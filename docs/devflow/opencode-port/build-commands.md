@@ -29,6 +29,9 @@ bun install
 
 Known behavior:
 - `bun install` can update `bun.lock` even when no source change is intended.
+- After switching among OpenCode PR branches, stale `node_modules` can resolve an
+  older `effect` version than `bun.lock`; rerun `bun install` before treating
+  Effect import/type errors as code failures.
 - On `devflow/pr-15224-session-start`, it added missing lock entries for the
   PR's demo workspace package.
 - On `devflow/pr-16598-session-stopping`, it changed the `ghostty-web` resolved

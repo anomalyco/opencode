@@ -15,9 +15,9 @@ Status values: `Not Started`, `Partial`, `Blocked`, `Parity`, `Not Applicable`.
 | Post-tool telemetry | Claude `PostToolUse` hooks | OpenCode `tool.execute.after` adapter | PR `#21150` improves MCP timing | Not Started | TBD |
 | Session start telemetry | Claude `SessionStart` | OpenCode `session.start` | PR `#15224` | Blocked | TBD |
 | Compaction reinforcement | Claude compact matcher reinjects rules | OpenCode compaction plugin hook | Existing `experimental.session.compacting` | Not Started | TBD |
-| Subagent start telemetry | Claude `SubagentStart` | OpenCode task/tool/session context | PR `#15412` | Blocked | TBD |
+| Subagent start telemetry | Claude `SubagentStart` | OpenCode task/tool/session context | PR `#15412` | Partial | `#15412` integrated on `devflow/hojo`; `bun test test/plugin/parent-agent.test.ts` and package typechecks pass. Adapter work remains. |
 | Subagent stop telemetry | Claude `SubagentStop` | OpenCode child session/task completion event | Needs validation | Not Started | TBD |
-| Orchestrator lockdown | Hook blocks main-session write/bash | OpenCode primary agent permissions plus hook adapter | PR `#15412` helps identity | Not Started | TBD |
+| Orchestrator lockdown | Hook blocks main-session write/bash | OpenCode primary agent permissions plus hook adapter | PR `#15412` helps identity | Partial | Parent-agent context is now available to hooks; enforcement adapter not implemented yet. |
 | Worktree isolation | Hook blocks source writes in main worktree | Same hook via adapter; optional native session cwd support | None initially | Not Started | TBD |
 | TDD commit ordering | Bash/write hooks enforce test-before-impl commits | Same Python hook via adapter | None | Not Started | TBD |
 | Test-before-commit | Bash hook enforces tests passed after changes | Same Python hook via adapter | None | Not Started | TBD |

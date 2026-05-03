@@ -12,7 +12,7 @@ and OpenCode behavior. Do not close a gap without evidence.
 | G5 | `/loop` depends on Claude `Stop` hook | P1 | `hooks/stop-hook.sh` | Use OpenCode `session.stopping` | `#16598` | Open | TBD |
 | G6 | Telemetry scripts must record `harness=opencode` | P1 | Current telemetry behavior | Pass harness through adapter and telemetry scripts | None | Open | TBD |
 | G7 | OpenCode `apply_patch` has no Claude `MultiEdit` equivalent payload | P1 | OpenCode tool model | Parse patch paths in adapter | None | Open | TBD |
-| G8 | Subagent identity/parent context is insufficient for policy | P1 | Hook payload needs | Absorb parent agent context PR | `#15412` | Open | TBD |
+| G8 | Subagent identity/parent context is insufficient for policy | P1 | Hook payload needs | Absorb parent agent context PR | `#15412` | Partial | `#15412` integrated on `devflow/hojo`; `bun test test/plugin/parent-agent.test.ts`, plugin typecheck, and opencode typecheck pass. Gap remains open until the devflow adapter consumes the context. |
 | G9 | SessionStart parity is missing for startup telemetry/context | P2 | Hook lifecycle gap | Absorb session.start PR | `#15224` | Open | TBD |
 | G10 | Post-tool hook timing for MCP/plugin tools may miss final output | P2 | Hook timing gap | Absorb after-MCP PR | `#21150` | Open | TBD |
 
