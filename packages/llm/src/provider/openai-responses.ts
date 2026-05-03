@@ -13,6 +13,7 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolResultPart,
 } from "../schema"
 import { ProviderShared } from "./shared"
 
@@ -33,6 +34,46 @@ const OpenAIResponsesOutputText = Schema.Struct({
   text: Schema.String,
 })
 
+const HOSTED_TOOL_TYPES = [
+  "web_search_call",
+  "web_search_preview_call",
+  "file_search_call",
+  "code_interpreter_call",
+  "computer_use_call",
+  "image_generation_call",
+  "mcp_call",
+  "local_shell_call",
+] as const
+
+// item.type -> tool name. Each entry is the OpenAI Responses item type that
+// represents a hosted (provider-executed) tool call.
+const HOSTED_TOOL_NAMES = {
+  web_search_call: "web_search",
+  web_search_preview_call: "web_search_preview",
+  file_search_call: "file_search",
+  code_interpreter_call: "code_interpreter",
+  computer_use_call: "computer_use",
+  image_generation_call: "image_generation",
+  mcp_call: "mcp",
+  local_shell_call: "local_shell",
+} satisfies Record<(typeof HOSTED_TOOL_TYPES)[number], string>
+
+const OpenAIResponsesHostedToolItem = Schema.Struct({
+  type: Schema.Literals(HOSTED_TOOL_TYPES),
+  id: Schema.String,
+  status: Schema.optional(Schema.String),
+  action: Schema.optional(Schema.Unknown),
+  queries: Schema.optional(Schema.Unknown),
+  results: Schema.optional(Schema.Unknown),
+  code: Schema.optional(Schema.String),
+  container_id: Schema.optional(Schema.String),
+  outputs: Schema.optional(Schema.Unknown),
+  server_label: Schema.optional(Schema.String),
+  output: Schema.optional(Schema.Unknown),
+  error: Schema.optional(Schema.Unknown),
+})
+type OpenAIResponsesHostedToolItem = Schema.Schema.Type<typeof OpenAIResponsesHostedToolItem>
+
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.Literal("system"), content: Schema.String }),
   Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(OpenAIResponsesInputText) }),
@@ -48,6 +89,7 @@ const OpenAIResponsesInputItem = Schema.Union([
     call_id: Schema.String,
     output: Schema.String,
   }),
+  OpenAIResponsesHostedToolItem,
 ])
 type OpenAIResponsesInputItem = Schema.Schema.Type<typeof OpenAIResponsesInputItem>
 
@@ -167,6 +209,25 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
   arguments: ProviderShared.encodeJson(part.input),
 })
 
+const decodeHostedToolItem = Schema.decodeUnknownEffect(OpenAIResponsesHostedToolItem)
+
+const lowerHostedToolResult = Effect.fn("OpenAIResponses.lowerHostedToolResult")(function* (part: ToolResultPart) {
+  if (part.result.type !== "json") {
+    return yield* invalid(`OpenAI Responses hosted tool result for ${part.name} must be a JSON item`)
+  }
+  const item = yield* decodeHostedToolItem(part.result.value).pipe(Effect.mapError((error) => invalid(error.message)))
+  if (HOSTED_TOOL_NAMES[item.type] !== part.name) {
+    return yield* invalid(`OpenAI Responses hosted tool result ${item.type} does not match tool ${part.name}`)
+  }
+  return item
+})
+
+const flushAssistantText = (input: OpenAIResponsesInputItem[], content: TextPart[]) => {
+  if (content.length === 0) return
+  input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
+  content.length = 0
+}
+
 const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIResponsesInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
@@ -191,13 +252,18 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           continue
         }
         if (part.type === "tool-call") {
-          input.push(lowerToolCall(part))
+          flushAssistantText(input, content)
+          if (!part.providerExecuted) input.push(lowerToolCall(part))
           continue
         }
-        return yield* invalid(`OpenAI Responses assistant messages only support text and tool-call content for now`)
+        if (part.type === "tool-result" && part.providerExecuted) {
+          flushAssistantText(input, content)
+          input.push(yield* lowerHostedToolResult(part))
+          continue
+        }
+        return yield* invalid(`OpenAI Responses assistant messages only support text, tool-call, and hosted tool-result content for now`)
       }
-      if (content.length > 0)
-        input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
+      flushAssistantText(input, content)
       continue
     }
 
@@ -268,22 +334,9 @@ const withoutTool = (tools: Record<string, ProviderShared.ToolAccumulator>, id: 
 // fields all in one item. We expose them as a `tool-call` + `tool-result` pair
 // so consumers can treat them uniformly with client tools, only differentiated
 // by `providerExecuted: true`.
-//
-// item.type → tool name. Each entry is the OpenAI Responses item type that
-// represents a hosted (provider-executed) tool call.
-const HOSTED_TOOL_NAMES: Record<string, string> = {
-  web_search_call: "web_search",
-  web_search_preview_call: "web_search_preview",
-  file_search_call: "file_search",
-  code_interpreter_call: "code_interpreter",
-  computer_use_call: "computer_use",
-  image_generation_call: "image_generation",
-  mcp_call: "mcp",
-  local_shell_call: "local_shell",
-}
 
-const isHostedToolItem = (item: OpenAIResponsesStreamItem): item is OpenAIResponsesStreamItem & { id: string } =>
-  item.type in HOSTED_TOOL_NAMES && typeof item.id === "string" && item.id.length > 0
+const isHostedToolItem = (item: OpenAIResponsesStreamItem): item is OpenAIResponsesHostedToolItem =>
+  isHostedToolType(item.type) && typeof item.id === "string" && item.id.length > 0
 
 // Pick the input fields the model actually populated when invoking the tool.
 // The shape is tool-specific. Keep this list explicit so each tool's input is
@@ -307,7 +360,9 @@ const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
     : ({ type: "json" as const, value: item })
 }
 
-const hostedToolEvents = (item: OpenAIResponsesStreamItem & { id: string }): ReadonlyArray<LLMEvent> => {
+const isHostedToolType = (type: string): type is keyof typeof HOSTED_TOOL_NAMES => type in HOSTED_TOOL_NAMES
+
+const hostedToolEvents = (item: OpenAIResponsesHostedToolItem): ReadonlyArray<LLMEvent> => {
   const name = HOSTED_TOOL_NAMES[item.type]
   return [
     { type: "tool-call", id: item.id, name, input: hostedToolInput(item), providerExecuted: true },

@@ -212,13 +212,17 @@ describe("Bedrock Converse adapter", () => {
     }),
   )
 
-  it.effect("decodes reasoning deltas", () =>
+  it.effect("decodes reasoning deltas with signatures", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStart", { role: "assistant" }],
         [
           "contentBlockDelta",
           { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } },
+        ],
+        [
+          "contentBlockDelta",
+          { contentBlockIndex: 0, delta: { reasoningContent: { signature: "sig_1" } } },
         ],
         ["contentBlockStop", { contentBlockIndex: 0 }],
         ["messageStop", { stopReason: "end_turn" }],
@@ -228,6 +232,10 @@ describe("Bedrock Converse adapter", () => {
         .pipe(Effect.provide(fixedBytes(body)))
 
       expect(LLM.outputReasoning(response)).toBe("Let me think.")
+      expect(response.events.filter((event) => event.type === "reasoning-delta")).toEqual([
+        { type: "reasoning-delta", text: "Let me think.", encrypted: undefined },
+        { type: "reasoning-delta", text: "", encrypted: "sig_1" },
+      ])
     }),
   )
 

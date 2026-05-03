@@ -108,6 +108,8 @@ Use `prepare(...)` to inspect the provider-native payload without sending it.
 `Conversation` owns the shared stream-to-history semantics. It answers two questions: given the events from one model round, what assistant content and tool calls should be carried into the next request; and what did each raw event mean semantically?
 
 ```ts
+import { Conversation } from "@opencode-ai/llm"
+
 const state = Conversation.empty()
 const deltas = Conversation.mutate(state, {
   type: "tool-call",
@@ -138,8 +140,13 @@ const next = Conversation.continueRequest({
 `defineTool(...)` bundles a description, parameter schema, success schema, and handler. The record key becomes the wire tool name.
 
 ```ts
-import { Effect, Schema } from "effect"
-import { LLM, OpenAIChat, ToolFailure, ToolRuntime, client, defineTool } from "@opencode-ai/llm"
+import { Effect, Schema, Stream } from "effect"
+import { LLM, OpenAIChat, RequestExecutor, ToolFailure, ToolRuntime, client, defineTool } from "@opencode-ai/llm"
+
+const model = OpenAIChat.model({
+  id: "gpt-4o-mini",
+  apiKey: process.env.OPENAI_API_KEY,
+})
 
 const get_weather = defineTool({
   description: "Get current weather for a city.",
@@ -163,6 +170,8 @@ const stream = ToolRuntime.run(client({ adapters: [OpenAIChat.adapter] }), {
   tools: { get_weather },
   maxSteps: 10,
 })
+
+const program = Stream.runCollect(stream).pipe(Effect.provide(RequestExecutor.defaultLayer))
 ```
 
 Tool handlers should return typed success values or fail with `ToolFailure`. Unknown tools, invalid inputs, and invalid outputs become model-visible tool errors when they are recoverable.

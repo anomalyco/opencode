@@ -119,6 +119,65 @@ describe("OpenAI Responses adapter", () => {
     }),
   )
 
+  it.effect("preserves assistant text and function call ordering", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(
+        LLM.request({
+          id: "req_tool_order",
+          model,
+          messages: [
+            LLM.user("What is the weather?"),
+            LLM.assistant([
+              LLM.text("I will check."),
+              LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+              LLM.text("Then I will answer."),
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        input: [
+          { role: "user", content: [{ type: "input_text", text: "What is the weather?" }] },
+          { role: "assistant", content: [{ type: "output_text", text: "I will check." }] },
+          { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
+          { role: "assistant", content: [{ type: "output_text", text: "Then I will answer." }] },
+        ],
+      })
+    }),
+  )
+
+  it.effect("round-trips hosted tool result items in assistant history", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "web_search_call",
+        id: "ws_1",
+        status: "completed",
+        action: { type: "search", query: "effect 4" },
+      }
+      const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(
+        LLM.request({
+          id: "req_hosted_history",
+          model,
+          messages: [
+            LLM.user("Search for Effect."),
+            LLM.assistant([
+              LLM.toolCall({ id: "ws_1", name: "web_search", input: item.action, providerExecuted: true }),
+              LLM.toolResult({ id: "ws_1", name: "web_search", result: item, providerExecuted: true }),
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        input: [
+          { role: "user", content: [{ type: "input_text", text: "Search for Effect." }] },
+          item,
+        ],
+      })
+    }),
+  )
+
   it.effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(

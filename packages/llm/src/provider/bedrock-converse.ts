@@ -632,10 +632,11 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
       return [state, [{ type: "text-delta" as const, text: chunk.contentBlockDelta.delta.text }]] as const
     }
 
-    if (chunk.contentBlockDelta?.delta?.reasoningContent?.text) {
+    if (chunk.contentBlockDelta?.delta?.reasoningContent) {
+      const reasoning = chunk.contentBlockDelta.delta.reasoningContent
       return [
         state,
-        [{ type: "reasoning-delta" as const, text: chunk.contentBlockDelta.delta.reasoningContent.text }],
+        [{ type: "reasoning-delta" as const, text: reasoning.text ?? "", encrypted: reasoning.signature }],
       ] as const
     }
 
