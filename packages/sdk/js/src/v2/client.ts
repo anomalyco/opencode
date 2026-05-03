@@ -96,13 +96,12 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
       error === "" ||
       (typeof error === "object" && !(error instanceof Error) && Object.keys(error).length === 0)
     if (!isEmpty) return error
-    const status = response?.status ?? 0
-    const statusText = response?.statusText ?? ""
     const method = request?.method ?? "?"
     const url = request?.url ?? "?"
-    return new Error(
-      `opencode server ${method} ${url} → ${status}${statusText ? " " + statusText : ""}: (empty response body)`,
-    )
+    if (!response) return new Error(`opencode server ${method} ${url}: network error (no response)`)
+    const status = response.status
+    const statusText = response.statusText ? " " + response.statusText : ""
+    return new Error(`opencode server ${method} ${url} → ${status}${statusText}: (empty response body)`)
   })
   return new OpencodeClient({ client })
 }
