@@ -9,8 +9,7 @@ import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import matter from "gray-matter"
-import { Instance } from "../../project/instance"
-import { WithInstance } from "../../project/with-instance"
+import { InstanceRef } from "@/effect/instance-ref"
 import { EOL } from "os"
 import type { Argv } from "yargs"
 import { Effect } from "effect"
@@ -35,7 +34,7 @@ const AVAILABLE_PERMISSIONS = [
   "skill",
 ]
 
-const AgentCreateCommand = cmd({
+const AgentCreateCommand = effectCmd({
   command: "create",
   describe: "create a new agent",
   builder: (yargs: Argv) =>
@@ -63,10 +62,11 @@ const AgentCreateCommand = cmd({
         alias: ["m"],
         describe: "model to use in the format of provider/model",
       }),
-  async handler(args) {
-    await WithInstance.provide({
-      directory: process.cwd(),
-      async fn() {
+  handler: Effect.fn("Cli.agent.create")(function* (args) {
+    const maybeCtx = yield* InstanceRef
+    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    const ctx = maybeCtx
+    yield* Effect.promise(async () => {
         const cliPath = args.path
         const cliDescription = args.description
         const cliMode = args.mode as AgentMode | undefined
@@ -79,7 +79,7 @@ const AgentCreateCommand = cmd({
           prompts.intro("Create agent")
         }
 
-        const project = Instance.project
+        const project = ctx.project
 
         // Determine scope/path
         let targetPath: string
@@ -94,7 +94,7 @@ const AgentCreateCommand = cmd({
                 {
                   label: "Current project",
                   value: "project" as const,
-                  hint: Instance.worktree,
+                  hint: ctx.worktree,
                 },
                 {
                   label: "Global",
@@ -107,7 +107,7 @@ const AgentCreateCommand = cmd({
             scope = scopeResult
           }
           targetPath = path.join(
-            scope === "global" ? Global.Path.config : path.join(Instance.worktree, ".opencode"),
+            scope === "global" ? Global.Path.config : path.join(ctx.worktree, ".opencode"),
             "agent",
           )
         }
@@ -230,9 +230,8 @@ const AgentCreateCommand = cmd({
           prompts.log.success(`Agent created: ${filePath}`)
           prompts.outro("Done")
         }
-      },
     })
-  },
+  }),
 })
 
 const AgentListCommand = effectCmd({

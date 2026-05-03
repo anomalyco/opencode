@@ -11,8 +11,7 @@ import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
 import { ConfigMCP } from "../../config/mcp"
-import { Instance } from "../../project/instance"
-import { WithInstance } from "../../project/with-instance"
+import { InstanceRef } from "@/effect/instance-ref"
 import { Installation } from "../../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
@@ -433,21 +432,22 @@ async function addMcpToConfig(name: string, mcpConfig: ConfigMCP.Info, configPat
   return configPath
 }
 
-export const McpAddCommand = cmd({
+export const McpAddCommand = effectCmd({
   command: "add",
   describe: "add an MCP server",
-  async handler() {
-    await WithInstance.provide({
-      directory: process.cwd(),
-      async fn() {
+  handler: Effect.fn("Cli.mcp.add")(function* () {
+    const maybeCtx = yield* InstanceRef
+    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    const ctx = maybeCtx
+    yield* Effect.promise(async () => {
         UI.empty()
         prompts.intro("Add MCP server")
 
-        const project = Instance.project
+        const project = ctx.project
 
         // Resolve config paths eagerly for hints
         const [projectConfigPath, globalConfigPath] = await Promise.all([
-          resolveConfigPath(Instance.worktree),
+          resolveConfigPath(ctx.worktree),
           resolveConfigPath(Global.Path.config, true),
         ])
 
@@ -592,12 +592,11 @@ export const McpAddCommand = cmd({
         }
 
         prompts.outro("MCP server added successfully")
-      },
     })
-  },
+  }),
 })
 
-export const McpDebugCommand = cmd({
+export const McpDebugCommand = effectCmd({
   command: "debug <name>",
   describe: "debug OAuth connection for an MCP server",
   builder: (yargs) =>
@@ -606,10 +605,8 @@ export const McpDebugCommand = cmd({
       type: "string",
       demandOption: true,
     }),
-  async handler(args) {
-    await WithInstance.provide({
-      directory: process.cwd(),
-      async fn() {
+  handler: Effect.fn("Cli.mcp.debug")(function* (args) {
+    yield* Effect.promise(async () => {
         UI.empty()
         prompts.intro("MCP OAuth Debug")
 
@@ -781,7 +778,6 @@ export const McpDebugCommand = cmd({
         }
 
         prompts.outro("Debug complete")
-      },
     })
-  },
+  }),
 })

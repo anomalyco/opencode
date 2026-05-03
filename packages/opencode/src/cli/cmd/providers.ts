@@ -1,6 +1,7 @@
 import { Auth } from "../../auth"
 import { AppRuntime } from "../../effect/app-runtime"
 import { cmd } from "./cmd"
+import { effectCmd } from "../effect-cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { ModelsDev } from "@/provider/models"
@@ -13,7 +14,6 @@ import os from "os"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import { Plugin } from "../../plugin"
-import { WithInstance } from "../../project/with-instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "@/util/process"
 import { text } from "node:stream/consumers"
@@ -232,11 +232,14 @@ export const ProvidersCommand = cmd({
   async handler() {},
 })
 
-export const ProvidersListCommand = cmd({
+export const ProvidersListCommand = effectCmd({
   command: "list",
   aliases: ["ls"],
   describe: "list providers and credentials",
-  async handler(_args) {
+  // Lists global credentials + provider env vars; no project instance needed.
+  instance: false,
+  handler: Effect.fn("Cli.providers.list")(function* (_args) {
+    yield* Effect.promise(async () => {
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
     const homedir = os.homedir()
@@ -280,10 +283,11 @@ export const ProvidersListCommand = cmd({
 
       prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
     }
-  },
+    })
+  }),
 })
 
-export const ProvidersLoginCommand = cmd({
+export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to a provider",
   builder: (yargs) =>
@@ -302,10 +306,8 @@ export const ProvidersLoginCommand = cmd({
         describe: "login method label (skips method selection)",
         type: "string",
       }),
-  async handler(args) {
-    await WithInstance.provide({
-      directory: process.cwd(),
-      async fn() {
+  handler: Effect.fn("Cli.providers.login")(function* (args) {
+    yield* Effect.promise(async () => {
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
@@ -487,15 +489,17 @@ export const ProvidersLoginCommand = cmd({
         })
 
         prompts.outro("Done")
-      },
     })
-  },
+  }),
 })
 
-export const ProvidersLogoutCommand = cmd({
+export const ProvidersLogoutCommand = effectCmd({
   command: "logout",
   describe: "log out from a configured provider",
-  async handler(_args) {
+  // Removes a global auth credential; no project instance needed.
+  instance: false,
+  handler: Effect.fn("Cli.providers.logout")(function* (_args) {
+    yield* Effect.promise(async () => {
     UI.empty()
     const credentials: Array<[string, Auth.Info]> = await AppRuntime.runPromise(
       Effect.gen(function* () {
@@ -525,5 +529,6 @@ export const ProvidersLogoutCommand = cmd({
       }),
     )
     prompts.outro("Logout successful")
-  },
+    })
+  }),
 })
