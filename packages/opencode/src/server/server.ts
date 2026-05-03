@@ -219,6 +219,8 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
     url: next,
     stop(close?: boolean) {
       unpublish()
+      // Always forward stop(true), even if a graceful stop was requested
+      // first, so native listeners can escalate shutdown in-place.
       const next = inner.stop(close)
       closing ??= next
       return close ? next.then(() => closing!) : closing
@@ -322,6 +324,8 @@ async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selec
     url: innerUrl,
     stop: (close?: boolean) => {
       const requested = close ? forceStop() : Promise.resolve()
+      // The first call starts scope shutdown. A later stop(true) cannot undo
+      // that, but it still runs forceStop() before awaiting the original close.
       stopPromise ??= requested.then(() => Effect.runPromiseExit(Scope.close(resolved!.scope, Exit.void))).then(() => undefined)
       return requested.then(() => stopPromise!)
     },

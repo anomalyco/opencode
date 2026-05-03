@@ -86,6 +86,7 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
           socket
             .runRaw(() => Effect.void, { onOpen: write(event).pipe(Effect.catch(() => Effect.void)) })
             .pipe(
+              Effect.timeout("1 second"),
               Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
               Effect.catch(() => Effect.void),
             )

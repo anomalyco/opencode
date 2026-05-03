@@ -35,6 +35,7 @@ export function websocket(
             onOpen: write(WebSocketTracker.SERVER_CLOSING_EVENT()).pipe(Effect.catch(() => Effect.void)),
           })
           .pipe(
+            Effect.timeout("1 second"),
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
             Effect.catch(() => Effect.void),
           )
