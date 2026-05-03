@@ -42,6 +42,11 @@ Record verification evidence here before claiming any parity milestone.
 | 2026-05-03 | `bun test test/plugin/session-stopping.test.ts` in `packages/opencode` on `devflow/hojo` | PASS | 2 tests passed, 0 failed, 4 assertions. |
 | 2026-05-03 | `bun run typecheck` in `packages/plugin` on `devflow/hojo` after `session.stopping` adaptation | PASS | `tsgo --noEmit` completed successfully. |
 | 2026-05-03 | `bun run typecheck` in `packages/opencode` on `devflow/hojo` after `session.stopping` adaptation | PASS | `tsgo --noEmit` completed successfully. |
+| 2026-05-03 | Final narrow validation on `devflow/hojo`: `bun test test/plugin/parent-agent.test.ts` in `packages/opencode` | PASS | 5 tests passed, 0 failed, 5 assertions. |
+| 2026-05-03 | Final narrow validation on `devflow/hojo`: `bun test test/plugin/session-stopping.test.ts` in `packages/opencode` | PASS | 2 tests passed, 0 failed, 4 assertions. |
+| 2026-05-03 | Final narrow validation on `devflow/hojo`: `bun run typecheck` in `packages/plugin` | PASS | `tsgo --noEmit` completed successfully. |
+| 2026-05-03 | Final narrow validation on `devflow/hojo`: `bun run build` in `packages/plugin` | PASS | `tsc` completed successfully. |
+| 2026-05-03 | Final narrow validation on `devflow/hojo`: `bun run typecheck` in `packages/opencode` | PASS | `tsgo --noEmit` completed successfully. |
 | TBD | `PYTHONPATH=src python3 -m pytest` | TBD | Current hook/unit baseline |
 | TBD | `./install.sh --target claude --root /tmp/devflow-claude-test install` | TBD | Claude install regression |
 | TBD | `./install.sh --target opencode --root /tmp/devflow-opencode-test install` | TBD | OpenCode install |
