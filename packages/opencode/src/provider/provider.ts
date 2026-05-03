@@ -28,6 +28,8 @@ import { optionalOmitUndefined, withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
+import { createFeatherlessFetch } from "./sdk/featherless"
+import { registerFeatherlessSeed } from "./sdk/featherless/seed"
 
 const log = Log.create({ service: "provider" })
 
@@ -149,6 +151,24 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    featherless: Effect.fnUntraced(function* (provider: Info) {
+      const env = yield* dep.env()
+      const fromEnv = provider.env.map((item) => env[item]).find(Boolean)
+      const auth = yield* dep.auth(provider.id)
+      const fromAuth = auth?.type === "api" ? auth.key : undefined
+      // Inline `options.apiKey` path: variable.ts has already substituted any
+      // `{env:VAR}` template, so provider.options.apiKey is the real key here.
+      const fromOptions = typeof provider.options?.apiKey === "string" ? provider.options.apiKey : undefined
+      const apiKey = fromEnv || fromAuth || fromOptions
+      if (!apiKey) return { autoload: false }
+      // autoload: true is required for the throttled fetch to actually attach
+      // when the user supplies the key via inline options.apiKey rather than
+      // the env: [...] array — see provider.ts custom() loop guard at ~L1321.
+      return {
+        autoload: true,
+        options: { fetch: createFeatherlessFetch({ apiKey }) },
+      }
+    }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const hasKey = iife(() => {
@@ -1132,6 +1152,9 @@ const layer: Layer.Layer<
 
         // now read config providers - includes any modifications from plugin config() hook
         const configProviders = Object.entries(cfg.provider ?? {})
+        // Bundled seed for providers not in models.dev (currently only
+        // featherless). User config wins via last-write-wins merge.
+        registerFeatherlessSeed(configProviders)
         const disabled = new Set(cfg.disabled_providers ?? [])
         const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
 
