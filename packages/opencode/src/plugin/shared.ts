@@ -1,13 +1,17 @@
-import path from "path"
-import { fileURLToPath, pathToFileURL } from "url"
-import npa from "npm-package-arg"
-import semver from "semver"
 import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
 import { Npm } from "@opencode-ai/core/npm"
+import npa from "npm-package-arg"
+import path from "path"
+import semver from "semver"
+import { fileURLToPath, pathToFileURL } from "url"
 
 // Old npm package names for plugins that are now built-in
 export const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
+
+export const PLUGIN_PACKAGE_RENAMES: Record<string, string> = {
+  "oh-my-openagent": "oh-my-opencode",
+}
 
 export function isDeprecatedPlugin(spec: string) {
   return DEPRECATED_PLUGIN_PACKAGES.some((pkg) => spec.includes(pkg))
@@ -15,7 +19,8 @@ export function isDeprecatedPlugin(spec: string) {
 
 function parse(spec: string) {
   try {
-    return npa(spec)
+    const renamed = PLUGIN_PACKAGE_RENAMES[spec] || spec
+    return npa(renamed)
   } catch {}
 }
 
@@ -206,8 +211,13 @@ export async function checkPluginCompatibility(target: string, opencodeVersion: 
 
 export async function resolvePluginTarget(spec: string) {
   if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec)
-  const hit = parse(spec)
-  const pkg = hit?.name && hit.raw === hit.name ? `${hit.name}@latest` : spec
+
+  const parsed = parsePluginSpecifier(spec)
+  const renamed = PLUGIN_PACKAGE_RENAMES[parsed.pkg]
+  const next = renamed ? `${renamed}@${parsed.version || "latest"}` : spec
+
+  const hit = parse(next)
+  const pkg = hit?.name && hit.raw === hit.name ? `${hit.name}@latest` : next
   const result = await Npm.add(pkg)
   return result.directory
 }

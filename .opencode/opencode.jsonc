@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "plugin": ["oh-my-opencode@3.17.12"],
   "provider": {},
   "permission": {
     "edit": {
