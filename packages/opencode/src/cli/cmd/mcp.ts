@@ -1,4 +1,5 @@
 import { cmd } from "./cmd"
+import { effectCmd } from "../effect-cmd"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
@@ -65,20 +66,18 @@ function oauthServers(config: Config.Info) {
   )
 }
 
-async function listState() {
-  return AppRuntime.runPromise(
-    Effect.gen(function* () {
-      const cfg = yield* Config.Service
-      const mcp = yield* MCP.Service
-      const config = yield* cfg.get()
-      const statuses = yield* mcp.status()
-      const stored = yield* Effect.all(
-        Object.fromEntries(configuredServers(config).map(([name]) => [name, mcp.hasStoredTokens(name)])),
-        { concurrency: "unbounded" },
-      )
-      return { config, statuses, stored }
-    }),
-  )
+function listState() {
+  return Effect.gen(function* () {
+    const cfg = yield* Config.Service
+    const mcp = yield* MCP.Service
+    const config = yield* cfg.get()
+    const statuses = yield* mcp.status()
+    const stored = yield* Effect.all(
+      Object.fromEntries(configuredServers(config).map(([name]) => [name, mcp.hasStoredTokens(name)])),
+      { concurrency: "unbounded" },
+    )
+    return { config, statuses, stored }
+  })
 }
 
 async function authState() {
@@ -110,70 +109,65 @@ export const McpCommand = cmd({
   async handler() {},
 })
 
-export const McpListCommand = cmd({
+export const McpListCommand = effectCmd({
   command: "list",
   aliases: ["ls"],
   describe: "list MCP servers and their status",
-  async handler() {
-    await WithInstance.provide({
-      directory: process.cwd(),
-      async fn() {
-        UI.empty()
-        prompts.intro("MCP Servers")
+  handler: Effect.fn("Cli.mcp.list")(function* () {
+    UI.empty()
+    prompts.intro("MCP Servers")
 
-        const { config, statuses, stored } = await listState()
-        const servers = configuredServers(config)
+    const { config, statuses, stored } = yield* listState()
+    const servers = configuredServers(config)
 
-        if (servers.length === 0) {
-          prompts.log.warn("No MCP servers configured")
-          prompts.outro("Add servers with: opencode mcp add")
-          return
+    if (servers.length === 0) {
+      prompts.log.warn("No MCP servers configured")
+      prompts.outro("Add servers with: opencode mcp add")
+      return
+    }
+
+    for (const [name, serverConfig] of servers) {
+      const status = statuses[name]
+      const hasOAuth = isMcpRemote(serverConfig) && !!serverConfig.oauth
+      const hasStoredTokens = stored[name]
+
+      let statusIcon: string
+      let statusText: string
+      let hint = ""
+
+      if (!status) {
+        statusIcon = "○"
+        statusText = "not initialized"
+      } else if (status.status === "connected") {
+        statusIcon = "✓"
+        statusText = "connected"
+        if (hasOAuth && hasStoredTokens) {
+          hint = " (OAuth)"
         }
+      } else if (status.status === "disabled") {
+        statusIcon = "○"
+        statusText = "disabled"
+      } else if (status.status === "needs_auth") {
+        statusIcon = "⚠"
+        statusText = "needs authentication"
+      } else if (status.status === "needs_client_registration") {
+        statusIcon = "✗"
+        statusText = "needs client registration"
+        hint = "\n    " + status.error
+      } else {
+        statusIcon = "✗"
+        statusText = "failed"
+        hint = "\n    " + status.error
+      }
 
-        for (const [name, serverConfig] of servers) {
-          const status = statuses[name]
-          const hasOAuth = isMcpRemote(serverConfig) && !!serverConfig.oauth
-          const hasStoredTokens = stored[name]
+      const typeHint = serverConfig.type === "remote" ? serverConfig.url : serverConfig.command.join(" ")
+      prompts.log.info(
+        `${statusIcon} ${name} ${UI.Style.TEXT_DIM}${statusText}${hint}\n    ${UI.Style.TEXT_DIM}${typeHint}`,
+      )
+    }
 
-          let statusIcon: string
-          let statusText: string
-          let hint = ""
-
-          if (!status) {
-            statusIcon = "○"
-            statusText = "not initialized"
-          } else if (status.status === "connected") {
-            statusIcon = "✓"
-            statusText = "connected"
-            if (hasOAuth && hasStoredTokens) {
-              hint = " (OAuth)"
-            }
-          } else if (status.status === "disabled") {
-            statusIcon = "○"
-            statusText = "disabled"
-          } else if (status.status === "needs_auth") {
-            statusIcon = "⚠"
-            statusText = "needs authentication"
-          } else if (status.status === "needs_client_registration") {
-            statusIcon = "✗"
-            statusText = "needs client registration"
-            hint = "\n    " + status.error
-          } else {
-            statusIcon = "✗"
-            statusText = "failed"
-            hint = "\n    " + status.error
-          }
-
-          const typeHint = serverConfig.type === "remote" ? serverConfig.url : serverConfig.command.join(" ")
-          prompts.log.info(
-            `${statusIcon} ${name} ${UI.Style.TEXT_DIM}${statusText}${hint}\n    ${UI.Style.TEXT_DIM}${typeHint}`,
-          )
-        }
-
-        prompts.outro(`${servers.length} server(s)`)
-      },
-    })
-  },
+    prompts.outro(`${servers.length} server(s)`)
+  }),
 })
 
 export const McpAuthCommand = cmd({
