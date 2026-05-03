@@ -129,8 +129,22 @@ function edit(info: ToolProps<typeof EditTool>) {
       icon: "←",
       title: `Edit ${title}`,
     },
-    diff,
+    diff ? colorizeDiff(diff) : undefined,
   )
+}
+
+function colorizeDiff(diff: string): string {
+  return diff
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("Index:") || line.startsWith("==="))
+        return UI.Style.TEXT_DIM + line + UI.Style.TEXT_NORMAL
+      if (line.startsWith("@@")) return UI.Style.TEXT_INFO + line + UI.Style.TEXT_NORMAL
+      if (line.startsWith("+")) return UI.Style.TEXT_SUCCESS + line + UI.Style.TEXT_NORMAL
+      if (line.startsWith("-")) return UI.Style.TEXT_DANGER + line + UI.Style.TEXT_NORMAL
+      return line
+    })
+    .join("\n")
 }
 
 function websearch(info: ToolProps<typeof WebSearchTool>) {
