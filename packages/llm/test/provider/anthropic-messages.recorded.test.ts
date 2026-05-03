@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { AnthropicMessages } from "../../src/provider/anthropic-messages"
-import { expectFinish, expectWeatherToolCall, textRequest, weatherToolRequest } from "../recorded-scenarios"
+import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const model = AnthropicMessages.model({
@@ -11,8 +11,18 @@ const model = AnthropicMessages.model({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 })
 
+const flagshipModel = AnthropicMessages.model({
+  id: "claude-opus-4-7",
+  apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
+})
+
 const request = textRequest({ id: "recorded_anthropic_messages_text", model })
 const toolRequest = weatherToolRequest({ id: "recorded_anthropic_messages_tool_call", model })
+const flagshipToolLoopRequest = weatherToolLoopRequest({
+  id: "recorded_anthropic_messages_opus_4_7_tool_loop",
+  model: flagshipModel,
+  temperature: false,
+})
 
 const recorded = recordedTests({
   prefix: "anthropic-messages",
@@ -41,6 +51,12 @@ describe("Anthropic Messages recorded", () => {
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
       expectWeatherToolCall(response)
       expectFinish(response.events, "tool-calls")
+    }),
+  )
+
+  recorded.effect.with("claude opus 4.7 drives a tool loop", { tags: ["tool", "tool-loop", "golden", "flagship"] }, () =>
+    Effect.gen(function* () {
+      expectWeatherToolLoop(yield* runWeatherToolLoop(anthropic, flagshipToolLoopRequest))
     }),
   )
 })

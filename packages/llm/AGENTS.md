@@ -345,8 +345,11 @@ Reference examples:
 - [ ] Fireworks OpenAI-compatible Chat basic streaming text and tool-call flow.
 - [ ] DeepInfra OpenAI-compatible Chat basic streaming text and tool-call flow.
 - [ ] Provider-error cassettes for stable, non-secret error bodies where the provider returns deterministic 4xx/5xx payloads.
-- [ ] Mistral, Groq, xAI, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
-- [x] Bedrock Converse basic text and tool-call cassettes (recorded against `us.amazon.nova-micro-v1:0` in us-east-1). Cache-hint cassettes still TODO.
+- [ ] Mistral, Groq, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
+- [x] xAI OpenAI-compatible Chat basic text/tool cassettes plus a `grok-4.3` golden tool loop.
+- [x] Bedrock Converse basic text, tool-call, and golden tool-loop cassettes (recorded against `us.amazon.nova-micro-v1:0` in us-east-1). Cache-hint cassettes still TODO.
 - [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex adapter/patch shape is decided.
 - [ ] Gateway/OpenRouter routing-header cassettes after routing support lands.
 - [x] OpenRouter OpenAI-compatible Chat golden tool-loop cassettes for `openai/gpt-4o-mini`, `openai/gpt-5.5`, and `anthropic/claude-opus-4.7`.
+- [x] Anthropic Messages flagship golden tool-loop cassette for `claude-opus-4-7`.
+- [x] OpenAI Responses flagship text/tool/golden-loop cassettes for `gpt-5.5`.

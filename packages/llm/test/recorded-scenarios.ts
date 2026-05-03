@@ -64,13 +64,16 @@ export const weatherToolLoopRequest = (input: {
   readonly model: ModelRef
   readonly system?: string
   readonly maxTokens?: number
+  readonly temperature?: number | false
 }) =>
   LLM.request({
     id: input.id,
     model: input.model,
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
     prompt: "What is the weather in Paris?",
-    generation: { maxTokens: input.maxTokens ?? 80, temperature: 0 },
+    generation: input.temperature === false
+      ? { maxTokens: input.maxTokens ?? 80 }
+      : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
   })
 
 export const runWeatherToolLoop = (client: LLMClient, request: LLMRequest) =>

@@ -162,7 +162,7 @@ const OpenAIResponsesChunk = Schema.Struct({
   response: Schema.optional(
     Schema.Struct({
       incomplete_details: Schema.optional(Schema.NullOr(Schema.Struct({ reason: Schema.String }))),
-      usage: Schema.optional(OpenAIResponsesUsage),
+      usage: Schema.optional(Schema.NullOr(OpenAIResponsesUsage)),
     }),
   ),
   code: Schema.optional(Schema.String),
@@ -290,7 +290,7 @@ const prepare = Effect.fn("OpenAIResponses.prepare")(function* (request: LLMRequ
   }
 })
 
-const mapUsage = (usage: OpenAIResponsesUsage | undefined) => {
+const mapUsage = (usage: OpenAIResponsesUsage | null | undefined) => {
   if (!usage) return undefined
   return new Usage({
     inputTokens: usage.input_tokens,
