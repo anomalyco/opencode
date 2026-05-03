@@ -7,6 +7,23 @@ opencode는 브라우저에서 웹 응용 프로그램을 실행할 수 있으�
 
 ![opencode Web - 새로운 세션](../../../assets/web/web-homepage-new-session.png)
 
+### 사용법
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### 옵션
+
+| 플래그 | 설명 | 기본값 |
+| --- | --- | --- |
+| `--port` | 수신할 포트 | `4096` |
+| `--hostname` | 수신할 호스트 이름 | `127.0.0.1` |
+| `--mdns` | mDNS 탐색 활성화 | `false` |
+| `--mdns-domain` | mDNS 서비스용 사용자 지정 도메인 이름 | `opencode.local` |
+| `--cors` | 추가로 허용할 브라우저 출처 | `[]` |
+| `--base-path` | 접근할 수 있도록 노출할 엔드포인트의 기본 경로 | `/` |
+
 ## 시작하기
 
 실행하여 웹 인터페이스를 시작:
@@ -134,7 +151,8 @@ opencode attach http://localhost:4096
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

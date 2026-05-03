@@ -13,7 +13,7 @@ Komenda `opencode serve` uruchamia bezgłowy serwer HTTP, który udostępnia pun
 ### Użycie
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### Opcje
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | Włącz wykrywanie mDNS                        | `false`          |
 | `--mdns-domain` | Niestandardowa nazwa domeny dla usługi mDNS  | `opencode.local` |
 | `--cors`        | Dodatkowe originy przeglądarki do dozwolenia | `[]`             |
+| `--base-path`   | Bazowy endpoint (prefiks) dodawany przed wszystkimi ścieżkami | `/`              |
 
 `--cors` można przekazać wiele razy:
 
@@ -84,6 +85,10 @@ Na przykład `http://localhost:4096/doc`. Użyj specyfikacji, aby wygenerować k
 ## API
 
 Serwer opencode udostępnia następujące interfejsy API.
+
+:::tip
+Jeśli ustawisz `--base-path` na `/opencode`, wszystkie adresy URL API będą zaczynać się od `/opencode`.
+:::
 
 ---
 

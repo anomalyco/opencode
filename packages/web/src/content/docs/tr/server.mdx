@@ -13,7 +13,7 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 ### Kullanım
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### Seçenekler
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | mDNS keşfini etkinleştir                       | `false`          |
 | `--mdns-domain` | mDNS hizmeti için özel alan adı                | `opencode.local` |
 | `--cors`        | İzin verilecek ek tarayıcı kaynakları (origin) | `[]`             |
+| `--base-path`   | Tüm rotalara eklenen temel uç nokta (önek)     | `/`              |
 
 `--cors` birden fazla kez geçilebilir:
 
@@ -82,6 +83,10 @@ http://<hostname>:<port>/doc
 ## API'ler
 
 opencode sunucusu aşağıdaki API'leri sunar.
+
+:::tip
+`--base-path` değerini `/opencode` olarak ayarlarsanız tüm API URL'leri `/opencode` ile başlar.
+:::
 
 ---
 

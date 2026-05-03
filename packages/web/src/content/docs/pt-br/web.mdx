@@ -7,6 +7,23 @@ O opencode pode ser executado como uma aplicação web no seu navegador, proporc
 
 ![opencode Web - Nova Sessão](../../../assets/web/web-homepage-new-session.png)
 
+### Uso
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### Opções
+
+| Flag            | Descrição                                         | Padrão           |
+| --------------- | ------------------------------------------------- | ---------------- |
+| `--port`        | Porta para escutar                                | `4096`           |
+| `--hostname`    | Nome do host para escutar                         | `127.0.0.1`      |
+| `--mdns`        | Habilitar descoberta mDNS                         | `false`          |
+| `--mdns-domain` | Nome de domínio personalizado para o serviço mDNS | `opencode.local` |
+| `--cors`        | Origens adicionais de navegador a permitir        | `[]`             |
+| `--base-path`   | Endpoint para ser acessível                       | `/`              |
+
 ## Primeiros passos
 
 Inicie a interface web executando:
@@ -134,7 +151,8 @@ Você também pode configurar as configurações do servidor no seu arquivo de c
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

@@ -7,6 +7,18 @@ OpenCode može raditi kao web aplikacija u vašem pretraživaču, pružajući is
 
 ![OpenCode Web - Nova sesija](../../../assets/web/web-homepage-new-session.png)
 
+### Upotreba
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### Opcije
+
+| Oznaka | Opis | Podrazumijevano |
+| ------ | ---- | --------------- |
+| `--base-path` | Prefiks putanje na kojoj će endpoint biti dostupan | `/` |
+
 ## Početak rada
 
 Pokrenite web interfejs tako što ćete pokrenuti:
@@ -134,7 +146,8 @@ Također možete konfigurirati postavke servera u svom `opencode.json` konfigura
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

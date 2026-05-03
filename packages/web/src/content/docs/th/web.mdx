@@ -7,6 +7,18 @@ OpenCode สามารถทำงานเป็นเว็บแอปพ�
 
 ![เว็บ OpenCode - เซสชันใหม่](../../../assets/web/web-homepage-new-session.png)
 
+### การใช้งาน
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### ตัวเลือก
+
+| แฟล็ก | คำอธิบาย | ค่าเริ่มต้น |
+| ----- | -------- | ----------- |
+| `--base-path` | คำนำหน้าพาธที่ใช้เมานต์เพื่อให้ endpoint เข้าถึงได้ | `/` |
+
 ## เริ่มต้นใช้งาน
 
 เริ่มเว็บอินเตอร์เฟสด้วยการรัน:
@@ -134,7 +146,8 @@ opencode attach http://localhost:4096
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

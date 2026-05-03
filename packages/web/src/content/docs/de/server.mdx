@@ -14,7 +14,7 @@ Er stellt einen OpenAPI-Endpunkt bereit, den ein opencode-Client nutzen kann.
 ### Nutzung
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### Optionen
@@ -26,6 +26,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | Enable mDNS discovery               | `false`          |
 | `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
 | `--cors`        | Additional browser origins to allow | `[]`             |
+| `--base-path`   | Basis-Endpunkt (Praefix) fuer alle Routen | `/`         |
 
 `--cors` kann mehrfach angegeben werden:
 
@@ -88,6 +89,10 @@ Nutze die Spec zum Generieren von Clients, zum Pruefen von Request/Response-Type
 ## APIs
 
 Der opencode-Server stellt folgende APIs bereit.
+
+:::tip
+Wenn `--base-path` auf `/opencode` gesetzt ist, beginnen alle API-URLs mit `/opencode`.
+:::
 
 ---
 

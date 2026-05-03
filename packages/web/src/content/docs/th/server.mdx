@@ -13,7 +13,7 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 ### การใช้งาน
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### ตัวเลือก
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | เปิดใช้งานการค้นพบ mDNS                  | `false`          |
 | `--mdns-domain` | ชื่อโดเมนที่กำหนดเองสำหรับบริการ mDNS    | `opencode.local` |
 | `--cors`        | ต้นกำเนิดเบราว์เซอร์เพิ่มเติมที่จะอนุญาต | `[]`             |
+| `--base-path`   | เอนด์พอยต์ฐาน (คำนำหน้า) ที่จะเติมหน้าทุกรูต | `/`              |
 
 `--cors` สามารถส่งผ่านได้หลายครั้ง:
 
@@ -84,6 +85,10 @@ http://<hostname>:<port>/doc
 ## API
 
 เซิร์ฟเวอร์ opencode เปิดเผย API ต่อไปนี้
+
+:::tip
+หากตั้งค่า `--base-path` เป็น `/opencode` URL ของ API ทั้งหมดจะขึ้นต้นด้วย `/opencode`
+:::
 
 ---
 

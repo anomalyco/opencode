@@ -13,7 +13,7 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 ### Использование
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### Параметры
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | Включить обнаружение mDNS                   | `false`          |
 | `--mdns-domain` | Пользовательское доменное имя для mDNS      | `opencode.local` |
 | `--cors`        | Разрешенные дополнительные источники (CORS) | `[]`             |
+| `--base-path`   | Базовый путь (префикс), добавляемый ко всем маршрутам | `/`              |
 
 `--cors` можно передать несколько раз:
 
@@ -84,6 +85,10 @@ For example, `http://localhost:4096/doc`. Use the spec to generate clients or in
 ## API
 
 Сервер opencode предоставляет следующие API.
+
+:::tip
+Если задать `--base-path` как `/opencode`, все URL API будут начинаться с `/opencode`.
+:::
 
 ---
 

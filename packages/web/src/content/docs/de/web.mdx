@@ -7,6 +7,23 @@ OpenCode kann als Webanwendung in Ihrem Browser ausgeführt werden und bietet da
 
 ![OpenCode Web – Neue Sitzung](../../../assets/web/web-homepage-new-session.png)
 
+### Verwendung
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### Optionen
+
+| Flag            | Beschreibung                                      | Standard         |
+| --------------- | ------------------------------------------------- | ---------------- |
+| `--port`        | Port, auf dem gelauscht wird                      | `4096`           |
+| `--hostname`    | Hostname, auf dem gelauscht wird                  | `127.0.0.1`      |
+| `--mdns`        | mDNS-Erkennung aktivieren                         | `false`          |
+| `--mdns-domain` | Benutzerdefinierter Domainname für den mDNS-Dienst | `opencode.local` |
+| `--cors`        | Zusätzliche Browser-Origin, die erlaubt werden   | `[]`             |
+| `--base-path`   | Mount-Präfix, unter dem der Endpunkt erreichbar ist | `/`            |
+
 ## Erste Schritte
 
 Starten Sie die Weboberfläche, indem Sie Folgendes ausführen:
@@ -134,7 +151,8 @@ Sie können Servereinstellungen auch in Ihrer `opencode.json`-Konfigurationsdate
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

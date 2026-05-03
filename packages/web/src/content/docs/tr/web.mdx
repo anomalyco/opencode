@@ -7,6 +7,18 @@ opencode, tarayıcınızda bir web uygulaması olarak çalışabilir ve bir term
 
 ![opencode Web - Yeni Oturum](../../../assets/web/web-homepage-new-session.png)
 
+### Kullanım
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### Seçenekler
+
+| Bayrak | Açıklama | Varsayılan |
+| ------ | -------- | ---------- |
+| `--base-path` | Uç noktanın erişilebilir olacağı yol öneki | `/` |
+
 ## Başlarken
 
 Aşağıdakileri çalıştırarak web arayüzünü başlatın:
@@ -134,7 +146,8 @@ Sunucu ayarlarını `opencode.json` yapılandırma dosyanızda da yapılandırab
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

@@ -13,7 +13,7 @@ El comando `opencode serve` ejecuta un servidor HTTP sin cabeza que expone un pu
 ### Uso
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### Opciones
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | Habilitar el descubrimiento de mDNS                   | `false`          |
 | `--mdns-domain` | Nombre de dominio personalizado para el servicio mDNS | `opencode.local` |
 | `--cors`        | Orígenes de navegador adicionales para permitir       | `[]`             |
+| `--base-path`   | Endpoint base (prefijo) añadido a todas las rutas     | `/`              |
 
 `--cors` se puede pasar varias veces:
 
@@ -84,6 +85,10 @@ Por ejemplo, `http://localhost:4096/doc`. Utilice la especificación para genera
 ## API
 
 El servidor opencode expone las siguientes API.
+
+:::tip
+Si configura `--base-path` como `/opencode`, todas las URL de la API empezarán por `/opencode`.
+:::
 
 ---
 

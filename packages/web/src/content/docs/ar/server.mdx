@@ -13,7 +13,7 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 ### الاستخدام
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### الخيارات
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | تفعيل اكتشاف mDNS                     | `false`          |
 | `--mdns-domain` | اسم نطاق مخصص لخدمة mDNS              | `opencode.local` |
 | `--cors`        | أصول (Origins) متصفح إضافية مسموح بها | `[]`             |
+| `--base-path`   | نقطة نهاية أساسية (بادئة) تُضاف إلى جميع المسارات | `/`              |
 
 يمكن تمرير `--cors` عدة مرات:
 
@@ -84,6 +85,10 @@ http://<hostname>:<port>/doc
 ## واجهات API
 
 يعرض خادم opencode واجهات API التالية.
+
+:::tip
+إذا ضبطت `--base-path` على `/opencode`، فستبدأ جميع عناوين URL الخاصة بواجهات API بـ `/opencode`.
+:::
 
 ---
 

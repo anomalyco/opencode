@@ -13,7 +13,7 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 ### 使用法
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### オプション
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | mDNS 検出を有効にする             | `false`          |
 | `--mdns-domain` | mDNS サービスのカスタムドメイン名 | `opencode.local` |
 | `--cors`        | 許可する追加のブラウザーオリジン  | `[]`             |
+| `--base-path`   | すべてのルートの先頭に付くベースエンドポイント（プレフィックス） | `/`              |
 
 `--cors` は複数回渡すことができます。
 
@@ -79,6 +80,10 @@ http://<hostname>:<port>/doc
 ## API
 
 OpenCode サーバーは次の API を公開します。
+
+:::tip
+`--base-path` を `/opencode` に設定すると、すべての API URL は `/opencode` で始まります。
+:::
 
 ---
 

@@ -7,6 +7,18 @@ opencode może działać jako aplikacja internetowa w przeglądarce, zapewniają
 
 ![Sieć opencode - Nowa sesja](../../../assets/web/web-homepage-new-session.png)
 
+### Użycie
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### Opcje
+
+| Flaga           | Opis                                              | Domyślnie        |
+| --------------- | ------------------------------------------------- | ---------------- |
+| `--base-path`   | Prefiks ścieżki, pod którym endpoint będzie dostępny | `/`           |
+
 ## Pierwsze kroki
 
 Uruchom interfejs sieciowy, uruchamiając:
@@ -134,7 +146,8 @@ Możesz także skonfigurować ustawienia serwera w pliku konfiguracyjnym `openco
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

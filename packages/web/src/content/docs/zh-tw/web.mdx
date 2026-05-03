@@ -7,6 +7,23 @@ OpenCode 可以作為 Web 應用程式在瀏覽器中執行，無需終端機即
 
 ![OpenCode Web - New Session](../../../assets/web/web-homepage-new-session.png)
 
+### 用法
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### 選項
+
+| 旗標 | 說明 | 預設值 |
+| --- | --- | --- |
+| `--port` | 監聽連接埠 | `4096` |
+| `--hostname` | 監聽的主機名稱 | `127.0.0.1` |
+| `--mdns` | 啟用 mDNS 探索 | `false` |
+| `--mdns-domain` | mDNS 服務的自訂網域名稱 | `opencode.local` |
+| `--cors` | 額外允許的瀏覽器來源 | `[]` |
+| `--base-path` | 可存取端點的基礎路徑（掛載前綴） | `/` |
+
 ## 快速開始
 
 執行以下指令啟動 Web 介面：
@@ -134,7 +151,8 @@ opencode attach http://localhost:4096
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

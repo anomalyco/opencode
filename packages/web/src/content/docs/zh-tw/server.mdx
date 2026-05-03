@@ -13,7 +13,7 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 ### 用法
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### 選項
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | 啟用 mDNS 探索          | `false`          |
 | `--mdns-domain` | mDNS 服務的自訂網域名稱 | `opencode.local` |
 | `--cors`        | 額外允許的瀏覽器來源    | `[]`             |
+| `--base-path`   | 加到所有路由前面的基礎端點（前綴） | `/`              |
 
 `--cors` 可以多次傳遞：
 
@@ -81,6 +82,10 @@ http://<hostname>:<port>/doc
 ## API
 
 opencode 伺服器暴露以下 API。
+
+:::tip
+如果將 `--base-path` 設為 `/opencode`，所有 API URL 都會以 `/opencode` 開頭。
+:::
 
 ---
 

@@ -13,7 +13,7 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 ### 사용법
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### 옵션
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | mDNS 탐지 활성화                      | `false`          |
 | `--mdns-domain` | mDNS 서비스의 사용자 지정 도메인 이름 | `opencode.local` |
 | `--cors`        | 허용할 추가 브라우저 origin           | `[]`             |
+| `--base-path`   | 모든 라우트 앞에 붙는 기본 엔드포인트(접두사) | `/`              |
 
 `--cors`는 다수 시간을 통과될 수 있습니다:
 
@@ -84,6 +85,10 @@ http://<hostname>:<port>/doc
 ## API
 
 opencode 서버는 다음과 같은 API를 노출합니다.
+
+:::tip
+`--base-path`를 `/opencode`로 설정하면 모든 API URL이 `/opencode`로 시작합니다.
+:::
 
 ---
 

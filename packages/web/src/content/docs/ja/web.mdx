@@ -7,6 +7,23 @@ OpenCode はブラウザで Web アプリケーションとして実行でき、
 
 ![OpenCode Web - 新しいセッション](../../../assets/web/web-homepage-new-session.png)
 
+### 使用法
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### オプション
+
+| フラグ | 説明 | デフォルト |
+| --- | --- | --- |
+| `--port` | リッスンするポート | `4096` |
+| `--hostname` | リッスンするホスト名 | `127.0.0.1` |
+| `--mdns` | mDNS 検出を有効にする | `false` |
+| `--mdns-domain` | mDNS サービスのカスタムドメイン名 | `opencode.local` |
+| `--cors` | 許可する追加のブラウザーオリジン | `[]` |
+| `--base-path` | アクセス可能にするエンドポイントのベースパス | `/` |
+
 ---
 
 ## はじめる
@@ -135,7 +152,8 @@ opencode attach http://localhost:4096
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

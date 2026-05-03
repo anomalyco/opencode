@@ -7,6 +7,18 @@ description: استخدام OpenCode في متصفحك.
 
 ![OpenCode Web - جلسة جديدة](../../../assets/web/web-homepage-new-session.png)
 
+### الاستخدام
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### الخيارات
+
+| العلامة | الوصف | الافتراضي |
+| ------ | ----- | --------- |
+| `--base-path` | بادئة المسار التي سيكون عليها الوصول إلى الخدمة | `/` |
+
 ## البدء
 
 ابدأ تشغيل واجهة الويب عبر تنفيذ:
@@ -134,7 +146,8 @@ opencode attach http://localhost:4096
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

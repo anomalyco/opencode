@@ -13,7 +13,7 @@ Kommandoen `opencode serve` kører en hovedløs HTTP-server, som afslører et Op
 ### Brug
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--base-path <string>]
 ```
 
 #### Indstillinger
@@ -25,6 +25,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns`        | Aktiver mDNS-opdagelse                       | `false`          |
 | `--mdns-domain` | Brugerdefineret domænenavn for mDNS-tjeneste | `opencode.local` |
 | `--cors`        | Yderligere browseroprindelse for at tillade  | `[]`             |
+| `--base-path`   | Basis-endpoint (præfiks), der føjes foran alle ruter | `/`              |
 
 `--cors` kan angives flere gange:
 
@@ -84,6 +85,10 @@ For eksempel `http://localhost:4096/doc`. Brug specifikationen til at generere k
 ## API'er
 
 OpenCode-serveren viser følgende API'er.
+
+:::tip
+Hvis `--base-path` sættes til `/opencode`, vil alle API-URL'er starte med `/opencode`.
+:::
 
 ---
 

@@ -7,6 +7,18 @@ opencode может работать как веб-приложение в ва�
 
 ![opencode Web — новый сеанс](../../../assets/web/web-homepage-new-session.png)
 
+### Использование
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### Параметры
+
+| Флаг            | Описание                                          | По умолчанию     |
+| --------------- | ------------------------------------------------- | ---------------- |
+| `--base-path`   | Префикс пути, по которому будет доступен endpoint | `/`              |
+
 ## Начало работы
 
 Запустите веб-интерфейс, выполнив:
@@ -134,7 +146,8 @@ opencode attach http://localhost:4096
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```

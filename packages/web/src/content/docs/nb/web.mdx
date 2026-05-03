@@ -7,6 +7,18 @@ OpenCode kan kjøres som en nettapplikasjon i nettleseren din, og gir den samme 
 
 ![OpenCode Web - Ny økt](../../../assets/web/web-homepage-new-session.png)
 
+### Bruk
+
+```bash
+opencode web [--port <number>] [--hostname <string>] [--cors <origin>] [--mdns <boolean>] [--mdns-domain <string>] [--base-path <string>]
+```
+
+#### Alternativer
+
+| Flagg           | Beskrivelse                                       | Standard         |
+| --------------- | ------------------------------------------------- | ---------------- |
+| `--base-path`   | Stiprefikset der endepunktet blir tilgjengelig    | `/`              |
+
 ## Komme i gang
 
 Start web-grensesnittet ved å kjøre:
@@ -97,7 +109,8 @@ Du kan også konfigurere serverinnstillinger i `opencode.json` konfigurasjonsfil
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["https://example.com"]
+    "cors": ["https://example.com"],
+    "basePath": "/"
   }
 }
 ```
