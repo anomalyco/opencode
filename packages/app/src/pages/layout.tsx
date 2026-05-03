@@ -116,6 +116,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { TrellisTasksPanel } from "./layout/trellis-tasks-panel"
 
 const USE_NEW_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
@@ -131,6 +132,7 @@ export default function Layout(props: ParentProps) {
       workspaceBranchName: {} as Record<string, Record<string, string>>,
       workspaceExpanded: {} as Record<string, boolean>,
       gettingStartedDismissed: false,
+      sidebarPanel: "project" as "project" | "tasks",
     }),
   )
 
@@ -186,6 +188,7 @@ export default function Layout(props: ParentProps) {
   // route is mounted. The URL still carries the project slug so existing
   // resolvers keep working, but the icon should not look "selected".
   const onConfigRoute = createMemo(() => /\/config(?:\/|$)/.test(location.pathname))
+  const tasksPanelActive = createMemo(() => store.sidebarPanel === "tasks")
   const railCurrentDir = createMemo(() => (onConfigRoute() ? "" : routeDir()))
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
@@ -1110,6 +1113,15 @@ export default function Layout(props: ParentProps) {
         onSelect: () => layout.sidebar.toggle(),
       },
       {
+        id: "trellis.tasks.open",
+        title: language.t("command.trellis.tasks.open"),
+        description: language.t("command.trellis.tasks.open.description"),
+        keywords: kw("command.trellis.tasks.open", "command.trellis.tasks.open.description"),
+        category: language.t("command.category.view"),
+        disabled: !params.dir,
+        onSelect: () => openTasksPanel(),
+      },
+      {
         id: "page.find",
         title: language.t("command.page.find"),
         description: language.t("command.page.find.description"),
@@ -1527,11 +1539,18 @@ export default function Layout(props: ParentProps) {
 
   function openConfig(section?: string, pick?: string) {
     if (!params.dir) return
+    setStore("sidebarPanel", "project")
     const q = new URLSearchParams()
     if (section) q.set("section", section)
     if (pick) q.set("pick", pick)
     const next = q.size ? `/${params.dir}/config?${q.toString()}` : `/${params.dir}/config`
     navigate(next)
+  }
+
+  function openTasksPanel() {
+    if (!params.dir) return
+    setStore("sidebarPanel", "tasks")
+    layout.sidebar.open()
   }
 
   function openExtraAgent(id: Parameters<typeof extraAgentDir>[0]) {
@@ -3804,6 +3823,16 @@ export default function Layout(props: ParentProps) {
                           {language.t("command.session.new")}
                         </Button>
                         <div class="flex items-center gap-2">
+                          <Tooltip placement="bottom" value={language.t("trellis.tasks.title")}>
+                            <IconButton
+                              icon="task"
+                              variant="ghost"
+                              size="large"
+                              class="rounded-lg border border-border-weak-base"
+                              aria-label={language.t("trellis.tasks.title")}
+                              onClick={openTasksPanel}
+                            />
+                          </Tooltip>
                           <Tooltip placement="bottom" value={language.t("sidebar.project.clearNotifications")}>
                             <IconButton
                               icon="bell-off"
@@ -3859,6 +3888,16 @@ export default function Layout(props: ParentProps) {
                         {language.t("workspace.new")}
                       </Button>
                       <div class="flex items-center gap-2">
+                        <Tooltip placement="bottom" value={language.t("trellis.tasks.title")}>
+                          <IconButton
+                            icon="task"
+                            variant="ghost"
+                            size="large"
+                            class="rounded-lg border border-border-weak-base"
+                            aria-label={language.t("trellis.tasks.title")}
+                            onClick={openTasksPanel}
+                          />
+                        </Tooltip>
                         <Tooltip placement="bottom" value={language.t("sidebar.project.clearNotifications")}>
                           <IconButton
                             icon="bell-off"
@@ -4000,7 +4039,18 @@ export default function Layout(props: ParentProps) {
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
       renderPanel={() =>
-        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
+        tasksPanelActive() ? (
+          <TrellisTasksPanel
+            directory={() => sidebarProject()?.worktree ?? (routeDir() ? projectRoot(routeDir()) : "")}
+            width={panel}
+            mobile={mobile}
+            onBack={() => setStore("sidebarPanel", "project")}
+          />
+        ) : mobile ? (
+          <SidebarPanel project={currentProject} mobile />
+        ) : (
+          <SidebarPanel project={currentProject} merged />
+        )
       }
     />
   )
