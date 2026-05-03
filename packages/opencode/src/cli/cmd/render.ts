@@ -134,15 +134,49 @@ function edit(info: ToolProps<typeof EditTool>) {
 }
 
 function colorizeDiff(diff: string): string {
+  const width = process.stdout.columns || 80
+  const REMOVED_BG = "\x1b[48;5;52m"
+  const ADDED_BG = "\x1b[48;5;22m"
+  const RESET = "\x1b[0m"
+  const GUTTER = 4
+
+  const gutter = (n: number) => String(n).padStart(GUTTER, " ")
+  const pad = (s: string) => s + " ".repeat(Math.max(0, width - Bun.stringWidth(s)))
+
+  let oldLine = 0
+  let newLine = 0
+
   return diff
     .split("\n")
+    .filter((line) => {
+      if (line.startsWith("Index:")) return false
+      if (line.startsWith("===")) return false
+      if (line.startsWith("---") || line.startsWith("+++")) return false
+      return true
+    })
     .map((line) => {
-      if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("Index:") || line.startsWith("==="))
+      if (line.startsWith("@@")) {
+        const m = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
+        if (m) {
+          oldLine = parseInt(m[1], 10)
+          newLine = parseInt(m[2], 10)
+        }
         return UI.Style.TEXT_DIM + line + UI.Style.TEXT_NORMAL
-      if (line.startsWith("@@")) return UI.Style.TEXT_INFO + line + UI.Style.TEXT_NORMAL
-      if (line.startsWith("+")) return UI.Style.TEXT_SUCCESS + line + UI.Style.TEXT_NORMAL
-      if (line.startsWith("-")) return UI.Style.TEXT_DANGER + line + UI.Style.TEXT_NORMAL
-      return line
+      }
+      if (line.startsWith("-")) {
+        const out = pad(gutter(oldLine) + " " + line)
+        oldLine++
+        return REMOVED_BG + out + RESET
+      }
+      if (line.startsWith("+")) {
+        const out = pad(gutter(newLine) + " " + line)
+        newLine++
+        return ADDED_BG + out + RESET
+      }
+      const out = UI.Style.TEXT_DIM + gutter(newLine) + UI.Style.TEXT_NORMAL + " " + line
+      oldLine++
+      newLine++
+      return out
     })
     .join("\n")
 }
