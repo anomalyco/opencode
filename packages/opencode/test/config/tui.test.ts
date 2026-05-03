@@ -624,3 +624,52 @@ test("merges plugin_enabled flags across config layers", async () => {
     "local.plugin": true,
   })
 })
+
+test("loads animate_logo and logo_sound from tui.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ logo: { animate: true, sound: true } }, null, 2))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.logo?.animate).toBe(true)
+  expect(config.logo?.sound).toBe(true)
+})
+
+test("animate_logo and logo_sound are undefined when absent from tui.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ theme: "opencode" }, null, 2))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.logo).toBeUndefined()
+})
+
+test("migrates tui.animate_logo and tui.logo_sound from legacy opencode.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify(
+          {
+            tui: { logo: { animate: true, sound: true } },
+          },
+          null,
+          2,
+        ),
+      )
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.logo?.animate).toBe(true)
+  expect(config.logo?.sound).toBe(true)
+
+  const text = await Filesystem.readText(path.join(tmp.path, "tui.json"))
+  const migrated = JSON.parse(text)
+  expect(migrated.logo?.animate).toBe(true)
+  expect(migrated.logo?.sound).toBe(true)
+})

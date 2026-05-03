@@ -6,6 +6,7 @@ import { selectedForeground, useTheme } from "@tui/context/theme"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { Link } from "@tui/ui/link"
 import { GoLogo } from "./logo"
+import { useTuiConfig } from "../context/tui-config"
 import { BgPulse, type BgPulseMask } from "./bg-pulse"
 
 const GO_URL = "https://opencode.ai/go"
@@ -30,6 +31,7 @@ function dismiss(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog
 export function DialogGoUpsell(props: DialogGoUpsellProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
   const fg = selectedForeground(theme)
   const [selected, setSelected] = createSignal<"dismiss" | "subscribe">("subscribe")
   const [center, setCenter] = createSignal<{ x: number; y: number } | undefined>()
@@ -110,7 +112,7 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
         </box>
         <box alignItems="center" gap={1} paddingBottom={1}>
           <box ref={(item: BoxRenderable) => (logoBox = item)}>
-            <GoLogo />
+            <GoLogo animation={tuiConfig.logo?.animate ?? false} sound={tuiConfig.logo?.sound ?? false} />
           </box>
           <Link href={GO_URL} fg={theme.primary} />
         </box>

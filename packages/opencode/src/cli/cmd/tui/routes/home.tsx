@@ -9,6 +9,7 @@ import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import { useTuiConfig } from "../context/tui-config"
 
 let once = false
 const placeholder = {
@@ -24,6 +25,7 @@ export function Home() {
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
+  const tuiConfig = useTuiConfig()
   let sent = false
 
   const bind = (r: PromptRef | undefined) => {
@@ -59,7 +61,10 @@ export function Home() {
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>
           <TuiPluginRuntime.Slot name="home_logo" mode="replace">
-            <Logo />
+            <Logo
+              animation={tuiConfig.logo?.animate ?? false}
+              sound={tuiConfig.logo?.sound ?? false}
+            />
           </TuiPluginRuntime.Slot>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />

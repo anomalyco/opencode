@@ -24,6 +24,19 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  logo: z
+    .object({
+      animate: z
+        .boolean()
+        .optional()
+        .describe("Enable logo animation on the home screen and Go upsell dialog (default: false)"),
+      sound: z
+        .boolean()
+        .optional()
+        .describe("Enable sound effects for the logo animation. Only has effect when animate is true (default: false)"),
+    })
+    .optional()
+    .describe("Logo display settings"),
 })
 
 export const TuiInfo = z

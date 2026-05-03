@@ -552,7 +552,9 @@ function buildIdleState(t: number, ctx: LogoContext): IdleState {
   return { cfg, reach, rings, active }
 }
 
-export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = {}) {
+export function Logo(
+  props: { shape?: LogoShape; ink?: RGBA; idle?: boolean; animation?: boolean; sound?: boolean } = {},
+) {
   const ctx = props.shape ? build(props.shape) : DEFAULT
   const { theme } = useTheme()
   const renderer = useRenderer()
@@ -577,7 +579,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     const item = hold()
     if (item && !hum && t - item.at >= HOLD) {
       hum = true
-      Sound.start()
+      if (props.sound === true) Sound.start()
     }
     if (item && t - item.at >= CHARGE) {
       burst(item.x, item.y)
@@ -599,6 +601,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   }
 
   const start = () => {
+    if (props.animation !== true) return
     if (timer) return
     timer = setInterval(tick, 16)
   }
@@ -606,7 +609,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   onCleanup(() => {
     stop()
     hum = false
-    Sound.dispose()
+    if (props.sound === true) Sound.dispose()
   })
 
   onMount(() => {
@@ -621,6 +624,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   }
 
   const press = (x: number, y: number, t: number) => {
+    if (props.animation !== true) return
     const last = hold()
     if (last) burst(last.x, last.y)
     setNow(t)
@@ -631,6 +635,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   }
 
   const burst = (x: number, y: number) => {
+    if (props.animation !== true) return
     const item = hold()
     if (!item) return
     hum = false
@@ -655,7 +660,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     ])
     setNow(t)
     start()
-    Sound.pulse(lerp(0.8, 1, level))
+    if (props.sound === true) Sound.pulse(lerp(0.8, 1, level))
   }
 
   const frame = createMemo(() => {
@@ -889,8 +894,8 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   )
 }
 
-export function GoLogo() {
+export function GoLogo(props: { animation?: boolean; sound?: boolean }) {
   const { theme } = useTheme()
   const base = tint(theme.background, theme.text, 0.62)
-  return <Logo shape={go} ink={base} idle />
+  return <Logo shape={go} ink={base} idle animation={props.animation} sound={props.sound} />
 }
