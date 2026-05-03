@@ -5,7 +5,7 @@ import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { SyntaxStyle } from "@opentui/core"
+import type { BoxRenderable, SyntaxStyle } from "@opentui/core"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import path from "path"
@@ -521,6 +521,7 @@ function InlineTool(props: {
   part: SessionMessageAssistantTool
 }) {
   const { theme } = useTheme()
+  const [margin, setMargin] = createSignal(0)
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
   const denied = createMemo(() => {
     const message = error()
@@ -532,7 +533,26 @@ function InlineTool(props: {
     )
   })
   return (
-    <box marginTop={1} paddingLeft={3} flexShrink={0}>
+    <box
+      marginTop={margin()}
+      paddingLeft={3}
+      flexShrink={0}
+      renderBefore={function () {
+        const el = this as BoxRenderable
+        const parent = el.parent
+        if (!parent) return
+        if (el.height > 1) {
+          setMargin(1)
+          return
+        }
+        const previous = parent.getChildren()[parent.getChildren().indexOf(el) - 1]
+        if (!previous) {
+          setMargin(0)
+          return
+        }
+        if (previous.height > 1 || previous.id.startsWith("text-")) setMargin(1)
+      }}
+    >
       <Switch>
         <Match when={props.spinner}>
           <Spinner color={theme.text}>{props.children}</Spinner>
