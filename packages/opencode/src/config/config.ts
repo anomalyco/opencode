@@ -244,24 +244,27 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
-  experimental: Schema.optional(
-    Schema.Struct({
-      disable_paste_summary: Schema.optional(Schema.Boolean),
-      batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
-      openTelemetry: Schema.optional(Schema.Boolean).annotate({
-        description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
+    experimental: Schema.optional(
+      Schema.Struct({
+        disable_paste_summary: Schema.optional(Schema.Boolean),
+        batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
+        openTelemetry: Schema.optional(Schema.Boolean).annotate({
+          description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
+        }),
+        primary_tools: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+          description: "Tools that should only be available to primary agents.",
+        }),
+        continue_loop_on_deny: Schema.optional(Schema.Boolean).annotate({
+          description: "Continue the agent loop when a tool call is denied",
+        }),
+        mcp_timeout: Schema.optional(PositiveInt).annotate({
+          description: "Timeout in milliseconds for model context protocol (MCP) requests",
+        }),
+        max_retries: Schema.optional(PositiveInt).annotate({
+          description: "Maximum number of retry attempts when a provider request fails. Defaults to 5.",
+        }),
       }),
-      primary_tools: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
-        description: "Tools that should only be available to primary agents.",
-      }),
-      continue_loop_on_deny: Schema.optional(Schema.Boolean).annotate({
-        description: "Continue the agent loop when a tool call is denied",
-      }),
-      mcp_timeout: Schema.optional(PositiveInt).annotate({
-        description: "Timeout in milliseconds for model context protocol (MCP) requests",
-      }),
-    }),
-  ),
+    ),
 })
   .annotate({ identifier: "Config" })
   .pipe(

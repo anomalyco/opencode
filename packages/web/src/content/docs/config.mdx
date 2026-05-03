@@ -793,9 +793,13 @@ The `experimental` key contains options that are under active development.
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "experimental": {}
+  "experimental": {
+    "max_retries": 3
+  }
 }
 ```
+
+- `max_retries` - Maximum number of retry attempts when a provider request fails (default: 5). Set to `3` to reduce wait time on flaky endpoints.
 
 :::caution
 Experimental options are not stable. They may change or be removed without notice.

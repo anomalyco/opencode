@@ -106,9 +106,12 @@ export function retryable(error: Err) {
 export function policy(opts: {
   parse: (error: unknown) => Err
   set: (input: { attempt: number; message: string; next: number }) => Effect.Effect<void>
+  maxAttempts?: number
 }) {
+  const maxAttempts = Math.max(1, opts.maxAttempts ?? 5)
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
+      if (meta.attempt > maxAttempts) return Cause.done(meta.attempt)
       const error = opts.parse(meta.input)
       const message = retryable(error)
       if (!message) return Cause.done(meta.attempt)

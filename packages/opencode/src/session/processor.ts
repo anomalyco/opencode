@@ -661,7 +661,9 @@ export const layer: Layer.Layer<
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         slog.info("process")
         ctx.needsCompaction = false
-        ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        const cfg = yield* config.get()
+        ctx.shouldBreak = cfg.experimental?.continue_loop_on_deny !== true
+        const maxRetries = cfg.experimental?.max_retries
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
@@ -690,6 +692,7 @@ export const layer: Layer.Layer<
             Effect.retry(
               SessionRetry.policy({
                 parse,
+                maxAttempts: maxRetries,
                 set: (info) => {
                   // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
                   EventV2.run(SessionEvent.Retried.Sync, {

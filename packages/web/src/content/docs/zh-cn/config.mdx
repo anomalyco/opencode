@@ -611,17 +611,21 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 
 ### 实验性功能
 
-`experimental` 键包含正在积极开发中的选项。
+`experimental` 键包含正在开发中的选项。
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "experimental": {}
+  "experimental": {
+    "max_retries": 3
+  }
 }
 ```
 
+- `max_retries` - 提供商请求失败时的最大重试次数（默认值：5）。对于连接不稳定的端点，可以设置为 `3` 以减少等待时间。
+
 :::caution
-实验性选项不稳定。它们可能会在不另行通知的情况下被更改或移除。
+实验性选项不稳定，可能会在没有通知的情况下更改或移除。
 :::
 
 ---
