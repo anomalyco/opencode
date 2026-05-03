@@ -260,6 +260,47 @@ describe("Vcs diff", () => {
     })
   })
 
+  test("diff('git') returns paths relative to the active subdirectory", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const dir = path.join(tmp.path, "sub")
+    await fs.mkdir(dir)
+    await fs.writeFile(path.join(dir, "file.txt"), "original\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+    await fs.writeFile(path.join(dir, "file.txt"), "changed\n", "utf-8")
+    await fs.writeFile(path.join(dir, "new.txt"), "new\n", "utf-8")
+    await fs.writeFile(path.join(tmp.path, "outside.txt"), "outside\n", "utf-8")
+
+    await withVcsOnly(dir, async () => {
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
+      expect(diff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            file: "file.txt",
+            status: "modified",
+          }),
+        ]),
+      )
+      expect(diff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            file: "new.txt",
+            status: "added",
+          }),
+        ]),
+      )
+      expect(diff.some((item) => item.file === "sub/file.txt")).toBe(false)
+      expect(diff.some((item) => item.file === "sub/new.txt")).toBe(false)
+      expect(diff.some((item) => item.file === "outside.txt")).toBe(false)
+      expect(diff.find((item) => item.file === "file.txt")?.patch).toContain("+changed")
+    })
+  })
+
   test("diff('git') keeps batched patches aligned for type changes", async () => {
     if (process.platform === "win32") return
 

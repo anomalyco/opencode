@@ -18,6 +18,14 @@ const cfg = [
 
 const out = (result: { text(): string }) => result.text().trim()
 const nuls = (text: string) => text.split("\0").filter(Boolean)
+const slashes = (value: string) => value.replaceAll("\\", "/")
+const stripPrefix = (file: string, prefix: string) => {
+  const base = slashes(prefix)
+  if (!base) return file
+  const next = slashes(file)
+  if (!next.startsWith(base)) return file
+  return next.slice(base.length)
+}
 const fail = (err: unknown) =>
   ({
     exitCode: 1,
@@ -218,7 +226,7 @@ export const layer = Layer.effect(
     })
 
     const show = Effect.fn("Git.show")(function* (cwd: string, ref: string, file: string, prefix = "") {
-      const target = prefix ? `${prefix}${file}` : file
+      const target = prefix ? `${prefix}${file}` : `./${file}`
       const result = yield* run(["show", `${ref}:${target}`], { cwd })
       if (result.exitCode !== 0) return ""
       if (result.stdout.includes(0)) return ""
@@ -226,6 +234,7 @@ export const layer = Layer.effect(
     })
 
     const status = Effect.fn("Git.status")(function* (cwd: string) {
+      const base = yield* prefix(cwd)
       return nuls(
         yield* text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], {
           cwd,
@@ -234,11 +243,12 @@ export const layer = Layer.effect(
         const file = item.slice(3)
         if (!file) return []
         const code = item.slice(0, 2)
-        return [{ file, code, status: kind(code) } satisfies Item]
+        return [{ file: stripPrefix(file, base), code, status: kind(code) } satisfies Item]
       })
     })
 
     const diff = Effect.fn("Git.diff")(function* (cwd: string, ref: string) {
+      const base = yield* prefix(cwd)
       const list = nuls(
         yield* text(["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."], { cwd }),
       )
@@ -246,11 +256,12 @@ export const layer = Layer.effect(
         if (idx % 2 !== 0) return []
         const file = list[idx + 1]
         if (!code || !file) return []
-        return [{ file, code, status: kind(code) } satisfies Item]
+        return [{ file: stripPrefix(file, base), code, status: kind(code) } satisfies Item]
       })
     })
 
     const stats = Effect.fn("Git.stats")(function* (cwd: string, ref: string) {
+      const base = yield* prefix(cwd)
       return nuls(
         yield* text(["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."], { cwd }),
       ).flatMap((item) => {
@@ -265,7 +276,7 @@ export const layer = Layer.effect(
         const deletions = dels === "-" ? 0 : Number.parseInt(dels || "0", 10)
         return [
           {
-            file,
+            file: stripPrefix(file, base),
             additions: Number.isFinite(additions) ? additions : 0,
             deletions: Number.isFinite(deletions) ? deletions : 0,
           } satisfies Stat,

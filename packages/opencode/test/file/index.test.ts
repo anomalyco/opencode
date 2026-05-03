@@ -430,6 +430,35 @@ describe("file/index Filesystem patterns", () => {
       })
     })
 
+    test("detects modified files relative to a subdirectory", async () => {
+      await using tmp = await tmpdir({ git: true })
+      const dir = path.join(tmp.path, "sub")
+      await fs.mkdir(dir)
+      await fs.writeFile(path.join(dir, "file.txt"), "original\n", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "outside.txt"), "original\n", "utf-8")
+      await $`git add .`.cwd(tmp.path).quiet()
+      await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+      await fs.writeFile(path.join(dir, "file.txt"), "modified\n", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "outside.txt"), "modified\n", "utf-8")
+
+      await WithInstance.provide({
+        directory: dir,
+        fn: async () => {
+          const result = await status()
+          expect(result).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                path: "file.txt",
+                status: "modified",
+              }),
+            ]),
+          )
+          expect(result.some((item) => item.path === "sub/file.txt")).toBe(false)
+          expect(result.some((item) => item.path === "outside.txt")).toBe(false)
+        },
+      })
+    })
+
     test("detects untracked file as added", async () => {
       await using tmp = await tmpdir({ git: true })
       await fs.writeFile(path.join(tmp.path, "new.txt"), "line1\nline2\nline3\n", "utf-8")

@@ -114,6 +114,20 @@ describe("Git", () => {
     })
   })
 
+  test("show() reads files relative to a subdirectory", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const dir = path.join(tmp.path, "sub")
+    await fs.mkdir(dir)
+    await fs.writeFile(path.join(dir, "file.txt"), "original\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+
+    await withGit(async (rt) => {
+      const text = await rt.runPromise(Git.Service.use((git) => git.show(dir, "HEAD", "file.txt")))
+      expect(text).toBe("original\n")
+    })
+  })
+
   test("patch() returns capped native patch output", async () => {
     await using tmp = await tmpdir({ git: true })
     await fs.writeFile(path.join(tmp.path, weird), "before\n", "utf-8")

@@ -77,6 +77,14 @@ export const Event = {
 }
 
 const log = Log.create({ service: "file" })
+const slashes = (value: string) => value.replaceAll("\\", "/")
+const stripGitPrefix = (file: string, prefix: string) => {
+  const base = slashes(prefix)
+  if (!base) return file
+  const next = slashes(file)
+  if (!next.startsWith(base)) return file
+  return next.slice(base.length)
+}
 
 const binary = new Set([
   "exe",
@@ -421,6 +429,7 @@ export const layer = Layer.effect(
     const status = Effect.fn("File.status")(function* () {
       const ctx = yield* InstanceState.context
       if (ctx.project.vcs !== "git") return []
+      const prefix = yield* git.prefix(ctx.directory)
 
       const diffOutput = yield* gitText([
         "-c",
@@ -430,13 +439,17 @@ export const layer = Layer.effect(
         "diff",
         "--numstat",
         "HEAD",
+        "--",
+        ".",
       ])
 
       const changed: Info[] = []
 
       if (diffOutput.trim()) {
         for (const line of diffOutput.trim().split("\n")) {
-          const [added, removed, file] = line.split("\t")
+          const [added, removed, raw] = line.split("\t")
+          if (!raw) continue
+          const file = stripGitPrefix(raw, prefix)
           changed.push({
             path: file,
             added: added === "-" ? 0 : parseInt(added, 10),
@@ -454,10 +467,13 @@ export const layer = Layer.effect(
         "ls-files",
         "--others",
         "--exclude-standard",
+        "--",
+        ".",
       ])
 
       if (untrackedOutput.trim()) {
-        for (const file of untrackedOutput.trim().split("\n")) {
+        for (const raw of untrackedOutput.trim().split("\n")) {
+          const file = stripGitPrefix(raw, prefix)
           const content = yield* appFs
             .readFileString(path.join(ctx.directory, file))
             .pipe(Effect.catch(() => Effect.succeed<string | undefined>(undefined)))
@@ -480,10 +496,13 @@ export const layer = Layer.effect(
         "--name-only",
         "--diff-filter=D",
         "HEAD",
+        "--",
+        ".",
       ])
 
       if (deletedOutput.trim()) {
-        for (const file of deletedOutput.trim().split("\n")) {
+        for (const raw of deletedOutput.trim().split("\n")) {
+          const file = stripGitPrefix(raw, prefix)
           changed.push({
             path: file,
             added: 0,

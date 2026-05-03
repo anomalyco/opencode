@@ -15,6 +15,14 @@ const MAX_PATCH_BYTES = 10_000_000
 const MAX_TOTAL_PATCH_BYTES = 10_000_000
 
 const emptyPatch = (file: string) => formatPatch(structuredPatch(file, file, "", "", "", "", { context: 0 }))
+const slashes = (value: string) => value.replaceAll("\\", "/")
+const stripPrefix = (file: string, prefix: string) => {
+  const base = slashes(prefix)
+  if (!base) return file
+  const next = slashes(file)
+  if (!next.startsWith(base)) return file
+  return next.slice(base.length)
+}
 
 const nums = (list: Git.Stat[]) =>
   new Map(list.map((item) => [item.file, { additions: item.additions, deletions: item.deletions }] as const))
@@ -94,6 +102,7 @@ const splitGitPatch = (patch: Git.Patch) => {
 const batchPatches = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string, list: Git.Item[]) {
   if (list.length === 0) return { patches: new Map<string, string>(), capped: false }
 
+  const prefix = yield* git.prefix(cwd)
   const result = yield* git.patchAll(cwd, ref, {
     context: PATCH_CONTEXT_LINES,
     maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
@@ -102,9 +111,10 @@ const batchPatches = Effect.fnUntraced(function* (git: Git.Interface, cwd: strin
 
   return {
     patches: splitGitPatch(result).reduce((acc, patch, index) => {
-      const file = fileFromPatchChunk(patch) ?? list[index]?.file
-      if (!file) return acc
-      acc.set(file, (acc.get(file) ?? "") + patch)
+      const file = fileFromPatchChunk(patch)
+      const key = file ? stripPrefix(file, prefix) : list[index]?.file
+      if (!key) return acc
+      acc.set(key, (acc.get(key) ?? "") + patch)
       return acc
     }, new Map<string, string>()),
     capped: result.truncated,
