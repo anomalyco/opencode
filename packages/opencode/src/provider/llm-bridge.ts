@@ -31,14 +31,20 @@ const PROVIDERS: Record<string, ProviderResolverShape> = {
   "@ai-sdk/azure": Azure.resolver,
   "@ai-sdk/baseten": OpenAICompatibleFamily.resolver,
   "@ai-sdk/cerebras": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/deepseek": OpenAICompatibleFamily.resolver,
   "@ai-sdk/deepinfra": OpenAICompatibleFamily.resolver,
   "@ai-sdk/fireworks": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/groq": OpenAICompatibleFamily.resolver,
   "@ai-sdk/github-copilot": GitHubCopilot.resolver,
   "@ai-sdk/google": Google.resolver,
+  "@ai-sdk/mistral": OpenAICompatibleFamily.resolver,
   "@ai-sdk/openai": OpenAI.resolver,
   "@ai-sdk/openai-compatible": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/perplexity": OpenAICompatibleFamily.resolver,
   "@ai-sdk/togetherai": OpenAICompatibleFamily.resolver,
   "@ai-sdk/xai": XAI.resolver,
+  "@openrouter/ai-sdk-provider": OpenAICompatibleFamily.resolver,
+  "venice-ai-sdk-provider": OpenAICompatibleFamily.resolver,
 }
 
 const REASONING_EFFORTS = new Set<ReasoningEffort>(ReasoningEfforts)

@@ -87,22 +87,46 @@ describe("ProviderLLMBridge", () => {
   })
 
   test("maps known OpenAI-compatible provider families", () => {
+    const cases = [
+      ["togetherai", "@ai-sdk/togetherai", "https://api.together.xyz/v1"],
+      ["openrouter", "@openrouter/ai-sdk-provider", "https://openrouter.ai/api/v1"],
+      ["groq", "@ai-sdk/groq", "https://api.groq.com/openai/v1"],
+      ["mistral", "@ai-sdk/mistral", "https://api.mistral.ai/v1"],
+      ["perplexity", "@ai-sdk/perplexity", "https://api.perplexity.ai"],
+      ["venice", "venice-ai-sdk-provider", "https://api.venice.ai/api/v1"],
+    ] as const
+
+    for (const [providerID, npm, baseURL] of cases) {
+      const ref = ProviderLLMBridge.toModelRef({
+        provider: provider({ id: ProviderID.make(providerID), options: { apiKey: `${providerID}-key` } }),
+        model: model({
+          id: "llama",
+          apiID: providerID === "togetherai" ? "meta-llama/Llama-3.3-70B-Instruct-Turbo" : "model-1",
+          providerID,
+          npm,
+        }),
+      })
+
+      expect(ref).toMatchObject({
+        provider: providerID,
+        protocol: "openai-compatible-chat",
+        baseURL,
+        apiKey: `${providerID}-key`,
+      })
+    }
+  })
+
+  test("maps xAI to OpenAI-compatible Chat", () => {
     const ref = ProviderLLMBridge.toModelRef({
-      provider: provider({ id: ProviderID.make("togetherai"), options: { apiKey: "together-key" } }),
-      model: model({
-        id: "llama",
-        apiID: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        providerID: "togetherai",
-        npm: "@ai-sdk/togetherai",
-      }),
+      provider: provider({ id: ProviderID.make("xai"), key: "xai-key" }),
+      model: model({ id: "grok-4", providerID: "xai", npm: "@ai-sdk/xai" }),
     })
 
     expect(ref).toMatchObject({
-      id: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-      provider: "togetherai",
+      provider: "xai",
       protocol: "openai-compatible-chat",
-      baseURL: "https://api.together.xyz/v1",
-      apiKey: "together-key",
+      baseURL: "https://api.x.ai/v1",
+      apiKey: "xai-key",
     })
   })
 
@@ -202,7 +226,9 @@ describe("ProviderLLMBridge", () => {
 
   test("leaves undecided provider packages unmapped", () => {
     const unsupported = [
-      ["mistral", "mistral-large", "@ai-sdk/mistral"],
+      ["cohere", "command-a", "@ai-sdk/cohere"],
+      ["google-vertex", "gemini-2.5-flash", "@ai-sdk/google-vertex"],
+      ["gateway", "openai/gpt-5", "@ai-sdk/gateway"],
     ] as const
 
     expect(
@@ -212,6 +238,6 @@ describe("ProviderLLMBridge", () => {
           model: model({ id: modelID, providerID, npm }),
         }),
       ),
-    ).toEqual([undefined, undefined])
+    ).toEqual([undefined, undefined, undefined])
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Azure, GitHubCopilot, OpenAI, OpenAICompatibleFamily, ProviderResolver } from "../src"
+import { Azure, GitHubCopilot, OpenAI, OpenAICompatibleFamily, ProviderResolver, XAI } from "../src"
 
 describe("provider resolver", () => {
   test("fixed providers resolve protocol and auth defaults", () => {
@@ -29,6 +29,29 @@ describe("provider resolver", () => {
       protocol: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
       auth: "key",
+    })
+    expect(OpenAICompatibleFamily.resolver.resolve(ProviderResolver.input("llama", "groq", {}))).toMatchObject({
+      provider: "groq",
+      protocol: "openai-compatible-chat",
+      baseURL: "https://api.groq.com/openai/v1",
+    })
+    expect(OpenAICompatibleFamily.resolver.resolve(ProviderResolver.input("sonar", "perplexity", {}))).toMatchObject({
+      provider: "perplexity",
+      protocol: "openai-compatible-chat",
+      baseURL: "https://api.perplexity.ai",
+    })
+    expect(OpenAICompatibleFamily.resolver.resolve(ProviderResolver.input("gpt-5", "openrouter", {}))).toMatchObject({
+      provider: "openrouter",
+      protocol: "openai-compatible-chat",
+      baseURL: "https://openrouter.ai/api/v1",
+    })
+  })
+
+  test("xAI resolves to its OpenAI-compatible chat endpoint", () => {
+    expect(XAI.resolver.resolve(ProviderResolver.input("grok-4", "xai", {}))).toMatchObject({
+      provider: "xai",
+      protocol: "openai-compatible-chat",
+      baseURL: "https://api.x.ai/v1",
     })
   })
 
