@@ -143,7 +143,7 @@ async function freecase(fn: () => Promise<void>) {
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn,
   })
@@ -590,7 +590,7 @@ test("resolveSelection picks only valid opencode free listings", async () => {
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const providers = await list()
@@ -728,7 +728,7 @@ test("resolveSelection throws with actionable message when no free models are av
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       let caught: Error | undefined
