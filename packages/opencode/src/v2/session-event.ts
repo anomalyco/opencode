@@ -22,6 +22,11 @@ const Base = {
   sessionID: SessionID,
 }
 
+const Error = Schema.Struct({
+  type: Schema.String,
+  message: Schema.String,
+})
+
 export const AgentSwitched = EventV2.define({
   type: "session.next.agent.switched",
   aggregate: "sessionID",
@@ -128,6 +133,16 @@ export namespace Step {
     },
   })
   export type Ended = Schema.Schema.Type<typeof Ended>
+
+  export const Failed = EventV2.define({
+    type: "session.next.step.failed",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      error: Error,
+    },
+  })
+  export type Failed = Schema.Schema.Type<typeof Failed>
 }
 
 export namespace Text {
@@ -275,23 +290,20 @@ export namespace Tool {
   })
   export type Success = Schema.Schema.Type<typeof Success>
 
-  export const Error = EventV2.define({
-    type: "session.next.tool.error",
+  export const Failed = EventV2.define({
+    type: "session.next.tool.failed",
     aggregate: "sessionID",
     schema: {
       ...Base,
       callID: Schema.String,
-      error: Schema.Struct({
-        type: Schema.String,
-        message: Schema.String,
-      }),
+      error: Error,
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       }),
     },
   })
-  export type Error = Schema.Schema.Type<typeof Error>
+  export type Failed = Schema.Schema.Type<typeof Failed>
 }
 
 export const RetryError = Schema.Struct({
@@ -359,6 +371,7 @@ export const All = Schema.Union(
     Shell.Ended,
     Step.Started,
     Step.Ended,
+    Step.Failed,
     Text.Started,
     Text.Delta,
     Text.Ended,
@@ -368,7 +381,7 @@ export const All = Schema.Union(
     Tool.Called,
     Tool.Progress,
     Tool.Success,
-    Tool.Error,
+    Tool.Failed,
     Reasoning.Started,
     Reasoning.Delta,
     Reasoning.Ended,
