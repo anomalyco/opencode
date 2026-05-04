@@ -6,13 +6,13 @@ import type { MCP as MCPNS } from "../../src/mcp/index"
 const transportCalls: Array<{
   type: "streamable" | "sse"
   url: string
-  options: { authProvider?: unknown; requestInit?: RequestInit }
+  options: { authProvider?: unknown; requestInit?: RequestInit; fetch?: unknown }
 }> = []
 
 // Mock the transport constructors to capture their arguments
 void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
-    constructor(url: URL, options?: { authProvider?: unknown; requestInit?: RequestInit }) {
+    constructor(url: URL, options?: { authProvider?: unknown; requestInit?: RequestInit; fetch?: unknown }) {
       transportCalls.push({
         type: "streamable",
         url: url.toString(),
@@ -173,6 +173,66 @@ test("no requestInit when headers are not provided", async () => {
       for (const call of transportCalls) {
         // No headers means requestInit should be undefined
         expect(call.options.requestInit).toBeUndefined()
+      }
+    },
+  })
+})
+
+test("streamable http transport receives custom fetch that sets Accept header", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/opencode.json`,
+        JSON.stringify({
+          mcp: {
+            test: {
+              type: "remote",
+              url: "https://example.com/mcp",
+            },
+          },
+        }),
+      )
+    },
+    run: async () => {
+      const mcp = await Effect.runPromise(service)
+      await Effect.runPromise(
+        WithInstance.provide(
+          mcp
+            .connect({
+              url: "https://example.com/mcp",
+            })
+            .pipe(Effect.catch(() => Effect.void)),
+        ),
+      )
+
+      const streamableCall = transportCalls.find((c) => c.type === "streamable")
+      expect(streamableCall).toBeDefined()
+      expect(streamableCall!.options.fetch).toBeTypeOf("function")
+
+      // Verify the custom fetch adds Accept header
+      const customFetch = streamableCall!.options.fetch as typeof fetch
+      const mockResponse = new Response("ok")
+      const originalFetch = globalThis.fetch
+      let capturedHeaders: Headers | undefined
+      globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+        capturedHeaders = new Headers(init?.headers)
+        return Promise.resolve(mockResponse)
+      }) as typeof fetch
+
+      try {
+        // Test with only text/event-stream (simulates SDK's GET request)
+        await customFetch("https://example.com/mcp", {
+          headers: { accept: "text/event-stream" },
+        })
+        expect(capturedHeaders!.get("accept")).toBe("application/json, text/event-stream")
+
+        // Test with both already set (simulates SDK's POST request)
+        await customFetch("https://example.com/mcp", {
+          headers: { accept: "application/json, text/event-stream" },
+        })
+        expect(capturedHeaders!.get("accept")).toBe("application/json, text/event-stream")
+      } finally {
+        globalThis.fetch = originalFetch
       }
     },
   })

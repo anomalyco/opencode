@@ -300,12 +300,25 @@ export const layer = Layer.effect(
         )
       }
 
+      // Custom fetch that ensures Accept header includes both required values
+      // for MCP Streamable HTTP spec compliance. Some servers (e.g. Zhipu/BigModel)
+      // reject requests without both application/json and text/event-stream (#6972, #25650).
+      const mcpFetch: typeof fetch = (input, init) => {
+        const headers = new Headers(init?.headers)
+        const accept = headers.get("accept") ?? ""
+        if (!accept.includes("application/json") || !accept.includes("text/event-stream")) {
+          headers.set("accept", "application/json, text/event-stream")
+        }
+        return fetch(input, { ...init, headers })
+      }
+
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: mcpFetch,
           }),
         },
         {
