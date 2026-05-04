@@ -8,6 +8,21 @@ import { lazy } from "@/util/lazy"
 import { Effect } from "effect"
 import { jsonRequest, runRequest } from "./trace"
 
+const UnsupportedOAuthError = z
+  .object({
+    error: z.string(),
+  })
+  .meta({ ref: "McpUnsupportedOAuthError" })
+
+const unsupportedOAuthErrorResponse = {
+  description: "MCP server does not support OAuth",
+  content: {
+    "application/json": {
+      schema: resolver(UnsupportedOAuthError),
+    },
+  },
+}
+
 export const McpRoutes = lazy(() =>
   new Hono()
     .get(
@@ -21,7 +36,7 @@ export const McpRoutes = lazy(() =>
             description: "MCP server status",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), MCP.Status)),
+                schema: resolver(z.record(z.string(), MCP.Status.zod)),
               },
             },
           },
@@ -44,7 +59,7 @@ export const McpRoutes = lazy(() =>
             description: "MCP server added successfully",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), MCP.Status)),
+                schema: resolver(z.record(z.string(), MCP.Status.zod)),
               },
             },
           },
@@ -85,7 +100,8 @@ export const McpRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400, 404),
+          400: unsupportedOAuthErrorResponse,
+          ...errors(404),
         },
       }),
       async (c) => {
@@ -121,7 +137,7 @@ export const McpRoutes = lazy(() =>
             description: "OAuth authentication completed",
             content: {
               "application/json": {
-                schema: resolver(MCP.Status),
+                schema: resolver(MCP.Status.zod),
               },
             },
           },
@@ -153,11 +169,12 @@ export const McpRoutes = lazy(() =>
             description: "OAuth authentication completed",
             content: {
               "application/json": {
-                schema: resolver(MCP.Status),
+                schema: resolver(MCP.Status.zod),
               },
             },
           },
-          ...errors(400, 404),
+          400: unsupportedOAuthErrorResponse,
+          ...errors(404),
         },
       }),
       async (c) => {
