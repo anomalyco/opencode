@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -109,7 +109,7 @@ jobs:
           targets: x86_64-pc-windows-msvc
 
       - name: Cache Rust target
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~\.cargo\registry
@@ -163,7 +163,7 @@ jobs:
           Write-Host "[artifact] $filename ($mb MB) SHA256=$hash"
 
       - name: Upload artifact (always — dispatch / tag 都上传)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: deskfox-${{ steps.meta.outputs.env }}-${{ steps.meta.outputs.version }}
           path: ${{ steps.artifact.outputs.path }}
@@ -171,7 +171,7 @@ jobs:
 
       - name: Create GitHub Release (draft, push-tag 模式才创建)
         if: steps.meta.outputs.is_release == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: DeskFox ${{ steps.meta.outputs.version }}${{ steps.meta.outputs.env == 'beta' && ' (beta)' || '' }}
