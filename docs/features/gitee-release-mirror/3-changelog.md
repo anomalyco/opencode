@@ -192,5 +192,27 @@ release: published 事件
 
 - 前置:`repo-migration-deskfox`(主仓在 zoulukuang/deskfox 真 fork)
 - 前置:F2a Gitee Pull 镜像(配过 GitHub PAT,代码层已实时同步)
-- 后续 backlog:Mac release(`ship-mac-prod-*`)首次出 draft 时同样测一遍 — 设计上 workflow 通用,但 Mac asset 命名 / 大小不同,值得首次实测
 - 后续 backlog:几月后老附件可能挤 Gitee 单仓配额,届时考虑保留最近 N 个 release 删旧的
+
+## 续笔(2026-05-04):Mac sh 版本补全
+
+Mac 端 release(`ship-mac-prod-2026.5.4.1`)发了 GitHub draft 后,Gitee 那边没法上 .dmg 附件 — Win 端有 `mirror-asset-to-gitee.ps1`,Mac 端缺对应 sh。补:
+
+`packages/branding/scripts/mirror-asset-to-gitee.sh`(~230 行 bash,镜像 .ps1 逻辑):
+- 位置参数 1 取 tag(例 `ship-mac-prod-2026.5.4.1`)
+- 解析 `ship-mac-(prod|beta)-VERSION` → 自动定位 `packages/desktop/src-tauri/target/release/bundle/dmg/DeskFox-${VERSION}_aarch64.dmg`
+- 找不到 → `gh release download` 从 GitHub 拉到 `/tmp/gitee-mirror-<tag>/`
+- 校验 GITEE_TOKEN(env 或 `--gitee-token` 参数,持久化建议 `echo 'export GITEE_TOKEN="..."' >> ~/.zshrc`)
+- GET Gitee releases 列表找 `release_id` by tag
+- 已有同名附件 → skip(去重)
+- curl `attach_files` 上传(`--connect-timeout 30 --max-time 600`)
+- 报告:elapsed + Mbps + Gitee URL
+
+跨平台兼容:
+- file size:`stat -f%z`(BSD/macOS)优先,fallback `stat -c%s`(GNU/Linux)+ `wc -c` 兜底
+- bash 版本要求 `[[ ... =~ ]]` 正则(bash 3.2+,macOS 自带 3.2 OK)
+- 依赖:`curl` + `jq` + `gh`(macOS 可 `brew install jq gh` 一次装)
+
+文件 mode 100755(可执行),user 可直接 `./packages/branding/scripts/mirror-asset-to-gitee.sh ship-mac-prod-X` 或 `bash <path> ship-mac-prod-X` 跑。
+
+Mac 协作者首次实测目标:`ship-mac-prod-2026.5.4.1`(GitHub 上还是 draft,Mac 协作者要先 publish 才能测)。
