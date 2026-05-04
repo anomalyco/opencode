@@ -13,7 +13,7 @@ import { SessionEvent } from "./session-event"
 import { V2Schema } from "./schema"
 import { optionalOmitUndefined } from "@/util/schema"
 
-export const Delivery = Schema.Union([Schema.Literal("immediate"), Schema.Literal("deferred")]).annotate({
+export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
 })
 export type Delivery = Schema.Schema.Type<typeof Delivery>
@@ -88,6 +88,14 @@ export interface Interface {
   }) => Effect.Effect<SessionMessage.User, never>
   readonly shell: (input: { id?: EventV2.ID; sessionID: SessionID; command: string }) => Effect.Effect<void, never>
   readonly skill: (input: { id?: EventV2.ID; sessionID: SessionID; skill: string }) => Effect.Effect<void, never>
+  readonly subagent: (input: {
+    id?: EventV2.ID
+    parentID: SessionID
+    prompt: Prompt
+    background?: boolean
+    agent: string
+    model?: string
+  }) => Effect.Effect<void, never>
   readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: {
     sessionID: SessionID
@@ -267,6 +275,7 @@ export const layer = Layer.effect(
           variant: input.variant,
         })
       }),
+      subagent: Effect.fn("V2Session.subagent")(function* (_input) {}),
       compact: Effect.fn("V2Session.compact")(function* (_sessionID) {}),
       wait: Effect.fn("V2Session.wait")(function* (_sessionID) {}),
     }

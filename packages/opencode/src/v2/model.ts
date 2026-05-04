@@ -1,5 +1,5 @@
 import { withStatics } from "@/util/schema"
-import { Array, Context, Effect, HashMap, Layer, Option, Order, pipe, Schema } from "effect"
+import { Array, Context, DateTime, Effect, HashMap, Layer, Option, Order, pipe, Schema } from "effect"
 import { DateTimeUtcFromMillis } from "effect/Schema"
 
 export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
@@ -24,44 +24,94 @@ export const ProviderID = Schema.String.pipe(
 )
 export type ProviderID = typeof ProviderID.Type
 
-export const ApiFormat = Schema.Union([
-  Schema.Literal("openai/responses"),
-  Schema.Literal("openai/completions"),
-  Schema.Literal("anthropic"),
-])
+export const VariantID = Schema.String.pipe(Schema.brand("VariantID"))
+export type VariantID = typeof VariantID.Type
 
-const Modalities = Schema.Struct({
-  text: Schema.Boolean,
-  audio: Schema.Boolean,
-  image: Schema.Boolean,
-  video: Schema.Boolean,
-  pdf: Schema.Boolean,
+// Grouping of models, eg claude opus, claude sonnet
+export const Family = Schema.String.pipe(Schema.brand("Family"))
+export type Family = typeof Family.Type
+
+const OpenAIResponses = Schema.Struct({
+  type: Schema.Literal("openai/responses"),
+  url: Schema.String,
+  websocket: Schema.optional(Schema.Boolean),
 })
 
+const OpenAICompletions = Schema.Struct({
+  type: Schema.Literal("openai/completions"),
+  url: Schema.String,
+  reasoning: Schema.Union([
+    Schema.Struct({
+      type: Schema.Literal("reasoning_content"),
+    }),
+    Schema.Struct({
+      type: Schema.Literal("reasoning_details"),
+    }),
+  ]).pipe(Schema.optional),
+})
+export type OpenAICompletions = typeof OpenAICompletions.Type
+
+const AnthropicMessages = Schema.Struct({
+  type: Schema.Literal("anthropic/messages"),
+  url: Schema.String,
+})
+
+export const Endpoint = Schema.Union([OpenAIResponses, OpenAICompletions, AnthropicMessages]).pipe(
+  Schema.toTaggedUnion("type"),
+)
+export type Endpoint = typeof Endpoint.Type
+
 export const Capabilities = Schema.Struct({
-  temperature: Schema.Boolean,
-  reasoning: Schema.Boolean,
-  attachment: Schema.Boolean,
-  toolcall: Schema.Boolean,
-  small: Schema.Boolean,
-  input: Modalities,
-  output: Modalities,
+  tools: Schema.Boolean,
+  // mime patterns, image, audio, video/*, text/*
+  input: Schema.String.pipe(Schema.Array),
+  output: Schema.String.pipe(Schema.Array),
+})
+export type Capabilities = typeof Capabilities.Type
+
+export const Options = Schema.Struct({
+  headers: Schema.Record(Schema.String, Schema.String),
+  body: Schema.Record(Schema.String, Schema.Any),
+})
+export type Options = typeof Options.Type
+
+export const Cost = Schema.Struct({
+  tier: Schema.Struct({
+    type: Schema.Literal("context"),
+    size: Schema.Int,
+  }).pipe(Schema.optional),
+  input: Schema.Finite,
+  output: Schema.Finite,
+  cache: Schema.Struct({
+    read: Schema.Finite,
+    write: Schema.Finite,
+  }),
 })
 
 export class Info extends Schema.Class<Info>("Model.Info")({
   id: ID,
   providerID: ProviderID,
-  api: Schema.Struct({
-    format: ApiFormat,
-    url: Schema.String,
-    headers: Schema.Record(Schema.String, Schema.String),
-  }),
-  capabilities: Capabilities,
+  family: Family.pipe(Schema.optional),
   name: Schema.String,
-  family: Schema.optional(Schema.String),
-  variants: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any)),
+  endpoint: Endpoint,
+  capabilities: Capabilities,
+  options: Schema.Struct({
+    ...Options.fields,
+    variant: Schema.String.pipe(Schema.optional),
+  }),
+  variants: Schema.Struct({
+    id: VariantID,
+    ...Options.fields,
+  }).pipe(Schema.Array),
   time: Schema.Struct({
     released: DateTimeUtcFromMillis,
+  }),
+  cost: Cost.pipe(Schema.Array),
+  status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
+  limit: Schema.Struct({
+    context: Schema.Int,
+    input: Schema.Int.pipe(Schema.optional),
+    output: Schema.Int,
   }),
 }) {}
 
@@ -121,7 +171,7 @@ export const layer = Layer.effect(
 
       small: Effect.fn("V2Model.small")(function* (providerID) {
         const all = yield* result.all()
-        const match = all.find((model) => model.capabilities.small && model.providerID === providerID)
+        const match = all.find((model) => model.providerID === providerID && model.id.toLowerCase().includes("small"))
         return Option.fromUndefinedOr(match)
       }),
     }
