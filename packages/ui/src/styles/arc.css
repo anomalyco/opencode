@@ -79,40 +79,44 @@ html[data-theme="arc"] {
     --rail-hue-6: linear-gradient(180deg, #e6e6f0 0%, #dcdce8 100%);
   }
 
-  /* Within the dusty-mauve sidebar, switch text/icon/border tokens to
-     light values for legibility. Children consume these via CSS var
-     inheritance — no per-component selector overrides needed. */
-  html[data-theme="arc"] [data-component="sidebar-rail"],
-  html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
-  html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
-    --text-strong: #F0E8F0;
-    --text-base: #D5C8D8;
-    --text-weak: #A89DAB;
-    --text-weaker: #8A7F8E;
-    --icon-base: #B0A3B6;
-    --icon-hover: #D5C8D8;
-    --icon-active: #F0E8F0;
-    --icon-strong-base: #F0E8F0;
-    --icon-strong-hover: #FFFFFF;
-    --icon-strong-active: #FFFFFF;
-    --icon-weak-base: #8A7F8E;
-    --border-base: rgba(255, 255, 255, 0.16);
-    --border-weak-base: rgba(255, 255, 255, 0.08);
-    --border-weaker-base: rgba(255, 255, 255, 0.06);
-    --border-strong-base: rgba(255, 255, 255, 0.22);
-    --surface-base-hover: rgba(255, 255, 255, 0.08);
-    --surface-base-active: rgba(255, 255, 255, 0.12);
-    --button-ghost-hover: rgba(255, 255, 255, 0.10);
-    --button-ghost-hover2: rgba(255, 255, 255, 0.14);
+  /* Within the dusty-mauve sidebar, set high-contrast text/icon colors
+     by directly overriding Tailwind v4's text-* / icon-* utilities.
+     We can't rely on --text-* / --icon-* CSS var overrides because
+     Tailwind v4's @theme block resolves --color-* tokens into
+     utilities at build time — runtime var overrides don't propagate
+     into bg-/text-/border-*-base classes.
+     Substring [class*="..."] selectors cover both base classes and
+     group-hover/session: variants in one rule. */
+  html[data-theme="arc"] [data-component="sidebar-rail"] [class*="text-text-strong"],
+  html[data-theme="arc"] [data-component="sidebar-nav-desktop"] [class*="text-text-strong"],
+  html[data-theme="arc"] [data-component="sidebar-nav-mobile"] [class*="text-text-strong"],
+  html[data-theme="arc"] [data-component="sidebar-panel"] [class*="text-text-strong"] {
+    color: #F0E8F0 !important;
+  }
+  html[data-theme="arc"] [data-component="sidebar-rail"] [class*="text-text-base"],
+  html[data-theme="arc"] [data-component="sidebar-nav-desktop"] [class*="text-text-base"],
+  html[data-theme="arc"] [data-component="sidebar-nav-mobile"] [class*="text-text-base"],
+  html[data-theme="arc"] [data-component="sidebar-panel"] [class*="text-text-base"] {
+    color: #D5C8D8 !important;
+  }
+  html[data-theme="arc"] [data-component="sidebar-rail"] [class*="text-text-weak"],
+  html[data-theme="arc"] [data-component="sidebar-nav-desktop"] [class*="text-text-weak"],
+  html[data-theme="arc"] [data-component="sidebar-nav-mobile"] [class*="text-text-weak"],
+  html[data-theme="arc"] [data-component="sidebar-panel"] [class*="text-text-weak"] {
+    color: #A89DAB !important;
+  }
+  html[data-theme="arc"] [data-component="sidebar-rail"] [class*="text-icon-weak"],
+  html[data-theme="arc"] [data-component="sidebar-nav-desktop"] [class*="text-icon-weak"],
+  html[data-theme="arc"] [data-component="sidebar-panel"] [class*="text-icon-weak"] {
+    color: #8A7F8E !important;
+  }
 
-    /* SidebarPanel (the conversation list root) uses Tailwind's
-       bg-background-base / bg-background-stronger utilities. Aligning
-       these vars to the sidebar's mauve makes the panel share the
-       rail's panel identity instead of staying white. */
-    --background-base: #756B7E;
-    --background-weak: #6F6479;
-    --background-strong: #7B708A;
-    --background-stronger: #756B7E;
+  /* SidebarPanel: remove the light border separator (drew a hard line
+     between rail and panel since both are now the same mauve color),
+     and bump top-left radius to match the main pane's --radius-2xl. */
+  html[data-theme="arc"] [data-component="sidebar-panel"] {
+    border: none !important;
+    border-top-left-radius: var(--radius-2xl) !important;
   }
 }
 
