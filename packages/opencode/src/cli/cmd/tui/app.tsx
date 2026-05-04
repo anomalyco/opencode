@@ -260,8 +260,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       setReady(true)
     })
 
+  const disableCopyOnSelect = () => {
+    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return true
+    if (tuiConfig.copy_on_select !== undefined) return !tuiConfig.copy_on_select
+    return false
+  }
+
   useKeyboard((evt) => {
-    if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+    if (!disableCopyOnSelect()) return
     const sel = renderer.getSelection()
     if (!sel) return
 
@@ -884,14 +890,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       height={dimensions().height}
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (!disableCopyOnSelect()) return
         if (evt.button !== MouseButton.RIGHT) return
 
         if (!Selection.copy(renderer, toast)) return
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
+      onMouseUp={disableCopyOnSelect() ? undefined : () => Selection.copy(renderer, toast)}
     >
       <Show when={Flag.OPENCODE_SHOW_TTFD}>
         <TimeToFirstDraw />

@@ -5,6 +5,7 @@ import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { useTuiConfig } from "@tui/context/tui-config"
 import * as Selection from "@tui/util/selection"
 
 export function Dialog(
@@ -155,6 +156,12 @@ export function DialogProvider(props: ParentProps) {
   const value = init()
   const renderer = useRenderer()
   const toast = useToast()
+  const tuiConfig = useTuiConfig()
+  const disableCopyOnSelect = () => {
+    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return true
+    if (tuiConfig.copy_on_select !== undefined) return !tuiConfig.copy_on_select
+    return false
+  }
   return (
     <ctx.Provider value={value}>
       {props.children}
@@ -162,7 +169,7 @@ export function DialogProvider(props: ParentProps) {
         position="absolute"
         zIndex={3000}
         onMouseDown={(evt) => {
-          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+          if (!disableCopyOnSelect()) return
           if (evt.button !== MouseButton.RIGHT) return
 
           if (!Selection.copy(renderer, toast)) return
@@ -170,7 +177,7 @@ export function DialogProvider(props: ParentProps) {
           evt.stopPropagation()
         }}
         onMouseUp={
-          !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => Selection.copy(renderer, toast) : undefined
+          disableCopyOnSelect() ? undefined : () => Selection.copy(renderer, toast)
         }
       >
         <Show when={value.stack.length}>
