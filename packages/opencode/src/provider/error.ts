@@ -123,7 +123,10 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
   const responseBody = JSON.stringify(body)
   if (body.type !== "error") return
 
-  switch (body?.error?.code) {
+  const errorCode = typeof body?.error?.code === "string" ? body.error.code : ""
+  const errorType = typeof body?.error?.type === "string" ? body.error.type : ""
+
+  switch (errorCode) {
     case "context_length_exceeded":
       return {
         type: "context_overflow",
@@ -158,6 +161,20 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
         isRetryable: true,
         responseBody,
       }
+  }
+
+  if (
+    errorType === "service_unavailable_error" ||
+    errorCode === "server_is_overloaded" ||
+    errorCode.includes("unavailable") ||
+    errorCode.includes("exhausted")
+  ) {
+    return {
+      type: "api_error",
+      message: typeof body?.error?.message === "string" ? body.error.message : "Provider is overloaded",
+      isRetryable: true,
+      responseBody,
+    }
   }
 }
 
