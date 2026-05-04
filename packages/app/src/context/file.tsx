@@ -308,6 +308,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       tree: {
         list: tree.listDir,
         refresh: (input: string) => tree.listDir(input, { force: true }),
+        // FORK: 递归刷新(根 + 所有 expanded 子目录),修空白处刷新不真重载问题 [feat: file-tree-ux-polish] 2026-05-04
+        refreshAll: tree.refreshAllExpanded,
         state: tree.dirState,
         children: tree.children,
         expand: tree.expandDir,

@@ -161,6 +161,19 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     return out
   }
 
+  // FORK-BEGIN: 递归刷新 — 强制 re-list 根 + 所有 expanded 子目录,修复"刷新但子目录没变"问题
+  // [feat: file-tree-ux-polish] 2026-05-04
+  const refreshAllExpanded = async (rootInput: string) => {
+    const root = options.normalizeDir(rootInput)
+    const tasks: Promise<void>[] = [listDir(root, { force: true })]
+    for (const [path, state] of Object.entries(tree.dir)) {
+      if (path === root) continue
+      if (state?.expanded) tasks.push(listDir(path, { force: true }))
+    }
+    await Promise.all(tasks)
+  }
+  // FORK-END
+
   return {
     listDir,
     expandDir,
@@ -170,5 +183,6 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     node: (path: string) => tree.node[path],
     isLoaded: (path: string) => Boolean(tree.dir[path]?.loaded),
     reset,
+    refreshAllExpanded,
   }
 }

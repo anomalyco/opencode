@@ -901,26 +901,31 @@ export default function FileTree(props: {
   const renderEmptyMenuItems = () => {
     const rootAbs = sdk.directory
     const rootRel = props.path
+    // FORK-BEGIN: 空白处右键菜单重整 — 2 组(新建/[粘贴] → 刷新);
+    // 刷新改用 refreshAll 递归刷新所有 expanded 子目录,修"刷新但子目录没变"问题
+    // [feat: file-tree-ux-polish] 2026-05-04
     return (
       <ContextMenu.Content>
+        {/* 组 1: 新建文件 / 新建文件夹 / [粘贴到项目根] */}
         <ContextMenu.Item onSelect={() => promptNewFileAt(rootAbs, rootRel)}>
-          <ContextMenu.ItemLabel>新建文件 (.md)</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>新建文件</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => promptNewFolderAt(rootAbs, rootRel)}>
           <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
         </ContextMenu.Item>
-        {/* FORK: 树根空白处也支持粘贴到项目根 (commit #3 of file-tree-dnd) 2026-04-27 */}
         <Show when={clipboard.hasContent()}>
           <ContextMenu.Item onSelect={() => void pasteTo(rootAbs, rootRel)}>
             <ContextMenu.ItemLabel>粘贴到项目根</ContextMenu.ItemLabel>
           </ContextMenu.Item>
         </Show>
         <ContextMenu.Separator />
-        <ContextMenu.Item onSelect={() => void file.tree.refresh(rootRel)}>
+        {/* 组 2: 刷新(递归) */}
+        <ContextMenu.Item onSelect={() => void file.tree.refreshAll(rootRel)}>
           <ContextMenu.ItemLabel>刷新</ContextMenu.ItemLabel>
         </ContextMenu.Item>
       </ContextMenu.Content>
     )
+    // FORK-END
   }
 
   const key = (p: string) =>
