@@ -25,6 +25,15 @@ html[data-theme="arc"] {
   --canvas-padding: 8px;
   --canvas-gap: 8px;
 
+  /* Sidebar card background — distinctly more saturated than main content,
+     so the rail and session list read as a separate "panel" with material
+     identity (Arc's signature warm grey-violet sidebar). */
+  --sidebar-card-bg: #1B1826;
+
+  /* Dock-prompt shell background — opaque (not the hardcoded
+     rgb(12 12 14 / 0.34) which becomes muddy grey on light canvases). */
+  --dock-shell-bg: color-mix(in srgb, #221E2D 68%, transparent);
+
   /* Floating card elevation (subtle violet-tinged outer shadow) */
   --card-elevation:
     0 0 0 0.5px rgba(167, 139, 250, 0.08),
@@ -45,6 +54,13 @@ html[data-theme="arc"] {
   html[data-theme="arc"] {
     /* Canvas: cream-violet, slightly darker than background-base */
     --canvas-base: #ebe6f2;
+
+    /* Sidebar card background — warm grey-violet, distinctly more
+       saturated than main's pure white, mirrors Arc Browser's sidebar. */
+    --sidebar-card-bg: #E8E1F2;
+
+    /* Dock-prompt shell background — soft opaque white-violet */
+    --dock-shell-bg: color-mix(in srgb, #FFFFFF 84%, transparent);
 
     /* Floating card elevation (subtle violet-tinged warm shadow) */
     --card-elevation:
@@ -80,7 +96,7 @@ html[data-theme="arc"] [data-component="titlebar"] {
 /* Project rail — keeps its 64px slot but reads as a distinct floating panel
    via raised surface + rounded right edge (left edge stays flush with viewport) */
 html[data-theme="arc"] [data-component="sidebar-rail"] {
-  background-color: var(--surface-raised-base);
+  background-color: var(--sidebar-card-bg);
   border-top-right-radius: var(--radius-xl);
   border-bottom-right-radius: var(--radius-xl);
   box-shadow:
@@ -91,7 +107,7 @@ html[data-theme="arc"] [data-component="sidebar-rail"] {
 /* Session sidebar nav — same treatment, sits to the right of rail */
 html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
 html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
-  background-color: var(--surface-raised-base);
+  background-color: var(--sidebar-card-bg);
   border-top-right-radius: var(--radius-xl);
   border-bottom-right-radius: var(--radius-xl);
   box-shadow:
@@ -108,8 +124,13 @@ html[data-theme="arc"] main {
   box-shadow: var(--card-elevation);
 }
 
-/* Dock-prompt: sync radius with cards */
-html[data-theme="arc"] [data-dock-surface="shell"],
+/* Dock-prompt: sync radius with cards + override hardcoded translucent dark
+   background that becomes muddy grey on light canvases */
+html[data-theme="arc"] [data-dock-surface="shell"] {
+  border-radius: var(--radius-xl);
+  background-color: var(--dock-shell-bg);
+}
+
 html[data-theme="arc"] [data-dock-surface="tray"] {
   border-radius: var(--radius-xl);
 }
