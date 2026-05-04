@@ -47,7 +47,6 @@
         display: none;
       }
 
-      padding: 14px;
       border-radius: var(--radius-xl);
       border: 1px solid color-mix(in oklch, var(--border-strong-base) 88%, transparent);
       background-color: rgb(12 12 14 / 0.34);
