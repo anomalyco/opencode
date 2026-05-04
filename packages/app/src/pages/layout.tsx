@@ -1020,6 +1020,13 @@ export default function Layout(props: ParentProps) {
         onSelect: () => layout.sidebar.toggle(),
       },
       {
+        id: "project.create",
+        title: language.t("command.project.create"),
+        category: language.t("command.category.project"),
+        keybind: "mod+shift+n",
+        onSelect: () => createProject(),
+      },
+      {
         id: "project.open",
         title: language.t("command.project.open"),
         category: language.t("command.category.project"),
@@ -1475,6 +1482,20 @@ export default function Layout(props: ParentProps) {
         )
       })
     }
+  }
+
+  function createProject() {
+    const run = ++dialogRun
+    void import("@/components/dialog-create-folder").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => (
+        <x.DialogCreateFolder
+          onCreated={(path) => {
+            void openProject(path)
+          }}
+        />
+      ))
+    })
   }
 
   const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {

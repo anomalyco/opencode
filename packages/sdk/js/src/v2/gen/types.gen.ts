@@ -3985,6 +3985,29 @@ export type FileStatusResponses = {
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
 
+export type FileMkdirInput = {
+  path: string
+}
+
+export type FileMkdirData = {
+  body: FileMkdirInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/file/mkdir"
+}
+
+export type FileMkdirResponses = {
+  /**
+   * Absolute path of the created directory
+   */
+  200: { path: string }
+}
+
+export type FileMkdirResponse = FileMkdirResponses[keyof FileMkdirResponses]
+
 export type InstanceDisposeData = {
   body?: never
   path?: never

@@ -23,6 +23,7 @@ export const dict = {
 
   "command.sidebar.toggle": "Toggle sidebar",
   "command.project.open": "Open project",
+  "command.project.create": "New folder",
   "command.project.previous": "Previous project",
   "command.project.next": "Next project",
   "command.provider.connect": "Connect provider",
@@ -522,6 +523,15 @@ export const dict = {
   "home.recentProjects": "Recent projects",
   "home.empty.title": "No recent projects",
   "home.empty.description": "Get started by opening a local project",
+
+  "dialog.createFolder.title": "New folder",
+  "dialog.createFolder.label": "Folder name",
+  "dialog.createFolder.placeholder": "my-project",
+  "dialog.createFolder.parentLabel": "Parent directory",
+  "dialog.createFolder.create": "Create folder",
+  "dialog.createFolder.error.empty": "Folder name is required",
+  "dialog.createFolder.error.failed": "Failed to create folder",
+  "dialog.createFolder.error.invalid": "Folder name contains invalid characters",
 
   "session.tab.session": "Session",
   "session.tab.review": "Review",

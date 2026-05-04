@@ -36,6 +36,7 @@ export const FilePaths = {
   list: "/file",
   content: "/file/content",
   status: "/file/status",
+  mkdir: "/file/mkdir",
 } as const
 
 export const FileApi = HttpApi.make("file")

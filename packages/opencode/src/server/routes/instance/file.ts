@@ -7,6 +7,7 @@ import { LSP } from "@/lsp/lsp"
 import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
 import { jsonRequest } from "./trace"
+import { errors } from "../../error"
 
 export const FileRoutes = lazy(() =>
   new Hono()
@@ -162,6 +163,37 @@ export const FileRoutes = lazy(() =>
         jsonRequest("FileRoutes.read", c, function* () {
           const svc = yield* File.Service
           return yield* svc.read(c.req.valid("query").path)
+        }),
+    )
+    .post(
+      "/file/mkdir",
+      describeRoute({
+        summary: "Create directory",
+        description: "Create a new directory at the given absolute path. Parent directories are created as needed.",
+        operationId: "file.mkdir",
+        responses: {
+          200: {
+            description: "Absolute path of the created directory",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ path: z.string() })),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          path: z.string().min(1),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("FileRoutes.mkdir", c, function* () {
+          const svc = yield* File.Service
+          const resolved = yield* svc.mkdir(c.req.valid("json").path)
+          return { path: resolved }
         }),
     )
     .get(

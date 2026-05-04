@@ -9,6 +9,7 @@ import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
 import path from "path"
+import { mkdir as fsMkdir } from "fs/promises"
 import { Global } from "@opencode-ai/core/global"
 import { containsPath } from "../project/instance-context"
 import * as Log from "@opencode-ai/core/util/log"
@@ -323,6 +324,7 @@ export interface Interface {
   readonly status: () => Effect.Effect<Info[]>
   readonly read: (file: string) => Effect.Effect<Content>
   readonly list: (dir?: string) => Effect.Effect<Node[]>
+  readonly mkdir: (absolutePath: string) => Effect.Effect<string>
   readonly search: (input: {
     query: string
     limit?: number
@@ -644,8 +646,17 @@ export const layer = Layer.effect(
       return output
     })
 
+    const mkdir = Effect.fn("File.mkdir")(function* (absolutePath: string) {
+      const resolved = path.resolve(absolutePath)
+      yield* Effect.tryPromise({
+        try: () => fsMkdir(resolved, { recursive: true }),
+        catch: (err) => new Error(err instanceof Error ? err.message : "Failed to create directory"),
+      })
+      return resolved
+    })
+
     log.info("init")
-    return Service.of({ init, status, read, list, search })
+    return Service.of({ init, status, read, list, mkdir, search })
   }),
 )
 
