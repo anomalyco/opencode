@@ -38,10 +38,12 @@ docs/devflow/opencode-port/gap-log.md
 docs/devflow/opencode-port/rebase-log.md
 docs/devflow/opencode-port/verification-log.md
 docs/devflow/opencode-port/build-commands.md
+docs/devflow/opencode-port/experiment-runbook.md
 ```
 
 Update the docs before claiming any compatibility improvement.
 Use `build-commands.md` for exact package-level build and test commands.
+Use `experiment-runbook.md` for isolated OpenCode/devflow experiment runs.
 
 ## First Fork Task
 
