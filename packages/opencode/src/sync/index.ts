@@ -1,4 +1,3 @@
-import z from "zod"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
@@ -10,7 +9,6 @@ import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
-import { zodObject } from "@/util/effect-zod"
 import type { DeepMutable } from "@/util/schema"
 import { makeRuntime } from "@/effect/run-service"
 import { serviceUse } from "@/effect/service-use"
@@ -362,26 +360,6 @@ export function claim(aggregateID: string, ownerID: string) {
       .where(eq(EventSequenceTable.aggregate_id, aggregateID))
       .run(),
   )
-}
-
-export function payloads() {
-  return registry
-    .entries()
-    .map(([type, def]) => {
-      return z
-        .object({
-          type: z.literal("sync"),
-          name: z.literal(type),
-          id: z.string(),
-          seq: z.number(),
-          aggregateID: z.literal(def.aggregate),
-          data: zodObject(def.schema),
-        })
-        .meta({
-          ref: `SyncEvent.${def.type}`,
-        })
-    })
-    .toArray()
 }
 
 export function effectPayloads() {
