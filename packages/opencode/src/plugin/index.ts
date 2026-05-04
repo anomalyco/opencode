@@ -3,28 +3,30 @@ import type {
   PluginInput,
   Plugin as PluginInstance,
   PluginModule,
-  WorkspaceAdaptor as PluginWorkspaceAdaptor,
+  WorkspaceAdapter as PluginWorkspaceAdapter,
 } from "@opencode-ai/plugin"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { Bus } from "../bus"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./codex"
-import { Session } from "../session"
+import { Session } from "@/session/session"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
+import { AzureAuthPlugin } from "./azure"
 import { Effect, Layer, Context, Stream } from "effect"
-import { EffectBridge } from "@/effect"
-import { InstanceState } from "@/effect"
+import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
 import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
-import { registerAdaptor } from "@/control-plane/adaptors"
-import type { WorkspaceAdaptor } from "@/control-plane/types"
+import { registerAdapter } from "@/control-plane/adapters"
+import type { WorkspaceAdapter } from "@/control-plane/types"
 
 const log = Log.create({ service: "plugin" })
 
@@ -61,6 +63,7 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   PoeAuthPlugin,
   CloudflareWorkersAuthPlugin,
   CloudflareAIGatewayAuthPlugin,
+  AzureAuthPlugin,
 ]
 
 function isServerPlugin(value: unknown): value is PluginInstance {
@@ -122,12 +125,8 @@ export const layer = Layer.effect(
         const client = createOpencodeClient({
           baseUrl: "http://localhost:4096",
           directory: ctx.directory,
-          headers: Flag.OPENCODE_SERVER_PASSWORD
-            ? {
-                Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
-              }
-            : undefined,
-          fetch: async (...args) => (await Server.Default()).app.fetch(...args),
+          headers: ServerAuth.headers(),
+          fetch: async (...args) => Server.Default().app.fetch(...args),
         })
         const cfg = yield* config.get()
         const input: PluginInput = {
@@ -136,8 +135,8 @@ export const layer = Layer.effect(
           worktree: ctx.worktree,
           directory: ctx.directory,
           experimental_workspace: {
-            register(type: string, adaptor: PluginWorkspaceAdaptor) {
-              registerAdaptor(ctx.project.id, type, adaptor as WorkspaceAdaptor)
+            register(type: string, adapter: PluginWorkspaceAdapter) {
+              registerAdapter(ctx.project.id, type, adapter as WorkspaceAdapter)
             },
           },
           get serverUrl(): URL {

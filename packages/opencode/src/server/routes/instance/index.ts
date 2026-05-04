@@ -2,29 +2,20 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
 import { Context, Effect } from "effect"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import z from "zod"
 import { Format } from "@/format"
 import { TuiRoutes } from "./tui"
 import { Instance } from "@/project/instance"
-import { Vcs } from "@/project"
+import { InstanceRuntime } from "@/project/instance-runtime"
+import { Vcs } from "@/project/vcs"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
 import { Global } from "@opencode-ai/core/global"
-import { LSP } from "@/lsp"
+import { LSP } from "@/lsp/lsp"
 import { Command } from "@/command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { ExperimentalHttpApiServer } from "./httpapi/server"
-import { PtyPaths } from "./httpapi/pty"
-import { EventPaths } from "./httpapi/event"
-import { ExperimentalPaths } from "./httpapi/experimental"
-import { FilePaths } from "./httpapi/file"
-import { InstancePaths } from "./httpapi/instance"
-import { McpPaths } from "./httpapi/mcp"
-import { SessionPaths } from "./httpapi/session"
-import { SyncPaths } from "./httpapi/sync"
-import { TuiPaths } from "./httpapi/tui"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -37,13 +28,27 @@ import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
 import { InstanceMiddleware } from "./middleware"
 import { jsonRequest } from "./trace"
+import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { EventPaths } from "./httpapi/event"
+import { ExperimentalPaths } from "./httpapi/groups/experimental"
+import { FilePaths } from "./httpapi/groups/file"
+import { InstancePaths } from "./httpapi/groups/instance"
+import { McpPaths } from "./httpapi/groups/mcp"
+import { PtyPaths } from "./httpapi/groups/pty"
+import { SessionPaths } from "./httpapi/groups/session"
+import { SyncPaths } from "./httpapi/groups/sync"
+import { TuiPaths } from "./httpapi/groups/tui"
+import { WorkspacePaths } from "./httpapi/groups/workspace"
+import type { CorsOptions } from "@/server/cors"
 
-export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
+export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): Hono => {
   const app = new Hono()
+  const handler = ExperimentalHttpApiServer.webHandler(opts).handler
+  const context = Context.empty() as Context.Context<unknown>
+
+  app.all("/api/*", (c) => handler(c.req.raw, context))
 
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
-    const handler = ExperimentalHttpApiServer.webHandler().handler
-    const context = Context.empty() as Context.Context<unknown>
     app.get(EventPaths.event, (c) => handler(c.req.raw, context))
     app.get("/question", (c) => handler(c.req.raw, context))
     app.post("/question/:requestID/reply", (c) => handler(c.req.raw, context))
@@ -103,6 +108,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(PtyPaths.get, (c) => handler(c.req.raw, context))
     app.put(PtyPaths.update, (c) => handler(c.req.raw, context))
     app.delete(PtyPaths.remove, (c) => handler(c.req.raw, context))
+    app.post(PtyPaths.connectToken, (c) => handler(c.req.raw, context))
     app.get(PtyPaths.connect, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
@@ -144,11 +150,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(TuiPaths.selectSession, (c) => handler(c.req.raw, context))
     app.get(TuiPaths.controlNext, (c) => handler(c.req.raw, context))
     app.post(TuiPaths.controlResponse, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.adapters, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.list, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
+    app.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
   }
 
   return app
     .route("/project", ProjectRoutes())
-    .route("/pty", PtyRoutes(upgrade))
+    .route("/pty", PtyRoutes(upgrade, opts))
     .route("/config", ConfigRoutes())
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
@@ -178,7 +190,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
         },
       }),
       async (c) => {
-        await Instance.dispose()
+        await InstanceRuntime.disposeInstance(Instance.current)
         return c.json(true)
       },
     )

@@ -5,8 +5,10 @@ import path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Worktree } from "../../src/worktree"
-import { provideInstance, provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(Worktree.defaultLayer, CrossSpawnSpawner.defaultLayer))
@@ -37,7 +39,7 @@ async function waitReady() {
 }
 
 describe("Worktree", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(() => disposeAllInstances())
 
   describe("makeWorktreeInfo", () => {
     it.live("returns info with name, branch, and directory", () =>
@@ -136,7 +138,12 @@ describe("Worktree", () => {
             expect(props.name).toBe(info.name)
             expect(props.branch).toBe(info.branch)
 
-            yield* Effect.promise(() => Instance.dispose()).pipe(provideInstance(info.directory))
+            yield* Effect.promise(() =>
+              WithInstance.provide({
+                directory: info.directory,
+                fn: () => InstanceRuntime.disposeInstance(Instance.current),
+              }),
+            )
             yield* Effect.promise(() => Bun.sleep(100))
             yield* svc.remove({ directory: info.directory })
           }),
@@ -156,7 +163,12 @@ describe("Worktree", () => {
             expect(info.branch).toBe("opencode/test-workspace")
 
             yield* Effect.promise(() => ready)
-            yield* Effect.promise(() => Instance.dispose()).pipe(provideInstance(info.directory))
+            yield* Effect.promise(() =>
+              WithInstance.provide({
+                directory: info.directory,
+                fn: () => InstanceRuntime.disposeInstance(Instance.current),
+              }),
+            )
             yield* Effect.promise(() => Bun.sleep(100))
             yield* svc.remove({ directory: info.directory })
           }),
@@ -166,12 +178,13 @@ describe("Worktree", () => {
   })
 
   describe("createFromInfo", () => {
-    wintest("creates and bootstraps git worktree", () =>
+    wintest("creates git worktree and boots asynchronously", () =>
       provideTmpdirInstance(
         (dir) =>
           Effect.gen(function* () {
             const svc = yield* Worktree.Service
             const info = yield* svc.makeWorktreeInfo("from-info-test")
+            const ready = waitReady()
             yield* svc.createFromInfo(info)
 
             const list = yield* Effect.promise(() => $`git worktree list --porcelain`.cwd(dir).quiet().text())
@@ -179,6 +192,7 @@ describe("Worktree", () => {
             const normalizedDir = info.directory.replace(/\\/g, "/")
             expect(normalizedList).toContain(normalizedDir)
 
+            yield* Effect.promise(() => ready)
             yield* svc.remove({ directory: info.directory })
           }),
         { git: true },

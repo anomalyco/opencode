@@ -1,5 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Git } from "@/git"
@@ -10,17 +10,17 @@ import fuzzysort from "fuzzysort"
 import ignore from "ignore"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
-import { Instance } from "../project/instance"
-import { Log } from "../util"
+import { containsPath } from "../project/instance-context"
+import * as Log from "@opencode-ai/core/util/log"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
 import { zod } from "@/util/effect-zod"
-import { type DeepMutable, withStatics } from "@/util/schema"
+import { NonNegativeInt, type DeepMutable, withStatics } from "@/util/schema"
 
 export const Info = Schema.Struct({
   path: Schema.String,
-  added: Schema.Int,
-  removed: Schema.Int,
+  added: NonNegativeInt,
+  removed: NonNegativeInt,
   status: Schema.Literals(["added", "deleted", "modified"]),
 })
   .annotate({ identifier: "File" })
@@ -39,10 +39,10 @@ export const Node = Schema.Struct({
 export type Node = DeepMutable<Schema.Schema.Type<typeof Node>>
 
 const Hunk = Schema.Struct({
-  oldStart: Schema.Number,
-  oldLines: Schema.Number,
-  newStart: Schema.Number,
-  newLines: Schema.Number,
+  oldStart: NonNegativeInt,
+  oldLines: NonNegativeInt,
+  newStart: NonNegativeInt,
+  newLines: NonNegativeInt,
   lines: Schema.Array(Schema.String),
 })
 
@@ -507,7 +507,7 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       const full = path.join(ctx.directory, file)
 
-      if (!Instance.containsPath(full, ctx)) {
+      if (!containsPath(full, ctx)) {
         throw new Error("Access denied: path escapes project directory")
       }
 
@@ -587,7 +587,7 @@ export const layer = Layer.effect(
       }
 
       const resolved = dir ? path.join(ctx.directory, dir) : ctx.directory
-      if (!Instance.containsPath(resolved, ctx)) {
+      if (!containsPath(resolved, ctx)) {
         throw new Error("Access denied: path escapes project directory")
       }
 
