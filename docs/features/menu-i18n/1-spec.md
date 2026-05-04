@@ -1,6 +1,6 @@
 ---
 feat-id: menu-i18n
-status: spec
+status: done
 related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
