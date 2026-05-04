@@ -257,6 +257,46 @@ describe("HttpApi Server.listen", () => {
     }
   })
 
+  // Regression for #25698 (Ope): the app's SDK call to
+  // `client.pty.connectToken({ ptyID })` originally omitted `directory`, so
+  // the server resolved the PTY in its own cwd context — where the project
+  // PTY isn't registered — and returned 404. The fix is to always pass
+  // `directory` from the app side; this test locks in two contracts:
+  //   1. Mint without directory cannot find a PTY registered in another dir.
+  //   2. Mint with the project directory succeeds; the resulting ticket
+  //      consumes cleanly when the WS upgrade carries the same directory.
+  testPty("PTY connect token requires matching directory across mint and connect", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const listener = await startListener()
+    try {
+      const info = await createCat(listener, tmp.path)
+
+      // Mint without directory — server uses its own cwd, can't find the PTY.
+      const ambiguous = await fetch(new URL(PtyPaths.connectToken.replace(":ptyID", info.id), listener.url), {
+        method: "POST",
+        headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+      })
+      expect(ambiguous.status).toBe(404)
+
+      // Mint with the project directory — succeeds, ticket binds to that scope.
+      const scoped = await fetch(
+        new URL(`${PtyPaths.connectToken.replace(":ptyID", info.id)}?directory=${encodeURIComponent(tmp.path)}`, listener.url),
+        {
+          method: "POST",
+          headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+        },
+      )
+      expect(scoped.status).toBe(200)
+      const mint = (await scoped.json()) as { ticket: string }
+
+      // Same directory on the WS upgrade → consume succeeds.
+      const ws = await openSocket(socketURL(listener, info.id, tmp.path, mint.ticket))
+      ws.close(1000)
+    } finally {
+      await stop(listener, "timed out cleaning up directory-scope listener").catch(() => undefined)
+    }
+  })
+
   testPty("keeps PTY websocket tickets optional when server auth is disabled", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const listener = await startNoAuthListener()
