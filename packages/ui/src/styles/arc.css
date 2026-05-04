@@ -92,7 +92,19 @@ html[data-theme="arc"] {
     --rail-hue-6: #a691c1; /* lavender */
   }
 
-  /* Within the dusty-mauve sidebar, set high-contrast text/icon colors.
+  /* Within the dusty-mauve sidebar AND the canvas-tinted titlebar,
+     set high-contrast text/icon colors.
+
+     Why titlebar joins this group: arc.css makes the titlebar background
+     transparent (see "Titlebar sinks into the canvas" rule below), so the
+     header sits visually on top of the same #756B7E mauve canvas as the
+     sidebar. Without the override, ghost buttons in the titlebar inherit
+     the theme's --icon-base (#847CA0 lavender-gray), which contrasts the
+     mauve canvas at only 1.29:1 — well below WCAG's 3:1 minimum for
+     interactive icons. Inheriting the sidebar's lighter token bumps the
+     ratio to 4+ and unifies the chrome (titlebar reads as "the same
+     panel" as the sidebar, mirroring Arc Browser's seamless top chrome).
+
      Two-pronged approach because Tailwind v4 captures --color-* tokens
      at the @theme (root) level and inherits the resulting *static* value
      into descendants — overriding the upstream --text-* alone won't
@@ -106,7 +118,8 @@ html[data-theme="arc"] {
   html[data-theme="arc"] [data-component="sidebar-rail"],
   html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
   html[data-theme="arc"] [data-component="sidebar-nav-mobile"],
-  html[data-theme="arc"] [data-component="sidebar-panel"] {
+  html[data-theme="arc"] [data-component="sidebar-panel"],
+  html[data-theme="arc"] [data-component="titlebar"] {
     --text-strong: #FBF6FB;
     --text-base: #ECE3EE;
     --text-weak: #BCB0BF;
@@ -353,9 +366,8 @@ html[data-theme="arc"] [data-component="dialog-overlay"] {
 }
 
 /* ───────────────────────────────────────────────────────────── */
-/* Menu / list items — Arc-style "push-in" hover                 */
-/* Real surface color on hover (vs. weak alpha), translateX +2px */
-/* to suggest the item is "stepping forward" toward the user.    */
+/* Menu / list items — Arc-style hover                           */
+/* Real surface color on hover (vs. weak alpha).                 */
 /* ───────────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: no-preference) {
@@ -369,7 +381,6 @@ html[data-theme="arc"] [data-component="dialog-overlay"] {
   html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"] {
     transition:
       background-color 120ms ease-out,
-      transform 120ms ease-out,
       color 120ms ease-out;
   }
 }
@@ -382,13 +393,11 @@ html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="conte
 html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-checkbox-item"][data-highlighted],
 html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-radio-item"][data-highlighted] {
   background: var(--surface-raised-base-hover);
-  transform: translateX(2px);
 }
 
 html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"]:hover,
 html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"][data-highlighted] {
   background: var(--surface-raised-base-hover);
-  transform: translateX(2px);
 }
 
 /* ───────────────────────────────────────────────────────────── */
