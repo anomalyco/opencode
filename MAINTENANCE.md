@@ -130,18 +130,18 @@ git push origin v0.1.0-minimal
 1. **创建分支**：`git checkout -b feature/my-feature`
 2. **进行改动**：保持代码精简，专注于极简模式的增强。
 3. **测试**：`bun run typecheck`
-4. **提交 PR**：目标分支设为此分支的 `main`。
+4. **提交 PR**：目标分支设为此分支的 `feat/minimal-tui-style`。
 
 ### 同步功能分支
 如果你在开发分支上需要同步上游：
 ```bash
-# 更新 main 分支
-git checkout main
+# 更新 feat/minimal-tui-style 分支
+git checkout feat/minimal-tui-style
 ./scripts/sync-upstream.sh
 
 # Rebase 你的功能分支
 git checkout feature/my-feature
-git rebase main
+git rebase feat/minimal-tui-style
 ```
 
 ---

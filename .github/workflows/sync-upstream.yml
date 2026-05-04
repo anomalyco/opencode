@@ -58,7 +58,7 @@ jobs:
           fi
 
       - name: Push changes
-        run: git push origin main
+        run: git push origin feat/minimal-tui-style
 
       - name: Create PR (if conflicts)
         if: failure()
