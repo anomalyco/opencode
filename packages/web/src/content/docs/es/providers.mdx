@@ -1342,6 +1342,60 @@ Para usar Kimi K2 de Moonshot AI:
 
 ---
 
+### NVIDIA
+
+NVIDIA proporciona acceso a modelos Nemotron y muchos otros modelos abiertos a través de [build.nvidia.com](https://build.nvidia.com) de forma gratuita.
+
+1. Dirígete a [build.nvidia.com](https://build.nvidia.com), crea una cuenta y genera una clave API.
+
+2. Ejecute el comando `/connect` y busque **NVIDIA**.
+
+   ```txt
+   /connect
+   ```
+
+3. Ingrese su clave NVIDIA API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Ejecute el comando `/models` para seleccionar un modelo como nemotron-3-super-120b-a12b.
+
+   ```txt
+   /models
+   ```
+
+#### On-Prem / NIM
+
+También puede usar modelos NVIDIA localmente a través de [NVIDIA NIM](https://docs.nvidia.com/nim/) configurando una URL base personalizada.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "nvidia": {
+      "options": {
+        "baseURL": "http://localhost:8000/v1"
+      }
+    }
+  }
+}
+```
+
+#### Variable de entorno
+
+Como alternativa, configure su clave API como una variable de entorno.
+
+```bash frame="none"
+export NVIDIA_API_KEY=nvapi-your-key-here
+```
+
+---
+
 ### Nebius Token Factory
 
 1. Dirígete a la [consola de Nebius Token Factory](https://tokenfactory.nebius.com/), crea una cuenta y haz clic en **Agregar clave**.
