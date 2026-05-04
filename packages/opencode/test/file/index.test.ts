@@ -1,6 +1,7 @@
 import { afterEach, describe, test, expect } from "bun:test"
 import { $ } from "bun"
 import { Effect } from "effect"
+import { setTimeout as sleep } from "node:timers/promises"
 import path from "path"
 import fs from "fs/promises"
 import { File } from "../../src/file"
@@ -822,6 +823,7 @@ describe("file/index Filesystem patterns", () => {
           expect(await search({ query: "fresh", type: "file" })).toEqual([])
 
           await fs.writeFile(path.join(tmp.path, "fresh.ts"), "fresh", "utf-8")
+          await sleep(100); // fff guarantees search corretness within 50ms after file write
 
           const result = await search({ query: "fresh", type: "file" })
           expect(result).toContain("fresh.ts")

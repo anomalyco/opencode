@@ -65,6 +65,7 @@ describe("file HttpApi", () => {
       request(FilePaths.findSymbol, tmp.path, { query: "hello" }),
     ])
 
+    console.log(files);
     expect(text.status).toBe(200)
     expect(await text.json()).toContainEqual(expect.objectContaining({ line_number: 1 }))
 

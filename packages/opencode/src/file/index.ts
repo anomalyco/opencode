@@ -633,7 +633,7 @@ export const layer = Layer.effect(
 
       if (query && kind === "file") {
         const files = yield* searchSvc.file({
-          cwd: Instance.directory,
+          cwd: (yield* InstanceState.context).directory,
           query,
           limit,
         }).pipe(Effect.orDie)

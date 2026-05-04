@@ -1,7 +1,7 @@
 import path from "path"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Glob } from "@opencode-ai/core/util/glob"
-import { Context, Deferred, Effect, Layer, Option } from "effect"
+import { Clock, Context, Deferred, Effect, Layer, Option } from "effect"
 import * as Stream from "effect/Stream"
 import z from "zod"
 import * as InstanceState from "@/effect/instance-state"
@@ -88,23 +88,6 @@ function normalize(text: string) {
   return text.replaceAll("\\", "/")
 }
 
-function blocked(rel: string) {
-  return normalize(rel).split("/").includes(".git")
-}
-
-function basename(file: string) {
-  return normalize(file).split("/").at(-1) ?? file
-}
-
-function allow(glob: string[] | undefined, rel: string, file: string) {
-  if (!glob?.length) return true
-  const include = glob.filter((item) => !item.startsWith("!"))
-  const exclude = glob.filter((item) => item.startsWith("!")).map((item) => item.slice(1))
-  if (include.length > 0 && !include.some((item) => Glob.match(item, rel) || Glob.match(item, file))) return false
-  if (exclude.some((item) => Glob.match(item, rel) || Glob.match(item, file))) return false
-  return true
-}
-
 function include(pattern: string) {
   const value = pattern.trim().replaceAll("\\", "/")
   if (!value) return "*"
@@ -115,6 +98,22 @@ function include(pattern: string) {
   const glob = flat.slice(idx + 1)
   if (!glob) return dir
   return `${dir} ${glob}`
+}
+
+// fff supports glob narrowing for any search out of the box
+function fffGlobbedQuery(query: string, glob?: string | string[]) {
+  if (query && glob) {
+    let resolvedGlob = ""
+    if (Array.isArray(glob)) {
+      resolvedGlob = glob.join(" ")
+    } else {
+      resolvedGlob = glob
+    }
+
+    return `${glob} ${query}`
+  }
+
+  return query ?? glob
 }
 
 function remember(state: State, dir: string, text: string, files: string[]) {
@@ -212,15 +211,18 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Ripgrep.
         }
 
         const pick = made.value
-        const ready = yield* Effect.sync(() => pick.waitForScan(5_000))
-        if (!ready.ok) {
-          pick.destroy()
-          log.warn("fff scan failed", { dir, error: ready.error })
-          const err = new Error(ready.error)
-          yield* Deferred.fail(gate, err)
-          return yield* Effect.fail(err)
-        }
-        if (!ready.value) {
+
+        const ready = yield* Effect.gen(function* () {
+          const start = yield* Clock.currentTimeMillis
+          while (true) {
+            if (!pick.isScanning()) return true
+            const now = yield* Clock.currentTimeMillis
+            if (now - start >= 5_000) return false
+            yield* Effect.sleep("25 millis")
+          }
+        })
+
+        if (!ready) {
           pick.destroy()
           const err = new Error("fff scan timed out")
           log.warn("fff scan timed out", { dir })
@@ -252,12 +254,8 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Ripgrep.
       const dir = AppFileSystem.resolve(input.cwd)
       const out = yield* Effect.sync(() =>
         pick.fileSearch(query, {
-          currentFile: input.current
-            ? path.isAbsolute(input.current)
-              ? input.current
-              : path.join(dir, input.current)
-            : undefined,
           pageIndex: 0,
+          currentFile: input.current, // supports both relative and absolute (relative preferred)
           pageSize: Math.max(input.limit ?? 100, 100),
         }),
       )
@@ -294,14 +292,13 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Ripgrep.
 
       const dir = AppFileSystem.resolve(input.cwd)
       const rows: Item[] = []
-      const seen = new Set<string>()
       let cursor: Fff.Cursor = null
       let regexFallbackError: string | undefined
 
       while (input.limit === undefined || rows.length < input.limit) {
         input.signal?.throwIfAborted()
         const out = yield* Effect.sync(() =>
-          pick.grep(input.pattern, {
+          pick.grep(fffGlobbedQuery(input.pattern, input.glob), {
             mode: "regex",
             cursor,
             maxMatchesPerFile: input.limit ?? 0,
@@ -315,11 +312,6 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Ripgrep.
 
         regexFallbackError = regexFallbackError ?? out.value.regexFallbackError
         for (const hit of out.value.items) {
-          const rel = normalize(hit.relativePath)
-          if (!allow(input.glob, rel, normalize(hit.fileName))) continue
-          const id = `${rel}:${hit.lineNumber}:${hit.byteOffset}`
-          if (seen.has(id)) continue
-          seen.add(id)
           rows.push(item(hit))
           if (input.limit !== undefined && rows.length >= input.limit) break
         }
@@ -331,12 +323,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Ripgrep.
       if (!rows.length && input.glob?.length) return yield* rip(input)
 
       const current = yield* InstanceState.get(state)
-      remember(
-        current,
-        dir,
-        input.pattern,
-        Array.from(new Set(rows.map((row) => path.join(dir, row.path.text)))),
-      )
+      remember(current, dir, input.pattern, Array.from(new Set(rows.map((row) => path.join(dir, row.path.text)))))
 
       return {
         items: rows,
@@ -352,28 +339,17 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Ripgrep.
       const dir = AppFileSystem.resolve(input.cwd)
       const limit = input.limit ?? 100
       const pick = yield* picker(dir).pipe(Effect.catch(() => Effect.succeed<Fff.Picker | undefined>(undefined)))
+
       if (pick) {
         const out = yield* Effect.sync(() =>
           pick.fileSearch(include(input.pattern), {
-            currentFile: path.join(dir, ".opencode"),
             pageIndex: 0,
             pageSize: Math.max(limit * 4, 200),
           }),
         )
+
         if (out.ok) {
-          const rows: string[] = Array.from(
-            new Map(
-              out.value.items
-                .filter((item) => !blocked(item.relativePath))
-                .filter(
-                  (item) =>
-                    Glob.match(input.pattern, item.relativePath) || Glob.match(input.pattern, basename(item.relativePath)),
-                )
-                .map((item) => [normalize(item.relativePath), item.modified] as const),
-            ).entries(),
-          )
-            .sort((a, b) => b[1] - a[1])
-            .map(([file]) => file)
+          const rows: string[] = out.value.items.map((item) => item.relativePath)
 
           if (rows.length > 0) {
             const current = yield* InstanceState.get(state)
@@ -383,6 +359,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Ripgrep.
               input.pattern,
               rows.map((row) => path.join(dir, row)),
             )
+
             return {
               files: rows.slice(0, limit).map((row) => path.join(dir, row)),
               truncated: rows.length > limit,

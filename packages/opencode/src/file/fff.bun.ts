@@ -35,6 +35,7 @@ export interface Grep {
 
 export interface Picker {
   destroy(): void
+  isScanning(): boolean
   waitForScan(timeout?: number): Result<boolean>
   refreshGitStatus(): Result<number>
   fileSearch(
@@ -72,6 +73,7 @@ export function create(opts: Init): Result<Picker> {
     ok: true,
     value: {
       destroy: () => pick.destroy(),
+      isScanning: () => pick.isScanning(),
       waitForScan: (timeout) => pick.waitForScan(timeout),
       refreshGitStatus: () => pick.refreshGitStatus(),
       fileSearch: (query, next) => pick.fileSearch(query, next),

@@ -49,6 +49,7 @@ export interface Grep {
 
 export interface Picker {
   destroy(): void
+  isScanning(): boolean
   waitForScan(timeout?: number): Result<boolean>
   refreshGitStatus(): Result<number>
   fileSearch(
