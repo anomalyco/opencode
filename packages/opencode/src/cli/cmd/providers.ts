@@ -369,7 +369,8 @@ export const ProvidersLoginCommand = effectCmd({
       google: 3,
       anthropic: 4,
       openrouter: 5,
-      vercel: 6,
+      fastrouter: 6,
+      vercel: 7,
     }
     const pluginProviders = resolvePluginProviders({
       hooks,

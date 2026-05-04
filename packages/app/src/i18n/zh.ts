@@ -133,6 +133,7 @@ export const dict = {
   "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 密钥连接",
   "dialog.provider.google.note": "使用 Google 账号或 API 密钥连接",
   "dialog.provider.openrouter.note": "使用 OpenRouter 账号或 API 密钥连接",
+  "dialog.provider.fastrouter.note": "通过 FastRouter 统一网关访问模型",
   "dialog.provider.vercel.note": "使用 Vercel 账号或 API 密钥连接",
 
   "dialog.model.select.title": "选择模型",

@@ -102,6 +102,7 @@ export const dict = {
   "dialog.provider.openai.note": "Mit ChatGPT Pro/Plus oder API-Schlüssel verbinden",
   "dialog.provider.google.note": "Gemini-Modelle für schnelle, strukturierte Antworten",
   "dialog.provider.openrouter.note": "Zugriff auf alle unterstützten Modelle über einen Anbieter",
+  "dialog.provider.fastrouter.note": "Modelle über das einheitliche FastRouter-Gateway nutzen",
   "dialog.provider.vercel.note": "Einheitlicher Zugriff auf KI-Modelle mit intelligentem Routing",
   "dialog.model.select.title": "Modell auswählen",
   "dialog.model.search.placeholder": "Modelle durchsuchen",

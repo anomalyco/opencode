@@ -470,6 +470,12 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
+test("parseModel handles fastrouter model IDs with slashes", () => {
+  const result = Provider.parseModel("fastrouter/openai/gpt-5")
+  expect(String(result.providerID)).toBe("fastrouter")
+  expect(String(result.modelID)).toBe("openai/gpt-5")
+})
+
 test("defaultModel returns first available model when no config set", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

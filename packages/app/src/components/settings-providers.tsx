@@ -24,6 +24,7 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "openai", key: "dialog.provider.openai.note" },
   { match: (id: string) => id === "google", key: "dialog.provider.google.note" },
   { match: (id: string) => id === "openrouter", key: "dialog.provider.openrouter.note" },
+  { match: (id: string) => id === "fastrouter", key: "dialog.provider.fastrouter.note" },
   { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
 ] as const
 

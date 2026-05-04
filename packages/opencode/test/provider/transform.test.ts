@@ -358,6 +358,54 @@ describe("ProviderTransform.options - gateway", () => {
   })
 })
 
+describe("ProviderTransform.options - fastrouter", () => {
+  const sessionID = "test-session-fr"
+  const baseModel = {
+    id: "fastrouter/openai/gpt-5",
+    providerID: "fastrouter",
+    api: {
+      id: "openai/gpt-5",
+      url: "https://go.fastrouter.ai/api/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "GPT-5",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 1, output: 2, cache: { read: 0, write: 0 } },
+    limit: { context: 400_000, output: 128_000 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2025-01-01",
+  } as any
+
+  test("sets usage and prompt_cache_key like OpenRouter-style gateways", () => {
+    const result = ProviderTransform.options({ model: baseModel, sessionID, providerOptions: {} })
+    expect(result.usage).toEqual({ include: true })
+    expect(result.prompt_cache_key).toBe(sessionID)
+  })
+
+  test("smallOptions uses minimal reasoning effort by default", () => {
+    expect(ProviderTransform.smallOptions(baseModel)).toEqual({ reasoningEffort: "minimal" })
+  })
+
+  test("smallOptions disables reasoning for google routes", () => {
+    const model = {
+      ...baseModel,
+      id: "fastrouter/google/gemini-2.0-flash",
+      api: { ...baseModel.api, id: "google/gemini-2.0-flash" },
+    }
+    expect(ProviderTransform.smallOptions(model)).toEqual({ reasoning: { enabled: false } })
+  })
+})
+
 describe("ProviderTransform.providerOptions", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({
@@ -2091,6 +2139,11 @@ describe("ProviderTransform.message - cache control on gateway", () => {
           type: "ephemeral",
         },
       },
+      fastrouter: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
       bedrock: {
         cachePoint: {
           type: "default",
@@ -2144,6 +2197,11 @@ describe("ProviderTransform.message - cache control on gateway", () => {
         },
       },
       openrouter: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      fastrouter: {
         cacheControl: {
           type: "ephemeral",
         },
@@ -2388,6 +2446,24 @@ describe("ProviderTransform.variants", () => {
           id: "grok-3-mini",
           url: "https://openrouter.ai",
           npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "high"])
+      expect(result.low).toEqual({ reasoning: { effort: "low" } })
+      expect(result.high).toEqual({ reasoning: { effort: "high" } })
+    })
+  })
+
+  describe("fastrouter @ai-sdk/openai-compatible", () => {
+    test("grok-3-mini returns low and high with reasoning like OpenRouter", () => {
+      const model = createMockModel({
+        id: "fastrouter/grok-3-mini",
+        providerID: "fastrouter",
+        api: {
+          id: "grok-3-mini",
+          url: "https://go.fastrouter.ai/api/v1",
+          npm: "@ai-sdk/openai-compatible",
         },
       })
       const result = ProviderTransform.variants(model)

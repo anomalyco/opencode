@@ -1,0 +1,618 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="325" assertions="838" failures="0" skipped="0" time="0.766847">
+  <testsuite name="src/theme-preload.test.ts" file="src/theme-preload.test.ts" tests="2" assertions="8" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="theme preload" file="src/theme-preload.test.ts" line="21" tests="2" assertions="8" failures="0" skipped="0" time="0.001" hostname="BMMDVJATINGO.local">
+      <testcase name="migrates legacy oc-1 to oc-2 before mount" classname="theme preload" time="0.001166" file="src/theme-preload.test.ts" line="22" assertions="6" />
+      <testcase name="keeps cached css for non-default themes" classname="theme preload" time="0.000443" file="src/theme-preload.test.ts" line="37" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/permission-auto-respond.test.ts" file="src/context/permission-auto-respond.test.ts" tests="10" assertions="10" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="autoRespondsPermission" file="src/context/permission-auto-respond.test.ts" line="17" tests="7" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="uses a parent session&apos;s directory-scoped auto-accept" classname="autoRespondsPermission" time="0.000483" file="src/context/permission-auto-respond.test.ts" line="18" assertions="1" />
+      <testcase name="uses a parent session&apos;s legacy auto-accept key" classname="autoRespondsPermission" time="0.000083" file="src/context/permission-auto-respond.test.ts" line="28" assertions="1" />
+      <testcase name="defaults to requiring approval when no lineage override exists" classname="autoRespondsPermission" time="0.000065" file="src/context/permission-auto-respond.test.ts" line="34" assertions="1" />
+      <testcase name="inherits a parent session&apos;s false override" classname="autoRespondsPermission" time="0.000103" file="src/context/permission-auto-respond.test.ts" line="43" assertions="1" />
+      <testcase name="prefers a child override over parent override" classname="autoRespondsPermission" time="0.000061" file="src/context/permission-auto-respond.test.ts" line="53" assertions="1" />
+      <testcase name="falls back to directory-level auto-accept" classname="autoRespondsPermission" time="0.000032" file="src/context/permission-auto-respond.test.ts" line="64" assertions="1" />
+      <testcase name="session-level override takes precedence over directory-level" classname="autoRespondsPermission" time="0.000056" file="src/context/permission-auto-respond.test.ts" line="74" assertions="1" />
+    </testsuite>
+    <testsuite name="isDirectoryAutoAccepting" file="src/context/permission-auto-respond.test.ts" line="86" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="returns true when directory key is set" classname="isDirectoryAutoAccepting" time="0.000042" file="src/context/permission-auto-respond.test.ts" line="87" assertions="1" />
+      <testcase name="returns false when directory key is not set" classname="isDirectoryAutoAccepting" time="0.000021" file="src/context/permission-auto-respond.test.ts" line="93" assertions="1" />
+      <testcase name="returns false when directory key is explicitly false" classname="isDirectoryAutoAccepting" time="0.000032" file="src/context/permission-auto-respond.test.ts" line="97" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/terminal.test.ts" file="src/context/terminal.test.ts" tests="5" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="getWorkspaceTerminalCacheKey" file="src/context/terminal.test.ts" line="24" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="uses workspace-only directory cache key" classname="getWorkspaceTerminalCacheKey" time="0" file="src/context/terminal.test.ts" line="25" assertions="1" />
+    </testsuite>
+    <testsuite name="getLegacyTerminalStorageKeys" file="src/context/terminal.test.ts" line="30" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps workspace storage path when no legacy session id" classname="getLegacyTerminalStorageKeys" time="0.000043" file="src/context/terminal.test.ts" line="31" assertions="1" />
+      <testcase name="includes legacy session path before workspace path" classname="getLegacyTerminalStorageKeys" time="0.000009" file="src/context/terminal.test.ts" line="35" assertions="1" />
+    </testsuite>
+    <testsuite name="migrateTerminalState" file="src/context/terminal.test.ts" line="43" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="drops invalid terminals and restores a valid active terminal" classname="migrateTerminalState" time="0.000115" file="src/context/terminal.test.ts" line="44" assertions="1" />
+      <testcase name="keeps a valid active id" classname="migrateTerminalState" time="0.000179" file="src/context/terminal.test.ts" line="65" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/comments.test.ts" file="src/context/comments.test.ts" tests="7" assertions="25" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="comments session indexing" file="src/context/comments.test.ts" line="32" tests="7" assertions="25" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps file list behavior and aggregate chronological order" classname="comments session indexing" time="0.000719" file="src/context/comments.test.ts" line="33" assertions="4" />
+      <testcase name="remove updates file and aggregate indexes consistently" classname="comments session indexing" time="0.000171" file="src/context/comments.test.ts" line="63" assertions="4" />
+      <testcase name="clear resets file and aggregate indexes plus focus state" classname="comments session indexing" time="0.000115" file="src/context/comments.test.ts" line="88" assertions="5" />
+      <testcase name="remove keeps focus when same comment id exists in another file" classname="comments session indexing" time="0.000094" file="src/context/comments.test.ts" line="113" assertions="3" />
+      <testcase name="setFocus and setActive updater callbacks receive current state" classname="comments session indexing" time="0.00009" file="src/context/comments.test.ts" line="131" assertions="4" />
+      <testcase name="update changes only the targeted comment body" classname="comments session indexing" time="0.000058" file="src/context/comments.test.ts" line="154" assertions="1" />
+      <testcase name="replace swaps comment state and clears focus state" classname="comments session indexing" time="0.000123" file="src/context/comments.test.ts" line="168" assertions="4" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/command.test.ts" file="src/context/command.test.ts" tests="2" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="upsertCommandRegistration" file="src/context/command.test.ts" line="4" tests="2" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="replaces keyed registrations" classname="upsertCommandRegistration" time="0.000084" file="src/context/command.test.ts" line="5" assertions="2" />
+      <testcase name="keeps unkeyed registrations additive" classname="upsertCommandRegistration" time="0.000068" file="src/context/command.test.ts" line="15" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/sync-optimistic.test.ts" file="src/context/sync-optimistic.test.ts" tests="5" assertions="13" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="sync optimistic reducers" file="src/context/sync-optimistic.test.ts" line="24" tests="5" assertions="13" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="applyOptimisticAdd inserts message in sorted order and stores parts" classname="sync optimistic reducers" time="0.000227" file="src/context/sync-optimistic.test.ts" line="25" assertions="2" />
+      <testcase name="applyOptimisticRemove removes message and part entries" classname="sync optimistic reducers" time="0.00008" file="src/context/sync-optimistic.test.ts" line="42" assertions="3" />
+      <testcase name="mergeOptimisticPage keeps pending messages in fetched timelines" classname="sync optimistic reducers" time="0.000167" file="src/context/sync-optimistic.test.ts" line="59" assertions="4" />
+      <testcase name="mergeOptimisticPage keeps missing optimistic parts until the server has them" classname="sync optimistic reducers" time="0.000119" file="src/context/sync-optimistic.test.ts" line="76" assertions="2" />
+      <testcase name="mergeOptimisticPage confirms echoed messages once all parts arrive" classname="sync optimistic reducers" time="0.000075" file="src/context/sync-optimistic.test.ts" line="96" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/file-content-eviction-accounting.test.ts" file="src/context/file-content-eviction-accounting.test.ts" tests="3" assertions="15" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="file content eviction accounting" file="src/context/file-content-eviction-accounting.test.ts" line="12" tests="3" assertions="15" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="updates byte totals incrementally for set, overwrite, remove, and reset" classname="file content eviction accounting" time="0.000117" file="src/context/file-content-eviction-accounting.test.ts" line="17" assertions="9" />
+      <testcase name="evicts by entry cap using LRU order" classname="file content eviction accounting" time="0.000141" file="src/context/file-content-eviction-accounting.test.ts" line="39" assertions="3" />
+      <testcase name="evicts by byte cap while preserving protected entries" classname="file content eviction accounting" time="0.000054" file="src/context/file-content-eviction-accounting.test.ts" line="52" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/layout.test.ts" file="src/context/layout.test.ts" tests="4" assertions="8" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="layout session-key helpers" file="src/context/layout.test.ts" line="5" tests="2" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="couples touch and scroll seed in order" classname="layout session-key helpers" time="0" file="src/context/layout.test.ts" line="6" assertions="2" />
+      <testcase name="reads dynamic accessor keys lazily" classname="layout session-key helpers" time="0.000169" file="src/context/layout.test.ts" line="18" assertions="3" />
+    </testsuite>
+    <testsuite name="pruneSessionKeys" file="src/context/layout.test.ts" line="36" tests="2" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps active key and drops lowest-used keys" classname="pruneSessionKeys" time="0.000104" file="src/context/layout.test.ts" line="37" assertions="2" />
+      <testcase name="does not prune without keep key" classname="pruneSessionKeys" time="0.000058" file="src/context/layout.test.ts" line="55" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/model-variant.test.ts" file="src/context/model-variant.test.ts" tests="7" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="model variant" file="src/context/model-variant.test.ts" line="4" tests="7" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="resolves configured agent variant when model matches" classname="model variant" time="0.000028" file="src/context/model-variant.test.ts" line="5" assertions="1" />
+      <testcase name="ignores configured variant when model does not match" classname="model variant" time="0.000017" file="src/context/model-variant.test.ts" line="21" assertions="1" />
+      <testcase name="prefers selected variant over configured variant" classname="model variant" time="0.000026" file="src/context/model-variant.test.ts" line="37" assertions="1" />
+      <testcase name="lets an explicit default override the configured variant" classname="model variant" time="0.00001" file="src/context/model-variant.test.ts" line="47" assertions="1" />
+      <testcase name="cycles from configured variant to next" classname="model variant" time="0.000031" file="src/context/model-variant.test.ts" line="57" assertions="1" />
+      <testcase name="wraps from configured last variant to first" classname="model variant" time="0.000019" file="src/context/model-variant.test.ts" line="67" assertions="1" />
+      <testcase name="cycles from an explicit default to the first variant" classname="model variant" time="0.000011" file="src/context/model-variant.test.ts" line="77" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/layout-scroll.test.ts" file="src/context/layout-scroll.test.ts" tests="2" assertions="6" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="createScrollPersistence" file="src/context/layout-scroll.test.ts" line="4" tests="2" assertions="6" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="debounces persisted scroll writes" classname="createScrollPersistence" time="0.000682" file="src/context/layout-scroll.test.ts" line="5" assertions="4" />
+      <testcase name="reseeds empty cache after persisted snapshot loads" classname="createScrollPersistence" time="0.000122" file="src/context/layout-scroll.test.ts" line="45" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/command-keybind.test.ts" file="src/context/command-keybind.test.ts" tests="6" assertions="19" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="command keybind helpers" file="src/context/command-keybind.test.ts" line="4" tests="6" assertions="19" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="parseKeybind handles aliases and multiple combos" classname="command keybind helpers" time="0.000029" file="src/context/command-keybind.test.ts" line="5" assertions="5" />
+      <testcase name="parseKeybind treats none and empty as disabled" classname="command keybind helpers" time="0.000022" file="src/context/command-keybind.test.ts" line="21" assertions="2" />
+      <testcase name="matchKeybind normalizes punctuation keys" classname="command keybind helpers" time="0.000154" file="src/context/command-keybind.test.ts" line="26" assertions="4" />
+      <testcase name="matchKeybind supports bracket keys" classname="command keybind helpers" time="0.000046" file="src/context/command-keybind.test.ts" line="35" assertions="2" />
+      <testcase name="formatKeybind returns human readable output" classname="command keybind helpers" time="0.000084" file="src/context/command-keybind.test.ts" line="54" assertions="4" />
+      <testcase name="formatKeybind prefers the first combo" classname="command keybind helpers" time="0.000075" file="src/context/command-keybind.test.ts" line="63" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/server.test.ts" file="src/context/server.test.ts" tests="2" assertions="9" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="resolveServerList" file="src/context/server.test.ts" line="4" tests="2" assertions="9" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="lets startup auth_token credentials override a persisted same-url server" classname="resolveServerList" time="0.000206" file="src/context/server.test.ts" line="5" assertions="5" />
+      <testcase name="keeps persisted credentials when startup has no auth_token" classname="resolveServerList" time="0.000095" file="src/context/server.test.ts" line="32" assertions="4" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/global-sync.test.ts" file="src/context/global-sync.test.ts" tests="8" assertions="14" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="pickDirectoriesToEvict" file="src/context/global-sync.test.ts" line="5" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps pinned stores and evicts idle stores" classname="pickDirectoriesToEvict" time="0.000018" file="src/context/global-sync.test.ts" line="6" assertions="1" />
+    </testsuite>
+    <testsuite name="loadRootSessionsWithFallback" file="src/context/global-sync.test.ts" line="26" tests="2" assertions="6" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="uses limited roots query when supported" classname="loadRootSessionsWithFallback" time="0.000124" file="src/context/global-sync.test.ts" line="27" assertions="3" />
+      <testcase name="falls back to full roots query on limited-query failure" classname="loadRootSessionsWithFallback" time="0.000148" file="src/context/global-sync.test.ts" line="44" assertions="3" />
+    </testsuite>
+    <testsuite name="estimateRootSessionTotal" file="src/context/global-sync.test.ts" line="66" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps exact total for full fetches" classname="estimateRootSessionTotal" time="0.000033" file="src/context/global-sync.test.ts" line="67" assertions="1" />
+      <testcase name="marks has-more for full-limit limited fetches" classname="estimateRootSessionTotal" time="0.000009" file="src/context/global-sync.test.ts" line="71" assertions="1" />
+      <testcase name="keeps exact total when limited fetch is under limit" classname="estimateRootSessionTotal" time="0.000008" file="src/context/global-sync.test.ts" line="75" assertions="1" />
+    </testsuite>
+    <testsuite name="canDisposeDirectory" file="src/context/global-sync.test.ts" line="80" tests="2" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="rejects pinned or inflight directories" classname="canDisposeDirectory" time="0.000026" file="src/context/global-sync.test.ts" line="81" assertions="3" />
+      <testcase name="accepts idle unpinned directory store" classname="canDisposeDirectory" time="0.000007" file="src/context/global-sync.test.ts" line="111" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/addons/serialize.test.ts" file="src/addons/serialize.test.ts" tests="11" assertions="48" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="SerializeAddon" file="src/addons/serialize.test.ts" line="39" tests="11" assertions="48" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testsuite name="ANSI color preservation" file="src/addons/serialize.test.ts" line="40" tests="6" assertions="28" failures="0" skipped="0" time="0.047" hostname="BMMDVJATINGO.local">
+        <testcase name="should preserve text attributes (bold, italic, underline)" classname="ANSI color preservation &amp;gt; SerializeAddon" time="0.024658" file="src/addons/serialize.test.ts" line="41" assertions="9" />
+        <testcase name="should preserve basic 16-color foreground colors" classname="ANSI color preservation &amp;gt; SerializeAddon" time="0.006521" file="src/addons/serialize.test.ts" line="73" assertions="7" />
+        <testcase name="should preserve 256-color palette colors" classname="ANSI color preservation &amp;gt; SerializeAddon" time="0.004968" file="src/addons/serialize.test.ts" line="106" assertions="2" />
+        <testcase name="should preserve RGB/truecolor colors" classname="ANSI color preservation &amp;gt; SerializeAddon" time="0.00661" file="src/addons/serialize.test.ts" line="127" assertions="2" />
+        <testcase name="should preserve background colors" classname="ANSI color preservation &amp;gt; SerializeAddon" time="0.004956" file="src/addons/serialize.test.ts" line="148" assertions="4" />
+        <testcase name="should handle combined colors and attributes" classname="ANSI color preservation &amp;gt; SerializeAddon" time="0.003531" file="src/addons/serialize.test.ts" line="175" assertions="4" />
+      </testsuite>
+      <testsuite name="round-trip serialization" file="src/addons/serialize.test.ts" line="204" tests="5" assertions="20" failures="0" skipped="0" time="0.02" hostname="BMMDVJATINGO.local">
+        <testcase name="should not produce ECH sequences" classname="round-trip serialization &amp;gt; SerializeAddon" time="0.003661" file="src/addons/serialize.test.ts" line="205" assertions="1" />
+        <testcase name="multi-line content should not have garbage characters" classname="round-trip serialization &amp;gt; SerializeAddon" time="0.007224" file="src/addons/serialize.test.ts" line="216" assertions="7" />
+        <testcase name="serialized output should restore after Terminal.reset()" classname="round-trip serialization &amp;gt; SerializeAddon" time="0.006195" file="src/addons/serialize.test.ts" line="245" assertions="3" />
+        <testcase name="alternate buffer should round-trip without garbage" classname="round-trip serialization &amp;gt; SerializeAddon" time="0.003651" file="src/addons/serialize.test.ts" line="268" assertions="4" />
+        <testcase name="serialized output written to new terminal should match original colors" classname="round-trip serialization &amp;gt; SerializeAddon" time="0.00178" file="src/addons/serialize.test.ts" line="292" assertions="5" />
+      </testsuite>
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/scoped-cache.test.ts" file="src/utils/scoped-cache.test.ts" tests="3" assertions="17" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="createScopedCache" file="src/utils/scoped-cache.test.ts" line="4" tests="3" assertions="17" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="evicts least-recently-used entry when max is reached" classname="createScopedCache" time="0.000306" file="src/utils/scoped-cache.test.ts" line="5" assertions="7" />
+      <testcase name="disposes entries on delete and clear" classname="createScopedCache" time="0.000062" file="src/utils/scoped-cache.test.ts" line="27" assertions="4" />
+      <testcase name="expires stale entries with ttl and recreates on get" classname="createScopedCache" time="0.000083" file="src/utils/scoped-cache.test.ts" line="45" assertions="6" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/server-health.test.ts" file="src/utils/server-health.test.ts" tests="6" assertions="9" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="checkServerHealth" file="src/utils/server-health.test.ts" line="15" tests="6" assertions="9" failures="0" skipped="0" time="0.327" hostname="BMMDVJATINGO.local">
+      <testcase name="returns healthy response with version" classname="checkServerHealth" time="0.004283" file="src/utils/server-health.test.ts" line="16" assertions="1" />
+      <testcase name="returns unhealthy when request fails" classname="checkServerHealth" time="0.304272" file="src/utils/server-health.test.ts" line="28" assertions="1" />
+      <testcase name="uses timeout fallback when AbortSignal.timeout is unavailable" classname="checkServerHealth" time="0.011614" file="src/utils/server-health.test.ts" line="38" assertions="2" />
+      <testcase name="uses provided abort signal" classname="checkServerHealth" time="0.000344" file="src/utils/server-health.test.ts" line="70" assertions="1" />
+      <testcase name="retries transient failures and eventually succeeds" classname="checkServerHealth" time="0.004003" file="src/utils/server-health.test.ts" line="88" assertions="2" />
+      <testcase name="returns unhealthy when retries are exhausted" classname="checkServerHealth" time="0.004443" file="src/utils/server-health.test.ts" line="108" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/uuid.test.ts" file="src/utils/uuid.test.ts" tests="4" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="uuid" file="src/utils/uuid.test.ts" line="47" tests="4" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="uses randomUUID in secure contexts" classname="uuid" time="0.000078" file="src/utils/uuid.test.ts" line="48" assertions="1" />
+      <testcase name="falls back in insecure contexts" classname="uuid" time="0.000049" file="src/utils/uuid.test.ts" line="54" assertions="1" />
+      <testcase name="falls back when randomUUID throws" classname="uuid" time="0.000082" file="src/utils/uuid.test.ts" line="61" assertions="1" />
+      <testcase name="falls back when randomUUID is unavailable" classname="uuid" time="0.00003" file="src/utils/uuid.test.ts" line="72" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/prompt.test.ts" file="src/utils/prompt.test.ts" tests="1" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="extractPromptFromParts" file="src/utils/prompt.test.ts" line="5" tests="1" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="restores multiple uploaded attachments" classname="extractPromptFromParts" time="0.000422" file="src/utils/prompt.test.ts" line="6" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/persist.test.ts" file="src/utils/persist.test.ts" tests="9" assertions="20" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="persist localStorage resilience" file="src/utils/persist.test.ts" line="76" tests="9" assertions="20" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="does not cache values as persisted when quota write and eviction fail" classname="persist localStorage resilience" time="0.000335" file="src/utils/persist.test.ts" line="77" assertions="2" />
+      <testcase name="disables only the failing scope when storage throws" classname="persist localStorage resilience" time="0.000036" file="src/utils/persist.test.ts" line="85" assertions="3" />
+      <testcase name="failing fallback scope does not poison direct storage scope" classname="persist localStorage resilience" time="0.000055" file="src/utils/persist.test.ts" line="99" assertions="1" />
+      <testcase name="normalizer rejects malformed JSON payloads" classname="persist localStorage resilience" time="0.000041" file="src/utils/persist.test.ts" line="109" assertions="1" />
+      <testcase name="workspace storage sanitizes Windows filename characters" classname="persist localStorage resilience" time="0.000096" file="src/utils/persist.test.ts" line="114" assertions="3" />
+      <testcase name="workspace target keeps raw path storage as legacy fallback" classname="persist localStorage resilience" time="0.000153" file="src/utils/persist.test.ts" line="122" assertions="2" />
+      <testcase name="workspace target keeps backslash storage as fallback for normalized Windows paths" classname="persist localStorage resilience" time="0.000018" file="src/utils/persist.test.ts" line="129" assertions="2" />
+      <testcase name="migrates direct legacy keys into scoped storage" classname="persist localStorage resilience" time="0.00018" file="src/utils/persist.test.ts" line="136" assertions="4" />
+      <testcase name="removes legacy workspace storage when removing persisted target" classname="persist localStorage resilience" time="0.000086" file="src/utils/persist.test.ts" line="157" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/notification-click.test.ts" file="src/utils/notification-click.test.ts" tests="3" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="notification click" file="src/utils/notification-click.test.ts" line="4" tests="3" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="navigates via registered navigate function" classname="notification click" time="0" file="src/utils/notification-click.test.ts" line="9" assertions="1" />
+      <testcase name="does not navigate when href is missing" classname="notification click" time="0.000157" file="src/utils/notification-click.test.ts" line="16" assertions="1" />
+      <testcase name="falls back to location.assign without registered navigate" classname="notification click" time="0.00077" file="src/utils/notification-click.test.ts" line="23" assertions="0" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/diffs.test.ts" file="src/utils/diffs.test.ts" tests="6" assertions="6" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="diffs" file="src/utils/diffs.test.ts" line="14" tests="4" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps valid arrays" classname="diffs" time="0" file="src/utils/diffs.test.ts" line="15" assertions="1" />
+      <testcase name="wraps a single diff object" classname="diffs" time="0" file="src/utils/diffs.test.ts" line="19" assertions="1" />
+      <testcase name="reads keyed diff objects" classname="diffs" time="0.000229" file="src/utils/diffs.test.ts" line="23" assertions="1" />
+      <testcase name="drops invalid entries" classname="diffs" time="0.000022" file="src/utils/diffs.test.ts" line="27" assertions="1" />
+    </testsuite>
+    <testsuite name="message" file="src/utils/diffs.test.ts" line="38" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="normalizes user summaries with object diffs" classname="message" time="0.000073" file="src/utils/diffs.test.ts" line="39" assertions="1" />
+      <testcase name="drops invalid user summaries" classname="message" time="0.000018" file="src/utils/diffs.test.ts" line="61" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/terminal-writer.test.ts" file="src/utils/terminal-writer.test.ts" tests="3" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="terminalWriter" file="src/utils/terminal-writer.test.ts" line="4" tests="3" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="buffers and flushes once per schedule" classname="terminalWriter" time="0.000278" file="src/utils/terminal-writer.test.ts" line="5" assertions="3" />
+      <testcase name="flush is a no-op when empty" classname="terminalWriter" time="0.000066" file="src/utils/terminal-writer.test.ts" line="27" assertions="1" />
+      <testcase name="flush waits for pending write completion" classname="terminalWriter" time="0.000048" file="src/utils/terminal-writer.test.ts" line="40" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/worktree.test.ts" file="src/utils/worktree.test.ts" tests="4" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="Worktree" file="src/utils/worktree.test.ts" line="6" tests="4" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="normalizes trailing slashes" classname="Worktree" time="0.000136" file="src/utils/worktree.test.ts" line="7" assertions="1" />
+      <testcase name="pending does not overwrite a terminal state" classname="Worktree" time="0.000046" file="src/utils/worktree.test.ts" line="14" assertions="1" />
+      <testcase name="wait resolves shared pending waiter when ready" classname="Worktree" time="0.000096" file="src/utils/worktree.test.ts" line="22" assertions="3" />
+      <testcase name="wait resolves with failure message" classname="Worktree" time="0.00007" file="src/utils/worktree.test.ts" line="37" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/terminal-websocket-url.test.ts" file="src/utils/terminal-websocket-url.test.ts" tests="3" assertions="8" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="terminalWebSocketURL" file="src/utils/terminal-websocket-url.test.ts" line="4" tests="3" assertions="8" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="uses query auth without embedding credentials in websocket URL" classname="terminalWebSocketURL" time="0.000157" file="src/utils/terminal-websocket-url.test.ts" line="5" assertions="4" />
+      <testcase name="omits query auth for same-origin saved credentials" classname="terminalWebSocketURL" time="0.000069" file="src/utils/terminal-websocket-url.test.ts" line="22" assertions="2" />
+      <testcase name="uses query auth for same-origin credentials from auth_token" classname="terminalWebSocketURL" time="0.000023" file="src/utils/terminal-websocket-url.test.ts" line="37" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/runtime-adapters.test.ts" file="src/utils/runtime-adapters.test.ts" tests="6" assertions="13" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="runtime adapters" file="src/utils/runtime-adapters.test.ts" line="11" tests="6" assertions="13" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="detects and disposes disposable values" classname="runtime adapters" time="0" file="src/utils/runtime-adapters.test.ts" line="12" assertions="2" />
+      <testcase name="ignores non-disposable values" classname="runtime adapters" time="0.000196" file="src/utils/runtime-adapters.test.ts" line="24" assertions="2" />
+      <testcase name="sets options only when setter exists" classname="runtime adapters" time="0.000044" file="src/utils/runtime-adapters.test.ts" line="29" assertions="3" />
+      <testcase name="reads hovered link text safely" classname="runtime adapters" time="0.000046" file="src/utils/runtime-adapters.test.ts" line="42" assertions="3" />
+      <testcase name="resolves speech recognition constructor with webkit precedence" classname="runtime adapters" time="0.000031" file="src/utils/runtime-adapters.test.ts" line="48" assertions="1" />
+      <testcase name="returns undefined when no valid speech constructor exists" classname="runtime adapters" time="0.000018" file="src/utils/runtime-adapters.test.ts" line="60" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/server.test.ts" file="src/utils/server.test.ts" tests="4" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="authFromToken" file="src/utils/server.test.ts" line="4" tests="3" assertions="4" failures="0" skipped="0" time="0.001" hostname="BMMDVJATINGO.local">
+      <testcase name="decodes basic auth credentials from auth_token" classname="authFromToken" time="0.001075" file="src/utils/server.test.ts" line="5" assertions="1" />
+      <testcase name="defaults blank username to opencode" classname="authFromToken" time="0.000047" file="src/utils/server.test.ts" line="9" assertions="1" />
+      <testcase name="ignores malformed tokens" classname="authFromToken" time="0.000061" file="src/utils/server.test.ts" line="13" assertions="2" />
+    </testsuite>
+    <testsuite name="authTokenFromCredentials" file="src/utils/server.test.ts" line="19" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="encodes credentials with the default username" classname="authTokenFromCredentials" time="0.000014" file="src/utils/server.test.ts" line="20" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/utils/server-errors.test.ts" file="src/utils/server-errors.test.ts" tests="9" assertions="9" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="parseReadableConfigInvalidError" file="src/utils/server-errors.test.ts" line="34" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="formats issues with file path" classname="parseReadableConfigInvalidError" time="0.000112" file="src/utils/server-errors.test.ts" line="35" assertions="1" />
+      <testcase name="uses trimmed message when issues are missing" classname="parseReadableConfigInvalidError" time="0.000035" file="src/utils/server-errors.test.ts" line="54" assertions="1" />
+    </testsuite>
+    <testsuite name="formatServerError" file="src/utils/server-errors.test.ts" line="69" tests="7" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="formats config invalid errors" classname="formatServerError" time="0.000052" file="src/utils/server-errors.test.ts" line="70" assertions="1" />
+      <testcase name="returns error messages" classname="formatServerError" time="0.000023" file="src/utils/server-errors.test.ts" line="83" assertions="1" />
+      <testcase name="returns provided string errors" classname="formatServerError" time="0.000021" file="src/utils/server-errors.test.ts" line="89" assertions="1" />
+      <testcase name="uses translated unknown fallback" classname="formatServerError" time="0.000014" file="src/utils/server-errors.test.ts" line="93" assertions="1" />
+      <testcase name="falls back for unknown error objects and names" classname="formatServerError" time="0.000017" file="src/utils/server-errors.test.ts" line="97" assertions="1" />
+      <testcase name="formats provider model errors using provider/model" classname="formatServerError" time="0.000044" file="src/utils/server-errors.test.ts" line="103" assertions="1" />
+      <testcase name="formats provider model suggestions" classname="formatServerError" time="0.000044" file="src/utils/server-errors.test.ts" line="117" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/file-tree.test.ts" file="src/components/file-tree.test.ts" tests="3" assertions="13" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="file tree fetch discipline" file="src/components/file-tree.test.ts" line="38" tests="3" assertions="13" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="root lists on mount unless already loaded or loading" classname="file tree fetch discipline" time="0" file="src/components/file-tree.test.ts" line="39" assertions="4" />
+      <testcase name="nested dirs list only when expanded and stale" classname="file tree fetch discipline" time="0.000189" file="src/components/file-tree.test.ts" line="46" assertions="6" />
+      <testcase name="allowed auto-expand picks only collapsed dirs" classname="file tree fetch discipline" time="0.000093" file="src/components/file-tree.test.ts" line="55" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/dialog-custom-provider.test.ts" file="src/components/dialog-custom-provider.test.ts" tests="2" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="validateCustomProvider" file="src/components/dialog-custom-provider.test.ts" line="6" tests="2" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="builds trimmed config payload" classname="validateCustomProvider" time="0.00034" file="src/components/dialog-custom-provider.test.ts" line="7" assertions="1" />
+      <testcase name="flags duplicate rows and allows reconnecting disabled providers" classname="validateCustomProvider" time="0.000069" file="src/components/dialog-custom-provider.test.ts" line="47" assertions="4" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/titlebar-history.test.ts" file="src/components/titlebar-history.test.ts" tests="3" assertions="17" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="titlebar history" file="src/components/titlebar-history.test.ts" line="8" tests="3" assertions="17" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="append and trim keeps max bounded" classname="titlebar history" time="0.000096" file="src/components/titlebar-history.test.ts" line="9" assertions="3" />
+      <testcase name="back and forward indexes stay correct after trimming" classname="titlebar history" time="0.000085" file="src/components/titlebar-history.test.ts" line="21" assertions="10" />
+      <testcase name="action-driven navigation does not push duplicate history entries" classname="titlebar history" time="0.000037" file="src/components/titlebar-history.test.ts" line="48" assertions="4" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/i18n/parity.test.ts" file="src/i18n/parity.test.ts" tests="1" assertions="64" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="i18n parity" file="src/i18n/parity.test.ts" line="23" tests="1" assertions="64" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="non-English locales translate targeted unseen session keys" classname="i18n parity" time="0.000961" file="src/i18n/parity.test.ts" line="24" assertions="64" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/file/path.test.ts" file="src/context/file/path.test.ts" tests="37" assertions="88" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="file path helpers" file="src/context/file/path.test.ts" line="4" tests="4" assertions="17" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="normalizes file inputs against workspace root" classname="file path helpers" time="0.000489" file="src/context/file/path.test.ts" line="5" assertions="7" />
+      <testcase name="normalizes Windows absolute paths with mixed separators" classname="file path helpers" time="0.000029" file="src/context/file/path.test.ts" line="16" assertions="4" />
+      <testcase name="keeps query/hash stripping behavior stable" classname="file path helpers" time="0.000023" file="src/context/file/path.test.ts" line="24" assertions="3" />
+      <testcase name="unquotes git escaped octal path strings" classname="file path helpers" time="0.000065" file="src/context/file/path.test.ts" line="30" assertions="3" />
+    </testsuite>
+    <testsuite name="encodeFilePath" file="src/context/file/path.test.ts" line="37" tests="33" assertions="71" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testsuite name="Linux/Unix paths" file="src/context/file/path.test.ts" line="38" tests="5" assertions="13" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+        <testcase name="should handle Linux absolute path" classname="Linux/Unix paths &amp;gt; encodeFilePath" time="0.000055" file="src/context/file/path.test.ts" line="39" assertions="4" />
+        <testcase name="should handle Linux path with special characters" classname="Linux/Unix paths &amp;gt; encodeFilePath" time="0.000035" file="src/context/file/path.test.ts" line="53" assertions="2" />
+        <testcase name="should handle Linux relative path" classname="Linux/Unix paths &amp;gt; encodeFilePath" time="0.000009" file="src/context/file/path.test.ts" line="62" assertions="1" />
+        <testcase name="should handle Linux root directory" classname="Linux/Unix paths &amp;gt; encodeFilePath" time="0.000007" file="src/context/file/path.test.ts" line="69" assertions="1" />
+        <testcase name="should handle Linux path with all special chars" classname="Linux/Unix paths &amp;gt; encodeFilePath" time="0.000026" file="src/context/file/path.test.ts" line="74" assertions="5" />
+      </testsuite>
+      <testsuite name="macOS paths" file="src/context/file/path.test.ts" line="87" tests="2" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+        <testcase name="should handle macOS absolute path" classname="macOS paths &amp;gt; encodeFilePath" time="0.000028" file="src/context/file/path.test.ts" line="88" assertions="2" />
+        <testcase name="should handle macOS path with spaces" classname="macOS paths &amp;gt; encodeFilePath" time="0.000022" file="src/context/file/path.test.ts" line="97" assertions="2" />
+      </testsuite>
+      <testsuite name="Windows paths" file="src/context/file/path.test.ts" line="107" tests="8" assertions="19" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+        <testcase name="should handle Windows absolute path with backslashes" classname="Windows paths &amp;gt; encodeFilePath" time="0.000036" file="src/context/file/path.test.ts" line="108" assertions="4" />
+        <testcase name="should handle mixed separator path (Windows + Unix)" classname="Windows paths &amp;gt; encodeFilePath" time="0.000022" file="src/context/file/path.test.ts" line="122" assertions="2" />
+        <testcase name="should handle Windows path with spaces" classname="Windows paths &amp;gt; encodeFilePath" time="0.000025" file="src/context/file/path.test.ts" line="132" assertions="3" />
+        <testcase name="should handle Windows path with special chars in filename" classname="Windows paths &amp;gt; encodeFilePath" time="0.000024" file="src/context/file/path.test.ts" line="142" assertions="2" />
+        <testcase name="should handle Windows root directory" classname="Windows paths &amp;gt; encodeFilePath" time="0.000021" file="src/context/file/path.test.ts" line="151" assertions="2" />
+        <testcase name="should handle Windows relative path with backslashes" classname="Windows paths &amp;gt; encodeFilePath" time="0.000013" file="src/context/file/path.test.ts" line="160" assertions="1" />
+        <testcase name="should NOT create invalid URL like the bug report" classname="Windows paths &amp;gt; encodeFilePath" time="0.000017" file="src/context/file/path.test.ts" line="168" assertions="3" />
+        <testcase name="should handle lowercase drive letters" classname="Windows paths &amp;gt; encodeFilePath" time="0.000027" file="src/context/file/path.test.ts" line="182" assertions="2" />
+      </testsuite>
+      <testsuite name="Cross-platform compatibility" file="src/context/file/path.test.ts" line="192" tests="3" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+        <testcase name="should preserve Unix paths unchanged (except encoding)" classname="Cross-platform compatibility &amp;gt; encodeFilePath" time="0.000008" file="src/context/file/path.test.ts" line="193" assertions="1" />
+        <testcase name="should normalize Windows paths for cross-platform use" classname="Cross-platform compatibility &amp;gt; encodeFilePath" time="0.000034" file="src/context/file/path.test.ts" line="199" assertions="2" />
+        <testcase name="should handle relative paths the same on all platforms" classname="Cross-platform compatibility &amp;gt; encodeFilePath" time="0.000015" file="src/context/file/path.test.ts" line="207" assertions="2" />
+      </testsuite>
+      <testsuite name="Edge cases" file="src/context/file/path.test.ts" line="220" tests="8" assertions="15" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+        <testcase name="should handle empty path" classname="Edge cases &amp;gt; encodeFilePath" time="0.000009" file="src/context/file/path.test.ts" line="221" assertions="1" />
+        <testcase name="should handle path with multiple consecutive slashes" classname="Edge cases &amp;gt; encodeFilePath" time="0.000009" file="src/context/file/path.test.ts" line="226" assertions="1" />
+        <testcase name="should encode Unicode characters" classname="Edge cases &amp;gt; encodeFilePath" time="0.000037" file="src/context/file/path.test.ts" line="232" assertions="2" />
+        <testcase name="should handle already normalized Windows path" classname="Edge cases &amp;gt; encodeFilePath" time="0.000011" file="src/context/file/path.test.ts" line="242" assertions="2" />
+        <testcase name="should handle just drive letter" classname="Edge cases &amp;gt; encodeFilePath" time="0.00002" file="src/context/file/path.test.ts" line="252" assertions="2" />
+        <testcase name="should handle Windows path with trailing backslash" classname="Edge cases &amp;gt; encodeFilePath" time="0.000018" file="src/context/file/path.test.ts" line="261" assertions="2" />
+        <testcase name="should handle very long paths" classname="Edge cases &amp;gt; encodeFilePath" time="0.000038" file="src/context/file/path.test.ts" line="270" assertions="2" />
+        <testcase name="should handle paths with dots" classname="Edge cases &amp;gt; encodeFilePath" time="0.000023" file="src/context/file/path.test.ts" line="279" assertions="3" />
+      </testsuite>
+      <testsuite name="Regression tests for PR #12424" file="src/context/file/path.test.ts" line="291" tests="3" assertions="6" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+        <testcase name="should handle file with # in name" classname="Regression tests for PR #12424 &amp;gt; encodeFilePath" time="0.000028" file="src/context/file/path.test.ts" line="292" assertions="2" />
+        <testcase name="should handle file with ? in name" classname="Regression tests for PR #12424 &amp;gt; encodeFilePath" time="0.000017" file="src/context/file/path.test.ts" line="301" assertions="2" />
+        <testcase name="should handle file with % in name" classname="Regression tests for PR #12424 &amp;gt; encodeFilePath" time="0.000021" file="src/context/file/path.test.ts" line="310" assertions="2" />
+      </testsuite>
+      <testsuite name="Integration with file:// URL construction" file="src/context/file/path.test.ts" line="320" tests="4" assertions="9" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+        <testcase name="should work with query parameters (Linux)" classname="Integration with file:// URL construction &amp;gt; encodeFilePath" time="0.000022" file="src/context/file/path.test.ts" line="321" assertions="3" />
+        <testcase name="should work with query parameters (Windows)" classname="Integration with file:// URL construction &amp;gt; encodeFilePath" time="0.000023" file="src/context/file/path.test.ts" line="332" assertions="2" />
+        <testcase name="should parse correctly in URL constructor (Linux)" classname="Integration with file:// URL construction &amp;gt; encodeFilePath" time="0.000015" file="src/context/file/path.test.ts" line="342" assertions="2" />
+        <testcase name="should parse correctly in URL constructor (Windows)" classname="Integration with file:// URL construction &amp;gt; encodeFilePath" time="0.000018" file="src/context/file/path.test.ts" line="351" assertions="2" />
+      </testsuite>
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/file/watcher.test.ts" file="src/context/file/watcher.test.ts" tests="4" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="file watcher invalidation" file="src/context/file/watcher.test.ts" line="4" tests="4" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="reloads open files and refreshes loaded parent on add" classname="file watcher invalidation" time="0.000117" file="src/context/file/watcher.test.ts" line="5" assertions="2" />
+      <testcase name="reloads files that are open in tabs" classname="file watcher invalidation" time="0.000081" file="src/context/file/watcher.test.ts" line="30" assertions="1" />
+      <testcase name="refreshes only changed loaded directory nodes" classname="file watcher invalidation" time="0.00005" file="src/context/file/watcher.test.ts" line="61" assertions="1" />
+      <testcase name="ignores invalid or git watcher updates" classname="file watcher invalidation" time="0.000048" file="src/context/file/watcher.test.ts" line="109" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/global-sync/utils.test.ts" file="src/context/global-sync/utils.test.ts" tests="7" assertions="11" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="normalizeAgentList" file="src/context/global-sync/utils.test.ts" line="13" tests="4" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps array payloads" classname="normalizeAgentList" time="0.000065" file="src/context/global-sync/utils.test.ts" line="14" assertions="1" />
+      <testcase name="wraps a single agent payload" classname="normalizeAgentList" time="0.000044" file="src/context/global-sync/utils.test.ts" line="18" assertions="1" />
+      <testcase name="extracts agents from keyed objects" classname="normalizeAgentList" time="0.000025" file="src/context/global-sync/utils.test.ts" line="22" assertions="1" />
+      <testcase name="drops invalid payloads" classname="normalizeAgentList" time="0.00002" file="src/context/global-sync/utils.test.ts" line="31" assertions="2" />
+    </testsuite>
+    <testsuite name="directoryKey" file="src/context/global-sync/utils.test.ts" line="37" tests="3" assertions="6" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="normalizes slashes" classname="directoryKey" time="0.000016" file="src/context/global-sync/utils.test.ts" line="38" assertions="2" />
+      <testcase name="preserves backslashes in posix paths" classname="directoryKey" time="0.00001" file="src/context/global-sync/utils.test.ts" line="43" assertions="1" />
+      <testcase name="trims trailing slashes without breaking roots" classname="directoryKey" time="0.000025" file="src/context/global-sync/utils.test.ts" line="47" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/global-sync/child-store.test.ts" file="src/context/global-sync/child-store.test.ts" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="createChildStoreManager" file="src/context/global-sync/child-store.test.ts" line="9" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="does not evict the active directory during mark" classname="createChildStoreManager" time="0.000744" file="src/context/global-sync/child-store.test.ts" line="10" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/global-sync/queue.test.ts" file="src/context/global-sync/queue.test.ts" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="createRefreshQueue" file="src/context/global-sync/queue.test.ts" line="7" tests="2" assertions="2" failures="0" skipped="0" time="0.022" hostname="BMMDVJATINGO.local">
+      <testcase name="clears queued directories by normalized key" classname="createRefreshQueue" time="0.011163" file="src/context/global-sync/queue.test.ts" line="8" assertions="1" />
+      <testcase name="passes the original directory to bootstrapInstance" classname="createRefreshQueue" time="0.011179" file="src/context/global-sync/queue.test.ts" line="28" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/global-sync/session-prefetch.test.ts" file="src/context/global-sync/session-prefetch.test.ts" tests="5" assertions="12" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="session prefetch" file="src/context/global-sync/session-prefetch.test.ts" line="11" tests="5" assertions="12" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="stores and clears message metadata by directory" classname="session prefetch" time="0.000174" file="src/context/global-sync/session-prefetch.test.ts" line="12" assertions="3" />
+      <testcase name="dedupes inflight work" classname="session prefetch" time="0.000135" file="src/context/global-sync/session-prefetch.test.ts" line="33" assertions="3" />
+      <testcase name="clears a whole directory" classname="session prefetch" time="0.00011" file="src/context/global-sync/session-prefetch.test.ts" line="54" assertions="3" />
+      <testcase name="refreshes stale first-page prefetched history" classname="session prefetch" time="0.000022" file="src/context/global-sync/session-prefetch.test.ts" line="66" assertions="1" />
+      <testcase name="keeps deeper or complete history cached" classname="session prefetch" time="0.00003" file="src/context/global-sync/session-prefetch.test.ts" line="77" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/global-sync/session-trim.test.ts" file="src/context/global-sync/session-trim.test.ts" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="trimSessions" file="src/context/global-sync/session-trim.test.ts" line="16" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps base roots and recent roots beyond the limit" classname="trimSessions" time="0.00093" file="src/context/global-sync/session-trim.test.ts" line="17" assertions="1" />
+      <testcase name="keeps children when root is kept, permission exists, or child is recent" classname="trimSessions" time="0.000071" file="src/context/global-sync/session-trim.test.ts" line="31" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/global-sync/session-cache.test.ts" file="src/context/global-sync/session-cache.test.ts" tests="3" assertions="11" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="app session cache" file="src/context/global-sync/session-cache.test.ts" line="32" tests="3" assertions="11" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="dropSessionCaches clears orphaned parts without message rows" classname="app session cache" time="0.000151" file="src/context/global-sync/session-cache.test.ts" line="33" assertions="7" />
+      <testcase name="dropSessionCaches clears message-backed parts" classname="app session cache" time="0.000048" file="src/context/global-sync/session-cache.test.ts" line="63" assertions="2" />
+      <testcase name="pickSessionCacheEvictions preserves requested sessions" classname="app session cache" time="0.000063" file="src/context/global-sync/session-cache.test.ts" line="89" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/context/global-sync/event-reducer.test.ts" file="src/context/global-sync/event-reducer.test.ts" tests="13" assertions="62" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="applyGlobalEvent" file="src/context/global-sync/event-reducer.test.ts" line="87" tests="3" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="upserts project.updated in sorted position" classname="applyGlobalEvent" time="0.000275" file="src/context/global-sync/event-reducer.test.ts" line="88" assertions="2" />
+      <testcase name="handles global.disposed by triggering refresh" classname="applyGlobalEvent" time="0.000076" file="src/context/global-sync/event-reducer.test.ts" line="106" assertions="1" />
+      <testcase name="handles server.connected by triggering refresh" classname="applyGlobalEvent" time="0.000031" file="src/context/global-sync/event-reducer.test.ts" line="120" assertions="1" />
+    </testsuite>
+    <testsuite name="applyDirectoryEvent" file="src/context/global-sync/event-reducer.test.ts" line="135" tests="10" assertions="58" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="inserts root sessions in sorted order and updates sessionTotal" classname="applyDirectoryEvent" time="0.000433" file="src/context/global-sync/event-reducer.test.ts" line="136" assertions="3" />
+      <testcase name="cleans session caches when archived" classname="applyDirectoryEvent" time="0.00013" file="src/context/global-sync/event-reducer.test.ts" line="168" assertions="9" />
+      <testcase name="cleans session caches when deleted and decrements only root totals" classname="applyDirectoryEvent" time="0.000102" file="src/context/global-sync/event-reducer.test.ts" line="204" assertions="18" />
+      <testcase name="cleans caches for trimmed sessions on session.created" classname="applyDirectoryEvent" time="0.000157" file="src/context/global-sync/event-reducer.test.ts" line="251" assertions="9" />
+      <testcase name="cleanupDroppedSessionCaches clears part-only orphan state" classname="applyDirectoryEvent" time="0.000041" file="src/context/global-sync/event-reducer.test.ts" line="294" assertions="1" />
+      <testcase name="upserts and removes messages while clearing orphaned parts" classname="applyDirectoryEvent" time="0.000113" file="src/context/global-sync/event-reducer.test.ts" line="307" assertions="4" />
+      <testcase name="upserts and prunes message parts" classname="applyDirectoryEvent" time="0.000109" file="src/context/global-sync/event-reducer.test.ts" line="359" assertions="4" />
+      <testcase name="tracks permission and question request lifecycles" classname="applyDirectoryEvent" time="0.000176" file="src/context/global-sync/event-reducer.test.ts" line="426" assertions="6" />
+      <testcase name="updates vcs branch in store and cache" classname="applyDirectoryEvent" time="0.000046" file="src/context/global-sync/event-reducer.test.ts" line="496" assertions="2" />
+      <testcase name="routes disposal and lsp events to side-effect handlers" classname="applyDirectoryEvent" time="0.000045" file="src/context/global-sync/event-reducer.test.ts" line="520" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/prompt-input/attachments.test.ts" file="src/components/prompt-input/attachments.test.ts" tests="7" assertions="8" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="attachmentMime" file="src/components/prompt-input/attachments.test.ts" line="5" tests="4" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="keeps PDFs when the browser reports the mime" classname="attachmentMime" time="0.00028" file="src/components/prompt-input/attachments.test.ts" line="6" assertions="1" />
+      <testcase name="normalizes structured text types to text/plain" classname="attachmentMime" time="0.000069" file="src/components/prompt-input/attachments.test.ts" line="11" assertions="1" />
+      <testcase name="accepts text files even with a misleading browser mime" classname="attachmentMime" time="0.000168" file="src/components/prompt-input/attachments.test.ts" line="16" assertions="1" />
+      <testcase name="rejects binary files" classname="attachmentMime" time="0.000062" file="src/components/prompt-input/attachments.test.ts" line="21" assertions="1" />
+    </testsuite>
+    <testsuite name="pasteMode" file="src/components/prompt-input/attachments.test.ts" line="27" tests="3" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="uses native paste for short single-line text" classname="pasteMode" time="0.000058" file="src/components/prompt-input/attachments.test.ts" line="28" assertions="1" />
+      <testcase name="uses manual paste for multiline text" classname="pasteMode" time="0.000043" file="src/components/prompt-input/attachments.test.ts" line="32" assertions="2" />
+      <testcase name="uses manual paste for large text" classname="pasteMode" time="0.000011" file="src/components/prompt-input/attachments.test.ts" line="41" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/prompt-input/placeholder.test.ts" file="src/components/prompt-input/placeholder.test.ts" tests="4" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="promptPlaceholder" file="src/components/prompt-input/placeholder.test.ts" line="4" tests="4" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="returns shell placeholder in shell mode" classname="promptPlaceholder" time="0.000121" file="src/components/prompt-input/placeholder.test.ts" line="7" assertions="1" />
+      <testcase name="returns summarize placeholders for comment context" classname="promptPlaceholder" time="0.000022" file="src/components/prompt-input/placeholder.test.ts" line="18" assertions="2" />
+      <testcase name="returns default placeholder with example when suggestions enabled" classname="promptPlaceholder" time="0.000018" file="src/components/prompt-input/placeholder.test.ts" line="27" assertions="1" />
+      <testcase name="returns simple placeholder when suggestions disabled" classname="promptPlaceholder" time="0.000013" file="src/components/prompt-input/placeholder.test.ts" line="38" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/prompt-input/history.test.ts" file="src/components/prompt-input/history.test.ts" tests="6" assertions="39" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="prompt-input history" file="src/components/prompt-input/history.test.ts" line="26" tests="6" assertions="39" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="prependHistoryEntry skips empty prompt and deduplicates consecutive entries" classname="prompt-input history" time="0.000288" file="src/components/prompt-input/history.test.ts" line="27" assertions="5" />
+      <testcase name="navigatePromptHistory restores saved prompt when moving down from newest" classname="prompt-input history" time="0.000154" file="src/components/prompt-input/history.test.ts" line="44" assertions="8" />
+      <testcase name="navigatePromptHistory keeps entry comments when moving through history" classname="prompt-input history" time="0.00002" file="src/components/prompt-input/history.test.ts" line="75" assertions="3" />
+      <testcase name="normalizePromptHistoryEntry supports legacy prompt arrays" classname="prompt-input history" time="0.000018" file="src/components/prompt-input/history.test.ts" line="98" assertions="2" />
+      <testcase name="helpers clone prompt and count text content length" classname="prompt-input history" time="0.000057" file="src/components/prompt-input/history.test.ts" line="104" assertions="3" />
+      <testcase name="canNavigateHistoryAtCursor only allows prompt boundaries" classname="prompt-input history" time="0.000079" file="src/components/prompt-input/history.test.ts" line="126" assertions="18" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/prompt-input/submit.test.ts" file="src/components/prompt-input/submit.test.ts" tests="4" assertions="11" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="prompt submit worktree selection" file="src/components/prompt-input/submit.test.ts" line="219" tests="4" assertions="11" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="reads the latest worktree accessor value per submit" classname="prompt submit worktree selection" time="0.000916" file="src/components/prompt-input/submit.test.ts" line="220" assertions="6" />
+      <testcase name="applies auto-accept to newly created sessions" classname="prompt submit worktree selection" time="0.000168" file="src/components/prompt-input/submit.test.ts" line="257" assertions="1" />
+      <testcase name="includes the selected variant on optimistic prompts" classname="prompt submit worktree selection" time="0.000664" file="src/components/prompt-input/submit.test.ts" line="284" assertions="2" />
+      <testcase name="seeds new sessions before optimistic prompts are added" classname="prompt submit worktree selection" time="0.000255" file="src/components/prompt-input/submit.test.ts" line="318" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/prompt-input/editor-dom.test.ts" file="src/components/prompt-input/editor-dom.test.ts" tests="7" assertions="22" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="prompt-input editor dom" file="src/components/prompt-input/editor-dom.test.ts" line="4" tests="7" assertions="22" failures="0" skipped="0" time="0.002" hostname="BMMDVJATINGO.local">
+      <testcase name="createTextFragment preserves newlines with consecutive br nodes" classname="prompt-input editor dom" time="0.001385" file="src/components/prompt-input/editor-dom.test.ts" line="5" assertions="5" />
+      <testcase name="createTextFragment keeps trailing newline as terminal break" classname="prompt-input editor dom" time="0.000202" file="src/components/prompt-input/editor-dom.test.ts" line="17" assertions="3" />
+      <testcase name="createTextFragment avoids break-node explosion for large multiline content" classname="prompt-input editor dom" time="0.000233" file="src/components/prompt-input/editor-dom.test.ts" line="27" assertions="3" />
+      <testcase name="createTextFragment keeps terminal break in large multiline fallback" classname="prompt-input editor dom" time="0.000145" file="src/components/prompt-input/editor-dom.test.ts" line="38" assertions="3" />
+      <testcase name="length helpers treat breaks as one char and ignore zero-width chars" classname="prompt-input editor dom" time="0.000129" file="src/components/prompt-input/editor-dom.test.ts" line="49" assertions="3" />
+      <testcase name="setCursorPosition and getCursorPosition round-trip with pills and breaks" classname="prompt-input editor dom" time="0.001763" file="src/components/prompt-input/editor-dom.test.ts" line="60" assertions="3" />
+      <testcase name="setCursorPosition and getCursorPosition round-trip across blank lines" classname="prompt-input editor dom" time="0.000458" file="src/components/prompt-input/editor-dom.test.ts" line="83" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/prompt-input/build-request-parts.test.ts" file="src/components/prompt-input/build-request-parts.test.ts" tests="12" assertions="44" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="buildRequestParts" file="src/components/prompt-input/build-request-parts.test.ts" line="5" tests="12" assertions="44" failures="0" skipped="0" time="0.001" hostname="BMMDVJATINGO.local">
+      <testcase name="builds typed request and optimistic parts without cast path" classname="buildRequestParts" time="0.001234" file="src/components/prompt-input/build-request-parts.test.ts" line="6" assertions="7" />
+      <testcase name="keeps multiple uploaded attachments in order" classname="buildRequestParts" time="0.000099" file="src/components/prompt-input/build-request-parts.test.ts" line="52" assertions="2" />
+      <testcase name="deduplicates context files when prompt already includes same path" classname="buildRequestParts" time="0.000102" file="src/components/prompt-input/build-request-parts.test.ts" line="78" assertions="2" />
+      <testcase name="adds file parts for @mentions inside comment text" classname="buildRequestParts" time="0.000126" file="src/components/prompt-input/build-request-parts.test.ts" line="103" assertions="3" />
+      <testcase name="handles Windows paths correctly (simulated on macOS)" classname="buildRequestParts" time="0.000092" file="src/components/prompt-input/build-request-parts.test.ts" line="127" assertions="4" />
+      <testcase name="handles Windows absolute path with special characters" classname="buildRequestParts" time="0.000085" file="src/components/prompt-input/build-request-parts.test.ts" line="153" assertions="4" />
+      <testcase name="handles Linux absolute paths correctly" classname="buildRequestParts" time="0.000071" file="src/components/prompt-input/build-request-parts.test.ts" line="178" assertions="3" />
+      <testcase name="handles macOS paths correctly" classname="buildRequestParts" time="0.000144" file="src/components/prompt-input/build-request-parts.test.ts" line="201" assertions="3" />
+      <testcase name="handles context files with Windows paths" classname="buildRequestParts" time="0.000119" file="src/components/prompt-input/build-request-parts.test.ts" line="224" assertions="5" />
+      <testcase name="handles absolute Windows paths (user manually specifies full path)" classname="buildRequestParts" time="0.000077" file="src/components/prompt-input/build-request-parts.test.ts" line="252" assertions="3" />
+      <testcase name="handles selection with query parameters on Windows" classname="buildRequestParts" time="0.000088" file="src/components/prompt-input/build-request-parts.test.ts" line="276" assertions="5" />
+      <testcase name="handles file paths with dots and special segments on Windows" classname="buildRequestParts" time="0.000077" file="src/components/prompt-input/build-request-parts.test.ts" line="312" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/session/session-context-metrics.test.ts" file="src/components/session/session-context-metrics.test.ts" tests="4" assertions="15" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="getSessionContextMetrics" file="src/components/session/session-context-metrics.test.ts" line="40" tests="4" assertions="15" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="computes totals and usage from latest assistant with tokens" classname="getSessionContextMetrics" time="0.000198" file="src/components/session/session-context-metrics.test.ts" line="41" assertions="6" />
+      <testcase name="preserves fallback labels and null usage when model metadata is missing" classname="getSessionContextMetrics" time="0.000021" file="src/components/session/session-context-metrics.test.ts" line="70" assertions="4" />
+      <testcase name="recomputes when message array is mutated in place" classname="getSessionContextMetrics" time="0.000035" file="src/components/session/session-context-metrics.test.ts" line="82" assertions="3" />
+      <testcase name="returns empty metrics when inputs are undefined" classname="getSessionContextMetrics" time="0.000012" file="src/components/session/session-context-metrics.test.ts" line="95" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/components/session/session-context-breakdown.test.ts" file="src/components/session/session-context-breakdown.test.ts" tests="2" assertions="6" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="estimateSessionContextBreakdown" file="src/components/session/session-context-breakdown.test.ts" line="21" tests="2" assertions="6" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="estimates tokens and keeps remaining tokens as other" classname="estimateSessionContextBreakdown" time="0.000254" file="src/components/session/session-context-breakdown.test.ts" line="22" assertions="4" />
+      <testcase name="scales segments when estimates exceed input" classname="estimateSessionContextBreakdown" time="0.000056" file="src/components/session/session-context-breakdown.test.ts" line="43" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/pages/layout/helpers.test.ts" file="src/pages/layout/helpers.test.ts" tests="20" assertions="37" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="layout deep links" file="src/pages/layout/helpers.test.ts" line="31" tests="10" assertions="16" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="parses open-project deep links" classname="layout deep links" time="0.000007" file="src/pages/layout/helpers.test.ts" line="32" assertions="1" />
+      <testcase name="ignores non-project deep links" classname="layout deep links" time="0.00009" file="src/pages/layout/helpers.test.ts" line="36" assertions="2" />
+      <testcase name="ignores malformed deep links safely" classname="layout deep links" time="0.000021" file="src/pages/layout/helpers.test.ts" line="41" assertions="2" />
+      <testcase name="parses links when URL.canParse is unavailable" classname="layout deep links" time="0.000035" file="src/pages/layout/helpers.test.ts" line="46" assertions="1" />
+      <testcase name="ignores open-project deep links without directory" classname="layout deep links" time="0.00002" file="src/pages/layout/helpers.test.ts" line="57" assertions="2" />
+      <testcase name="collects only valid open-project directories" classname="layout deep links" time="0.000028" file="src/pages/layout/helpers.test.ts" line="62" assertions="1" />
+      <testcase name="parses new-session deep links with optional prompt" classname="layout deep links" time="0.000055" file="src/pages/layout/helpers.test.ts" line="71" assertions="2" />
+      <testcase name="ignores new-session deep links without directory" classname="layout deep links" time="0.000014" file="src/pages/layout/helpers.test.ts" line="79" assertions="2" />
+      <testcase name="collects only valid new-session deep links" classname="layout deep links" time="0.000017" file="src/pages/layout/helpers.test.ts" line="84" assertions="1" />
+      <testcase name="drains global deep links once" classname="layout deep links" time="0.00004" file="src/pages/layout/helpers.test.ts" line="93" assertions="2" />
+    </testsuite>
+    <testsuite name="layout workspace helpers" file="src/pages/layout/helpers.test.ts" line="105" tests="10" assertions="21" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="normalizes trailing slash in workspace key" classname="layout workspace helpers" time="0.000028" file="src/pages/layout/helpers.test.ts" line="106" assertions="2" />
+      <testcase name="preserves posix and drive roots in workspace key" classname="layout workspace helpers" time="0.000021" file="src/pages/layout/helpers.test.ts" line="111" assertions="5" />
+      <testcase name="keeps local first while preserving known order" classname="layout workspace helpers" time="0.000051" file="src/pages/layout/helpers.test.ts" line="119" assertions="1" />
+      <testcase name="finds the latest root session across workspaces" classname="layout workspace helpers" time="0.000122" file="src/pages/layout/helpers.test.ts" line="124" assertions="1" />
+      <testcase name="detects project permissions with a filter" classname="layout workspace helpers" time="0.000047" file="src/pages/layout/helpers.test.ts" line="148" assertions="1" />
+      <testcase name="ignores project permissions filtered out" classname="layout workspace helpers" time="0.000017" file="src/pages/layout/helpers.test.ts" line="160" assertions="1" />
+      <testcase name="ignores archived and child sessions when finding latest root session" classname="layout workspace helpers" time="0.000031" file="src/pages/layout/helpers.test.ts" line="171" assertions="1" />
+      <testcase name="finds the direct child on the active session path" classname="layout workspace helpers" time="0.000059" file="src/pages/layout/helpers.test.ts" line="202" assertions="4" />
+      <testcase name="formats fallback project display name" classname="layout workspace helpers" time="0.000026" file="src/pages/layout/helpers.test.ts" line="215" assertions="2" />
+      <testcase name="extracts api error message and fallback" classname="layout workspace helpers" time="0.000044" file="src/pages/layout/helpers.test.ts" line="220" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/pages/session/use-session-hash-scroll.test.ts" file="src/pages/session/use-session-hash-scroll.test.ts" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="messageIdFromHash" file="src/pages/session/use-session-hash-scroll.test.ts" line="4" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="parses hash with leading #" classname="messageIdFromHash" time="0" file="src/pages/session/use-session-hash-scroll.test.ts" line="5" assertions="1" />
+      <testcase name="parses raw hash fragment" classname="messageIdFromHash" time="0.000189" file="src/pages/session/use-session-hash-scroll.test.ts" line="9" assertions="1" />
+      <testcase name="ignores non-message anchors" classname="messageIdFromHash" time="0.000031" file="src/pages/session/use-session-hash-scroll.test.ts" line="13" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/pages/session/terminal-panel.test.ts" file="src/pages/session/terminal-panel.test.ts" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="terminalTabLabel" file="src/pages/session/terminal-panel.test.ts" line="10" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="returns custom title unchanged" classname="terminalTabLabel" time="0.000125" file="src/pages/session/terminal-panel.test.ts" line="11" assertions="1" />
+      <testcase name="normalizes default numbered title" classname="terminalTabLabel" time="0.000038" file="src/pages/session/terminal-panel.test.ts" line="16" assertions="1" />
+      <testcase name="falls back to generic title" classname="terminalTabLabel" time="0.000006" file="src/pages/session/terminal-panel.test.ts" line="21" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/pages/session/message-gesture.test.ts" file="src/pages/session/message-gesture.test.ts" tests="7" assertions="7" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="normalizeWheelDelta" file="src/pages/session/message-gesture.test.ts" line="4" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="converts line mode to px" classname="normalizeWheelDelta" time="0.000043" file="src/pages/session/message-gesture.test.ts" line="5" assertions="1" />
+      <testcase name="converts page mode to container height" classname="normalizeWheelDelta" time="0.000023" file="src/pages/session/message-gesture.test.ts" line="9" assertions="1" />
+      <testcase name="keeps pixel mode unchanged" classname="normalizeWheelDelta" time="0.000011" file="src/pages/session/message-gesture.test.ts" line="13" assertions="1" />
+    </testsuite>
+    <testsuite name="shouldMarkBoundaryGesture" file="src/pages/session/message-gesture.test.ts" line="18" tests="4" assertions="4" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="marks when nested scroller cannot scroll" classname="shouldMarkBoundaryGesture" time="0.000026" file="src/pages/session/message-gesture.test.ts" line="19" assertions="1" />
+      <testcase name="marks when scrolling beyond top boundary" classname="shouldMarkBoundaryGesture" time="0.000021" file="src/pages/session/message-gesture.test.ts" line="30" assertions="1" />
+      <testcase name="marks when scrolling beyond bottom boundary" classname="shouldMarkBoundaryGesture" time="0.00001" file="src/pages/session/message-gesture.test.ts" line="41" assertions="1" />
+      <testcase name="does not mark when nested scroller can consume movement" classname="shouldMarkBoundaryGesture" time="0.000008" file="src/pages/session/message-gesture.test.ts" line="52" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/pages/session/helpers.test.ts" file="src/pages/session/helpers.test.ts" tests="11" assertions="26" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="createOpenReviewFile" file="src/pages/session/helpers.test.ts" line="13" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="opens and loads selected review file" classname="createOpenReviewFile" time="0.000084" file="src/pages/session/helpers.test.ts" line="14" assertions="1" />
+    </testsuite>
+    <testsuite name="createOpenSessionFileTab" file="src/pages/session/helpers.test.ts" line="33" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="activates the opened file tab" classname="createOpenSessionFileTab" time="0.00016" file="src/pages/session/helpers.test.ts" line="34" assertions="1" />
+    </testsuite>
+    <testsuite name="focusTerminalById" file="src/pages/session/helpers.test.ts" line="64" tests="2" assertions="5" failures="0" skipped="0" time="0.001" hostname="BMMDVJATINGO.local">
+      <testcase name="focuses textarea when present" classname="focusTerminalById" time="0.001606" file="src/pages/session/helpers.test.ts" line="65" assertions="2" />
+      <testcase name="falls back to terminal element focus" classname="focusTerminalById" time="0.000465" file="src/pages/session/helpers.test.ts" line="74" assertions="3" />
+    </testsuite>
+    <testsuite name="shouldFocusTerminalOnKeyDown" file="src/pages/session/helpers.test.ts" line="90" tests="3" assertions="9" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="skips pure modifier keys" classname="shouldFocusTerminalOnKeyDown" time="0.000243" file="src/pages/session/helpers.test.ts" line="91" assertions="4" />
+      <testcase name="skips shortcut key combos" classname="shouldFocusTerminalOnKeyDown" time="0.000036" file="src/pages/session/helpers.test.ts" line="98" assertions="3" />
+      <testcase name="keeps plain typing focused on terminal" classname="shouldFocusTerminalOnKeyDown" time="0.000025" file="src/pages/session/helpers.test.ts" line="104" assertions="2" />
+    </testsuite>
+    <testsuite name="getTabReorderIndex" file="src/pages/session/helpers.test.ts" line="110" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="returns target index for valid drag reorder" classname="getTabReorderIndex" time="0.000031" file="src/pages/session/helpers.test.ts" line="111" assertions="1" />
+      <testcase name="returns undefined for unknown droppable id" classname="getTabReorderIndex" time="0.00001" file="src/pages/session/helpers.test.ts" line="115" assertions="1" />
+    </testsuite>
+    <testsuite name="createSessionTabs" file="src/pages/session/helpers.test.ts" line="120" tests="2" assertions="8" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="normalizes the effective file tab" classname="createSessionTabs" time="0.000198" file="src/pages/session/helpers.test.ts" line="121" assertions="3" />
+      <testcase name="prefers context and review fallbacks when no file tab is active" classname="createSessionTabs" time="0.000223" file="src/pages/session/helpers.test.ts" line="141" assertions="5" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/pages/session/session-model-helpers.test.ts" file="src/pages/session/session-model-helpers.test.ts" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="syncSessionModel" file="src/pages/session/session-model-helpers.test.ts" line="15" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="restores the last message through session state" classname="syncSessionModel" time="0.00006" file="src/pages/session/session-model-helpers.test.ts" line="16" assertions="1" />
+    </testsuite>
+    <testsuite name="resetSessionModel" file="src/pages/session/session-model-helpers.test.ts" line="37" tests="1" assertions="1" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="clears draft session state" classname="resetSessionModel" time="0.000017" file="src/pages/session/session-model-helpers.test.ts" line="38" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/pages/session/file-tab-scroll.test.ts" file="src/pages/session/file-tab-scroll.test.ts" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="nextTabListScrollLeft" file="src/pages/session/file-tab-scroll.test.ts" line="4" tests="3" assertions="3" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="does not scroll when width shrinks" classname="nextTabListScrollLeft" time="0" file="src/pages/session/file-tab-scroll.test.ts" line="5" assertions="1" />
+      <testcase name="scrolls to start when context tab opens" classname="nextTabListScrollLeft" time="0.000074" file="src/pages/session/file-tab-scroll.test.ts" line="17" assertions="1" />
+      <testcase name="scrolls to right edge for new file tabs" classname="nextTabListScrollLeft" time="0.000026" file="src/pages/session/file-tab-scroll.test.ts" line="29" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="src/pages/session/composer/session-composer-state.test.ts" file="src/pages/session/composer/session-composer-state.test.ts" tests="12" assertions="12" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+    <testsuite name="sessionPermissionRequest" file="src/pages/session/composer/session-composer-state.test.ts" line="25" tests="5" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="prefers the current session permission" classname="sessionPermissionRequest" time="0" file="src/pages/session/composer/session-composer-state.test.ts" line="26" assertions="1" />
+      <testcase name="returns a nested child permission" classname="sessionPermissionRequest" time="0.000298" file="src/pages/session/composer/session-composer-state.test.ts" line="36" assertions="1" />
+      <testcase name="returns undefined without a matching tree permission" classname="sessionPermissionRequest" time="0.000018" file="src/pages/session/composer/session-composer-state.test.ts" line="51" assertions="1" />
+      <testcase name="skips filtered permissions in the current tree" classname="sessionPermissionRequest" time="0.000021" file="src/pages/session/composer/session-composer-state.test.ts" line="60" assertions="1" />
+      <testcase name="returns undefined when all tree permissions are filtered out" classname="sessionPermissionRequest" time="0.000029" file="src/pages/session/composer/session-composer-state.test.ts" line="72" assertions="1" />
+    </testsuite>
+    <testsuite name="sessionQuestionRequest" file="src/pages/session/composer/session-composer-state.test.ts" line="83" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="prefers the current session question" classname="sessionQuestionRequest" time="0.000027" file="src/pages/session/composer/session-composer-state.test.ts" line="84" assertions="1" />
+      <testcase name="returns a nested child question" classname="sessionQuestionRequest" time="0.000078" file="src/pages/session/composer/session-composer-state.test.ts" line="94" assertions="1" />
+    </testsuite>
+    <testsuite name="todoState" file="src/pages/session/composer/session-composer-state.test.ts" line="108" tests="5" assertions="5" failures="0" skipped="0" time="0" hostname="BMMDVJATINGO.local">
+      <testcase name="hides when there are no todos" classname="todoState" time="0.000041" file="src/pages/session/composer/session-composer-state.test.ts" line="109" assertions="1" />
+      <testcase name="opens while the session is still working" classname="todoState" time="0.000015" file="src/pages/session/composer/session-composer-state.test.ts" line="113" assertions="1" />
+      <testcase name="closes completed todos after a running turn" classname="todoState" time="0.000012" file="src/pages/session/composer/session-composer-state.test.ts" line="117" assertions="1" />
+      <testcase name="clears stale todos when the turn ends" classname="todoState" time="0.000004" file="src/pages/session/composer/session-composer-state.test.ts" line="121" assertions="1" />
+      <testcase name="clears completed todos when the session is no longer live" classname="todoState" time="0.000013" file="src/pages/session/composer/session-composer-state.test.ts" line="125" assertions="1" />
+    </testsuite>
+  </testsuite>
+</testsuites>

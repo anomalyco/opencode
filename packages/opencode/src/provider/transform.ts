@@ -217,7 +217,8 @@ function normalizeMessages(
   if (
     typeof model.capabilities.interleaved === "object" &&
     model.capabilities.interleaved.field &&
-    model.api.npm !== "@openrouter/ai-sdk-provider"
+    model.api.npm !== "@openrouter/ai-sdk-provider" &&
+    model.providerID !== "fastrouter"
   ) {
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
@@ -260,6 +261,9 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
       cacheControl: { type: "ephemeral" },
     },
     openrouter: {
+      cacheControl: { type: "ephemeral" },
+    },
+    fastrouter: {
       cacheControl: { type: "ephemeral" },
     },
     bedrock: {
@@ -458,7 +462,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
   // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
   if (id.includes("grok") && id.includes("grok-3-mini")) {
-    if (model.api.npm === "@openrouter/ai-sdk-provider") {
+    if (model.api.npm === "@openrouter/ai-sdk-provider" || model.providerID === "fastrouter") {
       return {
         low: { reasoning: { effort: "low" } },
         high: { reasoning: { effort: "high" } },
@@ -870,7 +874,11 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
-  if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
+  if (
+    input.model.api.npm === "@openrouter/ai-sdk-provider" ||
+    input.model.api.npm === "@llmgateway/ai-sdk-provider" ||
+    input.model.providerID === "fastrouter"
+  ) {
     result["usage"] = {
       include: true,
     }
@@ -974,7 +982,7 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
-  if (input.model.providerID === "openrouter") {
+  if (input.model.providerID === "openrouter" || input.model.providerID === "fastrouter") {
     result["prompt_cache_key"] = input.sessionID
   }
   if (input.model.api.npm === "@ai-sdk/gateway") {
@@ -1007,7 +1015,7 @@ export function smallOptions(model: Provider.Model) {
     }
     return { thinkingConfig: { thinkingBudget: 0 } }
   }
-  if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
+  if (model.providerID === "openrouter" || model.providerID === "llmgateway" || model.providerID === "fastrouter") {
     if (model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }

@@ -108,6 +108,7 @@ export const dict = {
   "dialog.provider.openai.note": "GPT models for fast, capable general AI tasks",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
   "dialog.provider.openrouter.note": "Access all supported models from one provider",
+  "dialog.provider.fastrouter.note": "Access models through FastRouter's unified gateway",
   "dialog.provider.vercel.note": "Unified access to AI models with smart routing",
 
   "dialog.model.select.title": "Select model",

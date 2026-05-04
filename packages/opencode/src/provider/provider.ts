@@ -429,6 +429,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    fastrouter: () =>
+      Effect.succeed({
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }),
     nvidia: () =>
       Effect.succeed({
         autoload: false,

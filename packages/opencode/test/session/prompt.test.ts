@@ -536,7 +536,7 @@ it.live("glob tool keeps instance context during prompt runs", () =>
           noReply: true,
           parts: [{ type: "text", text: "find text files" }],
         })
-        yield* llm.tool("glob", { pattern: "**/*.txt" })
+        yield* llm.tool("glob", { pattern: "*.txt" })
         yield* llm.text("done")
 
         const result = yield* prompt.loop({ sessionID: session.id })
