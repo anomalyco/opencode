@@ -655,7 +655,7 @@ export const layer: Layer.Layer<
           EventV2.run(SessionEvent.Step.Failed.Sync, {
             sessionID: ctx.sessionID,
             error: {
-              type: error.name,
+              type: "unknown",
               message: errorMessage(e),
             },
             timestamp: DateTime.makeUnsafe(Date.now()),

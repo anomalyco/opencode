@@ -7,8 +7,6 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
-const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
-
 const AccountID = Schema.String.pipe(
   Schema.brand("AccountID"),
   withStatics((schema) => ({ create: () => schema.make("acc_" + Identifier.ascending()) })),
@@ -45,10 +43,12 @@ export class Account extends Schema.Class<Account>("AuthV2.Account")({
   credential: Credential,
 }) {}
 
-export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthV2.AuthError", {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
+export class AuthFileWriteError extends Schema.TaggedErrorClass<AuthFileWriteError>()("AuthV2.FileWriteError", {
+  operation: Schema.Union([Schema.Literal("migrate"), Schema.Literal("write")]),
+  cause: Schema.Defect,
 }) {}
+
+export type AuthError = AuthFileWriteError
 
 interface Writable {
   version: 2
@@ -121,12 +121,16 @@ export const layer = Layer.effect(
       if ("version" in raw && raw.version === 2) return raw as Writable
 
       const migrated = migrate(raw as Record<string, unknown>)
-      yield* fsys.writeJson(file, migrated, 0o600).pipe(Effect.mapError(fail("Failed to write migrated auth data")))
+      yield* fsys.writeJson(file, migrated, 0o600).pipe(
+        Effect.mapError((cause) => new AuthFileWriteError({ operation: "migrate", cause })),
+      )
       return migrated
     })
 
     const write = (data: Writable) =>
-      fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+      fsys.writeJson(file, data, 0o600).pipe(
+        Effect.mapError((cause) => new AuthFileWriteError({ operation: "write", cause })),
+      )
 
     const state = SynchronizedRef.makeUnsafe(yield* load())
 

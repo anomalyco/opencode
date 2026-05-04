@@ -87,10 +87,7 @@ export class ToolStateError extends Schema.Class<ToolStateError>("Session.Messag
   input: Schema.Record(Schema.String, Schema.Unknown),
   content: ToolOutput.Content.pipe(Schema.Array),
   structured: ToolOutput.Structured,
-  error: Schema.Struct({
-    type: Schema.String,
-    message: Schema.String,
-  }),
+  error: SessionEvent.UnknownError,
 }) {}
 
 export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(
