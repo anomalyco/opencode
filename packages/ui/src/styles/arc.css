@@ -157,6 +157,11 @@ html[data-theme="arc"] {
     --color-surface-raised-base-hover: #8B8294;
   }
 
+  html[data-theme="arc"] [data-component="titlebar"] {
+    --surface-raised-base: rgba(255, 255, 255, 0.06);
+    --color-surface-raised-base: rgba(255, 255, 255, 0.06);
+  }
+
   /* SidebarPanel: remove the light border separator (drew a hard line
      between rail and panel since both are now the same mauve color).
      Drop the panel's top-left radius entirely — the panel sits flush
