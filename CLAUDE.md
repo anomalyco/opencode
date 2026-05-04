@@ -106,6 +106,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 
 - **默认分支**:`dev` — **单一稳定主干**,不自动跟随 `upstream/dev`,合上游是主动决策(不是被动跟随)
 - **功能分支**:`feat/<name>` — **一次性容器**,合 dev = 销毁,**新项目用新名字,绝不复用**。`<name>` **全小写 + kebab-case**(中划线分词,行业常规),中英混合 OK 但英文部分必须小写。详见 [`docs/governance/双端协作-SOP.md`](docs/governance/双端协作-SOP.md)(feat 生命周期 + 命名规范 + Win/Mac 双端协作流程)
+- **🌿 开任何新分支前必先拉最新 dev**(硬规则,无例外):`git checkout -b feat/<name>` / `chore/<name>` / `sync/<日期>` 之前,**必须**先 `git checkout dev && git pull --rebase`。理由:Win/Mac 双端协作 + 远端持续推进,基于 stale dev 起 feat = 注定 rebase / 大概率冲突。实施超 30 min 时,合 dev 前再 `git fetch && git log dev..origin/dev` 确认远端没新动。
 - **上游同步**:临时分支 `sync/upstream-<日期>`,merge 完即删
 - **三档环境**(dev/beta/prod):靠 **build 参数**切换(`pack-installer.* -Env <env>`),**不靠分支** — 同一 commit 可出三档产物
 - **tag 命名**:
