@@ -43,3 +43,6 @@ tsconfig.tsbuildinfo
 # FORK: DeskFox installer 编译产物(iscc 输出,binary 不入仓) 2026-04-28
 packages/branding/installer/Output/
 packages/branding/installer/*.lnk
+
+# FORK: Claude Code 会话状态目录(每台机器本地,不入仓) 2026-05-04
+.claude/
