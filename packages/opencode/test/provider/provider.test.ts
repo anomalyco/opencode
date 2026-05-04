@@ -1196,17 +1196,17 @@ test("openai-compatible custom provider refreshes models from /models", async ()
     },
   })
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const before = await list()
-      expect(before[ProviderID.make("lmstudio")]).toBeDefined()
-      expect(before[ProviderID.make("lmstudio")].models["placeholder"]).toBeDefined()
-      expect(before[ProviderID.make("lmstudio")].models["qwen2.5-coder-7b-instruct"]).toBeUndefined()
+  await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const before = await list()
+        expect(before[ProviderID.make("lmstudio")]).toBeDefined()
+        expect(before[ProviderID.make("lmstudio")].models["placeholder"]).toBeDefined()
+        expect(before[ProviderID.make("lmstudio")].models["qwen2.5-coder-7b-instruct"]).toBeUndefined()
 
-      await refresh()
+        await refresh()
 
-      const after = await list()
+        const after = await list()
       expect(after[ProviderID.make("lmstudio")].models["placeholder"]).toBeUndefined()
       expect(after[ProviderID.make("lmstudio")].models["qwen2.5-coder-7b-instruct"]).toBeDefined()
       expect(after[ProviderID.make("lmstudio")].models["gemma-3-12b"]).toBeDefined()
@@ -2645,7 +2645,7 @@ test("provider refresh replaces plugin-scanned models after startup", async () =
   GlobalBus.on("event", handler)
 
   try {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const before = await list()
