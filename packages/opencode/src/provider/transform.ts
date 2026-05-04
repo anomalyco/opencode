@@ -137,12 +137,12 @@ function normalizeMessages(
       if (msg.role !== "assistant" || !Array.isArray(msg.content)) return [msg]
 
       const parts = msg.content
-      const first = parts.findIndex((part) => part.type === "tool-call")
+      const first = parts.findIndex((part) => part.type === "tool-call" || part.type === "tool-result")
       if (first === -1) return [msg]
-      if (!parts.slice(first).some((part) => part.type !== "tool-call")) return [msg]
+      if (!parts.slice(first).some((part) => part.type !== "tool-call" && part.type !== "tool-result")) return [msg]
       return [
-        { ...msg, content: parts.filter((part) => part.type !== "tool-call") },
-        { ...msg, content: parts.filter((part) => part.type === "tool-call") },
+        { ...msg, content: parts.filter((part) => part.type !== "tool-call" && part.type !== "tool-result") },
+        { ...msg, content: parts.filter((part) => part.type === "tool-call" || part.type === "tool-result") },
       ]
     })
   }
