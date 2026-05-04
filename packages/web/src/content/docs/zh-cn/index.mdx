@@ -88,6 +88,22 @@ curl -fsSL https://opencode.ai/install | bash
   paru -S opencode-bin              # Arch Linux (Latest from AUR)
   ```
 
+### Shell 补全
+
+OpenCode 支持通过 `opencode completion` 生成 shell 补全脚本。
+
+```bash
+# Bash
+SHELL="$(command -v bash)" opencode completion >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh
+SHELL="$(command -v zsh)" opencode completion >> ~/.zshrc
+source ~/.zshrc
+```
+
+在 macOS 上，你可能更想写入 `~/.bash_profile` 或 `~/.zprofile`。
+
 #### Windows
 
 :::tip[推荐：使用 WSL]
