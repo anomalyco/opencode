@@ -8,6 +8,12 @@ Use `${tmp}` for temporary work outside the workspace. This directory has alread
 
 IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
 
+## System Safety (Critical)
+
+- **NEVER** run commands that kill all Node.js processes (e.g., `taskkill /F /IM node.exe`, `killall node`, `pkill node`, `Get-Process node | Stop-Process`, etc.).
+- OpenCode is built on Node.js (`node.exe`). Killing all Node processes will immediately crash the AI assistant and terminate the current session.
+- If you need to stop a specific process, target it by PID or use process-manager commands scoped to the project (e.g., `npm stop`, `pm2 stop <name>`).
+
 ${commandSection}
 
 # Committing changes with git

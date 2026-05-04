@@ -58,6 +58,12 @@ export const layer = Layer.effect(
             `  Platform: ${process.platform}`,
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
+            ``,
+            `## System Safety (Critical)`,
+            ``,
+            `- **NEVER** run commands that kill all Node.js processes (e.g., \`taskkill /F /IM node.exe\`, \`killall node\`, \`pkill node\`, \`Get-Process node | Stop-Process\`, etc.).`,
+            `- OpenCode is built on Node.js (\`node.exe\`). Killing all Node processes will immediately crash the AI assistant and terminate the current session.`,
+            `- If you need to stop a specific process, target it by PID or use process-manager commands scoped to the project (e.g., \`npm stop\`, \`pm2 stop <name>\`).`,
           ].join("\n"),
         ]
       }),

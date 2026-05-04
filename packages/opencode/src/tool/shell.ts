@@ -28,6 +28,18 @@ export { Parameters } from "./shell/prompt"
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+
+const DANGEROUS_COMMAND_PATTERNS = [
+  /taskkill\s+.*\/?[Ff]\s+.*\/?[Ii][Mm]\s+node\.?exe/i,
+  /taskkill\s+.*\/?[Ii][Mm]\s+node\.?exe/i,
+  /killall\s+node/i,
+  /pkill\s+node/i,
+  /Get-Process\s+.*node\s*\|\s*Stop-Process/i,
+]
+
+function isDangerousCommand(command: string): boolean {
+  return DANGEROUS_COMMAND_PATTERNS.some((pattern) => pattern.test(command))
+}
 const FILES = new Set([
   ...CWD,
   "rm",
@@ -601,6 +613,11 @@ export const ShellTool = Tool.define(
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
               const timeout = params.timeout ?? DEFAULT_TIMEOUT
+              if (isDangerousCommand(params.command)) {
+                throw new Error(
+                  `Command blocked for system safety: "${params.command}". This command would kill all Node.js processes, which crashes OpenCode because it is built on Node.js (node.exe). If you need to stop a specific process, target it by PID or use project-scoped commands like "npm stop" or "pm2 stop <name>".`,
+                )
+              }
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {
