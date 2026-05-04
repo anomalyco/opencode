@@ -3,9 +3,8 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { $ } from "bun"
 import { Context, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { InstanceStore } from "../../src/project/instance-store"
 import { Instance } from "../../src/project/instance"
-import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(CrossSpawnSpawner.defaultLayer)
@@ -70,7 +69,7 @@ it.live("InstanceState invalidates on reload", () =>
     )
 
     const a = yield* access(state, dir)
-    yield* Effect.promise(() => InstanceStore.reloadInstance({ directory: dir }))
+    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
     const b = yield* access(state, dir)
 
     expect(a).not.toBe(b)
@@ -270,7 +269,7 @@ it.live("InstanceState correct after interleaved init and dispose", () =>
 
       const [, b] = yield* Effect.all(
         [
-          Effect.promise(() => InstanceStore.reloadInstance({ directory: one })),
+          Effect.promise(() => reloadTestInstance({ directory: one })),
           Test.use((svc) => svc.get()).pipe(provideInstance(two)),
         ],
         { concurrency: "unbounded" },
