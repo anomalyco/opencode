@@ -215,7 +215,7 @@ function ShellMessage(props: { message: SessionMessageShell }) {
 }
 
 function CompactionMessage(props: { message: SessionMessageCompaction }) {
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
   return (
     <box
       marginTop={1}
@@ -226,7 +226,19 @@ function CompactionMessage(props: { message: SessionMessageCompaction }) {
       flexShrink={0}
     >
       <Show when={props.message.summary}>
-        <text fg={theme.textMuted}>{props.message.summary}</text>
+        {(summary) => (
+          <box paddingLeft={3} paddingTop={1}>
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={false}
+              syntaxStyle={syntax()}
+              content={summary().trim()}
+              conceal={true}
+              fg={theme.text}
+            />
+          </box>
+        )}
       </Show>
     </box>
   )
