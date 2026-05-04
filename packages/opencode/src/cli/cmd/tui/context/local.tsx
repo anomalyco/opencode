@@ -251,6 +251,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (im && isModelValid(im)) return im
             return undefined
           },
+          parsed: createMemo(() => {
+            const im = modelStore.imageModel
+            if (!im) return undefined
+            const provider = sync.data.provider.find((x) => x.id === im.providerID)
+            const info = provider?.models[im.modelID]
+            return {
+              provider: provider?.name ?? im.providerID,
+              model: info?.name ?? im.modelID,
+            }
+          }),
           set(model: { providerID: string; modelID: string }) {
             if (!isModelValid(model)) {
               toast.show({

@@ -20,6 +20,10 @@ export const Info = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("busy"),
   }),
+  Schema.Struct({
+    type: Schema.Literal("image_processing"),
+    model: Schema.String,
+  }),
 ])
   .annotate({ identifier: "SessionStatus" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))

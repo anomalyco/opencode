@@ -343,6 +343,10 @@ export type SessionStatus =
   | {
       type: "busy"
     }
+  | {
+      type: "image_processing"
+      model: string
+    }
 
 export type EventSessionStatus = {
   type: "session.status"

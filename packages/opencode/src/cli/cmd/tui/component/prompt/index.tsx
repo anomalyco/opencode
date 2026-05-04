@@ -1249,6 +1249,16 @@ export function Prompt(props: PromptProps) {
                             {local.model.parsed().model}
                           </text>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                          <Show when={local.model.imageModel.parsed()}>
+                            {(parsed) => (
+                              <>
+                                <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                                <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>
+                                  [IMG] {parsed().model}
+                                </text>
+                              </>
+                            )}
+                          </Show>
                           <Show when={showVariant()}>
                             <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
                             <text>
@@ -1368,6 +1378,12 @@ export function Prompt(props: PromptProps) {
                       </Show>
                     )
                   })()}
+                  <Show when={status().type === "image_processing"}>
+                    <text fg={theme.textMuted}>
+                      <span style={{ fg: theme.secondary }}>{(() => { const s = status(); return s.type === "image_processing" ? s.model : "" })()}</span>{" "}
+                      is analyzing image...
+                    </text>
+                  </Show>
                 </box>
               </box>
               <text fg={store.interrupt > 0 ? theme.primary : theme.text}>

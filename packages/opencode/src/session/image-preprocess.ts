@@ -2,6 +2,7 @@ import { Log } from "@/util"
 import { Provider } from "@/provider"
 import type { Config } from "@/config"
 import type { Session } from "@/session"
+import type { SessionStatus } from "@/session/status"
 import { MessageV2 } from "@/session/message-v2"
 import { PartID, SessionID, MessageID } from "@/session/schema"
 import { ProviderID, ModelID } from "@/provider/schema"
@@ -22,8 +23,9 @@ export const preprocessImages = Effect.fn("ImagePreprocess.preprocessImages")(
     sessions: Session.Interface
     provider: Provider.Interface
     config: Config.Interface
+    status: SessionStatus.Interface
   }) {
-    const { sessionID, message, imageModel: explicitImageModel, textParts, sessions, provider, config } = options
+    const { sessionID, message, imageModel: explicitImageModel, textParts, sessions, provider, config, status } = options
 
     if (message.info.role !== "user") return message
     const userModel = message.info.model
@@ -116,6 +118,10 @@ export const preprocessImages = Effect.fn("ImagePreprocess.preprocessImages")(
 
     const language = yield* provider.getLanguage(resolvedImageModel)
 
+    const modelLabel = resolvedImageModel.name ?? `${resolvedImageModel.providerID}/${resolvedImageModel.id}`
+
+    yield* status.set(SessionID.make(sessionID), { type: "image_processing", model: modelLabel })
+
     const description = yield* Effect.promise(async () => {
       const result = await generateText({
         model: language,
@@ -127,6 +133,7 @@ export const preprocessImages = Effect.fn("ImagePreprocess.preprocessImages")(
     }).pipe(
       Effect.tapError((err) => Effect.sync(() => log.error("image model call failed", { error: err }))),
       Effect.catch(() => Effect.succeed(undefined as string | undefined)),
+      Effect.ensuring(status.set(SessionID.make(sessionID), { type: "busy" })),
     )
 
     if (!description) {

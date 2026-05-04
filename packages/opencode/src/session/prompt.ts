@@ -1305,6 +1305,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessions,
           provider,
           config,
+          status,
         })
 
         if (input.noReply === true) return preprocessed
