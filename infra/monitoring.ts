@@ -32,7 +32,7 @@ const fields = {
 }
 
 const alertSource = new incident.AlertSource("HoneycombAlertSource", {
-  name: "Honeycomb",
+  name: $app.stage === "production" ? "Honeycomb" : `Honeycomb (${$app.stage})`,
   sourceType: "honeycomb",
   template: {
     title: {
@@ -112,7 +112,7 @@ const webhookRecipient = new honeycomb.WebhookRecipient(`IncidentWebhook`, {
         description: "{{ .Description }}",
         status: "{{ .Alert.Status }}",
         deduplication_key: "{{ .Alert.InstanceID }}",
-        source_url: "{{ .URL }}",
+        source_url: "{{ .Result.URL }}",
         model: "{{ .Vars.model }}",
         product: "{{ .Vars.product }}",
       }),
@@ -129,7 +129,7 @@ const webhookRecipient = new honeycomb.WebhookRecipient(`IncidentWebhook`, {
 })
 
 new incident.AlertRoute("HoneycombAlertRoute", {
-  name: "Honeycomb Alerts",
+  name: $app.stage === "production" ? "Honeycomb" : `Honeycomb (${$app.stage})`,
   enabled: true,
   isPrivate: false,
   alertSources: [
@@ -197,6 +197,12 @@ new incident.AlertRoute("HoneycombAlertRoute", {
     },
     severity: {
       mergeStrategy: "first-wins",
+    },
+    incidentMode: {
+      value: {
+        literal: "standard",
+        // literal: $app.stage === "production" ? "standard" : "test",
+      },
     },
   },
 })
