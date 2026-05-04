@@ -4,24 +4,25 @@ import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
-import { Config } from "../../src/config"
-import { LSP } from "../../src/lsp"
+import { Config } from "@/config/config"
+import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
-import { Provider as ProviderSvc } from "../../src/provider"
+import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
-import { Session } from "../../src/session"
+import { Session } from "@/session/session"
+import { SessionMessageTable } from "../../src/session/session.sql"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { SessionCompaction } from "../../src/session/compaction"
 import { SessionSummary } from "../../src/session/summary"
 import { Instruction } from "../../src/session/instruction"
@@ -31,14 +32,16 @@ import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { SessionV2 } from "../../src/v2/session"
 import { Skill } from "../../src/skill"
 import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
-import { ToolRegistry } from "../../src/tool"
-import { Truncate } from "../../src/tool"
-import { Log } from "../../src/util"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { ToolRegistry } from "@/tool/registry"
+import { Truncate } from "@/tool/truncate"
+import * as Log from "@opencode-ai/core/util/log"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import * as Database from "../../src/storage/db"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
@@ -316,9 +319,11 @@ const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref) =>
   })
 
 const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
+  const config = yield* Config.Service
   const prompt = yield* SessionPrompt.Service
   const run = yield* SessionRunState.Service
   const sessions = yield* Session.Service
+  yield* config.get()
   const chat = yield* sessions.create(input ?? { title: "Pinned" })
   return { prompt, run, sessions, chat }
 })
@@ -364,6 +369,47 @@ it.live("loop calls LLM and returns assistant message", () =>
       const parts = result.parts.filter((p) => p.type === "text")
       expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
       expect(yield* llm.hits).toHaveLength(1)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("prompt emits v2 prompted and synthetic events", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "hello v2" },
+          {
+            type: "file",
+            mime: "text/plain",
+            filename: "note.txt",
+            url: "data:text/plain;base64,bm90ZSBjb250ZW50",
+          },
+        ],
+      })
+
+      const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
+        Effect.provide(SessionV2.layer),
+      )
+      const row = Database.use((db) =>
+        db.select().from(SessionMessageTable).where(Database.eq(SessionMessageTable.session_id, chat.id)).get(),
+      )
+      expect(messages.find((message) => message.type === "user")).toMatchObject({ type: "user", text: "hello v2" })
+      expect(typeof row?.data.time.created).toBe("number")
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "synthetic", text: expect.stringContaining("Called the Read tool") }),
+          expect.objectContaining({ type: "synthetic", text: "note content" }),
+        ]),
+      )
     }),
     { git: true, config: providerCfg },
   ),
@@ -1078,6 +1124,56 @@ unix("shell completes a fast command on the preferred shell", () =>
   ),
 )
 
+unix(
+  "shell uses configured shell over env shell",
+  () =>
+    withSh(() =>
+      provideTmpdirInstance(
+        (_dir) =>
+          Effect.gen(function* () {
+            if (!Bun.which("bash")) return
+
+            const { prompt, chat } = yield* boot()
+            const result = yield* prompt.shell({
+              sessionID: chat.id,
+              agent: "build",
+              command: "[[ 1 -eq 1 ]] && printf configured",
+            })
+
+            const tool = completedTool(result.parts)
+            if (!tool) return
+            expect(tool.state.output).toContain("configured")
+          }),
+        { git: true, config: { ...cfg, shell: "bash" } },
+      ),
+    ),
+  30_000,
+)
+
+unix("shell commands can change directory after startup", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { prompt, run, chat } = yield* boot()
+        const parent = path.dirname(dir)
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "cd .. && pwd",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(tool.state.output).toContain(parent)
+        expect(tool.state.metadata.output).toContain(parent)
+        yield* run.assertNotBusy(chat.id)
+      }),
+    { git: true, config: cfg },
+  ),
+)
+
 unix("shell lists files from the project directory", () =>
   provideTmpdirInstance(
     (dir) =>
@@ -1240,6 +1336,45 @@ it.live(
 )
 
 unix(
+  "command ! expansion uses configured shell over env shell",
+  () =>
+    withSh(() =>
+      provideTmpdirServer(
+        ({ llm }) =>
+          Effect.gen(function* () {
+            if (!Bun.which("bash")) return
+
+            const { prompt, chat } = yield* boot()
+            yield* llm.text("done")
+
+            const result = yield* prompt.command({
+              sessionID: chat.id,
+              command: "probe",
+              arguments: "",
+            })
+
+            expect(result.info.role).toBe("assistant")
+            const inputs = yield* llm.inputs
+            expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("configured")
+          }),
+        {
+          git: true,
+          config: (url) => ({
+            ...providerCfg(url),
+            shell: "bash",
+            command: {
+              probe: {
+                template: "Probe: !`[[ 1 -eq 1 ]] && printf configured`",
+              },
+            },
+          }),
+        },
+      ),
+    ),
+  30_000,
+)
+
+unix(
   "cancel interrupts shell and resolves cleanly",
   () =>
     withSh(() =>
@@ -1379,6 +1514,10 @@ unix(
 
           const exit = yield* Fiber.await(loop)
           expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) {
+            const tool = completedTool(exit.value.parts)
+            expect(tool?.state.output).toContain("User aborted the command")
+          }
 
           yield* Fiber.await(sh)
         }),

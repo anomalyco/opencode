@@ -1,10 +1,10 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { Config } from "@/config"
-import { Provider } from "@/provider"
-import { ModelsDev } from "@/provider"
-import { ProviderAuth } from "@/provider"
+import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
+import { ModelsDev } from "@/provider/models"
+import { ProviderAuth } from "@/provider/auth"
 import { ProviderID } from "@/provider/schema"
 import { mapValues } from "remeda"
 import { errors } from "../../error"
@@ -36,7 +36,7 @@ export const ProviderRoutes = lazy(() =>
           const svc = yield* Provider.Service
           const cfg = yield* Config.Service
           const config = yield* cfg.get()
-          const all = yield* Effect.promise(() => ModelsDev.get())
+          const all = yield* ModelsDev.Service.use((s) => s.get())
           const disabled = new Set(config.disabled_providers ?? [])
           const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
           const filtered: Record<string, (typeof all)[string]> = {}

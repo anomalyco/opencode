@@ -4,7 +4,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/shared/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
@@ -20,9 +20,10 @@ import { childSessionOnPath, hasProjectPermissions } from "./helpers"
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
-  return id === OPENCODE_PROJECT_ID
-    ? "https://opencode.ai/favicon.svg"
-    : (icon?.override ?? (icon?.color ? undefined : icon?.url))
+  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
+  if (icon?.override) return icon?.override
+  if (icon?.color) return undefined
+  return icon?.url
 }
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {

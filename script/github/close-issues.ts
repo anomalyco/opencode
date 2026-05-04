@@ -37,7 +37,7 @@ async function close(num: number) {
   const patch = await fetch(base, {
     method: "PATCH",
     headers,
-    body: JSON.stringify({ state: "closed", state_reason: "completed" }),
+    body: JSON.stringify({ state: "closed", state_reason: "not_planned" }),
   })
   if (!patch.ok) throw new Error(`Failed to close #${num}: ${patch.status} ${patch.statusText}`)
 

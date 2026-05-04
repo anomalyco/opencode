@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import type { Context } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import type { UpgradeWebSocket } from "hono/ws"
 import { Effect, Schema } from "effect"
@@ -6,14 +7,54 @@ import z from "zod"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
-import { NotFoundError } from "@/storage"
+import { PtyTicket } from "@/pty/ticket"
+import { Shell } from "@/shell/shell"
+import { NotFoundError } from "@/storage/storage"
 import { errors } from "../../error"
 import { jsonRequest, runRequest } from "./trace"
+import { HTTPException } from "hono/http-exception"
+import { isAllowedRequestOrigin, type CorsOptions } from "@/server/cors"
+import {
+  PTY_CONNECT_TICKET_QUERY,
+  PTY_CONNECT_TOKEN_HEADER,
+  PTY_CONNECT_TOKEN_HEADER_VALUE,
+} from "@/server/shared/pty-ticket"
+import { zod as effectZod } from "@/util/effect-zod"
 
+const ShellItem = z.object({
+  path: z.string(),
+  name: z.string(),
+  acceptable: z.boolean(),
+})
 const decodePtyID = Schema.decodeUnknownSync(PtyID)
 
-export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
+function validOrigin(c: Context, opts?: CorsOptions) {
+  return isAllowedRequestOrigin(c.req.header("origin"), c.req.header("host"), opts)
+}
+
+export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket, opts?: CorsOptions) {
   return new Hono()
+    .get(
+      "/shells",
+      describeRoute({
+        summary: "List available shells",
+        description: "Get a list of available shells on the system.",
+        operationId: "pty.shells",
+        responses: {
+          200: {
+            description: "List of shells",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(ShellItem)),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await Shell.list())
+      },
+    )
     .get(
       "/",
       describeRoute({
@@ -148,6 +189,43 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
           return true
         }),
     )
+    .post(
+      "/:ptyID/connect-token",
+      describeRoute({
+        summary: "Create PTY WebSocket token",
+        description: "Create a short-lived token for opening a PTY WebSocket connection.",
+        operationId: "pty.connectToken",
+        responses: {
+          200: {
+            description: "WebSocket connect token",
+            content: {
+              "application/json": {
+                schema: resolver(effectZod(PtyTicket.ConnectToken)),
+              },
+            },
+          },
+          ...errors(403, 404),
+        },
+      }),
+      validator("param", z.object({ ptyID: PtyID.zod })),
+      async (c) => {
+        if (c.req.header(PTY_CONNECT_TOKEN_HEADER) !== PTY_CONNECT_TOKEN_HEADER_VALUE || !validOrigin(c, opts))
+          throw new HTTPException(403)
+        const result = await runRequest(
+          "PtyRoutes.connectToken",
+          c,
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            const id = c.req.valid("param").ptyID
+            if (!(yield* pty.get(id))) return
+            const tickets = yield* PtyTicket.Service
+            return yield* tickets.issue({ ptyID: id, ...(yield* PtyTicket.scope) })
+          }),
+        )
+        if (!result) throw new NotFoundError({ message: "Session not found" })
+        return c.json(result)
+      },
+    )
     .get(
       "/:ptyID/connect",
       describeRoute({
@@ -163,7 +241,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
               },
             },
           },
-          ...errors(404),
+          ...errors(403, 404),
         },
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
@@ -174,14 +252,6 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
         }
 
         const id = decodePtyID(c.req.param("ptyID"))
-        const cursor = (() => {
-          const value = c.req.query("cursor")
-          if (!value) return
-          const parsed = Number(value)
-          if (!Number.isSafeInteger(parsed) || parsed < -1) return
-          return parsed
-        })()
-        let handler: Handler | undefined
         if (
           !(await runRequest(
             "PtyRoutes.connect",
@@ -192,8 +262,29 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             }),
           ))
         ) {
-          throw new Error("Session not found")
+          throw new NotFoundError({ message: "Session not found" })
         }
+        const ticket = c.req.query(PTY_CONNECT_TICKET_QUERY)
+        if (ticket) {
+          if (!validOrigin(c, opts)) throw new HTTPException(403)
+          const valid = await runRequest(
+            "PtyRoutes.connect.ticket",
+            c,
+            Effect.gen(function* () {
+              const tickets = yield* PtyTicket.Service
+              return yield* tickets.consume({ ticket, ptyID: id, ...(yield* PtyTicket.scope) })
+            }),
+          )
+          if (!valid) throw new HTTPException(403)
+        }
+        const cursor = (() => {
+          const value = c.req.query("cursor")
+          if (!value) return
+          const parsed = Number(value)
+          if (!Number.isSafeInteger(parsed) || parsed < -1) return
+          return parsed
+        })()
+        let handler: Handler | undefined
 
         type Socket = {
           readyState: number

@@ -1,11 +1,13 @@
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect"
-import { EffectBridge } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
+import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import z from "zod"
-import { Config } from "../config"
+import { zod, ZodOverride } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
+import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
@@ -27,25 +29,22 @@ export const Event = {
   ),
 }
 
-export const Info = z
-  .object({
-    name: z.string(),
-    description: z.string().optional(),
-    agent: z.string().optional(),
-    model: z.string().optional(),
-    source: z.enum(["command", "mcp", "skill"]).optional(),
-    // workaround for zod not supporting async functions natively so we use getters
-    // https://zod.dev/v4/changelog?id=zfunction
-    template: z.promise(z.string()).or(z.string()),
-    subtask: z.boolean().optional(),
-    hints: z.array(z.string()),
-  })
-  .meta({
-    ref: "Command",
-  })
+export const Info = Schema.Struct({
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  agent: Schema.optional(Schema.String),
+  model: Schema.optional(Schema.String),
+  source: Schema.optional(Schema.Literals(["command", "mcp", "skill"])),
+  // Some command templates are lazy promises from MCP prompt resolution.
+  template: Schema.Unknown.annotate({ [ZodOverride]: z.promise(z.string()).or(z.string()) }),
+  subtask: Schema.optional(Schema.Boolean),
+  hints: Schema.Array(Schema.String),
+})
+  .annotate({ identifier: "Command" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
 
 // for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
-export type Info = Omit<z.infer<typeof Info>, "template"> & { template: Promise<string> | string }
+export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & { template: Promise<string> | string }
 
 export function hints(template: string) {
   const result: string[] = []

@@ -1,9 +1,9 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "./schema"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, withStatics } from "@/util/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import z from "zod"
 
@@ -13,9 +13,9 @@ export const Info = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("retry"),
-    attempt: Schema.Number,
+    attempt: NonNegativeInt,
     message: Schema.String,
-    next: Schema.Number,
+    next: NonNegativeInt,
   }),
   Schema.Struct({
     type: Schema.Literal("busy"),
