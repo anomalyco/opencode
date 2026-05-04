@@ -31,29 +31,31 @@ import {
   type Usage,
 } from "@agentclientprotocol/sdk"
 
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { pathToFileURL } from "url"
-import { Filesystem } from "../util"
-import { Hash } from "@opencode-ai/shared/util/hash"
+import { Filesystem } from "@/util/filesystem"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
-import { Provider } from "../provider"
+import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
-import { z } from "zod"
+import { Result, Schema } from "effect"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
-import { InstallationVersion } from "@/installation/version"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { ShellID } from "@/tool/shell/id"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
+const decodeTodos = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Array(Todo.Info)))
 
 const DEFAULT_VARIANT_VALUE = "default"
 
@@ -128,7 +130,7 @@ async function sendUsageUpdate(
     })
 }
 
-export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
+export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
   return {
     create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
       return new Agent(connection, fullConfig)
@@ -143,7 +145,7 @@ export class Agent implements ACPAgent {
   private sessionManager: ACPSessionManager
   private eventAbort = new AbortController()
   private eventStarted = false
-  private bashSnapshots = new Map<string, string>()
+  private shellSnapshots = new Map<string, string>()
   private toolStarts = new Set<string>()
   private permissionQueues = new Map<string, Promise<void>>()
   private permissionOptions: PermissionOption[] = [
@@ -282,16 +284,16 @@ export class Agent implements ACPAgent {
 
           switch (part.state.status) {
             case "pending":
-              this.bashSnapshots.delete(part.callID)
+              this.shellSnapshots.delete(part.callID)
               return
 
             case "running":
-              const output = this.bashOutput(part)
+              const output = this.shellOutput(part)
               const content: ToolCallContent[] = []
               if (output) {
                 const hash = Hash.fast(output)
-                if (part.tool === "bash") {
-                  if (this.bashSnapshots.get(part.callID) === hash) {
+                if (part.tool === ShellID.ToolID) {
+                  if (this.shellSnapshots.get(part.callID) === hash) {
                     await this.connection
                       .sessionUpdate({
                         sessionId,
@@ -310,7 +312,7 @@ export class Agent implements ACPAgent {
                       })
                     return
                   }
-                  this.bashSnapshots.set(part.callID, hash)
+                  this.shellSnapshots.set(part.callID, hash)
                 }
                 content.push({
                   type: "content",
@@ -341,7 +343,7 @@ export class Agent implements ACPAgent {
 
             case "completed": {
               this.toolStarts.delete(part.callID)
-              this.bashSnapshots.delete(part.callID)
+              this.shellSnapshots.delete(part.callID)
               const kind = toToolKind(part.tool)
               const content: ToolCallContent[] = [
                 {
@@ -372,14 +374,14 @@ export class Agent implements ACPAgent {
               }
 
               if (part.tool === "todowrite") {
-                const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
-                if (parsedTodos.success) {
+                const parsedTodos = decodeTodos(part.state.output)
+                if (Result.isSuccess(parsedTodos)) {
                   await this.connection
                     .sessionUpdate({
                       sessionId,
                       update: {
                         sessionUpdate: "plan",
-                        entries: parsedTodos.data.map((todo) => {
+                        entries: parsedTodos.success.map((todo) => {
                           const status: PlanEntry["status"] =
                             todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                           return {
@@ -394,7 +396,7 @@ export class Agent implements ACPAgent {
                       log.error("failed to send session update for todo", { error })
                     })
                 } else {
-                  log.error("failed to parse todo output", { error: parsedTodos.error })
+                  log.error("failed to parse todo output", { error: parsedTodos.failure })
                 }
               }
 
@@ -422,7 +424,7 @@ export class Agent implements ACPAgent {
             }
             case "error":
               this.toolStarts.delete(part.callID)
-              this.bashSnapshots.delete(part.callID)
+              this.shellSnapshots.delete(part.callID)
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -836,10 +838,10 @@ export class Agent implements ACPAgent {
         await this.toolStart(sessionId, part)
         switch (part.state.status) {
           case "pending":
-            this.bashSnapshots.delete(part.callID)
+            this.shellSnapshots.delete(part.callID)
             break
           case "running":
-            const output = this.bashOutput(part)
+            const output = this.shellOutput(part)
             const runningContent: ToolCallContent[] = []
             if (output) {
               runningContent.push({
@@ -870,7 +872,7 @@ export class Agent implements ACPAgent {
             break
           case "completed":
             this.toolStarts.delete(part.callID)
-            this.bashSnapshots.delete(part.callID)
+            this.shellSnapshots.delete(part.callID)
             const kind = toToolKind(part.tool)
             const content: ToolCallContent[] = [
               {
@@ -901,14 +903,14 @@ export class Agent implements ACPAgent {
             }
 
             if (part.tool === "todowrite") {
-              const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
-              if (parsedTodos.success) {
+              const parsedTodos = decodeTodos(part.state.output)
+              if (Result.isSuccess(parsedTodos)) {
                 await this.connection
                   .sessionUpdate({
                     sessionId,
                     update: {
                       sessionUpdate: "plan",
-                      entries: parsedTodos.data.map((todo) => {
+                      entries: parsedTodos.success.map((todo) => {
                         const status: PlanEntry["status"] =
                           todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                         return {
@@ -923,7 +925,7 @@ export class Agent implements ACPAgent {
                     log.error("failed to send session update for todo", { error: err })
                   })
               } else {
-                log.error("failed to parse todo output", { error: parsedTodos.error })
+                log.error("failed to parse todo output", { error: parsedTodos.failure })
               }
             }
 
@@ -950,7 +952,7 @@ export class Agent implements ACPAgent {
             break
           case "error":
             this.toolStarts.delete(part.callID)
-            this.bashSnapshots.delete(part.callID)
+            this.shellSnapshots.delete(part.callID)
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -1104,8 +1106,8 @@ export class Agent implements ACPAgent {
     }
   }
 
-  private bashOutput(part: ToolPart) {
-    if (part.tool !== "bash") return
+  private shellOutput(part: ToolPart) {
+    if (part.tool !== ShellID.ToolID) return
     if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
     const output = part.state.metadata["output"]
     if (typeof output !== "string") return
@@ -1548,9 +1550,11 @@ export class Agent implements ACPAgent {
 
 function toToolKind(toolName: string): ToolKind {
   const tool = toolName.toLocaleLowerCase()
+
   switch (tool) {
-    case "bash":
+    case ShellID.ToolID:
       return "execute"
+
     case "webfetch":
       return "fetch"
 
@@ -1575,6 +1579,7 @@ function toToolKind(toolName: string): ToolKind {
 
 function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {
   const tool = toolName.toLocaleLowerCase()
+
   switch (tool) {
     case "read":
     case "edit":
@@ -1583,7 +1588,7 @@ function toLocations(toolName: string, input: Record<string, any>): { path: stri
     case "glob":
     case "grep":
       return input["path"] ? [{ path: input["path"] }] : []
-    case "bash":
+    case ShellID.ToolID:
       return []
     default:
       return []

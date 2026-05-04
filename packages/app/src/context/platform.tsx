@@ -49,11 +49,11 @@ export type Platform = {
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
-  /** Check for updates (Tauri only) */
+  /** Check for a downloadable desktop update */
   checkUpdate?(): Promise<UpdateInfo>
 
-  /** Install updates (Tauri only) */
-  update?(): Promise<void>
+  /** Install the downloaded update using the platform restart flow */
+  updateAndRestart?(): Promise<void>
 
   /** Fetch override */
   fetch?: typeof fetch

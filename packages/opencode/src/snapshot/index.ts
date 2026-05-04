@@ -3,14 +3,14 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import z from "zod"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { InstanceState } from "@/effect"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { Hash } from "@opencode-ai/shared/util/hash"
-import { Config } from "../config"
-import { Global } from "../global"
-import { Log } from "../util"
-import { withStatics } from "@/util/schema"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { InstanceState } from "@/effect/instance-state"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { Config } from "@/config/config"
+import { Global } from "@opencode-ai/core/global"
+import * as Log from "@opencode-ai/core/util/log"
+import { NonNegativeInt, withStatics } from "@/util/schema"
 import { zod } from "@/util/effect-zod"
 
 export const Patch = Schema.Struct({
@@ -22,8 +22,8 @@ export type Patch = typeof Patch.Type
 export const FileDiff = Schema.Struct({
   file: Schema.String,
   patch: Schema.String,
-  additions: Schema.Number,
-  deletions: Schema.Number,
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
 })
   .annotate({ identifier: "SnapshotFileDiff" })
