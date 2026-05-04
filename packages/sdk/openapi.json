@@ -3414,6 +3414,91 @@
         ]
       }
     },
+    "/pty/{ptyID}/connect-token": {
+      "post": {
+        "tags": ["pty"],
+        "operationId": "pty.connectToken",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty.*"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WebSocket connect token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "type": "string"
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": ["ticket", "expires_in"],
+                  "additionalProperties": false,
+                  "description": "WebSocket connect token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Forbidden"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a short-lived ticket for opening a PTY WebSocket connection.",
+        "summary": "Create PTY WebSocket token",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.pty.connectToken({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/question": {
       "get": {
         "tags": ["question"],
@@ -8327,6 +8412,16 @@
               }
             }
           },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Forbidden"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not found",
             "content": {
@@ -12750,6 +12845,17 @@
           }
         },
         "required": ["error"],
+        "additionalProperties": false
+      },
+      "effect_HttpApiError_Forbidden": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["Forbidden"]
+          }
+        },
+        "required": ["_tag"],
         "additionalProperties": false
       },
       "ProviderAuthMethod": {
