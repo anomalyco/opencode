@@ -423,20 +423,21 @@ describe("HttpApi SDK", () => {
     ),
   )
 
-  parity("matches generated SDK basic auth behavior across backends", (backend) =>
-    withStandardProject(backend, ({ directory }) =>
+  httpapi(
+    "uses generated SDK basic auth behavior",
+    withStandardProject("httpapi", ({ directory }) =>
       Effect.gen(function* () {
         const missing = yield* capture(() =>
-          client(backend, directory, { password: "secret" }).file.read({ path: "hello.txt" }),
+          client("httpapi", directory, { password: "secret" }).file.read({ path: "hello.txt" }),
         )
         const bad = yield* capture(() =>
-          client(backend, directory, {
+          client("httpapi", directory, {
             password: "secret",
             headers: { authorization: authorization("opencode", "wrong") },
           }).file.read({ path: "hello.txt" }),
         )
         const good = yield* capture(() =>
-          client(backend, directory, {
+          client("httpapi", directory, {
             password: "secret",
             headers: { authorization: authorization("opencode", "secret") },
           }).file.read({ path: "hello.txt" }),
