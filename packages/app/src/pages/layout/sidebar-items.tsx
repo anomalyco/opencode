@@ -151,10 +151,9 @@ const SessionRow = (props: {
       </Show>
       <span
         classList={{
-          "text-14-regular grow-1 min-w-0 overflow-hidden text-ellipsis truncate": true,
+          "text-16-medium grow-1 min-w-0 overflow-hidden text-ellipsis truncate": true,
           "transition-colors": !props.reduced,
-          "font-medium": !!props.active,
-          "text-text-weak group-hover/session:text-text-strong": !props.active && !props.reduced,
+          "text-text-base": !props.active,
         }}
         style={props.active ? { color: "var(--sidebar-session-accent)" } : undefined}
       >
