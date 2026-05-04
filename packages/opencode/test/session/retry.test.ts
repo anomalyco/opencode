@@ -126,6 +126,22 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
   })
 
+  test("maps nested overloaded provider errors", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 2,
+        error: {
+          type: "service_unavailable_error",
+          code: "server_is_overloaded",
+          message: "Our servers are currently overloaded. Please try again later.",
+          param: null,
+        },
+      }),
+    )
+    expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
+  })
+
   test("does not retry unknown json messages", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
     expect(SessionRetry.retryable(error)).toBeUndefined()
@@ -322,5 +338,28 @@ describe("session.message-v2.fromError", () => {
     if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
     expect(result.data.isRetryable).toBe(true)
     expect(SessionRetry.retryable(result)).toBe("An error occurred while processing your request.")
+  })
+
+  test("converts OpenAI server_is_overloaded stream chunks to retryable APIError", () => {
+    const result = MessageV2.fromError(
+      {
+        message: JSON.stringify({
+          type: "error",
+          sequence_number: 2,
+          error: {
+            type: "service_unavailable_error",
+            code: "server_is_overloaded",
+            message: "Our servers are currently overloaded. Please try again later.",
+            param: null,
+          },
+        }),
+      },
+      { providerID: ProviderID.make("openai") },
+    )
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result)).toBe("Provider is overloaded")
   })
 })
