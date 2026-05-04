@@ -405,7 +405,7 @@ export const layer: Layer.Layer<
           case "tool-error": {
             const toolCall = yield* readToolCall(value.toolCallId)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Tool.Error.Sync, {
+            EventV2.run(SessionEvent.Tool.Failed.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
               error: {
@@ -649,6 +649,17 @@ export const layer: Layer.Layer<
           ctx.needsCompaction = true
           yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
+        }
+        if (!ctx.assistantMessage.summary) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Step.Failed.Sync, {
+            sessionID: ctx.sessionID,
+            error: {
+              type: error.name,
+              message: errorMessage(e),
+            },
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
         }
         ctx.assistantMessage.error = error
         yield* bus.publish(Session.Event.Error, {
