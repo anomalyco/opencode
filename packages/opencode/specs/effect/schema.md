@@ -286,7 +286,6 @@ emitted JSON Schema must stay byte-identical.
 
 - [x] `src/tool/apply_patch.ts`
 - [x] `src/tool/bash.ts`
-- [x] `src/tool/codesearch.ts`
 - [x] `src/tool/edit.ts`
 - [x] `src/tool/glob.ts`
 - [x] `src/tool/grep.ts`
@@ -354,7 +353,7 @@ piecewise.
 - [ ] `src/cli/cmd/tui/event.ts`
 - [ ] `src/cli/ui.ts`
 - [ ] `src/command/index.ts`
-- [x] `src/control-plane/adaptors/worktree.ts`
+- [x] `src/control-plane/adapters/worktree.ts`
 - [x] `src/control-plane/types.ts`
 - [x] `src/control-plane/workspace.ts`
 - [ ] `src/file/index.ts`
