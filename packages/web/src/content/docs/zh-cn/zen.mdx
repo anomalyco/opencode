@@ -55,6 +55,8 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 
 | 模型                  | 模型 ID               | 端点                                               | AI SDK 包                   |
 | --------------------- | --------------------- | -------------------------------------------------- | --------------------------- |
+| GPT 5.5               | gpt-5.5               | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.5 Pro           | gpt-5.5-pro           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.4               | gpt-5.4               | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.4 Pro           | gpt-5.4-pro           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.4 Mini          | gpt-5.4-mini          | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -95,7 +97,7 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | Hy3 Preview Free      | hy3-preview-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-在你的 OpenCode 配置中，[模型 ID](/docs/config/#models) 使用 `opencode/<model-id>` 格式。例如，对于 GPT 5.4，你需要在配置中使用 `opencode/gpt-5.4`。
+在你的 OpenCode 配置中，[模型 ID](/docs/config/#models) 使用 `opencode/<model-id>` 格式。例如，对于 GPT 5.5，你需要在配置中使用 `opencode/gpt-5.5`。
 
 ---
 
@@ -138,11 +140,14 @@ https://opencode.ai/zen/v1/models
 | Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00  | $0.30    | $3.75    |
 | Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50  | $0.60    | $7.50    |
 | Claude Haiku 4.5                  | $1.00  | $5.00   | $0.10    | $1.25    |
-| Claude Haiku 3.5                  | $0.80  | $4.00   | $0.08    | $1.00    |
 | Gemini 3.1 Pro (≤ 200K tokens)    | $2.00  | $12.00  | $0.20    | -        |
 | Gemini 3.1 Pro (> 200K tokens)    | $4.00  | $18.00  | $0.40    | -        |
 | Gemini 3 Flash                    | $0.50  | $3.00   | $0.05    | -        |
-| GPT 5.4                           | $2.50  | $15.00  | $0.25    | -        |
+| GPT 5.5 (≤ 272K tokens)           | $5.00  | $30.00  | $0.50    | -        |
+| GPT 5.5 (> 272K tokens)           | $10.00 | $45.00  | $1.00    | -        |
+| GPT 5.5 Pro                       | $30.00 | $180.00 | $30.00   | -        |
+| GPT 5.4 (≤ 272K tokens)           | $2.50  | $15.00  | $0.25    | -        |
+| GPT 5.4 (> 272K tokens)           | $5.00  | $22.50  | $0.50    | -        |
 | GPT 5.4 Pro                       | $30.00 | $180.00 | $30.00   | -        |
 | GPT 5.4 Mini                      | $0.75  | $4.50   | $0.075   | -        |
 | GPT 5.4 Nano                      | $0.20  | $1.25   | $0.02    | -        |
@@ -194,15 +199,23 @@ https://opencode.ai/zen/v1/models
 
 ### 已弃用模型
 
-| 模型             | 弃用日期       |
-| ---------------- | -------------- |
-| MiniMax M2.1     | March 15, 2026 |
-| GLM 4.7          | March 15, 2026 |
-| GLM 4.6          | March 15, 2026 |
-| Gemini 3 Pro     | March 9, 2026  |
-| Kimi K2 Thinking | March 6, 2026  |
-| Kimi K2          | March 6, 2026  |
-| Qwen3 Coder 480B | Feb 6, 2026    |
+| 模型               | 弃用日期       |
+| ------------------ | -------------- |
+| GPT 5.2 Codex      | July 23, 2026  |
+| GPT 5.1 Codex      | July 23, 2026  |
+| GPT 5.1 Codex Max  | July 23, 2026  |
+| GPT 5.1 Codex Mini | July 23, 2026  |
+| GPT 5 Codex        | July 23, 2026  |
+| Claude Sonnet 4    | June 15, 2026  |
+| GLM 5              | May 14, 2026   |
+| MiniMax M2.1       | March 15, 2026 |
+| GLM 4.7            | March 15, 2026 |
+| GLM 4.6            | March 15, 2026 |
+| Gemini 3 Pro       | March 9, 2026  |
+| Kimi K2 Thinking   | March 6, 2026  |
+| Kimi K2            | March 6, 2026  |
+| Claude Haiku 3.5   | Feb 16, 2026   |
+| Qwen3 Coder 480B   | Feb 6, 2026    |
 
 ---
 

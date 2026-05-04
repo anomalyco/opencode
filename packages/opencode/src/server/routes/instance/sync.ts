@@ -2,11 +2,18 @@ import z from "zod"
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { SyncEvent } from "@/sync"
-import { Database, asc, and, not, or, lte, eq } from "@/storage"
+import { Database } from "@/storage/db"
+import { asc } from "drizzle-orm"
+import { and } from "drizzle-orm"
+import { not } from "drizzle-orm"
+import { or } from "drizzle-orm"
+import { lte } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { EventTable } from "@/sync/event.sql"
 import { lazy } from "@/util/lazy"
-import { Log } from "@/util"
-import { startWorkspaceSyncing } from "@/control-plane/workspace"
+import * as Log from "@opencode-ai/core/util/log"
+import { Workspace } from "@/control-plane/workspace"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Instance } from "@/project/instance"
 import { errors } from "../../error"
 
@@ -40,7 +47,9 @@ export const SyncRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        startWorkspaceSyncing(Instance.project.id)
+        void AppRuntime.runPromise(
+          Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(Instance.project.id)),
+        )
         return c.json(true)
       },
     )
@@ -85,7 +94,7 @@ export const SyncRoutes = lazy(() =>
           last: events.at(-1)?.seq,
           directory: body.directory,
         })
-        SyncEvent.replayAll(events)
+        await AppRuntime.runPromise(SyncEvent.use.replayAll(events))
 
         log.info("sync replay complete", {
           sessionID: source,

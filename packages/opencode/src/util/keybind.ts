@@ -99,3 +99,5 @@ export function parse(key: string): Info[] {
     return info
   })
 }
+
+export * as Keybind from "./keybind"
