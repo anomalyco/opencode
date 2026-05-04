@@ -14,7 +14,7 @@ const keybind = (value: string, description: string) =>
 // cannot consume ctrl+z on native Windows terminals (no POSIX suspend).
 const inputUndoDefault = process.platform === "win32" ? "ctrl+z,ctrl+-,super+z" : "ctrl+-,super+z"
 
-const KeybindsSchema = Schema.Struct({
+const KeybindsSchema = Schema.StructWithRest(Schema.Struct({
   leader: keybind("ctrl+x", "Leader key for keybind combinations"),
   app_exit: keybind("ctrl+c,ctrl+d,<leader>q", "Exit the application"),
   editor_open: keybind("<leader>e", "Open external editor"),
@@ -115,7 +115,9 @@ const KeybindsSchema = Schema.Struct({
   tips_toggle: keybind("<leader>h", "Toggle tips on home screen"),
   plugin_manager: keybind("none", "Open plugin manager dialog"),
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
-}).annotate({ identifier: "KeybindsConfig" })
+  }),
+  [Schema.Record(Schema.String, Schema.String)]
+).annotate({ identifier: "KeybindsConfig" })
 
 export type Keybinds = Schema.Schema.Type<typeof KeybindsSchema>
 
