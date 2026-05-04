@@ -2,11 +2,19 @@ import { afterEach, test, expect } from "bun:test"
 import os from "os"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Bus } from "../../src/bus"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
-import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import { WithInstance } from "../../src/project/with-instance"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
+import {
+  disposeAllInstances,
+  provideInstance,
+  provideTmpdirInstance,
+  reloadTestInstance,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 
@@ -15,7 +23,7 @@ const env = Layer.mergeAll(Permission.layer.pipe(Layer.provide(bus)), bus, Cross
 const it = testEffect(env)
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const rejectAll = (message?: string) =>
@@ -128,61 +136,45 @@ test("fromConfig - does not expand tilde in middle of path", () => {
   expect(result).toEqual([{ permission: "external_directory", pattern: "/some/~/path", action: "allow" }])
 })
 
-// Top-level wildcard-vs-specific precedence semantics.
-//
-// fromConfig sorts top-level keys so wildcard permissions (containing "*")
-// come before specific permissions. Combined with `findLast` in evaluate(),
-// this gives the intuitive semantic "specific tool rules override the `*`
-// fallback", regardless of the order the user wrote the keys in their JSON.
-//
-// Sub-pattern order inside a single permission key (e.g. `bash: { "*": "allow", "rm": "deny" }`)
-// still depends on insertion order — only top-level keys are sorted.
+// Permission precedence follows config insertion order. `evaluate()` uses the
+// last matching rule, so later config entries intentionally override earlier
+// entries even when a wildcard appears after a specific permission.
 
-test("fromConfig - specific key beats wildcard regardless of JSON key order", () => {
+test("fromConfig - preserves top-level config key order", () => {
   const wildcardFirst = Permission.fromConfig({ "*": "deny", bash: "allow" })
   const specificFirst = Permission.fromConfig({ bash: "allow", "*": "deny" })
 
-  // Both orderings produce the same ruleset
-  expect(wildcardFirst).toEqual(specificFirst)
+  expect(wildcardFirst.map((r) => r.permission)).toEqual(["*", "bash"])
+  expect(specificFirst.map((r) => r.permission)).toEqual(["bash", "*"])
 
-  // And both evaluate bash → allow (bash rule wins over * fallback)
   expect(Permission.evaluate("bash", "ls", wildcardFirst).action).toBe("allow")
-  expect(Permission.evaluate("bash", "ls", specificFirst).action).toBe("allow")
+  expect(Permission.evaluate("bash", "ls", specificFirst).action).toBe("deny")
 })
 
-test("fromConfig - wildcard acts as fallback for permissions with no specific rule", () => {
-  const ruleset = Permission.fromConfig({ bash: "allow", "*": "ask" })
+test("fromConfig - wildcard acts as fallback when it appears before specifics", () => {
+  const ruleset = Permission.fromConfig({ "*": "ask", bash: "allow" })
   expect(Permission.evaluate("edit", "foo.ts", ruleset).action).toBe("ask")
   expect(Permission.evaluate("bash", "ls", ruleset).action).toBe("allow")
 })
 
-test("fromConfig - top-level ordering: wildcards first, specifics after", () => {
+test("fromConfig - top-level ordering is not sorted by wildcard specificity", () => {
   const ruleset = Permission.fromConfig({
     bash: "allow",
     "*": "ask",
     edit: "deny",
     "mcp_*": "allow",
   })
-  // wildcards (* and mcp_*) come before specifics (bash, edit)
-  const permissions = ruleset.map((r) => r.permission)
-  expect(permissions.slice(0, 2).sort()).toEqual(["*", "mcp_*"])
-  expect(permissions.slice(2)).toEqual(["bash", "edit"])
+  expect(ruleset.map((r) => r.permission)).toEqual(["bash", "*", "edit", "mcp_*"])
 })
 
-test("fromConfig - sub-pattern insertion order inside a tool key is preserved (only top-level sorts)", () => {
-  // Sub-patterns within a single tool key use the documented "`*` first,
-  // specific patterns after" convention (findLast picks specifics). The
-  // top-level sort must not touch sub-pattern ordering.
+test("fromConfig - sub-pattern insertion order inside a tool key is preserved", () => {
   const ruleset = Permission.fromConfig({ bash: { "*": "deny", "git *": "allow" } })
   expect(ruleset.map((r) => r.pattern)).toEqual(["*", "git *"])
-  // * fallback for unknown commands
   expect(Permission.evaluate("bash", "rm foo", ruleset).action).toBe("deny")
-  // specific pattern wins for git commands (it's last, findLast picks it)
   expect(Permission.evaluate("bash", "git status", ruleset).action).toBe("allow")
 })
 
-test("fromConfig - canonical documented example unchanged", () => {
-  // Regression guard for the example in docs/permissions.mdx
+test("fromConfig - documented fallback-first example", () => {
   const ruleset = Permission.fromConfig({ "*": "ask", bash: "allow", edit: "deny" })
   expect(Permission.evaluate("bash", "ls", ruleset).action).toBe("allow")
   expect(Permission.evaluate("edit", "foo.ts", ruleset).action).toBe("deny")
@@ -448,7 +440,7 @@ test("evaluate - wildcard permission fallback for unknown tool", () => {
   expect(result.action).toBe("ask")
 })
 
-test("evaluate - permission patterns sorted by length regardless of object order", () => {
+test("evaluate - later wildcard permission can override earlier specific permission", () => {
   const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "*", pattern: "*", action: "deny" },
@@ -1014,7 +1006,9 @@ it.live("pending permission rejects on instance dispose", () =>
     }).pipe(run, Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
-    yield* Effect.promise(() => Instance.provide({ directory: dir, fn: () => void Instance.dispose() }))
+    yield* Effect.promise(() =>
+      WithInstance.provide({ directory: dir, fn: () => void InstanceRuntime.disposeInstance(Instance.current) }),
+    )
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)
@@ -1037,7 +1031,7 @@ it.live("pending permission rejects on instance reload", () =>
     }).pipe(run, Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
-    yield* Effect.promise(() => Instance.reload({ directory: dir }))
+    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)
@@ -1131,7 +1125,7 @@ it.live("ask - abort should clear pending request", () =>
 
     const pending = yield* waitForPending(1).pipe(run)
     expect(pending).toHaveLength(1)
-    yield* Effect.promise(() => Instance.reload({ directory: dir }))
+    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)

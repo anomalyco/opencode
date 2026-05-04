@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { Session } from "../../src/session"
+import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { MessageV2 } from "../../src/session/message-v2"
 
 const projectRoot = path.join(__dirname, "../..")
@@ -15,7 +16,7 @@ const hasApiKey = !!process.env.ANTHROPIC_API_KEY
 
 // Helper to run test within Instance context
 async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
-  return Instance.provide({
+  return WithInstance.provide({
     directory: projectRoot,
     fn,
   })

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Session as SessionNs } from "../../src/session"
+import { Session as SessionNs } from "@/session/session"
 import { Bus } from "../../src/bus"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
@@ -34,7 +35,7 @@ function updatePart<T extends MessageV2.Part>(part: T) {
 
 describe("session.created event", () => {
   test("should emit session.created event when session is created", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         let eventReceived = false
@@ -54,6 +55,7 @@ describe("session.created event", () => {
         expect(receivedInfo?.id).toBe(info.id)
         expect(receivedInfo?.projectID).toBe(info.projectID)
         expect(receivedInfo?.directory).toBe(info.directory)
+        expect(receivedInfo?.path).toBe(info.path)
         expect(receivedInfo?.title).toBe(info.title)
 
         await remove(info.id)
@@ -62,7 +64,7 @@ describe("session.created event", () => {
   })
 
   test("session.created event should be emitted before session.updated", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const events: string[] = []
@@ -94,7 +96,7 @@ describe("step-finish token propagation via Bus event", () => {
   test(
     "non-zero tokens propagate through PartUpdated event",
     async () => {
-      await Instance.provide({
+      await WithInstance.provide({
         directory: projectRoot,
         fn: async () => {
           const info = await create({})
@@ -111,9 +113,12 @@ describe("step-finish token propagation via Bus event", () => {
             mode: "",
           } as unknown as MessageV2.Info)
 
+          // Bus subscribers receive readonly Schema.Type payloads; `MessageV2.Part`
+          // is the mutable domain type. Cast bridges the two — safe because the
+          // test only reads the value afterwards.
           let received: MessageV2.Part | undefined
           const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, (event) => {
-            received = event.properties.part
+            received = event.properties.part as MessageV2.Part
           })
 
           const tokens = {
@@ -162,7 +167,7 @@ describe("Session", () => {
   test("remove works without an instance", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    const info = await Instance.provide({
+    const info = await WithInstance.provide({
       directory: tmp.path,
       fn: () => create({ title: "remove-without-instance" }),
     })

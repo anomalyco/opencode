@@ -2,7 +2,7 @@ import z from "zod"
 import { Hono } from "hono"
 import { describeRoute, resolver } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { AsyncQueue } from "@/util/queue"
@@ -42,6 +42,7 @@ export const EventRoutes = () =>
 
         q.push(
           JSON.stringify({
+            id: Bus.createID(),
             type: "server.connected",
             properties: {},
           }),
@@ -51,6 +52,7 @@ export const EventRoutes = () =>
         const heartbeat = setInterval(() => {
           q.push(
             JSON.stringify({
+              id: Bus.createID(),
               type: "server.heartbeat",
               properties: {},
             }),
