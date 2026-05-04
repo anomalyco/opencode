@@ -366,6 +366,12 @@ html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
     0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
+@media (prefers-color-scheme: light) {
+  html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
+    background-color: rgba(255, 255, 255, 0.72);
+  }
+}
+
 /* Dialog overlay — gentle backdrop blur to push focus on the dialog */
 html[data-theme="arc"] [data-component="dialog-overlay"] {
   backdrop-filter: blur(6px) saturate(120%);
