@@ -20,15 +20,50 @@ We have a GitHub Actions workflow that syncs with upstream every Monday:
 
 ### Manual Sync
 
-If you need to sync manually:
+If you need to sync manually, use the provided script which handles merging and basic conflict resolution:
 
 ```bash
-# Run the sync script
+# Recommended way
 ./scripts/sync-upstream.sh
+```
 
-# Or do it manually:
+#### 📋 Post-Sync Checklist
+
+After every sync, you should perform the following steps to ensure stability:
+
+1. **Type Checking**: Ensure the new upstream code is compatible with our custom logic.
+   ```bash
+   bun run typecheck
+   ```
+2. **Rebuild & Test**: Rebuild the CLI and verify that the minimal mode is still the default and functional.
+   ```bash
+   cd packages/opencode
+   bun run script/build.ts --single
+   ./dist/opencode-<platform>/bin/opencode
+   ```
+3. **Review Log**: Check the upstream commit log to stay informed about new features.
+   ```bash
+   git log --oneline -n 20
+   ```
+*(Note: The sync script now automatically pushes changes to your origin fork.)*
+
+Alternatively, perform the steps manually:
+
+```bash
+# Add upstream remote (if not already added)
+git remote add upstream https://github.com/anomalyco/opencode.git
+
+# Fetch upstream changes
 git fetch upstream
+
+# Merge upstream changes
 git merge upstream/dev
+
+# Resolve conflicts by keeping our minimal mode settings
+git checkout --ours packages/opencode/src/cli/cmd/tui/thread.ts
+git checkout --ours README.md
+git add .
+git commit -m "merge: sync with upstream"
 ```
 
 ## ⚠️ Handling Merge Conflicts
@@ -180,17 +215,33 @@ bun run typecheck
 ### Problem: Sync workflow fails
 
 **Solution**:
-1. Check the Actions tab for error details
-2. Usually it's a conflict that needs manual resolution
-3. Run `./scripts/sync-upstream.sh` locally
-4. Resolve conflicts manually
-5. Push the resolved merge
+1. Check the Actions tab for error details.
+2. Usually it's a conflict that needs manual resolution.
+3. Run `./scripts/sync-upstream.sh` locally.
+4. Resolve conflicts manually.
+5. Push the resolved merge.
+
+### Problem: `git fetch upstream` fails (Network Restriction)
+
+If you are in a restricted network environment (e.g., a sandboxed terminal) where `github.com` cannot be resolved:
+
+1. **Check DNS/Proxy**: Ensure your terminal has internet access.
+2. **Manual Patch**: If you can access GitHub via a browser but not the terminal, you can download a patch and apply it:
+   ```bash
+   # In a browser, get the patch URL:
+   # https://github.com/anomalyco/opencode/compare/YOUR_LOCAL_HASH...upstream/dev.patch
+   
+   # Apply the patch locally:
+   git apply your_downloaded_patch.patch
+   ```
+3. **External Fetch**: Run `git fetch upstream` in a different terminal/environment that has network access, then return to the restricted environment to run the merge.
 
 ## 📞 Getting Help
 
 - **Issues**: https://github.com/iamcheyan/opencode/issues
 - **Discussions**: https://github.com/iamcheyan/opencode/discussions
 - **Upstream**: https://github.com/anomalyco/opencode
+- **AWS Bedrock Guide (ZH)**: [AWS_BEDROCK_GUIDE_ZH.md](AWS_BEDROCK_GUIDE_ZH.md)
 
 ## 🎉 Contributing
 

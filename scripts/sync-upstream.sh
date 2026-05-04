@@ -28,7 +28,8 @@ fi
 
 # Merge upstream changes
 echo "🔀 Merging upstream/dev..."
-if git merge upstream/dev --no-edit; then
+SYNC_MSG="chore: sync with upstream, merge latest changes"
+if git merge upstream/dev --no-edit -m "$SYNC_MSG"; then
   echo "✅ Merge successful!"
 else
   echo "⚠️  Merge conflicts detected. Resolving..."
@@ -43,18 +44,22 @@ else
   git add README.md
 
   # Commit the merge
-  git commit -m "merge: sync with upstream, preserve minimal mode default"
+  git commit -m "$SYNC_MSG (resolved conflicts)"
   echo "✅ Conflicts resolved!"
 fi
+
+# Push to origin
+CURRENT_BRANCH=$(git branch --show-current)
+echo "📤 Pushing to origin/$CURRENT_BRANCH..."
+git push origin "$CURRENT_BRANCH"
 
 echo ""
 echo "📋 Summary of changes:"
 git log --oneline HEAD...upstream/dev | head -20
 
 echo ""
-echo "🎉 Sync complete!"
+echo "🎉 Sync and Push complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Review the changes: git log --oneline HEAD...upstream/dev"
-echo "  2. Test the build: bun run typecheck"
-echo "  3. Push to your fork: git push origin main"
+2. Test the build: bun run typecheck

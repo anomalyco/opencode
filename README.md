@@ -145,21 +145,14 @@ bun run script/build.ts
 
 ### Syncing with Upstream
 
-This fork regularly syncs with upstream to get the latest features and bug fixes:
+This fork regularly syncs with upstream to get the latest features and bug fixes. We provide a script to handle this while preserving our custom settings:
 
 ```bash
-# Add upstream remote
-git remote add upstream https://github.com/anomalyco/opencode.git
-
-# Fetch upstream changes
-git fetch upstream
-
-# Merge upstream changes
-git merge upstream/dev
-
-# Resolve conflicts (if any)
-# Our default minimal mode is preserved
+# Recommended sync method
+./scripts/sync-upstream.sh
 ```
+
+For manual sync instructions or troubleshooting (including network issues), see the [Maintenance Guide](MAINTENANCE.md).
 
 ---
 
