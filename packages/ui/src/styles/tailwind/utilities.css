@@ -126,3 +126,13 @@
   color: var(--color-icon-warning-base);
   font-weight: 600 !important;
 }
+
+/* Canvas surface for the root layer behind floating panels (Arc-style modernization). */
+@utility bg-canvas-base {
+  background-color: var(--canvas-base);
+}
+
+/* Floating card elevation — used for three-pane cards (project rail / session sidebar / main). */
+@utility shadow-card-elevation {
+  box-shadow: var(--card-elevation);
+}

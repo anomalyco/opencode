@@ -47,6 +47,7 @@
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.625rem;
+  --radius-2xl: 1.25rem; /* 20px — for floating panel cards (Arc-style modernization) */
 
   --shadow-xs:
     0 1px 2px -0.5px light-dark(hsl(0 0% 0% / 0.04), hsl(0 0% 0% / 0.06)),
