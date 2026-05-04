@@ -155,6 +155,31 @@ html[data-theme="arc"] {
     --color-surface-base-hover: #8B8294;
     --surface-raised-base-hover: #8B8294;
     --color-surface-raised-base-hover: #8B8294;
+
+    /* Task cards inside the tasks panel: their bg/border tokens must
+       resolve to semi-transparent whites so cards layer visibly on
+       the dusty-mauve sidebar instead of blending in with dark fills
+       from the default light-theme palette. Both the raw --token and
+       the --color-* alias are overridden (same two-pronged reason as
+       the text/icon overrides above).
+
+       bg-surface-panel is a custom utility (utilities.css) that reads
+       --surface-raised-base directly, NOT --surface-panel — so we
+       override --surface-raised-base here to cover both the task-card
+       status chips and any other component using that token inside
+       the sidebar. (The titlebar block below sets a weaker 0.06
+       value; this 0.10 wins for sidebar-panel descendants because
+       specificity is equal but source order is later.) */
+    --background-base: rgba(255, 255, 255, 0.06);
+    --color-background-base: rgba(255, 255, 255, 0.06);
+    --background-stronger: rgba(255, 255, 255, 0.10);
+    --color-background-stronger: rgba(255, 255, 255, 0.10);
+    --surface-raised-base: rgba(255, 255, 255, 0.10);
+    --color-surface-raised-base: rgba(255, 255, 255, 0.10);
+    --surface-info-base: rgba(255, 255, 255, 0.18);
+    --color-surface-info-base: rgba(255, 255, 255, 0.18);
+    --border-weak-base: rgba(255, 255, 255, 0.14);
+    --color-border-weak-base: rgba(255, 255, 255, 0.14);
   }
 
   html[data-theme="arc"] [data-component="titlebar"] {
