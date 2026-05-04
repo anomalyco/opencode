@@ -618,6 +618,38 @@ export function FileTabContent(props: { tab: string }) {
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
+  // FORK-BEGIN: 文件查看器 Ctrl/Cmd+C — 修非 .md 内容(@pierre/diffs shadow DOM)原生 Ctrl+C 拿不到选区的 bug 2026-05-04
+  // 现象:.md 走 light DOM 原生 Ctrl+C 工作;代码 / HTML / PDF / office 预览走 <diffs-container> shadow DOM,
+  // window.getSelection().toString() 对 shadow 内容返回空 → 系统剪贴板拿不到东西 → "Ctrl+C 没反应"。
+  // 解法:复用既有 pickBestRecentSelection()(2026-04-29 macOS 选区修复时建立的 shadow-aware 历史栈),
+  // 加 window-capture keydown,Ctrl/Cmd+C 时把"最近最长"选区文本 writeText 到剪贴板,preventDefault 阻断原生
+  // 的失败路径。.md 也命中(无回归 — light DOM 选区也进 history),编辑态 / input / textarea / contenteditable 时让原生走。
+  createEffect(() => {
+    if (typeof window === "undefined") return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (activeFileTab() !== props.tab) return
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+      if (event.key.toLowerCase() !== "c") return
+      if (editing()) return // CodeMirror 编辑态自己管 Ctrl+C
+
+      // 焦点在可编辑元素 → 让原生处理(input/textarea 自有 selection,不走 history)
+      const ae = document.activeElement as HTMLElement | null
+      if (ae && (ae instanceof HTMLInputElement || ae instanceof HTMLTextAreaElement || ae.isContentEditable)) return
+
+      const best = pickBestRecentSelection()
+      if (!best || !best.text.trim()) return // 无可用选区 → 让原生处理(也是 no-op)
+
+      event.preventDefault()
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(best.text).catch(() => {})
+      }
+    }
+
+    makeEventListener(window, "keydown", onKeyDown, { capture: true })
+  })
+  // FORK-END
+
   createEffect(
     on(
       path,
