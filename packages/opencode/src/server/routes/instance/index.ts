@@ -39,10 +39,11 @@ import { SessionPaths } from "./httpapi/groups/session"
 import { SyncPaths } from "./httpapi/groups/sync"
 import { TuiPaths } from "./httpapi/groups/tui"
 import { WorkspacePaths } from "./httpapi/groups/workspace"
+import type { CorsOptions } from "@/server/cors"
 
-export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
+export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): Hono => {
   const app = new Hono()
-  const handler = ExperimentalHttpApiServer.webHandler().handler
+  const handler = ExperimentalHttpApiServer.webHandler(opts).handler
   const context = Context.empty() as Context.Context<unknown>
 
   app.all("/api/*", (c) => handler(c.req.raw, context))
@@ -107,6 +108,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(PtyPaths.get, (c) => handler(c.req.raw, context))
     app.put(PtyPaths.update, (c) => handler(c.req.raw, context))
     app.delete(PtyPaths.remove, (c) => handler(c.req.raw, context))
+    app.post(PtyPaths.connectToken, (c) => handler(c.req.raw, context))
     app.get(PtyPaths.connect, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
@@ -158,7 +160,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
 
   return app
     .route("/project", ProjectRoutes())
-    .route("/pty", PtyRoutes(upgrade))
+    .route("/pty", PtyRoutes(upgrade, opts))
     .route("/config", ConfigRoutes())
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
