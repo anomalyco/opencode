@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
@@ -6,101 +7,142 @@ import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/grou
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
-const original = {
-  OPENCODE_EXPERIMENTAL_HTTPAPI: Flag.OPENCODE_EXPERIMENTAL_HTTPAPI,
-  OPENCODE_EXPERIMENTAL_WORKSPACES: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
+const stateLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const original = {
+      OPENCODE_EXPERIMENTAL_HTTPAPI: Flag.OPENCODE_EXPERIMENTAL_HTTPAPI,
+      OPENCODE_EXPERIMENTAL_WORKSPACES: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
+    }
+
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original.OPENCODE_EXPERIMENTAL_WORKSPACES
+        await resetDatabase()
+      }),
+    )
+  }),
+)
+
+const it = testEffect(stateLayer)
+type TestServer = ReturnType<typeof HttpRouter.toWebHandler>
+
+function serverScoped() {
+  return Effect.acquireRelease(
+    Effect.sync(() => HttpRouter.toWebHandler(ExperimentalHttpApiServer.routes, { disableLogger: true })),
+    (server) => Effect.promise(() => server.dispose()).pipe(Effect.ignore),
+  )
 }
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
-  const server = HttpRouter.toWebHandler(ExperimentalHttpApiServer.routes, { disableLogger: true })
-  return {
-    request: (input: string, init?: RequestInit) =>
-      server.handler(new Request(new URL(input, "http://localhost"), init), ExperimentalHttpApiServer.context),
-    dispose: server.dispose,
-    [Symbol.asyncDispose]: server.dispose,
-  }
+function request(server: TestServer, input: string, init?: RequestInit) {
+  return Effect.promise(() =>
+    server.handler(new Request(new URL(input, "http://localhost"), init), ExperimentalHttpApiServer.context),
+  )
 }
 
-afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original.OPENCODE_EXPERIMENTAL_WORKSPACES
-  await resetDatabase()
-})
+function withRequestTimeout(effect: Effect.Effect<Response>, label: string, ms = 5_000) {
+  return Effect.promise(() => withTimeout(Effect.runPromise(effect), ms, label))
+}
+
+function setProjectStartCommand(input: { server: TestServer; directory: string; command: string }) {
+  return Effect.gen(function* () {
+    const current = yield* request(input.server, `/project/current?directory=${encodeURIComponent(input.directory)}`)
+    expect(current.status).toBe(200)
+    const project = (yield* Effect.promise(() => current.json())) as { id: string }
+    const updated = yield* request(
+      input.server,
+      `/project/${project.id}?directory=${encodeURIComponent(input.directory)}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ commands: { start: input.command } }),
+      },
+    )
+    expect(updated.status).toBe(200)
+  })
+}
 
 describe("worktree endpoint reproduction", () => {
-  async function setProjectStartCommand(input: { request: ReturnType<typeof app>["request"]; directory: string; command: string }) {
-    const current = await input.request(`/project/current?directory=${encodeURIComponent(input.directory)}`)
-    expect(current.status).toBe(200)
-    const project = (await current.json()) as { id: string }
-    const updated = await input.request(`/project/${project.id}?directory=${encodeURIComponent(input.directory)}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ commands: { start: input.command } }),
-    })
-    expect(updated.status).toBe(200)
-  }
+  it.instance(
+    "direct HttpApi worktree create returns without waiting for boot",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
 
-  test("direct HttpApi worktree create returns without waiting for boot", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await using server = app()
+        const response = yield* withRequestTimeout(
+          request(server, `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({}),
+          }),
+          "direct worktree create",
+        )
 
-    const response = await withTimeout(
-      server.request(`${ExperimentalPaths.worktree}?directory=${encodeURIComponent(tmp.path)}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        expect(response.status).toBe(200)
+        expect(yield* Effect.promise(() => response.json())).toMatchObject({ directory: expect.any(String) })
       }),
-      5_000,
-      "direct worktree create",
-    )
+    { git: true },
+  )
 
-    expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ directory: expect.any(String) })
-  })
+  it.instance(
+    "workspace worktree create does not hang",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
 
-  test("workspace worktree create does not hang", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await using server = app()
+        const response = yield* withRequestTimeout(
+          request(server, `${WorkspacePaths.list}?directory=${encodeURIComponent(test.directory)}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ type: "worktree", branch: null }),
+          }),
+          "workspace worktree create",
+          8_000,
+        )
 
-    const response = await withTimeout(
-      server.request(`${WorkspacePaths.list}?directory=${encodeURIComponent(tmp.path)}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "worktree", branch: null }),
+        expect(response.status).toBe(200)
+        expect(yield* Effect.promise(() => response.json())).toMatchObject({
+          type: "worktree",
+          directory: expect.any(String),
+        })
       }),
-      8_000,
-      "workspace worktree create",
-    )
+    { git: true },
+  )
 
-    expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ type: "worktree", directory: expect.any(String) })
-  })
+  it.instance(
+    "workspace worktree create returns without waiting for project start command",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+        yield* setProjectStartCommand({
+          server,
+          directory: test.directory,
+          command: 'bun -e "setTimeout(() => {}, 2000)"',
+        })
 
-  test("workspace worktree create returns without waiting for project start command", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await using server = app()
-    await setProjectStartCommand({
-      request: server.request,
-      directory: tmp.path,
-      command: 'bun -e "setTimeout(() => {}, 2000)"',
-    })
+        const started = Date.now()
+        const response = yield* withRequestTimeout(
+          request(server, `${WorkspacePaths.list}?directory=${encodeURIComponent(test.directory)}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ type: "worktree", branch: null }),
+          }),
+          "workspace worktree create with project start command",
+          6_000,
+        )
 
-    const started = Date.now()
-    const response = await withTimeout(
-      server.request(`${WorkspacePaths.list}?directory=${encodeURIComponent(tmp.path)}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "worktree", branch: null }),
+        expect(response.status).toBe(200)
+        expect(Date.now() - started).toBeLessThan(1_500)
       }),
-      6_000,
-      "workspace worktree create with project start command",
-    )
-
-    expect(response.status).toBe(200)
-    expect(Date.now() - started).toBeLessThan(1_500)
-  })
+    { git: true },
+  )
 })
