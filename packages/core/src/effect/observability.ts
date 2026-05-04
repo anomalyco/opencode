@@ -39,11 +39,7 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
     }
   })()
 
-  // Respect OTEL_SERVICE_NAME and "service.name" in OTEL_RESOURCE_ATTRIBUTES;
-  // fall back to "opencode" only if neither is set.
   const serviceName = process.env.OTEL_SERVICE_NAME ?? attributes["service.name"] ?? "opencode"
-  // Remove "service.name" from attributes to avoid duplication — it is
-  // promoted to the top-level serviceName field consumed by both SDKs.
   const { "service.name": _removed, ...remainingAttributes } = attributes
 
   return {
