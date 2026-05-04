@@ -29,16 +29,16 @@ opencode [project]
 
 #### Bayraklar
 
-| Bayrak       | Kısa | Açıklama                                                                    |
-| ------------ | ---- | --------------------------------------------------------------------------- |
-| `--continue` | `-c` | Son oturuma devam et                                                        |
-| `--session`  | `-s` | Devam edecek oturum kimliği                                                 |
-| `--fork`     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın) |
-| `--prompt`   |      | Kullanılacak prompt                                                         |
-| `--model`    | `-m` | provider/model biçiminde kullanılacak model                                 |
-| `--agent`    |      | Kullanılacak agent                                                          |
-| `--port`     |      | Dinlenecek port                                                             |
-| `--hostname` |      | Dinlenecek host adı                                                         |
+| Bayrak                                   | Kısa | Açıklama                                                                    |
+| ---------------------------------------- | ---- | --------------------------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Son oturuma devam et                                                        |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Devam edecek oturum kimliği                                                 |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın) |
+| <nobr><code>{"--prompt"}</code></nobr>   |      | Kullanılacak prompt                                                         |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | provider/model biçiminde kullanılacak model                                 |
+| <nobr><code>{"--agent"}</code></nobr>    |      | Kullanılacak agent                                                          |
+| <nobr><code>{"--port"}</code></nobr>     |      | Dinlenecek port                                                             |
+| <nobr><code>{"--hostname"}</code></nobr> |      | Dinlenecek host adı                                                         |
 
 ---
 
@@ -78,10 +78,14 @@ opencode attach http://10.20.30.40:4096
 
 #### Bayraklar
 
-| Bayrak      | Kısa | Tanım                                |
-| ----------- | ---- | ------------------------------------ |
-| `--dir`     |      | TUI'yi başlatmak için çalışma dizini |
-| `--session` | `-s` | Devam edecek oturum açma bilgileri   |
+| Bayrak                                   | Kısa | Tanım                                                                                         |
+| ---------------------------------------- | ---- | --------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | TUI'yi başlatmak için çalışma dizini                                                          |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Son oturuma devam et                                                                          |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Devam edecek oturum açma bilgileri                                                            |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu çatalla (`--continue` veya `--session` ile kullanın)                    |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Temel kimlik doğrulama parolası (varsayılan: `OPENCODE_SERVER_PASSWORD`)                      |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Temel kimlik doğrulama kullanıcı adı (varsayılan: `OPENCODE_SERVER_USERNAME` veya `opencode`) |
 
 ---
 
@@ -187,10 +191,10 @@ opencode github run
 
 ##### Bayraklar
 
-| Bayrak    | Açıklama                                    |
-| --------- | ------------------------------------------- |
-| `--event` | Aracıyı çalıştırmak için GitHub sahte olayı |
-| `--token` | GitHub personal access token                |
+| Bayrak                                | Açıklama                                    |
+| ------------------------------------- | ------------------------------------------- |
+| <nobr><code>{"--event"}</code></nobr> | Aracıyı çalıştırmak için GitHub sahte olayı |
+| <nobr><code>{"--token"}</code></nobr> | GitHub personal access token                |
 
 ---
 
@@ -296,10 +300,10 @@ opencode models anthropic
 
 #### Bayraklar
 
-| Bayrak      | Tanım                                                                       |
-| ----------- | --------------------------------------------------------------------------- |
-| `--refresh` | Modeller.dev'den model önbelleğini yenileyin                                |
-| `--verbose` | Daha ayrıntılı model çıktısı kullanın (maliyetler gibi meta veriler içerir) |
+| Bayrak                                  | Tanım                                                                       |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| <nobr><code>{"--refresh"}</code></nobr> | Modeller.dev'den model önbelleğini yenileyin                                |
+| <nobr><code>{"--verbose"}</code></nobr> | Daha ayrıntılı model çıktısı kullanın (maliyetler gibi meta veriler içerir) |
 
 Önbelleğe alınan model listesini güncellemek için `--refresh` bayrağını kullanın. Bu, bir sağlayıcıya yeni modeller eklendiğinde ve bunları opencode'da görmek istediğinizde kullanışlıdır.
 
@@ -335,20 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Bayraklar
 
-| Bayrak       | Kısa | Açıklama                                                                          |
-| ------------ | ---- | --------------------------------------------------------------------------------- |
-| `--command`  |      | Çalıştırılacak komut, args için mesajı kullanın                                   |
-| `--continue` | `-c` | Son oturuma devam et                                                              |
-| `--session`  | `-s` | Devam edecek oturum kimliği                                                       |
-| `--fork`     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın)       |
-| `--share`    |      | Oturumu paylaşın                                                                  |
-| `--model`    | `-m` | provider/model biçiminde kullanılacak model                                       |
-| `--agent`    |      | Kullanılacak temsilci                                                             |
-| `--file`     | `-f` | Mesaja eklenecek dosya(lar)                                                       |
-| `--format`   |      | Biçim: varsayılan (biçimlendirilmiş) veya json (ham JSON olayları)                |
-| `--title`    |      | Oturumun başlığı (değer sağlanmazsa kısaltılmış bilgi istemi kullanılır)          |
-| `--attach`   |      | Çalışan bir opencode sunucusuna ekleyin (ör. http://localhost:4096)               |
-| `--port`     |      | Yerel sunucunun bağlantı noktası (varsayılan olarak rastgele bağlantı noktasıdır) |
+| Bayrak                                   | Kısa | Açıklama                                                                                      |
+| ---------------------------------------- | ---- | --------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |      | Çalıştırılacak komut, args için mesajı kullanın                                               |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Son oturuma devam et                                                                          |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Devam edecek oturum kimliği                                                                   |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın)                   |
+| <nobr><code>{"--share"}</code></nobr>    |      | Oturumu paylaşın                                                                              |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | provider/model biçiminde kullanılacak model                                                   |
+| <nobr><code>{"--agent"}</code></nobr>    |      | Kullanılacak temsilci                                                                         |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | Mesaja eklenecek dosya(lar)                                                                   |
+| <nobr><code>{"--format"}</code></nobr>   |      | Biçim: varsayılan (biçimlendirilmiş) veya json (ham JSON olayları)                            |
+| <nobr><code>{"--title"}</code></nobr>    |      | Oturumun başlığı (değer sağlanmazsa kısaltılmış bilgi istemi kullanılır)                      |
+| <nobr><code>{"--attach"}</code></nobr>   |      | Çalışan bir opencode sunucusuna ekleyin (ör. http://localhost:4096)                           |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Temel kimlik doğrulama parolası (varsayılan: `OPENCODE_SERVER_PASSWORD`)                      |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Temel kimlik doğrulama kullanıcı adı (varsayılan: `OPENCODE_SERVER_USERNAME` veya `opencode`) |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Çalıştırılacak dizin veya bağlanırken uzak sunucudaki yol                                     |
+| <nobr><code>{"--variant"}</code></nobr>  |      | Model varyantı (sağlayıcıya özgü muhakeme düzeyi)                                             |
+| <nobr><code>{"--thinking"}</code></nobr> |      | Düşünme bloklarını göster                                                                     |
+| <nobr><code>{"--port"}</code></nobr>     |      | Yerel sunucunun bağlantı noktası (varsayılan olarak rastgele bağlantı noktasıdır)             |
 
 ---
 
@@ -364,12 +373,12 @@ Bu, TUI arayüzü olmadan opencode işlevselliğine API erişimi sağlayan bir H
 
 #### Bayraklar
 
-| Bayrak       | Tanım                                      |
-| ------------ | ------------------------------------------ |
-| `--port`     | Dinlenecek bağlantı noktası                |
-| `--hostname` | Dinlenecek ana bilgisayar adı              |
-| `--mdns`     | mDNS bulmayı etkinleştir                   |
-| `--cors`     | CORS'a izin verecek ek tarayıcı kaynakları |
+| Bayrak                                   | Tanım                                      |
+| ---------------------------------------- | ------------------------------------------ |
+| <nobr><code>{"--port"}</code></nobr>     | Dinlenecek bağlantı noktası                |
+| <nobr><code>{"--hostname"}</code></nobr> | Dinlenecek ana bilgisayar adı              |
+| <nobr><code>{"--mdns"}</code></nobr>     | mDNS bulmayı etkinleştir                   |
+| <nobr><code>{"--cors"}</code></nobr>     | CORS'a izin verecek ek tarayıcı kaynakları |
 
 ---
 
@@ -393,10 +402,10 @@ opencode session list
 
 ##### Bayraklar
 
-| Bayrak        | Kısa | Tanım                                  |
-| ------------- | ---- | -------------------------------------- |
-| `--max-count` | `-n` | En son N oturumla sınırla              |
-| `--format`    |      | Çıkış formatı: tablo veya json (tablo) |
+| Bayrak                                    | Kısa | Tanım                                  |
+| ----------------------------------------- | ---- | -------------------------------------- |
+| <nobr><code>{"--max-count"}</code></nobr> | `-n` | En son N oturumla sınırla              |
+| <nobr><code>{"--format"}</code></nobr>    |      | Çıkış formatı: tablo veya json (tablo) |
 
 ---
 
@@ -410,12 +419,12 @@ opencode stats
 
 #### Bayraklar
 
-| Bayrak      | Açıklama                                                                                                    |
-| ----------- | ----------------------------------------------------------------------------------------------------------- |
-| `--days`    | Son N güne ait istatistikleri göster (tüm zamanlar)                                                         |
-| `--tools`   | Gösterilecek araç sayısı (tümü)                                                                             |
-| `--models`  | Model kullanım dökümünü göster (varsayılan olarak gizlidir). En üstteki N'yi göstermek için bir sayı iletin |
-| `--project` | Projeye göre filtrele (tüm projeler, boş değer: mevcut proje)                                               |
+| Bayrak                                  | Açıklama                                                                                                    |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--days"}</code></nobr>    | Son N güne ait istatistikleri göster (tüm zamanlar)                                                         |
+| <nobr><code>{"--tools"}</code></nobr>   | Gösterilecek araç sayısı (tümü)                                                                             |
+| <nobr><code>{"--models"}</code></nobr>  | Model kullanım dökümünü göster (varsayılan olarak gizlidir). En üstteki N'yi göstermek için bir sayı iletin |
+| <nobr><code>{"--project"}</code></nobr> | Projeye göre filtrele (tüm projeler, boş değer: mevcut proje)                                               |
 
 ---
 
@@ -460,12 +469,12 @@ Bu, bir HTTP sunucusunu başlatır ve bir web arayüzü aracılığıyla opencod
 
 #### Bayraklar
 
-| Bayrak       | Tanım                                      |
-| ------------ | ------------------------------------------ |
-| `--port`     | Dinlenecek bağlantı noktası                |
-| `--hostname` | Dinlenecek ana bilgisayar adı              |
-| `--mdns`     | mDNS bulmayı etkinleştir                   |
-| `--cors`     | CORS'a izin verecek ek tarayıcı kaynakları |
+| Bayrak                                   | Tanım                                      |
+| ---------------------------------------- | ------------------------------------------ |
+| <nobr><code>{"--port"}</code></nobr>     | Dinlenecek bağlantı noktası                |
+| <nobr><code>{"--hostname"}</code></nobr> | Dinlenecek ana bilgisayar adı              |
+| <nobr><code>{"--mdns"}</code></nobr>     | mDNS bulmayı etkinleştir                   |
+| <nobr><code>{"--cors"}</code></nobr>     | CORS'a izin verecek ek tarayıcı kaynakları |
 
 ---
 
@@ -481,11 +490,11 @@ Bu komut, nd-JSON kullanarak stdin/stdout aracılığıyla iletişim kuran bir A
 
 #### Bayraklar
 
-| Bayrak       | Açıklama            |
-| ------------ | ------------------- |
-| `--cwd`      | Çalışma dizini      |
-| `--port`     | Dinlenecek port     |
-| `--hostname` | Dinlenecek host adı |
+| Bayrak                                   | Açıklama            |
+| ---------------------------------------- | ------------------- |
+| <nobr><code>{"--cwd"}</code></nobr>      | Çalışma dizini      |
+| <nobr><code>{"--port"}</code></nobr>     | Dinlenecek port     |
+| <nobr><code>{"--hostname"}</code></nobr> | Dinlenecek host adı |
 
 ---
 
@@ -499,12 +508,12 @@ opencode uninstall
 
 #### Bayraklar
 
-| Bayrak          | Kısa | Tanım                                           |
-| --------------- | ---- | ----------------------------------------------- |
-| `--keep-config` | `-c` | Yapılandırma dosyalarını sakla                  |
-| `--keep-data`   | `-d` | Oturum verilerini ve anlık görüntüleri saklayın |
-| `--dry-run`     |      | Nelerin kaldırılmadan kaldırılacağı göster      |
-| `--force`       | `-f` | Onay istemlerini atla                           |
+| Bayrak                                      | Kısa | Tanım                                           |
+| ------------------------------------------- | ---- | ----------------------------------------------- |
+| <nobr><code>{"--keep-config"}</code></nobr> | `-c` | Yapılandırma dosyalarını sakla                  |
+| <nobr><code>{"--keep-data"}</code></nobr>   | `-d` | Oturum verilerini ve anlık görüntüleri saklayın |
+| <nobr><code>{"--dry-run"}</code></nobr>     |      | Nelerin kaldırılmadan kaldırılacağı göster      |
+| <nobr><code>{"--force"}</code></nobr>       | `-f` | Onay istemlerini atla                           |
 
 ---
 
@@ -530,9 +539,9 @@ opencode upgrade v0.1.48
 
 #### Bayraklar
 
-| Bayrak     | Kısa | Açıklama                                               |
-| ---------- | ---- | ------------------------------------------------------ |
-| `--method` | `-m` | Kullanılan kurulum yöntemi: curl, npm, pnpm, bun, brew |
+| Bayrak                                 | Kısa | Açıklama                                               |
+| -------------------------------------- | ---- | ------------------------------------------------------ |
+| <nobr><code>{"--method"}</code></nobr> | `-m` | Kullanılan kurulum yöntemi: curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -540,12 +549,12 @@ opencode upgrade v0.1.48
 
 opencode CLI aşağıdaki global bayrakları destekler.
 
-| Bayrak         | Kısa | Tanım                                    |
-| -------------- | ---- | ---------------------------------------- |
-| `--help`       | `-h` | Yardımı görüntüle                        |
-| `--version`    | `-v` | Sürüm numarasını yazdır                  |
-| `--print-logs` |      | Günlükleri stderr'e yazdır               |
-| `--log-level`  |      | Günlük düzeyi (DEBUG, INFO, WARN, ERROR) |
+| Bayrak                                     | Kısa | Tanım                                    |
+| ------------------------------------------ | ---- | ---------------------------------------- |
+| <nobr><code>{"--help"}</code></nobr>       | `-h` | Yardımı görüntüle                        |
+| <nobr><code>{"--version"}</code></nobr>    | `-v` | Sürüm numarasını yazdır                  |
+| <nobr><code>{"--print-logs"}</code></nobr> |      | Günlükleri stderr'e yazdır               |
+| <nobr><code>{"--log-level"}</code></nobr>  |      | Günlük düzeyi (DEBUG, INFO, WARN, ERROR) |
 
 ---
 
