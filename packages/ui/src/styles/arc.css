@@ -603,15 +603,13 @@ html[data-theme="arc"] [data-component="list"] [data-slot="list-search"] {
   border-radius: var(--radius-xl);
   background: color-mix(in oklch, var(--surface-base) 78%, transparent);
   transition:
-    background-color 160ms ease-out,
-    box-shadow 200ms ease-out;
+    background-color 160ms ease-out;
 }
 
 html[data-theme="arc"] [data-component="list"] [data-slot="list-search"]:focus-within {
   background: var(--surface-raised-base);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--border-interactive-active) 22%, transparent),
-    0 0 0 1px var(--border-interactive-active);
+  outline: 2px solid color-mix(in srgb, var(--border-interactive-active) 40%, transparent);
+  outline-offset: 1px;
 }
 
 /* ───────────────────────────────────────────────────────────── */
