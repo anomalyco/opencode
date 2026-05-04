@@ -63,11 +63,19 @@ function message(providerID: ProviderID, e: APICallError) {
 
     try {
       const body = JSON.parse(e.responseBody)
-      // try to extract common error message fields
-      const errMsg = body.message || body.error || body.error?.message
-      if (errMsg && typeof errMsg === "string") {
-        return `${msg}: ${errMsg}`
-      }
+      // Try common error message fields. Use explicit-typeof guards so a truthy
+      // non-string at any level (e.g. body.error being the {message,type,code}
+      // object that OpenAI returns) cannot block a valid string further down
+      // the chain. Matches parseStreamError's pattern below.
+      const errMsg =
+        typeof body.error?.message === "string"
+          ? body.error.message
+          : typeof body.message === "string"
+            ? body.message
+            : typeof body.error === "string"
+              ? body.error
+              : undefined
+      if (errMsg) return `${msg}: ${errMsg}`
     } catch {}
 
     // If responseBody is HTML (e.g. from a gateway or proxy error page),
