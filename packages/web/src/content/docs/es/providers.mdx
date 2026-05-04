@@ -706,7 +706,15 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
 
 ### GitLab Duo
 
-GitLab Duo proporciona chat agente basado en IA con capacidades de llamada de herramientas nativas a través del proxy Anthropic de GitLab.
+:::caution[Experimental]
+El soporte de GitLab Duo en OpenCode es experimental. Las características, configuración y comportamiento pueden cambiar en futuras versiones.
+:::
+
+OpenCode se integra con la [Plataforma de Agentes de GitLab Duo](https://docs.gitlab.com/user/duo_agent_platform/), proporcionando un chat basado en agentes con tecnología de IA y capacidades nativas de llamada a herramientas.
+
+:::note[Requisitos de licencia]
+La Plataforma de Agentes de GitLab Duo requiere una suscripción **Premium** o **Ultimate** de GitLab. Está disponible en GitLab.com y en GitLab Self-Managed. Consulta los [requisitos previos de la Plataforma de Agentes de GitLab Duo](https://docs.gitlab.com/user/duo_agent_platform/#prerequisites) para obtener más información.
+:::
 
 1. Ejecute el comando `/connect` y seleccione GitLab.
 
@@ -727,10 +735,10 @@ GitLab Duo proporciona chat agente basado en IA con capacidades de llamada de he
 
    #### Usando OAuth (recomendado)
 
-   Seleccione **OAuth** y su navegador se abrirá para autorización.
+   Seleccione **OAuth** y su navegador se abrirá para la autorización.
 
    #### Uso del token de acceso personal
-   1. Vaya a [GitLab Configuración de usuario > Tokens de acceso](https://gitlab.com/-/user_settings/personal_access_tokens)
+   1. Vaya a [Configuración de usuario de GitLab > Tokens de acceso](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Haga clic en **Agregar nuevo token**
    3. Nombre: `OpenCode`, Alcances: `api`
    4. Copie el token (comienza con `glpat-`)
@@ -792,13 +800,12 @@ export GITLAB_TOKEN=glpat-...
 ```
 
 :::note
-Su administrador GitLab debe habilitar lo siguiente:
+Su administrador de GitLab debe habilitar:
 
-1. [Plataforma de agente Duo](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/) para el usuario, grupo o instancia
-2. Indicadores de funciones (a través de la consola Rails):
-   - `agent_platform_claude_code`
-   - `third_party_agents_enabled`
-     :::
+1. [Activar GitLab Duo](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/) para el usuario, grupo o instancia.
+2. [Activar la Plataforma de Agentes](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/) (GitLab 18.8+) o [habilitar funciones beta y experimentales](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/) (GitLab 18.7 y anteriores).
+3. Para Self-Managed, [configurar su instancia](https://docs.gitlab.com/administration/gitlab_duo/configure/gitlab_self_managed/).
+   :::
 
 ##### OAuth para instancias autohospedadas
 
@@ -834,6 +841,17 @@ Personalizar a través de `opencode.json`:
   }
 }
 ```
+
+##### Modelos de flujo de trabajo DAP (GitLab Duo Agent Platform)
+
+Los modelos de flujo de trabajo DAP proporcionan una ruta de ejecución alternativa que redirige las llamadas a herramientas a través del Servicio de Flujo de Trabajo Duo de GitLab (DWS), en lugar del chat basado en agentes estándar. Cuando se selecciona un modelo `duo-workflow-*`, OpenCode:
+
+1. Descubre los modelos disponibles en tu espacio de nombres de GitLab.
+2. Muestra un selector si hay varios modelos disponibles.
+3. Almacena en caché el modelo seleccionado para acelerar los inicios posteriores.
+4. Redirige las solicitudes de ejecución de herramientas a través del sistema de herramientas de OpenCode controlado por permisos.
+
+Los modelos disponibles siguen la convención de nombres `duo-workflow-*` y se descubren dinámicamente en tu instancia de GitLab.
 
 ##### Herramientas de API de GitLab (opcionales, pero muy recomendables)
 
