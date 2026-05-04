@@ -167,6 +167,8 @@ Para usar Amazon Bedrock con OpenCode:
 
 2. **Configure la autenticación** utilizando uno de los siguientes métodos:
 
+   ***
+
    #### Variables de entorno (Inicio rápido)
 
    Establezca una de estas variables de entorno mientras ejecuta opencode:
@@ -188,6 +190,8 @@ Para usar Amazon Bedrock con OpenCode:
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
    ```
+
+   ***
 
    #### Archivo de configuración (recomendado)
 
@@ -216,6 +220,8 @@ Para usar Amazon Bedrock con OpenCode:
    Las opciones del archivo de configuración tienen prioridad sobre las variables de entorno.
    :::
 
+   ***
+
    #### Avanzado: puntos finales de la VPC
 
    Si utiliza puntos de enlace de VPC para Bedrock:
@@ -239,11 +245,15 @@ Para usar Amazon Bedrock con OpenCode:
    La opción `endpoint` es un alias para la opción genérica `baseURL`, que utiliza terminología específica de AWS. Si se especifican `endpoint` y `baseURL`, `endpoint` tiene prioridad.
    :::
 
+   ***
+
    #### Métodos de autenticación
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Crear un usuario de IAM y generar claves de acceso en la Consola AWS
    - **`AWS_PROFILE`**: Utilice perfiles con nombre de `~/.aws/credentials`. Primero configure con `aws configure --profile my-profile` o `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**: Genera claves API a largo plazo desde la consola Amazon Bedrock
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: Para EKS IRSA (Roles IAM para Cuentas de Servicio) u otros entornos de Kubernetes con federación OIDC. Kubernetes inyecta automáticamente estas variables de entorno cuando se utilizan anotaciones de cuentas de servicio.
+
+   ***
 
    #### Prioridad de autenticación
 
