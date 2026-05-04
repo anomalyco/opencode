@@ -3569,6 +3569,7 @@ export default function Layout(props: ParentProps) {
 
     return (
       <div
+        data-component="sidebar-panel"
         classList={{
           "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-3": true,
           "border border-b-0 border-border-weak-base": !merged(),

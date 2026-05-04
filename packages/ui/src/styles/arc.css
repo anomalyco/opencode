@@ -153,6 +153,18 @@ html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
     var(--card-elevation);
 }
 
+/* Conversation list panel inside the sidebar.
+   Uses a direct selector instead of relying on Tailwind's
+   bg-background-base utility, because Tailwind v4 resolves --color-*
+   theme tokens at build time — runtime --background-base overrides
+   on ancestor elements don't propagate to the bg-* utility. The
+   data-component selector here has higher specificity than the
+   Tailwind class; !important guards against utility-layer ordering
+   surprises. */
+html[data-theme="arc"] [data-component="sidebar-panel"] {
+  background-color: var(--sidebar-card-bg) !important;
+}
+
 /* Main pane — the largest floating card, fully rounded top-left corner */
 html[data-theme="arc"] main {
   background-color: var(--surface-raised-base);
