@@ -550,6 +550,78 @@ export default function FileTree(props: {
     await Promise.all([...refreshRels].map((r) => file.tree.refresh(r)))
   }
 
+  // FORK-BEGIN: 键盘导航 — buildFlatVisible 全局递归扫(尊重 expanded 状态)
+  // [feat: file-tree-ux-polish] 2026-05-04
+  /** 从 rootPath 递归构建当前可见的扁平 FileNode 序列(展开顺序 = 屏幕上下顺序)。
+   * 注:不应用 nodes() memo 的 filter — 键盘导航在全树上工作,与 UI 内部 filter 解耦 */
+  const buildFlatVisible = (rootPath: string): FileNode[] => {
+    const out: FileNode[] = []
+    const visit = (path: string) => {
+      const children = file.tree.children(path)
+      for (const child of children) {
+        out.push(child)
+        if (child.type === "directory") {
+          const state = file.tree.state(child.path)
+          if (state?.expanded) visit(child.path)
+        }
+      }
+    }
+    visit(rootPath)
+    return out
+  }
+
+  const navigateRelative = (delta: -1 | 1) => {
+    const flat = buildFlatVisible(props.path)
+    if (flat.length === 0) return
+    const sel = selection.paths()
+    if (sel.length === 0) {
+      selection.replace(flat[0].absolute)
+      return
+    }
+    const cursorAbs = sel[sel.length - 1]
+    const idx = flat.findIndex((n) => n.absolute === cursorAbs)
+    if (idx < 0) {
+      selection.replace(flat[0].absolute)
+      return
+    }
+    const next = flat[idx + delta]
+    if (next) selection.replace(next.absolute)
+  }
+
+  /** 找当前单选的 FileNode(从 flat 里查,因 selection 存的是 absolute) */
+  const singleSelectedNode = (): FileNode | null => {
+    const sel = selection.paths()
+    if (sel.length !== 1) return null
+    const flat = buildFlatVisible(props.path)
+    return flat.find((n) => n.absolute === sel[0]) ?? null
+  }
+
+  const onEnterAction = () => {
+    const node = singleSelectedNode()
+    if (!node) return
+    if (node.type === "directory") {
+      const state = file.tree.state(node.path)
+      if (state?.expanded) file.tree.collapse(node.path)
+      else file.tree.expand(node.path)
+    } else {
+      props.onFileClick?.(node)
+    }
+  }
+
+  const onRenameAction = () => {
+    const node = singleSelectedNode()
+    if (node) promptRename(node)
+  }
+
+  const onDeleteAction = () => {
+    const sel = selection.paths()
+    if (sel.length === 0) return
+    const flat = buildFlatVisible(props.path)
+    const first = flat.find((n) => n.absolute === sel[0])
+    if (first) promptDelete(first) // promptDelete 内部 sourcesFor 处理批量
+  }
+  // FORK-END
+
   // 全局快捷键:只在 level 0(根 FileTree)注册 — 递归组件每层注册会让 keydown 触发 N 次
   if (level === 0) {
     useFileTreeShortcuts({
@@ -557,6 +629,12 @@ export default function FileTree(props: {
       onCopy: () => copyFor(null),
       onPaste: pasteSmart,
       onUndo: undoLast,
+      // FORK: 键盘导航 [feat: file-tree-ux-polish] 2026-05-04
+      onArrowUp: () => navigateRelative(-1),
+      onArrowDown: () => navigateRelative(1),
+      onEnter: onEnterAction,
+      onRename: onRenameAction,
+      onDelete: onDeleteAction,
       hasSelection: () => selection.paths().length > 0,
     })
 

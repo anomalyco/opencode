@@ -1,4 +1,4 @@
-// [fork-only] 文件树键盘快捷键(commit #3 of file-tree-dnd)
+// [fork-only] 文件树键盘快捷键(commit #3 of file-tree-dnd + file-tree-ux-polish 2026-05-04 扩)
 //
 // 触发条件(OR):
 //   A. activeElement 在 [data-component=filetree] 内(用户刚点过文件树)
@@ -14,6 +14,11 @@
 // - Ctrl+C (Copy) 复制当前 selection
 // - Ctrl+V (Paste) 粘贴到当前 active 文件夹(如果 active 是文件,粘贴到其父目录)
 // - Ctrl+Z (Undo) commit #4 接入
+// FORK: 2026-05-04 file-tree-ux-polish 扩展导航键(无 ctrl/meta/shift/alt 时):
+// - ↑↓        在可见节点序列里上下移动 selection
+// - Enter     单选时 — 文件:打开;文件夹:toggle 展开
+// - F2        单选时:重命名
+// - Delete    selection 非空时:删除(macOS 同时绑 Backspace,决议 E)
 
 import { onCleanup, onMount } from "solid-js"
 
@@ -22,6 +27,12 @@ export type ShortcutHandlers = {
   onCopy?: () => void | Promise<void>
   onPaste?: () => void | Promise<void>
   onUndo?: () => void | Promise<void>
+  // FORK: file-tree-ux-polish 2026-05-04
+  onArrowUp?: () => void
+  onArrowDown?: () => void
+  onEnter?: () => void
+  onRename?: () => void
+  onDelete?: () => void
   /** 当前 selection 是否非空 — 用于 B 路径判定 */
   hasSelection?: () => boolean
 }
@@ -68,6 +79,45 @@ export function useFileTreeShortcuts(handlers: ShortcutHandlers) {
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (!shouldTrigger()) return
+
+    // FORK-BEGIN: 导航键 — 无任何 modifier 时响应 [feat: file-tree-ux-polish] 2026-05-04
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      switch (event.key) {
+        case "ArrowUp":
+          if (handlers.onArrowUp) {
+            event.preventDefault()
+            handlers.onArrowUp()
+          }
+          return
+        case "ArrowDown":
+          if (handlers.onArrowDown) {
+            event.preventDefault()
+            handlers.onArrowDown()
+          }
+          return
+        case "Enter":
+          if (handlers.onEnter) {
+            event.preventDefault()
+            handlers.onEnter()
+          }
+          return
+        case "F2":
+          if (handlers.onRename) {
+            event.preventDefault()
+            handlers.onRename()
+          }
+          return
+        case "Delete":
+        case "Backspace": // macOS 习惯(决议 E)
+          if (handlers.onDelete) {
+            event.preventDefault()
+            handlers.onDelete()
+          }
+          return
+      }
+    }
+    // FORK-END
+
     const meta = event.ctrlKey || event.metaKey
     if (!meta) return
     // 跳过 shift / alt 组合,留给浏览器/系统
