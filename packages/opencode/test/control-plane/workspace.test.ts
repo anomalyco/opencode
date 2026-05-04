@@ -110,8 +110,8 @@ async function withInstance<T>(fn: (dir: string) => T | Promise<T>) {
 const runWorkspace = <A, E>(effect: Effect.Effect<A, E, WorkspaceOld.Service>) => AppRuntime.runPromise(effect)
 const createWorkspace = (input: WorkspaceOld.CreateInput) =>
   runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.create(input)))
-const restoreWorkspaceSession = (input: WorkspaceOld.SessionRestoreInput) =>
-  runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.sessionRestore(input)))
+const warpWorkspaceSession = (input: WorkspaceOld.SessionWarpInput) =>
+  runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.sessionWarp(input)))
 const listWorkspaces = (project: Parameters<WorkspaceOld.Interface["list"]>[0]) =>
   runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.list(project)))
 const getWorkspace = (id: WorkspaceID) => runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.get(id)))
@@ -624,12 +624,12 @@ describe("workspace-old CRUD", () => {
       const target = workspaceInfo(Instance.project.id, targetType)
       insertWorkspace(previous)
       insertWorkspace(target)
-      registerAdaptor(Instance.project.id, previousType, localAdaptor(path.join(dir, "warp-prev-local")).adaptor)
-      registerAdaptor(Instance.project.id, targetType, localAdaptor(path.join(dir, "warp-target-local")).adaptor)
+      registerAdapter(Instance.project.id, previousType, localAdapter(path.join(dir, "warp-prev-local")).adapter)
+      registerAdapter(Instance.project.id, targetType, localAdapter(path.join(dir, "warp-target-local")).adapter)
       const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
       attachSessionToWorkspace(session.id, previous.id)
 
-      await WorkspaceOld.sessionWarp({ workspaceID: target.id, sessionID: session.id })
+      await warpWorkspaceSession({ workspaceID: target.id, sessionID: session.id })
 
       expect(
         Database.use((db) =>
@@ -649,11 +649,11 @@ describe("workspace-old CRUD", () => {
       const previousType = unique("warp-detach-local")
       const previous = workspaceInfo(Instance.project.id, previousType)
       insertWorkspace(previous)
-      registerAdaptor(Instance.project.id, previousType, localAdaptor(path.join(dir, "warp-detach-local")).adaptor)
+      registerAdapter(Instance.project.id, previousType, localAdapter(path.join(dir, "warp-detach-local")).adapter)
       const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
       attachSessionToWorkspace(session.id, previous.id)
 
-      await WorkspaceOld.sessionWarp({ workspaceID: null, sessionID: session.id })
+      await warpWorkspaceSession({ workspaceID: null, sessionID: session.id })
 
       expect(
         Database.use((db) =>
@@ -715,8 +715,8 @@ describe("workspace-old CRUD", () => {
             const target = workspaceInfo(Instance.project.id, targetType, { directory: "remote-target-dir" })
             insertWorkspace(previous)
             insertWorkspace(target)
-            registerAdaptor(Instance.project.id, previousType, remoteAdaptor(`${url}/warp-source`).adaptor)
-            registerAdaptor(Instance.project.id, targetType, remoteAdaptor(`${url}/warp-target`).adaptor)
+            registerAdapter(Instance.project.id, previousType, remoteAdapter(`${url}/warp-source`).adapter)
+            registerAdapter(Instance.project.id, targetType, remoteAdapter(`${url}/warp-target`).adapter)
             const session = yield* sessionSvc.create({})
             attachSessionToWorkspace(session.id, previous.id)
             historySessionID = session.id

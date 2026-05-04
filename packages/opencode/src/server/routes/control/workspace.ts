@@ -168,10 +168,14 @@ export const WorkspaceRoutes = lazy(() =>
       ),
       async (c) => {
         const body = c.req.valid("json")
-        await Workspace.sessionWarp({
-          workspaceID: body.id,
-          sessionID: body.sessionID,
-        })
+        await AppRuntime.runPromise(
+          Workspace.Service.use((workspace) =>
+            workspace.sessionWarp({
+              workspaceID: body.id,
+              sessionID: body.sessionID,
+            }),
+          ),
+        )
         return c.body(null, 204)
       },
     ),

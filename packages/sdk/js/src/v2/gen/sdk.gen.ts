@@ -1106,7 +1106,7 @@ export class Workspace extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      id?: string
+      id?: string | null
       sessionID?: string
     },
     options?: Options<never, ThrowOnError>,

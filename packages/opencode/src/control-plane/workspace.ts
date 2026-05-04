@@ -78,7 +78,7 @@ export const CreateInput = Schema.Struct({
   type: Info.fields.type,
   branch: Info.fields.branch,
   projectID: ProjectID,
-  extra: Info.fields.extra,
+  extra: Schema.optional(Info.fields.extra),
 }).pipe(withStatics((s) => ({ zod: effectZod(s), zodObject: zodObject(s) })))
 export type CreateInput = Schema.Schema.Type<typeof CreateInput>
 
@@ -456,7 +456,7 @@ export const layer = Layer.effect(
       const id = WorkspaceID.ascending(input.id)
       const adapter = getAdapter(input.projectID, input.type)
       const config = yield* EffectBridge.fromPromise(() =>
-        adapter.configure({ ...input, id, name: Slug.create(), directory: null }),
+        adapter.configure({ ...input, id, name: Slug.create(), directory: null, extra: input.extra ?? null }),
       )
 
       const info: Info = {
@@ -533,8 +533,8 @@ export const layer = Layer.effect(
         if (current?.workspaceID) {
           const previous = yield* get(current.workspaceID)
           if (previous) {
-            const adaptor = getAdaptor(previous.projectID, previous.type)
-            const target = yield* Effect.promise(() => Promise.resolve(adaptor.target(previous)))
+            const adapter = getAdapter(previous.projectID, previous.type)
+            const target = yield* EffectBridge.fromPromise(() => adapter.target(previous))
 
             if (target.type === "remote") {
               yield* syncHistory(previous, target.url, target.headers).pipe(

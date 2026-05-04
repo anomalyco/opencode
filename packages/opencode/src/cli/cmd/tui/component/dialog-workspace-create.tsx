@@ -8,7 +8,7 @@ import { errorMessage } from "@/util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 
-type Adaptor = {
+type Adapter = {
   type: string
   name: string
   description: string
@@ -33,21 +33,21 @@ export type WorkspaceSelection =
 type WorkspaceSelectValue = WorkspaceSelection | { type: "existing-list" }
 type ExistingWorkspaceSelectValue = { workspace: Workspace }
 
-async function loadWorkspaceAdaptors(input: {
+async function loadWorkspaceAdapters(input: {
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   toast: ReturnType<typeof useToast>
 }) {
   const dir = input.sync.path.directory || input.sdk.directory
-  const url = new URL("/experimental/workspace/adaptor", input.sdk.url)
+  const url = new URL("/experimental/workspace/adapter", input.sdk.url)
   if (dir) url.searchParams.set("directory", dir)
   const res = await input.sdk
     .fetch(url)
-    .then((x) => x.json() as Promise<Adaptor[]>)
+    .then((x) => x.json() as Promise<Adapter[]>)
     .catch(() => undefined)
   if (res) return res
   input.toast.show({
-    message: "Failed to load workspace adaptors",
+    message: "Failed to load workspace adapters",
     variant: "error",
   })
 }
@@ -60,9 +60,9 @@ export async function openWorkspaceSelect(input: {
   onSelect: (selection: WorkspaceSelection) => Promise<void> | void
 }) {
   input.dialog.clear()
-  const adaptors = await loadWorkspaceAdaptors(input)
-  if (!adaptors) return
-  input.dialog.replace(() => <DialogWorkspaceSelect adaptors={adaptors} onSelect={input.onSelect} />)
+  const adapters = await loadWorkspaceAdapters(input)
+  if (!adapters) return
+  input.dialog.replace(() => <DialogWorkspaceSelect adapters={adapters} onSelect={input.onSelect} />)
 }
 
 export async function warpWorkspaceSession(input: {
@@ -97,12 +97,9 @@ export async function warpWorkspaceSession(input: {
   await Promise.all([input.project.workspace.sync(), input.sync.session.refresh()])
 
   if (input.showSuccessToast !== false) {
-    input.toast.show({
-      message:
-        input.workspaceID === null ? "Session moved to the local project" : "Session warped into the new workspace",
-      variant: "success",
-    })
+    input.toast.show({ message: "Session warped", variant: "success" })
   }
+
   input.done?.()
   if (input.done) return true
   input.dialog.clear()
@@ -110,7 +107,7 @@ export async function warpWorkspaceSession(input: {
 }
 
 export function DialogWorkspaceSelect(props: {
-  adaptors?: Adaptor[]
+  adapters?: Adapter[]
   onSelect: (selection: WorkspaceSelection) => Promise<void> | void
 }) {
   const dialog = useDialog()
@@ -118,20 +115,20 @@ export function DialogWorkspaceSelect(props: {
   const sync = useSync()
   const sdk = useSDK()
   const toast = useToast()
-  const [adaptors, setAdaptors] = createSignal<Adaptor[] | undefined>(props.adaptors)
+  const [adapters, setAdapters] = createSignal<Adapter[] | undefined>(props.adapters)
 
   onMount(() => {
     dialog.setSize("medium")
     void (async () => {
-      if (adaptors()) return
-      const res = await loadWorkspaceAdaptors({ sdk, sync, toast })
+      if (adapters()) return
+      const res = await loadWorkspaceAdapters({ sdk, sync, toast })
       if (!res) return
-      setAdaptors(res)
+      setAdapters(res)
     })()
   })
 
   const options = createMemo<DialogSelectOption<WorkspaceSelectValue>[]>(() => {
-    const list = adaptors()
+    const list = adapters()
     if (!list) return []
     const recent = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
@@ -143,10 +140,10 @@ export function DialogWorkspaceSelect(props: {
         return workspace ? [workspace] : []
       })
     return [
-      ...list.map((adaptor) => ({
-        title: adaptor.name,
-        value: { type: "new" as const, workspaceType: adaptor.type, workspaceName: adaptor.name },
-        description: adaptor.description,
+      ...list.map((adapter) => ({
+        title: adapter.name,
+        value: { type: "new" as const, workspaceType: adapter.type, workspaceName: adapter.name },
+        description: adapter.description,
         category: "New workspace",
       })),
       {
@@ -175,7 +172,7 @@ export function DialogWorkspaceSelect(props: {
     ]
   })
 
-  if (!adaptors()) return null
+  if (!adapters()) return null
   return (
     <DialogSelect<WorkspaceSelectValue>
       title="Warp"
