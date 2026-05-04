@@ -77,13 +77,19 @@ html[data-theme="arc"] {
       0 1px 2px rgba(0, 0, 0, 0.04),
       0 12px 32px rgba(107, 70, 229, 0.08);
 
-    /* Per-project rail hues (soft pastels for cream backdrop) */
-    --rail-hue-1: linear-gradient(180deg, #e7eaf3 0%, #dfe4f0 100%);
-    --rail-hue-2: linear-gradient(180deg, #e7efe6 0%, #dde7dc 100%);
-    --rail-hue-3: linear-gradient(180deg, #f1e6ee 0%, #e9dde5 100%);
-    --rail-hue-4: linear-gradient(180deg, #f1ece0 0%, #e7e0d2 100%);
-    --rail-hue-5: linear-gradient(180deg, #e2eef1 0%, #d8e6ea 100%);
-    --rail-hue-6: linear-gradient(180deg, #e6e6f0 0%, #dcdce8 100%);
+    /* Per-project rail hues — flat mid-saturated tones (no gradient).
+       The previous low-saturation cream pastels had too little
+       lightness/saturation contrast against #756B7E and all blurred
+       into "various washed creams". A flat fill (instead of a top-to-
+       bottom gradient) reads cleaner: the tile becomes a single
+       confident color block, and the white letter on top has the
+       best possible contrast across the whole face. */
+    --rail-hue-1: #7889b5; /* indigo */
+    --rail-hue-2: #87a886; /* sage */
+    --rail-hue-3: #c98ead; /* rose */
+    --rail-hue-4: #c5ad75; /* sand */
+    --rail-hue-5: #7caab5; /* sea */
+    --rail-hue-6: #a691c1; /* lavender */
   }
 
   /* Within the dusty-mauve sidebar, set high-contrast text/icon colors.
@@ -120,6 +126,22 @@ html[data-theme="arc"] {
        icon-* aliases are mirrored in @theme as --color-icon-weak etc.
        (no -base suffix). Cover both shapes. */
     --color-icon-weak: var(--icon-weak-base);
+
+    /* Mirror the session row hover bg onto the surface-base-hover /
+       surface-raised-base-hover tokens, scoped to the sidebar. Without
+       this, the ghost buttons inside the panel (new-session, bell-off,
+       archive, workspace-trigger, load-more) hover-fill with the theme
+       default near-white slab — too pale against the dusty mauve panel
+       and visually disconnected from how a session row reacts to hover.
+       Value matches --sidebar-session-hover-bg (light value in
+       index.css: #8B8294). Both --surface-* (consumed by button.css /
+       icon-button.css via raw var()) and --color-surface-* (consumed
+       by Tailwind utilities like hover:bg-surface-raised-base-hover)
+       are overridden so it doesn't matter which path the button took. */
+    --surface-base-hover: #8B8294;
+    --color-surface-base-hover: #8B8294;
+    --surface-raised-base-hover: #8B8294;
+    --color-surface-raised-base-hover: #8B8294;
   }
 
   /* SidebarPanel: remove the light border separator (drew a hard line
@@ -404,20 +426,119 @@ html[data-theme="arc"] [data-component="icon-button"]:active:not(:disabled) {
 }
 
 /* ───────────────────────────────────────────────────────────── */
-/* Project rail tiles — strong scale + depth on hover            */
-/* (overrides the existing hover:scale-105 in JSX classList for  */
-/* a more confident, Arc-spaces-style interaction)               */
+/* Project rail tiles — Arc Spaces / Discord-inspired redesign   */
+/*                                                               */
+/* The JSX in sidebar-project.tsx applies three layers of border */
+/* (1px transparent default, 1px border-base on hover, 2px       */
+/* border-brand-base when selected) plus the inner Avatar's 1px  */
+/* border-weak-base. Stacked on top of the per-project rail-hue  */
+/* gradient bg, that's far too "framed". And the previous Arc    */
+/* override that replaced the chunky black border with a violet  */
+/* outer ring still felt heavy: it competed with the tile color  */
+/* and didn't match the rest of the Arc theme's clean radii.     */
+/*                                                               */
+/* This redesign:                                                */
+/*  • Strips every border/padding so the tile is a single solid  */
+/*    rounded color block (mid-saturated rail-hue gradient) with */
+/*    the letter floating on top.                                */
+/*  • Replaces the selected ring with a Discord-style vertical   */
+/*    pill on the LEFT of the tile, sitting in the rail's px-3   */
+/*    margin. No competing tile-shape decoration; the pill is    */
+/*    the only "system chrome" that marks selection.             */
+/*  • Tile shape stays rounded-xl (12px) — squircle-ish, soft.   */
 /* ───────────────────────────────────────────────────────────── */
 
-html[data-theme="arc"] [data-action="project-switch"]:hover:not([aria-current]):not(:disabled) {
-  transform: scale(1.12) !important;
-  box-shadow:
-    0 6px 16px rgba(0, 0, 0, 0.18),
-    0 2px 4px rgba(0, 0, 0, 0.08);
+html[data-theme="arc"] [data-action="project-switch"] {
+  border-width: 0 !important;
+  border-color: transparent !important;
+  /* Drop the JSX p-1 (4px) padding so the avatar can stretch
+     edge-to-edge — eliminates the old rail-hue "frame" effect. */
+  padding: 0 !important;
+  /* Override the JSX overflow-hidden so the ::before pill on the
+     left of the tile can extend outside the button's bounding box
+     into the rail's px-3 padding margin. */
+  overflow: visible !important;
+  position: relative;
 }
 
+/* Inner ProjectIcon wrappers + Avatar fill the full tile, with the
+   Avatar's bg made transparent so the rail-hue gradient is the only
+   color visible behind the centered letter. */
+html[data-theme="arc"] [data-action="project-switch"] > div,
+html[data-theme="arc"] [data-action="project-switch"] > div > div {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0.75rem !important;
+}
+
+html[data-theme="arc"] [data-action="project-switch"] [data-component="avatar"] {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background-color: transparent !important;
+  border-radius: 0.75rem !important;
+  /* Force the letter to white across all rail-hues. The Avatar
+     component otherwise inherits `color: var(--avatar-fg)` set
+     via inline style from getAvatarColors() / the unloaded fallback
+     (light cream `--text-base`). With saturated rail-hue tiles,
+     pure white gives the most consistent contrast — and matches
+     how Discord/Slack solid-color tiles render their initials. */
+  color: #ffffff;
+}
+
+/* Unloaded projects: replace the per-project rail-hue tile with a
+   neutral gray placeholder so the user can tell at a glance which
+   projects haven't synced yet. The :has() selector reads the
+   `data-loaded="false"` attribute that ProjectIcon writes on its
+   wrapper while `globalSync.loaded(dir)` is still false. */
+html[data-theme="arc"] [data-action="project-switch"]:has([data-loaded="false"]) {
+  background: #6c6772 !important;
+}
+
+/* Mute the letter on the gray placeholder so it reads as "pending"
+   rather than "active". Pure white on gray competes with the colored
+   loaded tiles for visual weight; a 60%-opacity white sits back. */
+html[data-theme="arc"] [data-action="project-switch"]:has([data-loaded="false"]) [data-component="avatar"] {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Hover (not selected): subtle scale + soft drop, no ring. The 1.12
+   scale used previously felt too aggressive on a stack of 10+ tiles. */
+html[data-theme="arc"] [data-action="project-switch"]:hover:not([aria-current="true"]):not(:disabled) {
+  transform: scale(1.06) !important;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.16),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Active (mouse-down): tiny press-back */
 html[data-theme="arc"] [data-action="project-switch"]:active:not(:disabled) {
   transform: scale(1.02) !important;
+}
+
+/* Selected: tile keeps a subtle drop (still feels lifted), but the
+   PRIMARY indicator is the violet pill on the left (see ::before). */
+html[data-theme="arc"] [data-action="project-switch"][aria-current="true"] {
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.18),
+    0 1px 3px rgba(0, 0, 0, 0.10);
+}
+
+/* Discord/Slack/iOS-style left pill indicator. Sits at left: -10px
+   (relative to the tile's left edge), inside the rail's px-3 padding
+   margin, vertically centered. 4×26px violet pill, rounded fully
+   on its short axis. The tile's overflow:visible (above) lets it
+   extend out. */
+html[data-theme="arc"] [data-action="project-switch"][aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 26px;
+  border-radius: 2px;
+  background-color: var(--text-interactive-base);
 }
 
 /* ───────────────────────────────────────────────────────────── */

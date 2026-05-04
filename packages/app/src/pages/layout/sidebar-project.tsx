@@ -95,6 +95,7 @@ const ProjectTile = (props: {
           as="button"
           type="button"
           aria-label={name()}
+          aria-current={props.selected() ? "true" : undefined}
           data-action="project-switch"
           data-project={base64Encode(props.project.worktree)}
           data-rail-hue={railHue(props.project.worktree)}
