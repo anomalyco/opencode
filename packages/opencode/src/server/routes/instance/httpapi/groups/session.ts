@@ -404,7 +404,7 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("deleteMessage", SessionPaths.deleteMessage, {
           params: { sessionID: SessionID, messageID: MessageID },
-          query: WorkspaceRoutingQuery,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, force: Schema.optional(QueryBoolean) }),
           success: described(Schema.Boolean, "Successfully deleted message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(

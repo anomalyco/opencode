@@ -5779,6 +5779,7 @@ export type SessionDeleteMessageData = {
   query?: {
     directory?: string
     workspace?: string
+    force?: "true" | "false"
   }
   url: "/session/{sessionID}/message/{messageID}"
 }

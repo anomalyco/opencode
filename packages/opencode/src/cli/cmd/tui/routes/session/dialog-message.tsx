@@ -11,6 +11,7 @@ export function DialogMessage(props: {
   messageID: string
   sessionID: string
   setPrompt?: (prompt: PromptInfo) => void
+  queued?: boolean
 }) {
   const sync = useSync()
   const sdk = useSDK()
@@ -21,6 +22,23 @@ export function DialogMessage(props: {
     <DialogSelect
       title="Message Actions"
       options={[
+        ...(props.queued
+          ? [
+              {
+                title: "Cancel",
+                value: "session.deleteMessage",
+                description: "discard queued message",
+                onSelect: (dialog: { clear: () => void }) => {
+                  void sdk.client.session.deleteMessage({
+                    sessionID: props.sessionID,
+                    messageID: props.messageID,
+                    force: "true",
+                  })
+                  dialog.clear()
+                },
+              },
+            ]
+          : []),
         {
           title: "Revert",
           value: "session.revert",

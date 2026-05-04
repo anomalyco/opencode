@@ -33,8 +33,10 @@ export function DialogTimeline(props: {
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: (dialog) => {
+          const pendingMessageID = messages.findLast((x) => x.role === "assistant" && !x.time.completed)?.id
+          const queued = !!pendingMessageID && message.id > pendingMessageID
           dialog.replace(() => (
-            <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
+            <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} queued={queued} />
           ))
         },
       })

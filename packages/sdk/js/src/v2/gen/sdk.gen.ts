@@ -3389,6 +3389,7 @@ export class Session2 extends HeyApiClient {
       messageID: string
       directory?: string
       workspace?: string
+      force?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3401,6 +3402,7 @@ export class Session2 extends HeyApiClient {
             { in: "path", key: "messageID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "force" },
           ],
         },
       ],

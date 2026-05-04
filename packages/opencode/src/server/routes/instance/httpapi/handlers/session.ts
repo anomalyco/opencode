@@ -356,9 +356,18 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const deleteMessage = Effect.fn("SessionHttpApi.deleteMessage")(function* (ctx: {
       params: { sessionID: SessionID; messageID: MessageID }
+      query: { force?: boolean }
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
+      if (ctx.query.force) {
+        const msgs = yield* session.messages({ sessionID: ctx.params.sessionID })
+        const pending = msgs.findLast((m) => m.info.role === "assistant" && m.info.time.completed === undefined)
+        if (!pending || !(ctx.params.messageID > pending.info.id)) {
+          yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
+        }
+      } else {
+        yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
+      }
       yield* session.removeMessage(ctx.params)
       return true
     })

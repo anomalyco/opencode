@@ -1190,11 +1190,14 @@ export function Session() {
                           index={index()}
                           onMouseUp={() => {
                             if (renderer.getSelection()?.getSelectedText()) return
+                            const pendingMessageID = pending()
+                            const queued = !!pendingMessageID && message.id > pendingMessageID
                             dialog.replace(() => (
                               <DialogMessage
                                 messageID={message.id}
                                 sessionID={route.sessionID}
                                 setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+                                queued={queued}
                               />
                             ))
                           }}
