@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow: hidden;
+  overflow: visible;
   padding: 0 12px;
 
   [data-slot="list-search-wrapper"] {
@@ -170,7 +170,7 @@
 
       [data-slot="list-filter"] {
         color: var(--text-strong);
-        overflow: hidden;
+  overflow: hidden;
         text-overflow: ellipsis;
       }
     }
