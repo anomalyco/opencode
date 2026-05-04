@@ -234,6 +234,7 @@ describe("Vcs diff", () => {
           }),
         ]),
       )
+      expect(diff.find((item) => item.file === "file.txt")?.patch).toContain("diff --git")
     })
   })
 
@@ -256,6 +257,34 @@ describe("Vcs diff", () => {
           }),
         ]),
       )
+    })
+  })
+
+  test("diff('git') keeps batched patches aligned for type changes", async () => {
+    if (process.platform === "win32") return
+
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, "a.txt"), "old\n", "utf-8")
+    await fs.writeFile(path.join(tmp.path, "b.txt"), "old\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add files"`.cwd(tmp.path).quiet()
+    await fs.unlink(path.join(tmp.path, "a.txt"))
+    await fs.symlink("target", path.join(tmp.path, "a.txt"))
+    await fs.writeFile(path.join(tmp.path, "b.txt"), "new\n", "utf-8")
+
+    await withVcsOnly(tmp.path, async () => {
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
+      const a = diff.find((item) => item.file === "a.txt")
+      const b = diff.find((item) => item.file === "b.txt")
+
+      expect(a?.patch).toContain("deleted file mode")
+      expect(a?.patch).toContain("new file mode")
+      expect(b?.patch).toContain("+new")
     })
   })
 
