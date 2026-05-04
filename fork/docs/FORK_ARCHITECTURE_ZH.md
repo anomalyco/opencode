@@ -42,6 +42,7 @@
 | `fork/scripts/sync-upstream.sh` | 自动化同步脚本，内置全方位保护逻辑 |
 | `fork/scripts/build.sh` | 个人定制版编译脚本（默认单平台） |
 | `fork/docs/MAINTENANCE.md` | 维护与同步指南（中文） |
+| `fork/docs/USAGE_GUIDE_ZH.md` | 使用手册与参数指南（中文） |
 | `fork/docs/AWS_BEDROCK_GUIDE_ZH.md` | AWS Bedrock 专项配置指南（中文） |
 | `fork/docs/FORK_ARCHITECTURE_ZH.md` | 本文档（架构说明） |
 
