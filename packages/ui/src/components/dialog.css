@@ -37,15 +37,8 @@
       width: 100%;
       max-height: 100%;
       min-height: 280px;
-      overflow: auto;
+      overflow: visible;
       pointer-events: auto;
-
-      /* Hide scrollbar */
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-      &::-webkit-scrollbar {
-        display: none;
-      }
 
       border-radius: var(--radius-xl);
       border: 1px solid color-mix(in oklch, var(--border-strong-base) 88%, transparent);
