@@ -2,6 +2,8 @@ import { ServerAuth } from "@/server/auth"
 import { Effect, Encoding, Layer, Redacted } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi"
+import { hasPtyConnectTicketURL } from "@/server/shared/pty-ticket"
+import { isPublicUIPath } from "@/server/shared/public-ui"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
@@ -55,7 +57,11 @@ function decodeCredential(input: string) {
 }
 
 function credentialFromRequest(request: HttpServerRequest.HttpServerRequest) {
-  const token = new URL(request.url, "http://localhost").searchParams.get(AUTH_TOKEN_QUERY)
+  return credentialFromURL(new URL(request.url, "http://localhost"), request)
+}
+
+function credentialFromURL(url: URL, request: HttpServerRequest.HttpServerRequest) {
+  const token = url.searchParams.get(AUTH_TOKEN_QUERY)
   if (token) return decodeCredential(token)
   const match = /^Basic\s+(.+)$/i.exec(request.headers.authorization ?? "")
   if (match) return decodeCredential(match[1])
@@ -86,7 +92,10 @@ export const authorizationRouterMiddleware = HttpRouter.middleware()(
     return (effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* credentialFromRequest(request).pipe(
+        const url = new URL(request.url, "http://localhost")
+        if (isPublicUIPath(request.method, url.pathname)) return yield* effect
+        if (hasPtyConnectTicketURL(url)) return yield* effect
+        return yield* credentialFromURL(url, request).pipe(
           Effect.flatMap((credential) => validateRawCredential(effect, credential, config)),
         )
       })
