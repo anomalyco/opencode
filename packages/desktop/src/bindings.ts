@@ -74,6 +74,7 @@ export const commands = {
 	getDefaultEditor: () => __TAURI_INVOKE<string | null>("get_default_editor"),
 	setDefaultEditor: (editor: string | null) => __TAURI_INVOKE<null>("set_default_editor", { editor }),
 	listConfigFiles: (directory: string | null) => __TAURI_INVOKE<ConfigFile[]>("list_config_files", { directory }),
+	listTrellisTasks: (directory: string) => __TAURI_INVOKE<TrellisTaskList>("list_trellis_tasks", { directory }),
 	getConfigWorkspace: () => __TAURI_INVOKE<ConfigWorkspace>("get_config_workspace"),
 	listConfigDirectory: (path: string) => __TAURI_INVOKE<ConfigTreeItem[]>("list_config_directory", { path }),
 	readConfigFile: (path: string) => __TAURI_INVOKE<string | null>("read_config_file", { path }),
@@ -173,6 +174,28 @@ export type StartupSample = {
 		deltaMs: number,
 		frontendElapsedMs: number | null,
 		detail: string | null,
+	};
+
+export type TrellisTask = {
+		id: string,
+		name: string,
+		title: string,
+		status: string,
+		priority: string | null,
+		assignee: string | null,
+		package: string | null,
+		parent: string | null,
+		children: string[],
+		createdAt: string | null,
+		completedAt: string | null,
+		path: string,
+		current: boolean,
+	};
+
+export type TrellisTaskList = {
+		root: string,
+		current: string | null,
+		tasks: TrellisTask[],
 	};
 
 export type WslConfig = {
