@@ -18,9 +18,12 @@ Do not use `git log` or author metadata when deciding attribution.
 
 Rules:
 
-- Write the final file with sections in this order:
+- Write the final file with release sections in this order:
   `## Core`, `## TUI`, `## Desktop`, `## SDK`, `## Extensions`
 - Only include sections that have at least one notable entry
+- Within each release section, keep bug fixes grouped under `### Bugfixes`
+- Keep other notable entries under `### Improvements` when a section has bug fixes too
+- Omit empty subsections
 - Keep one bullet per commit you keep
 - Skip commits that are entirely internal, CI, tests, refactors, or otherwise not user-facing
 - Start each bullet with a capital letter
