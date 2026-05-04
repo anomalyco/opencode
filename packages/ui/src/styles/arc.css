@@ -98,11 +98,21 @@ html[data-theme="arc"] {
     --icon-weak-base: #8A7F8E;
     --border-base: rgba(255, 255, 255, 0.16);
     --border-weak-base: rgba(255, 255, 255, 0.08);
+    --border-weaker-base: rgba(255, 255, 255, 0.06);
     --border-strong-base: rgba(255, 255, 255, 0.22);
     --surface-base-hover: rgba(255, 255, 255, 0.08);
     --surface-base-active: rgba(255, 255, 255, 0.12);
     --button-ghost-hover: rgba(255, 255, 255, 0.10);
     --button-ghost-hover2: rgba(255, 255, 255, 0.14);
+
+    /* SidebarPanel (the conversation list root) uses Tailwind's
+       bg-background-base / bg-background-stronger utilities. Aligning
+       these vars to the sidebar's mauve makes the panel share the
+       rail's panel identity instead of staying white. */
+    --background-base: #756B7E;
+    --background-weak: #6F6479;
+    --background-strong: #7B708A;
+    --background-stronger: #756B7E;
   }
 }
 
