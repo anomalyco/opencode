@@ -2635,7 +2635,7 @@ export default function Layout(props: ParentProps) {
                       transform: "translate3d(52px, 0, 0)",
                     }}
                   >
-                    <span class="text-12-regular text-text-base truncate select-text">
+                    <span class="text-12-regular text-text-weak truncate select-text">
                       {worktree().replace(homedir(), "~")}
                     </span>
                   </Tooltip>
@@ -2934,7 +2934,10 @@ export default function Layout(props: ParentProps) {
   )
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <div
+      data-component="app-root"
+      class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
+    >
       <Show when={folderDragging() || fileDragging()}>
         <div class="fixed inset-0 z-[100] flex items-center justify-center bg-background-base/80 pointer-events-none">
           <div class="flex flex-col items-center gap-3 text-text-weak">
@@ -2997,6 +3000,7 @@ export default function Layout(props: ParentProps) {
             </Show>
 
             <div
+              data-component="layout-top-divider"
               class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
               style={{ left: "calc(4rem + 12px)" }}
             />

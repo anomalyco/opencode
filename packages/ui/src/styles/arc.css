@@ -52,8 +52,15 @@ html[data-theme="arc"] {
 /* ─── Light mode ─── */
 @media (prefers-color-scheme: light) {
   html[data-theme="arc"] {
-    /* Canvas: cream-violet, slightly darker than background-base */
-    --canvas-base: #ebe6f2;
+    /* Canvas: unified with the sidebar mauve. The titlebar, the wedge
+       exposed by the sidebar's rounded right edge, the area above the
+       main pane's rounded top-left, and the rail/panel themselves are
+       all the same dusty mauve — matches Arc Browser's seamless chrome,
+       where only the main content pane reads as a distinct lighter
+       surface "floating" on the chrome. (Previously #ebe6f2 cream-violet,
+       which read as a contrasting backdrop and bled white-ish through
+       the rounded-corner gaps via the app-root's bg-background-base.) */
+    --canvas-base: #756B7E;
 
     /* Sidebar card background — Arc Browser's signature dusty mauve.
        Deliberately mid-tone (not light) so it reads as a distinct
@@ -79,44 +86,52 @@ html[data-theme="arc"] {
     --rail-hue-6: linear-gradient(180deg, #e6e6f0 0%, #dcdce8 100%);
   }
 
-  /* Within the dusty-mauve sidebar, set high-contrast text/icon colors
-     by directly overriding Tailwind v4's text-* / icon-* utilities.
-     We can't rely on --text-* / --icon-* CSS var overrides because
-     Tailwind v4's @theme block resolves --color-* tokens into
-     utilities at build time — runtime var overrides don't propagate
-     into bg-/text-/border-*-base classes.
-     Substring [class*="..."] selectors cover both base classes and
-     group-hover/session: variants in one rule. */
-  html[data-theme="arc"] [data-component="sidebar-rail"] [class*="text-text-strong"],
-  html[data-theme="arc"] [data-component="sidebar-nav-desktop"] [class*="text-text-strong"],
-  html[data-theme="arc"] [data-component="sidebar-nav-mobile"] [class*="text-text-strong"],
-  html[data-theme="arc"] [data-component="sidebar-panel"] [class*="text-text-strong"] {
-    color: #F0E8F0 !important;
-  }
-  html[data-theme="arc"] [data-component="sidebar-rail"] [class*="text-text-base"],
-  html[data-theme="arc"] [data-component="sidebar-nav-desktop"] [class*="text-text-base"],
-  html[data-theme="arc"] [data-component="sidebar-nav-mobile"] [class*="text-text-base"],
-  html[data-theme="arc"] [data-component="sidebar-panel"] [class*="text-text-base"] {
-    color: #D5C8D8 !important;
-  }
-  html[data-theme="arc"] [data-component="sidebar-rail"] [class*="text-text-weak"],
-  html[data-theme="arc"] [data-component="sidebar-nav-desktop"] [class*="text-text-weak"],
-  html[data-theme="arc"] [data-component="sidebar-nav-mobile"] [class*="text-text-weak"],
-  html[data-theme="arc"] [data-component="sidebar-panel"] [class*="text-text-weak"] {
-    color: #A89DAB !important;
-  }
-  html[data-theme="arc"] [data-component="sidebar-rail"] [class*="text-icon-weak"],
-  html[data-theme="arc"] [data-component="sidebar-nav-desktop"] [class*="text-icon-weak"],
-  html[data-theme="arc"] [data-component="sidebar-panel"] [class*="text-icon-weak"] {
-    color: #8A7F8E !important;
+  /* Within the dusty-mauve sidebar, set high-contrast text/icon colors.
+     Two-pronged approach because Tailwind v4 captures --color-* tokens
+     at the @theme (root) level and inherits the resulting *static* value
+     into descendants — overriding the upstream --text-* alone won't
+     reach utilities like text-text-strong. So we override BOTH:
+       1. The raw --text-* / --icon-* tokens, so component CSS that
+          consumes them directly (Button, IconButton) gets the contrast.
+       2. The --color-text-* / --color-icon-* aliases at the same scope,
+          so Tailwind utilities (text-text-strong, text-icon-weak, …)
+          resolve against the local override instead of the inherited
+          root-resolved value. */
+  html[data-theme="arc"] [data-component="sidebar-rail"],
+  html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
+  html[data-theme="arc"] [data-component="sidebar-nav-mobile"],
+  html[data-theme="arc"] [data-component="sidebar-panel"] {
+    --text-strong: #FBF6FB;
+    --text-base: #ECE3EE;
+    --text-weak: #BCB0BF;
+    --icon-base: #ECE3EE;
+    --icon-strong-base: #FBF6FB;
+    --icon-weak-base: #BCB0BF;
+
+    --color-text-strong: var(--text-strong);
+    --color-text-base: var(--text-base);
+    --color-text-weak: var(--text-weak);
+    --color-icon-base: var(--icon-base);
+    --color-icon-strong-base: var(--icon-strong-base);
+    --color-icon-weak-base: var(--icon-weak-base);
+
+    /* Tailwind also exposes plain text-icon-weak / text-icon-base as
+       utilities that compile to color: var(--color-icon-...). The
+       icon-* aliases are mirrored in @theme as --color-icon-weak etc.
+       (no -base suffix). Cover both shapes. */
+    --color-icon-weak: var(--icon-weak-base);
   }
 
   /* SidebarPanel: remove the light border separator (drew a hard line
-     between rail and panel since both are now the same mauve color),
-     and bump top-left radius to match the main pane's --radius-2xl. */
+     between rail and panel since both are now the same mauve color).
+     Drop the panel's top-left radius entirely — the panel sits flush
+     against the rail (same color), so any inward radius here just cuts
+     a wedge of canvas-color through the unified sidebar surface. The
+     outer wrapper [data-component="sidebar-nav-desktop"] still rounds
+     the visible right edge against the canvas. */
   html[data-theme="arc"] [data-component="sidebar-panel"] {
     border: none !important;
-    border-top-left-radius: var(--radius-2xl) !important;
+    border-top-left-radius: 0 !important;
   }
 }
 
@@ -124,9 +139,15 @@ html[data-theme="arc"] {
 /* Layout: floating three-pane visual treatment                  */
 /* ───────────────────────────────────────────────────────────── */
 
-/* Body / root canvas behind the three panes */
+/* Body / root canvas behind the three panes.
+   The app-root wrapper carries `bg-background-base` from layout.tsx,
+   which would otherwise paint a contrasting slab on top of the body's
+   canvas color and re-expose itself through the sidebar's rounded
+   top-right corner (that "white wedge" between sidebar and main pane).
+   Tying the wrapper to var(--canvas-base) keeps the chrome continuous. */
 html[data-theme="arc"],
-html[data-theme="arc"] body {
+html[data-theme="arc"] body,
+html[data-theme="arc"] [data-component="app-root"] {
   background-color: var(--canvas-base);
 }
 
@@ -135,26 +156,40 @@ html[data-theme="arc"] [data-component="titlebar"] {
   background-color: transparent;
 }
 
-/* Project rail — keeps its 64px slot but reads as a distinct floating panel
-   via raised surface + rounded right edge (left edge stays flush with viewport) */
-html[data-theme="arc"] [data-component="sidebar-rail"] {
-  background-color: var(--sidebar-card-bg);
-  border-top-right-radius: var(--radius-xl);
-  border-bottom-right-radius: var(--radius-xl);
-  box-shadow:
-    1px 0 0 var(--border-weak-base),
-    var(--card-elevation);
+/* Legacy 1px hairline that other themes draw across the area to the right
+   of the rail (top-0). The main pane sits z-20 above it and visually hides
+   the line — except in the area carved out by the main pane's rounded
+   top-left corner, where the hairline pokes through as a pale sliver
+   above the curve (the "white edge" remaining after canvas unification).
+   In arc, the rounded floating panes don't need an explicit divider, so
+   we suppress the top-border here. */
+html[data-theme="arc"] [data-component="layout-top-divider"] {
+  border-top-color: transparent;
 }
 
-/* Session sidebar nav — same treatment, sits to the right of rail */
+/* Project rail — keeps its 64px slot and visually merges into the unified
+   sidebar surface. The outer wrapper (sidebar-nav-desktop) handles the
+   right-edge rounding against the canvas; the rail must NOT round its
+   own right edges or it cuts a wedge of canvas color where it abuts the
+   conversation panel (both are the same --sidebar-card-bg). */
+html[data-theme="arc"] [data-component="sidebar-rail"] {
+  background-color: var(--sidebar-card-bg);
+  box-shadow: var(--card-elevation);
+}
+
+/* Session sidebar nav — same treatment, sits to the right of rail.
+   We deliberately drop the 1px hard `var(--border-weak-base)` right shadow
+   that other themes use as a vertical divider: on the rounded top-right
+   corner, that 1px shadow follows the curve and reads as a thin pale
+   halo against the dusty mauve canvas (the "white border" along the
+   curve). Sidebar mauve vs. main pane white already provides plenty of
+   visual separation without an explicit divider line. */
 html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
 html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
   background-color: var(--sidebar-card-bg);
   border-top-right-radius: var(--radius-xl);
   border-bottom-right-radius: var(--radius-xl);
-  box-shadow:
-    1px 0 0 var(--border-weak-base),
-    var(--card-elevation);
+  box-shadow: var(--card-elevation);
 }
 
 /* Conversation list panel inside the sidebar.
@@ -386,7 +421,10 @@ html[data-theme="arc"] [data-action="project-switch"]:active:not(:disabled) {
 }
 
 /* ───────────────────────────────────────────────────────────── */
-/* Sidebar session items — Arc-style step-in on hover            */
+/* Sidebar session items — Arc-style hover                       */
+/* (translateX-on-hover removed by request — felt fidgety on the */
+/*  unified mauve panel where rows already have a clear bg/      */
+/*  border hover treatment from index.css)                       */
 /* ───────────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: no-preference) {
@@ -394,19 +432,18 @@ html[data-theme="arc"] [data-action="project-switch"]:active:not(:disabled) {
     transition:
       background-color 160ms ease-out,
       border-color 160ms ease-out,
-      transform 160ms ease-out,
       box-shadow 220ms ease-out;
   }
 }
 
-html[data-theme="arc"] [data-component="sidebar-session"]:hover:not([data-active="true"]) {
-  transform: translateX(2px);
-}
-
 html[data-theme="arc"] [data-component="sidebar-session"][data-active="true"] {
+  /* No inset-left stripe: a 2px stripe on a rounded-[22px] container
+     bends with the radius and reads as a dark crescent against the
+     mauve panel. The gradient background + violet border-color set in
+     index.css already mark the active row clearly. We keep just the
+     subtle top inner highlight + outer drop shadow for depth. */
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 2px 0 0 var(--text-interactive-base),
     0 8px 20px -16px var(--sidebar-session-active-shadow);
 }
 
