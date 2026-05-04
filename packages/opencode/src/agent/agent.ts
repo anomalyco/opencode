@@ -77,6 +77,10 @@ export const layer = Layer.effect(
     const skill = yield* Skill.Service
     const provider = yield* Provider.Service
 
+    // Some entry points resolve agents before project bootstrap runs, so ensure
+    // plugin config hooks have mutated config before agent state snapshots it.
+    yield* plugin.init()
+
     const state = yield* InstanceState.make<State>(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
