@@ -2192,5 +2192,5 @@ Si tiene problemas para configurar un proveedor, verifique lo siguiente:
 
 2. Para proveedores personalizados, verifique la configuración opencode y:
    - Asegúrese de que el ID del proveedor utilizado en el comando `/connect` coincida con el ID en su configuración opencode.
-   - Se utiliza el paquete npm correcto para el proveedor. Por ejemplo, utilice `@ai-sdk/cerebras` para Cerebras. Y para todos los demás proveedores compatibles con OpenAI, utilice `@ai-sdk/openai-compatible`.
+   - Se utiliza el paquete npm correcto para el proveedor. Por ejemplo, utilice `@ai-sdk/cerebras` para Cerebras. Y para todos los demás proveedores compatibles con OpenAI, utilice `@ai-sdk/openai-compatible` (para `/v1/chat/completions`); si un modelo usa `/v1/responses`, utilice `@ai-sdk/openai`. Para configuraciones mixtas bajo un solo proveedor, puede sobrescribir esta opción por modelo a través de `provider.npm`.
    - Verifique que se utilice el punto final API correcto en el campo `options.baseURL`.
