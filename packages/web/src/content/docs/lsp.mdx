@@ -3,7 +3,7 @@ title: LSP Servers
 description: OpenCode integrates with your LSP servers.
 ---
 
-OpenCode integrates with your Language Server Protocol (LSP) to help the LLM interact with your codebase. It uses diagnostics to provide feedback to the LLM.
+OpenCode can integrate with your Language Server Protocol (LSP) to help the LLM interact with your codebase. It uses diagnostics to provide feedback to the LLM.
 
 ---
 
@@ -48,7 +48,7 @@ OpenCode comes with several built-in LSP servers for popular languages:
 | yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
 | zls                | .zig, .zon                                                          | `zig` command available                                      |
 
-LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
+When LSP is enabled, servers start when one of the above file extensions is detected and the requirements are met.
 
 :::note
 You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_LSP_DOWNLOAD` environment variable to `true`.
@@ -58,7 +58,7 @@ You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_
 
 ## How It Works
 
-When opencode opens a file, it:
+When LSP is enabled and opencode opens a file, it:
 
 1. Checks the file extension against all enabled LSP servers.
 2. Starts the appropriate LSP server if not already running.
@@ -67,7 +67,18 @@ When opencode opens a file, it:
 
 ## Configure
 
-You can customize LSP servers through the `lsp` section in your opencode config.
+You can enable and customize LSP servers through the `lsp` section in your opencode config.
+
+To enable all built-in LSP servers, set `lsp` to `true`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true
+}
+```
+
+Use an object to keep built-ins enabled while configuring overrides or custom servers.
 
 ```json title="opencode.json"
 {
@@ -76,7 +87,9 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 }
 ```
 
-Each LSP server supports the following:
+Each configured LSP server entry supports the following:
+
+Server entries need `command` unless they only disable a server.
 
 | Property         | Type     | Description                                       |
 | ---------------- | -------- | ------------------------------------------------- |
@@ -94,11 +107,12 @@ Let's look at some examples.
 
 Use the `env` property to set environment variables when starting the LSP server:
 
-```json title="opencode.json" {5-7}
+```json title="opencode.json" {5-8}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
     "rust": {
+      "command": ["rust-analyzer"],
       "env": {
         "RUST_LOG": "debug"
       }
@@ -113,11 +127,13 @@ Use the `env` property to set environment variables when starting the LSP server
 
 Use the `initialization` property to pass initialization options to the LSP server. These are server-specific settings sent during the LSP `initialize` request:
 
-```json title="opencode.json" {5-9}
+```json title="opencode.json" {5-13}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
-    "typescript": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"],
       "initialization": {
         "preferences": {
           "importModuleSpecifierPreference": "relative"
@@ -136,7 +152,7 @@ Initialization options vary by LSP server. Check your LSP server's documentation
 
 ### Disabling LSP servers
 
-To disable **all** LSP servers globally, set `lsp` to `false`:
+If `lsp` is omitted, all LSP servers are disabled. To disable all LSP servers after another config enabled them, set `lsp` to `false`:
 
 ```json title="opencode.json" {3}
 {

@@ -3,6 +3,7 @@ import { AppRuntime } from "../../src/effect/app-runtime"
 import { Bus } from "../../src/bus"
 import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Pty } from "../../src/pty"
 import type { PtyID } from "../../src/pty/schema"
 import { tmpdir } from "../fixture/fixture"
@@ -27,7 +28,7 @@ describe("pty", () => {
 
     await using dir = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: dir.path,
       fn: () =>
         AppRuntime.runPromise(
@@ -68,7 +69,7 @@ describe("pty", () => {
 
     await using dir = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: dir.path,
       fn: () =>
         AppRuntime.runPromise(
