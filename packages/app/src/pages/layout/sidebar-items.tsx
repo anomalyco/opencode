@@ -44,7 +44,10 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
 
   return (
-    <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
+    <div
+      data-loaded={loaded() ? "true" : "false"}
+      class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}
+    >
       <div class="size-full rounded overflow-clip">
         <Avatar
           fallback={name()}

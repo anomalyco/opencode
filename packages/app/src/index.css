@@ -102,20 +102,35 @@
     border-top-right-radius: 28px;
   }
 
+  /* The default dock-surface.css gives the prompt shell a 3-stop drop
+     shadow that lifts it off the canvas. The :focus-within rule below
+     adds a warm focus ring; we MUST also re-state the inset border /
+     highlight and the three elevation drops so they aren't replaced
+     when the user starts typing — otherwise the surface "sinks flat".
+     Order matters: insets paint inside, focus rings sit just outside
+     the box edge, drop shadows go furthest behind. */
   [data-dock-surface="shell"][data-slot="prompt-shell"].prompt-shell-shadow:focus-within {
     box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--border-weak-base) 58%, transparent) inset,
+      0 1px 0 color-mix(in srgb, white 12%, transparent) inset,
       0 0 0 1px light-dark(rgba(142, 120, 98, 0.68), rgba(166, 141, 111, 0.62)),
       0 0 0 4px light-dark(rgba(186, 172, 147, 0.22), rgba(186, 172, 147, 0.2)),
       0 0 24px light-dark(rgba(168, 142, 109, 0.24), rgba(201, 170, 128, 0.2)),
-      var(--shadow-xs-border);
+      0 24px 56px rgba(0, 0, 0, 0.16),
+      0 10px 24px rgba(0, 0, 0, 0.12),
+      0 4px 10px rgba(0, 0, 0, 0.08);
   }
 
   html[data-theme="aether"] [data-dock-surface="shell"][data-slot="prompt-shell"].prompt-shell-shadow:focus-within {
     box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--border-weak-base) 58%, transparent) inset,
+      0 1px 0 color-mix(in srgb, white 12%, transparent) inset,
       0 0 0 1px light-dark(rgba(142, 120, 98, 0.64), rgba(174, 149, 118, 0.58)),
       0 0 0 5px light-dark(rgba(186, 172, 147, 0.2), rgba(186, 172, 147, 0.18)),
       0 0 28px light-dark(rgba(168, 142, 109, 0.2), rgba(201, 170, 128, 0.18)),
-      var(--shadow-lg-border-base);
+      0 24px 56px rgba(0, 0, 0, 0.16),
+      0 10px 24px rgba(0, 0, 0, 0.12),
+      0 4px 10px rgba(0, 0, 0, 0.08);
   }
 
   html[data-platform="desktop"] [data-component="user-message"] [data-slot="user-message-text"] {
