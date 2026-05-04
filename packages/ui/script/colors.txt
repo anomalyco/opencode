@@ -14,6 +14,7 @@
 --surface-inset-strong: #1F000017;
 --surface-inset-strong-hover: #1F000017;
 --surface-raised-base: var(--smoke-light-alpha-1);
+--surface-panel: var(--smoke-light-alpha-1);
 --surface-float-base: var(--smoke-dark-1);
 --surface-float-base-hover: var(--smoke-dark-2);
 --surface-raised-base-hover: var(--smoke-light-alpha-2);

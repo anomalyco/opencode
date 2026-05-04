@@ -112,7 +112,7 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
                   />
                 )}
               </Show>
-              <span class="text-14-medium text-text-base truncate w-[200px] shrink-0 pl-2">{item.name}</span>
+              <span class="text-14-medium text-text-base truncate w-[200px] shrink-0 pl-4">{item.name}</span>
               <Show when={item.kind === "project"}>
                 <span class="text-12-regular text-text-weak truncate grow min-w-0 text-left pl-3">{item.path}</span>
               </Show>
