@@ -21,6 +21,9 @@ export const ERRORS = {
       },
     },
   },
+  403: {
+    description: "Forbidden",
+  },
   404: {
     description: "Not found",
     content: {

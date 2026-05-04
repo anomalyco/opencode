@@ -45,6 +45,31 @@ export function embeddedUI() {
   return embeddedUIPromise
 }
 
+function notFound() {
+  return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
+}
+
+function embeddedUIResponse(file: string, body: Uint8Array) {
+  const mime = AppFileSystem.mimeType(file)
+  const headers = new Headers({ "content-type": mime })
+  if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
+  return HttpServerResponse.raw(body, { headers })
+}
+
+export function serveEmbeddedUIEffect(
+  requestPath: string,
+  fs: AppFileSystem.Interface,
+  embeddedWebUI: Record<string, string>,
+) {
+  const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
+  if (!file) return Effect.succeed(notFound())
+
+  return fs.readFile(file).pipe(
+    Effect.map((body) => embeddedUIResponse(file, body)),
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
+  )
+}
+
 export function serveUIEffect(
   request: HttpServerRequest.HttpServerRequest,
   services: { fs: AppFileSystem.Interface; client: HttpClient.HttpClient },
@@ -53,19 +78,7 @@ export function serveUIEffect(
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI())
     const path = new URL(request.url, "http://localhost").pathname
 
-    if (embeddedWebUI) {
-      const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
-      if (!match) return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
-
-      if (yield* services.fs.existsSafe(match)) {
-        const mime = AppFileSystem.mimeType(match)
-        const headers = new Headers({ "content-type": mime })
-        if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-        return HttpServerResponse.raw(yield* services.fs.readFile(match), { headers })
-      }
-
-      return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
-    }
+    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
 
     const response = yield* services.client.execute(
       HttpClientRequest.make(request.method)(upstreamURL(path), {
