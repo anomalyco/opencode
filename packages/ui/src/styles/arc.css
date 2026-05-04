@@ -119,7 +119,8 @@ html[data-theme="arc"] {
   html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
   html[data-theme="arc"] [data-component="sidebar-nav-mobile"],
   html[data-theme="arc"] [data-component="sidebar-panel"],
-  html[data-theme="arc"] [data-component="titlebar"] {
+  html[data-theme="arc"] [data-component="titlebar"],
+  html[data-theme="arc"] .arc-sidebar-scope {
     --text-strong: #FBF6FB;
     --text-base: #ECE3EE;
     --text-weak: #BCB0BF;
@@ -176,6 +177,8 @@ html[data-theme="arc"] {
     --color-background-stronger: rgba(255, 255, 255, 0.10);
     --surface-raised-base: rgba(255, 255, 255, 0.10);
     --color-surface-raised-base: rgba(255, 255, 255, 0.10);
+    --surface-panel: rgba(255, 255, 255, 0.10);
+    --color-surface-panel: rgba(255, 255, 255, 0.10);
     --surface-info-base: rgba(255, 255, 255, 0.18);
     --color-surface-info-base: rgba(255, 255, 255, 0.18);
     --border-weak-base: rgba(255, 255, 255, 0.14);
@@ -185,6 +188,8 @@ html[data-theme="arc"] {
   html[data-theme="arc"] [data-component="titlebar"] {
     --surface-raised-base: rgba(255, 255, 255, 0.06);
     --color-surface-raised-base: rgba(255, 255, 255, 0.06);
+    --surface-panel: rgba(255, 255, 255, 0.06);
+    --color-surface-panel: rgba(255, 255, 255, 0.06);
     --border-weak-base: transparent;
     --color-border-weak-base: transparent;
   }

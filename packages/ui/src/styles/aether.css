@@ -98,3 +98,94 @@ html[data-theme="aether"] {
     border-radius: 10px;
   }
 }
+
+/* ─── Aether Dark Mode: Dock Surface Refinements ─── */
+@media (prefers-color-scheme: dark) {
+  /* Prompt shell: deep warm card matching Aether's warm paper identity.
+     Without this, the dark-mode Dock falls back to the base theme's
+     translucent glass (#1c1c1c / rgb(12 12 14 / 0.34)), which clashes
+     with Aether's clay-tinted shadow system and reads as cold/muddy. */
+  html[data-theme="aether"] [data-dock-surface="shell"] {
+    background-color: #1E1B18;
+    border: 1px solid #3D3830;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow:
+      0 0 0 0.5px rgba(193, 95, 60, 0.08),
+      0 2px 8px -2px rgba(0, 0, 0, 0.18),
+      0 4px 16px -4px rgba(0, 0, 0, 0.14);
+    border-radius: 16px;
+  }
+
+  /* Tray: matching warm dark border and deep warm background */
+  html[data-theme="aether"] [data-dock-surface="tray"] {
+    background-color: #1A1815;
+    border: 1px solid #3D3830;
+    border-radius: 16px;
+  }
+
+  html[data-theme="aether"] [data-dock-surface="tray"][data-dock-attach="top"] {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  /* Tool call cards: warm dark tint consistent with the Dock palette */
+  html[data-theme="aether"] [data-component="collapsible"].tool-collapsible {
+    background-color: #25221E;
+    border: 1px solid #3D3830;
+    border-radius: 10px;
+  }
+}
+
+/* ─── Aether Micro Transitions ─── */
+/* Aether previously had zero transition definitions — all interactive
+   state changes (hover, active, focus) were instantaneous jumps. Arc
+   defines a comprehensive set (all wrapped in @media prefers-reduced-
+   motion: no-preference). This block adds a base set for the most
+   commonly-interacted elements: buttons, icon buttons, and sidebar
+   sessions. Kept deliberately restrained — no scale transforms or
+   position shifts — to preserve Aether's calm, paper-material identity. */
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme="aether"] [data-component="button"],
+  html[data-theme="aether"] [data-component="icon-button"],
+  html[data-theme="aether"] [data-component="sidebar-session"] {
+    transition:
+      background-color 160ms ease-out,
+      box-shadow 200ms ease-out,
+      border-color 160ms ease-out;
+  }
+
+  /* Dropdowns and popovers: add warm-tinted glass + lifted shadow for depth.
+     Without this, Aether floating panels fall back to the base theme's flat
+     defaults, feeling visually disconnected from the warm-tinted surface
+     hierarchy below. */
+  html[data-theme="aether"] [data-component="dropdown-menu-content"],
+  html[data-theme="aether"] [data-component="dropdown-menu-sub-content"],
+  html[data-theme="aether"] [data-component="context-menu-content"],
+  html[data-theme="aether"] [data-component="context-menu-sub-content"],
+  html[data-theme="aether"] [data-component="popover-content"],
+  html[data-theme="aether"] [data-component="hover-card-content"],
+  html[data-theme="aether"] [data-component="select-content"] {
+    backdrop-filter: blur(48px) saturate(140%);
+    -webkit-backdrop-filter: blur(48px) saturate(140%);
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--border-weak-base) 40%, transparent) inset,
+      0 1px 0 color-mix(in srgb, white 10%, transparent) inset,
+      0 24px 56px rgba(193, 95, 60, 0.1),
+      0 10px 24px rgba(193, 95, 60, 0.06),
+      0 4px 10px rgba(193, 95, 60, 0.04);
+  }
+
+  /* Dialog: stronger blur + deeper shadow for the most prominent surface */
+  html[data-theme="aether"] [data-component="dialog"] [data-slot="dialog-content"] {
+    backdrop-filter: blur(56px) saturate(140%);
+    -webkit-backdrop-filter: blur(56px) saturate(140%);
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--border-weak-base) 36%, transparent) inset,
+      0 1px 0 color-mix(in srgb, white 12%, transparent) inset,
+      0 32px 80px rgba(193, 95, 60, 0.12),
+      0 14px 32px rgba(193, 95, 60, 0.08),
+      0 6px 14px rgba(193, 95, 60, 0.05);
+  }
+}

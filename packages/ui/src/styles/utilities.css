@@ -119,16 +119,9 @@
 }
 
 /* Custom utilities for project switcher */
-.pl-2 {
-  padding-left: calc(var(--spacing) * 4);
-}
-
-.w-\[200px\] {
-  width: 150px;
-}
 
 .bg-surface-panel {
-  background-color: var(--surface-raised-base);
+  background-color: var(--surface-panel);
 }
 
 .backdrop-blur {
