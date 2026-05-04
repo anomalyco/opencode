@@ -44,6 +44,7 @@ const names: Record<string, string> = {
   "oc-2": "OC-2",
   aether: "Aether",
   amoled: "AMOLED",
+  arc: "Arc",
   aura: "Aura",
   ayu: "Ayu",
   carbonfox: "Carbonfox",
