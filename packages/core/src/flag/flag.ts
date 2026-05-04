@@ -1,4 +1,5 @@
 import { Config } from "effect"
+import { InstallationChannel } from "../installation/version"
 
 function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
@@ -9,6 +10,10 @@ function falsy(key: string) {
   const value = process.env[key]?.toLowerCase()
   return value === "false" || value === "0"
 }
+
+// Channels that default to the new effect-httpapi server backend. The legacy
+// hono backend remains the default for stable (`prod`/`latest`) installs.
+const HTTPAPI_DEFAULT_ON_CHANNELS = new Set(["dev", "beta", "local"])
 
 function number(key: string) {
   const value = process.env[key]
@@ -47,7 +52,7 @@ export const Flag = {
   OPENCODE_DISABLE_CLAUDE_CODE,
   OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),
   OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
-  OPENCODE_DISABLE_EXTERNAL_SKILLS: OPENCODE_DISABLE_CLAUDE_CODE_SKILLS || truthy("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
+  OPENCODE_DISABLE_EXTERNAL_SKILLS: truthy("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
   OPENCODE_FAKE_VCS: process.env["OPENCODE_FAKE_VCS"],
   OPENCODE_SERVER_PASSWORD: process.env["OPENCODE_SERVER_PASSWORD"],
   OPENCODE_SERVER_USERNAME: process.env["OPENCODE_SERVER_USERNAME"],
@@ -81,8 +86,16 @@ export const Flag = {
   OPENCODE_STRICT_CONFIG_DEPS: truthy("OPENCODE_STRICT_CONFIG_DEPS"),
 
   OPENCODE_WORKSPACE_ID: process.env["OPENCODE_WORKSPACE_ID"],
-  OPENCODE_EXPERIMENTAL_HTTPAPI: truthy("OPENCODE_EXPERIMENTAL_HTTPAPI"),
+  // Defaults to true on dev/beta/local channels so internal users exercise the
+  // new effect-httpapi server backend. Stable (`prod`/`latest`) installs stay
+  // on the legacy hono backend until the rollout is complete. An explicit env
+  // var ("true"/"1" or "false"/"0") always wins, providing an opt-in for
+  // stable users and an escape hatch for dev/beta users.
+  OPENCODE_EXPERIMENTAL_HTTPAPI:
+    truthy("OPENCODE_EXPERIMENTAL_HTTPAPI") ||
+    (!falsy("OPENCODE_EXPERIMENTAL_HTTPAPI") && HTTPAPI_DEFAULT_ON_CHANNELS.has(InstallationChannel)),
   OPENCODE_EXPERIMENTAL_WORKSPACES: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WORKSPACES"),
+  OPENCODE_EXPERIMENTAL_EVENT_SYSTEM: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
 
   // Evaluated at access time (not module load) because tests, the CLI, and
   // external tooling set these env vars at runtime.
