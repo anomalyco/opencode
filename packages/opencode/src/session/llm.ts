@@ -340,25 +340,18 @@ const live: Layer.Layer<
           })
         },
         async experimental_repairToolCall(failed) {
-          const lower = failed.toolCall.toolName.toLowerCase()
-          if (lower !== failed.toolCall.toolName && tools[lower]) {
+          const repaired = repairToolCallFailure({
+            toolCall: failed.toolCall,
+            errorMessage: failed.error.message,
+            toolNames: Object.keys(tools),
+          })
+          if (repaired.toolName !== failed.toolCall.toolName && repaired.toolName !== "invalid") {
             l.info("repairing tool call", {
               tool: failed.toolCall.toolName,
-              repaired: lower,
+              repaired: repaired.toolName,
             })
-            return {
-              ...failed.toolCall,
-              toolName: lower,
-            }
           }
-          return {
-            ...failed.toolCall,
-            input: JSON.stringify({
-              tool: failed.toolCall.toolName,
-              error: failed.error.message,
-            }),
-            toolName: "invalid",
-          }
+          return repaired
         },
         temperature: params.temperature,
         topP: params.topP,
@@ -445,6 +438,48 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
   ),
 )
+
+export function repairToolCallFailure<T extends { toolName: string; input?: string }>(input: {
+  toolCall: T
+  errorMessage: string
+  toolNames: Iterable<string>
+}): T {
+  const tools = new Set(input.toolNames)
+  const lower = input.toolCall.toolName.toLowerCase()
+
+  if (lower !== input.toolCall.toolName && tools.has(lower)) {
+    return {
+      ...input.toolCall,
+      toolName: lower,
+    } as T
+  }
+
+  const original = input.toolCall.toolName
+  const known = tools.has(original) || tools.has(lower)
+
+  if (known) {
+    return {
+      ...input.toolCall,
+      input: JSON.stringify({
+        type: "known_tool_invalid_input",
+        tool: original,
+        error: input.errorMessage,
+        hint: "The tool name is valid, but the input was malformed or truncated. Retry with valid input or split large operations into smaller chunks.",
+      }),
+      toolName: "invalid",
+    } as T
+  }
+
+  return {
+    ...input.toolCall,
+    input: JSON.stringify({
+      type: "unknown_tool",
+      tool: original,
+      error: input.errorMessage,
+    }),
+    toolName: "invalid",
+  } as T
+}
 
 function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
   const disabled = Permission.disabled(

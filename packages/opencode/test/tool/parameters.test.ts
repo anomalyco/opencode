@@ -131,6 +131,21 @@ describe("tool parameters", () => {
     test("accepts tool + error", () => {
       expect(parse(Invalid, { tool: "foo", error: "bar" })).toEqual({ tool: "foo", error: "bar" })
     })
+    test("accepts optional type + hint", () => {
+      expect(
+        parse(Invalid, {
+          tool: "write",
+          error: "JSON parsing failed",
+          type: "known_tool_invalid_input",
+          hint: "Retry with valid input or split large operations into smaller chunks.",
+        }),
+      ).toEqual({
+        tool: "write",
+        error: "JSON parsing failed",
+        type: "known_tool_invalid_input",
+        hint: "Retry with valid input or split large operations into smaller chunks.",
+      })
+    })
     test("rejects missing fields", () => {
       expect(accepts(Invalid, { tool: "foo" })).toBe(false)
       expect(accepts(Invalid, { error: "bar" })).toBe(false)

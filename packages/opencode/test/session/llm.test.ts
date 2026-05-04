@@ -4,7 +4,7 @@ import { tool, type ModelMessage } from "ai"
 import { Cause, Effect, Exit, Stream } from "effect"
 import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
-import { LLM } from "../../src/session/llm"
+import { LLM, repairToolCallFailure } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
@@ -32,6 +32,52 @@ const llm = makeRuntime(LLM.Service, LLM.defaultLayer)
 async function drain(input: LLM.StreamInput) {
   return llm.runPromise((svc) => svc.stream(input).pipe(Stream.runDrain))
 }
+
+describe("session.llm.repairToolCallFailure", () => {
+  test("repairs tool name casing when lower-case tool exists", () => {
+    const repaired = repairToolCallFailure({
+      toolCall: { toolName: "Write", input: "{}" },
+      errorMessage: "No such tool",
+      toolNames: ["write", "bash"],
+    })
+
+    expect(repaired.toolName).toBe("write")
+    expect(repaired.input).toBe("{}")
+  })
+
+  test("classifies known tool invalid input", () => {
+    const repaired = repairToolCallFailure({
+      toolCall: { toolName: "write", input: "{ malformed" },
+      errorMessage: "JSON parsing failed",
+      toolNames: ["write", "bash"],
+    })
+
+    expect(repaired.toolName).toBe("invalid")
+    const input = JSON.parse(String(repaired.input))
+    expect(input).toEqual({
+      type: "known_tool_invalid_input",
+      tool: "write",
+      error: "JSON parsing failed",
+      hint: "The tool name is valid, but the input was malformed or truncated. Retry with valid input or split large operations into smaller chunks.",
+    })
+  })
+
+  test("classifies unknown tool separately", () => {
+    const repaired = repairToolCallFailure({
+      toolCall: { toolName: "does_not_exist", input: "{}" },
+      errorMessage: "No such tool",
+      toolNames: ["write", "bash"],
+    })
+
+    expect(repaired.toolName).toBe("invalid")
+    const input = JSON.parse(String(repaired.input))
+    expect(input).toEqual({
+      type: "unknown_tool",
+      tool: "does_not_exist",
+      error: "No such tool",
+    })
+  })
+})
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {

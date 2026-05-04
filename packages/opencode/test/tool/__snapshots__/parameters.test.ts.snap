@@ -141,7 +141,13 @@ exports[`tool parameters JSON Schema (wire shape) invalid 1`] = `
     "error": {
       "type": "string",
     },
+    "hint": {
+      "type": "string",
+    },
     "tool": {
+      "type": "string",
+    },
+    "type": {
       "type": "string",
     },
   },
