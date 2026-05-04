@@ -515,43 +515,48 @@ Si encuentra errores del tipo "Lo siento, pero no puedo ayudar con esa solicitud
 
 Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers AI y más a través de un punto final unificado. Con [Facturación unificada](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) no necesita claves API independientes para cada proveedor.
 
-1. Dirígete al [panel de Cloudflare](https://dash.cloudflare.com/), navega hasta **AI** > **AI Gateway** y crea una nueva puerta de enlace.
+1. Dirígete al [panel de Cloudflare](https://dash.cloudflare.com/), navega hasta **AI** > **AI Gateway** y crea una nueva puerta de enlace. Anota tu **Account ID** y **Gateway ID**.
 
-2. Configure su ID de cuenta y su ID de puerta de enlace como variables de entorno.
-
-   ```bash title="~/.bash_profile"
-   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
-   export CLOUDFLARE_GATEWAY_ID=your-gateway-id
-   ```
-
-3. Ejecute el comando `/connect` y busque **Cloudflare AI Gateway**.
+2. Ejecute el comando `/connect` y busque **Cloudflare AI Gateway**.
 
    ```txt
    /connect
    ```
 
-4. Ingrese su token API de Cloudflare.
+3. Ingrese su **Account ID** cuando se le solicite.
 
    ```txt
-   ┌ API key
+   ┌ Enter your Cloudflare Account ID
    │
    │
    └ enter
    ```
 
-   O configúrelo como una variable de entorno.
+4. Ingrese su **Gateway ID** cuando se le solicite.
 
-   ```bash title="~/.bash_profile"
-   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```txt
+   ┌ Enter your Cloudflare AI Gateway ID
+   │
+   │
+   └ enter
    ```
 
-5. Ejecute el comando `/models` para seleccionar un modelo.
+5. Ingrese su **Cloudflare API token**.
+
+   ```txt
+   ┌ Gateway API token
+   │
+   │
+   └ enter
+   ```
+
+6. Ejecute el comando `/models` para seleccionar un modelo.
 
    ```txt
    /models
    ```
 
-   También puede agregar modelos a través de su configuración opencode.
+   También puede agregar modelos a través de su configuración opencode:
 
    ```json title="opencode.json"
    {
@@ -565,6 +570,59 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
        }
      }
    }
+   ```
+
+   Alternativamente, puede configurar variables de entorno en lugar de usar `/connect`:
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_GATEWAY_ID=your-gateway-id
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```
+
+---
+
+### Cloudflare Workers AI
+
+Cloudflare Workers AI le permite ejecutar modelos de IA en la red global de Cloudflare directamente a través de una API REST, sin necesidad de cuentas de proveedor separadas para los modelos admitidos.
+
+1. Dirígete al [panel de Cloudflare](https://dash.cloudflare.com/), navega hasta **Workers AI** y selecciona **Use REST API** para obtener su **Account ID** y crear un token de API.
+
+2. Ejecute el comando `/connect` y busque **Cloudflare Workers AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Ingrese su **Account ID** cuando se le solicite.
+
+   ```txt
+   ┌ Enter your Cloudflare Account ID
+   │
+   │
+   └ enter
+   ```
+
+4. Ingrese su **Cloudflare API key**.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. Ejecute el comando `/models` para seleccionar un modelo.
+
+   ```txt
+   /models
+   ```
+
+   Alternativamente, puede configurar variables de entorno en lugar de usar `/connect`:
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_API_KEY=your-api-token
    ```
 
 ---
