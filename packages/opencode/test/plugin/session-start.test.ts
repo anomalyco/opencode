@@ -81,7 +81,38 @@ describe("session.start hook", () => {
           const second = bodies.find((body) => JSON.stringify(body).includes("second user"))
 
           expect(JSON.stringify(first)).toContain("session start context")
+          expect(JSON.stringify(first)).toContain("parent=none")
+          expect(JSON.stringify(first)).toContain("agent=build")
           expect(JSON.stringify(second)).not.toContain("session start context")
+        }),
+      { git: true, config: providerCfg },
+    ),
+  )
+
+  it.live("includes parent session and agent context for child sessions", () =>
+    provideTmpdirServer(
+      ({ llm }) =>
+        Effect.gen(function* () {
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ title: "parent session" })
+          const child = yield* sessions.create({ title: "child session", parentID: parent.id })
+
+          yield* llm.text("child response")
+          yield* prompt.prompt({
+            sessionID: child.id,
+            agent: "build",
+            parentAgent: "general",
+            model: ref,
+            parts: [{ type: "text", text: "child user" }],
+          })
+
+          const bodies = yield* llm.inputs
+          const body = bodies.find((item) => JSON.stringify(item).includes("child user"))
+
+          expect(JSON.stringify(body)).toContain(`parent=${parent.id}`)
+          expect(JSON.stringify(body)).toContain("agent=build")
+          expect(JSON.stringify(body)).toContain("parentAgent=general")
         }),
       { git: true, config: providerCfg },
     ),

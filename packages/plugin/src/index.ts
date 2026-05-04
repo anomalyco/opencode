@@ -288,7 +288,14 @@ export interface Hooks {
     output: { stop: boolean; message?: string },
   ) => Promise<void>
   "session.start"?: (
-    input: { sessionID: string; directory: string; projectID: string },
+    input: {
+      sessionID: string
+      directory: string
+      projectID: string
+      parentSessionID?: string
+      agent?: string
+      parentAgent?: string
+    },
     output: { context: string[] },
   ) => Promise<void>
   "tool.execute.before"?: (

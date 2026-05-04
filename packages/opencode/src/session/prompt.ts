@@ -1609,7 +1609,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const sessionStartContext = !msgs.some((m) => m.info.role === "assistant")
             ? (yield* plugin.trigger(
                 "session.start",
-                { sessionID, directory: session.directory, projectID: session.projectID },
+                {
+                  sessionID,
+                  directory: session.directory,
+                  projectID: session.projectID,
+                  parentSessionID: session.parentID,
+                  agent: lastUser.agent,
+                  parentAgent: lastUser.parentAgent,
+                },
                 { context: [] as string[] },
               )).context
             : []
