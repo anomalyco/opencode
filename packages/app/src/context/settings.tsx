@@ -108,7 +108,7 @@ const defaultSettings: Settings = {
     autoSave: true,
     releaseNotes: true,
     followup: "steer",
-    showFileTree: false,
+    showFileTree: true, // FORK: 新用户默认展开右侧文件树面板 [feat: file-tree-ux-polish] 2026-05-04
     showNavigation: false,
     showSearch: false,
     showStatus: false,
