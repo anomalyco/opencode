@@ -39,6 +39,7 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { isShellCompletionInvocation } from "./cli/completion"
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -55,6 +56,7 @@ process.on("uncaughtException", (e) => {
 })
 
 const args = hideBin(process.argv)
+const shellCompletionInvocation = isShellCompletionInvocation(args)
 
 function show(out: string) {
   const text = out.trimStart()
@@ -88,6 +90,8 @@ const cli = yargs(args)
     type: "boolean",
   })
   .middleware(async (opts) => {
+    if (shellCompletionInvocation) return
+
     if (opts.pure) {
       process.env.OPENCODE_PURE = "1"
     }
