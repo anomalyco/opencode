@@ -42,7 +42,7 @@ export interface DialogSelectOption<T = any> {
   categoryView?: JSX.Element
   disabled?: boolean
   bg?: RGBA
-  gutter?: JSX.Element
+  gutter?: () => JSX.Element
   margin?: JSX.Element
   onSelect?: (ctx: DialogContext) => void
 }
@@ -407,7 +407,7 @@ function Option(props: {
   active?: boolean
   current?: boolean
   footer?: JSX.Element | string
-  gutter?: JSX.Element
+  gutter?: () => JSX.Element
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
@@ -422,7 +422,7 @@ function Option(props: {
       </Show>
       <Show when={!props.current && props.gutter}>
         <box flexShrink={0} marginRight={0}>
-          {props.gutter}
+          {props.gutter?.()}
         </box>
       </Show>
       <text
