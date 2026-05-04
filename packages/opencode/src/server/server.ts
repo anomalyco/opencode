@@ -5,7 +5,7 @@ import { lazy } from "@/util/lazy"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { WorkspaceID } from "@/control-plane/schema"
-import { Context, Effect, Exit, Layer, Scope } from "effect"
+import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import * as HttpApiServer from "#httpapi-server"
@@ -259,6 +259,12 @@ async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selec
     }).pipe(
       Layer.provideMerge(WebSocketTracker.layer),
       Layer.provideMerge(HttpApiServer.layer({ port, hostname: opts.hostname })),
+      // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
+      // reads reflect the current `process.env`. Effect's default
+      // `ConfigProvider` snapshots `process.env` on first read and caches the
+      // result on a module-singleton Reference; without overriding it here,
+      // every later `Server.listen()` keeps observing that initial snapshot.
+      Layer.provide(ConfigProvider.layer(ConfigProvider.fromEnv())),
     )
 
   const start = async (port: number) => {
