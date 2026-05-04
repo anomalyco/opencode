@@ -5,8 +5,9 @@ export function terminalWebSocketURL(input: {
   id: string
   directory: string
   cursor: number
-  sameOrigin: boolean
-  username: string
+  ticket?: string
+  sameOrigin?: boolean
+  username?: string
   password?: string
   authToken?: boolean
 }) {
@@ -14,6 +15,10 @@ export function terminalWebSocketURL(input: {
   next.searchParams.set("directory", input.directory)
   next.searchParams.set("cursor", String(input.cursor))
   next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
+  if (input.ticket) {
+    next.searchParams.set("ticket", input.ticket)
+    return next
+  }
   if (input.password && (!input.sameOrigin || input.authToken))
     next.searchParams.set(
       "auth_token",

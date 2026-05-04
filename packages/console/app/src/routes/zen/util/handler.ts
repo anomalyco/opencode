@@ -158,11 +158,13 @@ export async function handler(
                 Object.entries(obj).flatMap(([k, v]) => {
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
-                  if (v === "$ip") return [[k, ip]]
-                  if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
-                  if (v.startsWith("$header.")) {
-                    const headerValue = input.request.headers.get(v.slice(8))
-                    return headerValue ? [[k, headerValue]] : []
+                  if (typeof v === "string") {
+                    if (v === "$ip") return [[k, ip]]
+                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v.startsWith("$header.")) {
+                      const headerValue = input.request.headers.get(v.slice(8))
+                      return headerValue ? [[k, headerValue]] : []
+                    }
                   }
                   return [[k, v]]
                 }),
