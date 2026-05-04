@@ -54,6 +54,7 @@ export class Info extends Schema.Class<Info>("Session.Info")({
 }) {}
 
 export interface Interface {
+  readonly create: (input?: { agent?: string; model?: string }) => Effect.Effect<Info>
   readonly list: (input: {
     limit?: number
     order?: "asc" | "desc"
