@@ -149,10 +149,10 @@ This fork regularly syncs with upstream to get the latest features and bug fixes
 
 ```bash
 # Recommended sync method
-./scripts/sync-upstream.sh
+./fork/scripts/sync-upstream.sh
 ```
 
-For manual sync instructions or troubleshooting (including network issues), see the [Maintenance Guide](MAINTENANCE.md).
+For manual sync instructions or troubleshooting (including network issues), see the [Maintenance Guide](fork/docs/MAINTENANCE.md).
 
 ---
 

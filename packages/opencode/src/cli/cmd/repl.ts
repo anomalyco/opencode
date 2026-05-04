@@ -5,7 +5,7 @@ import { bootstrap } from "../bootstrap"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
-import { inline, renderRunningTask, renderTool } from "./render"
+import { colorizeDiff, inline, isDiff, renderRunningTask, renderTool } from "./render"
 
 const SLASH_COMMANDS = [
   "help",
@@ -506,7 +506,23 @@ async function consumeUntilIdle(sdk: OpencodeClient, state: State, send: () => P
             const ts = new Date(part.time.start).toLocaleTimeString()
             UI.println(UI.Style.TEXT_DIM + `[${ts}]` + UI.Style.TEXT_NORMAL)
           }
-          UI.println(text)
+
+          // Handle diff blocks in text
+          if (text.includes("```diff")) {
+            const segments = text.split(/(```diff\n[\s\S]*?\n```)/g)
+            for (const segment of segments) {
+              if (segment.startsWith("```diff")) {
+                const content = segment.replace(/```diff\n/, "").replace(/\n```/, "")
+                UI.println(colorizeDiff(content))
+              } else if (segment.trim()) {
+                UI.println(segment.trim())
+              }
+            }
+          } else if (isDiff(text)) {
+            UI.println(colorizeDiff(text))
+          } else {
+            UI.println(text)
+          }
           UI.empty()
         }
 

@@ -23,7 +23,9 @@ target
 .scripts
 .direnv/
 
+
 # Local dev files
+fork/dist/
 opencode-dev
 UPCOMING_CHANGELOG.md
 logs/

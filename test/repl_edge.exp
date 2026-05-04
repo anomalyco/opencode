@@ -1,0 +1,59 @@
+#!/usr/bin/env expect -f
+
+# Edge cases for the slash command parser:
+# - :q exits
+# - empty "/" doesn't crash
+# - whitespace-only after slash is treated benignly
+# - unknown /xyz passes through to sdk.session.command (which will error, but REPL stays alive)
+set timeout 30
+set env(PATH) "$env(HOME)/.bun/bin:$env(PATH)"
+
+# 1. :q variant
+spawn -noecho bun run --cwd packages/opencode --conditions=browser src/index.ts .
+expect {
+    -re {for commands} {}
+    timeout { puts "FAIL: banner"; exit 1 }
+}
+send ":q\r"
+expect {
+    eof {}
+    timeout { puts "FAIL: :q did not terminate"; exit 1 }
+}
+puts "OK: :q exits"
+
+# 2. lone slash followed by /exit — should not crash
+spawn -noecho bun run --cwd packages/opencode --conditions=browser src/index.ts .
+expect -re {for commands}
+send "/\r"
+# After lone "/", REPL should print prompt again (handled as unknown passthrough)
+expect {
+    -re {»} {}
+    timeout { puts "FAIL: lone / hung"; exit 1 }
+}
+puts "OK: lone /"
+send "/exit\r"
+expect eof
+
+# 3. unknown command
+spawn -noecho bun run --cwd packages/opencode --conditions=browser src/index.ts .
+expect -re {for commands}
+send "/zzzz_does_not_exist xyz\r"
+# REPL should print error then return to prompt
+expect {
+    -re {Command not found} {}
+    -re {not found} {}
+    timeout { puts "FAIL: unknown command did not error"; exit 1 }
+}
+puts "OK: unknown command errors gracefully"
+# Verify REPL still alive — send /help and check it prints
+send "/help\r"
+expect {
+    "Commands:" {}
+    timeout { puts "FAIL: REPL not alive after unknown command"; exit 1 }
+}
+puts "OK: REPL still alive after unknown command"
+send "/exit\r"
+expect eof
+
+puts "\nALL EDGE CASES OK"
+exit 0

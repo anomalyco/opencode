@@ -26,7 +26,7 @@
 
 ```bash
 # 推荐方式
-./scripts/sync-upstream.sh
+./fork/scripts/sync-upstream.sh
 ```
 
 #### 📋 同步后检查清单 (Post-Sync Checklist)
@@ -90,7 +90,8 @@ git commit -m "merge: resolve conflicts, preserve minimal mode"
 | `README.md` | 项目说明文档 | 保留我们的 (Ours) |
 | `.github/workflows/build-cli.yml` | 构建工作流 | 保留我们的 (Ours) |
 | `.github/workflows/sync-upstream.yml` | 同步工作流 | 保留我们的 (Ours) |
-| `scripts/sync-upstream.sh` | 同步脚本 | 保留我们的 (Ours) |
+| `fork/scripts/sync-upstream.sh` | 同步脚本 | 保留我们的 (Ours) |
+| `fork/docs/` | 所有的文档与指南 | 保留我们的 (Ours) |
 
 ---
 
@@ -98,7 +99,7 @@ git commit -m "merge: resolve conflicts, preserve minimal mode"
 
 ### 1. 与上游同步
 ```bash
-./scripts/sync-upstream.sh
+./fork/scripts/sync-upstream.sh
 ```
 
 ### 2. 测试改动
@@ -137,7 +138,7 @@ git push origin v0.1.0-minimal
 ```bash
 # 更新 feat/minimal-tui-style 分支
 git checkout feat/minimal-tui-style
-./scripts/sync-upstream.sh
+./fork/scripts/sync-upstream.sh
 
 # Rebase 你的功能分支
 git checkout feature/my-feature
@@ -180,6 +181,7 @@ bun run typecheck
 - **问题反馈**: https://github.com/iamcheyan/opencode/issues
 - **上游项目**: https://github.com/anomalyco/opencode
 - **AWS Bedrock 指南 (中文)**: [AWS_BEDROCK_GUIDE_ZH.md](AWS_BEDROCK_GUIDE_ZH.md)
+- **架构与设计指南 (中文)**: [FORK_ARCHITECTURE_ZH.md](FORK_ARCHITECTURE_ZH.md)
 
 ---
 

@@ -133,7 +133,7 @@ function edit(info: ToolProps<typeof EditTool>) {
   )
 }
 
-function colorizeDiff(diff: string): string {
+export function colorizeDiff(diff: string): string {
   const width = process.stdout.columns || 80
   const REMOVED_BG = "\x1b[48;5;52m"
   const ADDED_BG = "\x1b[48;5;22m"
@@ -181,6 +181,11 @@ function colorizeDiff(diff: string): string {
     .join("\n")
 }
 
+export function isDiff(text: string): boolean {
+  const lines = text.split("\n").slice(0, 5)
+  return lines.some((l) => l.startsWith("@@ -") || l.startsWith("diff --git ") || l.startsWith("--- "))
+}
+
 function websearch(info: ToolProps<typeof WebSearchTool>) {
   inline({
     icon: "◈",
@@ -213,7 +218,10 @@ function skill(info: ToolProps<typeof SkillTool>) {
 }
 
 function shell(info: ToolProps<typeof ShellTool>) {
-  const output = info.part.state.status === "completed" ? info.part.state.output?.trim() : undefined
+  let output = info.part.state.status === "completed" ? info.part.state.output?.trim() : undefined
+  if (output && (info.input.command.includes("diff") || isDiff(output))) {
+    output = colorizeDiff(output)
+  }
   block(
     {
       icon: "$",

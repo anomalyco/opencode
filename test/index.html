@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="基本的なウェブ開発を紹介するシンプルなウェブサイト">
+  <title>マイウェブサイト</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <h1 class="header__title">マイウェブサイトへようこそ</h1>
+    <nav class="header__nav">
+      <ul class="nav-list">
+        <li><a href="#home" class="nav-link">ホーム</a></li>
+        <li><a href="#about" class="nav-link">概要</a></li>
+        <li><a href="#contact" class="nav-link">お問い合わせ</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="main">
+    <section id="home" class="section">
+      <h2 class="section__title">ホーム</h2>
+      <p class="section__text">HTMLとCSSで作成されたシンプルなウェブサイトです。</p>
+      <a href="#about" class="btn">詳しく見る</a>
+    </section>
+
+    <section id="about" class="section">
+      <h2 class="section__title">概要</h2>
+      <p class="section__text">このウェブサイトは基本的なウェブ開発の概念を紹介しています。</p>
+    </section>
+
+    <section id="contact" class="section">
+      <h2 class="section__title">お問い合わせ</h2>
+      <p class="section__text">メール: <a href="mailto:example@example.com">example@example.com</a></p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>&copy; 2026 マイウェブサイト</p>
+  </footer>
+</body>
+</html>

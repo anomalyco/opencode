@@ -1,0 +1,96 @@
+#!/usr/bin/env expect -f
+
+# Drive opencode REPL via a pty so stdin.isTTY=true and the slurp in
+# thread.ts:input() is bypassed. Tests slash command handling.
+
+set timeout 60
+
+# Make sure bun is on PATH inside the pty.
+set env(PATH) "$env(HOME)/.bun/bin:$env(PATH)"
+
+# Spawn opencode in REPL mode (style:minimal in tui.json)
+spawn -noecho bun run --cwd packages/opencode --conditions=browser src/index.ts .
+
+# Wait for the welcome banner
+expect {
+    -re {for commands} {}
+    timeout { puts "\nFAIL: never saw welcome banner"; exit 1 }
+}
+
+# /help
+send "/help\r"
+expect {
+    "Commands:" {}
+    timeout { puts "\nFAIL: /help did not print Commands header"; exit 1 }
+}
+expect {
+    -re {/help\s+show this help} {}
+    timeout { puts "\nFAIL: /help did not list itself"; exit 1 }
+}
+puts "\nOK: /help"
+
+# /thinking toggle on
+send "/thinking\r"
+expect {
+    "thinking on" {}
+    timeout { puts "\nFAIL: /thinking did not toggle on"; exit 1 }
+}
+# /thinking toggle off
+send "/thinking\r"
+expect {
+    "thinking off" {}
+    timeout { puts "\nFAIL: /thinking did not toggle off"; exit 1 }
+}
+puts "OK: /thinking"
+
+# /model (no args) should list providers/models
+send "/model\r"
+expect {
+    -re {current:.*\(default\)} {}
+    -re {current:.*/} {}
+    timeout { puts "\nFAIL: /model did not show current"; exit 1 }
+}
+puts "OK: /model (list)"
+
+# /model set
+send "/model anthropic/claude-sonnet-4-5\r"
+expect {
+    -re {model.*claude-sonnet-4-5} {}
+    timeout { puts "\nFAIL: /model set not echoed"; exit 1 }
+}
+puts "OK: /model (set)"
+
+# /agent (no args)
+send "/agent\r"
+expect {
+    -re {current:.*} {}
+    timeout { puts "\nFAIL: /agent did not show current"; exit 1 }
+}
+puts "OK: /agent (list)"
+
+# /sessions
+send "/sessions\r"
+expect {
+    -re {[*\s]\s+[0-9A-Za-z]{6}\s} {}
+    "no sessions" {}
+    timeout { puts "\nFAIL: /sessions did not list"; exit 1 }
+}
+puts "OK: /sessions"
+
+# /clear should clear screen — we just verify it doesn't crash and returns prompt
+send "/clear\r"
+expect {
+    -re {»} {}
+    timeout { puts "\nFAIL: /clear did not return prompt"; exit 1 }
+}
+puts "OK: /clear"
+
+# /exit
+send "/exit\r"
+expect {
+    eof {}
+    timeout { puts "\nFAIL: /exit did not terminate"; exit 1 }
+}
+puts "OK: /exit"
+puts "\nALL TESTS PASSED"
+exit 0

@@ -1,0 +1,28 @@
+#!/usr/bin/env expect -f
+
+# Verify plain-text prompts still flow to LLM (no slash prefix).
+set timeout 90
+set env(PATH) "$env(HOME)/.bun/bin:$env(PATH)"
+
+spawn -noecho bun run --cwd packages/opencode --conditions=browser src/index.ts .
+
+expect {
+    -re {for commands} {}
+    timeout { puts "\nFAIL: never saw welcome banner"; exit 1 }
+}
+
+# Send plain text prompt
+send "say only the word hello and nothing else\r"
+
+# Wait for assistant model line
+expect {
+    -re {>.*\n.*hello} {}
+    "hello" {}
+    timeout { puts "\nFAIL: model did not respond with hello"; exit 1 }
+}
+puts "\nOK: plain prompt → LLM"
+
+send "/exit\r"
+expect eof
+puts "ALL TESTS PASSED"
+exit 0

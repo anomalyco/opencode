@@ -35,13 +35,19 @@ else
   echo "⚠️  Merge conflicts detected. Resolving..."
 
   # Keep our version of conflicted files
-  # This preserves our minimal mode default
+  # This preserves our minimal mode default and custom scripts
   git checkout --ours packages/opencode/src/cli/cmd/tui/thread.ts
+  git checkout --ours packages/opencode/script/build.ts
   git checkout --ours README.md
-
+  
+  # Protect everything in the fork/ directory
+  git checkout --ours fork/
+  
   # Stage resolved files
   git add packages/opencode/src/cli/cmd/tui/thread.ts
+  git add packages/opencode/script/build.ts
   git add README.md
+  git add fork/
 
   # Commit the merge
   git commit -m "$SYNC_MSG (resolved conflicts)"
@@ -62,4 +68,4 @@ echo "🎉 Sync and Push complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Review the changes: git log --oneline HEAD...upstream/dev"
-2. Test the build: bun run typecheck
+echo "  2. Test the build: bun run typecheck"
