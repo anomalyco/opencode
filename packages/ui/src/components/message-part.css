@@ -462,17 +462,7 @@
     padding: 6px 0px;
     transition:
       background-color 0.15s ease,
-      border-color 0.15s ease,
       color 0.15s ease;
-    border: 1px solid transparent;
-  }
-
-  > [data-slot="collapsible-trigger"]:hover {
-    border-color: color-mix(in oklch, var(--border-weak-base) 70%, transparent);
-  }
-
-  > [data-slot="collapsible-trigger"][aria-expanded="true"] {
-    border-color: color-mix(in oklch, var(--border-weak-base) 90%, transparent);
   }
 }
 
