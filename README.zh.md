@@ -97,6 +97,22 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+#### Shell 补全
+
+OpenCode 支持通过 `opencode completion` 生成 shell 补全脚本。
+
+```bash
+# Bash
+SHELL="$(command -v bash)" opencode completion >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh
+SHELL="$(command -v zsh)" opencode completion >> ~/.zshrc
+source ~/.zshrc
+```
+
+在 macOS 上，你可能更想写入 `~/.bash_profile` 或 `~/.zprofile`。
+
 ### Agents
 
 OpenCode 内置两种 Agent，可用 `Tab` 键快速切换：
