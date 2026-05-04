@@ -1,31 +1,32 @@
-import * as Log from "@opencode-ai/core/util/log"
-import path from "path"
-import { pathToFileURL } from "url"
-import os from "os"
-import z from "zod"
-import { mergeDeep } from "remeda"
-import { Global } from "@opencode-ai/core/global"
-import fsNode from "fs/promises"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { Account } from "@/account/account"
+import { InstanceState } from "@/effect/instance-state"
+import { zod } from "@/util/effect-zod"
+import { isRecord } from "@/util/record"
+import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@/util/schema"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Global } from "@opencode-ai/core/global"
+import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Npm } from "@opencode-ai/core/npm"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { NamedError } from "@opencode-ai/core/util/error"
+import * as Log from "@opencode-ai/core/util/log"
+import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
+import { existsSync } from "fs"
+import fsNode from "fs/promises"
+import { applyEdits, modify } from "jsonc-parser"
+import os from "os"
+import path from "path"
+import { mergeDeep } from "remeda"
+import { pathToFileURL } from "url"
+import z from "zod"
 import { Auth } from "../auth"
 import { Env } from "../env"
-import { applyEdits, modify } from "jsonc-parser"
 import { type InstanceContext } from "../project/instance"
-import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
-import { existsSync } from "fs"
-import { Account } from "@/account/account"
-import { isRecord } from "@/util/record"
-import type { ConsoleState } from "./console-state"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { InstanceState } from "@/effect/instance-state"
-import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath } from "../project/instance-context"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@/util/schema"
 import { ConfigAgent } from "./agent"
 import { ConfigCommand } from "./command"
+import type { ConsoleState } from "./console-state"
 import { ConfigFormatter } from "./formatter"
 import { ConfigLayout } from "./layout"
 import { ConfigLSP } from "./lsp"
@@ -40,7 +41,6 @@ import { ConfigProvider } from "./provider"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
-import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "config" })
 
@@ -286,6 +286,8 @@ type State = {
   directories: string[]
   deps: Fiber.Fiber<void, never>[]
   consoleState: ConsoleState
+  files: string[]
+  fingerprints: Record<string, string>
 }
 
 export interface Interface {
@@ -335,6 +337,24 @@ function writableGlobal(info: Info) {
   // When a user changes config from a value back to default in the Desktop app, we don't want to leave a blank `"shell": "",` key
   if ("shell" in next && next.shell === "") return { ...next, shell: undefined }
   return next
+}
+
+async function fingerprintFile(filepath: string) {
+  try {
+    const stat = await fsNode.stat(filepath)
+    return `${stat.size}:${stat.mtimeMs}`
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return "missing"
+    throw err
+  }
+}
+
+async function fingerprintFiles(files: string[]) {
+  const result: Record<string, string> = {}
+  for (const file of files) {
+    result[file] = await fingerprintFile(file)
+  }
+  return result
 }
 
 export const ConfigDirectoryTypoError = NamedError.create(
@@ -449,6 +469,7 @@ export const layer = Layer.effect(
         const auth = yield* authSvc.all().pipe(Effect.orDie)
 
         let result: Info = {}
+        const files = new Set<string>()
         const consoleManagedProviders = new Set<string>()
         let activeOrgName: string | undefined
 
@@ -507,16 +528,22 @@ export const layer = Layer.effect(
           }
         }
 
+        for (const file of ["config.json", "opencode.json", "opencode.jsonc"]) {
+          files.add(path.join(Global.Path.config, file))
+        }
+
         const global = yield* getGlobal()
         yield* merge(Global.Path.config, global, "global")
 
         if (Flag.OPENCODE_CONFIG) {
+          files.add(Flag.OPENCODE_CONFIG)
           yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG))
           log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+            files.add(file)
             yield* merge(file, yield* loadFile(file), "local")
           }
         }
@@ -537,6 +564,7 @@ export const layer = Layer.effect(
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
+              files.add(source)
               log.debug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source))
               result.agent ??= {}
@@ -632,6 +660,7 @@ export const layer = Layer.effect(
         if (existsSync(managedDir)) {
           for (const file of ["opencode.json", "opencode.jsonc"]) {
             const source = path.join(managedDir, file)
+            files.add(source)
             yield* merge(source, yield* loadFile(source), "global")
           }
         }
@@ -687,10 +716,14 @@ export const layer = Layer.effect(
           result.compaction = { ...result.compaction, prune: false }
         }
 
+        const trackedFiles = Array.from(files)
+
         return {
           config: result,
           directories,
           deps,
+          files: trackedFiles,
+          fingerprints: yield* Effect.promise(() => fingerprintFiles(trackedFiles)),
           consoleState: {
             consoleManagedProviders: Array.from(consoleManagedProviders),
             activeOrgName,
@@ -708,6 +741,15 @@ export const layer = Layer.effect(
     )
 
     const get = Effect.fn("Config.get")(function* () {
+      const current = yield* InstanceState.get(state)
+      const latest = yield* Effect.promise(() => fingerprintFiles(current.files))
+      const changed = current.files.some((file) => latest[file] !== current.fingerprints[file])
+
+      if (changed) {
+        yield* invalidateGlobal
+        yield* InstanceState.invalidate(state)
+      }
+
       return yield* InstanceState.use(state, (s) => s.config)
     })
 
@@ -736,6 +778,7 @@ export const layer = Layer.effect(
 
     const invalidate = Effect.fn("Config.invalidate")(function* () {
       yield* invalidateGlobal
+      yield* InstanceState.invalidate(state)
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
