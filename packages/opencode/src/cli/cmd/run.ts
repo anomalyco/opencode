@@ -441,10 +441,18 @@ export const RunCommand = effectCmd({
         const events = await sdk.event.subscribe()
         let error: string | undefined
 
-        async function loop() {
+        async function loop(runSessionID: string) {
           const toggles = new Map<string, boolean>()
+          const runSessionIDs = new Set<string>([runSessionID])
 
           for await (const event of events.stream) {
+            if (event.type === "session.created" || event.type === "session.updated") {
+              const info = event.properties.info
+              if (event.properties.sessionID && info.parentID && runSessionIDs.has(info.parentID)) {
+                runSessionIDs.add(event.properties.sessionID)
+              }
+            }
+
             if (
               event.type === "message.updated" &&
               event.properties.info.role === "assistant" &&
@@ -459,7 +467,7 @@ export const RunCommand = effectCmd({
 
             if (event.type === "message.part.updated") {
               const part = event.properties.part
-              if (part.sessionID !== sessionID) continue
+              if (part.sessionID !== runSessionID) continue
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
@@ -523,7 +531,7 @@ export const RunCommand = effectCmd({
 
             if (event.type === "session.error") {
               const props = event.properties
-              if (props.sessionID !== sessionID || !props.error) continue
+              if (props.sessionID !== runSessionID || !props.error) continue
               let err = String(props.error.name)
               if ("data" in props.error && props.error.data && "message" in props.error.data) {
                 err = String(props.error.data.message)
@@ -535,7 +543,7 @@ export const RunCommand = effectCmd({
 
             if (
               event.type === "session.status" &&
-              event.properties.sessionID === sessionID &&
+              event.properties.sessionID === runSessionID &&
               event.properties.status.type === "idle"
             ) {
               break
@@ -543,7 +551,7 @@ export const RunCommand = effectCmd({
 
             if (event.type === "permission.asked") {
               const permission = event.properties
-              if (permission.sessionID !== sessionID) continue
+              if (!runSessionIDs.has(permission.sessionID)) continue
 
               if (args["dangerously-skip-permissions"]) {
                 await sdk.permission.reply({
@@ -635,7 +643,7 @@ export const RunCommand = effectCmd({
         }
         await share(sdk, sessionID)
 
-        loop().catch((e) => {
+        loop(sessionID).catch((e) => {
           console.error(e)
           process.exit(1)
         })
