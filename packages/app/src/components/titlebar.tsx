@@ -204,20 +204,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
   return (
     <header
-      classList={{
-        "shrink-0 relative overflow-hidden flex flex-row": true,
-        "h-11 bg-v2-background-bg-deep": USE_V2_TITLEBAR,
-        "h-10 bg-background-base": !USE_V2_TITLEBAR,
-      }}
-      style={{
-        "min-height": minHeight(),
-        "padding-left": mac() ? `${84 / zoom()}px` : 0,
-        width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
-        "max-width": electronWindows()
-          ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))`
-          : undefined,
-        "align-self": electronWindows() ? "flex-start" : undefined,
-      }}
+      data-component="titlebar"
+      class="h-10 shrink-0 bg-background-base relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
+      style={{ "min-height": minHeight() }}
       data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
