@@ -266,6 +266,10 @@ html[data-theme="arc"] [data-dock-surface="tray"] {
   border-radius: var(--radius-xl);
 }
 
+html[data-theme="arc"] [data-dock-surface="shell"][data-slot="prompt-shell"] {
+  border-radius: var(--radius-2xl);
+}
+
 /* Buttons / cards / dialogs: bump radii to feel softer under arc */
 html[data-theme="arc"] [data-component="button"] {
   border-radius: var(--radius-lg);
@@ -623,4 +627,3 @@ html[data-theme="arc"] [data-component="text-field"] [data-slot="text-field-inpu
 html[data-theme="arc"] [data-component="inline-input"] {
   border-radius: var(--radius-lg);
 }
-
