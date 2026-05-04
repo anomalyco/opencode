@@ -525,7 +525,7 @@
           width: 200px;
           min-width: 200px;
         }
-        padding: 12px;
+        padding: 18px;
         gap: 0;
         background-color: var(--background-base);
         border-right: 1px solid var(--border-weak-base);
