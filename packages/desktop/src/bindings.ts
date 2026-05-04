@@ -195,6 +195,7 @@ export type TrellisTask = {
 export type TrellisTaskList = {
 		root: string,
 		current: string | null,
+		skipped: number,
 		tasks: TrellisTask[],
 	};
 

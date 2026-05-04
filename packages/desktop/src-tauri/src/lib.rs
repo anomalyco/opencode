@@ -96,6 +96,7 @@ struct TrellisTask {
 struct TrellisTaskList {
     root: String,
     current: Option<String>,
+    skipped: u32,
     tasks: Vec<TrellisTask>,
 }
 
@@ -567,11 +568,13 @@ fn list_trellis_tasks(directory: String) -> Result<TrellisTaskList, String> {
         return Ok(TrellisTaskList {
             root: root.to_string_lossy().to_string(),
             current,
+            skipped: 0,
             tasks: Vec::new(),
         });
     };
 
     let mut list = Vec::new();
+    let mut skipped: u32 = 0;
     for entry in entries.filter_map(|entry| entry.ok()) {
         let path = entry.path();
         if !path.is_dir() {
@@ -586,10 +589,22 @@ fn list_trellis_tasks(directory: String) -> Result<TrellisTaskList, String> {
         }
 
         let file = path.join("task.json");
-        let text = fs::read_to_string(&file)
-            .map_err(|err| format!("Failed to read Trellis task {}: {err}", file.to_string_lossy()))?;
-        let data = serde_json::from_str::<serde_json::Value>(&text)
-            .map_err(|err| format!("Failed to parse Trellis task {}: {err}", file.to_string_lossy()))?;
+        let text = match fs::read_to_string(&file) {
+            Ok(text) => text,
+            Err(err) => {
+                eprintln!("[trellis] skipping task {}: failed to read task.json: {err}", path.to_string_lossy());
+                skipped += 1;
+                continue;
+            }
+        };
+        let data = match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(data) => data,
+            Err(err) => {
+                eprintln!("[trellis] skipping task {}: failed to parse task.json: {err}", path.to_string_lossy());
+                skipped += 1;
+                continue;
+            }
+        };
 
         let id = trellis_text(&data, "id").unwrap_or_else(|| name.to_string());
         let task_name = trellis_text(&data, "name").unwrap_or_else(|| id.clone());
@@ -625,6 +640,7 @@ fn list_trellis_tasks(directory: String) -> Result<TrellisTaskList, String> {
     Ok(TrellisTaskList {
         root: root.to_string_lossy().to_string(),
         current,
+        skipped,
         tasks: list,
     })
 }

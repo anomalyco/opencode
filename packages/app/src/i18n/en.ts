@@ -57,6 +57,7 @@ export const dict = {
   "trellis.tasks.empty": "No Trellis tasks found in this project.",
   "trellis.tasks.noProject": "Open a project to view Trellis tasks.",
   "trellis.tasks.desktopOnly": "Trellis tasks are available in the desktop app.",
+  "trellis.tasks.skipped": "Skipped {count} task(s) with missing or invalid task.json",
 
   "command.palette": "Command palette",
 

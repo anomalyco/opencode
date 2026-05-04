@@ -58,6 +58,7 @@ export type TrellisTask = {
 export type TrellisTaskList = {
   root: string
   current?: string
+  skipped?: number
   tasks: TrellisTask[]
 }
 
