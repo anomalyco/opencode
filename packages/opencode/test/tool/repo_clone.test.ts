@@ -184,40 +184,43 @@ describe("tool.repo_clone", () => {
     provideTmpdirInstance((_dir) =>
       Effect.gen(function* () {
         const tool = yield* init()
-        const result = yield* tool.execute({ repository: "not-a-repo" }, ctx).pipe(Effect.exit)
+        const inputs = [
+          { repository: "not-a-repo", message: "git URL" },
+          { repository: "git@github.com:../../../etc/passwd", message: "git URL" },
+          { repository: "-u:foo/bar", message: "git URL" },
+          { repository: pathToFileURL(path.join(_dir, "local.git")).href, message: "Local file" },
+        ]
 
-        expect(Exit.isFailure(result)).toBe(true)
-        if (Exit.isFailure(result)) {
-          const error = Cause.squash(result.cause)
-          expect(error instanceof Error ? error.message : String(error)).toContain("git URL")
-        }
+        yield* Effect.forEach(
+          inputs,
+          (input) =>
+            Effect.gen(function* () {
+              const result = yield* tool.execute({ repository: input.repository }, ctx).pipe(Effect.exit)
+
+              expect(Exit.isFailure(result)).toBe(true)
+              if (Exit.isFailure(result)) {
+                const error = Cause.squash(result.cause)
+                expect(error instanceof Error ? error.message : String(error)).toContain(input.message)
+              }
+            }),
+          { discard: true },
+        )
       }),
     ),
   )
 
-  it.live("clones generic git URLs into the managed cache", () =>
+  it.live("rejects local file repository URLs", () =>
     provideTmpdirInstance((_dir) =>
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
         const source = yield* tmpdirScoped({ git: true })
-        const remoteRoot = yield* tmpdirScoped()
-        const remoteDir = path.join(remoteRoot, "forge")
-        const remoteRepo = path.join(remoteDir, "repo.git")
-
-        yield* Effect.promise(() => Bun.write(path.join(source, "README.md"), "v1\n"))
-        yield* git(source, ["add", "."])
-        yield* git(source, ["commit", "-m", "add readme"])
-        yield* fs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
-        yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
-
         const tool = yield* init()
-        const result = yield* tool.execute({ repository: pathToFileURL(remoteRepo).href }, ctx)
+        const result = yield* tool.execute({ repository: pathToFileURL(source).href }, ctx).pipe(Effect.exit)
 
-        expect(result.metadata.status).toBe("cloned")
-        expect(result.metadata.host).toBe("file")
-        expect(result.metadata.localPath.startsWith(path.join(Global.Path.repos, "file"))).toBe(true)
-        expect(result.metadata.localPath.endsWith(path.join("forge", "repo"))).toBe(true)
-        expect(yield* fs.readFileString(path.join(result.metadata.localPath, "README.md"))).toBe("v1\n")
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) {
+          const error = Cause.squash(result.cause)
+          expect(error instanceof Error ? error.message : String(error)).toContain("Local file")
+        }
       }),
     ),
   )

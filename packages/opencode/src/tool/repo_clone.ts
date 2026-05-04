@@ -73,6 +73,7 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSys
           const reference = parseRepositoryReference(params.repository)
           if (!reference)
             throw new Error("Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand")
+          if (reference.protocol === "file:") throw new Error("Local file repositories are not supported")
           if (params.branch) validateBranch(params.branch)
 
           const repository = reference.label
@@ -126,6 +127,7 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSys
                       "--depth",
                       "100",
                       ...(params.branch ? ["--branch", params.branch] : []),
+                      "--",
                       remote,
                       localPath,
                     ],

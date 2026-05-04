@@ -9,6 +9,7 @@ export type Reference = {
   repo: string
   remote: string
   label: string
+  protocol?: string
 }
 
 function normalize(input: string) {
@@ -26,6 +27,14 @@ function parts(input: string) {
     .filter(Boolean)
 }
 
+function safeHost(input: string) {
+  return Boolean(input) && !input.startsWith("-") && !/[\s/\\]/.test(input)
+}
+
+function safeSegment(input: string) {
+  return input !== "." && input !== ".." && !input.includes(":") && !/[\s/\\]/.test(input)
+}
+
 function hostLike(input: string) {
   return input.includes(".") || input.includes(":") || input === "localhost"
 }
@@ -40,9 +49,9 @@ function githubRemote(pathname: string) {
   return new URL(`${pathname}.git`, withSlash(base)).href
 }
 
-function build(input: { host: string; segments: string[]; remote?: string }) {
+function build(input: { host: string; segments: string[]; remote?: string; protocol?: string }) {
   const segments = input.segments.map(trimGitSuffix).filter(Boolean)
-  if (!segments.length) return null
+  if (!safeHost(input.host) || !segments.length || segments.some((segment) => !safeSegment(segment))) return null
   const pathname = segments.join("/")
   const repo = segments[segments.length - 1]
   const host = input.host.toLowerCase()
@@ -54,6 +63,7 @@ function build(input: { host: string; segments: string[]; remote?: string }) {
     repo,
     remote: input.remote ?? (host === "github.com" ? githubRemote(pathname) : `https://${host}/${pathname}.git`),
     label: host === "github.com" && segments.length === 2 ? pathname : `${host}/${pathname}`,
+    protocol: input.protocol,
   } satisfies Reference
 }
 
@@ -82,7 +92,12 @@ export function parseRepositoryReference(input: string) {
     const url = new URL(cleaned)
     const pathname = parts(url.pathname)
     const host = url.protocol === "file:" ? "file" : url.host
-    return build({ host, segments: pathname, remote: host === "github.com" ? githubRemote(pathname.join("/")) : cleaned })
+    return build({
+      host,
+      segments: pathname,
+      remote: host === "github.com" ? githubRemote(pathname.join("/")) : cleaned,
+      protocol: url.protocol,
+    })
   } catch {
     return null
   }
