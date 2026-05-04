@@ -37,7 +37,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | 3 | `34afbd99d` | feat(file-tree): 空白处右键菜单重整 + 修复刷新递归(扫所有 expanded 子目录) |
 | 4 | `696231093` | feat(file-tree): 键盘导航 ↑↓/Enter/F2/Delete + macOS Backspace |
 | 5 | `21e26335b` | feat(file-tree): LLM 响应结束(busy→idle)自动刷新文件树 |
-| (合 dev)| (待补 merge commit hash)| Merge feat/file-tree-ux-polish into dev |
+| (合 dev)| `dd97806ef` | Merge feat/file-tree-ux-polish into dev |
 
 实施顺序与 plan 一致(#4 → #2 → #3 → #5 → #1),依赖链:#3 加 `refreshAllExpanded` → #1 复用 / #5 复用 #2 加的 promptRename promptDelete。
 
