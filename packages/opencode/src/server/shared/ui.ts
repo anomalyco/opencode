@@ -33,6 +33,7 @@ function proxyResponseHeaders(headers: Record<string, string>) {
   // transfer metadata makes browsers decode already-decoded assets again.
   result.delete("content-encoding")
   result.delete("content-length")
+  result.delete("transfer-encoding")
   return result
 }
 
