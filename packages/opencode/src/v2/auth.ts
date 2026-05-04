@@ -121,16 +121,16 @@ export const layer = Layer.effect(
       if ("version" in raw && raw.version === 2) return raw as Writable
 
       const migrated = migrate(raw as Record<string, unknown>)
-      yield* fsys.writeJson(file, migrated, 0o600).pipe(
-        Effect.mapError((cause) => new AuthFileWriteError({ operation: "migrate", cause })),
-      )
+      yield* fsys
+        .writeJson(file, migrated, 0o600)
+        .pipe(Effect.mapError((cause) => new AuthFileWriteError({ operation: "migrate", cause })))
       return migrated
     })
 
     const write = (data: Writable) =>
-      fsys.writeJson(file, data, 0o600).pipe(
-        Effect.mapError((cause) => new AuthFileWriteError({ operation: "write", cause })),
-      )
+      fsys
+        .writeJson(file, data, 0o600)
+        .pipe(Effect.mapError((cause) => new AuthFileWriteError({ operation: "write", cause })))
 
     const state = SynchronizedRef.makeUnsafe(yield* load())
 
