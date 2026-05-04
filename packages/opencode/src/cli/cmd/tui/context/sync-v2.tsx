@@ -143,6 +143,15 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               currentAssistant.snapshot = { ...currentAssistant.snapshot, end: event.properties.snapshot }
           })
           break
+        case "session.next.step.failed":
+          update(event.properties.sessionID, (draft) => {
+            const currentAssistant = activeAssistant(draft)
+            if (!currentAssistant) return
+            currentAssistant.time.completed = event.properties.timestamp
+            currentAssistant.finish = "error"
+            currentAssistant.error = event.properties.error
+          })
+          break
         case "session.next.text.started":
           update(event.properties.sessionID, (draft) => {
             activeAssistant(draft)?.content.push({ type: "text", text: "" })
@@ -210,7 +219,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
             match.time.completed = event.properties.timestamp
           })
           break
-        case "session.next.tool.error":
+        case "session.next.tool.failed":
           update(event.properties.sessionID, (draft) => {
             const match = latestTool(activeAssistant(draft), event.properties.callID)
             if (match?.state.status !== "running") return

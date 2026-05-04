@@ -503,7 +503,16 @@ export const Terminal = (props: TerminalProps) => {
         drop?.()
 
         const socket = new WebSocket(
-          terminalWebSocketURL({ url, id, directory, cursor: seek, sameOrigin, username, password }),
+          terminalWebSocketURL({
+            url,
+            id,
+            directory,
+            cursor: seek,
+            sameOrigin,
+            username,
+            password,
+            authToken: server.current?.type === "http" ? server.current.authToken : false,
+          }),
         )
         socket.binaryType = "arraybuffer"
         ws = socket

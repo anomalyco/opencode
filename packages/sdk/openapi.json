@@ -8513,6 +8513,9 @@
             "$ref": "#/components/schemas/EventSessionNextStepEnded"
           },
           {
+            "$ref": "#/components/schemas/EventSessionNextStepFailed"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionNextTextStarted"
           },
           {
@@ -8549,7 +8552,7 @@
             "$ref": "#/components/schemas/EventSessionNextToolSuccess"
           },
           {
-            "$ref": "#/components/schemas/EventSessionNextToolError"
+            "$ref": "#/components/schemas/EventSessionNextToolFailed"
           },
           {
             "$ref": "#/components/schemas/EventSessionNextRetried"
@@ -10709,6 +10712,9 @@
                 "$ref": "#/components/schemas/EventSessionNextStepEnded"
               },
               {
+                "$ref": "#/components/schemas/EventSessionNextStepFailed"
+              },
+              {
                 "$ref": "#/components/schemas/EventSessionNextTextStarted"
               },
               {
@@ -10745,7 +10751,7 @@
                 "$ref": "#/components/schemas/EventSessionNextToolSuccess"
               },
               {
-                "$ref": "#/components/schemas/EventSessionNextToolError"
+                "$ref": "#/components/schemas/EventSessionNextToolFailed"
               },
               {
                 "$ref": "#/components/schemas/EventSessionNextRetried"
@@ -10811,6 +10817,9 @@
                 "$ref": "#/components/schemas/SyncEventSessionNextStepEnded"
               },
               {
+                "$ref": "#/components/schemas/SyncEventSessionNextStepFailed"
+              },
+              {
                 "$ref": "#/components/schemas/SyncEventSessionNextTextStarted"
               },
               {
@@ -10847,7 +10856,7 @@
                 "$ref": "#/components/schemas/SyncEventSessionNextToolSuccess"
               },
               {
-                "$ref": "#/components/schemas/SyncEventSessionNextToolError"
+                "$ref": "#/components/schemas/SyncEventSessionNextToolFailed"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextRetried"
@@ -14161,6 +14170,57 @@
         "required": ["type", "name", "id", "seq", "aggregateID", "data"],
         "additionalProperties": false
       },
+      "SyncEventSessionNextStepFailed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "name": {
+            "type": "string",
+            "enum": ["session.next.step.failed.1"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "aggregateID": {
+            "type": "string",
+            "enum": ["sessionID"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "message"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["timestamp", "sessionID", "error"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "name", "id", "seq", "aggregateID", "data"],
+        "additionalProperties": false
+      },
       "SyncEventSessionNextTextStarted": {
         "type": "object",
         "properties": {
@@ -14729,7 +14789,7 @@
         "required": ["type", "name", "id", "seq", "aggregateID", "data"],
         "additionalProperties": false
       },
-      "SyncEventSessionNextToolError": {
+      "SyncEventSessionNextToolFailed": {
         "type": "object",
         "properties": {
           "type": {
@@ -14738,7 +14798,7 @@
           },
           "name": {
             "type": "string",
-            "enum": ["session.next.tool.error.1"]
+            "enum": ["session.next.tool.failed.1"]
           },
           "id": {
             "type": "string"
@@ -16399,6 +16459,46 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventSessionNextStepFailed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.step.failed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "message"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["timestamp", "sessionID", "error"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventSessionNextTextStarted": {
         "type": "object",
         "properties": {
@@ -16869,7 +16969,7 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventSessionNextToolError": {
+      "EventSessionNextToolFailed": {
         "type": "object",
         "properties": {
           "id": {
@@ -16877,7 +16977,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.next.tool.error"]
+            "enum": ["session.next.tool.failed"]
           },
           "properties": {
             "type": "object",
@@ -17700,7 +17800,17 @@
             "additionalProperties": false
           },
           "error": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "message"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "time", "type", "agent", "model", "content"],
