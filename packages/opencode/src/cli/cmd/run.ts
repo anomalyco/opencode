@@ -302,6 +302,11 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
         default: false,
+      })
+      .option("yolo", {
+        type: "boolean",
+        describe: "alias for --dangerously-skip-permissions",
+        default: false,
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
     const agentSvc = yield* Agent.Service
@@ -553,7 +558,7 @@ export const RunCommand = effectCmd({
               const permission = event.properties
               if (!runSessionIDs.has(permission.sessionID)) continue
 
-              if (args["dangerously-skip-permissions"]) {
+              if (args["dangerously-skip-permissions"] || args.yolo) {
                 await sdk.permission.reply({
                   requestID: permission.id,
                   reply: "once",
