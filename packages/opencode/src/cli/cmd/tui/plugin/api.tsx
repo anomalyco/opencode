@@ -167,6 +167,12 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       question(sessionID) {
         return sync.data.question[sessionID] ?? []
       },
+      cost(sessionID) {
+        return sync.data.session_cost[sessionID]
+      },
+      refreshCost(sessionID) {
+        void sync.session.syncCost(sessionID)
+      },
     },
     part(messageID) {
       return sync.data.part[messageID] ?? []
