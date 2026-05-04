@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
 import { Session } from "@/session/session"
@@ -38,7 +39,7 @@ describe("sync HttpApi", () => {
     const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
     const info = spyOn(Log.create({ service: "server.sync" }), "info")
 
-    const session = await Instance.provide({
+    const session = await WithInstance.provide({
       directory: tmp.path,
       fn: async () => runSession(Session.Service.use((svc) => svc.create({ title: "sync" }))),
     })
