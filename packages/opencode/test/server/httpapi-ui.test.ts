@@ -184,6 +184,52 @@ describe("HttpApi UI fallback", () => {
     expect(await response.text()).toBe("console.log('ok')")
   })
 
+  // Regression for #25698 (Ope): upstream `transfer-encoding: chunked` was
+  // forwarded through the proxy while the proxy itself re-frames the body,
+  // causing browsers to fail with `ERR_INVALID_CHUNKED_ENCODING`.
+  test("strips upstream transfer-encoding header from proxied assets", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
+
+    const response = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const client = yield* HttpClient.HttpClient
+        return yield* serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/")), {
+          fs,
+          client,
+        })
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AppFileSystem.defaultLayer,
+            Layer.succeed(
+              HttpClient.HttpClient,
+              HttpClient.make((request) =>
+                Effect.succeed(
+                  HttpClientResponse.fromWeb(
+                    request,
+                    new Response("<html>opencode</html>", {
+                      headers: {
+                        "transfer-encoding": "chunked",
+                        "content-type": "text/html",
+                      },
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Effect.map(HttpServerResponse.toWeb),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("transfer-encoding")).toBeNull()
+    expect(await response.text()).toBe("<html>opencode</html>")
+  })
+
   test("serves embedded UI assets when Bun can read them but access reports missing", async () => {
     Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     let readPath: string | undefined
@@ -255,6 +301,25 @@ describe("HttpApi UI fallback", () => {
     })
 
     expect(response.status).toBe(200)
+  })
+
+  // Regression for #25698 (Ope): the browser fetches the PWA manifest and
+  // its icons via flows that don't carry app-managed credentials (the
+  // `<link rel="manifest">` request is not under page-auth control), so the
+  // server returning 401 breaks PWA install. These specific public assets
+  // should bypass auth.
+  test("serves the PWA manifest without auth even when a server password is set", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
+
+    for (const path of ["/site.webmanifest", "/web-app-manifest-192x192.png", "/web-app-manifest-512x512.png"]) {
+      const response = await uiApp({
+        password: "secret",
+        username: "opencode",
+        client: httpClient(new Response("ok")),
+      }).request(path)
+      expect(response.status).not.toBe(401)
+    }
   })
 
   test("allows web UI preflight without auth", async () => {
