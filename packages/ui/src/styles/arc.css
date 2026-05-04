@@ -169,3 +169,197 @@ html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="6"] {
       transform 150ms ease-out;
   }
 }
+
+/* ───────────────────────────────────────────────────────────── */
+/* Floating panels — bigger radii, softer/deeper shadows,        */
+/* stronger backdrop blur to feel like Arc Browser overlays      */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-component="dropdown-menu-content"],
+html[data-theme="arc"] [data-component="dropdown-menu-sub-content"],
+html[data-theme="arc"] [data-component="context-menu-content"],
+html[data-theme="arc"] [data-component="context-menu-sub-content"],
+html[data-theme="arc"] [data-component="popover-content"],
+html[data-theme="arc"] [data-component="hover-card-content"],
+html[data-theme="arc"] [data-component="select-content"] {
+  border-radius: var(--radius-2xl);
+  backdrop-filter: blur(60px) saturate(180%);
+  -webkit-backdrop-filter: blur(60px) saturate(180%);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 58%, transparent) inset,
+    0 1px 0 color-mix(in srgb, white 14%, transparent) inset,
+    0 32px 72px rgba(0, 0, 0, 0.28),
+    0 14px 32px rgba(0, 0, 0, 0.18),
+    0 6px 14px rgba(0, 0, 0, 0.12);
+}
+
+/* Tooltip — match the same softness, smaller radius proportional */
+html[data-theme="arc"] [data-component="tooltip-content"] {
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+/* Dialog (command palette / settings dialogs) — even bigger,
+   visually the most prominent floating surface */
+html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
+  border-radius: var(--radius-2xl);
+  backdrop-filter: blur(72px) saturate(180%);
+  -webkit-backdrop-filter: blur(72px) saturate(180%);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 50%, transparent) inset,
+    0 1px 0 color-mix(in srgb, white 16%, transparent) inset,
+    0 40px 96px rgba(0, 0, 0, 0.32),
+    0 18px 40px rgba(0, 0, 0, 0.2),
+    0 8px 18px rgba(0, 0, 0, 0.14);
+}
+
+/* Dialog overlay — gentle backdrop blur to push focus on the dialog */
+html[data-theme="arc"] [data-component="dialog-overlay"] {
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Menu / list items — Arc-style "push-in" hover                 */
+/* Real surface color on hover (vs. weak alpha), translateX +2px */
+/* to suggest the item is "stepping forward" toward the user.    */
+/* ───────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"],
+  html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-checkbox-item"],
+  html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-radio-item"],
+  html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"],
+  html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-item"],
+  html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-checkbox-item"],
+  html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-radio-item"],
+  html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"] {
+    transition:
+      background-color 120ms ease-out,
+      transform 120ms ease-out,
+      color 120ms ease-out;
+  }
+}
+
+html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"][data-highlighted],
+html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-checkbox-item"][data-highlighted],
+html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-radio-item"][data-highlighted],
+html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"][data-highlighted],
+html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-item"][data-highlighted],
+html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-checkbox-item"][data-highlighted],
+html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-radio-item"][data-highlighted] {
+  background: var(--surface-raised-base-hover);
+  transform: translateX(2px);
+}
+
+html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"]:hover,
+html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"][data-highlighted] {
+  background: var(--surface-raised-base-hover);
+  transform: translateX(2px);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Buttons — micro lift on hover, snap-back on press             */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-component="button"][data-variant="primary"]:hover:not(:disabled),
+html[data-theme="arc"] [data-component="button"][data-variant="secondary"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.12),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="arc"] [data-component="button"][data-variant="primary"]:active:not(:disabled),
+html[data-theme="arc"] [data-component="button"][data-variant="secondary"]:active:not(:disabled),
+html[data-theme="arc"] [data-component="button"][data-variant="ghost"]:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Icon button — pop on hover, press on active */
+html[data-theme="arc"] [data-component="icon-button"] {
+  transition:
+    background-color 140ms ease-out,
+    transform 140ms ease-out,
+    box-shadow 180ms ease-out;
+}
+
+html[data-theme="arc"] [data-component="icon-button"]:hover:not(:disabled) {
+  transform: scale(1.08);
+}
+
+html[data-theme="arc"] [data-component="icon-button"]:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Project rail tiles — strong scale + depth on hover            */
+/* (overrides the existing hover:scale-105 in JSX classList for  */
+/* a more confident, Arc-spaces-style interaction)               */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-action="project-switch"]:hover:not([aria-current]):not(:disabled) {
+  transform: scale(1.12) !important;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.18),
+    0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="arc"] [data-action="project-switch"]:active:not(:disabled) {
+  transform: scale(1.02) !important;
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Sidebar session items — Arc-style step-in on hover            */
+/* ───────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme="arc"] [data-component="sidebar-session"] {
+    transition:
+      background-color 160ms ease-out,
+      border-color 160ms ease-out,
+      transform 160ms ease-out,
+      box-shadow 220ms ease-out;
+  }
+}
+
+html[data-theme="arc"] [data-component="sidebar-session"]:hover:not([data-active="true"]) {
+  transform: translateX(2px);
+}
+
+html[data-theme="arc"] [data-component="sidebar-session"][data-active="true"] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 2px 0 0 var(--text-interactive-base),
+    0 8px 20px -16px var(--sidebar-session-active-shadow);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* List search input — generous radius + softer focus ring       */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-component="list"] [data-slot="list-search"] {
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--surface-base) 78%, transparent);
+  transition:
+    background-color 160ms ease-out,
+    box-shadow 200ms ease-out;
+}
+
+html[data-theme="arc"] [data-component="list"] [data-slot="list-search"]:focus-within {
+  background: var(--surface-raised-base);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--border-interactive-active) 22%, transparent),
+    0 0 0 1px var(--border-interactive-active);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Inline input / text-field — softer corners + subtle focus     */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-component="text-field"] [data-slot="text-field-input"],
+html[data-theme="arc"] [data-component="inline-input"] {
+  border-radius: var(--radius-lg);
+}
+
