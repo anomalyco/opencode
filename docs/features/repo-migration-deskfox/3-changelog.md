@@ -81,7 +81,7 @@ related: ./3-changelog.md
 
 - **Mac 端 git remote 切换**:Mac 协作端要跑 `git remote set-url origin https://github.com/yuesoue/deskfox.git`(出文字命令 / 跟用户协调)
 - **Gitee 镜像迁移**:Gitee 侧手动新建 `zoulukuang/deskfox` + 配 auto-sync from `yuesoue/deskfox`(GitHub 不能代操作 Gitee)
-- **老仓 archive**:Settings → Archive(等几周确认新仓稳后)
+- **老仓 archive**:✅ **2026-05-04 done** — `gh api repos/zoulukuang/opencode-for-office-deskfox -X PATCH -f archived=true`,验证 `isArchived: true`。老仓变 read-only,deprecation banner 不动,redirect 不影响,历史 release(`ship-prod-2026.5.1.2` 等)仍可访问。提前于"几周后"完成,因新仓两天稳定通过 3 笔 release 全链路实测(Win + Mac + Gitee 镜像 + README 重塑 + social preview),0 stars/forks/watchers 受影响,无理由再等
 - **CI 状态校验**:看 push tag 时是否在新仓自动触发了 release-deskfox.yml(可能造成 ship-prod-2026.5.3.1 被新仓 CI 重复 build → 出第二个 draft Release),若有需手动 cancel
 - **README 替换**:目前新仓 README 还是上游 OpenCode README,以后做 DeskFox 自家 README(不阻塞)
 
@@ -126,6 +126,6 @@ related: ./3-changelog.md
   - **Mac 端 origin 切换**:协调命令 `git remote set-url origin https://github.com/yuesoue/deskfox.git`
   - **Gitee 镜像迁移**:Gitee 侧手动操作
   - **CI 状态校验**:看新仓是否触发重复 release build
-  - **老仓 archive**:几周后做
+  - **老仓 archive**:✅ 2026-05-04 done(详见 Phase 5)
   - **新仓 README 替换为 DeskFox 自家版本**:不阻塞
   - **user 改名 yuesoue → xiaonan-yue**:暂缓,改天独立 feat
