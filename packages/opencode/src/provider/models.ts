@@ -8,6 +8,7 @@ import { Flock } from "@opencode-ai/core/util/flock"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { isShellCompletionInvocation } from "@/cli/completion"
 
 const Cost = Schema.Struct({
   input: Schema.Finite,
@@ -181,7 +182,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
       )
     })
 
-    if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+    if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !isShellCompletionInvocation(process.argv.slice(2))) {
       // Schedule.spaced runs the effect once, then waits between completions.
       yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced("60 minutes")), Effect.ignore))
     }
