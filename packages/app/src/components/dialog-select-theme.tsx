@@ -21,7 +21,7 @@ export function DialogSelectTheme() {
   const theme = useTheme()
   const language = useLanguage()
   const dialog = useDialog()
-  const state = { cleanup: undefined as (() => void) | void, committed: false }
+  const state = { cleanup: undefined as (() => void) | void, committed: false, pending: undefined as ReturnType<typeof setTimeout> | undefined }
 
   const colorSchemeLabel = (scheme: ColorScheme) => {
     switch (scheme) {
@@ -61,19 +61,24 @@ export function DialogSelectTheme() {
   })
 
   const handleMove = (item: ThemeEntry | undefined) => {
-    state.cleanup?.()
+    clearTimeout(state.pending)
     if (!item) return
 
-    if (item.type === "theme" && item.themeId) {
-      state.cleanup = () => theme.cancelPreview()
-      theme.previewTheme(item.themeId)
-    } else if (item.type === "scheme" && item.scheme) {
-      state.cleanup = () => theme.cancelPreview()
-      theme.previewColorScheme(item.scheme)
-    }
+    console.debug("[dialog-theme] handleMove type=" + item.type + " id=" + item.id)
+    state.pending = setTimeout(() => {
+      state.cleanup?.()
+      if (item.type === "theme" && item.themeId) {
+        state.cleanup = () => theme.cancelPreview()
+        theme.previewTheme(item.themeId)
+      } else if (item.type === "scheme" && item.scheme) {
+        state.cleanup = () => theme.cancelPreview()
+        theme.previewColorScheme(item.scheme)
+      }
+    }, 80)
   }
 
-  const handleSelect = (item: ThemeEntry | undefined) => {
+const handleSelect = (item: ThemeEntry | undefined) => {
+    clearTimeout(state.pending)
     if (!item) return
     state.committed = true
     state.cleanup = undefined

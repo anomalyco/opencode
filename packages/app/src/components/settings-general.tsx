@@ -77,6 +77,8 @@ export const SettingsGeneral: Component = () => {
     checking: false,
   })
 
+  let previewPending: ReturnType<typeof setTimeout> | undefined
+
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
 
   const check = () => {
@@ -444,11 +446,22 @@ export const SettingsGeneral: Component = () => {
             current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
             value={(o) => o.value}
             label={(o) => o.label}
-            onSelect={(option) => option && theme.setColorScheme(option.value)}
-            onHighlight={(option) => {
+            onSelect={(option) => {
               if (!option) return
-              theme.previewColorScheme(option.value)
-              return () => theme.cancelPreview()
+              console.debug("[settings] setColorScheme " + option.value)
+              theme.setColorScheme(option.value)
+            }}
+            onHighlight={(option) => {
+              clearTimeout(previewPending)
+              if (!option) return
+              previewPending = setTimeout(() => {
+                console.debug("[settings] previewColorScheme " + option.value)
+                theme.previewColorScheme(option.value)
+              }, 80)
+              return () => {
+                clearTimeout(previewPending)
+                theme.cancelPreview()
+              }
             }}
             variant="secondary"
             size="small"
@@ -474,12 +487,20 @@ export const SettingsGeneral: Component = () => {
             label={(o) => o.name}
             onSelect={(option) => {
               if (!option) return
+              console.debug("[settings] setTheme " + option.id)
               theme.setTheme(option.id)
             }}
             onHighlight={(option) => {
+              clearTimeout(previewPending)
               if (!option) return
-              theme.previewTheme(option.id)
-              return () => theme.cancelPreview()
+              previewPending = setTimeout(() => {
+                console.debug("[settings] previewTheme " + option.id)
+                theme.previewTheme(option.id)
+              }, 80)
+              return () => {
+                clearTimeout(previewPending)
+                theme.cancelPreview()
+              }
             }}
             variant="secondary"
             size="small"

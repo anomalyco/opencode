@@ -131,10 +131,16 @@ function getSystemMode(): "light" | "dark" {
 }
 
 function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "dark") {
+  const start = performance.now()
+  console.debug("[theme] applyThemeCss start themeId=" + themeId + " mode=" + mode)
   const isDark = mode === "dark"
   const variant = isDark ? theme.dark : theme.light
+  const resStart = performance.now()
   const tokens = resolveThemeVariant(variant, isDark)
+  console.debug("[theme] resolveThemeVariant took " + (performance.now() - resStart).toFixed(1) + "ms themeId=" + themeId + " mode=" + mode)
+  const cssStart = performance.now()
   const css = themeToCss(tokens)
+  console.debug("[theme] themeToCss took " + (performance.now() - cssStart).toFixed(1) + "ms cssLength=" + css.length + " themeId=" + themeId + " mode=" + mode)
 
   if (themeId !== "oc-2") {
     write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
@@ -146,14 +152,13 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   ${css}
 }`
 
+  const domStart = performance.now()
   document.getElementById("oc-theme-preload")?.remove()
   ensureThemeStyleElement().textContent = fullCss
+  console.debug("[theme] DOM update took " + (performance.now() - domStart).toFixed(1) + "ms themeId=" + themeId + " mode=" + mode)
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
-
-  // Update theme-color meta tag to match light/dark mode
-  const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute("content", isDark ? "#131010" : "#F8F7F7")
+  console.debug("[theme] applyThemeCss total took " + (performance.now() - start).toFixed(1) + "ms themeId=" + themeId + " mode=" + mode)
 }
 
 function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
@@ -222,7 +227,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       return [...all, ...extra]
     }
 
-    const loadThemes = () => Promise.all(themeIDs().map(load)).then(() => store.themes)
+    const loadThemes = () => {
+      console.debug("[theme] loadThemes start count=" + themeIDs().length)
+      const batchStart = performance.now()
+      return Promise.all(themeIDs().map(load)).then((result) => {
+        console.debug("[theme] loadThemes done took " + (performance.now() - batchStart).toFixed(1) + "ms count=" + result.length)
+        return store.themes
+      })
+    }
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) {
@@ -272,12 +284,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     createEffect(() => {
+      console.debug("[theme] createEffect applying themeId=" + store.themeId + " mode=" + store.mode)
       const theme = store.themes[store.themeId]
-      if (!theme) return
+      if (!theme) { console.debug("[theme] createEffect theme not loaded yet, skipping"); return }
       applyTheme(theme, store.themeId, store.mode)
     })
 
     const setTheme = (id: string) => {
+      console.debug("[theme] setTheme " + id)
       const next = normalize(id)
       if (!next) {
         console.warn(`Theme "${id}" not found`)
@@ -285,6 +299,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
       if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) {
         console.warn(`Theme "${id}" not found`)
+        return
+      }
+      if (store.themeId === next) {
+        console.debug("[theme] setTheme skipped, already " + next)
         return
       }
       setStore("themeId", next)
@@ -301,6 +319,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     const setColorScheme = (scheme: ColorScheme) => {
+      console.debug("[theme] setColorScheme " + scheme)
+      if (store.colorScheme === scheme) {
+        console.debug("[theme] setColorScheme skipped, already " + scheme)
+        return
+      }
       setStore("colorScheme", scheme)
       write(STORAGE_KEYS.COLOR_SCHEME, scheme)
       setStore("mode", scheme === "system" ? getSystemMode() : scheme)
@@ -318,6 +341,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       setColorScheme,
       registerTheme: (theme: DesktopTheme) => setStore("themes", theme.id, theme),
       previewTheme: (id: string) => {
+        console.debug("[theme] previewTheme " + id)
         const next = normalize(id)
         if (!next) return
         if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) return
@@ -333,6 +357,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
       },
       previewColorScheme: (scheme: ColorScheme) => {
+        console.debug("[theme] previewColorScheme " + scheme)
         setStore("previewScheme", scheme)
         const mode = scheme === "system" ? getSystemMode() : scheme
         const id = store.previewThemeId ?? store.themeId
