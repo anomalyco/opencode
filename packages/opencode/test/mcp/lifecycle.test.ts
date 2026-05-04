@@ -17,6 +17,11 @@ interface MockClientState {
   resources: Array<{ name: string; uri: string; description?: string }>
   closed: boolean
   notificationHandlers: Map<unknown, (...args: any[]) => any>
+  // FIFO queue controlling what each `callTool` invocation returns / throws.
+  // Each entry is either { error } (throw it) or { result } (return it).
+  // If the queue is empty, a default ok payload is returned.
+  callToolOutcomes: Array<{ error?: unknown; result?: unknown }>
+  callToolCalls: number
 }
 
 const clientStates = new Map<string, MockClientState>()
@@ -44,6 +49,8 @@ function getOrCreateClientState(name?: string): MockClientState {
       resources: [],
       closed: false,
       notificationHandlers: new Map(),
+      callToolOutcomes: [],
+      callToolCalls: 0,
     }
     clientStates.set(key, state)
   }
@@ -96,6 +103,15 @@ void mock.module("@modelcontextprotocol/sdk/client/stdio.js", () => ({
 
 void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: MockStreamableHTTP,
+  // Also re-export the real error class so `transport-error.ts` can still
+  // instanceof-check against it (the classifier imports it from this module).
+  StreamableHTTPError: class StreamableHTTPError extends Error {
+    readonly code: number | undefined
+    constructor(code: number | undefined, message: string | undefined) {
+      super(message)
+      this.code = code
+    }
+  },
 }))
 
 void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
@@ -155,6 +171,13 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
     async close() {
       if (this._state) this._state.closed = true
+    }
+
+    async callTool(_payload: unknown, _schema?: unknown, _opts?: unknown) {
+      if (this._state) this._state.callToolCalls++
+      const next = this._state?.callToolOutcomes.shift()
+      if (next?.error) throw next.error
+      return next?.result ?? { content: [{ type: "text", text: "ok" }] }
     }
   },
 }))
@@ -784,5 +807,192 @@ test(
       // Both StreamableHTTP and SSE transports should be closed
       expect(transportCloseCount).toBeGreaterThanOrEqual(2)
     }),
+  ),
+)
+
+// ========================================================================
+// Test: tool.execute() auto-reconnect on transport errors
+// Covers the catch branch added in src/mcp/index.ts (makeTool) that calls
+// isTransportError(e), reconnects, and retries on the fresh client, plus the
+// single-flight dedup inside reconnectClient().
+// ========================================================================
+
+test(
+  "tool.execute() returns without reconnecting on success",
+  withInstance(
+    {
+      "reconn-ok": { type: "local", command: ["echo", "test"] },
+    },
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "reconn-ok"
+        const s = getOrCreateClientState("reconn-ok")
+        s.tools = [{ name: "ping", description: "", inputSchema: { type: "object", properties: {} } }]
+
+        // Warm up tools() to build the closure.
+        const tools = yield* mcp.tools()
+        const key = Object.keys(tools).find((k) => k.endsWith("_ping"))!
+        const tool = tools[key] as { execute: (args: unknown, opts: unknown) => Promise<unknown> }
+
+        const createdBefore = clientCreateCount
+        const result = yield* Effect.promise(() => tool.execute({}, { toolCallId: "x", messages: [] }))
+
+        expect(result).toEqual({ content: [{ type: "text", text: "ok" }] })
+        expect(s.callToolCalls).toBe(1)
+        // No reconnect -> no new Client instantiation
+        expect(clientCreateCount).toBe(createdBefore)
+      }),
+  ),
+)
+
+test(
+  "tool.execute() rethrows non-transport errors without reconnecting",
+  withInstance(
+    {
+      "reconn-biz": { type: "local", command: ["echo", "test"] },
+    },
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "reconn-biz"
+        const s = getOrCreateClientState("reconn-biz")
+        s.tools = [{ name: "run", description: "", inputSchema: { type: "object", properties: {} } }]
+        // A plain business error: isTransportError() must classify this as false.
+        s.callToolOutcomes = [{ error: new Error("business: invalid arg") }]
+
+        const tools = yield* mcp.tools()
+        const key = Object.keys(tools).find((k) => k.endsWith("_run"))!
+        const tool = tools[key] as { execute: (args: unknown, opts: unknown) => Promise<unknown> }
+
+        const createdBefore = clientCreateCount
+        let caught: unknown
+        yield* Effect.promise(() =>
+          tool.execute({}, { toolCallId: "x", messages: [] }).catch((err: unknown) => {
+            caught = err
+          }),
+        )
+
+        expect(caught).toBeInstanceOf(Error)
+        expect((caught as Error).message).toBe("business: invalid arg")
+        expect(s.callToolCalls).toBe(1)
+        expect(clientCreateCount).toBe(createdBefore)
+      }),
+  ),
+)
+
+test(
+  "tool.execute() reconnects and retries once on transport errors",
+  withInstance(
+    {
+      "reconn-retry": { type: "local", command: ["echo", "test"] },
+    },
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "reconn-retry"
+        const s = getOrCreateClientState("reconn-retry")
+        s.tools = [{ name: "run", description: "", inputSchema: { type: "object", properties: {} } }]
+        // 1st call: socket failure recognized by isTransportError; 2nd: succeed on fresh client.
+        const transportErr = Object.assign(new Error("Unable to connect"), { code: "ConnectionRefused" })
+        s.callToolOutcomes = [{ error: transportErr }, { result: { content: [{ type: "text", text: "retried" }] } }]
+
+        const tools = yield* mcp.tools()
+        const key = Object.keys(tools).find((k) => k.endsWith("_run"))!
+        const tool = tools[key] as { execute: (args: unknown, opts: unknown) => Promise<unknown> }
+
+        const createdBefore = clientCreateCount
+        const listToolsBefore = s.listToolsCalls
+
+        const result = yield* Effect.promise(() => tool.execute({}, { toolCallId: "x", messages: [] }))
+
+        expect(result).toEqual({ content: [{ type: "text", text: "retried" }] })
+        // 1 original failure + 1 retry against the fresh client
+        expect(s.callToolCalls).toBe(2)
+        // Reconnect must have spun up a new Client
+        expect(clientCreateCount).toBe(createdBefore + 1)
+        // Reconnect path also re-lists tools to refresh the cache
+        expect(s.listToolsCalls).toBe(listToolsBefore + 1)
+      }),
+  ),
+)
+
+test(
+  "tool.execute() throws original transport error when reconnect fails",
+  withInstance(
+    {
+      "reconn-fail": { type: "local", command: ["echo", "test"] },
+    },
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "reconn-fail"
+        const s = getOrCreateClientState("reconn-fail")
+        s.tools = [{ name: "run", description: "", inputSchema: { type: "object", properties: {} } }]
+        const transportErr = Object.assign(new Error("Unable to connect"), { code: "ConnectionRefused" })
+        s.callToolOutcomes = [{ error: transportErr }]
+
+        const tools = yield* mcp.tools()
+        const key = Object.keys(tools).find((k) => k.endsWith("_run"))!
+        const tool = tools[key] as { execute: (args: unknown, opts: unknown) => Promise<unknown> }
+
+        // Sabotage the reconnect: new transport connect will fail.
+        connectShouldFail = true
+        connectError = "reconnect refused"
+
+        let caught: unknown
+        yield* Effect.promise(() =>
+          tool.execute({}, { toolCallId: "x", messages: [] }).catch((err: unknown) => {
+            caught = err
+          }),
+        )
+
+        // The ORIGINAL transport error is surfaced, not the reconnect error
+        expect(caught).toBe(transportErr)
+        // No retry happened because reconnect returned false
+        expect(s.callToolCalls).toBe(1)
+      }),
+  ),
+)
+
+test(
+  "concurrent tool calls hitting transport errors trigger only one reconnect",
+  withInstance(
+    {
+      "reconn-dedup": { type: "local", command: ["echo", "test"] },
+    },
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "reconn-dedup"
+        const s = getOrCreateClientState("reconn-dedup")
+        s.tools = [
+          { name: "a", description: "", inputSchema: { type: "object", properties: {} } },
+          { name: "b", description: "", inputSchema: { type: "object", properties: {} } },
+        ]
+        // Two concurrent tools both see transport errors on the first call.
+        // Retries fall back to the default ok payload from MockClient.callTool.
+        s.callToolOutcomes = [
+          { error: Object.assign(new Error("Unable to connect"), { code: "ConnectionRefused" }) },
+          { error: Object.assign(new Error("Unable to connect"), { code: "ConnectionRefused" }) },
+        ]
+
+        const tools = yield* mcp.tools()
+        const keyA = Object.keys(tools).find((k) => k.endsWith("_a"))!
+        const keyB = Object.keys(tools).find((k) => k.endsWith("_b"))!
+        const toolA = tools[keyA] as { execute: (args: unknown, opts: unknown) => Promise<unknown> }
+        const toolB = tools[keyB] as { execute: (args: unknown, opts: unknown) => Promise<unknown> }
+
+        const createdBefore = clientCreateCount
+
+        const [ra, rb] = yield* Effect.promise(() =>
+          Promise.all([
+            toolA.execute({}, { toolCallId: "a", messages: [] }),
+            toolB.execute({}, { toolCallId: "b", messages: [] }),
+          ]),
+        )
+
+        expect(ra).toBeDefined()
+        expect(rb).toBeDefined()
+        // The single-flight map must collapse 2 parallel reconnects into 1 Client
+        expect(clientCreateCount).toBe(createdBefore + 1)
+        // 2 initial failures + 2 retry successes
+        expect(s.callToolCalls).toBe(4)
+      }),
   ),
 )

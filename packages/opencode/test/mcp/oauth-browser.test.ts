@@ -63,6 +63,14 @@ void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
       // Mock successful auth completion
     }
   },
+  // Re-export so `src/mcp/transport-error.ts` can still `instanceof`-check.
+  StreamableHTTPError: class StreamableHTTPError extends Error {
+    readonly code: number | undefined
+    constructor(code: number | undefined, message: string | undefined) {
+      super(message)
+      this.code = code
+    }
+  },
 }))
 
 void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
