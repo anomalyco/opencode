@@ -7,12 +7,9 @@ import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { PLUGIN_AGENT } from "../fixture/agent-plugin.constants"
 
-// The plugin lives in test/fixture/ as a stable file rather than being written
-// into a per-test tmpdir. Combined with `it.instance` (which uses the noop
-// InstanceBootstrap), this skips FileWatcher / LSP / MCP / etc. — the actual
-// source of Windows teardown flakiness — while still exercising the production
-// code path that matters: plugin load → config hook → agent registration →
-// Agent.list.
+// `it.instance` skips InstanceBootstrap so FileWatcher / LSP / MCP don't spin
+// up — those services hang during scope teardown on Windows and aren't needed
+// to verify plugin → config hook → Agent.list.
 const pluginUrl = pathToFileURL(path.join(import.meta.dir, "..", "fixture", "agent-plugin.ts")).href
 
 const it = testEffect(Layer.mergeAll(Agent.defaultLayer, Plugin.defaultLayer))
