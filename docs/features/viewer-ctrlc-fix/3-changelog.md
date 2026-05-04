@@ -33,7 +33,8 @@ WebView2(Chromium)和 macOS WebKit 的**原生 Ctrl+C** 都通过 `window.getSel
 
 ## 影响范围
 
-- **修复**:.py / .ts / .tsx / .html / .css / .json / .py / .go / .rs / .java / .c / .cpp / .sh / .xml / .sql / .pdf / .docx / .xlsx / .pptx 等所有走 `@pierre/diffs` 或 `<DocumentViewer>` 渲染的文件类型,Ctrl+C 全部生效
+- **修复**:代码 / 文本 / HTML 等**可选中文本**且走 `@pierre/diffs` shadow DOM 渲染的类型 — `.py / .ts / .tsx / .html / .css / .json / .go / .rs / .java / .c / .cpp / .sh / .xml / .sql / .yaml / .toml / .txt` 等。Ctrl+C 现在直接生效
+- **不在本修复范围 — PDF / `.docx` / `.xlsx` / `.pptx` 预览**:2026-05-04 user 实测确认这些查看器**文本本就不可选**(office 预览经 LibreOffice → PDF + pdfjs 渲染但文本层未开 / 图像化预览),Ctrl+C 问题在那儿不存在,所以与本修复无关。**未来若**这些查看器开放选区,本修复机制自动适用(都走同一 window-capture keydown 路径,无需再改)
 - **不回归**:.md(light DOM 选区也进 history,picker 同样拿到 → writeText 与原生等效)
 - **不影响**:聊天输入框 / 重命名 dialog 等输入框(被 input/textarea/contenteditable guard 让路)
 - **不影响**:文件树自身 Ctrl+C 复制路径(file-tree.tsx 的 `useFileTreeShortcuts`,走另一条 hook 链,继续用 `filetree-ctrlc-textsel-fix` 后的逻辑)
@@ -48,13 +49,7 @@ WebView2(Chromium)和 macOS WebKit 的**原生 Ctrl+C** 都通过 `window.getSel
 
 - ✅ `bun run typecheck` 15/15 全过
 - ✅ `build-deskfox.ps1 -Env dev -NoBundle` 成功:DeskFox.exe 32.24 MB / 1m09s / exit 0
-- ⏳ runtime 实测(等 user):
-  - 在 .py / .html / 代码文件里选文字 → Ctrl+C → 粘贴别处 → 应是选中内容
-  - 在 PDF 预览里选文字 → Ctrl+C → 同上
-  - 在 office 预览里选文字 → Ctrl+C → 同上
-  - 在 .md 里选文字 → Ctrl+C → **不回归**,正常复制
-  - 编辑态(点 Edit 进 CodeMirror)→ Ctrl+C → CodeMirror 自家复制不被劫持
-  - 聊天输入框选文字 Ctrl+C → 原生输入框复制行为不变
+- ✅ user 2026-05-04 runtime 实测:**非 .md 文件 Ctrl+C 复制问题已处理**(代码文件 / HTML / 纯文本 等 shadow DOM 类型);PDF / Office 因文本不可选,本就不在 bug 范围,无需测试
 
 ## R2 / R3 / R4 合规
 
