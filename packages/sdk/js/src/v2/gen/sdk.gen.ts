@@ -99,6 +99,8 @@ import type {
   ProviderOauthCallbackResponses,
   PtyConnectErrors,
   PtyConnectResponses,
+  PtyConnectTokenErrors,
+  PtyConnectTokenResponses,
   PtyCreateErrors,
   PtyCreateResponses,
   PtyGetErrors,
@@ -2342,6 +2344,38 @@ export class Pty extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Create PTY WebSocket token
+   *
+   * Create a short-lived ticket for opening a PTY WebSocket connection.
+   */
+  public connectToken<ThrowOnError extends boolean = false>(
+    parameters: {
+      ptyID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ptyID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PtyConnectTokenResponses, PtyConnectTokenErrors, ThrowOnError>({
+      url: "/pty/{ptyID}/connect-token",
+      ...options,
+      ...params,
     })
   }
 

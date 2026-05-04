@@ -120,7 +120,7 @@ function createHono(opts: CorsOptions, selection: ServerBackend.Selection = Serv
       app: app
         .use(InstanceMiddleware(Flag.OPENCODE_WORKSPACE_ID ? WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined))
         .use(FenceMiddleware)
-        .route("/", InstanceRoutes(runtime.upgradeWebSocket)),
+        .route("/", InstanceRoutes(runtime.upgradeWebSocket, opts)),
       runtime,
     }
   }
@@ -136,7 +136,7 @@ function createHono(opts: CorsOptions, selection: ServerBackend.Selection = Serv
     app: app
       .route("/", ControlPlaneRoutes())
       .route("/", workspaceApp)
-      .route("/", InstanceRoutes(runtime.upgradeWebSocket))
+      .route("/", InstanceRoutes(runtime.upgradeWebSocket, opts))
       .route("/", UIRoutes()),
     runtime,
   }

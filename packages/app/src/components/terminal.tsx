@@ -479,6 +479,21 @@ export const Terminal = (props: TerminalProps) => {
             return false
           })
 
+      const connectToken = async () => {
+        const result = await client.pty.connectToken(
+          { ptyID: id },
+          {
+            throwOnError: false,
+            headers: { "x-opencode-ticket": "1" },
+          },
+        )
+        if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
+        if ((result.response.status === 404 || result.response.status === 405) && password) return
+        if (result.response.status === 403)
+          throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
+        throw new Error(`PTY connect ticket failed with ${result.response.status}`)
+      }
+
       const retry = (err: unknown) => {
         if (disposed) return
         if (reconn !== undefined) return
@@ -498,9 +513,16 @@ export const Terminal = (props: TerminalProps) => {
         }, ms)
       }
 
-      const open = () => {
+      const open = async () => {
         if (disposed) return
         drop?.()
+
+        const ticket = await connectToken().catch((err) => {
+          fail(err)
+          return undefined
+        })
+        if (once.value) return
+        if (disposed) return
 
         const socket = new WebSocket(
           terminalWebSocketURL({
@@ -508,6 +530,7 @@ export const Terminal = (props: TerminalProps) => {
             id,
             directory,
             cursor: seek,
+            ticket,
             sameOrigin,
             username,
             password,

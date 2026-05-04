@@ -25,6 +25,7 @@ import { ProviderAuth } from "@/provider/auth"
 import { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
+import { PtyTicket } from "@/pty/ticket"
 import { Question } from "@/question"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
@@ -44,7 +45,7 @@ import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { Workspace } from "@/control-plane/workspace"
-import { isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
+import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
@@ -163,6 +164,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       ProviderAuth.defaultLayer,
       Provider.defaultLayer,
       Pty.defaultLayer,
+      PtyTicket.defaultLayer,
       Question.defaultLayer,
       Ripgrep.defaultLayer,
       Session.defaultLayer,
@@ -187,6 +189,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       FetchHttpClient.layer,
       HttpServer.layerServices,
     ]),
+    Layer.provideMerge(Layer.succeed(CorsConfig)(corsOptions)),
     Layer.provideMerge(InstanceLayer.layer),
     Layer.provideMerge(Observability.layer),
   )

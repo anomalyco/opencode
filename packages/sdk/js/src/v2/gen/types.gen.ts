@@ -1563,6 +1563,10 @@ export type McpUnsupportedOAuthError = {
   error: string
 }
 
+export type EffectHttpApiErrorForbidden = {
+  _tag: "Forbidden"
+}
+
 export type ProviderAuthMethod = {
   type: "oauth" | "api"
   label: string
@@ -4671,6 +4675,43 @@ export type PtyUpdateResponses = {
 
 export type PtyUpdateResponse = PtyUpdateResponses[keyof PtyUpdateResponses]
 
+export type PtyConnectTokenData = {
+  body?: never
+  path: {
+    ptyID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/pty/{ptyID}/connect-token"
+}
+
+export type PtyConnectTokenErrors = {
+  /**
+   * Forbidden
+   */
+  403: EffectHttpApiErrorForbidden
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyConnectTokenError = PtyConnectTokenErrors[keyof PtyConnectTokenErrors]
+
+export type PtyConnectTokenResponses = {
+  /**
+   * WebSocket connect token
+   */
+  200: {
+    ticket: string
+    expires_in: number
+  }
+}
+
+export type PtyConnectTokenResponse = PtyConnectTokenResponses[keyof PtyConnectTokenResponses]
+
 export type QuestionListData = {
   body?: never
   path?: never
@@ -6652,6 +6693,10 @@ export type PtyConnectData = {
 }
 
 export type PtyConnectErrors = {
+  /**
+   * Forbidden
+   */
+  403: EffectHttpApiErrorForbidden
   /**
    * Not found
    */
