@@ -570,7 +570,7 @@ export default function FileTree(props: {
         title="新建文件"
         label="文件名"
         defaultValue="untitled.md"
-        placeholder="文件名(默认 .md)"
+        placeholder="文件名"
         confirmLabel="创建"
         onConfirm={async (name) => {
           await invoke("create_empty_file", { path: joinAbs(targetAbs, name) })
@@ -616,6 +616,36 @@ export default function FileTree(props: {
       />
     ))
   }
+
+  // FORK-BEGIN: 复制文件路径 / 刷新单节点 helpers [feat: file-tree-ux-polish] 2026-05-04
+  // 多选时拼所有 selection paths(\n 分隔);单选 / 无 selection 时用 right-clicked target.absolute
+  const copyPathToClipboard = async (target: FileNode) => {
+    const sel = selection.paths()
+    const paths =
+      sel.length > 1
+        ? sel.map((p) => file.tree.node(p)?.absolute).filter((p): p is string => Boolean(p))
+        : [target.absolute]
+    if (paths.length === 0) return
+    try {
+      await navigator.clipboard.writeText(paths.join("\n"))
+      showToast({
+        variant: "success",
+        title: paths.length === 1 ? "已复制路径" : `已复制 ${paths.length} 个路径`,
+      })
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: "复制失败",
+        description: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
+  const refreshNode = async (target: FileNode) => {
+    const dir = target.type === "directory" ? target.path : dirname(target.path)
+    await file.tree.refresh(dir)
+  }
+  // FORK-END
 
   // FORK-BEGIN: 拖放移动 — drop handler + spring-load 共享 timer 2026-04-27
   let springTimer: ReturnType<typeof setTimeout> | undefined
@@ -813,26 +843,21 @@ export default function FileTree(props: {
     const newTargetAbs = isFolder ? target.absolute : dirname(target.absolute)
     const newTargetRel = isFolder ? target.path : dirname(target.path)
     const onAfterNew = isFolder ? () => file.tree.expand(target.path) : undefined
+    // FORK-BEGIN: 节点右键菜单重整 — 4 组(重命名/复制/剪切/粘贴/删除 → 在文件夹显示/复制路径 → 新建 → 刷新),
+    // 删打印,加复制路径 + 刷新 [feat: file-tree-ux-polish] 2026-05-04
     return (
       <ContextMenu.Content>
+        {/* 组 1: 重命名 / 复制 / 剪切 / [粘贴] / 删除 */}
         <ContextMenu.Item onSelect={() => promptRename(target)}>
           <ContextMenu.ItemLabel>重命名</ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => revealInFolder(target)}>
-          <ContextMenu.ItemLabel>在文件夹中显示</ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-        <ContextMenu.Item disabled={isFolder} onSelect={() => window.print()}>
-          <ContextMenu.ItemLabel>打印</ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-        {/* FORK: 剪切/复制/粘贴 (commit #3 of file-tree-dnd) 2026-04-27 */}
-        <ContextMenu.Item onSelect={() => cutFor(target)}>
-          <ContextMenu.ItemLabel>剪切</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => copyFor(target)}>
           <ContextMenu.ItemLabel>复制</ContextMenu.ItemLabel>
         </ContextMenu.Item>
-        {/* FORK: 粘贴 — 文件夹粘到自身,文件粘到其父目录(便于在文件附近粘);clipboard 非空才显示 2026-04-27 */}
+        <ContextMenu.Item onSelect={() => cutFor(target)}>
+          <ContextMenu.ItemLabel>剪切</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        {/* 粘贴 — 文件夹粘到自身,文件粘到其父目录;clipboard 非空才显示 */}
         <Show when={clipboard.hasContent()}>
           <ContextMenu.Item
             onSelect={() => {
@@ -844,19 +869,33 @@ export default function FileTree(props: {
             <ContextMenu.ItemLabel>{isFolder ? "粘贴到此文件夹" : "粘贴到当前目录"}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
         </Show>
-        <ContextMenu.Separator />
         <ContextMenu.Item onSelect={() => promptDelete(target)}>
           <ContextMenu.ItemLabel>删除</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Separator />
+        {/* 组 2: 在文件夹中显示 / 复制文件路径 */}
+        <ContextMenu.Item onSelect={() => revealInFolder(target)}>
+          <ContextMenu.ItemLabel>在文件夹中显示</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => void copyPathToClipboard(target)}>
+          <ContextMenu.ItemLabel>复制文件路径</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+        {/* 组 3: 新建文件 / 新建文件夹 */}
         <ContextMenu.Item onSelect={() => promptNewFileAt(newTargetAbs, newTargetRel, onAfterNew)}>
-          <ContextMenu.ItemLabel>新建文件 (.md)</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>新建文件</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => promptNewFolderAt(newTargetAbs, newTargetRel, onAfterNew)}>
           <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
         </ContextMenu.Item>
+        <ContextMenu.Separator />
+        {/* 组 4: 刷新 */}
+        <ContextMenu.Item onSelect={() => void refreshNode(target)}>
+          <ContextMenu.ItemLabel>刷新</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
       </ContextMenu.Content>
     )
+    // FORK-END
   }
 
   const renderEmptyMenuItems = () => {
