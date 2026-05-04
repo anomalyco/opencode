@@ -449,7 +449,7 @@ const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
 
 // Computes the reasoning_effort tiers an OpenAI (or OpenAI-compatible upstream
 // routed through it, e.g. cf-ai-gateway) model exposes. Returns null for models
-// with no tunable effort knob (gpt-5-pro). Effort order: weakest → strongest.
+// with no tunable effort knob (gpt-5-pro). Effort order: weakest to strongest.
 function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | null {
   const id = apiId.toLowerCase()
   if (id === "gpt-5-pro" || id === "openai/gpt-5-pro") return null
