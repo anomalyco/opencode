@@ -55,7 +55,10 @@ bulk 类型用 `{{count}}` 插值;deleteConfirm.message{Single,Bulk} 用 `{{name
 |---|---|---|
 | ✅ A1 | typecheck 全过 | `bun run typecheck` 15/15 successful, 0 error(rebase 前后各跑一次) |
 | ✅ A2 | release build 出 DeskFox.exe | `build-deskfox.ps1 -Env dev -NoBundle` 成功,32.24 MB,exit 0 |
-| ⏳ A3-A8 | locale runtime 切换测试 | 等 user 实际打开 DeskFox 切 zh/en/zht 验证菜单文案,见 2-plan.md 测试矩阵 |
+| ✅ A3-A6 | zh locale 文件树菜单 + dialog + 校验 + 删除多选 | user 2026-05-04 runtime 实测全过 |
+| ✅ A7 | 单选复制路径 toast | "已复制路径" 正常显示 |
+| ⚠️ A7-bulk | 多选复制路径 toast | **不触发**(见下方"遗留挂账");user 评估**不需要此功能**,保持原装 |
+| ⏳ A8 | 失败 toast | 触发条件不便构造,跳过(下次出现真实失败时观察) |
 
 ## R2 / R3 / R4 合规
 
@@ -85,6 +88,7 @@ revert 后 file-tree-ux-polish 既定改动(4 组菜单结构 / 复制路径功�
 - 其他 fork 文件硬编码中文(packages/app/ 域)未本次扫描;若 user 后续要做"全局 i18n",再起 feat
 - packages/desktop/src/menu.ts native menu 硬编码中文未触动
 - packages/ui/ 内部组件的硬编码中文(若有)属上游层,P3 适配层不展开
+- **多选复制路径实际不触发 bulk toast**:`copyPathToClipboard`(`file-tree-ux-polish` 引入)的 `sel.length > 1` 分支用 `file.tree.node(p)?.absolute` 查 selection 各路径,实测 selection 多选时 node 查不到导致 paths 数组过滤后只剩 1 个,走 single toast。**user 2026-05-04 评估不需要此功能**(同目录多文件路径复制场景几乎不存在),保持原装不修。三本 dict 的 `fileTree.toast.copyPathSuccessBulk` key 保留(冗余 key 0 runtime cost,日后若启用 bulk 复制可直接用)
 
 ## 触发条件再评估
 
