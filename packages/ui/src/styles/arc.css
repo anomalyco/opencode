@@ -126,3 +126,46 @@ html[data-theme="arc"] [data-component="card"] {
 html[data-theme="arc"] [data-component="dialog"] {
   border-radius: var(--radius-2xl);
 }
+
+/* ───────────────────────────────────────────────────────────── */
+/* Per-project rail hues — soft color identity                   */
+/* Applied only when the project tile is NOT selected/active,    */
+/* so selection styling stays dominant.                          */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="1"] {
+  background: var(--rail-hue-1);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="2"] {
+  background: var(--rail-hue-2);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="3"] {
+  background: var(--rail-hue-3);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="4"] {
+  background: var(--rail-hue-4);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="5"] {
+  background: var(--rail-hue-5);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="6"] {
+  background: var(--rail-hue-6);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Micro transitions — subtle, no spring/stagger, motion-safe    */
+/* ───────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme="arc"] [data-component="button"],
+  html[data-theme="arc"] [data-component="card"],
+  html[data-theme="arc"] [data-component="sidebar-session"],
+  html[data-theme="arc"] [data-action="project-switch"],
+  html[data-theme="arc"] [data-component="dialog"] {
+    transition:
+      background-color 150ms ease-out,
+      box-shadow 200ms ease-out,
+      border-color 150ms ease-out,
+      transform 150ms ease-out;
+  }
+}
