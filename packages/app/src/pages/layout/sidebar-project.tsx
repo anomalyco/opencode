@@ -11,6 +11,14 @@ import { ProjectIcon } from "./sidebar-items"
 import { displayName } from "./helpers"
 import { projectSelected } from "./sidebar-project-helpers"
 
+// Stable 1..6 hash from project path; consumed by Arc theme via [data-rail-hue].
+// Inert on other themes (no selector reads the attribute).
+function railHue(input: string): number {
+  let h = 0
+  for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) | 0
+  return Math.abs(h) % 6 + 1
+}
+
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
   sidebarReduced: Accessor<boolean>
@@ -89,6 +97,7 @@ const ProjectTile = (props: {
           aria-label={name()}
           data-action="project-switch"
           data-project={base64Encode(props.project.worktree)}
+          data-rail-hue={railHue(props.project.worktree)}
           classList={{
             "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden cursor-pointer": true,
             "transition-all duration-150": !props.sidebarReduced(),
