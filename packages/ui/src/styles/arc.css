@@ -160,6 +160,8 @@ html[data-theme="arc"] {
   html[data-theme="arc"] [data-component="titlebar"] {
     --surface-raised-base: rgba(255, 255, 255, 0.06);
     --color-surface-raised-base: rgba(255, 255, 255, 0.06);
+    --border-weak-base: transparent;
+    --color-border-weak-base: transparent;
   }
 
   /* SidebarPanel: remove the light border separator (drew a hard line
