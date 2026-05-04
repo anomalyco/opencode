@@ -4,25 +4,37 @@
 // chain that provider.ts:811 builds at runtime, with only the network boundary
 // stubbed. Asserts that `reasoning_effort` (and other provider options the
 // transform emits) actually land in the body Cloudflare AI Gateway forwards
-// upstream — which is the only place the bug was observable.
+// upstream, which is the only place the bug was observable.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import type { JSONValue } from "ai"
 import { generateText } from "ai"
 import { createAiGateway } from "ai-gateway-provider"
 import { createUnified } from "ai-gateway-provider/providers/unified"
 import { ProviderTransform } from "@/provider/transform"
+import type * as Provider from "@/provider/provider"
+import { ModelID, ProviderID } from "@/provider/schema"
 
-type Captured = { url: string; outerBody: any }
+type Captured = { url: string; outerBody: unknown }
+type ProviderOptions = Record<string, Record<string, JSONValue>>
 
 const realFetch = globalThis.fetch
 let captured: Captured | null = null
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 beforeEach(() => {
   captured = null
-  globalThis.fetch = (async (input: any, init?: any) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+  const handle = async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
     if (url.startsWith("https://gateway.ai.cloudflare.com/")) {
-      const bodyText = init?.body ?? ""
+      const bodyText = typeof init?.body === "string" ? init.body : ""
       captured = { url, outerBody: bodyText ? JSON.parse(bodyText) : null }
       return new Response(
         JSON.stringify({
@@ -37,16 +49,20 @@ beforeEach(() => {
       )
     }
     return realFetch(input, init)
-  }) as typeof fetch
+  }
+  // `typeof fetch` includes Bun's `preconnect` method; preserve it from realFetch.
+  const stubFetch: typeof fetch = Object.assign(handle, { preconnect: realFetch.preconnect.bind(realFetch) })
+  globalThis.fetch = stubFetch
 })
 
 afterEach(() => {
   globalThis.fetch = realFetch
 })
 
-const cfModel = (apiId: string, releaseDate = "2026-03-05"): any => ({
-  id: `cloudflare-ai-gateway/${apiId}`,
-  providerID: "cloudflare-ai-gateway",
+const cfModel = (apiId: string, releaseDate = "2026-03-05"): Provider.Model => ({
+  id: ModelID.make(`cloudflare-ai-gateway/${apiId}`),
+  providerID: ProviderID.make("cloudflare-ai-gateway"),
+  name: apiId,
   api: { id: apiId, url: "https://gateway.ai.cloudflare.com/v1/compat", npm: "ai-gateway-provider" },
   capabilities: {
     reasoning: true,
@@ -65,21 +81,30 @@ const cfModel = (apiId: string, releaseDate = "2026-03-05"): any => ({
   release_date: releaseDate,
 })
 
-async function callThroughGateway(apiId: string, providerOptions: Record<string, any>) {
+// ai-gateway-provider sends an array of step descriptors; each entry's `query`
+// is the body forwarded to the upstream provider.
+function extractUpstreamQuery(body: unknown): Record<string, unknown> | undefined {
+  if (!Array.isArray(body) || body.length === 0) return undefined
+  const first = body[0]
+  if (!isRecord(first)) return undefined
+  const query = first.query
+  return isRecord(query) ? query : undefined
+}
+
+async function callThroughGateway(apiId: string, providerOptions: ProviderOptions) {
   const aigateway = createAiGateway({ accountId: "test", gateway: "test", apiKey: "test" })
   const unified = createUnified()
   await generateText({ model: aigateway(unified(apiId)), prompt: "hi", providerOptions })
-  // ai-gateway-provider sends an array; each entry's `query` is the upstream body.
-  return captured?.outerBody?.[0]?.query as Record<string, any> | undefined
+  return extractUpstreamQuery(captured?.outerBody)
 }
 
 describe("cf-ai-gateway end-to-end (regression: #24432)", () => {
   test("ProviderTransform.providerOptions output puts reasoning_effort on the wire", async () => {
     // The full chain the runtime exercises:
-    //   transform.providerOptions() → openaiCompatible key
-    //   → @ai-sdk/openai-compatible reads it as compatibleOptions
-    //   → emits body.reasoning_effort
-    //   → ai-gateway-provider wraps the body and forwards to gateway.ai.cloudflare.com
+    //   transform.providerOptions() -> openaiCompatible key
+    //   -> @ai-sdk/openai-compatible reads it as compatibleOptions
+    //   -> emits body.reasoning_effort
+    //   -> ai-gateway-provider wraps the body and forwards to gateway.ai.cloudflare.com
     const opts = ProviderTransform.providerOptions(cfModel("openai/gpt-5.4"), { reasoningEffort: "xhigh" })
     expect(opts).toEqual({ openaiCompatible: { reasoningEffort: "xhigh" } })
 
