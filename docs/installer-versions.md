@@ -14,7 +14,30 @@
 
 ## [macOS] 2026.5.4.1 — 2026-05-04 00:05
 
-(to be filled: commits / plugin / installer path after ship)
+**主菜:Mac 端首次走 GitHub Actions 全自动 release**(对应 Win 端 [`ship-prod-2026.5.1.2`](https://github.com/zoulukuang/deskfox/releases/tag/ship-prod-2026.5.1.2) 已落地的同款链路,延伸到 mac 平台)。
+
+自 [macOS] `2026.4.30.3`(2026-04-30)以来 Mac 端 4 天未 ship,这中间 dev 主干推进显著(跟 Win [`ship-prod-2026.5.3.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-prod-2026.5.3.1) 同源):
+
+- **release-mac-ci** ([changelog](features/release-mac-ci/3-changelog.md)) — 新增 `release-mac-deskfox.yml` workflow,push `ship-mac-(prod|beta)-*` tag 触发 GitHub Actions `macos-latest` runner build .dmg + 创 draft Release;workflow 内自带 .dmg 重命名(对齐 Win)+ Release body 含 Gatekeeper "右键打开" 提示;**本笔即首次实战验证**(dispatch dev 7m13s + tag prod 4m50s 全绿)
+- **sync-2026-05-03-2** ([changelog](features/sync-2026-05-03-2/3-changelog.md)) — 本季首次 sync upstream 成功,upstream 462 commits / 1157 文件 / +58k/-53k 行 全 take(Effect HttpApi infra / shared→core rename / Updater API rename 等)
+- **office-routes-effect-httpapi** ([changelog](features/office-routes-effect-httpapi/3-changelog.md)) — fork 的 4 个 office routes(`/file/office-pdf` + `/office-tooling/{status,install,progress}`)迁到 PublicApi,httpapi-mode SDK 含 fork office method
+- **updater-disable-adapter-rollback** — Updates 段控件灰显恢复(撤回 sentinel pattern UX bug)
+- **repo-migration-deskfox** + **user-rename-zoulukuang** — GitHub 主仓 `yuesoue/opencode-for-office-deskfox` → `zoulukuang/deskfox`(同时 user rename),本笔 release 已挂在新仓
+- **gitee-release-mirror** + 其他 sync 链路相关 prep / postmortem,详见 [改动日志.md](../改动日志.md)
+
+**User 实测验证**:本机 `gh run download` 拉 .dmg + SHA256 校验通过(`831580ac... = Release body 期望值`,字节级一致)。dispatch dev 模式 .dmg 已开启 Gatekeeper 流程通过,prod 跟 dev 仅 productName / Bundle ID / icon 三档差异。
+
+**Release**:[GitHub Release `ship-mac-prod-2026.5.4.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-mac-prod-2026.5.4.1)
+- 文件:`DeskFox-2026.5.4.1_aarch64.dmg`
+- 大小:52.32 MB(54,866,286 bytes)
+- 架构:Apple Silicon(arm64,`aarch64-apple-darwin`)
+- SHA256:`831580ac51aebd8ded330b32e63482b96aaa10929716f056f9198656723f08b7`
+- Bundle ID:`ai.deskfox.app`(prod,跟 sst/opencode 0 命名空间共享)
+
+key commit: `e9048e591`(bump commit;基于 dev `dd137fee5`)
+build run: [Actions run 25284065820](https://github.com/zoulukuang/deskfox/actions/runs/25284065820)(4m50s,actions/cache 命中)
+
+**上游 baseline**:跟 dev 同步(sync-2026-05-03-2 后,~1.14.x + 上游推进)
 
 ---
 ## [Windows] 2026.5.3.1 - 2026-05-03 14:04
