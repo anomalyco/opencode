@@ -5,7 +5,6 @@ import path from "path"
 import { Config } from "@/config/config"
 import { Shell } from "../../src/shell/shell"
 import { ShellTool } from "../../src/tool/shell"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
@@ -161,7 +160,7 @@ describe("tool.shell", () => {
   })
 
   test("description includes shell information", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initBash()
@@ -175,7 +174,7 @@ describe("tool.shell", () => {
   })
 
   test("shell name detection is platform-aware", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initBash()
@@ -194,7 +193,7 @@ describe("tool.shell", () => {
   })
 
   test("description uses dynamic shell-specific language", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initBash()
@@ -217,7 +216,7 @@ describe("tool.shell", () => {
     // Test with different shell environments
     const originalShell = process.env.SHELL
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         try {
@@ -245,20 +244,23 @@ describe("tool.shell", () => {
           expect(bashKsh.description).toContain("ksh command")
           expect(bashKsh.description).toContain("ksh commands")
 
-          // Mock fish shell environment (fish is now supported, not blacklisted)
+          // Mock fish shell environment (fish is denied, falls back to platform default)
           process.env.SHELL = "/usr/bin/fish"
           Shell.acceptable.reset()
           Shell.preferred.reset()
           const bashFish = await initBash()
-          expect(bashFish.description).toContain("fish command")
-          expect(bashFish.description).toContain("fish commands")
+          const fishFallback = Shell.name(Shell.acceptable("fish"))
+          expect(bashFish.description).toContain(`${fishFallback} command`)
+          expect(bashFish.description).toContain(`${fishFallback} commands`)
 
+          // Mock nu shell environment (nu is denied, falls back to platform default)
           process.env.SHELL = "/usr/bin/nu"
           Shell.acceptable.reset()
           Shell.preferred.reset()
           const bashNu = await initBash()
-          expect(bashNu.description).toContain("nu command")
-          expect(bashNu.description).toContain("nu commands")
+          const nuFallback = Shell.name(Shell.acceptable("nu"))
+          expect(bashNu.description).toContain(`${nuFallback} command`)
+          expect(bashNu.description).toContain(`${nuFallback} commands`)
         } finally {
           // Restore original shell
           if (originalShell) {
