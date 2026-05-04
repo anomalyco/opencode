@@ -5,6 +5,8 @@ import {
   type AuthenticateRequest,
   type AuthMethod,
   type CancelNotification,
+  type CloseSessionRequest,
+  type CloseSessionResponse,
   type ForkSessionRequest,
   type ForkSessionResponse,
   type InitializeRequest,
@@ -565,6 +567,7 @@ export class Agent implements ACPAgent {
           image: true,
         },
         sessionCapabilities: {
+          close: {},
           fork: {},
           list: {},
           resume: {},
@@ -797,7 +800,7 @@ export class Agent implements ACPAgent {
     }
   }
 
-  async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+  async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
     const directory = params.cwd
     const sessionId = params.sessionId
     const mcpServers = params.mcpServers ?? []
@@ -826,6 +829,27 @@ export class Agent implements ACPAgent {
       }
       throw e
     }
+  }
+
+  async closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
+    const session = this.sessionManager.remove(params.sessionId)
+    if (!session) return {}
+
+    await this.sdk.session
+      .abort(
+        {
+          sessionID: params.sessionId,
+          directory: session.cwd,
+        },
+        { throwOnError: true },
+      )
+      .catch((error) => {
+        log.error("failed to abort session while closing ACP session", { error, sessionID: params.sessionId })
+      })
+
+    this.permissionQueues.delete(params.sessionId)
+    log.info("close_session", { sessionId: params.sessionId })
+    return {}
   }
 
   private async processMessage(message: SessionMessageResponse) {
