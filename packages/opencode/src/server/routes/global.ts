@@ -15,35 +15,52 @@ import * as Log from "@opencode-ai/core/util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "@/config/config"
 import { errors } from "../error"
+import { SSEReplayBuffer, parseLastEventId, type StoredEvent } from "../sse-replay"
 
 const log = Log.create({ service: "server" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", Schema.Struct({}))
 
-async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
-  return streamSSE(c, async (stream) => {
-    const q = new AsyncQueue<string | null>()
-    let done = false
+// Module-level ring buffer of recent global events. Every event published on
+// GlobalBus gets a monotonic id, gets stored here, and gets fanned out to all
+// active /global/event SSE connections. Clients reconnecting with a
+// `Last-Event-ID` header replay everything that happened during the gap.
+const globalReplay = new SSEReplayBuffer()
+GlobalBus.on("event", (event: any) => {
+  globalReplay.publish(JSON.stringify(event))
+})
 
-    q.push(
-      JSON.stringify({
+type QueueItem = { id?: number; data: string }
+
+async function streamEvents(c: Context, replay: SSEReplayBuffer) {
+  return streamSSE(c, async (stream) => {
+    const q = new AsyncQueue<QueueItem | null>()
+    let done = false
+    let lastSentId = 0
+
+    // Subscribe BEFORE replay so live events arriving during the replay window
+    // also land in the queue. Dedupe on id below.
+    const unsub = replay.subscribe((entry: StoredEvent) => q.push(entry))
+
+    q.push({
+      data: JSON.stringify({
         payload: {
           type: "server.connected",
           properties: {},
         },
       }),
-    )
+    })
 
     // Send heartbeat every 10s to prevent stalled proxy streams.
     const heartbeat = setInterval(() => {
-      q.push(
-        JSON.stringify({
+      q.push({
+        data: JSON.stringify({
           payload: {
             type: "server.heartbeat",
             properties: {},
           },
         }),
-      )
+      })
     }, 10_000)
 
     const stop = () => {
@@ -55,14 +72,33 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       log.info("global event disconnected")
     }
 
-    const unsub = subscribe(q)
-
     stream.onAbort(stop)
 
     try {
-      for await (const data of q) {
-        if (data === null) return
-        await stream.writeSSE({ data })
+      // Replay events the client missed during a disconnect, if any.
+      const lastEventId = parseLastEventId(c.req.header("Last-Event-ID"))
+      if (lastEventId > 0) {
+        const missed = replay.eventsAfter(lastEventId)
+        if (missed.length > 0) {
+          log.info("global event replay", { lastEventId, replayed: missed.length })
+        }
+        for (const ev of missed) {
+          await stream.writeSSE({ id: String(ev.id), data: ev.data })
+          lastSentId = ev.id
+        }
+      }
+
+      for await (const item of q) {
+        if (item === null) return
+        if (item.id != null) {
+          // Dedupe: events that arrived during the replay window may also be
+          // queued via the live subscription.
+          if (item.id <= lastSentId) continue
+          lastSentId = item.id
+          await stream.writeSSE({ id: String(item.id), data: item.data })
+        } else {
+          await stream.writeSSE({ data: item.data })
+        }
       }
     } finally {
       stop()
@@ -127,13 +163,7 @@ export const GlobalRoutes = lazy(() =>
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
 
-        return streamEvents(c, (q) => {
-          async function handler(event: any) {
-            q.push(JSON.stringify(event))
-          }
-          GlobalBus.on("event", handler)
-          return () => GlobalBus.off("event", handler)
-        })
+        return streamEvents(c, globalReplay)
       },
     )
     .get(
