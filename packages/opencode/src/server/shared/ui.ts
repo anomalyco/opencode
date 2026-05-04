@@ -14,6 +14,11 @@ export const DEFAULT_CSP =
   "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
 export const UI_UPSTREAM = new URL("https://app.opencode.ai")
 
+export function injectBasePath(html: string, basePath: string): string {
+  const href = basePath.endsWith("/") ? basePath : `${basePath}/`
+  return html.replace(/(<head\b[^>]*>)/i, `$1\n    <base href="${href}">`)
+}
+
 export const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
@@ -53,8 +58,11 @@ function notFound() {
 function embeddedUIResponse(file: string, body: Uint8Array) {
   const mime = AppFileSystem.mimeType(file)
   const headers = new Headers({ "content-type": mime })
-  if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-  return HttpServerResponse.raw(body, { headers })
+  if (!mime.startsWith("text/html")) return HttpServerResponse.raw(body, { headers })
+  headers.set("content-security-policy", DEFAULT_CSP)
+  const html = new TextDecoder().decode(body)
+  const basePath = Flag.OPENCODE_SERVER_BASE_PATH
+  return HttpServerResponse.text(basePath ? injectBasePath(html, basePath) : html, { headers })
 }
 
 export function serveEmbeddedUIEffect(
@@ -93,7 +101,8 @@ export function serveUIEffect(
       const body = yield* response.text
       const match = themePreloadHash(body)
       headers.set("Content-Security-Policy", csp(match ? createHash("sha256").update(match[2]).digest("base64") : ""))
-      return HttpServerResponse.text(body, { status: response.status, headers })
+      const basePath = Flag.OPENCODE_SERVER_BASE_PATH
+      return HttpServerResponse.text(basePath ? injectBasePath(body, basePath) : body, { status: response.status, headers })
     }
 
     headers.set("Content-Security-Policy", csp())

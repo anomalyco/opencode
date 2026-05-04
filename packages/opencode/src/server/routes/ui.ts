@@ -1,10 +1,11 @@
 import fs from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import { ProxyUtil } from "../proxy-util"
-import { DEFAULT_CSP, UI_UPSTREAM, csp, embeddedUI, themePreloadHash, upstreamURL } from "../shared/ui"
+import { DEFAULT_CSP, UI_UPSTREAM, csp, embeddedUI, injectBasePath, themePreloadHash, upstreamURL } from "../shared/ui"
 
 export async function serveUI(request: Request) {
   const embeddedWebUI = await embeddedUI()
@@ -17,10 +18,12 @@ export async function serveUI(request: Request) {
     if (await fs.exists(match)) {
       const mime = AppFileSystem.mimeType(match)
       const headers = new Headers({ "content-type": mime })
-      if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-      return new Response(new Uint8Array(await fs.readFile(match)), { headers })
-    }
-
+        if (mime.startsWith("text/html")) {
+          headers.set("content-security-policy", DEFAULT_CSP)
+          const html = new TextDecoder().decode(await fs.readFile(match))
+          const basePath = Flag.OPENCODE_SERVER_BASE_PATH
+          return new Response(basePath ? injectBasePath(html, basePath) : html, { headers })
+        }
     return Response.json({ error: "Not Found" }, { status: 404 })
   }
 
@@ -28,12 +31,17 @@ export async function serveUI(request: Request) {
     raw: request,
     headers: ProxyUtil.headers(request, { host: UI_UPSTREAM.host }),
   })
-  const match = response.headers.get("content-type")?.includes("text/html")
-    ? themePreloadHash(await response.clone().text())
-    : undefined
+  const isHtml = response.headers.get("content-type")?.includes("text/html")
+  if (!isHtml) {
+    response.headers.set("Content-Security-Policy", csp())
+    return response
+  }
+  const body = await response.text()
+  const match = themePreloadHash(body)
   const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
   response.headers.set("Content-Security-Policy", csp(hash))
-  return response
+  const basePath = Flag.OPENCODE_SERVER_BASE_PATH
+  return new Response(basePath ? injectBasePath(body, basePath) : body, { status: response.status, headers: response.headers })
 }
 
 export const UIRoutes = (): Hono => new Hono().all("/*", (c) => serveUI(c.req.raw))

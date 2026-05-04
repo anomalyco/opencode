@@ -164,6 +164,8 @@ if (root instanceof HTMLElement) {
       ...auth,
     },
   }
+  const baseEl = document.querySelector("base")
+  const base = baseEl ? new URL(baseEl.href).pathname : undefined
   render(
     () => (
       <PlatformProvider value={platform}>
@@ -171,6 +173,7 @@ if (root instanceof HTMLElement) {
           <AppInterface
             defaultServer={ServerConnection.Key.make(getDefaultUrl())}
             servers={[server]}
+            base={base}
             disableHealthCheck
           />
         </AppBaseProviders>
