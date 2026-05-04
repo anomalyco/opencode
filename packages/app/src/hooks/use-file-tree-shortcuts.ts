@@ -2,10 +2,12 @@
 //
 // 触发条件(OR):
 //   A. activeElement 在 [data-component=filetree] 内(用户刚点过文件树)
-//   B. selection 非空 + activeElement 不是可编辑控件(input/textarea/contenteditable)
-//      ←  v1 用户单击文件后焦点常跑到 main editor,但 selection 还在,这时 Ctrl+C/V 期望仍生效
+//   B. 文件树 selection 非空 + activeElement 不是可编辑控件 + 浏览器文本选区为空(或落在文件树内)
+//      ←  v1 用户单击文件后焦点常跑到 main editor,但文件树 selection 还在,这时 Ctrl+C/V 期望仍生效
+//      ←  浏览器文本选区在文件树外(聊天区 / 只读 viewer)时,意图是复制文本,B 让位给原生
 //
 // 这避免抢占编辑器 / 输入框 / 终端的 Ctrl+X/C/V/Z(它们的 activeElement 是可编辑控件,B 不满足)
+// 也避免抢占聊天气泡 / 文档查看器的 Ctrl+C(那些是普通 div,activeElement 是 body,靠"文本选区在外"兜底)
 //
 // 支持:
 // - Ctrl+X (Cut)  剪切当前 selection
@@ -40,11 +42,28 @@ function activeIsEditable(): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
 }
 
+/**
+ * 浏览器文本选区是否非空且落在文件树之外。
+ * 聊天区 / 只读文档查看器是普通 div,activeElement 多为 body —— 单凭 activeIsEditable 防不住。
+ * 用户在这些区域选了文本按 Ctrl+C,意图就是复制文本,B 路径不能抢。
+ */
+function hasTextSelectionOutsideFileTree(): boolean {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed) return false
+  if (sel.toString().length === 0) return false
+  const node = sel.anchorNode
+  const el = node instanceof Element ? node : (node?.parentElement ?? null)
+  if (!el) return false
+  return !el.closest('[data-component="filetree"]')
+}
+
 export function useFileTreeShortcuts(handlers: ShortcutHandlers) {
   const shouldTrigger = (): boolean => {
     if (activeInFileTree()) return true // A:focus 在文件树
     if (activeIsEditable()) return false // 可编辑控件优先,即便 selection 非空也不抢
-    return Boolean(handlers.hasSelection?.()) // B:focus 在中性区(body 等)+ selection 非空
+    // 中性区(body 等)有文本选区 → 用户要复制文本,让原生 Ctrl+C/X/V 走
+    if (hasTextSelectionOutsideFileTree()) return false
+    return Boolean(handlers.hasSelection?.()) // B:focus 在中性区 + 文件树 selection 非空
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
