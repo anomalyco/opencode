@@ -60,13 +60,40 @@ installer 路径: 等 GitHub Actions 跑完 `ship-prod-2026.5.3.1` tag 后,从 [
 
 ## [Windows] 2026.5.1.2 - 2026-05-01 22:20
 
-(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
+**主菜:Win 首次走 GitHub Actions 全自动 release**(release-自动化 feat 落地首笔实战 ship,延伸到 Mac 端的链路即 [`ship-mac-prod-2026.5.4.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-mac-prod-2026.5.4.1))。
+
+自 `2026.5.1.1`(同日早些时候)以来,新增内容全部为 release-自动化 feat 实施:
+- **release-自动化** ([changelog](features/release-自动化/3-changelog.md)) — 5 笔 commit(`10c98374a` / `17b159f25` / `49ba8005c` / `b1092742a` / `59afb8413`):`.github/workflows/release-deskfox.yml` 主体 workflow + pre-commit 黑名单豁免 `*-deskfox.yml` + DeskFox.iss IconFile 按 AppEnv 走 + sidecar copy 前确保目标目录;push `ship-prod-*` tag 触发 GitHub Actions `windows-latest` runner build .exe + 创 draft Release
+
+**Release**:[GitHub Release `ship-prod-2026.5.1.2`](https://github.com/zoulukuang/opencode-for-office-deskfox/releases/tag/ship-prod-2026.5.1.2)(**老仓** `zoulukuang/opencode-for-office-deskfox`,2026-05-03 仓库迁移到 `zoulukuang/deskfox` 时 release 没自动跟过来 — GitHub 设计如此)
+- 文件:`DeskFox-2026.5.1.2-setup.exe`
+- 大小:46.63 MB(48,897,142 bytes)
+- 架构:x86_64 Windows(Inno Setup 打包,未签名)
+- SHA256:`9751BECBC56FD280F97A4CBA5C6189F6B3C2D6374D23B70FE479D3CAB1A49FE3`
+- AppId:prod GUID(锁死,详见 win-tri-env-appid feature)
+
+key commit: `59afb8413`(bump commit;基于 `2026.5.1.1` 基础)
+publish 时间:2026-05-01 22:50(UTC+8)
+
+**上游 baseline**:1.14.21(沿用)
 
 ---
 
 ## [Windows] 2026.5.1.1 - 2026-05-01 14:21
 
-(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
+**性质:Win prod 首笔自用 build**(本地 `pack-installer.ps1` 走 bump → build,**未挂 GitHub Release**;后续被同日 [`2026.5.1.2`](#windows-202651-2--2026-05-01-2220)(GitHub Actions 自动)取代,本笔保留作 build 链路验证记录)。
+
+自 [Windows] `2026.4.29.2`(2026-04-29)以来 Win 端 2 天未 ship,这中间 dev 主干推进显著:
+- **win-tri-env-appid** (`21c3f80f9`) — Win 三档 AppId 同机共存,`DeskFox.iss` 加 `#if AppEnv` 切 GUID(prod 锁死 / beta `{86413DCA-EA81-415A-A309-473EBFD78990}` / dev `{4C5D29F2-3BBB-49A2-B248-B74B716F8EA1}` 新生成),`pack-installer.ps1` 加 `-Env` 参数,Mac/Win 三档共存能力对齐
+- **同期 macOS 工作**(对 win build 透明,但占同期 dev 主干):`macos-pack-installer` / `office-installer-macos` / `prod-bundle-id-fix` / `bundle-id-debrand` 等 — ship 在 `[macOS] 2026.4.30.2/.3` 两笔 mac entry 里
+- **分支策略-v2** v1.0/v1.1 — dev 单一稳定主干 + 上游同步分离(`sync/upstream-<日期>` 临时分支)+ 远端主仓策略调整(GitHub 升 origin / Gitee 降镜像)
+- **双端协作-SOP** v1.2 — feat 一次性容器 + Win/Mac 双端协作流程(rebase/merge/删分支)+ dev 上小补丁直推规则
+
+**installer**:`packages/branding/installer/Output/DeskFox-2026.5.1.1-setup.exe`(**本地路径**,未上传 GitHub Release)
+
+key commit: `60e617451`(bump commit;`pack-installer.ps1` 跑 bump → build → record bump 三联自动产物)
+
+**上游 baseline**:1.14.21(沿用)
 
 ---
 
