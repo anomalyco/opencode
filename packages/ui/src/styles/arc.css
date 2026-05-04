@@ -400,6 +400,11 @@ html[data-theme="arc"] [data-component="select-content"] [data-slot="select-sele
   background: var(--surface-raised-base-hover);
 }
 
+html[data-theme="arc"] [data-component="popover-content"] [data-slot="list-item"]:hover,
+html[data-theme="arc"] [data-component="popover-content"] [data-slot="list-item"][data-active="true"] {
+  background: var(--surface-raised-base-hover);
+}
+
 /* ───────────────────────────────────────────────────────────── */
 /* Buttons — micro lift on hover, snap-back on press             */
 /* ───────────────────────────────────────────────────────────── */
