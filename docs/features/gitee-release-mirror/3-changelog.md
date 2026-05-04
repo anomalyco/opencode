@@ -216,3 +216,24 @@ Mac 端 release(`ship-mac-prod-2026.5.4.1`)发了 GitHub draft 后,Gitee 那边�
 文件 mode 100755(可执行),user 可直接 `./packages/branding/scripts/mirror-asset-to-gitee.sh ship-mac-prod-X` 或 `bash <path> ship-mac-prod-X` 跑。
 
 Mac 协作者首次实测目标:`ship-mac-prod-2026.5.4.1`(GitHub 上还是 draft,Mac 协作者要先 publish 才能测)。
+
+### 续笔(2026-05-04)实测结果 + ps1 token 默认值修复
+
+Mac 协作者 publish 了 GitHub draft → workflow 触发 → Gitee 元数据建好(`id=673885`,name "DeskFox 2026.5.4.1 (mac)")。但 Gitee 端只看到 2 个自动 source archive(.zip / .tar.gz),**`.dmg` 没传上去**。Mac 端那次脚本运行可能没成功(没截图,推测原因:`source ~/.zshrc` 没在子 shell 里跑过 / 或当时没跑脚本)。
+
+我从 Win 这边接力补传(从 GitHub `gh release download` → ps1 `-Asset` 指定路径 → 上传):
+- HTTP 201,**7 秒,59.54 Mbps**
+- Gitee 现 3 个 assets:`.dmg`(我刚传的)+ `.zip` + `.tar.gz`
+
+**踩到一个 ps1 默认值小坑**:PowerShell 子进程(像 Claude 通过 PowerShell tool 启的)**不继承 Windows User-scope env var**。原 ps1 默认值 `$env:GITEE_TOKEN` 在子进程里是空,需手动 `$env:GITEE_TOKEN = [Environment]::GetEnvironmentVariable("GITEE_TOKEN", "User")` 注入。
+
+**修**:ps1 `$GiteeToken` 默认值改为优先读 User-scope env var,fallback process scope。子进程 / user 双场景都自动拿到 token,不用先手动注入。
+
+```powershell
+[string]$GiteeToken = $(
+    $userScope = [Environment]::GetEnvironmentVariable("GITEE_TOKEN", "User")
+    if ($userScope) { $userScope } else { $env:GITEE_TOKEN }
+)
+```
+
+sh 脚本(Mac/Linux 端)用 `${GITEE_TOKEN:-}` 已经可以从 shell init(`~/.zshrc`)继承,**Mac 端不存在这个坑**(只要 user 当前 shell `source` 过 init 文件)。

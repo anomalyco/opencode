@@ -15,7 +15,10 @@
 # 参数:
 #   -Tag <tag>             Release tag,例 ship-prod-2026.5.3.1 / ship-mac-prod-2026.5.10.1
 #   -Asset <path>          手动指定上传文件路径(默认根据 tag 自动定位 packages/branding/installer/Output/*.exe)
-#   -GiteeToken <token>    手动传 token(默认读 $env:GITEE_TOKEN)
+#   -GiteeToken <token>    手动传 token(默认优先读 User-scope env var,
+#                          fallback Process scope `$env:GITEE_TOKEN`)
+#                          PowerShell 子进程默认不继承 User-scope,所以 ps1
+#                          被 Claude / 自动化任务调起时显式从注册表读更鲁棒
 #   -GiteeOwner zoulukuang -GiteeRepo deskfox  (默认值,通常不改)
 
 [CmdletBinding()]
@@ -25,7 +28,12 @@ param(
 
     [string]$Asset = "",
 
-    [string]$GiteeToken = $env:GITEE_TOKEN,
+    [string]$GiteeToken = $(
+        # 优先 User-scope(持久化在 HKCU\Environment),fallback Process scope
+        # 子进程(Claude / 自动化)启动时不一定继承 User-scope env,显式从注册表读
+        $userScope = [Environment]::GetEnvironmentVariable("GITEE_TOKEN", "User")
+        if ($userScope) { $userScope } else { $env:GITEE_TOKEN }
+    ),
 
     [string]$GiteeOwner = "zoulukuang",
 
