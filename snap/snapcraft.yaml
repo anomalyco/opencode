@@ -1,0 +1,172 @@
+name: opencode
+adopt-info: opencode
+title: OpenCode
+summary: The open source AI coding agent
+description: |
+  OpenCode is a fully open source AI-powered coding agent that runs in
+  the terminal. It supports multiple AI providers including Claude,
+  OpenAI, Google, and local models. Features include interactive TUI,
+  built-in LSP support, a client/server architecture, and two built-in
+  agents (coder and planner) for development and code exploration tasks.
+
+  OpenCode can edit files, run commands, search codebases, and interact
+  with MCP servers, making it a versatile coding assistant directly in
+  the terminal.
+
+  This snap also includes the OpenCode desktop application.
+license: MIT
+website: https://opencode.ai
+contact: https://github.com/anomalyco/opencode/issues
+issues: https://github.com/anomalyco/opencode/issues
+source-code: https://github.com/anomalyco/opencode
+base: core24
+confinement: classic
+grade: stable
+
+platforms:
+  amd64:
+  arm64:
+
+apps:
+  opencode-cli:
+    command: bin/opencode-cli
+  opencode:
+    command: bin/OpenCode
+    desktop: usr/share/applications/OpenCode.desktop
+
+parts:
+  opencode:
+    plugin: nil
+    source: .
+    build-packages:
+      - curl
+      - unzip
+      - git
+      - jq
+      - build-essential
+      - python3
+      - pkg-config
+    override-pull: |
+      craftctl default
+      craftctl set version="$(jq -r .version packages/opencode/package.json)"
+    override-build: |
+      # Install Node.js 22 (Vite 7 requires Node 20.19+ or 22.12+)
+      curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+      apt-get install -y nodejs
+
+      # Install Bun
+      curl -fsSL https://bun.sh/install | bash
+      export BUN_INSTALL="$HOME/.bun"
+      export PATH="$BUN_INSTALL/bin:$PATH"
+
+      # Install dependencies
+      bun install
+
+      # Build standalone CLI binary for current platform
+      cd packages/opencode
+      bun run script/build.ts --single
+
+      # Determine architecture
+      case "$(uname -m)" in
+        x86_64)  ARCH="x64" ;;
+        aarch64) ARCH="arm64" ;;
+        *)       echo "Unsupported architecture: $(uname -m)" && exit 1 ;;
+      esac
+
+      # Install the CLI binary as opencode-cli (matching upstream deb layout)
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/bin"
+      cp "dist/opencode-linux-${ARCH}/bin/opencode" "$SNAPCRAFT_PART_INSTALL/bin/opencode-cli"
+
+  opencode-desktop:
+    plugin: nil
+    after: [opencode]
+    source: .
+    build-packages:
+      - curl
+      - git
+      - jq
+      - build-essential
+      - python3
+      - pkg-config
+      - libwebkit2gtk-4.1-dev
+      - libgtk-3-dev
+      - libsoup-3.0-dev
+      - nodejs
+      - npm
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+      - libgtk-3-0
+      - libsoup-3.0-0
+      - libjavascriptcoregtk-4.1-0
+      - libgdk-pixbuf-2.0-0
+      - libcairo2
+      - libpango-1.0-0
+      - libpangocairo-1.0-0
+      - libglib2.0-0
+      - libepoxy0
+      - libfontconfig1
+      - libfribidi0
+      - libatk1.0-0t64
+      - libatk-bridge2.0-0t64
+      - libx11-6
+      - libxcomposite1
+      - libxdamage1
+      - libxext6
+      - libxfixes3
+      - libxrandr2
+      - libxrender1
+      - libxtst6
+      - libxss1
+      - libnss3
+      - libnspr4
+      - libdbus-1-3
+      - libdrm2
+      - libgbm1
+      - libasound2t64
+    override-build: |
+      # Install Node.js 22 (Vite 7 requires Node 20.19+ or 22.12+)
+      curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+      apt-get install -y nodejs
+
+      # Install Bun
+      curl -fsSL https://bun.sh/install | bash
+      export BUN_INSTALL="$HOME/.bun"
+      export PATH="$BUN_INSTALL/bin:$PATH"
+
+      # Install workspace dependencies
+      bun install
+
+      # Build the frontend and package the Linux desktop app (no publish)
+      cd packages/desktop-electron
+      OPENCODE_CHANNEL=prod bun run build
+      OPENCODE_CHANNEL=prod bun run package:linux -- --linux dir
+
+      # Determine architecture
+      case "$(uname -m)" in
+        x86_64)  DESKTOP_ARCH="linux-unpacked" ;;
+        aarch64) DESKTOP_ARCH="linux-arm64-unpacked" ;;
+        *)       echo "Unsupported architecture: $(uname -m)" && exit 1 ;;
+      esac
+
+      # Install the desktop binary as OpenCode
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/bin"
+      # The main executable inside the unpacked dir matches the productName
+      cp "dist/${DESKTOP_ARCH}/OpenCode" "$SNAPCRAFT_PART_INSTALL/bin/OpenCode"
+
+      # Install desktop integration files
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/applications"
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/32x32/apps"
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/128x128/apps"
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/256x256@2/apps"
+
+      # Desktop file
+      printf '[Desktop Entry]\nCategories=Development;\nComment=The open source AI coding agent\nExec=OpenCode\nStartupWMClass=OpenCode\nIcon=OpenCode\nName=OpenCode\nTerminal=false\nType=Application\nMimeType=x-scheme-handler/opencode\n' \
+        > "$SNAPCRAFT_PART_INSTALL/usr/share/applications/OpenCode.desktop"
+
+      # Icons from the source icons/prod directory
+      cp "icons/prod/32x32.png" \
+        "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/32x32/apps/OpenCode.png"
+      cp "icons/prod/128x128.png" \
+        "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/128x128/apps/OpenCode.png"
+      cp "icons/prod/128x128@2x.png" \
+        "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/256x256@2/apps/OpenCode.png"
