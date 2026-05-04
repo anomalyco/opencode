@@ -5,6 +5,7 @@ import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { containsPath } from "../../src/project/instance-context"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 
@@ -55,7 +56,7 @@ describe("File.read path traversal protection", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         await expect(read("../../../etc/passwd")).rejects.toThrow("Access denied: path escapes project directory")
@@ -66,7 +67,7 @@ describe("File.read path traversal protection", () => {
   test("rejects deeply nested traversal", async () => {
     await using tmp = await tmpdir()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         await expect(read("src/nested/../../../../../../../etc/passwd")).rejects.toThrow(
@@ -83,7 +84,7 @@ describe("File.read path traversal protection", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const result = await read("valid.txt")
@@ -97,7 +98,7 @@ describe("File.list path traversal protection", () => {
   test("rejects ../ traversal attempting to list /etc", async () => {
     await using tmp = await tmpdir()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         await expect(list("../../../etc")).rejects.toThrow("Access denied: path escapes project directory")
@@ -112,7 +113,7 @@ describe("File.list path traversal protection", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const result = await list("subdir")
@@ -126,7 +127,7 @@ describe("containsPath", () => {
   test("returns true for path inside directory", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: () => {
         expect(containsPath(path.join(tmp.path, "foo.txt"), Instance.current)).toBe(true)
@@ -140,7 +141,7 @@ describe("containsPath", () => {
     const subdir = path.join(tmp.path, "packages", "lib")
     await fs.mkdir(subdir, { recursive: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: subdir,
       fn: () => {
         // .opencode at worktree root, but we're running from packages/lib
@@ -156,7 +157,7 @@ describe("containsPath", () => {
   test("returns false for path outside both directory and worktree", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: () => {
         expect(containsPath("/etc/passwd", Instance.current)).toBe(false)
@@ -168,7 +169,7 @@ describe("containsPath", () => {
   test("returns false for path with .. escaping worktree", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: () => {
         expect(containsPath(path.join(tmp.path, "..", "escape.txt"), Instance.current)).toBe(false)
@@ -179,7 +180,7 @@ describe("containsPath", () => {
   test("handles directory === worktree (running from repo root)", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: () => {
         expect(Instance.directory).toBe(Instance.worktree)
@@ -192,7 +193,7 @@ describe("containsPath", () => {
   test("non-git project does not allow arbitrary paths via worktree='/'", async () => {
     await using tmp = await tmpdir() // no git: true
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: () => {
         // worktree is "/" for non-git projects, but containsPath should NOT allow all paths

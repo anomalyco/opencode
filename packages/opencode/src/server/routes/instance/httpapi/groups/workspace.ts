@@ -9,7 +9,10 @@ import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/experimental/workspace"
-export const CreatePayload = Schema.Struct(Struct.omit(Workspace.CreateInput.fields, ["projectID"]))
+export const CreatePayload = Schema.Struct({
+  ...Struct.omit(Workspace.CreateInput.fields, ["projectID", "extra"]),
+  extra: Schema.optional(Workspace.CreateInput.fields.extra),
+})
 export const SessionRestorePayload = Schema.Struct(Struct.omit(Workspace.SessionRestoreInput.fields, ["workspaceID"]))
 export const SessionRestoreResponse = Schema.Struct({
   total: NonNegativeInt,

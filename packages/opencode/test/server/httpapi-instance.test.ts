@@ -7,13 +7,13 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../fixture/db"
-import { tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 // Flip the experimental HttpApi flag so backend selection telemetry on the
 // production routes reports the right backend, and reset the database around
 // the test so per-instance state does not leak between runs. resetDatabase()
-// already calls Instance.disposeAll(), so we don't repeat it.
+// already calls disposeAllInstances(), so we don't repeat it.
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
