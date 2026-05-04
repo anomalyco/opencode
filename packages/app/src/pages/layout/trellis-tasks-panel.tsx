@@ -99,6 +99,7 @@ export function TrellisTasksPanel(props: {
 
   return (
     <div
+      data-component="sidebar-panel"
       class="flex h-full min-h-0 min-w-0 flex-col rounded-tl-[12px] border-l border-t border-border-weaker-base bg-background-base px-3"
       style={{ width: props.mobile ? undefined : `${props.width()}px` }}
     >
