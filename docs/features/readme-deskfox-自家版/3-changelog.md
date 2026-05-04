@@ -107,7 +107,10 @@ merge dev 之后 user 反馈:**国外申请数字签名期间**(SignPath / Apple
   - `D:\project\OPENCODE-PLAN\readme-draft\截图\` → 4 张产品截图(user 提供)
   - `D:\project\deskfox-site\index.html` → canonical URL / 文案
 - follow-up backlog:
-  - GitHub repo 设置:Description / Topics / Social preview 图,跟 README 对齐(web UI 配,不在 repo 内)
-  - DeskFox 自家 markdown preview 渲染本地图问题(单独 feat,fork-only 改 markdown renderer image src 解析)
-  - 草稿目录 `OPENCODE-PLAN/readme-draft/` 保留 / 归档(user 决策)
-  - 截图后续迭代:产品 UI 改了,README 截图也要更新
+  - **GitHub repo Description**(2026-05-04 done):"Desktop AI assistant for office users · Open-source · Cross-platform (Windows / macOS) · Forked from sst/opencode" — `gh repo edit --description`
+  - **GitHub Homepage URL**(2026-05-04 done):`https://deskfox.ai`
+  - **GitHub Topics**(2026-05-04 done):10 个 — `ai-assistant` `desktop-app` `tauri` `llm` `claude` `openai` `gemini` `productivity` `office` `markdown`
+  - **Social preview 图**(2026-05-04 done):合成 1280x640 PNG(深 navy 底 + 横版 logo + 标语居中,极简风),存 `D:\project\OPENCODE-PLAN\品牌设计\png\social-preview\deskfox-social-preview-1280x640.png`,**user 通过 GitHub web UI 上传**(API 不支持):Settings → Social preview → Upload an image
+  - **草稿目录归档**(2026-05-04 done):`D:\project\OPENCODE-PLAN\readme-draft\` → `D:\project\OPENCODE-PLAN\archive\readme-draft-2026-05-04\`
+  - DeskFox 自家 markdown preview 渲染本地图问题(单独 feat,fork-only 改 markdown renderer image src 解析,留)
+  - 截图后续迭代:产品 UI 改了,README 截图也要更新(留)
