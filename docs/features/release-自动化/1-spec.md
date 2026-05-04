@@ -1,7 +1,7 @@
 ---
 feat-id: release-自动化
-status: in-progress
-related: ./3-changelog.md
+status: done
+related: ./1-spec.md ./3-changelog.md
 ---
 
 # DeskFox release 自动化(GitHub Actions)

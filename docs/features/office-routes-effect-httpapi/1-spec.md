@@ -1,7 +1,7 @@
 ---
 feat-id: office-routes-effect-httpapi
-status: spec
-related: ./1-spec.md
+status: done
+related: ./1-spec.md ./3-changelog.md
 ---
 
 # office-routes-effect-httpapi — spec
