@@ -31,7 +31,7 @@ related: ./3-changelog.md
 ### Phase 1 — GitHub web 改名(user 操作)
 
 1. user 自己 web Settings → Account → Change username `yuesoue` → `zoulukuang`
-2. (建议但 user 决策)立即注册 `yuesoue` 空号占位防 squat —— 老 username 释出后,任何人可注册 `yuesoue` → 接收原本指向你的所有 redirect 流量(impersonation 风险)
+2. ~~(建议但 user 决策)立即注册 `yuesoue` 空号占位防 squat~~ —— **2026-05-04 user 决定弃做**:项目当前阶段小(老仓 0 stars / 0 forks / 0 watchers),squat 后实际能"接管"的流量微不足道,运维一个空号比承担风险更不划算。接受 redirect 在他人注册老名后失效的风险
 
 ### Phase 2 — 验证改名生效
 
@@ -103,7 +103,7 @@ git remote set-url origin-legacy https://github.com/zoulukuang/opencode-for-offi
 - 所有"现状名"引用收敛到 `zoulukuang`,文档语义一致
 
 ### 风险 / 已缓解
-- **redirect 不是永久绝对安全**:GitHub 老 URL redirect 在,但任何人后续注册 `yuesoue` 后 redirect 会失效 —— 缓解:user 改完后立即注册 `yuesoue` 空号占住(防 squat)
+- **redirect 不是永久绝对安全**:GitHub 老 URL redirect 在,但任何人后续注册 `yuesoue` 后 redirect 会失效 —— ~~缓解:user 改完后立即注册 `yuesoue` 空号占住(防 squat)~~ **2026-05-04 决定弃**:项目小,squat 风险低,接受不防
 - **协作端**:Mac 协作端的 `git remote -v` 还是老 URL,redirect 兜底能用,但建议下次协调时统一 `git remote set-url origin https://github.com/zoulukuang/deskfox.git`(此项归并到 `repo-migration-deskfox` backlog 的 "Mac 端 origin 切换")
 
 ## R4 override
