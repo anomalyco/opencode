@@ -5,10 +5,17 @@
  *
  * This file defines:
  *   - canvas / card-elevation tokens (consumed by bg-canvas-base utility +
- *     shadow-card-elevation utility, and by layout selectors in commit 3)
+ *     shadow-card-elevation utility, and by layout selectors below)
  *   - rail-hue palette (per-project soft color identity, applied in commit 4)
+ *   - layout-level visual treatment for titlebar / sidebar-rail /
+ *     sidebar-nav-desktop / main / dock-prompt
  *
  * Activated via html[data-theme="arc"]. Other themes are unaffected.
+ *
+ * Layout strategy: pixel structure of the layout (rail width, nav absolute
+ * positioning, --main-left calc) is intentionally preserved. Visual card
+ * separation is achieved purely via background + radius + shadow, not via
+ * margin/padding that would shift hit zones or affect e2e selectors.
  */
 
 /* ─── Dark mode (default) ─── */
@@ -53,4 +60,69 @@ html[data-theme="arc"] {
     --rail-hue-5: linear-gradient(180deg, #e2eef1 0%, #d8e6ea 100%);
     --rail-hue-6: linear-gradient(180deg, #e6e6f0 0%, #dcdce8 100%);
   }
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Layout: floating three-pane visual treatment                  */
+/* ───────────────────────────────────────────────────────────── */
+
+/* Body / root canvas behind the three panes */
+html[data-theme="arc"],
+html[data-theme="arc"] body {
+  background-color: var(--canvas-base);
+}
+
+/* Titlebar sinks into the canvas — no horizontal slab cutting the view */
+html[data-theme="arc"] [data-component="titlebar"] {
+  background-color: transparent;
+}
+
+/* Project rail — keeps its 64px slot but reads as a distinct floating panel
+   via raised surface + rounded right edge (left edge stays flush with viewport) */
+html[data-theme="arc"] [data-component="sidebar-rail"] {
+  background-color: var(--surface-raised-base);
+  border-top-right-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+  box-shadow:
+    1px 0 0 var(--border-weak-base),
+    var(--card-elevation);
+}
+
+/* Session sidebar nav — same treatment, sits to the right of rail */
+html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
+html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
+  background-color: var(--surface-raised-base);
+  border-top-right-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+  box-shadow:
+    1px 0 0 var(--border-weak-base),
+    var(--card-elevation);
+}
+
+/* Main pane — the largest floating card, fully rounded top-left corner */
+html[data-theme="arc"] main {
+  background-color: var(--surface-raised-base);
+  /* Override existing xl:rounded-tl-[12px] / border-t-border-weak-base */
+  border: none !important;
+  border-top-left-radius: var(--radius-2xl) !important;
+  box-shadow: var(--card-elevation);
+}
+
+/* Dock-prompt: sync radius with cards */
+html[data-theme="arc"] [data-dock-surface="shell"],
+html[data-theme="arc"] [data-dock-surface="tray"] {
+  border-radius: var(--radius-xl);
+}
+
+/* Buttons / cards / dialogs: bump radii to feel softer under arc */
+html[data-theme="arc"] [data-component="button"] {
+  border-radius: var(--radius-lg);
+}
+
+html[data-theme="arc"] [data-component="card"] {
+  border-radius: var(--radius-lg);
+}
+
+html[data-theme="arc"] [data-component="dialog"] {
+  border-radius: var(--radius-2xl);
 }

@@ -169,6 +169,7 @@ export function Titlebar() {
 
   return (
     <header
+      data-component="titlebar"
       class="h-10 shrink-0 bg-background-base relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
       style={{ "min-height": minHeight() }}
       data-tauri-drag-region
