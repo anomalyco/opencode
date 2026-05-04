@@ -1,9 +1,10 @@
-const targets = ["kimi-k2.6"]
+const displayName = (s: string) =>
+  s
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ")
 
-const products = [
-  { product: "go", isGoTier: true },
-  { product: "zen", isGoTier: false },
-] as const
+const resourceName = (s: string) => displayName(s).replace(/[^a-zA-Z0-9]/g, "")
 
 const varSpec = (label: string, name: string) =>
   $jsonStringify({
@@ -100,14 +101,14 @@ const alertSource = new incident.AlertSource("HoneycombAlertSource", {
 })
 
 const webhookRecipient = new honeycomb.WebhookRecipient(`IncidentWebhook`, {
-  name: "Incident.io Webhook Recipient",
+  name: "Incident.io Webhook",
   url: alertSource.alertEventsUrl,
   secret: alertSource.secretToken,
   templates: [
     {
       type: "trigger",
       body: $jsonStringify({
-        title: "{{ .Alert.Summary }}",
+        title: "{{ .Name }}",
         description: "{{ .Description }}",
         status: "{{ .Alert.Status }}",
         deduplication_key: "{{ .Alert.InstanceID }}",
@@ -200,106 +201,83 @@ new incident.AlertRoute("HoneycombAlertRoute", {
   },
 })
 
-for (const model of targets) {
-  const name = model.replace(/[^a-zA-Z0-9 ]/g, "")
+type Product = "go" | "zen"
 
-  for (const { product, isGoTier } of products) {
-    const productCap = product.charAt(0).toUpperCase() + product.slice(1)
+type Trigger = (opts: { model: string; product: Product }) => {
+  id: string
+  title: string
+  description: string
+  json: honeycomb.GetQuerySpecificationOutputArgs
+  thresholds: honeycomb.TriggerArgs["thresholds"]
+}
 
-    const query = honeycomb.getQuerySpecificationOutput({
-      calculations: [
-        {
-          op: "COUNT",
-          name: "TOTAL",
-          filterCombination: "AND",
-          filters: [
-            {
-              column: "model",
-              op: "=",
-              value: model,
-            },
-            {
-              column: "isGoTier",
-              op: "=",
-              value: isGoTier,
-            },
-          ],
-        },
-        {
-          op: "COUNT",
-          name: "FAILED",
-          filterCombination: "AND",
-          filters: [
-            {
-              column: "model",
-              op: "=",
-              value: model,
-            },
-            {
-              column: "isGoTier",
-              op: "=",
-              value: isGoTier,
-            },
-            {
-              column: "status",
-              op: ">=",
-              value: "400",
-            },
-            {
-              column: "status",
-              op: "!=",
-              value: "401",
-            },
-          ],
-        },
-      ],
-      formulas: [
-        {
-          name: "ERROR",
-          expression: "$FAILED / $TOTAL",
-        },
-      ],
-      timeRange: 900,
-    })
+type Model = { id: string; products: Product[]; triggers: Trigger[] }
 
-    new honeycomb.Trigger(`IncreasedHTTPErrors${name}${productCap}`, {
-      name: `Increased HTTP Errors (${model} - ${productCap})`,
-      description: `Detected increased rate of HTTP errors for model ${name} on ${productCap} product`,
-      queryJson: query.json,
-      frequency: 900,
-      alertType: "on_change",
-      baselineDetails: [
-        {
-          type: "percentage",
-          offsetMinutes: 60,
-        },
-      ],
-      thresholds: [
-        {
-          op: ">=",
-          value: 50,
-          exceededLimit: 1,
-        },
-      ],
-      recipients: [
-        {
-          id: webhookRecipient.id,
-          notificationDetails: [
-            {
-              variables: [
-                {
-                  name: "model",
-                  value: model,
-                },
-                {
-                  name: "product",
-                  value: product,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    })
+const httpErrors: Trigger = ({ model, product }: { model: string; product: Product }) => ({
+  id: `IncreasedHttpErrors`,
+  title: `Increased HTTP Errors for ${displayName(model)} on ${displayName(product)}`,
+  description: `Detected increased rate of HTTP errors for ${displayName(model)} on OpenCode ${displayName(product)}`,
+  json: {
+    calculations: [
+      {
+        op: "COUNT",
+        name: "TOTAL",
+        filterCombination: "AND",
+        filters: [
+          { column: "model", op: "=", value: model },
+          { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
+        ],
+      },
+      {
+        op: "COUNT",
+        name: "FAILED",
+        filterCombination: "AND",
+        filters: [
+          { column: "model", op: "=", value: model },
+          { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
+          { column: "status", op: ">=", value: "400" },
+          { column: "status", op: "!=", value: "401" },
+        ],
+      },
+    ],
+    formulas: [{ name: "ERROR", expression: "$FAILED / $TOTAL" }],
+    timeRange: 900,
+  },
+  thresholds: [{ op: ">=", value: 50, exceededLimit: 1 }],
+})
+
+const models: Model[] = [
+  { id: "kimi-k2.6", products: ["go", "zen"], triggers: [httpErrors] },
+  { id: "claude-opus-4.7", products: ["zen"], triggers: [httpErrors] },
+]
+
+for (const model of models) {
+  for (const product of model.products) {
+    for (const trigger of model.triggers) {
+      const spec = trigger({ model: model.id, product })
+
+      new honeycomb.Trigger(`${spec.id}${resourceName(product)}${resourceName(model.id)}`, {
+        name: spec.title,
+        description: spec.description,
+        queryJson: honeycomb.getQuerySpecificationOutput(spec.json).json,
+        frequency: 900,
+        alertType: "on_change",
+        baselineDetails: [{ type: "percentage", offsetMinutes: 60 }],
+        thresholds: spec.thresholds,
+        recipients: [
+          {
+            id: webhookRecipient.id,
+            notificationDetails: [
+              {
+                variables: [
+                  { name: "model", value: model.id },
+                  { name: "product", value: product },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+    }
   }
 }
