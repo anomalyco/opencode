@@ -326,11 +326,11 @@ it.live("InstanceState survives deferred resume from the same instance context",
       readonly get: (gate: Deferred.Deferred<void>) => Effect.Effect<string>
     }
 
-    class Test extends Context.Service<Test, Api>()("@test/DeferredResume") {
-      static readonly layer = Layer.effect(
-        Test,
-        Effect.gen(function* () {
-          const state = yield* InstanceState.make((ctx) => Effect.sync(() => ctx.directory))
+class Test extends Context.Service<Test, Api>()("@test/DeferredResume") {
+    static readonly layer = Layer.effect(
+      Test,
+      Effect.gen(function* () {
+        const state = yield* InstanceState.make((ctx) => Effect.sync(() => ctx.directory))
 
           return Test.of({
             get: Effect.fn("Test.get")(function* (gate: Deferred.Deferred<void>) {

@@ -60,7 +60,10 @@ export const make = <A, E = never, R = never>(
 
 export const get = <A, E, R>(self: InstanceState<A, E, R>) =>
   Effect.gen(function* () {
-    return yield* ScopedCache.get(self.cache, yield* directory)
+    const ctx = yield* context
+    return yield* ScopedCache.get(self.cache, ctx.directory).pipe(
+      Effect.provideService(InstanceRef, ctx),
+    )
   })
 
 export const use = <A, E, R, B>(self: InstanceState<A, E, R>, select: (value: A) => B) => Effect.map(get(self), select)
