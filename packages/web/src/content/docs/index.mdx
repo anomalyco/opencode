@@ -88,6 +88,22 @@ You can also install it with the following commands:
   paru -S opencode-bin              # Arch Linux (Latest from AUR)
   ```
 
+### Shell completion
+
+OpenCode can generate shell completion scripts with `opencode completion`.
+
+```bash
+# Bash
+SHELL="$(command -v bash)" opencode completion >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh
+SHELL="$(command -v zsh)" opencode completion >> ~/.zshrc
+source ~/.zshrc
+```
+
+On macOS, you may want to use `~/.bash_profile` or `~/.zprofile` instead.
+
 #### Windows
 
 :::tip[Recommended: Use WSL]
