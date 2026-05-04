@@ -97,6 +97,22 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+#### Shell Completion
+
+OpenCode can generate shell completion scripts with `opencode completion`.
+
+```bash
+# Bash
+SHELL="$(command -v bash)" opencode completion >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh
+SHELL="$(command -v zsh)" opencode completion >> ~/.zshrc
+source ~/.zshrc
+```
+
+On macOS, you may want to use `~/.bash_profile` or `~/.zprofile` instead.
+
 ### Agents
 
 OpenCode includes two built-in agents you can switch between with the `Tab` key.
