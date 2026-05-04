@@ -1821,8 +1821,7 @@ export function sort<T extends { id: string }>(models: T[]) {
 const FREE = "free"
 export const ANY = "any"
 
-// Models eligible for the free pool: ones whose id ends in "-free", plus
-// the legacy alias "big-pickle" which predates the suffix convention.
+// "big-pickle" predates the "-free" suffix convention.
 const FREE_LEGACY_IDS = new Set(["big-pickle"])
 
 export function isFree(model: Model) {
@@ -1855,8 +1854,8 @@ export async function resolveSelection(model?: string, variant?: string) {
   const providers = await runPromise((svc) => svc.list())
   const provider = providers[ProviderID.opencode]
   const models = sort(Object.values(provider?.models ?? {}).filter((item) => isFree(item) && isListed(item)))
-  // Selection is unseeded by design: same `--model free` invocation in two
-  // terminals lands on different models. Useful for exploration; not a bug.
+  // Unseeded by design: the same `--model free` in two terminals picks
+  // different models.
   const pick = models[Math.floor(Math.random() * models.length)]
   if (!pick)
     throw new Error(

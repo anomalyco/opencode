@@ -144,10 +144,9 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
-      // resolveSelection reads project config via Provider.Service.list, which
-      // requires the Instance ALS context. The TUI handler runs outside the
-      // effectCmd wrapper that establishes that context for `run`, so we must
-      // load it here explicitly. Worker spawn below establishes its own.
+      // TUI handler runs outside effectCmd, so the Instance ALS context that
+      // Provider.Service.list needs isn't established. Provide it here. The
+      // worker spawned below sets up its own.
       const pick = await WithInstance.provide({
         directory: cwd,
         fn: () => Provider.resolveSelection(args.model, args.variant),
