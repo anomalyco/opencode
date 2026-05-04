@@ -550,6 +550,78 @@ export default function FileTree(props: {
     await Promise.all([...refreshRels].map((r) => file.tree.refresh(r)))
   }
 
+  // FORK-BEGIN: 键盘导航 — buildFlatVisible 全局递归扫(尊重 expanded 状态)
+  // [feat: file-tree-ux-polish] 2026-05-04
+  /** 从 rootPath 递归构建当前可见的扁平 FileNode 序列(展开顺序 = 屏幕上下顺序)。
+   * 注:不应用 nodes() memo 的 filter — 键盘导航在全树上工作,与 UI 内部 filter 解耦 */
+  const buildFlatVisible = (rootPath: string): FileNode[] => {
+    const out: FileNode[] = []
+    const visit = (path: string) => {
+      const children = file.tree.children(path)
+      for (const child of children) {
+        out.push(child)
+        if (child.type === "directory") {
+          const state = file.tree.state(child.path)
+          if (state?.expanded) visit(child.path)
+        }
+      }
+    }
+    visit(rootPath)
+    return out
+  }
+
+  const navigateRelative = (delta: -1 | 1) => {
+    const flat = buildFlatVisible(props.path)
+    if (flat.length === 0) return
+    const sel = selection.paths()
+    if (sel.length === 0) {
+      selection.replace(flat[0].absolute)
+      return
+    }
+    const cursorAbs = sel[sel.length - 1]
+    const idx = flat.findIndex((n) => n.absolute === cursorAbs)
+    if (idx < 0) {
+      selection.replace(flat[0].absolute)
+      return
+    }
+    const next = flat[idx + delta]
+    if (next) selection.replace(next.absolute)
+  }
+
+  /** 找当前单选的 FileNode(从 flat 里查,因 selection 存的是 absolute) */
+  const singleSelectedNode = (): FileNode | null => {
+    const sel = selection.paths()
+    if (sel.length !== 1) return null
+    const flat = buildFlatVisible(props.path)
+    return flat.find((n) => n.absolute === sel[0]) ?? null
+  }
+
+  const onEnterAction = () => {
+    const node = singleSelectedNode()
+    if (!node) return
+    if (node.type === "directory") {
+      const state = file.tree.state(node.path)
+      if (state?.expanded) file.tree.collapse(node.path)
+      else file.tree.expand(node.path)
+    } else {
+      props.onFileClick?.(node)
+    }
+  }
+
+  const onRenameAction = () => {
+    const node = singleSelectedNode()
+    if (node) promptRename(node)
+  }
+
+  const onDeleteAction = () => {
+    const sel = selection.paths()
+    if (sel.length === 0) return
+    const flat = buildFlatVisible(props.path)
+    const first = flat.find((n) => n.absolute === sel[0])
+    if (first) promptDelete(first) // promptDelete 内部 sourcesFor 处理批量
+  }
+  // FORK-END
+
   // 全局快捷键:只在 level 0(根 FileTree)注册 — 递归组件每层注册会让 keydown 触发 N 次
   if (level === 0) {
     useFileTreeShortcuts({
@@ -557,6 +629,12 @@ export default function FileTree(props: {
       onCopy: () => copyFor(null),
       onPaste: pasteSmart,
       onUndo: undoLast,
+      // FORK: 键盘导航 [feat: file-tree-ux-polish] 2026-05-04
+      onArrowUp: () => navigateRelative(-1),
+      onArrowDown: () => navigateRelative(1),
+      onEnter: onEnterAction,
+      onRename: onRenameAction,
+      onDelete: onDeleteAction,
       hasSelection: () => selection.paths().length > 0,
     })
 
@@ -570,7 +648,7 @@ export default function FileTree(props: {
         title="新建文件"
         label="文件名"
         defaultValue="untitled.md"
-        placeholder="文件名(默认 .md)"
+        placeholder="文件名"
         confirmLabel="创建"
         onConfirm={async (name) => {
           await invoke("create_empty_file", { path: joinAbs(targetAbs, name) })
@@ -616,6 +694,36 @@ export default function FileTree(props: {
       />
     ))
   }
+
+  // FORK-BEGIN: 复制文件路径 / 刷新单节点 helpers [feat: file-tree-ux-polish] 2026-05-04
+  // 多选时拼所有 selection paths(\n 分隔);单选 / 无 selection 时用 right-clicked target.absolute
+  const copyPathToClipboard = async (target: FileNode) => {
+    const sel = selection.paths()
+    const paths =
+      sel.length > 1
+        ? sel.map((p) => file.tree.node(p)?.absolute).filter((p): p is string => Boolean(p))
+        : [target.absolute]
+    if (paths.length === 0) return
+    try {
+      await navigator.clipboard.writeText(paths.join("\n"))
+      showToast({
+        variant: "success",
+        title: paths.length === 1 ? "已复制路径" : `已复制 ${paths.length} 个路径`,
+      })
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: "复制失败",
+        description: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
+  const refreshNode = async (target: FileNode) => {
+    const dir = target.type === "directory" ? target.path : dirname(target.path)
+    await file.tree.refresh(dir)
+  }
+  // FORK-END
 
   // FORK-BEGIN: 拖放移动 — drop handler + spring-load 共享 timer 2026-04-27
   let springTimer: ReturnType<typeof setTimeout> | undefined
@@ -813,26 +921,21 @@ export default function FileTree(props: {
     const newTargetAbs = isFolder ? target.absolute : dirname(target.absolute)
     const newTargetRel = isFolder ? target.path : dirname(target.path)
     const onAfterNew = isFolder ? () => file.tree.expand(target.path) : undefined
+    // FORK-BEGIN: 节点右键菜单重整 — 4 组(重命名/复制/剪切/粘贴/删除 → 在文件夹显示/复制路径 → 新建 → 刷新),
+    // 删打印,加复制路径 + 刷新 [feat: file-tree-ux-polish] 2026-05-04
     return (
       <ContextMenu.Content>
+        {/* 组 1: 重命名 / 复制 / 剪切 / [粘贴] / 删除 */}
         <ContextMenu.Item onSelect={() => promptRename(target)}>
           <ContextMenu.ItemLabel>重命名</ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => revealInFolder(target)}>
-          <ContextMenu.ItemLabel>在文件夹中显示</ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-        <ContextMenu.Item disabled={isFolder} onSelect={() => window.print()}>
-          <ContextMenu.ItemLabel>打印</ContextMenu.ItemLabel>
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-        {/* FORK: 剪切/复制/粘贴 (commit #3 of file-tree-dnd) 2026-04-27 */}
-        <ContextMenu.Item onSelect={() => cutFor(target)}>
-          <ContextMenu.ItemLabel>剪切</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => copyFor(target)}>
           <ContextMenu.ItemLabel>复制</ContextMenu.ItemLabel>
         </ContextMenu.Item>
-        {/* FORK: 粘贴 — 文件夹粘到自身,文件粘到其父目录(便于在文件附近粘);clipboard 非空才显示 2026-04-27 */}
+        <ContextMenu.Item onSelect={() => cutFor(target)}>
+          <ContextMenu.ItemLabel>剪切</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        {/* 粘贴 — 文件夹粘到自身,文件粘到其父目录;clipboard 非空才显示 */}
         <Show when={clipboard.hasContent()}>
           <ContextMenu.Item
             onSelect={() => {
@@ -844,44 +947,63 @@ export default function FileTree(props: {
             <ContextMenu.ItemLabel>{isFolder ? "粘贴到此文件夹" : "粘贴到当前目录"}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
         </Show>
-        <ContextMenu.Separator />
         <ContextMenu.Item onSelect={() => promptDelete(target)}>
           <ContextMenu.ItemLabel>删除</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Separator />
+        {/* 组 2: 在文件夹中显示 / 复制文件路径 */}
+        <ContextMenu.Item onSelect={() => revealInFolder(target)}>
+          <ContextMenu.ItemLabel>在文件夹中显示</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => void copyPathToClipboard(target)}>
+          <ContextMenu.ItemLabel>复制文件路径</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+        {/* 组 3: 新建文件 / 新建文件夹 */}
         <ContextMenu.Item onSelect={() => promptNewFileAt(newTargetAbs, newTargetRel, onAfterNew)}>
-          <ContextMenu.ItemLabel>新建文件 (.md)</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>新建文件</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => promptNewFolderAt(newTargetAbs, newTargetRel, onAfterNew)}>
           <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
         </ContextMenu.Item>
+        <ContextMenu.Separator />
+        {/* 组 4: 刷新 */}
+        <ContextMenu.Item onSelect={() => void refreshNode(target)}>
+          <ContextMenu.ItemLabel>刷新</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
       </ContextMenu.Content>
     )
+    // FORK-END
   }
 
   const renderEmptyMenuItems = () => {
     const rootAbs = sdk.directory
     const rootRel = props.path
+    // FORK-BEGIN: 空白处右键菜单重整 — 2 组(新建/[粘贴] → 刷新);
+    // 刷新改用 refreshAll 递归刷新所有 expanded 子目录,修"刷新但子目录没变"问题
+    // [feat: file-tree-ux-polish] 2026-05-04
     return (
       <ContextMenu.Content>
+        {/* 组 1: 新建文件 / 新建文件夹 / [粘贴到项目根] */}
         <ContextMenu.Item onSelect={() => promptNewFileAt(rootAbs, rootRel)}>
-          <ContextMenu.ItemLabel>新建文件 (.md)</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>新建文件</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => promptNewFolderAt(rootAbs, rootRel)}>
           <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
         </ContextMenu.Item>
-        {/* FORK: 树根空白处也支持粘贴到项目根 (commit #3 of file-tree-dnd) 2026-04-27 */}
         <Show when={clipboard.hasContent()}>
           <ContextMenu.Item onSelect={() => void pasteTo(rootAbs, rootRel)}>
             <ContextMenu.ItemLabel>粘贴到项目根</ContextMenu.ItemLabel>
           </ContextMenu.Item>
         </Show>
         <ContextMenu.Separator />
-        <ContextMenu.Item onSelect={() => void file.tree.refresh(rootRel)}>
+        {/* 组 2: 刷新(递归) */}
+        <ContextMenu.Item onSelect={() => void file.tree.refreshAll(rootRel)}>
           <ContextMenu.ItemLabel>刷新</ContextMenu.ItemLabel>
         </ContextMenu.Item>
       </ContextMenu.Content>
     )
+    // FORK-END
   }
 
   const key = (p: string) =>
