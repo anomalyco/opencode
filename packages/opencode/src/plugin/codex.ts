@@ -1,11 +1,10 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import * as Log from "@opencode-ai/core/util/log"
-import { Installation } from "../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { OAUTH_DUMMY_KEY } from "../auth"
-import os from "os"
-import { setTimeout as sleep } from "node:timers/promises"
+import * as Log from "@opencode-ai/core/util/log"
+import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { createServer } from "http"
+import { setTimeout as sleep } from "node:timers/promises"
+import os from "os"
+import { OAUTH_DUMMY_KEY } from "../auth"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -114,8 +113,15 @@ function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string):
 interface TokenResponse {
   id_token: string
   access_token: string
-  refresh_token: string
+  refresh_token?: string
   expires_in?: number
+}
+
+function requireRefreshToken(tokens: TokenResponse): string {
+  if (!tokens.refresh_token) {
+    throw new Error("Token response missing refresh_token")
+  }
+  return tokens.refresh_token
 }
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
@@ -432,17 +438,23 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               log.info("refreshing codex access token")
               const tokens = await refreshAccessToken(currentAuth.refresh)
               const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
+              const refreshToken = tokens.refresh_token || currentAuth.refresh
+              const expires = Date.now() + (tokens.expires_in ?? 3600) * 1000
+
               await input.client.auth.set({
                 path: { id: "openai" },
                 body: {
                   type: "oauth",
-                  refresh: tokens.refresh_token,
+                  refresh: refreshToken,
                   access: tokens.access_token,
-                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                  expires,
                   ...(newAccountId && { accountId: newAccountId }),
                 },
               })
+
               currentAuth.access = tokens.access_token
+              currentAuth.refresh = refreshToken
+              currentAuth.expires = expires
               authWithAccount.accountId = newAccountId
             }
 
@@ -509,7 +521,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                 const accountId = extractAccountId(tokens)
                 return {
                   type: "success" as const,
-                  refresh: tokens.refresh_token,
+                  refresh: requireRefreshToken(tokens),
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                   accountId,
@@ -584,7 +596,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
                     return {
                       type: "success" as const,
-                      refresh: tokens.refresh_token,
+                      refresh: requireRefreshToken(tokens),
                       access: tokens.access_token,
                       expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                       accountId: extractAccountId(tokens),
