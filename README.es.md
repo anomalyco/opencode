@@ -132,7 +132,6 @@ Es muy similar a Claude Code en cuanto a capacidades. Estas son las diferencias 
 
 - 100% open source
 - No está acoplado a ningún proveedor. Aunque recomendamos los modelos que ofrecemos a través de [OpenCode Zen](https://opencode.ai/zen); OpenCode se puede usar con Claude, OpenAI, Google o incluso modelos locales. A medida que evolucionan los modelos, las brechas se cerrarán y los precios bajarán, por lo que ser agnóstico al proveedor es importante.
-- Soporte LSP listo para usar
 - Un enfoque en la TUI. OpenCode está construido por usuarios de neovim y los creadores de [terminal.shop](https://terminal.shop); vamos a empujar los límites de lo que es posible en la terminal.
 - Arquitectura cliente/servidor. Esto, por ejemplo, permite ejecutar OpenCode en tu computadora mientras lo controlas de forma remota desde una app móvil. Esto significa que el frontend TUI es solo uno de los posibles clientes.
 

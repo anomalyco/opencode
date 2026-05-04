@@ -132,7 +132,6 @@ C'est très similaire à Claude Code en termes de capacités. Voici les principa
 
 - 100% open source
 - Pas couplé à un fournisseur. Nous recommandons les modèles proposés via [OpenCode Zen](https://opencode.ai/zen) ; OpenCode peut être utilisé avec Claude, OpenAI, Google ou même des modèles locaux. Au fur et à mesure que les modèles évoluent, les écarts se réduiront et les prix baisseront, donc être agnostique au fournisseur est important.
-- Support LSP prêt à l'emploi
 - Un focus sur la TUI. OpenCode est construit par des utilisateurs de neovim et les créateurs de [terminal.shop](https://terminal.shop) ; nous allons repousser les limites de ce qui est possible dans le terminal.
 - Architecture client/serveur. Cela permet par exemple de faire tourner OpenCode sur votre ordinateur tout en le pilotant à distance depuis une application mobile. Cela signifie que la TUI n'est qu'un des clients possibles.
 
