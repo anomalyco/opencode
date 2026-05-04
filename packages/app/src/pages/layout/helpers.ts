@@ -52,6 +52,11 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
   }
 }
 
+export const childSessions = (sessions: Session[] | undefined, rootID: string, now: number) =>
+  (sessions ?? [])
+    .filter((s) => s.parentID === rootID && !s.time?.archived)
+    .sort(sortSessions(now))
+
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 

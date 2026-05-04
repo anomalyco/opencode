@@ -1,12 +1,14 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
+import { Button } from "@opencode-ai/ui/button"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
-import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -15,7 +17,7 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
-import { childSessionOnPath, hasProjectPermissions } from "./helpers"
+import { childSessions, hasProjectPermissions } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -95,6 +97,9 @@ const SessionRow = (props: {
   hasPermissions: Accessor<boolean>
   hasError: Accessor<boolean>
   unseenCount: Accessor<number>
+  hasChildren: Accessor<boolean>
+  expanded: Accessor<boolean>
+  onToggleChildren: () => void
   clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
   warmPress: () => void
@@ -113,27 +118,52 @@ const SessionRow = (props: {
         props.clearHoverProjectSoon()
       }}
     >
-      <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
-        <div
-          class="shrink-0 size-6 flex items-center justify-center"
-          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
-        >
-          <Switch>
-            <Match when={props.isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={props.hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={props.hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={props.unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-      </Show>
+      <div
+        class="shrink-0 size-6 flex items-center justify-center relative"
+        style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+      >
+        <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
+          <div
+            class="absolute inset-0 flex items-center justify-center transition-opacity"
+            classList={{
+              "group-hover/session:opacity-0": props.hasChildren(),
+              "opacity-0": props.expanded(),
+            }}
+          >
+            <Switch>
+              <Match when={props.isWorking()}>
+                <Spinner class="size-[15px]" />
+              </Match>
+              <Match when={props.hasPermissions()}>
+                <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+              </Match>
+              <Match when={props.hasError()}>
+                <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+              </Match>
+              <Match when={props.unseenCount() > 0}>
+                <div class="size-1.5 rounded-full bg-text-interactive-base" />
+              </Match>
+            </Switch>
+          </div>
+        </Show>
+        <Show when={props.hasChildren()}>
+          <IconButton
+            icon={props.expanded() ? "chevron-down" : "chevron-right"}
+            variant="ghost"
+            size="small"
+            class="absolute inset-0 size-6 rounded-xs transition-opacity"
+            classList={{
+              "opacity-0 group-hover/session:opacity-100": !props.expanded(),
+            }}
+            aria-label={props.expanded() ? "Collapse" : "Expand"}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              props.onToggleChildren()
+            }}
+          />
+        </Show>
+      </div>
       <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
     </A>
   )
@@ -172,10 +202,15 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
   const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))
   const tooltip = createMemo(() => props.showTooltip ?? (props.mobile || !props.sidebarExpanded()))
-  const currentChild = createMemo(() => {
-    if (!props.showChild) return
-    return childSessionOnPath(sessionStore.session, props.session.id, params.id)
+  const children = createMemo(() => {
+    if (!props.showChild) return []
+    return childSessions(sessionStore.session, props.session.id, Date.now())
   })
+  const hasChildren = createMemo(() => children().length > 0)
+  const [expanded, setExpanded] = createSignal(false)
+  const [fullyExpanded, setFullyExpanded] = createSignal(false)
+  const visible = createMemo(() => children().slice(0, 3))
+  const hasMore = createMemo(() => children().length > 3 && !fullyExpanded())
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -208,6 +243,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       hasPermissions={hasPermissions}
       hasError={hasError}
       unseenCount={unseenCount}
+      hasChildren={hasChildren}
+      expanded={expanded}
+      onToggleChildren={() => setExpanded((v) => !v)}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
       warmPress={() => warm(2, "high")}
@@ -268,12 +306,29 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </Show>
         </div>
       </div>
-      <Show when={currentChild()} keyed>
-        {(child) => (
-          <div class="w-full">
-            <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
-          </div>
-        )}
+      <Show when={hasChildren()}>
+        <Collapsible open={expanded()} onOpenChange={setExpanded}>
+          <Collapsible.Content>
+            <For each={fullyExpanded() ? children() : visible()}>
+              {(child) => (
+                <div class="w-full">
+                  <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
+                </div>
+              )}
+            </For>
+            <Show when={hasMore()}>
+              <div class="w-full" style={{ "padding-left": `${8 + ((props.level ?? 0) + 1) * 16}px` }}>
+                <Button
+                  variant="ghost"
+                  class="text-12-regular text-text-weak w-full text-left justify-start py-0.5 pl-6"
+                  onClick={() => setFullyExpanded(true)}
+                >
+                  {language.t("common.loadMore")}
+                </Button>
+              </div>
+            </Show>
+          </Collapsible.Content>
+        </Collapsible>
       </Show>
     </>
   )

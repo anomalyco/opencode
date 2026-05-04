@@ -8,6 +8,7 @@ import {
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
+  childSessions,
   childSessionOnPath,
   displayName,
   effectiveWorkspaceOrder,
@@ -221,5 +222,44 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+
+  test("returns all direct children sorted newest first", () => {
+    const root = session({ id: "root", directory: "/workspace" })
+    const child1 = session({ id: "child1", directory: "/workspace", parentID: "root", time: { created: 1, updated: 1, archived: undefined } })
+    const child2 = session({ id: "child2", directory: "/workspace", parentID: "root", time: { created: 2, updated: 3, archived: undefined } })
+    const child3 = session({ id: "child3", directory: "/workspace", parentID: "root", time: { created: 3, updated: 2, archived: undefined } })
+
+    const result = childSessions([root, child1, child2, child3], "root", 120_000)
+
+    expect(result.map((s) => s.id)).toEqual(["child2", "child3", "child1"])
+  })
+
+  test("excludes archived children", () => {
+    const root = session({ id: "root", directory: "/workspace" })
+    const active = session({ id: "active", directory: "/workspace", parentID: "root", time: { created: 1, updated: 1, archived: undefined } })
+    const archived = session({ id: "archived", directory: "/workspace", parentID: "root", time: { created: 2, updated: 2, archived: 1 } })
+
+    const result = childSessions([root, active, archived], "root", 120_000)
+
+    expect(result.map((s) => s.id)).toEqual(["active"])
+  })
+
+  test("returns empty array when no children", () => {
+    const root = session({ id: "root", directory: "/workspace" })
+
+    const result = childSessions([root], "root", 120_000)
+
+    expect(result).toEqual([])
+  })
+
+  test("excludes non-direct descendants", () => {
+    const root = session({ id: "root", directory: "/workspace" })
+    const child = session({ id: "child", directory: "/workspace", parentID: "root" })
+    const grandchild = session({ id: "grandchild", directory: "/workspace", parentID: "child" })
+
+    const result = childSessions([root, child, grandchild], "root", 120_000)
+
+    expect(result.map((s) => s.id)).toEqual(["child"])
   })
 })
