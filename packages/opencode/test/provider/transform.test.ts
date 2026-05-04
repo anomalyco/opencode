@@ -1409,6 +1409,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
   test("does not filter for non-anthropic providers", () => {
     const openaiModel = {
       ...anthropicModel,
+      id: "openai/gpt-4",
       providerID: "openai",
       api: {
         id: "gpt-4",

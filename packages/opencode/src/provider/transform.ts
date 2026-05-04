@@ -45,6 +45,20 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function isClaudeModel(model: Provider.Model): boolean {
+  return (
+    (model.providerID === "anthropic" ||
+      model.providerID === "google-vertex-anthropic" ||
+      model.api.id.includes("anthropic") ||
+      model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
+      model.api.npm === "@ai-sdk/anthropic" ||
+      model.api.npm === "@ai-sdk/alibaba") &&
+    model.api.npm !== "@ai-sdk/gateway"
+  )
+}
+
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
@@ -52,7 +66,7 @@ function normalizeMessages(
 ): ModelMessage[] {
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic") {
+  if (isClaudeModel(model)) {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -343,17 +357,7 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
-  if (
-    (model.providerID === "anthropic" ||
-      model.providerID === "google-vertex-anthropic" ||
-      model.api.id.includes("anthropic") ||
-      model.api.id.includes("claude") ||
-      model.id.includes("anthropic") ||
-      model.id.includes("claude") ||
-      model.api.npm === "@ai-sdk/anthropic" ||
-      model.api.npm === "@ai-sdk/alibaba") &&
-    model.api.npm !== "@ai-sdk/gateway"
-  ) {
+  if (isClaudeModel(model)) {
     msgs = applyCaching(msgs, model)
   }
 
