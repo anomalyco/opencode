@@ -28,19 +28,17 @@
     --sidebar-session-active-shadow: light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.34));
   }
 
-  /* Arc theme — violet-tinged sidebar session palette (light + dark).
-     Without this override, the rail/session list would inherit the
-     hardcoded warm-brown defaults from the base [data-component=...]
-     rule above, which become illegible (dark-on-dark or light-on-light)
-     under Arc's cream + violet color scheme. */
+  /* Arc theme — dusty mauve (light) / violet-black (dark) sidebar palette.
+     Light values must lighten the dusty-mauve sidebar (#756B7E) by overlay
+     so hover/active rows read clearly against it. */
   html[data-theme="arc"] [data-component="sidebar-session"] {
-    --sidebar-session-accent: light-dark(#6B46E5, #A78BFA);
-    --sidebar-session-hover-bg: light-dark(#DDD5E8, #28243A);
-    --sidebar-session-hover-border: light-dark(rgba(107, 70, 229, 0.14), rgba(167, 139, 250, 0.16));
-    --sidebar-session-active-bg-top: light-dark(#D5CCE0, #2C2839);
-    --sidebar-session-active-bg-bottom: light-dark(#CDC2D8, #221E2D);
-    --sidebar-session-active-border: light-dark(rgba(107, 70, 229, 0.18), rgba(167, 139, 250, 0.22));
-    --sidebar-session-active-shadow: light-dark(rgba(107, 70, 229, 0.1), rgba(0, 0, 0, 0.4));
+    --sidebar-session-accent: light-dark(#FFFFFF, #A78BFA);
+    --sidebar-session-hover-bg: light-dark(#8B8294, #28243A);
+    --sidebar-session-hover-border: light-dark(rgba(255, 255, 255, 0.12), rgba(167, 139, 250, 0.16));
+    --sidebar-session-active-bg-top: light-dark(#948A9F, #2C2839);
+    --sidebar-session-active-bg-bottom: light-dark(#8A8094, #221E2D);
+    --sidebar-session-active-border: light-dark(rgba(255, 255, 255, 0.20), rgba(167, 139, 250, 0.22));
+    --sidebar-session-active-shadow: light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.4));
   }
 
   [data-component="sidebar-session"]:hover,
@@ -69,14 +67,14 @@
     background: light-dark(#DDD6C8, rgb(65, 65, 65));
   }
 
-  /* Arc: stronger violet on active+hover */
+  /* Arc: stronger overlay on active+hover */
   html[data-theme="arc"] [data-component="sidebar-session"][data-active="true"]:hover,
   html[data-theme="arc"] [data-component="sidebar-session"][data-active="true"]:has(:focus-visible) {
     background: light-dark(
-      linear-gradient(180deg, #CDC2D8, #C5B8D0),
+      linear-gradient(180deg, #9C92A6, #92889B),
       linear-gradient(180deg, #322E40, #28243A)
     );
-    border-color: light-dark(rgba(107, 70, 229, 0.22), rgba(167, 139, 250, 0.28));
+    border-color: light-dark(rgba(255, 255, 255, 0.24), rgba(167, 139, 250, 0.28));
   }
 
   [data-component="sidebar-session-loading"] {

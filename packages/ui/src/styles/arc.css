@@ -55,9 +55,11 @@ html[data-theme="arc"] {
     /* Canvas: cream-violet, slightly darker than background-base */
     --canvas-base: #ebe6f2;
 
-    /* Sidebar card background — warm grey-violet, distinctly more
-       saturated than main's pure white, mirrors Arc Browser's sidebar. */
-    --sidebar-card-bg: #E8E1F2;
+    /* Sidebar card background — Arc Browser's signature dusty mauve.
+       Deliberately mid-tone (not light) so it reads as a distinct
+       "panel identity" against the white main pane, mirroring the
+       dark-sidebar / light-main contrast Arc is known for. */
+    --sidebar-card-bg: #756B7E;
 
     /* Dock-prompt shell background — soft opaque white-violet */
     --dock-shell-bg: color-mix(in srgb, #FFFFFF 84%, transparent);
@@ -75,6 +77,32 @@ html[data-theme="arc"] {
     --rail-hue-4: linear-gradient(180deg, #f1ece0 0%, #e7e0d2 100%);
     --rail-hue-5: linear-gradient(180deg, #e2eef1 0%, #d8e6ea 100%);
     --rail-hue-6: linear-gradient(180deg, #e6e6f0 0%, #dcdce8 100%);
+  }
+
+  /* Within the dusty-mauve sidebar, switch text/icon/border tokens to
+     light values for legibility. Children consume these via CSS var
+     inheritance — no per-component selector overrides needed. */
+  html[data-theme="arc"] [data-component="sidebar-rail"],
+  html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
+  html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
+    --text-strong: #F0E8F0;
+    --text-base: #D5C8D8;
+    --text-weak: #A89DAB;
+    --text-weaker: #8A7F8E;
+    --icon-base: #B0A3B6;
+    --icon-hover: #D5C8D8;
+    --icon-active: #F0E8F0;
+    --icon-strong-base: #F0E8F0;
+    --icon-strong-hover: #FFFFFF;
+    --icon-strong-active: #FFFFFF;
+    --icon-weak-base: #8A7F8E;
+    --border-base: rgba(255, 255, 255, 0.16);
+    --border-weak-base: rgba(255, 255, 255, 0.08);
+    --border-strong-base: rgba(255, 255, 255, 0.22);
+    --surface-base-hover: rgba(255, 255, 255, 0.08);
+    --surface-base-active: rgba(255, 255, 255, 0.12);
+    --button-ghost-hover: rgba(255, 255, 255, 0.10);
+    --button-ghost-hover2: rgba(255, 255, 255, 0.14);
   }
 }
 
