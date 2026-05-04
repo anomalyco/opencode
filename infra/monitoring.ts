@@ -1,5 +1,10 @@
 const targets = ["kimi-k2.6"]
 
+const products = [
+  { product: "go", isGoTier: true },
+  { product: "zen", isGoTier: false },
+] as const
+
 const varSpec = (label: string, name: string) =>
   $jsonStringify({
     content: [
@@ -20,7 +25,10 @@ const varSpec = (label: string, name: string) =>
     type: "doc",
   })
 
-const modelField = incident.getAlertAttributeOutput({ name: "Model" })
+const fields = {
+  model: incident.getAlertAttributeOutput({ name: "Model" }),
+  product: incident.getAlertAttributeOutput({ name: "Product" }),
+}
 
 const alertSource = new incident.AlertSource("HoneycombAlertSource", {
   name: "Honeycomb",
@@ -34,10 +42,19 @@ const alertSource = new incident.AlertSource("HoneycombAlertSource", {
     },
     attributes: [
       {
-        alertAttributeId: modelField.id,
+        alertAttributeId: fields.model.id,
         binding: {
           value: {
             reference: 'expressions["model"]',
+          },
+          mergeStrategy: "first_wins",
+        },
+      },
+      {
+        alertAttributeId: fields.product.id,
+        binding: {
+          value: {
+            reference: 'expressions["product"]',
           },
           mergeStrategy: "first_wins",
         },
@@ -52,13 +69,30 @@ const alertSource = new incident.AlertSource("HoneycombAlertSource", {
             parse: {
               returns: {
                 array: false,
-                type: modelField.type,
+                type: fields.model.type,
               },
               source: "$['model']",
             },
           },
         ],
         reference: "model",
+        rootReference: "payload",
+      },
+      {
+        label: "Product",
+        operations: [
+          {
+            operationType: "parse",
+            parse: {
+              returns: {
+                array: false,
+                type: fields.product.type,
+              },
+              source: "$['product']",
+            },
+          },
+        ],
+        reference: "product",
         rootReference: "payload",
       },
     ],
@@ -75,16 +109,20 @@ const webhookRecipient = new honeycomb.WebhookRecipient(`IncidentWebhook`, {
       body: $jsonStringify({
         title: "{{ .Alert.Summary }}",
         description: "{{ .Description }}",
-        status: '{{ if eq .Alert.Status "TRIGGERED"}}firing{{ else }}resolved{{ end }}',
+        status: "{{ .Alert.Status }}",
         deduplication_key: "{{ .Alert.InstanceID }}",
         source_url: "{{ .URL }}",
         model: "{{ .Vars.model }}",
+        product: "{{ .Vars.product }}",
       }),
     },
   ],
   variables: [
     {
       name: "model",
+    },
+    {
+      name: "product",
     },
   ],
 })
@@ -132,7 +170,10 @@ new incident.AlertRoute("HoneycombAlertRoute", {
     deferTimeSeconds: 0,
     groupingKeys: [
       {
-        reference: $interpolate`alert.attributes.${modelField.id}`,
+        reference: $interpolate`alert.attributes.${fields.model.id}`,
+      },
+      {
+        reference: $interpolate`alert.attributes.${fields.product.id}`,
       },
     ],
     groupingWindowSeconds: 900,
@@ -162,85 +203,103 @@ new incident.AlertRoute("HoneycombAlertRoute", {
 for (const model of targets) {
   const name = model.replace(/[^a-zA-Z0-9 ]/g, "")
 
-  const query = honeycomb.getQuerySpecificationOutput({
-    calculations: [
-      {
-        op: "COUNT",
-        name: "TOTAL",
-        filterCombination: "AND",
-        filters: [
-          {
-            column: "model",
-            op: "=",
-            value: model,
-          },
-        ],
-      },
-      {
-        op: "COUNT",
-        name: "FAILED",
-        filterCombination: "AND",
-        filters: [
-          {
-            column: "model",
-            op: "=",
-            value: model,
-          },
-          {
-            column: "status",
-            op: ">=",
-            value: "400",
-          },
-          {
-            column: "status",
-            op: "!=",
-            value: "401",
-          },
-        ],
-      },
-    ],
-    formulas: [
-      {
-        name: "ERROR",
-        expression: "$FAILED / $TOTAL",
-      },
-    ],
-    timeRange: 900,
-  })
+  for (const { product, isGoTier } of products) {
+    const productCap = product.charAt(0).toUpperCase() + product.slice(1)
 
-  new honeycomb.Trigger(`IncreasedHTTPErrors${name}`, {
-    name: `Increased HTTP Errors (${model})`,
-    description: `Detected increased rate of HTTP errors for model ${name}`,
-    queryJson: query.json,
-    frequency: 900,
-    alertType: "on_change",
-    baselineDetails: [
-      {
-        type: "percentage",
-        offsetMinutes: 60,
-      },
-    ],
-    thresholds: [
-      {
-        op: ">=",
-        value: 50,
-        exceededLimit: 1,
-      },
-    ],
-    recipients: [
-      {
-        id: webhookRecipient.id,
-        notificationDetails: [
-          {
-            variables: [
-              {
-                name: "model",
-                value: model,
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  })
+    const query = honeycomb.getQuerySpecificationOutput({
+      calculations: [
+        {
+          op: "COUNT",
+          name: "TOTAL",
+          filterCombination: "AND",
+          filters: [
+            {
+              column: "model",
+              op: "=",
+              value: model,
+            },
+            {
+              column: "isGoTier",
+              op: "=",
+              value: isGoTier,
+            },
+          ],
+        },
+        {
+          op: "COUNT",
+          name: "FAILED",
+          filterCombination: "AND",
+          filters: [
+            {
+              column: "model",
+              op: "=",
+              value: model,
+            },
+            {
+              column: "isGoTier",
+              op: "=",
+              value: isGoTier,
+            },
+            {
+              column: "status",
+              op: ">=",
+              value: "400",
+            },
+            {
+              column: "status",
+              op: "!=",
+              value: "401",
+            },
+          ],
+        },
+      ],
+      formulas: [
+        {
+          name: "ERROR",
+          expression: "$FAILED / $TOTAL",
+        },
+      ],
+      timeRange: 900,
+    })
+
+    new honeycomb.Trigger(`IncreasedHTTPErrors${name}${productCap}`, {
+      name: `Increased HTTP Errors (${model} - ${productCap})`,
+      description: `Detected increased rate of HTTP errors for model ${name} on ${productCap} product`,
+      queryJson: query.json,
+      frequency: 900,
+      alertType: "on_change",
+      baselineDetails: [
+        {
+          type: "percentage",
+          offsetMinutes: 60,
+        },
+      ],
+      thresholds: [
+        {
+          op: ">=",
+          value: 50,
+          exceededLimit: 1,
+        },
+      ],
+      recipients: [
+        {
+          id: webhookRecipient.id,
+          notificationDetails: [
+            {
+              variables: [
+                {
+                  name: "model",
+                  value: model,
+                },
+                {
+                  name: "product",
+                  value: product,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+  }
 }
