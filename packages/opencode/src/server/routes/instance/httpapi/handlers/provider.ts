@@ -24,6 +24,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       for (const [key, value] of Object.entries(all)) {
         if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
       }
+      ModelsDev.injectOpenWebUIPlaceholder(filtered, enabled, disabled, true)
       const connected = yield* provider.list()
       const providers = Object.assign(
         mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),

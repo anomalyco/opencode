@@ -3,12 +3,14 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { InstanceStore } from "@/project/instance-store"
+import { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { jsonRequest, runRequest } from "./trace"
 import { Effect } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
+import { mapValues } from "remeda"
 
 const log = Log.create({ service: "server.config" })
 
@@ -99,7 +101,21 @@ export const ConfigRoutes = lazy(() =>
       async (c) =>
         jsonRequest("ConfigRoutes.providers", c, function* () {
           const svc = yield* Provider.Service
-          const providers = yield* svc.list()
+          const cfg = yield* Config.Service
+          const config = yield* cfg.get()
+          const all = yield* ModelsDev.Service.use((s) => s.get())
+          const disabled = new Set(config.disabled_providers ?? [])
+          const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+          const filtered: Record<string, (typeof all)[string]> = {}
+          for (const [key, value] of Object.entries(all)) {
+            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
+          }
+          ModelsDev.injectOpenWebUIPlaceholder(filtered, enabled, disabled, true)
+          const connected = yield* svc.list()
+          const providers = Object.assign(
+            mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
+            connected,
+          )
           return {
             providers: Object.values(providers),
             default: Provider.defaultModelIDs(providers),
