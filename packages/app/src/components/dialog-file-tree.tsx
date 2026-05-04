@@ -4,6 +4,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useLanguage } from "@/context/language"
 
 type PromptProps = {
   title: string
@@ -17,6 +18,7 @@ type PromptProps = {
 
 export function DialogFileTreePrompt(props: PromptProps) {
   const dialog = useDialog()
+  const language = useLanguage()
   const [value, setValue] = createSignal(props.defaultValue ?? "")
   const [submitting, setSubmitting] = createSignal(false)
   const [error, setError] = createSignal<string | undefined>()
@@ -25,11 +27,11 @@ export function DialogFileTreePrompt(props: PromptProps) {
     if (submitting()) return
     const trimmed = value().trim()
     if (!trimmed) {
-      setError("名称不能为空")
+      setError(language.t("fileTree.dialog.validation.empty"))
       return
     }
     if (trimmed.includes("/") || trimmed.includes("\\")) {
-      setError("名称不能含 / 或 \\")
+      setError(language.t("fileTree.dialog.validation.invalidChar"))
       return
     }
     const validationError = props.validate?.(trimmed)
@@ -45,9 +47,9 @@ export function DialogFileTreePrompt(props: PromptProps) {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       if (message.startsWith("already_exists:")) {
-        setError("已存在同名文件 / 文件夹")
+        setError(language.t("fileTree.dialog.validation.duplicate"))
       } else {
-        showToast({ variant: "error", title: "操作失败", description: message })
+        showToast({ variant: "error", title: language.t("fileTree.toast.operationFailed"), description: message })
         setError(message)
       }
       setSubmitting(false)
@@ -77,7 +79,7 @@ export function DialogFileTreePrompt(props: PromptProps) {
         />
         <div class="flex justify-end gap-2">
           <Button variant="ghost" size="large" onClick={() => dialog.close()} disabled={submitting()}>
-            取消
+            {language.t("fileTree.dialog.cancel")}
           </Button>
           <Button variant="primary" size="large" onClick={() => void submit()} disabled={submitting()}>
             {props.confirmLabel}
@@ -98,6 +100,7 @@ type ConfirmProps = {
 
 export function DialogFileTreeConfirm(props: ConfirmProps) {
   const dialog = useDialog()
+  const language = useLanguage()
   const [submitting, setSubmitting] = createSignal(false)
 
   const submit = async () => {
@@ -108,7 +111,7 @@ export function DialogFileTreeConfirm(props: ConfirmProps) {
       dialog.close()
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      showToast({ variant: "error", title: "操作失败", description: message })
+      showToast({ variant: "error", title: language.t("fileTree.toast.operationFailed"), description: message })
       setSubmitting(false)
     }
   }
@@ -124,7 +127,7 @@ export function DialogFileTreeConfirm(props: ConfirmProps) {
         </div>
         <div class="flex justify-end gap-2">
           <Button variant="ghost" size="large" onClick={() => dialog.close()} disabled={submitting()}>
-            取消
+            {language.t("fileTree.dialog.cancel")}
           </Button>
           <Button variant="primary" size="large" onClick={() => void submit()} disabled={submitting()}>
             {props.confirmLabel}

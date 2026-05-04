@@ -16,6 +16,8 @@ import { useFileTreeShortcuts } from "@/hooks/use-file-tree-shortcuts"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+// FORK: 文件树菜单 i18n 2026-05-04
+import { useLanguage } from "@/context/language"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -333,6 +335,8 @@ export default function FileTree(props: {
   const file = useFile()
   const sdk = useSDK()
   const dialog = useDialog()
+  // FORK: 文件树菜单 i18n 2026-05-04
+  const language = useLanguage()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
 
@@ -449,7 +453,10 @@ export default function FileTree(props: {
     if (errors.length > 0) {
       showToast({
         variant: "error",
-        title: errors.length === 1 ? "粘贴失败" : `${errors.length} 项粘贴失败`,
+        title:
+          errors.length === 1
+            ? language.t("fileTree.toast.pasteFailedSingle")
+            : language.t("fileTree.toast.pasteFailedBulk", { count: errors.length }),
         description: errors[0],
       })
     }
@@ -512,7 +519,7 @@ export default function FileTree(props: {
         if (errors.length > 0) {
           showToast({
             variant: "error",
-            title: "撤销失败(部分)",
+            title: language.t("fileTree.toast.undoFailedPartial"),
             description: errors[0],
           })
         }
@@ -533,7 +540,7 @@ export default function FileTree(props: {
         if (errors.length > 0) {
           showToast({
             variant: "error",
-            title: "撤销失败(部分)",
+            title: language.t("fileTree.toast.undoFailedPartial"),
             description: errors[0],
           })
         }
@@ -645,11 +652,11 @@ export default function FileTree(props: {
   const promptNewFileAt = (targetAbs: string, targetRel: string, onAfter?: () => void) => {
     dialog.show(() => (
       <DialogFileTreePrompt
-        title="新建文件"
-        label="文件名"
+        title={language.t("fileTree.dialog.newFile.title")}
+        label={language.t("fileTree.dialog.newFile.label")}
         defaultValue="untitled.md"
-        placeholder="文件名"
-        confirmLabel="创建"
+        placeholder={language.t("fileTree.dialog.newFile.placeholder")}
+        confirmLabel={language.t("fileTree.dialog.create")}
         onConfirm={async (name) => {
           await invoke("create_empty_file", { path: joinAbs(targetAbs, name) })
           onAfter?.()
@@ -662,11 +669,11 @@ export default function FileTree(props: {
   const promptNewFolderAt = (targetAbs: string, targetRel: string, onAfter?: () => void) => {
     dialog.show(() => (
       <DialogFileTreePrompt
-        title="新建文件夹"
-        label="文件夹名"
+        title={language.t("fileTree.dialog.newFolder.title")}
+        label={language.t("fileTree.dialog.newFolder.label")}
         defaultValue=""
-        placeholder="新文件夹"
-        confirmLabel="创建"
+        placeholder={language.t("fileTree.dialog.newFolder.placeholder")}
+        confirmLabel={language.t("fileTree.dialog.create")}
         onConfirm={async (name) => {
           await invoke("create_directory", { path: joinAbs(targetAbs, name) })
           onAfter?.()
@@ -682,11 +689,15 @@ export default function FileTree(props: {
     const parentRel = dirname(target.path)
     dialog.show(() => (
       <DialogFileTreePrompt
-        title={target.type === "directory" ? "重命名文件夹" : "重命名文件"}
-        label="新名称"
+        title={
+          target.type === "directory"
+            ? language.t("fileTree.dialog.rename.folderTitle")
+            : language.t("fileTree.dialog.rename.fileTitle")
+        }
+        label={language.t("fileTree.dialog.rename.label")}
         defaultValue={oldName}
-        confirmLabel="重命名"
-        validate={(v) => (v === oldName ? "名称未变更" : undefined)}
+        confirmLabel={language.t("fileTree.dialog.rename.confirm")}
+        validate={(v) => (v === oldName ? language.t("fileTree.dialog.rename.unchanged") : undefined)}
         onConfirm={async (name) => {
           await invoke("rename_path", { from: target.absolute, to: joinAbs(parentAbs, name) })
           await file.tree.refresh(parentRel)
@@ -708,12 +719,15 @@ export default function FileTree(props: {
       await navigator.clipboard.writeText(paths.join("\n"))
       showToast({
         variant: "success",
-        title: paths.length === 1 ? "已复制路径" : `已复制 ${paths.length} 个路径`,
+        title:
+          paths.length === 1
+            ? language.t("fileTree.toast.copyPathSuccessSingle")
+            : language.t("fileTree.toast.copyPathSuccessBulk", { count: paths.length }),
       })
     } catch (e) {
       showToast({
         variant: "error",
-        title: "复制失败",
+        title: language.t("fileTree.toast.copyFailedSingle"),
         description: e instanceof Error ? e.message : String(e),
       })
     }
@@ -771,7 +785,10 @@ export default function FileTree(props: {
     if (errors.length > 0) {
       showToast({
         variant: "error",
-        title: errors.length === 1 ? "移动失败" : `${errors.length} 项移动失败`,
+        title:
+          errors.length === 1
+            ? language.t("fileTree.toast.moveFailedSingle")
+            : language.t("fileTree.toast.moveFailedBulk", { count: errors.length }),
         description: errors[0],
       })
     }
@@ -806,7 +823,10 @@ export default function FileTree(props: {
     if (errors.length > 0) {
       showToast({
         variant: "error",
-        title: errors.length === 1 ? "复制失败" : `${errors.length} 项复制失败`,
+        title:
+          errors.length === 1
+            ? language.t("fileTree.toast.copyFailedSingle")
+            : language.t("fileTree.toast.copyFailedBulk", { count: errors.length }),
         description: errors[0],
       })
     }
@@ -873,13 +893,25 @@ export default function FileTree(props: {
     // FORK: 批量删除 — 右键的 target 在 selection 中就删整组,否则只删 target(同 sourcesFor 规约)2026-04-27
     const targets = sourcesFor(target)
     const single = targets.length === 1
-    const onlyName = single ? basename(targets[0]) : `${targets.length} 个项目`
+    const onlyName = single
+      ? basename(targets[0])
+      : language.t("fileTree.dialog.confirmDelete.bulkName", { count: targets.length })
     dialog.show(() => (
       <DialogFileTreeConfirm
-        title={single ? (target.type === "directory" ? "删除文件夹" : "删除文件") : "批量删除"}
-        message={`确定要删除 ${single ? `"${onlyName}"` : onlyName} 吗?`}
-        detail="将移到系统回收站,可从回收站恢复。"
-        confirmLabel="删除"
+        title={
+          single
+            ? target.type === "directory"
+              ? language.t("fileTree.dialog.confirmDelete.folderTitle")
+              : language.t("fileTree.dialog.confirmDelete.fileTitle")
+            : language.t("fileTree.dialog.confirmDelete.bulkTitle")
+        }
+        message={
+          single
+            ? language.t("fileTree.dialog.confirmDelete.messageSingle", { name: onlyName })
+            : language.t("fileTree.dialog.confirmDelete.messageBulk", { name: onlyName })
+        }
+        detail={language.t("fileTree.dialog.confirmDelete.detail")}
+        confirmLabel={language.t("fileTree.dialog.confirmDelete.confirm")}
         onConfirm={async () => {
           const errors: string[] = []
           for (const path of targets) {
@@ -901,7 +933,10 @@ export default function FileTree(props: {
           if (errors.length > 0) {
             showToast({
               variant: "error",
-              title: errors.length === 1 ? "删除失败" : `${errors.length} 项删除失败`,
+              title:
+                errors.length === 1
+                  ? language.t("fileTree.toast.deleteFailedSingle")
+                  : language.t("fileTree.toast.deleteFailedBulk", { count: errors.length }),
               description: errors[0],
             })
           }
@@ -912,7 +947,7 @@ export default function FileTree(props: {
 
   const revealInFolder = (target: FileNode) => {
     void invoke("reveal_in_folder", { path: target.absolute }).catch((e) => {
-      showToast({ variant: "error", title: "打开失败", description: String(e) })
+      showToast({ variant: "error", title: language.t("fileTree.toast.openFailed"), description: String(e) })
     })
   }
 
@@ -927,13 +962,13 @@ export default function FileTree(props: {
       <ContextMenu.Content>
         {/* 组 1: 重命名 / 复制 / 剪切 / [粘贴] / 删除 */}
         <ContextMenu.Item onSelect={() => promptRename(target)}>
-          <ContextMenu.ItemLabel>重命名</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.rename")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => copyFor(target)}>
-          <ContextMenu.ItemLabel>复制</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.copy")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => cutFor(target)}>
-          <ContextMenu.ItemLabel>剪切</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.cut")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         {/* 粘贴 — 文件夹粘到自身,文件粘到其父目录;clipboard 非空才显示 */}
         <Show when={clipboard.hasContent()}>
@@ -944,32 +979,34 @@ export default function FileTree(props: {
               void pasteTo(targetAbs, targetRel)
             }}
           >
-            <ContextMenu.ItemLabel>{isFolder ? "粘贴到此文件夹" : "粘贴到当前目录"}</ContextMenu.ItemLabel>
+            <ContextMenu.ItemLabel>
+              {isFolder ? language.t("fileTree.menu.paste.toFolder") : language.t("fileTree.menu.paste.toCurrentDir")}
+            </ContextMenu.ItemLabel>
           </ContextMenu.Item>
         </Show>
         <ContextMenu.Item onSelect={() => promptDelete(target)}>
-          <ContextMenu.ItemLabel>删除</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.delete")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Separator />
         {/* 组 2: 在文件夹中显示 / 复制文件路径 */}
         <ContextMenu.Item onSelect={() => revealInFolder(target)}>
-          <ContextMenu.ItemLabel>在文件夹中显示</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.revealInFolder")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => void copyPathToClipboard(target)}>
-          <ContextMenu.ItemLabel>复制文件路径</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.copyPath")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Separator />
         {/* 组 3: 新建文件 / 新建文件夹 */}
         <ContextMenu.Item onSelect={() => promptNewFileAt(newTargetAbs, newTargetRel, onAfterNew)}>
-          <ContextMenu.ItemLabel>新建文件</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.newFile")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => promptNewFolderAt(newTargetAbs, newTargetRel, onAfterNew)}>
-          <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.newFolder")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Separator />
         {/* 组 4: 刷新 */}
         <ContextMenu.Item onSelect={() => void refreshNode(target)}>
-          <ContextMenu.ItemLabel>刷新</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.refresh")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
       </ContextMenu.Content>
     )
@@ -986,20 +1023,20 @@ export default function FileTree(props: {
       <ContextMenu.Content>
         {/* 组 1: 新建文件 / 新建文件夹 / [粘贴到项目根] */}
         <ContextMenu.Item onSelect={() => promptNewFileAt(rootAbs, rootRel)}>
-          <ContextMenu.ItemLabel>新建文件</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.newFile")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => promptNewFolderAt(rootAbs, rootRel)}>
-          <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.newFolder")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <Show when={clipboard.hasContent()}>
           <ContextMenu.Item onSelect={() => void pasteTo(rootAbs, rootRel)}>
-            <ContextMenu.ItemLabel>粘贴到项目根</ContextMenu.ItemLabel>
+            <ContextMenu.ItemLabel>{language.t("fileTree.menu.paste.toRoot")}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
         </Show>
         <ContextMenu.Separator />
         {/* 组 2: 刷新(递归) */}
         <ContextMenu.Item onSelect={() => void file.tree.refreshAll(rootRel)}>
-          <ContextMenu.ItemLabel>刷新</ContextMenu.ItemLabel>
+          <ContextMenu.ItemLabel>{language.t("fileTree.menu.refresh")}</ContextMenu.ItemLabel>
         </ContextMenu.Item>
       </ContextMenu.Content>
     )
