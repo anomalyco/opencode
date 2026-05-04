@@ -42,7 +42,10 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   const notify = createMemo(() => props.notify && (hasPermissions() || unseenCount() > 0))
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
   return (
-    <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
+    <div
+      data-loaded={loaded() ? "true" : "false"}
+      class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}
+    >
       <div class="size-full rounded overflow-clip">
         <Avatar
           fallback={name()}
@@ -144,10 +147,9 @@ const SessionRow = (props: {
       </Show>
       <span
         classList={{
-          "text-14-regular grow-1 min-w-0 overflow-hidden text-ellipsis truncate": true,
+          "text-16-medium grow-1 min-w-0 overflow-hidden text-ellipsis truncate": true,
           "transition-colors": !props.reduced,
-          "font-medium": !!props.active,
-          "text-text-weak group-hover/session:text-text-strong": !props.active && !props.reduced,
+          "text-text-base": !props.active,
         }}
         style={props.active ? { color: "var(--sidebar-session-accent)" } : undefined}
       >

@@ -1,0 +1,626 @@
+/*
+ * Arc Theme Tokens
+ * Modern Arc Browser-style with floating three-pane layout, larger radii,
+ * sunken titlebar, and per-project rail hues.
+ *
+ * This file defines:
+ *   - canvas / card-elevation tokens (consumed by bg-canvas-base utility +
+ *     shadow-card-elevation utility, and by layout selectors below)
+ *   - rail-hue palette (per-project soft color identity, applied in commit 4)
+ *   - layout-level visual treatment for titlebar / sidebar-rail /
+ *     sidebar-nav-desktop / main / dock-prompt
+ *
+ * Activated via html[data-theme="arc"]. Other themes are unaffected.
+ *
+ * Layout strategy: pixel structure of the layout (rail width, nav absolute
+ * positioning, --main-left calc) is intentionally preserved. Visual card
+ * separation is achieved purely via background + radius + shadow, not via
+ * margin/padding that would shift hit zones or affect e2e selectors.
+ */
+
+/* ─── Dark mode (default) ─── */
+html[data-theme="arc"] {
+  /* Canvas behind floating panels — slightly deeper than background-base */
+  --canvas-base: #0e0b14;
+  --canvas-padding: 8px;
+  --canvas-gap: 8px;
+
+  /* Sidebar card background — distinctly more saturated than main content,
+     so the rail and session list read as a separate "panel" with material
+     identity (Arc's signature warm grey-violet sidebar). */
+  --sidebar-card-bg: #1B1826;
+
+  /* Dock-prompt shell background — opaque (not the hardcoded
+     rgb(12 12 14 / 0.34) which becomes muddy grey on light canvases). */
+  --dock-shell-bg: color-mix(in srgb, #221E2D 68%, transparent);
+
+  /* Floating card elevation (subtle violet-tinged outer shadow) */
+  --card-elevation:
+    0 0 0 0.5px rgba(167, 139, 250, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 12px 32px rgba(0, 0, 0, 0.25);
+
+  /* Per-project rail hues — used by commit 4 to give each project a soft tint */
+  --rail-hue-1: linear-gradient(180deg, #2a3145 0%, #1f2433 100%); /* indigo */
+  --rail-hue-2: linear-gradient(180deg, #2d3a2c 0%, #1f2a1f 100%); /* moss */
+  --rail-hue-3: linear-gradient(180deg, #3d2d3a 0%, #2a1e2a 100%); /* rose */
+  --rail-hue-4: linear-gradient(180deg, #3a3829 0%, #2a281c 100%); /* sand */
+  --rail-hue-5: linear-gradient(180deg, #2c3a3d 0%, #1f2a2c 100%); /* sea */
+  --rail-hue-6: linear-gradient(180deg, #2a2a3a 0%, #1e1e2a 100%); /* cloud */
+}
+
+/* ─── Light mode ─── */
+@media (prefers-color-scheme: light) {
+  html[data-theme="arc"] {
+    /* Canvas: unified with the sidebar mauve. The titlebar, the wedge
+       exposed by the sidebar's rounded right edge, the area above the
+       main pane's rounded top-left, and the rail/panel themselves are
+       all the same dusty mauve — matches Arc Browser's seamless chrome,
+       where only the main content pane reads as a distinct lighter
+       surface "floating" on the chrome. (Previously #ebe6f2 cream-violet,
+       which read as a contrasting backdrop and bled white-ish through
+       the rounded-corner gaps via the app-root's bg-background-base.) */
+    --canvas-base: #756B7E;
+
+    /* Sidebar card background — Arc Browser's signature dusty mauve.
+       Deliberately mid-tone (not light) so it reads as a distinct
+       "panel identity" against the white main pane, mirroring the
+       dark-sidebar / light-main contrast Arc is known for. */
+    --sidebar-card-bg: #756B7E;
+
+    /* Dock-prompt shell background — soft opaque white-violet */
+    --dock-shell-bg: color-mix(in srgb, #FFFFFF 84%, transparent);
+
+    /* Floating card elevation (subtle violet-tinged warm shadow) */
+    --card-elevation:
+      0 0 0 0.5px rgba(107, 70, 229, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 12px 32px rgba(107, 70, 229, 0.08);
+
+    /* Per-project rail hues — flat mid-saturated tones (no gradient).
+       The previous low-saturation cream pastels had too little
+       lightness/saturation contrast against #756B7E and all blurred
+       into "various washed creams". A flat fill (instead of a top-to-
+       bottom gradient) reads cleaner: the tile becomes a single
+       confident color block, and the white letter on top has the
+       best possible contrast across the whole face. */
+    --rail-hue-1: #7889b5; /* indigo */
+    --rail-hue-2: #87a886; /* sage */
+    --rail-hue-3: #c98ead; /* rose */
+    --rail-hue-4: #c5ad75; /* sand */
+    --rail-hue-5: #7caab5; /* sea */
+    --rail-hue-6: #a691c1; /* lavender */
+  }
+
+  /* Within the dusty-mauve sidebar AND the canvas-tinted titlebar,
+     set high-contrast text/icon colors.
+
+     Why titlebar joins this group: arc.css makes the titlebar background
+     transparent (see "Titlebar sinks into the canvas" rule below), so the
+     header sits visually on top of the same #756B7E mauve canvas as the
+     sidebar. Without the override, ghost buttons in the titlebar inherit
+     the theme's --icon-base (#847CA0 lavender-gray), which contrasts the
+     mauve canvas at only 1.29:1 — well below WCAG's 3:1 minimum for
+     interactive icons. Inheriting the sidebar's lighter token bumps the
+     ratio to 4+ and unifies the chrome (titlebar reads as "the same
+     panel" as the sidebar, mirroring Arc Browser's seamless top chrome).
+
+     Two-pronged approach because Tailwind v4 captures --color-* tokens
+     at the @theme (root) level and inherits the resulting *static* value
+     into descendants — overriding the upstream --text-* alone won't
+     reach utilities like text-text-strong. So we override BOTH:
+       1. The raw --text-* / --icon-* tokens, so component CSS that
+          consumes them directly (Button, IconButton) gets the contrast.
+       2. The --color-text-* / --color-icon-* aliases at the same scope,
+          so Tailwind utilities (text-text-strong, text-icon-weak, …)
+          resolve against the local override instead of the inherited
+          root-resolved value. */
+  html[data-theme="arc"] [data-component="sidebar-rail"],
+  html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
+  html[data-theme="arc"] [data-component="sidebar-nav-mobile"],
+  html[data-theme="arc"] [data-component="sidebar-panel"],
+  html[data-theme="arc"] [data-component="titlebar"] {
+    --text-strong: #FBF6FB;
+    --text-base: #ECE3EE;
+    --text-weak: #BCB0BF;
+    --icon-base: #ECE3EE;
+    --icon-strong-base: #FBF6FB;
+    --icon-weak-base: #BCB0BF;
+
+    --color-text-strong: var(--text-strong);
+    --color-text-base: var(--text-base);
+    --color-text-weak: var(--text-weak);
+    --color-icon-base: var(--icon-base);
+    --color-icon-strong-base: var(--icon-strong-base);
+    --color-icon-weak-base: var(--icon-weak-base);
+
+    /* Tailwind also exposes plain text-icon-weak / text-icon-base as
+       utilities that compile to color: var(--color-icon-...). The
+       icon-* aliases are mirrored in @theme as --color-icon-weak etc.
+       (no -base suffix). Cover both shapes. */
+    --color-icon-weak: var(--icon-weak-base);
+
+    /* Mirror the session row hover bg onto the surface-base-hover /
+       surface-raised-base-hover tokens, scoped to the sidebar. Without
+       this, the ghost buttons inside the panel (new-session, bell-off,
+       archive, workspace-trigger, load-more) hover-fill with the theme
+       default near-white slab — too pale against the dusty mauve panel
+       and visually disconnected from how a session row reacts to hover.
+       Value matches --sidebar-session-hover-bg (light value in
+       index.css: #8B8294). Both --surface-* (consumed by button.css /
+       icon-button.css via raw var()) and --color-surface-* (consumed
+       by Tailwind utilities like hover:bg-surface-raised-base-hover)
+       are overridden so it doesn't matter which path the button took. */
+    --surface-base-hover: #8B8294;
+    --color-surface-base-hover: #8B8294;
+    --surface-raised-base-hover: #8B8294;
+    --color-surface-raised-base-hover: #8B8294;
+  }
+
+  html[data-theme="arc"] [data-component="titlebar"] {
+    --surface-raised-base: rgba(255, 255, 255, 0.06);
+    --color-surface-raised-base: rgba(255, 255, 255, 0.06);
+    --border-weak-base: transparent;
+    --color-border-weak-base: transparent;
+  }
+
+  /* SidebarPanel: remove the light border separator (drew a hard line
+     between rail and panel since both are now the same mauve color).
+     Drop the panel's top-left radius entirely — the panel sits flush
+     against the rail (same color), so any inward radius here just cuts
+     a wedge of canvas-color through the unified sidebar surface. The
+     outer wrapper [data-component="sidebar-nav-desktop"] still rounds
+     the visible right edge against the canvas. */
+  html[data-theme="arc"] [data-component="sidebar-panel"] {
+    border: none !important;
+    border-top-left-radius: 0 !important;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Layout: floating three-pane visual treatment                  */
+/* ───────────────────────────────────────────────────────────── */
+
+/* Body / root canvas behind the three panes.
+   The app-root wrapper carries `bg-background-base` from layout.tsx,
+   which would otherwise paint a contrasting slab on top of the body's
+   canvas color and re-expose itself through the sidebar's rounded
+   top-right corner (that "white wedge" between sidebar and main pane).
+   Tying the wrapper to var(--canvas-base) keeps the chrome continuous. */
+html[data-theme="arc"],
+html[data-theme="arc"] body,
+html[data-theme="arc"] [data-component="app-root"] {
+  background-color: var(--canvas-base);
+}
+
+/* Titlebar sinks into the canvas — no horizontal slab cutting the view */
+html[data-theme="arc"] [data-component="titlebar"] {
+  background-color: transparent;
+}
+
+/* Legacy 1px hairline that other themes draw across the area to the right
+   of the rail (top-0). The main pane sits z-20 above it and visually hides
+   the line — except in the area carved out by the main pane's rounded
+   top-left corner, where the hairline pokes through as a pale sliver
+   above the curve (the "white edge" remaining after canvas unification).
+   In arc, the rounded floating panes don't need an explicit divider, so
+   we suppress the top-border here. */
+html[data-theme="arc"] [data-component="layout-top-divider"] {
+  border-top-color: transparent;
+}
+
+/* Project rail — keeps its 64px slot and visually merges into the unified
+   sidebar surface. The outer wrapper (sidebar-nav-desktop) handles the
+   right-edge rounding against the canvas; the rail must NOT round its
+   own right edges or it cuts a wedge of canvas color where it abuts the
+   conversation panel (both are the same --sidebar-card-bg). */
+html[data-theme="arc"] [data-component="sidebar-rail"] {
+  background-color: var(--sidebar-card-bg);
+  box-shadow: var(--card-elevation);
+}
+
+/* Session sidebar nav — same treatment, sits to the right of rail.
+   We deliberately drop the 1px hard `var(--border-weak-base)` right shadow
+   that other themes use as a vertical divider: on the rounded top-right
+   corner, that 1px shadow follows the curve and reads as a thin pale
+   halo against the dusty mauve canvas (the "white border" along the
+   curve). Sidebar mauve vs. main pane white already provides plenty of
+   visual separation without an explicit divider line. */
+html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
+html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
+  background-color: var(--sidebar-card-bg);
+  border-top-right-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+  box-shadow: var(--card-elevation);
+}
+
+/* Conversation list panel inside the sidebar.
+   Uses a direct selector instead of relying on Tailwind's
+   bg-background-base utility, because Tailwind v4 resolves --color-*
+   theme tokens at build time — runtime --background-base overrides
+   on ancestor elements don't propagate to the bg-* utility. The
+   data-component selector here has higher specificity than the
+   Tailwind class; !important guards against utility-layer ordering
+   surprises. */
+html[data-theme="arc"] [data-component="sidebar-panel"] {
+  background-color: var(--sidebar-card-bg) !important;
+}
+
+/* Main pane — the largest floating card, fully rounded top-left corner */
+html[data-theme="arc"] main {
+  background-color: var(--surface-raised-base);
+  /* Override existing xl:rounded-tl-[12px] / border-t-border-weak-base */
+  border: none !important;
+  border-top-left-radius: var(--radius-2xl) !important;
+  box-shadow: var(--card-elevation);
+}
+
+/* Dock-prompt: sync radius with cards + override hardcoded translucent dark
+   background that becomes muddy grey on light canvases */
+html[data-theme="arc"] [data-dock-surface="shell"] {
+  border-radius: var(--radius-xl);
+  background-color: var(--dock-shell-bg);
+}
+
+html[data-theme="arc"] [data-dock-surface="tray"] {
+  border-radius: var(--radius-xl);
+}
+
+/* Buttons / cards / dialogs: bump radii to feel softer under arc */
+html[data-theme="arc"] [data-component="button"] {
+  border-radius: var(--radius-lg);
+}
+
+html[data-theme="arc"] [data-component="card"] {
+  border-radius: var(--radius-lg);
+}
+
+html[data-theme="arc"] [data-component="dialog"] {
+  border-radius: var(--radius-2xl);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Per-project rail hues — soft color identity                   */
+/* Applied only when the project tile is NOT selected/active,    */
+/* so selection styling stays dominant.                          */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="1"] {
+  background: var(--rail-hue-1);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="2"] {
+  background: var(--rail-hue-2);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="3"] {
+  background: var(--rail-hue-3);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="4"] {
+  background: var(--rail-hue-4);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="5"] {
+  background: var(--rail-hue-5);
+}
+html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="6"] {
+  background: var(--rail-hue-6);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Micro transitions — subtle, no spring/stagger, motion-safe    */
+/* ───────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme="arc"] [data-component="button"],
+  html[data-theme="arc"] [data-component="card"],
+  html[data-theme="arc"] [data-component="sidebar-session"],
+  html[data-theme="arc"] [data-action="project-switch"],
+  html[data-theme="arc"] [data-component="dialog"] {
+    transition:
+      background-color 150ms ease-out,
+      box-shadow 200ms ease-out,
+      border-color 150ms ease-out,
+      transform 150ms ease-out;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Floating panels — bigger radii, softer/deeper shadows,        */
+/* stronger backdrop blur to feel like Arc Browser overlays      */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-component="dropdown-menu-content"],
+html[data-theme="arc"] [data-component="dropdown-menu-sub-content"],
+html[data-theme="arc"] [data-component="context-menu-content"],
+html[data-theme="arc"] [data-component="context-menu-sub-content"],
+html[data-theme="arc"] [data-component="popover-content"],
+html[data-theme="arc"] [data-component="hover-card-content"],
+html[data-theme="arc"] [data-component="select-content"] {
+  border-radius: var(--radius-2xl);
+  backdrop-filter: blur(60px) saturate(180%);
+  -webkit-backdrop-filter: blur(60px) saturate(180%);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 58%, transparent) inset,
+    0 1px 0 color-mix(in srgb, white 14%, transparent) inset,
+    0 32px 72px rgba(0, 0, 0, 0.28),
+    0 14px 32px rgba(0, 0, 0, 0.18),
+    0 6px 14px rgba(0, 0, 0, 0.12);
+}
+
+/* Tooltip — match the same softness, smaller radius proportional */
+html[data-theme="arc"] [data-component="tooltip-content"] {
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+/* Dialog (command palette / settings dialogs) — even bigger,
+   visually the most prominent floating surface */
+html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
+  border-radius: var(--radius-2xl);
+  backdrop-filter: blur(72px) saturate(180%);
+  -webkit-backdrop-filter: blur(72px) saturate(180%);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 50%, transparent) inset,
+    0 1px 0 color-mix(in srgb, white 16%, transparent) inset,
+    0 40px 96px rgba(0, 0, 0, 0.32),
+    0 18px 40px rgba(0, 0, 0, 0.2),
+    0 8px 18px rgba(0, 0, 0, 0.14);
+}
+
+@media (prefers-color-scheme: light) {
+  html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
+    background-color: rgba(255, 255, 255, 0.72);
+  }
+}
+
+/* Dialog overlay — gentle backdrop blur to push focus on the dialog */
+html[data-theme="arc"] [data-component="dialog-overlay"] {
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Menu / list items — Arc-style hover                           */
+/* Real surface color on hover (vs. weak alpha).                 */
+/* ───────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"],
+  html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-checkbox-item"],
+  html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-radio-item"],
+  html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"],
+  html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-item"],
+  html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-checkbox-item"],
+  html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-radio-item"],
+  html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"] {
+    transition:
+      background-color 120ms ease-out,
+      color 120ms ease-out;
+  }
+}
+
+html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"][data-highlighted],
+html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-checkbox-item"][data-highlighted],
+html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-radio-item"][data-highlighted],
+html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"][data-highlighted],
+html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-item"][data-highlighted],
+html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-checkbox-item"][data-highlighted],
+html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-radio-item"][data-highlighted] {
+  background: var(--surface-raised-base-hover);
+}
+
+html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"]:hover,
+html[data-theme="arc"] [data-component="select-content"] [data-slot="select-select-item"][data-highlighted] {
+  background: var(--surface-raised-base-hover);
+}
+
+html[data-theme="arc"] [data-component="popover-content"] [data-slot="list-item"]:hover,
+html[data-theme="arc"] [data-component="popover-content"] [data-slot="list-item"][data-active="true"],
+html[data-theme="arc"] [data-component="dialog"] [data-slot="list-item"]:hover,
+html[data-theme="arc"] [data-component="dialog"] [data-slot="list-item"][data-active="true"] {
+  background: var(--surface-raised-base-hover);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Buttons — micro lift on hover, snap-back on press             */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-component="button"][data-variant="primary"]:hover:not(:disabled),
+html[data-theme="arc"] [data-component="button"][data-variant="secondary"]:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.12),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="arc"] [data-component="button"][data-variant="primary"]:active:not(:disabled),
+html[data-theme="arc"] [data-component="button"][data-variant="secondary"]:active:not(:disabled),
+html[data-theme="arc"] [data-component="button"][data-variant="ghost"]:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Icon button — pop on hover, press on active */
+html[data-theme="arc"] [data-component="icon-button"] {
+  transition:
+    background-color 140ms ease-out,
+    transform 140ms ease-out,
+    box-shadow 180ms ease-out;
+}
+
+html[data-theme="arc"] [data-component="icon-button"]:hover:not(:disabled) {
+  transform: scale(1.08);
+}
+
+html[data-theme="arc"] [data-component="icon-button"]:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Project rail tiles — Arc Spaces / Discord-inspired redesign   */
+/*                                                               */
+/* The JSX in sidebar-project.tsx applies three layers of border */
+/* (1px transparent default, 1px border-base on hover, 2px       */
+/* border-brand-base when selected) plus the inner Avatar's 1px  */
+/* border-weak-base. Stacked on top of the per-project rail-hue  */
+/* gradient bg, that's far too "framed". And the previous Arc    */
+/* override that replaced the chunky black border with a violet  */
+/* outer ring still felt heavy: it competed with the tile color  */
+/* and didn't match the rest of the Arc theme's clean radii.     */
+/*                                                               */
+/* This redesign:                                                */
+/*  • Strips every border/padding so the tile is a single solid  */
+/*    rounded color block (mid-saturated rail-hue gradient) with */
+/*    the letter floating on top.                                */
+/*  • Replaces the selected ring with a Discord-style vertical   */
+/*    pill on the LEFT of the tile, sitting in the rail's px-3   */
+/*    margin. No competing tile-shape decoration; the pill is    */
+/*    the only "system chrome" that marks selection.             */
+/*  • Tile shape stays rounded-xl (12px) — squircle-ish, soft.   */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-action="project-switch"] {
+  border-width: 0 !important;
+  border-color: transparent !important;
+  /* Drop the JSX p-1 (4px) padding so the avatar can stretch
+     edge-to-edge — eliminates the old rail-hue "frame" effect. */
+  padding: 0 !important;
+  /* Override the JSX overflow-hidden so the ::before pill on the
+     left of the tile can extend outside the button's bounding box
+     into the rail's px-3 padding margin. */
+  overflow: visible !important;
+  position: relative;
+}
+
+/* Inner ProjectIcon wrappers + Avatar fill the full tile, with the
+   Avatar's bg made transparent so the rail-hue gradient is the only
+   color visible behind the centered letter. */
+html[data-theme="arc"] [data-action="project-switch"] > div,
+html[data-theme="arc"] [data-action="project-switch"] > div > div {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0.75rem !important;
+}
+
+html[data-theme="arc"] [data-action="project-switch"] [data-component="avatar"] {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background-color: transparent !important;
+  border-radius: 0.75rem !important;
+  /* Force the letter to white across all rail-hues. The Avatar
+     component otherwise inherits `color: var(--avatar-fg)` set
+     via inline style from getAvatarColors() / the unloaded fallback
+     (light cream `--text-base`). With saturated rail-hue tiles,
+     pure white gives the most consistent contrast — and matches
+     how Discord/Slack solid-color tiles render their initials. */
+  color: #ffffff;
+}
+
+/* Unloaded projects: replace the per-project rail-hue tile with a
+   neutral gray placeholder so the user can tell at a glance which
+   projects haven't synced yet. The :has() selector reads the
+   `data-loaded="false"` attribute that ProjectIcon writes on its
+   wrapper while `globalSync.loaded(dir)` is still false. */
+html[data-theme="arc"] [data-action="project-switch"]:has([data-loaded="false"]) {
+  background: #6c6772 !important;
+}
+
+/* Mute the letter on the gray placeholder so it reads as "pending"
+   rather than "active". Pure white on gray competes with the colored
+   loaded tiles for visual weight; a 60%-opacity white sits back. */
+html[data-theme="arc"] [data-action="project-switch"]:has([data-loaded="false"]) [data-component="avatar"] {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Hover (not selected): subtle scale + soft drop, no ring. The 1.12
+   scale used previously felt too aggressive on a stack of 10+ tiles. */
+html[data-theme="arc"] [data-action="project-switch"]:hover:not([aria-current="true"]):not(:disabled) {
+  transform: scale(1.06) !important;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.16),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Active (mouse-down): tiny press-back */
+html[data-theme="arc"] [data-action="project-switch"]:active:not(:disabled) {
+  transform: scale(1.02) !important;
+}
+
+/* Selected: tile keeps a subtle drop (still feels lifted), but the
+   PRIMARY indicator is the violet pill on the left (see ::before). */
+html[data-theme="arc"] [data-action="project-switch"][aria-current="true"] {
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.18),
+    0 1px 3px rgba(0, 0, 0, 0.10);
+}
+
+/* Discord/Slack/iOS-style left pill indicator. Sits at left: -10px
+   (relative to the tile's left edge), inside the rail's px-3 padding
+   margin, vertically centered. 4×26px violet pill, rounded fully
+   on its short axis. The tile's overflow:visible (above) lets it
+   extend out. */
+html[data-theme="arc"] [data-action="project-switch"][aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 26px;
+  border-radius: 2px;
+  background-color: var(--text-interactive-base);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Sidebar session items — Arc-style hover                       */
+/* (translateX-on-hover removed by request — felt fidgety on the */
+/*  unified mauve panel where rows already have a clear bg/      */
+/*  border hover treatment from index.css)                       */
+/* ───────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme="arc"] [data-component="sidebar-session"] {
+    transition:
+      background-color 160ms ease-out,
+      border-color 160ms ease-out,
+      box-shadow 220ms ease-out;
+  }
+}
+
+html[data-theme="arc"] [data-component="sidebar-session"][data-active="true"] {
+  /* No inset-left stripe: a 2px stripe on a rounded-[22px] container
+     bends with the radius and reads as a dark crescent against the
+     mauve panel. The gradient background + violet border-color set in
+     index.css already mark the active row clearly. We keep just the
+     subtle top inner highlight + outer drop shadow for depth. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 20px -16px var(--sidebar-session-active-shadow);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* List search input — generous radius + softer focus ring       */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-component="list"] [data-slot="list-search"] {
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--surface-base) 78%, transparent);
+  transition:
+    background-color 160ms ease-out,
+    box-shadow 200ms ease-out;
+}
+
+html[data-theme="arc"] [data-component="list"] [data-slot="list-search"]:focus-within {
+  background: var(--surface-raised-base);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--border-interactive-active) 50%, transparent);
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Inline input / text-field — softer corners + subtle focus     */
+/* ───────────────────────────────────────────────────────────── */
+
+html[data-theme="arc"] [data-component="text-field"] [data-slot="text-field-input"],
+html[data-theme="arc"] [data-component="inline-input"] {
+  border-radius: var(--radius-lg);
+}
+
