@@ -1,0 +1,56 @@
+/*
+ * Arc Theme Tokens
+ * Modern Arc Browser-style with floating three-pane layout, larger radii,
+ * sunken titlebar, and per-project rail hues.
+ *
+ * This file defines:
+ *   - canvas / card-elevation tokens (consumed by bg-canvas-base utility +
+ *     shadow-card-elevation utility, and by layout selectors in commit 3)
+ *   - rail-hue palette (per-project soft color identity, applied in commit 4)
+ *
+ * Activated via html[data-theme="arc"]. Other themes are unaffected.
+ */
+
+/* ─── Dark mode (default) ─── */
+html[data-theme="arc"] {
+  /* Canvas behind floating panels — slightly deeper than background-base */
+  --canvas-base: #0e0b14;
+  --canvas-padding: 8px;
+  --canvas-gap: 8px;
+
+  /* Floating card elevation (subtle violet-tinged outer shadow) */
+  --card-elevation:
+    0 0 0 0.5px rgba(167, 139, 250, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 12px 32px rgba(0, 0, 0, 0.25);
+
+  /* Per-project rail hues — used by commit 4 to give each project a soft tint */
+  --rail-hue-1: linear-gradient(180deg, #2a3145 0%, #1f2433 100%); /* indigo */
+  --rail-hue-2: linear-gradient(180deg, #2d3a2c 0%, #1f2a1f 100%); /* moss */
+  --rail-hue-3: linear-gradient(180deg, #3d2d3a 0%, #2a1e2a 100%); /* rose */
+  --rail-hue-4: linear-gradient(180deg, #3a3829 0%, #2a281c 100%); /* sand */
+  --rail-hue-5: linear-gradient(180deg, #2c3a3d 0%, #1f2a2c 100%); /* sea */
+  --rail-hue-6: linear-gradient(180deg, #2a2a3a 0%, #1e1e2a 100%); /* cloud */
+}
+
+/* ─── Light mode ─── */
+@media (prefers-color-scheme: light) {
+  html[data-theme="arc"] {
+    /* Canvas: cream-violet, slightly darker than background-base */
+    --canvas-base: #ebe6f2;
+
+    /* Floating card elevation (subtle violet-tinged warm shadow) */
+    --card-elevation:
+      0 0 0 0.5px rgba(107, 70, 229, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 12px 32px rgba(107, 70, 229, 0.08);
+
+    /* Per-project rail hues (soft pastels for cream backdrop) */
+    --rail-hue-1: linear-gradient(180deg, #e7eaf3 0%, #dfe4f0 100%);
+    --rail-hue-2: linear-gradient(180deg, #e7efe6 0%, #dde7dc 100%);
+    --rail-hue-3: linear-gradient(180deg, #f1e6ee 0%, #e9dde5 100%);
+    --rail-hue-4: linear-gradient(180deg, #f1ece0 0%, #e7e0d2 100%);
+    --rail-hue-5: linear-gradient(180deg, #e2eef1 0%, #d8e6ea 100%);
+    --rail-hue-6: linear-gradient(180deg, #e6e6f0 0%, #dcdce8 100%);
+  }
+}
