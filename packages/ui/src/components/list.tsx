@@ -62,6 +62,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     mouseActive: false,
     scrollRef: undefined as HTMLDivElement | undefined,
     internalFilter: "",
+    composing: false,
   })
   const scrollRef = () => store.scrollRef
   const setScrollRef = (el: HTMLDivElement | undefined) => setStore("scrollRef", el)
@@ -96,9 +97,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
+  const isImeComposing = (event: KeyboardEvent) => event.isComposing || store.composing || event.keyCode === 229
+
   const applyFilter = (value: string, options?: { ref?: boolean }) => {
     const prev = filter()
     setInternalFilter(value)
+    if (store.composing && !options?.ref) return
+
     onInput(value)
     props.onFilter?.(value)
 
@@ -172,6 +177,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const handleKey = (e: KeyboardEvent) => {
     setStore("mouseActive", false)
     if (e.key === "Escape") return
+    const composing = isImeComposing(e)
 
     const all = flat()
     const selected = all.find((x) => props.key(x) === active())
@@ -180,10 +186,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
     if (e.defaultPrevented) return
 
-    if (e.key === "Enter" && !e.isComposing) {
+    if (e.key === "Enter" && !composing) {
       e.preventDefault()
       if (selected) handleSelect(selected, index)
     } else if (props.search) {
+      if (composing) return
       if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === "n" || e.key === "p")) {
         onKeyDown(e)
         return
@@ -194,6 +201,15 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     } else {
       onKeyDown(e)
     }
+  }
+
+  const handleCompositionEnd: JSX.EventHandler<HTMLInputElement, CompositionEvent> = (event) => {
+    const value = event.currentTarget.value
+    setStore("composing", false)
+    requestAnimationFrame(() => {
+      if (store.composing) return
+      applyFilter(value)
+    })
   }
 
   props.ref?.({
@@ -292,6 +308,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 }}
                 value={internalFilter()}
                 onChange={(value) => applyFilter(value)}
+                onCompositionStart={() => setStore("composing", true)}
+                onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKey}
                 placeholder={searchProps().placeholder}
                 spellcheck={false}

@@ -29,14 +29,20 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     }),
     async ({ filter, items }) => {
       const query = filter ?? ""
-      const needle = query.toLowerCase()
+      const needle = query.normalize("NFC").toLowerCase()
       const all = (await Promise.resolve(items)) || []
       const result = pipe(
         all,
         (x) => {
           if (!needle) return x
           if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
-            return fuzzysort.go(needle, x).map((x) => x.target) as T[]
+            return fuzzysort
+              .go(
+                needle,
+                x.map((target) => ({ target, search: target.normalize("NFC") })),
+                { key: "search" },
+              )
+              .map((x) => x.obj.target) as T[]
           }
           return fuzzysort.go(needle, x, { keys: props.filterKeys! }).map((x) => x.obj)
         },
@@ -83,7 +89,9 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Enter" && !event.isComposing) {
+    if (event.isComposing || event.keyCode === 229) return
+
+    if (event.key === "Enter") {
       event.preventDefault()
       const selectedIndex = flat().findIndex((x) => props.key(x) === list.active())
       const selected = flat()[selectedIndex]

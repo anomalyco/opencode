@@ -25,7 +25,10 @@ type Row = {
 
 function cleanInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
-  return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
+  return first
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim()
+    .normalize("NFC")
 }
 
 function normalizePath(input: string) {
@@ -113,7 +116,11 @@ function toRow(absolute: string, home: string, group: Row["group"]): Row {
   }
 
   const search = Array.from(
-    new Set([full, withSlash(full), tilde, withSlash(tilde), getFilename(full)].filter(Boolean)),
+    new Set(
+      [full, withSlash(full), tilde, withSlash(tilde), getFilename(full)]
+        .filter(Boolean)
+        .map((x) => x.normalize("NFC")),
+    ),
   ).join("\n")
   return { absolute: full, search, group }
 }
@@ -132,7 +139,7 @@ function useDirectorySearch(args: {
   start: () => string | undefined
   home: () => string
 }) {
-  const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
+  const cache = new Map<string, Promise<Array<{ name: string; search: string; absolute: string }>>>()
   let current = 0
 
   const scoped = (value: string) => {
@@ -165,6 +172,7 @@ function useDirectorySearch(args: {
           .filter((n) => n.type === "directory")
           .map((n) => ({
             name: n.name,
+            search: n.name.normalize("NFC"),
             absolute: trimTrailing(normalizeDriveRoot(n.absolute)),
           })),
       )
@@ -176,7 +184,7 @@ function useDirectorySearch(args: {
   const match = async (dir: string, query: string, limit: number) => {
     const items = await dirs(dir)
     if (!query) return items.slice(0, limit).map((x) => x.absolute)
-    return fuzzysort.go(query, items, { key: "name", limit }).map((x) => x.obj.absolute)
+    return fuzzysort.go(query.normalize("NFC"), items, { key: "search", limit }).map((x) => x.obj.absolute)
   }
 
   return async (filter: string) => {
@@ -233,8 +241,8 @@ function useDirectorySearch(args: {
       return items.slice(0, 50)
     }
 
-    const needle = tail.toLowerCase()
-    const exact = deduped.filter((p) => getFilename(p).toLowerCase() === needle)
+    const needle = tail.normalize("NFC").toLowerCase()
+    const exact = deduped.filter((p) => getFilename(p).normalize("NFC").toLowerCase() === needle)
     const target = exact[0]
     if (!target) return deduped.slice(0, 50)
 
@@ -305,7 +313,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         const name = project.name || getFilename(project.worktree)
         return {
           ...row,
-          search: `${row.search}\n${name}`,
+          search: `${row.search}\n${name.normalize("NFC")}`,
         }
       })
   })

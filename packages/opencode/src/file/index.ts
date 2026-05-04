@@ -622,7 +622,7 @@ export const layer = Layer.effect(
       yield* ensure()
       const { cache } = yield* InstanceState.get(state)
 
-      const query = input.query.trim()
+      const query = input.query.trim().normalize("NFC")
       const limit = input.limit ?? 100
       const kind = input.type ?? (input.dirs === false ? "file" : "all")
       log.info("search", { query, kind })
@@ -637,7 +637,13 @@ export const layer = Layer.effect(
       const items = kind === "file" ? cache.files : kind === "directory" ? cache.dirs : [...cache.files, ...cache.dirs]
 
       const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
-      const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
+      const sorted = fuzzysort
+        .go(
+          query,
+          items.map((target) => ({ target, search: target.normalize("NFC") })),
+          { key: "search", limit: searchLimit },
+        )
+        .map((item) => item.obj.target)
       const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
 
       log.info("search", { query, kind, results: output.length })
