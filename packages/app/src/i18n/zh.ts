@@ -981,5 +981,12 @@ export const dict = {
   "fileTree.toast.undoFailedPartial": "撤销失败(部分)",
   "fileTree.toast.copyPathSuccessSingle": "已复制路径",
   "fileTree.toast.copyPathSuccessBulk": "已复制 {{count}} 个路径",
+  // FORK: md-export-pdf-word — viewer 右键导出 PDF / Word 菜单 i18n 2026-05-05
+  "fileViewer.menu.exportPdf": "导出为 PDF",
+  "fileViewer.menu.exportDocx": "导出为 Word",
+  "fileViewer.dialog.exportDocxTitle": "保存为 Word 文档",
+  "fileViewer.toast.exportDocxSuccess": "已导出为 Word",
+  "fileViewer.toast.exportDocxFail": "导出失败",
+  "fileViewer.toast.exportPdfHint": "即将弹出系统打印对话框,请选择\"另存为 PDF\"。",
   // FORK-END
 } satisfies Partial<Record<Keys, string>>
