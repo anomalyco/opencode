@@ -173,6 +173,94 @@ function markCodeLinks(root: HTMLDivElement) {
   }
 }
 
+// FORK: Mermaid ```mermaid 代码块 → SVG 流程图 2026-05-05
+// 设计:
+//   1. decorate 阶段同步替换 <pre><code class="language-mermaid"> 为 <div data-mermaid-source="..."> 占位
+//   2. 异步 dynamic import('mermaid')(vite chunk split,首次用到才加载,~runtime 0 网络)
+//   3. mermaid.render(id, source) → SVG;失败回退源码
+//   4. 后续渲染同 .md 但已无 placeholder → 跳过(idempotent)
+function setupMermaidPlaceholders(root: HTMLDivElement) {
+  const blocks = Array.from(root.querySelectorAll("pre code.language-mermaid"))
+  for (const code of blocks) {
+    const pre = code.closest("pre")
+    if (!pre || !pre.parentElement) continue
+    const source = code.textContent ?? ""
+    const placeholder = document.createElement("div")
+    placeholder.setAttribute("data-component", "markdown-mermaid")
+    placeholder.setAttribute("data-mermaid-source", source)
+    placeholder.classList.add("markdown-mermaid")
+    placeholder.style.cssText = "padding: 1rem; opacity: 0.6; font-size: 0.85rem;"
+    placeholder.textContent = "渲染流程图中…"
+    pre.parentElement.replaceChild(placeholder, pre)
+  }
+}
+
+let mermaidLoader: Promise<unknown> | null = null
+async function loadMermaid(): Promise<{ render: (id: string, src: string) => Promise<{ svg: string }> }> {
+  if (!mermaidLoader) {
+    mermaidLoader = import("mermaid").then((mod) => {
+      const lib: any = (mod as any).default ?? mod
+      lib.initialize?.({
+        startOnLoad: false,
+        theme: "default",
+        securityLevel: "strict", // mermaid 内部 sanitize,SVG 输出不含 script
+        flowchart: { htmlLabels: false },
+        fontFamily: "var(--font-sans, sans-serif)",
+      })
+      return lib
+    })
+  }
+  return mermaidLoader as Promise<{ render: (id: string, src: string) => Promise<{ svg: string }> }>
+}
+
+async function renderMermaidIn(container: HTMLElement) {
+  const placeholders = Array.from(container.querySelectorAll<HTMLElement>("[data-mermaid-source]"))
+  if (placeholders.length === 0) return
+  let mermaid: { render: (id: string, src: string) => Promise<{ svg: string }> }
+  try {
+    mermaid = await loadMermaid()
+  } catch {
+    // 加载失败(理论上 0 网络不会发生):退回源码
+    for (const el of placeholders) {
+      fallbackToSource(el)
+      el.removeAttribute("data-mermaid-source")
+    }
+    return
+  }
+  for (let i = 0; i < placeholders.length; i++) {
+    const el = placeholders[i]
+    const src = el.getAttribute("data-mermaid-source") ?? ""
+    if (!src.trim()) {
+      el.removeAttribute("data-mermaid-source")
+      continue
+    }
+    const id = `mermaid-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`
+    try {
+      const { svg } = await mermaid.render(id, src)
+      el.removeAttribute("style")
+      el.classList.add("markdown-mermaid-rendered")
+      el.innerHTML = svg
+    } catch {
+      // 语法错或不支持 — 容错回退源码
+      fallbackToSource(el, src)
+    }
+    el.removeAttribute("data-mermaid-source")
+  }
+}
+
+function fallbackToSource(el: HTMLElement, src?: string) {
+  const source = src ?? el.getAttribute("data-mermaid-source") ?? ""
+  el.removeAttribute("style")
+  el.classList.add("markdown-mermaid-error")
+  el.innerHTML = ""
+  const pre = document.createElement("pre")
+  const code = document.createElement("code")
+  code.className = "language-mermaid"
+  code.textContent = source
+  pre.appendChild(code)
+  el.appendChild(pre)
+}
+
 // FORK: 本地资源 src 重写(.md 内 <img>/<video>/<audio>/<source>)2026-05-05
 // 把相对路径 src 转为 localasset:// URL,文件查看器侧传入 rewriteAssetSrc;
 // 聊天侧不传 → 此函数 no-op,无回归
@@ -201,6 +289,8 @@ function decorate(
   labels: CopyLabels,
   rewriter?: (src: string) => string | null,
 ) {
+  // FORK: Mermaid 占位先于 ensureCodeWrapper(否则 wrapper 会包住 <pre> 让我们替换变脏)2026-05-05
+  setupMermaidPlaceholders(root)
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
@@ -355,10 +445,24 @@ export function Markdown(
         ) {
           setCopyState(toEl, labels, true)
         }
+        // FORK: 已渲染的 mermaid 占位(无 data-mermaid-source 属性)不被 morphdom 替换覆盖回 placeholder 2026-05-05
+        if (
+          fromEl instanceof HTMLElement &&
+          toEl instanceof HTMLElement &&
+          fromEl.getAttribute("data-component") === "markdown-mermaid" &&
+          toEl.getAttribute("data-component") === "markdown-mermaid" &&
+          !fromEl.hasAttribute("data-mermaid-source")
+        ) {
+          // 已 render 的不动,新 placeholder(toEl)被丢弃
+          return false
+        }
         if (fromEl.isEqualNode(toEl)) return false
         return true
       },
     })
+
+    // FORK: 异步渲染所有 mermaid placeholder(dynamic import,vite chunk;0 网络请求)2026-05-05
+    void renderMermaidIn(container)
 
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
