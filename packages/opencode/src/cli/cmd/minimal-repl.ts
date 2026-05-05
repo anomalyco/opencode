@@ -111,7 +111,15 @@ export async function repl(opts: ReplOptions): Promise<void> {
 
     let currentAbort: AbortController | undefined
 
-    const handleInterrupt = () => {
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: process.stdout.isTTY === true,
+      completer,
+    })
+
+    let lastInterrupt = 0
+    rl.on("SIGINT", () => {
       if (currentAbort) {
         const controller = currentAbort
         currentAbort = undefined
@@ -122,12 +130,16 @@ export async function repl(opts: ReplOptions): Promise<void> {
         return
       }
       
-      // If no task is running, Ctrl+C should exit (standard CLI behavior)
-      process.stdout.write(EOL)
-      process.exit(0)
-    }
-
-    process.on("SIGINT", handleInterrupt)
+      // Double Ctrl+C within 500ms to exit, or Ctrl+C on empty line
+      const now = Date.now()
+      if (now - lastInterrupt < 500) {
+        process.stdout.write(EOL)
+        process.exit(0)
+      }
+      lastInterrupt = now
+      process.stdout.write(EOL + UI.Style.TEXT_DIM + "(Press Ctrl+C again to exit)" + UI.Style.TEXT_NORMAL + EOL)
+      rl.prompt()
+    })
 
     if (opts.initialPrompt && opts.initialPrompt.trim().length > 0) {
       const turnAbort = new AbortController()
@@ -135,20 +147,15 @@ export async function repl(opts: ReplOptions): Promise<void> {
       try {
         await turn(sdk, state, opts.initialPrompt.trim(), turnAbort.signal)
       } catch (e) {
-        if (!(e instanceof Error && e.name === "AbortError")) {
+        // Suppress errors caused by intentional cancellation
+        const err = String(e)
+        if (!err.includes("AbortError") && !err.includes("cancel") && !err.includes("aborted")) {
           UI.error(e instanceof Error ? e.message : String(e))
         }
       } finally {
         currentAbort = undefined
       }
     }
-
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      terminal: process.stdout.isTTY === true,
-      completer,
-    })
 
     while (true) {
       const line = await rl.question(UI.Style.TEXT_HIGHLIGHT_BOLD + "» " + UI.Style.TEXT_NORMAL).catch(() => undefined)
@@ -172,7 +179,9 @@ export async function repl(opts: ReplOptions): Promise<void> {
       try {
         await turn(sdk, state, trimmed, turnAbort.signal)
       } catch (e) {
-        if (!(e instanceof Error && e.name === "AbortError")) {
+        // Suppress errors caused by intentional cancellation
+        const err = String(e)
+        if (!err.includes("AbortError") && !err.includes("cancel") && !err.includes("aborted")) {
           UI.error(e instanceof Error ? e.message : String(e))
         }
       } finally {
@@ -180,7 +189,6 @@ export async function repl(opts: ReplOptions): Promise<void> {
       }
     }
     rl.close()
-    process.removeListener("SIGINT", handleInterrupt)
     if (process.stdout.isTTY) process.stdout.write(EOL)
     process.exit(0)
   })
