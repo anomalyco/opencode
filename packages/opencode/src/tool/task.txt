@@ -2,6 +2,14 @@ Launch a new agent to handle complex, multistep tasks autonomously.
 
 When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
 
+Available parameters:
+- description: A short (3-5 words) description of the task
+- prompt: The task for the agent to perform
+- subagent_type: The type of specialized agent to use (general, explore)
+- task_id: (Optional) Resume a previous task session
+- command: (Optional) The command that triggered this task
+- model: (Optional) Model to use for this subagent. Format: 'modelID' (e.g., 'gpt-4-vision-preview') or 'providerID/modelID' (e.g., 'openai/gpt-4-vision-preview'). Overrides the agent's default model.
+
 When to use the Task tool:
 - When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
 

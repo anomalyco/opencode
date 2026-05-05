@@ -26,6 +26,10 @@ export const Parameters = Schema.Struct({
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  model: Schema.optional(Schema.String).annotate({
+    description:
+      "Optional model to use for this subagent (e.g., 'gpt-4-vision-preview', 'claude-3-opus', 'llama-3.1-8b'). Overrides the agent's default model. Format: 'modelID' or 'providerID/modelID'.",
+  }),
 })
 
 export const TaskTool = Tool.define(
@@ -104,10 +108,18 @@ export const TaskTool = Tool.define(
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
 
-      const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
+      // Determine model: params.model > agent default > parent message model
+      const model = params.model
+        ? (params.model.includes("/")
+          ? (() => {
+              const [providerID, modelID] = params.model.split("/")
+              return { modelID, providerID }
+            })()
+          : { modelID: params.model, providerID: msg.info.providerID })
+        : next.model ?? {
+            modelID: msg.info.modelID,
+            providerID: msg.info.providerID,
+          }
 
       yield* ctx.metadata({
         title: params.description,

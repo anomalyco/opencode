@@ -362,8 +362,115 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance(
-    "execute shapes child permissions for task, todowrite, and primary tools",
+  it.instance("execute uses model parameter when provided", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "analyze image",
+          prompt: "Analyze this screenshot",
+          subagent_type: "general",
+          model: "gpt-4-vision-preview",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.model).toEqual({
+        modelID: "gpt-4-vision-preview",
+        providerID: ref.providerID,
+      })
+      expect(result.metadata.model).toEqual({
+        modelID: "gpt-4-vision-preview",
+        providerID: ref.providerID,
+      })
+    }),
+  )
+
+  it.instance("execute uses providerID/modelID format when model contains slash", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "research task",
+          prompt: "Research this topic",
+          subagent_type: "general",
+          model: "openai/gpt-4-turbo",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.model).toEqual({
+        modelID: "gpt-4-turbo",
+        providerID: "openai",
+      })
+      expect(result.metadata.model).toEqual({
+        modelID: "gpt-4-turbo",
+        providerID: "openai",
+      })
+    }),
+  )
+
+  it.instance("execute falls back to agent model when model param not provided", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "regular task",
+          prompt: "Do the thing",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      // Should use parent message model when no agent default and no param
+      expect(seen?.model).toEqual({
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+      })
+    }),
+  )
     () =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
