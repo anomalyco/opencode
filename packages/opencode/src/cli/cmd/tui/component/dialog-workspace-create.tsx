@@ -1,11 +1,9 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import type { Workspace } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@tui/ui/dialog"
-import { DialogSelect } from "@tui/ui/dialog-select"
-import { useRoute } from "@tui/context/route"
+import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useSync } from "@tui/context/sync"
 import { useProject } from "@tui/context/project"
 import { createMemo, createSignal, onMount } from "solid-js"
-import { setTimeout as sleep } from "node:timers/promises"
 import { errorMessage } from "@/util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
@@ -16,184 +14,212 @@ type Adapter = {
   description: string
 }
 
-function scoped(sdk: ReturnType<typeof useSDK>, sync: ReturnType<typeof useSync>, workspaceID: string) {
-  return createOpencodeClient({
-    baseUrl: sdk.url,
-    fetch: sdk.fetch,
-    directory: sync.path.directory || sdk.directory,
-    experimental_workspaceID: workspaceID,
-  })
-}
+export type WorkspaceSelection =
+  | {
+      type: "none"
+    }
+  | {
+      type: "new"
+      workspaceType: string
+      workspaceName: string
+    }
+  | {
+      type: "existing"
+      workspaceID: string
+      workspaceType: string
+      workspaceName: string
+    }
 
-export async function openWorkspaceSession(input: {
-  dialog: ReturnType<typeof useDialog>
-  route: ReturnType<typeof useRoute>
+type WorkspaceSelectValue = WorkspaceSelection | { type: "existing-list" }
+type ExistingWorkspaceSelectValue = { workspace: Workspace }
+
+async function loadWorkspaceAdapters(input: {
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   toast: ReturnType<typeof useToast>
-  workspaceID: string
 }) {
-  const client = scoped(input.sdk, input.sync, input.workspaceID)
-
-  while (true) {
-    const result = await client.session.create({ workspace: input.workspaceID }).catch(() => undefined)
-    if (!result) {
-      input.toast.show({
-        message: "Failed to create workspace session",
-        variant: "error",
-      })
-      return
-    }
-    if (result.response?.status && result.response.status >= 500 && result.response.status < 600) {
-      await sleep(1000)
-      continue
-    }
-    if (!result.data) {
-      input.toast.show({
-        message: "Failed to create workspace session",
-        variant: "error",
-      })
-      return
-    }
-
-    input.route.navigate({
-      type: "session",
-      sessionID: result.data.id,
-    })
-    input.dialog.clear()
-    return
-  }
+  const dir = input.sync.path.directory || input.sdk.directory
+  const url = new URL("/experimental/workspace/adapter", input.sdk.url)
+  if (dir) url.searchParams.set("directory", dir)
+  const res = await input.sdk
+    .fetch(url)
+    .then((x) => x.json() as Promise<Adapter[]>)
+    .catch(() => undefined)
+  if (res) return res
+  input.toast.show({
+    message: "Failed to load workspace adapters",
+    variant: "error",
+  })
 }
 
-export async function restoreWorkspaceSession(input: {
+export async function openWorkspaceSelect(input: {
+  dialog: ReturnType<typeof useDialog>
+  sdk: ReturnType<typeof useSDK>
+  sync: ReturnType<typeof useSync>
+  toast: ReturnType<typeof useToast>
+  onSelect: (selection: WorkspaceSelection) => Promise<void> | void
+}) {
+  input.dialog.clear()
+  const adapters = await loadWorkspaceAdapters(input)
+  if (!adapters) return
+  input.dialog.replace(() => <DialogWorkspaceSelect adapters={adapters} onSelect={input.onSelect} />)
+}
+
+export async function warpWorkspaceSession(input: {
   dialog: ReturnType<typeof useDialog>
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   project: ReturnType<typeof useProject>
   toast: ReturnType<typeof useToast>
-  workspaceID: string
+  workspaceID: string | null
   sessionID: string
   done?: () => void
-}) {
+}): Promise<boolean> {
   const result = await input.sdk.client.experimental.workspace
-    .sessionRestore({ id: input.workspaceID, sessionID: input.sessionID })
+    .warp({
+      id: input.workspaceID,
+      sessionID: input.sessionID,
+    })
     .catch(() => undefined)
   if (!result?.data) {
     input.toast.show({
-      message: `Failed to restore session: ${errorMessage(result?.error ?? "no response")}`,
+      message: `Failed to warp session: ${errorMessage(result?.error ?? "no response")}`,
       variant: "error",
     })
-    return
+    return false
   }
 
   input.project.workspace.set(input.workspaceID)
 
   await input.sync.bootstrap({ fatal: false }).catch(() => undefined)
 
-  await Promise.all([input.project.workspace.sync(), input.sync.session.sync(input.sessionID)])
+  await Promise.all([input.project.workspace.sync(), input.sync.session.refresh()])
 
-  input.toast.show({
-    message: "Session restored into the new workspace",
-    variant: "success",
-  })
   input.done?.()
-  if (input.done) return
+  if (input.done) return true
   input.dialog.clear()
+  return true
 }
 
-export function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promise<void> | void }) {
+export function DialogWorkspaceSelect(props: {
+  adapters?: Adapter[]
+  onSelect: (selection: WorkspaceSelection) => Promise<void> | void
+}) {
   const dialog = useDialog()
-  const sync = useSync()
   const project = useProject()
+  const sync = useSync()
   const sdk = useSDK()
   const toast = useToast()
-  const [creating, setCreating] = createSignal<string>()
-  const [adapters, setAdapters] = createSignal<Adapter[]>()
+  const [adapters, setAdapters] = createSignal<Adapter[] | undefined>(props.adapters)
 
   onMount(() => {
     dialog.setSize("medium")
     void (async () => {
-      const dir = sync.path.directory || sdk.directory
-      const url = new URL("/experimental/workspace/adapter", sdk.url)
-      if (dir) url.searchParams.set("directory", dir)
-      const res = await sdk
-        .fetch(url)
-        .then((x) => x.json() as Promise<Adapter[]>)
-        .catch(() => undefined)
-      if (!res) {
-        toast.show({
-          message: "Failed to load workspace adapters",
-          variant: "error",
-        })
-        return
-      }
+      if (adapters()) return
+      const res = await loadWorkspaceAdapters({ sdk, sync, toast })
+      if (!res) return
       setAdapters(res)
     })()
   })
 
-  const options = createMemo(() => {
-    const type = creating()
-    if (type) {
-      return [
-        {
-          title: `Creating ${type} workspace...`,
-          value: "creating" as const,
-          description: "This can take a while for remote environments",
-        },
-      ]
-    }
+  const options = createMemo<DialogSelectOption<WorkspaceSelectValue>[]>(() => {
     const list = adapters()
-    if (!list) {
-      return [
-        {
-          title: "Loading workspaces...",
-          value: "loading" as const,
-          description: "Fetching available workspace adapters",
+    if (!list) return []
+    const recent = sync.data.session
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .flatMap((session) => (session.workspaceID ? [session.workspaceID] : []))
+      .filter((workspaceID, index, list) => list.indexOf(workspaceID) === index)
+      .slice(0, 3)
+      .flatMap((workspaceID) => {
+        const workspace = project.workspace.get(workspaceID)
+        return workspace ? [workspace] : []
+      })
+    return [
+      ...list.map((adapter) => ({
+        title: adapter.name,
+        value: { type: "new" as const, workspaceType: adapter.type, workspaceName: adapter.name },
+        description: adapter.description,
+        category: "New workspace",
+      })),
+      {
+        title: "None",
+        value: { type: "none" as const },
+        description: "Use the local project",
+        category: "Choose workspace",
+      },
+      ...recent.map((workspace: Workspace) => ({
+        title: workspace.name,
+        description: `(${workspace.type})`,
+        value: {
+          type: "existing" as const,
+          workspaceID: workspace.id,
+          workspaceType: workspace.type,
+          workspaceName: workspace.name,
         },
-      ]
-    }
-    return list.map((item) => ({
-      title: item.name,
-      value: item.type,
-      description: item.description,
-    }))
+        category: "Choose workspace",
+      })),
+      {
+        title: "View all workspaces",
+        value: { type: "existing-list" as const },
+        description: "Choose from all workspaces",
+        category: "Choose workspace",
+      },
+    ]
   })
 
-  const create = async (type: string) => {
-    if (creating()) return
-    setCreating(type)
-
-    const result = await sdk.client.experimental.workspace.create({ type, branch: null }).catch(() => {
-      toast.show({
-        message: "Creating workspace failed",
-        variant: "error",
-      })
-      return undefined
-    })
-
-    const workspace = result?.data
-    if (!workspace) {
-      setCreating(undefined)
-      toast.show({
-        message: `Failed to create workspace: ${errorMessage(result?.error ?? "no response")}`,
-        variant: "error",
-      })
-      return
-    }
-
-    await project.workspace.sync()
-    await props.onSelect(workspace.id)
-    setCreating(undefined)
-  }
-
+  if (!adapters()) return null
   return (
-    <DialogSelect
-      title={creating() ? "Creating Workspace" : "New Workspace"}
+    <DialogSelect<WorkspaceSelectValue>
+      title="Warp"
       skipFilter={true}
+      renderFilter={false}
       options={options()}
       onSelect={(option) => {
-        if (option.value === "creating" || option.value === "loading") return
-        void create(option.value)
+        if (!option.value) return
+        if (option.value.type === "none") {
+          void props.onSelect(option.value)
+          return
+        }
+        if (option.value.type === "new") {
+          void props.onSelect(option.value)
+          return
+        }
+        if (option.value.type === "existing") {
+          void props.onSelect(option.value)
+          return
+        }
+
+        dialog.replace(() => <DialogExistingWorkspaceSelect onSelect={props.onSelect} />)
+      }}
+    />
+  )
+}
+
+function DialogExistingWorkspaceSelect(props: { onSelect: (selection: WorkspaceSelection) => Promise<void> | void }) {
+  const project = useProject()
+
+  const options = createMemo<DialogSelectOption<ExistingWorkspaceSelectValue>[]>(() =>
+    project.workspace
+      .list()
+      .filter((workspace) => project.workspace.status(workspace.id) === "connected")
+      .map((workspace: Workspace) => ({
+        title: workspace.name,
+        description: `(${workspace.type})`,
+        value: { workspace },
+      })),
+  )
+
+  return (
+    <DialogSelect<ExistingWorkspaceSelectValue>
+      title="Existing Workspace"
+      options={options()}
+      onSelect={(option) => {
+        void props.onSelect({
+          type: "existing",
+          workspaceID: option.value.workspace.id,
+          workspaceType: option.value.workspace.type,
+          workspaceName: option.value.workspace.name,
+        })
       }}
     />
   )
