@@ -21,7 +21,7 @@ issues: https://github.com/anomalyco/opencode/issues
 source-code: https://github.com/anomalyco/opencode
 base: core24
 confinement: classic
-grade: stable
+grade: devel
 
 platforms:
   amd64:
@@ -94,35 +94,41 @@ parts:
       - libsoup-3.0-dev
       - nodejs
     stage-packages:
-      - libwebkit2gtk-4.1-0
-      - libgtk-3-0
-      - libsoup-3.0-0
-      - libjavascriptcoregtk-4.1-0
-      - libgdk-pixbuf-2.0-0
+      - ca-certificates
+      - libasound2t64
+      - libatk1.0-0t64
+      - libatk-bridge2.0-0t64
       - libcairo2
-      - libpango-1.0-0
-      - libpangocairo-1.0-0
-      - libglib2.0-0
+      - libdbus-1-3
+      - libdrm2
+      - libegl1
       - libepoxy0
       - libfontconfig1
       - libfribidi0
-      - libatk1.0-0t64
-      - libatk-bridge2.0-0t64
+      - libgbm1
+      - libgdk-pixbuf-2.0-0
+      - libgl1
+      - libgl1-mesa-dri
+      - libgles2
+      - libglib2.0-0
+      - libgtk-3-0t64
+      - libnss3
+      - libnspr4
+      - libpango-1.0-0
+      - libpangocairo-1.0-0
+      - libwayland-egl1
       - libx11-6
       - libxcomposite1
       - libxdamage1
       - libxext6
       - libxfixes3
+      - libxkbcommon0
+      - libxkbfile1
       - libxrandr2
       - libxrender1
-      - libxtst6
       - libxss1
-      - libnss3
-      - libnspr4
-      - libdbus-1-3
-      - libdrm2
-      - libgbm1
-      - libasound2t64
+      - libxtst6
+      - xdg-utils
     override-build: |
       # Install Node.js 22 (Vite 7 requires Node 20.19+ or 22.12+)
       curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
