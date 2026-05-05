@@ -59,6 +59,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session_diff: {
         [sessionID: string]: Snapshot.FileDiff[]
       }
+      session_cost: {
+        [sessionID: string]: { self: number; subagents: number; subagent_count: number }
+      }
       todo: {
         [sessionID: string]: Todo[]
       }
@@ -96,6 +99,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session: [],
       session_status: {},
       session_diff: {},
+      session_cost: {},
       todo: {},
       message: {},
       part: {},
@@ -112,7 +116,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const kv = useKV()
 
     const fullSyncedSessions = new Set<string>()
+    const inflightCostRefresh = new Set<string>()
     let syncedWorkspace = project.workspace.current()
+
+    async function refreshCost(sessionID: string) {
+      if (inflightCostRefresh.has(sessionID)) return
+      inflightCostRefresh.add(sessionID)
+      try {
+        const response = await sdk.client.session.cost({ sessionID })
+        if (response.data) setStore("session_cost", sessionID, response.data)
+      } catch {
+        // Ignore transient errors; sidebar will keep last known value.
+      } finally {
+        inflightCostRefresh.delete(sessionID)
+      }
+    }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
@@ -251,6 +269,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.updated": {
+          // When an assistant message completes, refresh any cached cost
+          // rollups. This catches subagent completions for ancestor sidebars
+          // without tracking parent_id chains client-side.
+          if (
+            event.properties.info.role === "assistant" &&
+            event.properties.info.time?.completed &&
+            (event.properties.info.cost ?? 0) > 0
+          ) {
+            for (const id of Object.keys(store.session_cost)) {
+              void refreshCost(id)
+            }
+          }
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
             setStore("message", event.properties.info.sessionID, [event.properties.info])
@@ -512,13 +542,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
+        cost(sessionID: string) {
+          // Returns the last fetched value (or undefined). The caller is
+          // expected to have triggered `syncCost` for this session.
+          return store.session_cost[sessionID]
+        },
+        syncCost(sessionID: string) {
+          return refreshCost(sessionID)
+        },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
+          const [session, messages, todo, diff, cost] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
             sdk.client.session.messages({ sessionID, limit: 100 }),
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
+            sdk.client.session.cost({ sessionID }),
           ])
           setStore(
             produce((draft) => {
@@ -531,6 +570,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []
+              if (cost.data) draft.session_cost[sessionID] = cost.data
             }),
           )
           fullSyncedSessions.add(sessionID)

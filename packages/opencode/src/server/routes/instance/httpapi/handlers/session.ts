@@ -86,6 +86,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* session.children(ctx.params.sessionID)
     })
 
+    const cost = Effect.fn("SessionHttpApi.cost")(function* (ctx: { params: { sessionID: SessionID } }) {
+      return yield* session.cost(ctx.params.sessionID)
+    })
+
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       return yield* todoSvc.get(ctx.params.sessionID)
     })
@@ -363,6 +367,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("status", status)
       .handle("get", get)
       .handle("children", children)
+      .handle("cost", cost)
       .handle("todo", todo)
       .handle("diff", diff)
       .handle("messages", messages)

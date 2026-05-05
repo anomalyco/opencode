@@ -187,6 +187,40 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .get(
+      "/:sessionID/cost",
+      describeRoute({
+        summary: "Get session cost rollup",
+        tags: ["Session"],
+        description:
+          "Get the cumulative cost of this session plus the rolled-up cost of all descendant subagent sessions.",
+        operationId: "session.cost",
+        responses: {
+          200: {
+            description: "Cost rollup",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Cost.zod),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: Session.CostInput.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        return jsonRequest("SessionRoutes.cost", c, function* () {
+          const session = yield* Session.Service
+          return yield* session.cost(sessionID)
+        })
+      },
+    )
+    .get(
       "/:sessionID/todo",
       describeRoute({
         summary: "Get session todos",
