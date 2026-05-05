@@ -28,17 +28,15 @@ html[data-theme="arc"] {
   /* Sidebar card background — distinctly more saturated than main content,
      so the rail and session list read as a separate "panel" with material
      identity (Arc's signature warm grey-violet sidebar). */
-  --sidebar-card-bg: #1B1826;
+  --sidebar-card-bg: #1b1826;
 
   /* Dock-prompt shell background — opaque (not the hardcoded
      rgb(12 12 14 / 0.34) which becomes muddy grey on light canvases). */
-  --dock-shell-bg: color-mix(in srgb, #221E2D 68%, transparent);
+  --dock-shell-bg: color-mix(in srgb, #221e2d 68%, transparent);
 
   /* Floating card elevation (subtle violet-tinged outer shadow) */
   --card-elevation:
-    0 0 0 0.5px rgba(167, 139, 250, 0.08),
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    0 12px 32px rgba(0, 0, 0, 0.25);
+    0 0 0 0.5px rgba(167, 139, 250, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.25);
 
   /* Per-project rail hues — used by commit 4 to give each project a soft tint */
   --rail-hue-1: linear-gradient(180deg, #2a3145 0%, #1f2433 100%); /* indigo */
@@ -60,22 +58,20 @@ html[data-theme="arc"] {
        surface "floating" on the chrome. (Previously #ebe6f2 cream-violet,
        which read as a contrasting backdrop and bled white-ish through
        the rounded-corner gaps via the app-root's bg-background-base.) */
-    --canvas-base: #756B7E;
+    --canvas-base: #756b7e;
 
     /* Sidebar card background — Arc Browser's signature dusty mauve.
        Deliberately mid-tone (not light) so it reads as a distinct
        "panel identity" against the white main pane, mirroring the
        dark-sidebar / light-main contrast Arc is known for. */
-    --sidebar-card-bg: #756B7E;
+    --sidebar-card-bg: #756b7e;
 
     /* Dock-prompt shell background — soft opaque white-violet */
-    --dock-shell-bg: color-mix(in srgb, #FFFFFF 84%, transparent);
+    --dock-shell-bg: color-mix(in srgb, #ffffff 84%, transparent);
 
     /* Floating card elevation (subtle violet-tinged warm shadow) */
     --card-elevation:
-      0 0 0 0.5px rgba(107, 70, 229, 0.06),
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 12px 32px rgba(107, 70, 229, 0.08);
+      0 0 0 0.5px rgba(107, 70, 229, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(107, 70, 229, 0.08);
 
     /* Per-project rail hues — flat mid-saturated tones (no gradient).
        The previous low-saturation cream pastels had too little
@@ -119,14 +115,13 @@ html[data-theme="arc"] {
   html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
   html[data-theme="arc"] [data-component="sidebar-nav-mobile"],
   html[data-theme="arc"] [data-component="sidebar-panel"],
-  html[data-theme="arc"] [data-component="titlebar"],
-  html[data-theme="arc"] .arc-sidebar-scope {
-    --text-strong: #FBF6FB;
-    --text-base: #ECE3EE;
-    --text-weak: #BCB0BF;
-    --icon-base: #ECE3EE;
-    --icon-strong-base: #FBF6FB;
-    --icon-weak-base: #BCB0BF;
+  html[data-theme="arc"] [data-component="titlebar"] {
+    --text-strong: #fbf6fb;
+    --text-base: #ece3ee;
+    --text-weak: #bcb0bf;
+    --icon-base: #ece3ee;
+    --icon-strong-base: #fbf6fb;
+    --icon-weak-base: #bcb0bf;
 
     --color-text-strong: var(--text-strong);
     --color-text-base: var(--text-base);
@@ -152,10 +147,14 @@ html[data-theme="arc"] {
        icon-button.css via raw var()) and --color-surface-* (consumed
        by Tailwind utilities like hover:bg-surface-raised-base-hover)
        are overridden so it doesn't matter which path the button took. */
-    --surface-base-hover: #8B8294;
-    --color-surface-base-hover: #8B8294;
-    --surface-raised-base-hover: #8B8294;
-    --color-surface-raised-base-hover: #8B8294;
+    --surface-base-hover: #8b8294;
+    --color-surface-base-hover: #8b8294;
+    --surface-raised-base-hover: #8b8294;
+    --color-surface-raised-base-hover: #8b8294;
+    --surface-base-active: #7d7589;
+    --color-surface-base-active: #7d7589;
+    --surface-raised-base-active: #7d7589;
+    --color-surface-raised-base-active: #7d7589;
 
     /* Task cards inside the tasks panel: their bg/border tokens must
        resolve to semi-transparent whites so cards layer visibly on
@@ -173,12 +172,10 @@ html[data-theme="arc"] {
        specificity is equal but source order is later.) */
     --background-base: rgba(255, 255, 255, 0.06);
     --color-background-base: rgba(255, 255, 255, 0.06);
-    --background-stronger: rgba(255, 255, 255, 0.10);
-    --color-background-stronger: rgba(255, 255, 255, 0.10);
-    --surface-raised-base: rgba(255, 255, 255, 0.10);
-    --color-surface-raised-base: rgba(255, 255, 255, 0.10);
-    --surface-panel: rgba(255, 255, 255, 0.10);
-    --color-surface-panel: rgba(255, 255, 255, 0.10);
+    --background-stronger: rgba(255, 255, 255, 0.1);
+    --color-background-stronger: rgba(255, 255, 255, 0.1);
+    --surface-raised-base: rgba(255, 255, 255, 0.1);
+    --color-surface-raised-base: rgba(255, 255, 255, 0.1);
     --surface-info-base: rgba(255, 255, 255, 0.18);
     --color-surface-info-base: rgba(255, 255, 255, 0.18);
     --border-weak-base: rgba(255, 255, 255, 0.14);
@@ -188,8 +185,6 @@ html[data-theme="arc"] {
   html[data-theme="arc"] [data-component="titlebar"] {
     --surface-raised-base: rgba(255, 255, 255, 0.06);
     --color-surface-raised-base: rgba(255, 255, 255, 0.06);
-    --surface-panel: rgba(255, 255, 255, 0.06);
-    --color-surface-panel: rgba(255, 255, 255, 0.06);
     --border-weak-base: transparent;
     --color-border-weak-base: transparent;
   }
@@ -404,6 +399,30 @@ html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
   html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
     background-color: rgba(255, 255, 255, 0.72);
   }
+
+  /* Question tool — the default light-dark(#fff6be, #2a2307)
+     background produces a pale cream-yellow that has poor contrast
+     with the amber-tinted description text (--amber-darkalpha-10 =
+     #ffce48f9) and even --text-strong (#1A1625) reads faintly on it.
+     Replace with a richer warm-ochre that fits Arc's violet-tinged
+     palette while giving dark text a WCAG-passing contrast ratio. */
+  html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] {
+    background-color: #f0dca4;
+
+    [data-slot="option-description"] {
+      color: #6b4f1e;
+    }
+
+    [data-slot="question-option"][data-focused="true"]:not([data-picked="true"]) {
+      background-color: #e8cf8a;
+      border-color: #b8972f;
+    }
+
+    [data-slot="question-option"][data-picked="true"] {
+      background-color: #ddd0a0;
+      border-color: #a68830;
+    }
+  }
 }
 
 /* Dialog overlay — gentle backdrop blur to push focus on the dialog */
@@ -433,11 +452,19 @@ html[data-theme="arc"] [data-component="dialog-overlay"] {
 }
 
 html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"][data-highlighted],
-html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-checkbox-item"][data-highlighted],
-html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-radio-item"][data-highlighted],
-html[data-theme="arc"] [data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"][data-highlighted],
+html[data-theme="arc"]
+  [data-component="dropdown-menu-content"]
+  [data-slot="dropdown-menu-checkbox-item"][data-highlighted],
+html[data-theme="arc"]
+  [data-component="dropdown-menu-content"]
+  [data-slot="dropdown-menu-radio-item"][data-highlighted],
+html[data-theme="arc"]
+  [data-component="dropdown-menu-content"]
+  [data-slot="dropdown-menu-sub-trigger"][data-highlighted],
 html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-item"][data-highlighted],
-html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-checkbox-item"][data-highlighted],
+html[data-theme="arc"]
+  [data-component="context-menu-content"]
+  [data-slot="context-menu-checkbox-item"][data-highlighted],
 html[data-theme="arc"] [data-component="context-menu-content"] [data-slot="context-menu-radio-item"][data-highlighted] {
   background: var(--surface-raised-base-hover);
 }
@@ -584,7 +611,7 @@ html[data-theme="arc"] [data-action="project-switch"]:active:not(:disabled) {
 html[data-theme="arc"] [data-action="project-switch"][aria-current="true"] {
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.18),
-    0 1px 3px rgba(0, 0, 0, 0.10);
+    0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Discord/Slack/iOS-style left pill indicator. Sits at left: -10px
@@ -645,8 +672,7 @@ html[data-theme="arc"] [data-component="list"] [data-slot="list-search"] {
 
 html[data-theme="arc"] [data-component="list"] [data-slot="list-search"]:focus-within {
   background: var(--surface-raised-base);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--border-interactive-active) 50%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-interactive-active) 50%, transparent);
 }
 
 /* ───────────────────────────────────────────────────────────── */

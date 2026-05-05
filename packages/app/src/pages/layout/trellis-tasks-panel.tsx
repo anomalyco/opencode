@@ -77,11 +77,11 @@ function TaskCard(props: { task: TrellisTask; onOpen: (path: string) => void }):
           </div>
           <div class="mt-1 truncate text-12-regular text-text-base">{props.task.title}</div>
           <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-12-regular">
-            <span class="rounded-md bg-surface-base/40 px-1.5 py-0.5 text-text-strong">
+            <span class="rounded-md bg-surface-base/20 px-1.5 py-0.5 text-text-strong">
               {labelStatus(props.task.status)}
             </span>
             <For each={items()}>
-              {(item) => <span class="rounded-md bg-surface-base/40 px-1.5 py-0.5 text-text-base">{item}</span>}
+              {(item) => <span class="rounded-md bg-surface-base/20 px-1.5 py-0.5 text-text-base">{item}</span>}
             </For>
           </div>
         </div>
