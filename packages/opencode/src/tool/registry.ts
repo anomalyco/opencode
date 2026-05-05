@@ -51,9 +51,13 @@ const log = Log.create({ service: "tool.registry" })
 
 export function webSearchEnabled(
   providerID: ProviderID,
-  flags = { exa: Flag.OPENCODE_ENABLE_EXA, parallel: Flag.OPENCODE_ENABLE_PARALLEL },
+  flags: { exa?: boolean; parallel?: boolean; perplexity?: boolean } = {
+    exa: Flag.OPENCODE_ENABLE_EXA,
+    parallel: Flag.OPENCODE_ENABLE_PARALLEL,
+    perplexity: Flag.OPENCODE_ENABLE_PERPLEXITY,
+  },
 ) {
-  return providerID === ProviderID.opencode || flags.exa || flags.parallel
+  return providerID === ProviderID.opencode || !!flags.exa || !!flags.parallel || !!flags.perplexity
 }
 
 type TaskDef = Tool.InferDef<typeof TaskTool>

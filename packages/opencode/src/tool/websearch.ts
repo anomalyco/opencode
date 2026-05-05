@@ -1,9 +1,10 @@
 import { Effect, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Tool from "./tool"
 import * as McpWebSearch from "./mcp-websearch"
+import * as McpPerplexity from "./mcp-perplexity"
 import DESCRIPTION from "./websearch.txt"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
@@ -14,34 +15,58 @@ export const Parameters = Schema.Struct({
   }),
   livecrawl: Schema.optional(Schema.Literals(["fallback", "preferred"])).annotate({
     description:
-      "Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback')",
+      "Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback'). Exa-only; ignored when Perplexity or Parallel backend is in use.",
   }),
   type: Schema.optional(Schema.Literals(["auto", "fast", "deep"])).annotate({
-    description: "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search",
+    description:
+      "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search. Exa-only; ignored when Perplexity or Parallel backend is in use.",
   }),
   contextMaxCharacters: Schema.optional(Schema.Number).annotate({
     description: "Maximum characters for context string optimized for LLMs (default: 10000)",
   }),
 })
 
-const WebSearchProviderSchema = Schema.Literals(["exa", "parallel"])
+const WebSearchProviderSchema = Schema.Literals(["exa", "parallel", "perplexity"])
 export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchema>
 
+// Backend selection precedence:
+//   1. OPENCODE_WEBSEARCH_PROVIDER env override (exa | parallel | perplexity) — explicit user choice wins.
+//   2. Exa and Parallel are the default pair; when both flags are on, pick one per-session via checksum.
+//      When only one of them is on, use that one.
+//   3. Perplexity is opt-in only — it's never picked automatically unless it is the sole enabled backend
+//      (OPENCODE_ENABLE_PERPLEXITY=1 with PERPLEXITY_API_KEY / PPLX_API_KEY and neither Exa nor Parallel enabled).
+//      This keeps Exa as the default when multiple backends are available.
 export function selectWebSearchProvider(
   sessionID: string,
-  flags = { exa: Flag.OPENCODE_ENABLE_EXA, parallel: Flag.OPENCODE_ENABLE_PARALLEL },
+  flags: { exa?: boolean; parallel?: boolean; perplexity?: boolean } = {
+    exa: Flag.OPENCODE_ENABLE_EXA,
+    parallel: Flag.OPENCODE_ENABLE_PARALLEL,
+    perplexity: Flag.OPENCODE_ENABLE_PERPLEXITY && !!(process.env.PERPLEXITY_API_KEY ?? process.env.PPLX_API_KEY),
+  },
 ): WebSearchProvider {
   const override = process.env.OPENCODE_WEBSEARCH_PROVIDER
-  if (override === "exa" || override === "parallel") return override
-  if (flags.parallel) return "parallel"
-  if (flags.exa) return "exa"
+  if (override === "exa" || override === "parallel" || override === "perplexity") return override
 
-  return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
+  const exa = !!flags.exa
+  const parallel = !!flags.parallel
+  const perplexity = !!flags.perplexity
+
+  if (parallel && !exa) return "parallel"
+  if (exa && !parallel) return "exa"
+  if (exa && parallel) {
+    return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
+  }
+  // Neither Exa nor Parallel is enabled — fall through to Perplexity if it's the sole enabled backend.
+  if (perplexity) return "perplexity"
+
+  // No backend explicitly enabled; fall back to Exa (tool registration already gates on at least one flag).
+  return "exa"
 }
 
 export function webSearchProviderLabel(provider: unknown) {
   if (provider === "parallel") return "Parallel Web Search"
   if (provider === "exa") return "Exa Web Search"
+  if (provider === "perplexity") return "Perplexity Web Search"
   return "Web Search"
 }
 
@@ -80,6 +105,18 @@ function callProvider(
       },
       "25 seconds",
       parallelAuthHeaders(),
+    )
+  }
+
+  if (provider === "perplexity") {
+    return McpPerplexity.call(
+      http,
+      {
+        query: params.query,
+        numResults: params.numResults || 8,
+        contextMaxCharacters: params.contextMaxCharacters,
+      },
+      "25 seconds",
     )
   }
 
