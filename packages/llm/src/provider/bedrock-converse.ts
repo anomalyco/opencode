@@ -23,9 +23,9 @@ const ADAPTER = "bedrock-converse"
 
 /**
  * AWS credentials for SigV4 signing. Bedrock also supports Bearer API key auth
- * — pass the key as `model.headers.authorization = "Bearer <key>"` to take that
- * path instead. STS-vended credentials should be refreshed by the consumer
- * (rebuild the model) before they expire; the adapter does not refresh.
+ * via `model.apiKey`, which bypasses SigV4 signing. STS-vended credentials
+ * should be refreshed by the consumer (rebuild the model) before they expire;
+ * the adapter does not refresh.
  */
 export interface BedrockCredentials {
   readonly region: string
@@ -270,8 +270,6 @@ const region = (request: LLMRequest) => {
   if (typeof fromNative === "string" && fromNative !== "") return fromNative
   return "us-east-1"
 }
-
-
 
 const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   toolSpec: {
@@ -704,7 +702,7 @@ export const protocol = Protocol.define<
   onHalt,
 })
 
-export const adapter = Adapter.fromProtocol({
+export const adapter = Adapter.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({

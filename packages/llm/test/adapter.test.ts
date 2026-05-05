@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../src"
+import { Endpoint, LLM, Protocol } from "../src"
 import { Adapter, LLMClient } from "../src/adapter"
 import { Patch } from "../src/patch"
+import type { FramingDef } from "../src"
 import type { LLMRequest, Message, ModelRef, ToolDefinition } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
@@ -63,7 +63,20 @@ const FakeChunk = Schema.Union([
   Schema.Struct({ type: Schema.Literal("finish"), reason: Schema.Literal("stop") }),
 ])
 type FakeChunk = Schema.Schema.Type<typeof FakeChunk>
-const FakeChunks = Schema.Array(FakeChunk)
+const decodeFakeChunks = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(FakeChunk)))
+
+const fakeFraming: FramingDef<FakeChunk> = {
+  id: "fake-json-array",
+  frame: (bytes) =>
+    Stream.fromEffect(
+      bytes.pipe(
+        Stream.decodeText(),
+        Stream.runFold(() => "", (text, chunk) => text + chunk),
+        Effect.flatMap(decodeFakeChunks),
+        Effect.orDie,
+      ),
+    ).pipe(Stream.flatMap(Stream.fromIterable)),
+}
 
 const request = LLM.request({
   id: "req_1",
@@ -80,10 +93,13 @@ const raiseChunk = (chunk: FakeChunk): import("../src/schema").LLMEvent =>
     ? { type: "request-finish", reason: chunk.reason }
     : { type: "text-delta", text: chunk.text }
 
-const fake = Adapter.unsafe<FakeTarget>({
+const fakeProtocol = Protocol.define<FakeTarget, FakeChunk, FakeChunk, void>({
   id: "fake",
-  protocol: "openai-chat",
-  validate: (target) => Effect.succeed(target),
+  target: Schema.Struct({
+    body: Schema.String,
+    includeUsage: Schema.optional(Schema.Boolean),
+  }),
+  chunk: FakeChunk,
   prepare: (request) =>
     Effect.succeed({
       body: [
@@ -94,29 +110,24 @@ const fake = Adapter.unsafe<FakeTarget>({
         ...request.tools.map((tool) => `tool:${tool.name}:${tool.description}`),
       ].join("\n"),
     }),
-  toHttp: (target) =>
-    Effect.succeed(
-      HttpClientRequest.post("https://fake.local/chat").pipe(
-        HttpClientRequest.setHeader("content-type", "application/json"),
-        HttpClientRequest.bodyText(encodeJson(target), "application/json"),
-      ),
-    ),
-  parse: (response) =>
-    Stream.fromEffect(
-      response.json.pipe(
-        Effect.flatMap(Schema.decodeUnknownEffect(FakeChunks)),
-        Effect.orDie,
-      ),
-    ).pipe(
-      Stream.flatMap(Stream.fromIterable),
-      Stream.map(raiseChunk),
-    ),
+  initial: () => undefined,
+  process: (state, chunk) => Effect.succeed([state, [raiseChunk(chunk)]] as const),
 })
 
-const gemini = Adapter.unsafe<FakeTarget>({
-  ...fake,
+const fake = Adapter.make({
+  id: "fake",
+  protocol: fakeProtocol,
+  protocolId: "openai-chat",
+  endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
+  framing: fakeFraming,
+})
+
+const gemini = Adapter.make({
   id: "gemini-fake",
-  protocol: "gemini",
+  protocol: fakeProtocol,
+  protocolId: "gemini",
+  endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
+  framing: fakeFraming,
 })
 
 const echoLayer = dynamicResponse(({ text, respond }) =>
@@ -172,6 +183,42 @@ describe("llm adapter", () => {
     }),
   )
 
+  it.effect("rejects request patches that change model routing", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.make({
+        adapters: [fake, gemini],
+        patches: [
+          Patch.request("route-gemini", {
+            reason: "attempt to rewrite protocol after adapter selection",
+            apply: (request) => LLM.updateRequest(request, { model: updateModel(request.model, { protocol: "gemini" }) }),
+          }),
+        ],
+      })
+        .prepare(request)
+        .pipe(Effect.flip)
+
+      expect(error.message).toContain("Patches cannot change model routing")
+    }),
+  )
+
+  it.effect("rejects prompt patches that change model routing", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.make({
+        adapters: [fake, gemini],
+        patches: [
+          Patch.prompt("route-gemini", {
+            reason: "attempt to rewrite protocol after adapter selection",
+            apply: (request) => LLM.updateRequest(request, { model: updateModel(request.model, { protocol: "gemini" }) }),
+          }),
+        ],
+      })
+        .prepare(request)
+        .pipe(Effect.flip)
+
+      expect(error.message).toContain("Patches cannot change model routing")
+    }),
+  )
+
   it.effect("falls back to adapter bound to model", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [] }).prepare(
@@ -186,10 +233,15 @@ describe("llm adapter", () => {
 
   it.effect("explicit adapters override provider adapters", () =>
     Effect.gen(function* () {
-      const override = Adapter.unsafe<FakeTarget>({
-        ...fake,
+      const override = Adapter.make({
         id: "fake-override",
-        prepare: () => Effect.succeed({ body: "override" }),
+        protocol: Protocol.define({
+          ...fakeProtocol,
+          prepare: () => Effect.succeed({ body: "override" }),
+        }),
+        protocolId: "openai-chat",
+        endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
+        framing: fakeFraming,
       })
 
       const prepared = yield* LLM.make({ providers: [{ adapters: [fake] }], adapters: [override] }).prepare(request)
@@ -238,16 +290,17 @@ describe("llm adapter", () => {
       const prepared = yield* LLMClient.make({
         adapters: [fake],
         patches: [
-          // Earlier phase rewrites the provider, later phase only fires for the
-          // rewritten provider. If `compile` re-uses a stale PatchContext this
+          // Earlier phase marks the request, later phase only fires for the
+          // marked request. If `compile` re-uses a stale PatchContext this
           // test fails because the prompt patch's `when` would not match.
-          Patch.request("rewrite-provider", {
-            reason: "swap provider before prompt phase",
-            apply: (request) => LLM.updateRequest(request, { model: updateModel(request.model, { provider: "rewritten" }) }),
+          Patch.request("mark-request", {
+            reason: "mark request before prompt phase",
+            apply: (request) =>
+              LLM.updateRequest(request, { metadata: { ...request.metadata, promptPatchEnabled: true } }),
           }),
-          Patch.prompt("rewrite-only-when-rewritten", {
-            reason: "rewrite prompt text only after provider swap",
-            when: (ctx) => ctx.model.provider === "rewritten",
+          Patch.prompt("rewrite-only-when-marked", {
+            reason: "rewrite prompt text only after request marker",
+            when: (ctx) => ctx.request.metadata?.promptPatchEnabled === true,
             apply: mapText((text) => `rewrote-${text}`),
           }),
         ],
@@ -255,8 +308,8 @@ describe("llm adapter", () => {
 
       expect(prepared.target).toEqual({ body: "rewrote-hello" })
       expect(prepared.patchTrace.map((item) => item.id)).toEqual([
-        "request.rewrite-provider",
-        "prompt.rewrite-only-when-rewritten",
+        "request.mark-request",
+        "prompt.rewrite-only-when-marked",
       ])
     }),
   )

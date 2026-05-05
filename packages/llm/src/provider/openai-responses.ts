@@ -133,8 +133,6 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-
-
 const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   type: "function",
   name: tool.name,
@@ -374,7 +372,7 @@ export const protocol = Protocol.define<
   process: processChunk,
 })
 
-export const adapter = Adapter.fromProtocol({
+export const adapter = Adapter.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/responses" }),

@@ -139,8 +139,6 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-
-
 const mediaData = ProviderShared.mediaBytes
 
 const isRecord = ProviderShared.isRecord
@@ -456,7 +454,7 @@ export const protocol = Protocol.define<GeminiTarget, string, GeminiChunk, Parse
   onHalt: finish,
 })
 
-export const adapter = Adapter.fromProtocol({
+export const adapter = Adapter.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({

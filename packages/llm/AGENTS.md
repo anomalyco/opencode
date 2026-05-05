@@ -41,15 +41,15 @@ Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g.
 
 An adapter is the registered, runnable composition of four orthogonal pieces:
 
-- **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, the target schema, the chunk schema, and the streaming chunk-to-event state machine. `Adapter.fromProtocol(...)` validates and JSON-encodes the target from the target schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, the target schema, the chunk schema, and the streaming chunk-to-event state machine. `Adapter.make(...)` validates and JSON-encodes the target from the target schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
 - **`Endpoint`** (`src/endpoint.ts`) — URL construction. Receives the request and the validated target so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any target field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
-- **`Auth`** (`src/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Adapter.fromProtocol` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
+- **`Auth`** (`src/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Adapter.make` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
 - **`Framing`** (`src/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
 
-Compose them via `Adapter.fromProtocol(...)`:
+Compose them via `Adapter.make(...)`:
 
 ```ts
-export const adapter = Adapter.fromProtocol({
+export const adapter = Adapter.make({
   id: "openai-chat",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/chat/completions" }),
@@ -57,9 +57,9 @@ export const adapter = Adapter.fromProtocol({
 })
 ```
 
-The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Adapter.fromProtocol(...)` call instead of a 300-400 line adapter clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
+The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Adapter.make(...)` call instead of a 300-400 line adapter clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
-Reach for the lower-level `Adapter.unsafe(...)` only when an adapter genuinely cannot fit the four-axis model. The name signals that you're escaping the safe abstraction; new adapters should always start with `Adapter.fromProtocol(...)` and prove they need otherwise.
+New adapters should start with `Adapter.make(...)`. If a future provider genuinely cannot fit the four-axis model, add a purpose-built constructor for that case rather than widening the public surface preemptively.
 
 When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), the seam is `Framing` plus a parallel `Endpoint` / `Auth` interpretation — not a fork of the adapter contract.
 
@@ -69,7 +69,7 @@ When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backe
 packages/llm/src/
   schema.ts             // LLMRequest, LLMEvent, errors — canonical Schema model
   llm.ts                // request constructors and convenience helpers
-  adapter.ts            // Adapter.fromProtocol + LLMClient.make
+  adapter.ts            // Adapter.make + LLMClient.make
   executor.ts           // RequestExecutor service + transport error mapping
   patch.ts              // Patch system (request/prompt/tool-schema/target/stream)
 
@@ -101,26 +101,37 @@ The dependency arrow points down: `provider/*.ts` files import `protocol`, `endp
 
 `ProviderShared` exports a small toolkit used inside protocol implementations to keep them focused on provider-native shapes:
 
-- `framed({ adapter, response, readError, framing, decodeChunk, initial, process, onHalt? })` — the canonical streaming pipeline used by `Adapter.fromProtocol(...)`. You rarely call this directly anymore.
+- `framed({ adapter, response, readError, framing, decodeChunk, initial, process, onHalt? })` — the canonical streaming pipeline used by `Adapter.make(...)`. You rarely call this directly anymore.
 - `sseFraming` — the SSE-specific framing step. Already wired through `Framing.sse`; reach for it directly only when wrapping or composing.
 - `joinText(parts)` — joins an array of `TextPart` (or anything with a `.text`) with newlines. Use this anywhere a protocol flattens text content into a single string for a provider field.
 - `parseToolInput(adapter, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<adapter>` tool call `<name>`" error message. Treats empty input as `{}`. Use this in `finishToolCall` / `finalizeToolCalls`; do not roll a fresh `parseJson` callsite.
 - `parseJson(adapter, raw, message)` — generic JSON-via-Schema decode for non-tool payloads.
 - `chunkError(adapter, message, ...)` — typed `ProviderChunkError` constructor for stream-time failures.
-- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Adapter.fromProtocol(...)` uses this for target validation; lower-level adapters can reuse it.
+- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Adapter.make(...)` uses this for target validation; lower-level adapters can reuse it.
 
 If you find yourself copying a 3-to-5-line snippet between two protocols, lift it into `ProviderShared` next to these helpers rather than duplicating.
 
 ### Patches
 
-Patches are the forcing function for provider/model quirks. If a behavior is not universal enough for common IR, keep it as a named patch with a trace entry. Good examples:
+Patches are the forcing function for provider/model quirks, similar to OpenCode's `ProviderTransform`: payload cleanup, provider option shaping, schema sanitization, and target-level body tweaks. If a behavior is not universal enough for common IR, keep it as a named patch with a trace entry. Good examples:
 
 - OpenAI Chat streaming usage: `target.openai-chat.include-usage` adds `stream_options.include_usage`.
 - Anthropic prompt caching: map common cache hints onto selected content/message blocks.
 - Mistral/OpenAI-compatible prompt cleanup: normalize empty text content or tool-call IDs only for affected models.
 - Reasoning models: map common reasoning intent to provider-specific effort, summary, or encrypted-content fields.
 
-Do not grow common request schemas just to fit one provider. Prefer adapter-local target schemas plus patches selected by provider/model predicates.
+Do not grow common request schemas just to fit one provider. Prefer adapter-local target schemas plus patches selected by provider/model predicates. Patches must not reroute a request: `model.provider`, `model.id`, and `model.protocol` are fixed before patches run, and request patches that change them are rejected.
+
+Current OpenCode parity map:
+
+| Native location | OpenCode source | Status |
+| --- | --- | --- |
+| `ProviderPatch.removeEmptyAnthropicContent` | `ProviderTransform.normalizeMessages(...)` empty-content filtering for Anthropic/Bedrock. | Ported default patch. |
+| `ProviderPatch.scrubClaudeToolIds` | `ProviderTransform.normalizeMessages(...)` Claude tool id scrub. | Ported default patch. |
+| `ProviderPatch.scrubMistralToolIds` | `ProviderTransform.normalizeMessages(...)` Mistral/Devstral tool id scrub. | Partially ported; sequence repair still TODO. |
+| `ProviderPatch.cachePromptHints` | `ProviderTransform.applyCaching(...)`. | Ported default patch. |
+| `Gemini` schema sanitizer/projector | `ProviderTransform.schema(...)` Gemini branch. | Ported inside the adapter protocol. |
+| Provider option namespacing and model-specific reasoning defaults | `ProviderTransform.providerOptions(...)`, `options(...)`, `variants(...)`. | TODO/native bridge fallback today. |
 
 ### Tools
 

@@ -225,10 +225,10 @@ The adapter then owns the full compile/run boundary for that selected route.
 | `toHttp(target, context)` | Builds the real `HttpClientRequest`. |
 | `parse(response)` | Converts the provider response stream into common `LLMEvent`s. |
 
-`Adapter.fromProtocol(...)` is the normal constructor. It builds those methods by composing four pieces.
+`Adapter.make(...)` is the normal constructor. It builds those methods by composing four pieces.
 
 ```txt
-Adapter.fromProtocol(...)
+Adapter.make(...)
   = Protocol.prepare / target Schema / chunk Schema / process
   + Endpoint URL construction
   + Auth header/signing behavior
@@ -290,7 +290,7 @@ Adapter = Protocol + Endpoint + Auth + Framing
 OpenAI Chat is a normal adapter composition.
 
 ```ts
-export const adapter = Adapter.fromProtocol({
+export const adapter = Adapter.make({
   id: "openai-chat",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.baseURL({
@@ -349,7 +349,7 @@ OpenAICompatible.model("gpt-4o-mini", { provider: "local-gateway", baseURL })
 
 ## Terrace 5: Patch A Quirk
 
-Patches are named, traceable provider/model transformations.
+Patches are named, traceable provider/model transformations inspired by OpenCode's existing `ProviderTransform` layer.
 
 Use a patch when behavior is real but not universal enough to belong in the common request schema.
 
@@ -361,16 +361,195 @@ target.openai-chat.include-usage
 
 Each patch has an id, phase, predicate, and reason. Applied patches appear in `patchTrace`.
 
+Patches are not a routing mechanism. Adapter selection happens from the original `request.model`; request patches may change payload details, but changing `model.provider`, `model.id`, or `model.protocol` is rejected. If a call needs a different provider, model, or protocol, construct a different model handle before building the request.
+
 The rule is:
 
 ```txt
 Common request shape stays small.
 Provider quirks stay named and auditable.
+Model routing stays explicit at the call site.
 ```
 
 Good patch candidates include cache hint lowering, model-specific reasoning fields, OpenAI-compatible message cleanup, hosted-tool shape differences, metadata extraction, and provider option namespacing.
 
 Bad patch candidates are behaviors that every provider supports the same way. Those belong in the common request model.
+
+### OpenCode Transform Map
+
+The native patch layer exists to preserve the behavior OpenCode previously centralized in `packages/opencode/src/provider/transform.ts`, but with named phases and `patchTrace` entries.
+
+1. Empty Anthropic / Bedrock content
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.normalizeMessages(...)
+   if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
+     msgs = msgs
+       .map((msg) => removeEmptyTextAndReasoningParts(msg))
+       .filter((msg) => msg.content !== "" && msg.content.length > 0)
+   }
+   ```
+
+   Native shape:
+
+   ```ts
+   ProviderPatch.removeEmptyAnthropicContent
+   // prompt.anthropic.remove-empty-content
+   ```
+
+   Status: ported default prompt patch. Anthropic and Bedrock reject empty text/reasoning blocks, so this stays as a provider/model quirk instead of forbidding empty content in the common request model.
+
+2. Claude tool-call id scrub
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.normalizeMessages(...)
+   if (model.api.id.includes("claude")) {
+     toolCallId = toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_")
+   }
+   ```
+
+   Native shape:
+
+   ```ts
+   ProviderPatch.scrubClaudeToolIds
+   // prompt.anthropic.scrub-tool-call-ids
+   ```
+
+   Status: ported default prompt patch. The common request model can preserve original tool ids; Claude-specific transport constraints are applied late and traced.
+
+3. Mistral / Devstral tool-call id scrub
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.normalizeMessages(...)
+   if (model.providerID === "mistral" || model.api.id.includes("devstral")) {
+     toolCallId = toolCallId.replace(/[^a-zA-Z0-9]/g, "").substring(0, 9).padEnd(9, "0")
+   }
+   ```
+
+   Native shape:
+
+   ```ts
+   ProviderPatch.scrubMistralToolIds
+   // prompt.mistral.scrub-tool-call-ids
+   ```
+
+   Status: partially ported default prompt patch. The id scrub is ported. The old OpenCode message-sequence repair for `tool -> user` is still an OpenCode parity TODO.
+
+4. Prompt caching markers
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.applyCaching(...)
+   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
+   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+   for (const msg of unique([...system, ...final])) {
+     msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerCacheOptions)
+   }
+   ```
+
+   Native shape:
+
+   ```ts
+   ProviderPatch.cachePromptHints
+   // prompt.cache.prompt-hints
+   ```
+
+   Status: ported default prompt patch. The patch marks the first two system parts and last two messages with a common `CacheHint`. Adapters lower that hint to provider-native shapes like Anthropic `cache_control` or Bedrock `cachePoint`.
+
+5. Gemini tool-schema sanitization
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.schema(...)
+   if (model.providerID === "google" || model.api.id.includes("gemini")) {
+     schema = sanitizeGemini(schema)
+   }
+   ```
+
+   Native shape:
+
+   ```ts
+   // packages/llm/src/provider/gemini.ts
+   lowerToolSchema(tool.inputSchema)
+   ```
+
+   Status: ported inside `Gemini.protocol`, not as a registered patch. Gemini has a distinct schema dialect, so the adapter owns both the historical sanitizer and the lossy projection into Gemini's accepted keys.
+
+6. OpenAI Chat / OpenAI-compatible streaming usage
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.options(...), provider-specific option shaping
+   result["usage"] = { include: true }
+   ```
+
+   Native shape:
+
+   ```ts
+   OpenAIChat.adapter.patch("include-usage", ...)
+   OpenAICompatibleChat.adapter.patch("include-usage", ...)
+   // target.openai-chat.include-usage
+   ```
+
+   Status: ported as adapter-local target patches. This is target-body shape, not common request shape.
+
+7. DeepSeek reasoning replay and interleaved reasoning fields
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.normalizeMessages(...)
+   if (model.api.id.toLowerCase().includes("deepseek")) {
+     assistant.content.push({ type: "reasoning", text: "" })
+   }
+   if (model.capabilities.interleaved?.field) {
+     msg.providerOptions.openaiCompatible[field] = reasoningText
+   }
+   ```
+
+   Native shape: TODO.
+
+   Status: not ported yet. This should become provider-specific history shaping without exposing OpenAI-compatible reasoning internals globally.
+
+8. Provider option namespacing
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.providerOptions(...)
+   if (model.api.npm === "@ai-sdk/gateway") return { gateway, [upstreamSlug]: rest }
+   if (model.api.npm === "@ai-sdk/azure") return { openai: options, azure: options }
+   return { [sdkKey(model.api.npm) ?? model.providerID]: options }
+   ```
+
+   Native shape: TODO; the native OpenCode bridge currently falls back when prepared provider options are non-empty.
+
+   Status: not ported yet. These options are deployment/provider specific and should remain outside the common request model.
+
+9. Model-specific reasoning defaults
+
+   Old OpenCode shape:
+
+   ```ts
+   // ProviderTransform.options(...) and variants(...)
+   result["thinkingConfig"] = { includeThoughts: true }
+   result["enable_thinking"] = true
+   result["reasoningSummary"] = "auto"
+   result["include"] = ["reasoning.encrypted_content"]
+   ```
+
+   Native shape: partly represented by `request.reasoning`; provider-native defaults are still TODO.
+
+   Status: not fully ported. Some models need native knobs that do not belong in the universal request shape.
 
 ## Terrace 6: Compare Designs
 
@@ -424,4 +603,4 @@ The `@opencode-ai/llm` native path currently works in two modes:
 
 So OpenCode native integration is not “import any AI SDK provider package and it just works” yet. Today it supports the protocols/providers we can resolve to known native adapters, plus generic OpenAI-compatible deployments. A config-defined provider with `@ai-sdk/openai-compatible` can resolve to `openai-compatible-chat`; a brand-new protocol needs a native adapter and resolver mapping.
 
-The core package is now open enough for external protocols: `ProtocolID` is just a string, so a third-party package can define `Protocol.define(...)`, `Adapter.fromProtocol(...)`, and a model helper without changing this package. To make OpenCode load those from config the same way it loads AI SDK packages, we would add an explicit native-provider loader/registry analogous to the AI SDK `model.api.npm` loader.
+The core package is now open enough for external protocols: `ProtocolID` is just a string, so a third-party package can define `Protocol.define(...)`, `Adapter.make(...)`, and a model helper without changing this package. To make OpenCode load those from config the same way it loads AI SDK packages, we would add an explicit native-provider loader/registry analogous to the AI SDK `model.api.npm` loader.

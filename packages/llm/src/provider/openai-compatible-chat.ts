@@ -26,7 +26,7 @@ export type ProviderFamilyModelInput = Omit<OpenAICompatibleChatModelInput, "pro
  *   resolved per-family without colliding with native OpenAI;
  * - the endpoint, which requires `model.baseURL` (no provider default).
  */
-export const adapter = Adapter.fromProtocol({
+export const adapter = Adapter.make({
   id: ADAPTER,
   protocol: OpenAIChat.protocol,
   protocolId: "openai-compatible-chat",
@@ -58,6 +58,7 @@ export const profileModel = (profile: OpenAICompatibleProfile, input: ProviderFa
     ...input,
     provider: profile.provider,
     baseURL: profileBaseURL(profile, input),
+    capabilities: input.capabilities ?? profile.capabilities,
   })
 
 export const baseten = (input: ProviderFamilyModelInput) => profileModel(profiles.baseten, input)

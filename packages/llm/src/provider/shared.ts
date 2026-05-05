@@ -103,7 +103,7 @@ const streamError = (adapter: string, message: string, cause: Cause.Cause<unknow
 }
 
 /**
- * Generic streaming-response decoder used by `Adapter.fromProtocol`. Splits
+ * Generic streaming-response decoder used by `Adapter.make`. Splits
  * the response stream into:
  *
  *   bytes → frames (caller-supplied) → chunk → (state, events)
@@ -180,9 +180,9 @@ export const validateWith =
 
 /**
  * Build an HTTP POST with a JSON body. Sets `content-type: application/json`
- * automatically (callers can't override it — every adapter today places it
- * last so caller headers win on everything else) and merges caller-supplied
- * headers. The body is passed pre-encoded so adapters can choose between
+ * automatically after caller-supplied headers so adapters cannot accidentally
+ * send JSON with a stale content type. The body is passed pre-encoded so
+ * adapters can choose between
  * `Schema.encodeSync(target)` and `ProviderShared.encodeJson(target)`.
  */
 export const jsonPost = (input: {

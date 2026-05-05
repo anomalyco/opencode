@@ -1,4 +1,13 @@
-export * from "./adapter"
+export { Adapter, LLMClient } from "./adapter"
+export type {
+  Adapter as AdapterShape,
+  AdapterDefinition,
+  AdapterInput,
+  AnyAdapter,
+  ClientOptions,
+  HttpContext,
+  LLMClient as LLMClientShape,
+} from "./adapter"
 export * from "./executor"
 export * from "./patch"
 export * from "./schema"

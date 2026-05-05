@@ -145,8 +145,6 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-
-
 const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
   type: "function",
   function: {
@@ -338,7 +336,7 @@ export const protocol = Protocol.define<
   onHalt: finishEvents,
 })
 
-export const adapter = Adapter.fromProtocol({
+export const adapter = Adapter.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/chat/completions" }),

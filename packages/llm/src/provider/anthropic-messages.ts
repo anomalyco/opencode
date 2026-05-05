@@ -191,8 +191,6 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-
-
 const cacheControl = (cache: CacheHint | undefined) => cache?.type === "ephemeral" ? { type: "ephemeral" as const } : undefined
 
 const lowerTool = (tool: ToolDefinition): AnthropicTool => ({
@@ -503,7 +501,7 @@ export const protocol = Protocol.define<
   process: processChunk,
 })
 
-export const adapter = Adapter.fromProtocol({
+export const adapter = Adapter.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.anthropic.com/v1", path: "/messages" }),

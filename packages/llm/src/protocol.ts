@@ -19,14 +19,14 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } f
  *
  * A `Protocol` is **not** a deployment. It does not know which URL, which
  * headers, or which auth scheme to use. Those are deployment concerns owned
- * by `Adapter.fromProtocol(...)` along with the chosen `Endpoint`, `Auth`,
+ * by `Adapter.make(...)` along with the chosen `Endpoint`, `Auth`,
  * and `Framing`. This separation is what lets DeepSeek, TogetherAI, Cerebras,
  * etc. all reuse `OpenAIChat.protocol` without forking 300 lines per provider.
  *
  * The four type parameters reflect the pipeline:
  *
  * - `Target` — provider-native request body candidate. Target patches can
- *   transform this value, then `Adapter.fromProtocol(...)` validates and
+ *   transform this value, then `Adapter.make(...)` validates and
  *   JSON-encodes it with `target`.
  * - `Frame` — one unit of the framed response stream. SSE: a JSON data
  *   string. AWS event stream: a parsed binary frame.

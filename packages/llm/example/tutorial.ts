@@ -117,7 +117,7 @@ const FakeProtocol = Protocol.define<FakeTarget, string, string, void>({
 
 // An adapter is the runnable binding for that protocol. It adds the deployment
 // axes that the protocol deliberately does not know: URL, auth, and framing.
-const FakeAdapter = Adapter.fromProtocol({
+const FakeAdapter = Adapter.make({
   id: "fake-echo",
   protocol: FakeProtocol,
   endpoint: Endpoint.baseURL({
