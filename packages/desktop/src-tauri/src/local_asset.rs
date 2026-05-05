@@ -112,7 +112,8 @@ fn err_response(status: u16, msg: &str) -> Response<Cow<'static, [u8]>> {
 /// 处理 localasset:// 请求。
 /// URL path 结构:`/<base64url-root>/<rel-path>` — 第一个 `/` 后第一段是 base64url 的 root,
 /// 其余是 root 内的相对路径(forward slash)。
-fn handle_inner(uri_path: &str) -> Response<Cow<'static, [u8]>> {
+/// `range_header`:可选 HTTP Range header 值(形如 "bytes=start-end"),用于视频 seek。
+fn handle_inner(uri_path: &str, range_header: Option<&str>) -> Response<Cow<'static, [u8]>> {
     let trimmed = uri_path.trim_start_matches('/');
     if trimmed.is_empty() {
         return err_response(400, "empty path");
@@ -171,6 +172,55 @@ fn handle_inner(uri_path: &str) -> Response<Cow<'static, [u8]>> {
         return err_response(413, "too large");
     }
 
+    let mime = mime_for(&abs_canon);
+    let total = metadata.len();
+
+    // FORK: HTTP Range 支持 — 视频 seek / 大文件分片必须 2026-05-05
+    if let Some(range_str) = range_header {
+        if let Some(range_val) = range_str.strip_prefix("bytes=") {
+            let mut parts = range_val.splitn(2, '-');
+            let start_str = parts.next().unwrap_or("");
+            let end_str = parts.next().unwrap_or("");
+            if let Ok(start) = start_str.parse::<u64>() {
+                let end = if end_str.is_empty() {
+                    total.saturating_sub(1)
+                } else {
+                    end_str.parse::<u64>().unwrap_or(total.saturating_sub(1))
+                };
+                let end = end.min(total.saturating_sub(1));
+                if start <= end && start < total {
+                    use std::io::{Read, Seek, SeekFrom};
+                    let mut file = match std::fs::File::open(&abs_canon) {
+                        Ok(f) => f,
+                        Err(_) => return err_response(500, "open failed"),
+                    };
+                    if file.seek(SeekFrom::Start(start)).is_err() {
+                        return err_response(500, "seek failed");
+                    }
+                    let len = (end - start + 1) as usize;
+                    let mut buf = vec![0u8; len];
+                    if file.read_exact(&mut buf).is_err() {
+                        return err_response(500, "read range failed");
+                    }
+                    let body: Cow<'static, [u8]> = Cow::Owned(buf);
+                    return match Response::builder()
+                        .status(206)
+                        .header("Content-Type", mime)
+                        .header("Access-Control-Allow-Origin", "*")
+                        .header("Accept-Ranges", "bytes")
+                        .header("Content-Range", format!("bytes {}-{}/{}", start, end, total))
+                        .header("Cache-Control", "no-cache")
+                        .body(body)
+                    {
+                        Ok(r) => r,
+                        Err(_) => err_response(500, "build 206 response failed"),
+                    };
+                }
+            }
+        }
+        // 解析失败的 Range header 走 200 全文(浏览器自己再发 Range)
+    }
+
     let bytes: Cow<'static, [u8]> = match std::fs::read(&abs_canon) {
         Ok(b) => Cow::Owned(b),
         Err(_) => return err_response(500, "read failed"),
@@ -178,8 +228,9 @@ fn handle_inner(uri_path: &str) -> Response<Cow<'static, [u8]>> {
 
     match Response::builder()
         .status(200)
-        .header("Content-Type", mime_for(&abs_canon))
+        .header("Content-Type", mime)
         .header("Access-Control-Allow-Origin", "*")
+        .header("Accept-Ranges", "bytes")
         .header("Cache-Control", "no-cache")
         .body(bytes)
     {
@@ -194,7 +245,12 @@ pub fn handler<R: Runtime>(
     request: Request<Vec<u8>>,
 ) -> Response<Cow<'static, [u8]>> {
     let path = request.uri().path().to_string();
-    handle_inner(&path)
+    let range_header = request
+        .headers()
+        .get("range")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    handle_inner(&path, range_header.as_deref())
 }
 
 #[cfg(test)]
@@ -240,21 +296,21 @@ mod tests {
 
     #[test]
     fn handle_empty_path_400() {
-        let r = handle_inner("");
+        let r = handle_inner("", None);
         assert_eq!(r.status(), 400);
     }
 
     #[test]
     fn handle_missing_rel_path_400() {
         // 只有 root,没有 rel-path
-        let r = handle_inner("/aGVsbG8=");
+        let r = handle_inner("/aGVsbG8=", None);
         // base64url 没 padding 应该是 "aGVsbG8";这里测格式即可
         assert_eq!(r.status(), 400);
     }
 
     #[test]
     fn handle_invalid_root_400() {
-        let r = handle_inner("/!!!notbase64!!!/file.png");
+        let r = handle_inner("/!!!notbase64!!!/file.png", None);
         assert_eq!(r.status(), 400);
     }
 }

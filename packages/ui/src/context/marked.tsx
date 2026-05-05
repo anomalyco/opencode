@@ -490,6 +490,15 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }),
       markedShiki({
         async highlight(code, lang) {
+          // FORK: ```mermaid 代码块拦截 — 在 shiki 处理前返回 placeholder,
+          // 让 markdown.tsx 异步渲染为 SVG;不走 shiki 高亮 2026-05-05
+          if (lang === "mermaid") {
+            const escaped = code
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+            return `<div data-component="markdown-mermaid" data-mermaid-pending="">${escaped}</div>`
+          }
           const highlighter = await getSharedHighlighter({
             themes: ["OpenCode"],
             langs: [],

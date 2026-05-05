@@ -1023,42 +1023,8 @@ export function FileTabContent(props: {
     return (src: string) => rewriteAssetSrc(root, baseDir, src)
   })
 
-  // FORK: TOC 常驻面板(D4-C)+ MD 内链点击拦截(#8)2026-05-05
+  // FORK: MD 内链点击拦截 — 用容器 ref 监听点击事件(2026-05-05 P0 fix:移除 TOC,user 不要大纲面板)
   const [mdContainerRef, setMdContainerRef] = createSignal<HTMLDivElement | undefined>()
-  type TocItem = { id: string; level: number; text: string }
-  const [tocItems, setTocItems] = createSignal<TocItem[]>([])
-
-  // 内容变化时(cacheKey 变 = 文件切换 / save 后 reload)重扫 heading
-  createEffect(() => {
-    const _ck = cacheKey()
-    const c = mdContainerRef()
-    if (!c) {
-      setTocItems([])
-      return
-    }
-    // queueMicrotask:让 morphdom merge 完成后再读 DOM(否则可能拿到上一次 heading 集合)
-    queueMicrotask(() => {
-      const els = c.querySelectorAll("h1, h2, h3, h4, h5, h6")
-      const out: TocItem[] = []
-      for (const el of Array.from(els)) {
-        const lvl = parseInt(el.tagName.slice(1), 10)
-        const id = el.id
-        const text = (el.textContent ?? "").trim()
-        if (!id || !text) continue
-        out.push({ id, level: lvl, text })
-      }
-      setTocItems(out)
-    })
-  })
-
-  const tocMinLevel = createMemo(() => tocItems().reduce((m, x) => Math.min(m, x.level), 6))
-
-  const scrollToHeading = (id: string) => {
-    const c = mdContainerRef()
-    if (!c) return
-    const el = c.querySelector(`#${CSS.escape(id)}`) as HTMLElement | null
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
-  }
 
   // MD 内链点击拦截:相对路径 *.md / *.txt / 等 → 调 props.onOpenTab 在查看器打开
   const handleMdLinkClick = (event: MouseEvent) => {
@@ -1092,47 +1058,34 @@ export function FileTabContent(props: {
 
     const rel = targetAbs.startsWith(normRoot + "/") ? targetAbs.slice(normRoot.length + 1) : ""
     if (rel && props.onOpenTab) {
+      // 永远 preventDefault — 防 Tauri 把 _blank 路由到系统浏览器
       event.preventDefault()
-      props.onOpenTab(rel)
+      // 异步检查文件存在;不存在 → toast 提示,不开 tab
+      const onOpen = props.onOpenTab
+      invoke<number>("get_file_mtime", { root, path: rel })
+        .then(() => onOpen(rel))
+        .catch(() => {
+          showToast({ variant: "error", title: "文件不存在", description: rel })
+        })
+    } else {
+      // 没拿到合法相对路径(可能是绝对路径或 root 外)— 也阻止默认,防止开浏览器
+      event.preventDefault()
     }
   }
 
   const renderMarkdown = (source: string) => (
     // FORK: data-context scope 让 markdown.css 单独定制文件查看器排版,不影响聊天 2026-04-29
     // FORK: stripFrontmatter — D5 Obsidian 风默认隐藏 YAML 头 2026-05-05
-    // FORK: TOC 常驻右侧面板(D4-C)+ 内链点击拦截 2026-05-05
-    <div class="relative h-full flex flex-row overflow-hidden">
-      <div
-        ref={setMdContainerRef}
-        data-context="file-viewer"
-        class="flex-1 relative pb-40 px-6 py-4 select-text overflow-y-auto"
-        onMouseDown={handlePreContextCapture}
-        onContextMenu={handleSelectionContextMenu}
-        onClick={handleMdLinkClick}
-      >
-        <Markdown text={stripFrontmatter(source)} cacheKey={cacheKey()} rewriteAssetSrc={mdAssetRewriter()} />
-      </div>
-      <aside class="hidden lg:flex w-60 flex-shrink-0 flex-col overflow-y-auto border-l border-border-weak text-xs">
-        <div class="px-3 py-2 text-text-weak text-[10px] uppercase tracking-wider border-b border-border-weak sticky top-0 bg-surface-base">
-          大纲
-        </div>
-        <Show when={tocItems().length > 0} fallback={<div class="px-3 py-2 text-text-weak">(无标题)</div>}>
-          <div class="px-2 py-2 flex flex-col gap-0.5">
-            <For each={tocItems()}>
-              {(it) => (
-                <div
-                  class="cursor-pointer hover:text-text-strong text-text-weak truncate py-0.5 px-1 rounded hover:bg-surface-base-hover"
-                  style={{ "padding-left": `${0.25 + (it.level - tocMinLevel()) * 0.75}rem` }}
-                  title={it.text}
-                  onClick={() => scrollToHeading(it.id)}
-                >
-                  {it.text}
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
-      </aside>
+    // FORK: 内链点击拦截 + onClick 容器 — TOC 已移除(user 2026-05-05 反馈不需要)
+    <div
+      ref={setMdContainerRef}
+      data-context="file-viewer"
+      class="relative pb-40 px-6 py-4 select-text"
+      onMouseDown={handlePreContextCapture}
+      onContextMenu={handleSelectionContextMenu}
+      onClick={handleMdLinkClick}
+    >
+      <Markdown text={stripFrontmatter(source)} cacheKey={cacheKey()} rewriteAssetSrc={mdAssetRewriter()} />
     </div>
   )
 

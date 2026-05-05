@@ -264,3 +264,133 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* FORK: GitHub 风格 Callout / Alert(marked-alert 输出 .markdown-alert + .markdown-alert-{note,tip,important,warning,caution})2026-05-05 */
+[data-component="markdown"] .markdown-alert {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--border-base);
+  border-radius: 4px;
+  background: var(--surface-base-non-alpha);
+}
+
+[data-component="markdown"] .markdown-alert > p {
+  margin: 0;
+}
+
+[data-component="markdown"] .markdown-alert > p + p {
+  margin-top: 0.5rem;
+}
+
+[data-component="markdown"] .markdown-alert .markdown-alert-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: var(--font-weight-medium);
+  margin-bottom: 0.25rem;
+  font-size: 0.85rem;
+  text-transform: capitalize;
+}
+
+[data-component="markdown"] .markdown-alert .markdown-alert-title svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+[data-component="markdown"] .markdown-alert-note {
+  border-left-color: #2086ff;
+  background: rgba(32, 134, 255, 0.08);
+}
+[data-component="markdown"] .markdown-alert-note .markdown-alert-title { color: #2086ff; }
+
+[data-component="markdown"] .markdown-alert-tip {
+  border-left-color: #14b870;
+  background: rgba(20, 184, 112, 0.08);
+}
+[data-component="markdown"] .markdown-alert-tip .markdown-alert-title { color: #14b870; }
+
+[data-component="markdown"] .markdown-alert-important {
+  border-left-color: #a371f7;
+  background: rgba(163, 113, 247, 0.08);
+}
+[data-component="markdown"] .markdown-alert-important .markdown-alert-title { color: #a371f7; }
+
+[data-component="markdown"] .markdown-alert-warning {
+  border-left-color: #d4a72c;
+  background: rgba(212, 167, 44, 0.08);
+}
+[data-component="markdown"] .markdown-alert-warning .markdown-alert-title { color: #d4a72c; }
+
+[data-component="markdown"] .markdown-alert-caution {
+  border-left-color: #ec4d3a;
+  background: rgba(236, 77, 58, 0.08);
+}
+[data-component="markdown"] .markdown-alert-caution .markdown-alert-title { color: #ec4d3a; }
+
+/* FORK: 脚注(marked-footnote 输出 sup.footnote-ref + section.footnotes)2026-05-05 */
+[data-component="markdown"] .footnotes {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-weak-base);
+  font-size: 0.85rem;
+  color: var(--text-base);
+}
+
+[data-component="markdown"] .footnotes ol {
+  padding-left: 1.5rem;
+}
+
+[data-component="markdown"] .footnotes li {
+  margin: 0.4rem 0;
+}
+
+[data-component="markdown"] sup.footnote-ref {
+  font-size: 0.75rem;
+  vertical-align: super;
+  margin: 0 0.1rem;
+}
+
+[data-component="markdown"] sup.footnote-ref a {
+  text-decoration: none;
+}
+
+[data-component="markdown"] sup.footnote-ref a:hover {
+  text-decoration: underline;
+}
+
+/* FORK: Mermaid 流程图容器(渲染后)2026-05-05 */
+[data-component="markdown"] .markdown-mermaid {
+  margin: 1rem 0;
+  text-align: center;
+}
+
+[data-component="markdown"] .markdown-mermaid.markdown-mermaid-rendered {
+  background: var(--surface-base-non-alpha);
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+[data-component="markdown"] .markdown-mermaid.markdown-mermaid-error {
+  border: 1px dashed var(--border-weak-base);
+  color: var(--text-weak);
+  font-size: 0.8rem;
+}
+
+[data-component="markdown"] .markdown-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* FORK: 内部链接(相对路径)与外链区分样式 — fixLinkTargets 加 .internal-link class 2026-05-05 */
+[data-component="markdown"] a.internal-link {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-base);
+}
+
+[data-component="markdown"] a.internal-link:hover {
+  text-decoration-style: solid;
+  text-decoration-color: currentColor;
+}

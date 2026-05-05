@@ -29,10 +29,13 @@ if (typeof window !== "undefined" && DOMPurify.isSupported) {
 }
 
 const config = {
-  USE_PROFILES: { html: true, mathMl: true },
+  // FORK: 加 svg + svgFilters 让 marked-alert 的图标存活 + mermaid SVG 也通(虽然 mermaid 走 post-sanitize 路径) 2026-05-05
+  USE_PROFILES: { html: true, mathMl: true, svg: true, svgFilters: true },
   SANITIZE_NAMED_PROPS: true,
   FORBID_TAGS: ["style"],
   FORBID_CONTENTS: ["style", "script"],
+  // FORK: 显式允许 data-mermaid-pending 属性活过 sanitize(decorate 把它转 data-mermaid-source) 2026-05-05
+  ADD_ATTR: ["data-mermaid-pending"],
 }
 
 const iconPaths = {
@@ -174,24 +177,42 @@ function markCodeLinks(root: HTMLDivElement) {
 }
 
 // FORK: Mermaid ```mermaid 代码块 → SVG 流程图 2026-05-05
-// 设计:
-//   1. decorate 阶段同步替换 <pre><code class="language-mermaid"> 为 <div data-mermaid-source="..."> 占位
-//   2. 异步 dynamic import('mermaid')(vite chunk split,首次用到才加载,~runtime 0 网络)
-//   3. mermaid.render(id, source) → SVG;失败回退源码
-//   4. 后续渲染同 .md 但已无 placeholder → 跳过(idempotent)
+// 设计(修正版,2026-05-05 P0 fix):
+//   1. marked.tsx 的 markedShiki highlight callback 拦 lang==="mermaid",
+//      直接返回 <div data-mermaid-pending=""> 含 escaped source(跳过 shiki 高亮)
+//   2. DOMPurify 经过 — sanitize 保留 data-mermaid-pending 属性
+//   3. decorate 同步处理 — 把 textContent(原始 source)挪到 data-mermaid-source attr,
+//      改 placeholder 文本为"渲染流程图中…",清 pending 标志
+//   4. 异步 dynamic import('mermaid')(vite chunk split,runtime 0 网络)
+//   5. mermaid.render(id, source) → SVG;失败回退源码
+//   6. morphdom 守卫:已渲染的(无 data-mermaid-source)不被新 placeholder 覆盖回
 function setupMermaidPlaceholders(root: HTMLDivElement) {
-  const blocks = Array.from(root.querySelectorAll("pre code.language-mermaid"))
-  for (const code of blocks) {
-    const pre = code.closest("pre")
-    if (!pre || !pre.parentElement) continue
-    const source = code.textContent ?? ""
-    const placeholder = document.createElement("div")
-    placeholder.setAttribute("data-component", "markdown-mermaid")
-    placeholder.setAttribute("data-mermaid-source", source)
-    placeholder.classList.add("markdown-mermaid")
-    placeholder.style.cssText = "padding: 1rem; opacity: 0.6; font-size: 0.85rem;"
-    placeholder.textContent = "渲染流程图中…"
-    pre.parentElement.replaceChild(placeholder, pre)
+  const pending = Array.from(root.querySelectorAll<HTMLElement>("[data-mermaid-pending]"))
+  for (const el of pending) {
+    const source = el.textContent ?? ""
+    el.setAttribute("data-mermaid-source", source)
+    el.removeAttribute("data-mermaid-pending")
+    el.classList.add("markdown-mermaid")
+    el.style.cssText = "padding: 1rem; opacity: 0.6; font-size: 0.85rem;"
+    el.textContent = "渲染流程图中…"
+  }
+}
+
+// FORK: 相对路径 <a> 链接去掉 target=_blank — 否则 Tauri 把 _blank 路由到系统浏览器 2026-05-05
+// marked.tsx 的 link renderer 给所有 <a> 加 target=_blank,但相对路径(./other.md)
+// 应在 file viewer 内部通过 onOpenTab 跳转,不能开浏览器。
+function fixLinkTargets(root: HTMLDivElement) {
+  const links = Array.from(root.querySelectorAll("a"))
+  for (const link of links) {
+    const href = link.getAttribute("href") ?? ""
+    if (!href) continue
+    // 外链(http/https/mailto/ftp/tel)保持 target=_blank
+    if (/^(https?|mailto|ftp|tel):/i.test(href)) continue
+    // 相对路径 / 锚点(#xxx)→ 去掉 target/rel,改用 internal-link class 区分样式
+    link.removeAttribute("target")
+    link.removeAttribute("rel")
+    link.classList.remove("external-link")
+    link.classList.add("internal-link")
   }
 }
 
@@ -300,10 +321,12 @@ function decorate(
   labels: CopyLabels,
   rewriter?: (src: string) => string | null,
 ) {
-  // FORK: Mermaid 占位先于 ensureCodeWrapper(否则 wrapper 会包住 <pre> 让我们替换变脏)2026-05-05
+  // FORK: Mermaid 占位 — 转 data-mermaid-pending → data-mermaid-source 2026-05-05
   setupMermaidPlaceholders(root)
-  // FORK: heading id 注入 — TOC 锚点跳转用 2026-05-05
+  // FORK: heading id 注入 — #anchor 跳转用 2026-05-05
   assignHeadingIds(root)
+  // FORK: 相对路径 <a> 去掉 target=_blank,防 Tauri 把内链打开浏览器 2026-05-05
+  fixLinkTargets(root)
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
