@@ -16,13 +16,46 @@ import { ShellID } from "../../tool/shell/id"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "@/util/locale"
 
-// --- Syntax Highlighting (Disabled for performance and size) ---
+// --- Syntax Highlighting (Static Bundling for Binary Distribution) ---
+let highlighter: any = null
+
 export async function initHighlighter() {
-  // No-op
+  if (highlighter) return
+  try {
+    const { createHighlighterCore } = await import("shiki/core")
+    // Use dynamic import for the engine, trying common 3.x paths
+    const engineModule: any = await import("shiki/engine/javascript").catch(() => import("@shikijs/engine-javascript"))
+    const createJavaScriptEngine = engineModule.createJavaScriptEngine
+
+    // Import themes and languages statically so they are bundled by Bun
+    const nord = (await import("shiki/themes/nord.mjs")).default
+    const ts = (await import("shiki/langs/typescript.mjs")).default
+    const js = (await import("shiki/langs/javascript.mjs")).default
+    const go = (await import("shiki/langs/go.mjs")).default
+    const py = (await import("shiki/langs/python.mjs")).default
+    const json = (await import("shiki/langs/json.mjs")).default
+    const sh = (await import("shiki/langs/bash.mjs")).default
+    const md = (await import("shiki/langs/markdown.mjs")).default
+    const diff = (await import("shiki/langs/diff.mjs")).default
+
+    highlighter = await createHighlighterCore({
+      themes: [nord],
+      langs: [ts, js, go, py, json, sh, md, diff],
+      engine: createJavaScriptEngine(),
+    })
+  } catch (e) {
+    // Fallback to plain text if shiki fails to load
+    highlighter = null
+  }
 }
 
-export function colorizeCode(code: string, _lang?: string): string {
-  return code
+export function colorizeCode(code: string, lang?: string): string {
+  if (!highlighter || !lang) return code
+  try {
+    return highlighter.codeToAnsi(code, { lang, theme: "nord" })
+  } catch {
+    return code
+  }
 }
 // ---------------------------
 

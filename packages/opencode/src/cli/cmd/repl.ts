@@ -5,7 +5,7 @@ import { bootstrap } from "../bootstrap"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
-import { colorizeCode, colorizeDiff, inline, isDiff, renderRunningTask, renderTool } from "./render"
+import { colorizeCode, colorizeDiff, initHighlighter, inline, isDiff, renderRunningTask, renderTool } from "./render"
 
 const SLASH_COMMANDS = [
   "help",
@@ -87,6 +87,8 @@ export async function repl(opts: ReplOptions): Promise<void> {
 
     // Setup Model
     const modelId = opts.model || cfg.model || "opencode/minimax-m2.5-free"
+
+    void initHighlighter()
 
     const state: State = {
       sessionID,
