@@ -18,21 +18,21 @@ describe("recentConnectedWorkspaces", () => {
       wrk_e: "connected",
     } as const
 
-    expect(
-      recentConnectedWorkspaces({
-        sessions: [
-          { time: { updated: 900 } },
-          { workspaceID: "wrk_b", time: { updated: 800 } },
-          { workspaceID: "wrk_a", time: { updated: 700 } },
-          { workspaceID: "wrk_a", time: { updated: 600 } },
-          { workspaceID: "wrk_missing", time: { updated: 500 } },
-          { workspaceID: "wrk_c", time: { updated: 400 } },
-          { workspaceID: "wrk_d", time: { updated: 300 } },
-          { workspaceID: "wrk_e", time: { updated: 200 } },
-        ],
-        get: (workspaceID) => workspaces.find((workspace) => workspace.id === workspaceID),
-        status: (workspaceID) => status[workspaceID as keyof typeof status],
-      }).map((workspace) => workspace.id),
-    ).toEqual(["wrk_a", "wrk_d", "wrk_e"])
+    const { recent } = recentConnectedWorkspaces({
+      sessions: [
+        { time: { updated: 900 } },
+        { workspaceID: "wrk_b", time: { updated: 800 } },
+        { workspaceID: "wrk_a", time: { updated: 700 } },
+        { workspaceID: "wrk_a", time: { updated: 600 } },
+        { workspaceID: "wrk_missing", time: { updated: 500 } },
+        { workspaceID: "wrk_c", time: { updated: 400 } },
+        { workspaceID: "wrk_d", time: { updated: 300 } },
+        { workspaceID: "wrk_e", time: { updated: 200 } },
+      ],
+      get: (workspaceID) => workspaces.find((workspace) => workspace.id === workspaceID),
+      status: (workspaceID) => status[workspaceID as keyof typeof status],
+    })
+
+    expect(recent.map((workspace) => workspace.id)).toEqual(["wrk_a", "wrk_d", "wrk_e"])
   })
 })
