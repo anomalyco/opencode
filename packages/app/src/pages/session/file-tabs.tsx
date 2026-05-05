@@ -18,7 +18,11 @@ import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange
 import { useSDK } from "@/context/sdk"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
+// FORK: .md 导出 PDF / Word [feat: md-export-pdf-word] 2026-05-05
+import { exportMdAsPdf } from "@/utils/md-export-pdf"
+import { exportMdAsDocx } from "@/utils/md-export-docx"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -346,6 +350,8 @@ export function FileTabContent(props: {
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
+  // FORK: .md 导出 PDF / Word — 走 platform.saveFilePickerDialog [feat: md-export-pdf-word] 2026-05-05
+  const platform = usePlatform()
   const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
@@ -1009,6 +1015,39 @@ export function FileTabContent(props: {
     closeMdMenu()
   }
 
+  // FORK-BEGIN: .md 导出 PDF / Word [feat: md-export-pdf-word] 2026-05-05
+  const onExportPdf = () => {
+    closeMdMenu()
+    exportMdAsPdf({ hintText: language.t("fileViewer.toast.exportPdfHint") })
+  }
+
+  const onExportDocx = async () => {
+    closeMdMenu()
+    const p = path()
+    const text = contents()
+    if (!p || !text) return
+    const saveDialog = platform.saveFilePickerDialog
+    if (!saveDialog) {
+      // 非 desktop 平台 / 平台未实现 — 不应该到这,viewer 只在 desktop 用
+      showToast({ variant: "error", title: language.t("fileViewer.toast.exportDocxFail") })
+      return
+    }
+    // 默认文件名 = 原 .md 文件名(去 .md/.markdown 后缀)
+    const baseName =
+      p.replace(/\\/g, "/").split("/").pop()?.replace(/\.(md|markdown)$/i, "") || "untitled"
+    await exportMdAsDocx({
+      markdownText: text,
+      defaultFileName: baseName,
+      saveDialog,
+      i18n: {
+        title: language.t("fileViewer.dialog.exportDocxTitle"),
+        success: language.t("fileViewer.toast.exportDocxSuccess"),
+        fail: language.t("fileViewer.toast.exportDocxFail"),
+      },
+    })
+  }
+  // FORK-END
+
   const openMdInputPanel = () => {
     setMdMenu((m) => ({ ...m, mode: "input" }))
   }
@@ -1539,30 +1578,53 @@ export function FileTabContent(props: {
                 class="fixed z-50 min-w-[220px] rounded-md border border-border-base bg-surface-raised-stronger-non-alpha text-text-strong shadow-[var(--shadow-lg-border-base)] py-1 text-sm"
                 style={{ left: `${mdMenu().x}px`, top: `${mdMenu().y}px` }}
               >
-                <button
-                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
-                  disabled={!mdMenu().text.trim()}
-                  onClick={openMdInputPanel}
+                {/* FORK: 选了文字 → 原选区菜单(添加到聊天 / 编辑 / 复制);
+                    没选文字 → 导出菜单(PDF / Word)— UX 决议 B,语义最干净
+                    [feat: md-export-pdf-word] 2026-05-05 */}
+                <Show
+                  when={mdMenu().text.trim()}
+                  fallback={
+                    <>
+                      <button
+                        class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
+                        onClick={onExportPdf}
+                      >
+                        {language.t("fileViewer.menu.exportPdf")}
+                      </button>
+                      <button
+                        class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
+                        onClick={() => void onExportDocx()}
+                      >
+                        {language.t("fileViewer.menu.exportDocx")}
+                      </button>
+                    </>
+                  }
                 >
-                  添加到聊天窗口
-                </button>
-                <button
-                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
-                  disabled={!canEdit() || !state()?.loaded}
-                  title={editDisabledReason()}
-                  onClick={startEditFromMenu}
-                >
-                  编辑
-                </button>
-                <div class="my-1 border-t border-border-base" />
-                <button
-                  class="w-full px-3 py-1.5 hover:bg-surface-base-hover flex justify-between items-center gap-6 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
-                  disabled={!mdMenu().text.trim()}
-                  onClick={copyMdSelection}
-                >
-                  <span>复制</span>
-                  <span class="text-xs text-text-weak">Ctrl+C</span>
-                </button>
+                  <button
+                    class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                    disabled={!mdMenu().text.trim()}
+                    onClick={openMdInputPanel}
+                  >
+                    添加到聊天窗口
+                  </button>
+                  <button
+                    class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                    disabled={!canEdit() || !state()?.loaded}
+                    title={editDisabledReason()}
+                    onClick={startEditFromMenu}
+                  >
+                    编辑
+                  </button>
+                  <div class="my-1 border-t border-border-base" />
+                  <button
+                    class="w-full px-3 py-1.5 hover:bg-surface-base-hover flex justify-between items-center gap-6 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                    disabled={!mdMenu().text.trim()}
+                    onClick={copyMdSelection}
+                  >
+                    <span>复制</span>
+                    <span class="text-xs text-text-weak">Ctrl+C</span>
+                  </button>
+                </Show>
               </div>
             </Match>
             <Match when={mdMenu().mode === "input"}>
