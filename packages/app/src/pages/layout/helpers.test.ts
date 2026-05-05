@@ -8,12 +8,13 @@ import {
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
-  childSessionOnPath,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
+  sessionChildren,
+  sessionPathIDs,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
 
@@ -199,17 +200,61 @@ describe("layout workspace helpers", () => {
     expect(result?.id).toBe("root")
   })
 
-  test("finds the direct child on the active session path", () => {
-    const list = [
+  test("indexes direct children by parent and skips archived duplicates", () => {
+    const result = sessionChildren(
+      [
+        session({ id: "root", directory: "/workspace", time: { created: 1, updated: 1, archived: undefined } }),
+        session({
+          id: "child-old",
+          directory: "/workspace",
+          parentID: "root",
+          time: { created: 2, updated: 2, archived: undefined },
+        }),
+        session({
+          id: "child-new",
+          directory: "/workspace",
+          parentID: "root",
+          time: { created: 3, updated: 3, archived: undefined },
+        }),
+        session({
+          id: "child-new",
+          directory: "/workspace",
+          parentID: "root",
+          title: "duplicate ignored",
+          time: { created: 4, updated: 4, archived: undefined },
+        }),
+        session({
+          id: "archived-child",
+          directory: "/workspace",
+          parentID: "root",
+          time: { created: 5, updated: 5, archived: 5 },
+        }),
+        session({
+          id: "leaf",
+          directory: "/workspace",
+          parentID: "child-new",
+          time: { created: 6, updated: 6, archived: undefined },
+        }),
+      ],
+      1000,
+    )
+
+    expect(result.get("root")?.map((item) => item.id)).toEqual(["child-new", "child-old"])
+    expect(result.get("child-new")?.map((item) => item.id)).toEqual(["leaf"])
+    expect(result.get("missing")).toBeUndefined()
+  })
+
+  test("tracks ancestors on active session path", () => {
+    const result = sessionPathIDs([
       session({ id: "root", directory: "/workspace" }),
       session({ id: "child", directory: "/workspace", parentID: "root" }),
       session({ id: "leaf", directory: "/workspace", parentID: "child" }),
-    ]
+      session({ id: "archived", directory: "/workspace", parentID: "root", time: { created: 1, updated: 1, archived: 1 } }),
+    ], "leaf")
 
-    expect(childSessionOnPath(list, "root", "leaf")?.id).toBe("child")
-    expect(childSessionOnPath(list, "child", "leaf")?.id).toBe("leaf")
-    expect(childSessionOnPath(list, "root", "root")).toBeUndefined()
-    expect(childSessionOnPath(list, "root", "other")).toBeUndefined()
+    expect([...result]).toEqual(["child", "root"])
+    expect([...sessionPathIDs([], "leaf")]).toEqual([])
+    expect([...sessionPathIDs([], undefined)]).toEqual([])
   })
 
   test("formats fallback project display name", () => {

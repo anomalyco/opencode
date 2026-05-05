@@ -5,8 +5,8 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { A, useParams } from "@solidjs/router"
-import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
+import { A } from "@solidjs/router"
+import { type Accessor, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -15,7 +15,7 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
-import { childSessionOnPath, hasProjectPermissions } from "./helpers"
+import { hasProjectPermissions } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -77,8 +77,9 @@ export type SessionItemProps = {
   mobile?: boolean
   dense?: boolean
   showTooltip?: boolean
-  showChild?: boolean
   level?: number
+  sessionChildrenByParent?: Accessor<Map<string, Session[]>>
+  activeSessionPathIDs?: Accessor<Set<string>>
   sidebarExpanded: Accessor<boolean>
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
@@ -140,12 +141,12 @@ const SessionRow = (props: {
 }
 
 export const SessionItem = (props: SessionItemProps): JSX.Element => {
-  const params = useParams()
   const layout = useLayout()
   const language = useLanguage()
   const notification = useNotification()
   const permission = usePermission()
   const globalSync = useGlobalSync()
+  const [childrenOpen, setChildrenOpen] = createSignal<boolean | undefined>()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
@@ -172,10 +173,11 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
   const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))
   const tooltip = createMemo(() => props.showTooltip ?? (props.mobile || !props.sidebarExpanded()))
-  const currentChild = createMemo(() => {
-    if (!props.showChild) return
-    return childSessionOnPath(sessionStore.session, props.session.id, params.id)
-  })
+  const children = createMemo(() => props.sessionChildrenByParent?.().get(props.session.id) ?? [])
+  const hasChildren = createMemo(() => children().length > 0)
+  const childListOpen = createMemo(
+    () => hasChildren() && (childrenOpen() ?? props.activeSessionPathIDs?.().has(props.session.id) ?? false),
+  )
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -241,39 +243,89 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             </Show>
           </div>
 
-          <Show when={!props.level}>
-            <div
-              class="shrink-0 overflow-hidden transition-[width,opacity]"
-              classList={{
-                "w-6 opacity-100 pointer-events-auto": !!props.mobile,
-                "w-0 opacity-0 pointer-events-none": !props.mobile,
-                "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-                "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
-              }}
-            >
-              <Tooltip value={language.t("common.archive")} placement="top">
-                <IconButton
-                  icon="archive"
-                  variant="ghost"
-                  class="size-6 rounded-md"
-                  aria-label={language.t("common.archive")}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    void props.archiveSession(props.session)
+          <Show when={hasChildren() || !props.level}>
+            <div class="shrink-0 flex items-center gap-0.5">
+              <Show when={hasChildren()}>
+                <div
+                  class="overflow-hidden transition-[width,opacity]"
+                  classList={{
+                    "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+                    "w-0 opacity-0 pointer-events-none": !props.mobile,
+                    "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+                    "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
                   }}
-                />
-              </Tooltip>
+                >
+                  <Tooltip value="Toggle child sessions" placement="top">
+                    <Show
+                      when={childListOpen()}
+                      fallback={
+                        <IconButton
+                          icon="chevron-right"
+                          variant="ghost"
+                          class="size-6 rounded-md"
+                          aria-label="Toggle child sessions"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setChildrenOpen((value) =>
+                              !(value ?? props.activeSessionPathIDs?.().has(props.session.id) ?? false),
+                            )
+                          }}
+                        />
+                      }
+                    >
+                      <IconButton
+                        icon="chevron-down"
+                        variant="ghost"
+                        class="size-6 rounded-md"
+                        aria-label="Toggle child sessions"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          setChildrenOpen((value) =>
+                            !(value ?? props.activeSessionPathIDs?.().has(props.session.id) ?? false),
+                          )
+                        }}
+                      />
+                    </Show>
+                  </Tooltip>
+                </div>
+              </Show>
+              <Show when={!props.level}>
+                <div
+                  class="overflow-hidden transition-[width,opacity]"
+                  classList={{
+                    "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+                    "w-0 opacity-0 pointer-events-none": !props.mobile,
+                    "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+                    "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+                  }}
+                >
+                  <Tooltip value={language.t("common.archive")} placement="top">
+                    <IconButton
+                      icon="archive"
+                      variant="ghost"
+                      class="size-6 rounded-md"
+                      aria-label={language.t("common.archive")}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        void props.archiveSession(props.session)
+                      }}
+                    />
+                  </Tooltip>
+                </div>
+              </Show>
             </div>
           </Show>
         </div>
       </div>
-      <Show when={currentChild()} keyed>
-        {(child) => (
-          <div class="w-full">
-            <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
-          </div>
-        )}
+      <Show when={childListOpen()}>
+        <div class="flex flex-col gap-1">
+          <For each={children()}>
+            {(child) => <SessionItem {...props} session={child} list={children()} level={(props.level ?? 0) + 1} />}
+          </For>
+        </div>
       </Show>
     </>
   )

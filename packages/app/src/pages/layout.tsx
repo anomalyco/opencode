@@ -70,6 +70,8 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   latestRootSession,
+  sessionChildren,
+  sessionPathIDs,
   sortedRootSessions,
 } from "./layout/helpers"
 import {
@@ -545,6 +547,7 @@ export default function Layout(props: ParentProps) {
           dismissSessionAlert(`${currentDir()}:${child.id}`)
         }
       })
+
     })
 
   useUpdatePolling()
@@ -678,6 +681,40 @@ export default function Layout(props: ParentProps) {
       result.push(...dirSessions)
     }
     return result
+  })
+  const [directorySessionsResource] = createResource(
+    () => {
+      const directory = currentDir()
+      if (!directory) return
+      return { directory }
+    },
+    async (input) => (await globalSDK.client.session.list({ directory: input.directory, roots: false, limit: 200 })).data ?? [],
+  )
+  const sessionChildrenByParent = createMemo(() => {
+    const directory = currentDir()
+    if (!directory) return new Map<string, Session[]>()
+
+    const [dirStore] = globalSync.child(directory, { bootstrap: false })
+    const sessions = [...(directorySessionsResource() ?? [])]
+    for (const session of dirStore.session) {
+      if (sessions.some((item) => item.id === session.id)) continue
+      sessions.push(session)
+    }
+
+    return sessionChildren(sessions, Date.now())
+  })
+  const activeSessionPathIDs = createMemo(() => {
+    const directory = currentDir()
+    if (!directory) return new Set<string>()
+
+    const [dirStore] = globalSync.child(directory, { bootstrap: false })
+    const sessions = [...(directorySessionsResource() ?? [])]
+    for (const session of dirStore.session) {
+      if (sessions.some((item) => item.id === session.id)) continue
+      sessions.push(session)
+    }
+
+    return sessionPathIDs(sessions, params.id)
   })
 
   type PrefetchQueue = {
@@ -1974,6 +2011,8 @@ export default function Layout(props: ParentProps) {
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
     currentDir,
     navList: currentSessions,
+    sessionChildrenByParent,
+    activeSessionPathIDs,
     sidebarExpanded,
     sidebarHovering,
     clearHoverProjectSoon,
@@ -2021,6 +2060,8 @@ export default function Layout(props: ParentProps) {
     workspaceLabel,
     sessionProps: {
       navList: currentSessions,
+      sessionChildrenByParent,
+      activeSessionPathIDs,
       sidebarExpanded,
       clearHoverProjectSoon,
       prefetchSession,

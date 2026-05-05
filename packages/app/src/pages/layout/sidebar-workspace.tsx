@@ -35,6 +35,8 @@ type InlineEditorComponent = (props: {
 export type WorkspaceSidebarContext = {
   currentDir: Accessor<string>
   navList: Accessor<Session[]>
+  sessionChildrenByParent: Accessor<Map<string, Session[]>>
+  activeSessionPathIDs: Accessor<Set<string>>
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   clearHoverProjectSoon: () => void
@@ -265,7 +267,8 @@ const WorkspaceSessionList = (props: {
           navList={props.ctx.navList}
           slug={props.slug()}
           mobile={props.mobile}
-          showChild
+          sessionChildrenByParent={props.ctx.sessionChildrenByParent}
+          activeSessionPathIDs={props.ctx.activeSessionPathIDs}
           sidebarExpanded={props.ctx.sidebarExpanded}
           clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
           prefetchSession={props.ctx.prefetchSession}
