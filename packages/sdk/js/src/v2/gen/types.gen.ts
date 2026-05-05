@@ -1875,9 +1875,11 @@ export type SyncEventSessionNextModelSwitched = {
   data: {
     timestamp: number
     sessionID: string
-    id: string
-    providerID: string
-    variant?: string
+    model: {
+      id: string
+      providerID: string
+      variant: string
+    }
   }
 }
 
@@ -1948,7 +1950,7 @@ export type SyncEventSessionNextStepStarted = {
     model: {
       id: string
       providerID: string
-      variant?: string
+      variant: string
     }
     snapshot?: string
   }
@@ -1987,10 +1989,7 @@ export type SyncEventSessionNextStepFailed = {
   data: {
     timestamp: number
     sessionID: string
-    error: {
-      type: string
-      message: string
-    }
+    error: SessionErrorUnknown
   }
 }
 
@@ -2188,10 +2187,7 @@ export type SyncEventSessionNextToolFailed = {
     timestamp: number
     sessionID: string
     callID: string
-    error: {
-      type: string
-      message: string
-    }
+    error: SessionErrorUnknown
     provider: {
       executed: boolean
       metadata?: {
@@ -2616,9 +2612,11 @@ export type EventSessionNextModelSwitched = {
   properties: {
     timestamp: number
     sessionID: string
-    id: string
-    providerID: string
-    variant?: string
+    model: {
+      id: string
+      providerID: string
+      variant: string
+    }
   }
 }
 
@@ -2693,7 +2691,7 @@ export type EventSessionNextStepStarted = {
     model: {
       id: string
       providerID: string
-      variant?: string
+      variant: string
     }
     snapshot?: string
   }
@@ -2720,16 +2718,18 @@ export type EventSessionNextStepEnded = {
   }
 }
 
+export type SessionErrorUnknown = {
+  type: "unknown"
+  message: string
+}
+
 export type EventSessionNextStepFailed = {
   id: string
   type: "session.next.step.failed"
   properties: {
     timestamp: number
     sessionID: string
-    error: {
-      type: string
-      message: string
-    }
+    error: SessionErrorUnknown
   }
 }
 
@@ -2900,10 +2900,7 @@ export type EventSessionNextToolFailed = {
     timestamp: number
     sessionID: string
     callID: string
-    error: {
-      type: string
-      message: string
-    }
+    error: SessionErrorUnknown
     provider: {
       executed: boolean
       metadata?: {
@@ -2994,7 +2991,7 @@ export type SessionInfo = {
   model?: {
     id: string
     providerID: string
-    variant?: string
+    variant: string
   }
   time: {
     created: number
@@ -3030,7 +3027,7 @@ export type SessionMessageModelSwitched = {
   model: {
     id: string
     providerID: string
-    variant?: string
+    variant: string
   }
 }
 
@@ -3124,10 +3121,7 @@ export type SessionMessageToolStateError = {
   structured: {
     [key: string]: unknown
   }
-  error: {
-    type: string
-    message: string
-  }
+  error: SessionErrorUnknown
 }
 
 export type SessionMessageAssistantTool = {
@@ -3167,7 +3161,7 @@ export type SessionMessageAssistant = {
   model: {
     id: string
     providerID: string
-    variant?: string
+    variant: string
   }
   content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
   snapshot?: {
@@ -3185,10 +3179,7 @@ export type SessionMessageAssistant = {
       write: number
     }
   }
-  error?: {
-    type: string
-    message: string
-  }
+  error?: SessionErrorUnknown
 }
 
 export type SessionMessageCompaction = {
