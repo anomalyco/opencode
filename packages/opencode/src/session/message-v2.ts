@@ -446,19 +446,6 @@ export type Part =
   | RetryPart
   | CompactionPart
 
-// Zod discriminated union kept for the legacy Hono OpenAPI path.
-const AssistantErrorZod = z.discriminatedUnion("name", [
-  AuthError.Schema,
-  NamedError.Unknown.Schema,
-  OutputLengthError.Schema,
-  AbortedError.Schema,
-  StructuredOutputError.Schema,
-  ContextOverflowError.Schema,
-  APIError.Schema,
-])
-type AssistantError = z.infer<typeof AssistantErrorZod>
-
-// Effect Schema for the same union — used by HttpApi OpenAPI generation.
 const AssistantErrorSchema = Schema.Union([
   AuthError.EffectSchema,
   Schema.Struct({ name: Schema.Literal("UnknownError"), data: Schema.Struct({ message: Schema.String }) }).annotate({
@@ -470,6 +457,7 @@ const AssistantErrorSchema = Schema.Union([
   ContextOverflowError.EffectSchema,
   APIError.EffectSchema,
 ]).annotate({ discriminator: "name" })
+type AssistantError = Schema.Schema.Type<typeof AssistantErrorSchema>
 
 // ── Prompt input schemas ─────────────────────────────────────────────────────
 //
