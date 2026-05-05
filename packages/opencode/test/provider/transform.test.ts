@@ -2883,6 +2883,36 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
     })
+
+    test("dotted gpt-5.x ids include 'minimal' (regression: matcher used to miss gpt-5.4)", () => {
+      const model = createMockModel({
+        id: "gpt-5.4",
+        providerID: "openai",
+        api: {
+          id: "gpt-5.4",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2026-03-05",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-50 (lookalike) does not get gpt-5 family treatment", () => {
+      const model = createMockModel({
+        id: "gpt-50",
+        providerID: "openai",
+        api: {
+          id: "gpt-50",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2024-01-01",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
   })
 
   describe("@ai-sdk/anthropic", () => {
@@ -3329,5 +3359,84 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+  })
+
+  describe("ai-gateway-provider (cloudflare-ai-gateway)", () => {
+    const cfModel = (apiId: string, releaseDate = "2024-01-01") =>
+      createMockModel({
+        id: `cloudflare-ai-gateway/${apiId}`,
+        providerID: "cloudflare-ai-gateway",
+        api: {
+          id: apiId,
+          url: "https://gateway.ai.cloudflare.com/v1/compat",
+          npm: "ai-gateway-provider",
+        },
+        release_date: releaseDate,
+      })
+
+    test("openai gpt-5.4 includes xhigh effort (regression: variant=xhigh used to be silently ignored)", () => {
+      const result = ProviderTransform.variants(cfModel("openai/gpt-5.4", "2026-03-05"))
+      expect(result.xhigh).toEqual({ reasoningEffort: "xhigh" })
+      expect(result.high).toEqual({ reasoningEffort: "high" })
+      expect(Object.keys(result)).toContain("minimal")
+    })
+
+    test("openai gpt-5.2-codex includes xhigh", () => {
+      const result = ProviderTransform.variants(cfModel("openai/gpt-5.2-codex", "2025-12-11"))
+      expect(result.xhigh).toEqual({ reasoningEffort: "xhigh" })
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
+    })
+
+    test("openai gpt-4o (no reasoning) returns empty", () => {
+      const model = cfModel("openai/gpt-4o")
+      model.capabilities.reasoning = false
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+
+    test("non-openai upstream falls back to widely-supported OAI efforts", () => {
+      const result = ProviderTransform.variants(cfModel("anthropic/claude-sonnet-4-6"))
+      expect(result).toEqual({
+        low: { reasoningEffort: "low" },
+        medium: { reasoningEffort: "medium" },
+        high: { reasoningEffort: "high" },
+      })
+    })
+  })
+})
+
+describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
+  const createModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "cloudflare-ai-gateway/openai/gpt-5.4",
+      providerID: "cloudflare-ai-gateway",
+      api: {
+        id: "openai/gpt-5.4",
+        url: "https://gateway.ai.cloudflare.com/v1/compat",
+        npm: "ai-gateway-provider",
+      },
+      capabilities: {
+        temperature: false,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+      limit: { context: 1_000_000, output: 128_000 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-03-05",
+      ...overrides,
+    }) as any
+
+  test("routes options under openaiCompatible (the key @ai-sdk/openai-compatible reads)", () => {
+    // Regression: previously fell back to providerID="cloudflare-ai-gateway",
+    // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
+    const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
+    expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
