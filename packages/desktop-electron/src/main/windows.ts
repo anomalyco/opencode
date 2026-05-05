@@ -21,6 +21,8 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let backgroundColor: string | undefined
+const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
+const titlebarHeight = 40
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
@@ -43,18 +45,23 @@ function tone() {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light"
 }
 
-function overlay(theme: Partial<TitlebarTheme> = {}) {
+function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
   const mode = theme.mode ?? tone()
   return {
     color: "#00000000",
     symbolColor: mode === "dark" ? "white" : "black",
-    height: 40,
+    height: Math.max(titlebarHeight, Math.round(titlebarHeight * zoom)),
   }
 }
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
+  titlebarThemes.set(win, theme)
+  updateTitlebar(win)
+}
+
+export function updateTitlebar(win: BrowserWindow) {
   if (process.platform !== "win32") return
-  win.setTitleBarOverlay(overlay(theme))
+  win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
 }
 
 export function setDockIcon() {
@@ -188,6 +195,7 @@ function wireZoom(win: BrowserWindow) {
   win.webContents.setZoomFactor(1)
   win.webContents.on("zoom-changed", () => {
     win.webContents.setZoomFactor(1)
+    updateTitlebar(win)
   })
 }
 

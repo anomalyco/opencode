@@ -11,7 +11,7 @@ import type {
   WslConfig,
 } from "../preload/types"
 import { getStore } from "./store"
-import { setTitlebar } from "./windows"
+import { setTitlebar, updateTitlebar } from "./windows"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -183,7 +183,12 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   ipcMain.handle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())
-  ipcMain.handle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: number) => event.sender.setZoomFactor(factor))
+  ipcMain.handle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: number) => {
+    event.sender.setZoomFactor(factor)
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    updateTitlebar(win)
+  })
   ipcMain.handle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return

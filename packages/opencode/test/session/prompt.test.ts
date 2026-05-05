@@ -859,6 +859,43 @@ it.live(
 )
 
 it.live(
+  "cancel propagates from slash command subtask to child session",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const status = yield* SessionStatus.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+        yield* llm.hang
+        const msg = yield* user(chat.id, "hello")
+        yield* addSubtask(chat.id, msg.id)
+
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+        yield* llm.wait(1)
+
+        const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+        const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+        const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+        const sessionID = tool?.state.status === "running" ? tool.state.metadata?.sessionId : undefined
+        expect(typeof sessionID).toBe("string")
+        if (typeof sessionID !== "string") throw new Error("missing child session id")
+        const childID = SessionID.make(sessionID)
+        expect((yield* status.get(childID)).type).toBe("busy")
+
+        yield* prompt.cancel(chat.id)
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
+
+        expect((yield* status.get(chat.id)).type).toBe("idle")
+        expect((yield* status.get(childID)).type).toBe("idle")
+      }),
+      { git: true, config: providerCfg },
+    ),
+  10_000,
+)
+
+it.live(
   "cancel with queued callers resolves all cleanly",
   () =>
     provideTmpdirServer(
