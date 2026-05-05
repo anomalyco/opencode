@@ -13,11 +13,23 @@
   "exports": {
     ".": "./src/index.ts",
     "./providers": "./src/providers.ts",
-    "./providers/*": "./src/providers/*.ts",
+    "./providers/amazon-bedrock": "./src/providers/amazon-bedrock.ts",
+    "./providers/anthropic": "./src/providers/anthropic.ts",
+    "./providers/azure": "./src/providers/azure.ts",
+    "./providers/github-copilot": "./src/providers/github-copilot.ts",
+    "./providers/google": "./src/providers/google.ts",
+    "./providers/openai": "./src/providers/openai.ts",
+    "./providers/openai-compatible": "./src/providers/openai-compatible.ts",
+    "./providers/openrouter": "./src/providers/openrouter.ts",
+    "./providers/xai": "./src/providers/xai.ts",
     "./protocols": "./src/protocols.ts",
-    "./protocols/*": "./src/protocols/*.ts",
-    "./provider-transform": "./src/provider-transform.ts",
-    "./*": "./src/*.ts"
+    "./protocols/anthropic-messages": "./src/protocols/anthropic-messages.ts",
+    "./protocols/bedrock-converse": "./src/protocols/bedrock-converse.ts",
+    "./protocols/gemini": "./src/protocols/gemini.ts",
+    "./protocols/openai-chat": "./src/protocols/openai-chat.ts",
+    "./protocols/openai-compatible-chat": "./src/protocols/openai-compatible-chat.ts",
+    "./protocols/openai-responses": "./src/protocols/openai-responses.ts",
+    "./provider-transform": "./src/provider-transform.ts"
   },
   "devDependencies": {
     "@clack/prompts": "1.0.0-alpha.1",

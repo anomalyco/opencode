@@ -6,6 +6,15 @@ The short version: the public API is small, providers are built from composable 
 
 Use this as a code-reading path. Open the linked files in order and skim the referenced sections.
 
+## Tour Index
+
+- **Use-site shape**: Sections 1-2 show the public API and canonical request model.
+- **Request lifecycle**: Sections 3-4 name the main runtime pieces and follow one request through compile, HTTP, parse, and collect.
+- **Provider internals**: Sections 5-8 explain protocols, adapter composition, provider helpers, and transforms.
+- **Tools and streams**: Sections 9-10 show tool-loop behavior and provider-specific parser examples.
+- **Testing story**: Sections 11-13 cover deterministic fixtures, recorded cassettes, and recording commands.
+- **Wrap-up paths**: Sections 14-15 summarize the design payoff and suggest shorter reading paths for demos.
+
 ## 1. Start With The Use Site
 
 Start with the runnable tutorial: [`example/tutorial.ts`](./example/tutorial.ts).
@@ -81,6 +90,28 @@ At runtime, the flow is easier to read as a sequence of value transformations. T
 
 - The main request path: caller input becomes a provider HTTP request, then normalized events.
 - The parser zoom-in: `adapter.parse(...)` hides response framing, chunk decoding, and stream state.
+
+```text
+RequestInput
+  -> LLMRequest
+  -> TransformedRequest
+  -> provider Payload
+  -> HttpClientRequest
+  -> HttpClientResponse
+  -> Stream<LLMEvent>
+  -> LLMResponse
+
+Zoom into adapter.parse(...):
+
+HttpClientResponse.stream
+  -> Framing
+  -> Frame
+  -> protocol.chunk
+  -> Chunk
+  -> protocol.process(State, Chunk)
+  -> LLMEvent[]
+  -> Stream<LLMEvent>
+```
 
 The snippet below is pseudo-code. It shows resolved values at each boundary, not the `Effect` wrappers used by the implementation.
 
@@ -219,8 +250,9 @@ const decodeChunk: (frame: Frame) => Effect.Effect<Chunk, ProviderChunkError> = 
 
 const chunks: Stream.Stream<Chunk, ProviderChunkError> = frames.pipe(Stream.mapEffect(decodeChunk))
 
-// Protocol.process is the stream parser state machine. `State` carries whatever
-// memory this API needs between chunks, such as partial text or tool arguments.
+// Protocol.process is where provider events become LLMEvents.
+// Example: OpenAI may stream one tool call over several chunks; `State` holds
+// the partial argument JSON until the final chunk emits one `tool-call` event.
 // State + Chunk -> State + ReadonlyArray<LLMEvent>
 const initialState: State = protocol.initial()
 const eventBatches: Stream.Stream<ReadonlyArray<LLMEvent>, ProviderChunkError> = chunks.pipe(
@@ -245,19 +277,6 @@ const eventsFromInternals: Stream.Stream<LLMEvent, LLMError> = eventBatches.pipe
 const collected: { readonly events: ReadonlyArray<LLMEvent>; readonly usage?: Usage } = collectEvents(events)
 const response: LLMResponse = new LLMResponse(collected)
 ```
-
-The important translation points are:
-
-- `LLM.request(input)` turns ergonomic caller input into canonical `LLMRequest`.
-- `client.prepare(request)`, `client.stream(request)`, and `client.generate(request)` hand the canonical request to the lower-level runtime.
-- `transformPipeline.transformRequest(request)` applies request, prompt, and tool-schema transforms.
-- `adapter.toPayload(transformedRequest.request)` turns canonical `LLMRequest` into provider-native payload.
-- `transformPipeline.transformPayload(...)` applies adapter-local payload transforms and validates with `adapter.payloadSchema`.
-- `adapter.toHttp(payload, context)` turns provider-native payload into `HttpClientRequest`.
-- `Framing` turns response bytes into protocol frames.
-- `protocol.chunk` turns frames into provider-native chunks.
-- `protocol.process(state, chunk)` turns provider-native chunks into common `LLMEvent`s.
-- `LLM.generate` turns the event stream into `LLMResponse`.
 
 The useful lower-level seam is `LLMClient.prepare`: it compiles the entire provider request without sending it. That makes request-shape tests cheap and makes demos easy because you can show exactly what would be sent. It is intentionally not part of the top-level `LLM` convenience API.
 
@@ -293,7 +312,7 @@ interface Protocol<Payload, Frame, Chunk, State> {
 }
 ```
 
-Read those generics as the parser pipeline:
+Read those generics as the same parser zoom-in from Section 4:
 
 - `Payload`: the provider-native JSON body after request conversion and adapter-local payload transforms.
 - `Frame`: one response unit after byte framing, such as an SSE `data:` string or a Bedrock event-stream object.
@@ -308,7 +327,7 @@ The main protocol implementations are:
 - Gemini GenerateContent: [`src/protocols/gemini.ts`](./src/protocols/gemini.ts)
 - Bedrock Converse: [`src/protocols/bedrock-converse.ts`](./src/protocols/bedrock-converse.ts)
 
-The protocol files are intentionally sectioned the same way:
+The protocol files are sectioned the same way:
 
 ```ts
 Public Model Input
@@ -319,7 +338,7 @@ Protocol And Adapter
 Model Helper
 ```
 
-That layout makes each protocol readable as a story: what does the wire payload look like, how do common requests turn into it, how do provider stream chunks become common events, and how is the runnable adapter assembled?
+That layout keeps the same story in each file: wire payload, request lowering, stream parsing, and adapter assembly.
 
 ## 6. Adapter Composition Is Where The Reuse Shows Up
 
@@ -327,6 +346,17 @@ The adapter composition rule is:
 
 ```ts
 Adapter = Protocol + Endpoint + Auth + Framing
+```
+
+```text
+                 +-------------------+
+                 |      Protocol     |  request lowering + stream parsing
+                 +-------------------+
+                           |
++----------+     +---------v---------+     +------+     +---------+
+| Endpoint | --> |      Adapter      | <-- | Auth | <-- | Framing |
++----------+     +-------------------+     +------+     +---------+
+     URL              runnable route        headers      bytes -> frames
 ```
 
 The pieces live in these files:
@@ -515,9 +545,7 @@ What is worth showing:
 
 The common event model is what makes this work across providers. Providers emit `tool-input-delta`, `tool-call`, `tool-result`, and `request-finish` events; the runtime consumes those events and decides whether another model round is needed.
 
-## 10. Stream Parsers Are Small State Machines
-
-Each protocol's stream parser turns provider-native chunks into common events.
+## 10. Stream Parser Examples
 
 Examples worth reading:
 
@@ -527,7 +555,7 @@ Examples worth reading:
 - [`src/protocols/gemini.ts`](./src/protocols/gemini.ts) converts Gemini parts into text, reasoning, and tool-call events.
 - [`src/protocols/bedrock-converse.ts`](./src/protocols/bedrock-converse.ts) parses AWS event-stream frames and waits for metadata to emit finish with usage.
 
-This is the part where provider APIs differ the most. The normalized result is still one `LLMEvent` stream.
+This is where provider APIs differ the most, behind the same normalized `LLMEvent` stream.
 
 ## 11. Deterministic Tests Cover The Parser Edge Cases
 
