@@ -414,19 +414,18 @@
   margin: 0 auto;
 }
 
-/* FORK: 内部链接(相对路径)与外链区分样式 — fixLinkTargets 加 .internal-link class 2026-05-05 */
+/* FORK: 内部链接(相对路径)与外链区分样式 — fixLinkTargets 加 .internal-link class 2026-05-05
+   默认只用颜色暗示可点击(避免长链接 dotted 下划线密集恐惧),hover 才出实线下划线 + 淡灰底 */
 [data-component="markdown"] a.internal-link {
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-  text-decoration-color: var(--text-interactive-base);
+  text-decoration: none;
   cursor: pointer;
   border-radius: 3px;
   transition: background-color 0.12s ease;
 }
 
 [data-component="markdown"] a.internal-link:hover {
-  text-decoration-style: solid;
-  text-decoration-thickness: 2px;
+  text-decoration: underline solid currentColor;
+  text-underline-offset: 3px;
   background-color: var(--surface-base-hover);
   padding: 0 2px;
   margin: 0 -2px;
