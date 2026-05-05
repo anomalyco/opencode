@@ -167,21 +167,33 @@ export function SessionSidePanel(props: {
 
   createEffect(() => {
     const p = activeFilePath()
+    // FORK: 临时 diagnostic — 让 user 在 DevTools 验证 effect 是否触发 + 拿到的 path 对不对 2026-05-05
+    console.debug("[md-office-improvements] activeFilePath effect fired:", { p, tab: activeFileTab() })
     if (!p) return
-    // 展开所有父目录(file.tree.expand 是 idempotent,重复 expand 已展开目录无副作用)
+    // 展开所有父目录(file.tree.expand 是 idempotent,重复 expand 已展开目录无副作用;
+    // 内部 listDir 是异步,子目录加载完后 FileTree 会自动 re-render)
     const parts = p.split("/")
     for (let i = 1; i < parts.length; i++) {
-      file.tree.expand(parts.slice(0, i).join("/"))
+      const ancestor = parts.slice(0, i).join("/")
+      file.tree.expand(ancestor)
+      console.debug("[md-office-improvements] expand:", ancestor)
     }
-    // 滚动到 active 节点(等 DOM 更新 + 父目录展开后)
-    queueMicrotask(() => {
-      // CSS.escape 防 path 含特殊字符破坏 selector
-      const sel = `[data-tree-path="${CSS.escape(p)}"]`
+    // 滚动到 active 节点 — listDir 异步,DOM 节点会在加载完 + render 后才出现。
+    // queueMicrotask 太早(子目录 listDir 还未 resolve);用 rAF 重试 30 帧(~500ms)兜底:
+    const sel = `[data-tree-path="${CSS.escape(p)}"]`
+    let attempts = 0
+    const tryScroll = () => {
       const node = document.querySelector(sel)
       if (node instanceof HTMLElement) {
+        console.debug("[md-office-improvements] scroll into view, attempts:", attempts)
         node.scrollIntoView({ behavior: "smooth", block: "nearest" })
+        return
       }
-    })
+      attempts++
+      if (attempts < 30) requestAnimationFrame(tryScroll)
+      else console.debug("[md-office-improvements] 30 frames passed, no node found for sel:", sel)
+    }
+    requestAnimationFrame(tryScroll)
   })
 
   const fileTreeTab = () => layout.fileTree.tab()
