@@ -19,6 +19,10 @@ export const dict = {
   "command.category.agent": "智能体",
   "command.category.permissions": "权限",
   "command.category.workspace": "工作区",
+  "command.clearTasks": "清除任务",
+  "command.clearTasks.description": "清除所有待办任务",
+  "command.category.tasks": "任务",
+
   "command.category.settings": "设置",
 
   "theme.scheme.system": "系统",
