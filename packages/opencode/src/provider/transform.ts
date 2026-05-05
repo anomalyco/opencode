@@ -115,7 +115,6 @@ function normalizeMessages(
         }
         return msg
     }
-    return msg
   })
 
   // Anthropic rejects messages with empty content - filter out empty string messages
