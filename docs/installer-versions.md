@@ -12,6 +12,12 @@
 
 
 
+## [Windows] 2026.5.5.1 - 2026-05-05 23:39
+
+(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
+
+---
+
 ## [macOS] 2026.5.4.1 — 2026-05-04 00:05
 
 **主菜:Mac 端首次走 GitHub Actions 全自动 release**(对应 Win 端 [`ship-prod-2026.5.1.2`](https://github.com/zoulukuang/deskfox/releases/tag/ship-prod-2026.5.1.2) 已落地的同款链路,延伸到 mac 平台)。
