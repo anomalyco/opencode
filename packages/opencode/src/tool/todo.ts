@@ -39,13 +39,21 @@ export const TodoWriteTool = Tool.define<typeof Parameters, Metadata, Todo.Servi
             metadata: {},
           })
 
+          // Filter out completed/cancelled before saving.
+          // Only pending and in_progress todos persist in the database.
+          // Completed/cancelled items appear in this turn's output
+          // but are automatically cleaned up so they don't accumulate
+          // in the UI across multiple turns.
+          const active = params.todos.filter(
+            (t: typeof params.todos[number]) => t.status === "pending" || t.status === "in_progress"
+          )
           yield* todo.update({
             sessionID: ctx.sessionID,
-            todos: params.todos,
+            todos: active,
           })
 
           return {
-            title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
+            title: `${params.todos.filter((x) => x.status === "pending" || x.status === "in_progress").length} active`,
             output: JSON.stringify(params.todos, null, 2),
             metadata: {
               todos: params.todos,
