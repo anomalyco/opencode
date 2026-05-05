@@ -469,16 +469,19 @@ export const adapter = Adapter.fromProtocol({
 })
 
 export const model = (input: GeminiModelInput) =>
-  llmModel({
-    ...input,
-    provider: "google",
-    protocol: "gemini",
-    capabilities: input.capabilities ?? capabilities({
-      input: { image: true, audio: true, video: true, pdf: true },
-      output: { reasoning: true },
-      tools: { calls: true },
-      reasoning: { efforts: ["minimal", "low", "medium", "high", "xhigh", "max"] },
+  Adapter.bindModel(
+    llmModel({
+      ...input,
+      provider: "google",
+      protocol: "gemini",
+      capabilities: input.capabilities ?? capabilities({
+        input: { image: true, audio: true, video: true, pdf: true },
+        output: { reasoning: true },
+        tools: { calls: true },
+        reasoning: { efforts: ["minimal", "low", "medium", "high", "xhigh", "max"] },
+      }),
     }),
-  })
+    adapter,
+  )
 
 export * as Gemini from "./gemini"

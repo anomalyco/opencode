@@ -1,24 +1,25 @@
-import { ProviderResolver } from "../provider-resolver"
 import { OpenAICompatible, type ModelOptions as OpenAICompatibleModelOptions } from "./openai-compatible"
+import { OpenAICompatibleProfiles } from "./openai-compatible-profile"
 
-const baseURL = "https://openrouter.ai/api/v1"
+export const profile = OpenAICompatibleProfiles.profiles.openrouter
 
 export type ModelOptions = Omit<OpenAICompatibleModelOptions, "provider" | "baseURL"> & {
   readonly baseURL?: string
 }
 
-export const resolver = ProviderResolver.fixed("openrouter", "openai-compatible-chat", {
-  baseURL,
-})
+export const resolver = OpenAICompatibleProfiles.resolverFor(profile)
 
 export const adapters = OpenAICompatible.adapters
 
-export const model = (id: string, options: ModelOptions = {}) =>
-  OpenAICompatible.model(id, {
+export const model = (id: string, options: ModelOptions = {}) => {
+  const baseURL = options.baseURL ?? profile.baseURL
+  if (!baseURL) throw new Error("OpenRouter requires a baseURL")
+  return OpenAICompatible.model(id, {
     ...options,
-    provider: "openrouter",
-    baseURL: options.baseURL ?? baseURL,
+    provider: profile.provider,
+    baseURL,
   })
+}
 
 export const chat = model
 

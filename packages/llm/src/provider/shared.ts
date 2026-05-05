@@ -169,14 +169,14 @@ export const invalidRequest = (message: string) => new InvalidRequestError({ mes
 
 /**
  * Build a `validate` step from a Schema decoder. Replaces the per-adapter
- * lambda body `(draft) => decode(draft).pipe(Effect.mapError((e) =>
+ * lambda body `(target) => decode(target).pipe(Effect.mapError((e) =>
  * invalid(e.message)))`. Any decode error is translated into
  * `InvalidRequestError` carrying the original parse-error message.
  */
 export const validateWith =
   <A, I, E extends { readonly message: string }>(decode: (input: I) => Effect.Effect<A, E>) =>
-  (draft: I) =>
-    decode(draft).pipe(Effect.mapError((error) => invalidRequest(error.message)))
+  (target: I) =>
+    decode(target).pipe(Effect.mapError((error) => invalidRequest(error.message)))
 
 /**
  * Build an HTTP POST with a JSON body. Sets `content-type: application/json`

@@ -383,11 +383,14 @@ export const adapter = Adapter.fromProtocol({
 })
 
 export const model = (input: OpenAIResponsesModelInput) =>
-  llmModel({
-    ...input,
-    provider: "openai",
-    protocol: "openai-responses",
-    capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
-  })
+  Adapter.bindModel(
+    llmModel({
+      ...input,
+      provider: "openai",
+      protocol: "openai-responses",
+      capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
+    }),
+    adapter,
+  )
 
 export * as OpenAIResponses from "./openai-responses"

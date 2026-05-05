@@ -35,16 +35,16 @@ describe("llm schema", () => {
     expect(decoded.messages[0]?.content[0]?.type).toBe("text")
   })
 
-  test("rejects invalid protocol", () => {
-    expect(() =>
-      Schema.decodeUnknownSync(LLMRequest)({
-        model: { ...model, protocol: "bogus" },
-        system: [],
-        messages: [],
-        tools: [],
-        generation: {},
-      }),
-    ).toThrow()
+  test("accepts custom protocol ids", () => {
+    const decoded = Schema.decodeUnknownSync(LLMRequest)({
+      model: { ...model, protocol: "custom-protocol" },
+      system: [],
+      messages: [],
+      tools: [],
+      generation: {},
+    })
+
+    expect(decoded.model.protocol).toBe("custom-protocol")
   })
 
   test("rejects invalid event type", () => {

@@ -347,12 +347,15 @@ export const adapter = Adapter.fromProtocol({
 })
 
 export const model = (input: OpenAIChatModelInput) =>
-  llmModel({
-    ...input,
-    provider: "openai",
-    protocol: "openai-chat",
-    capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
-  })
+  Adapter.bindModel(
+    llmModel({
+      ...input,
+      provider: "openai",
+      protocol: "openai-chat",
+      capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
+    }),
+    adapter,
+  )
 
 export const includeUsage = adapter.patch("include-usage", {
   reason: "request final usage chunk from OpenAI Chat streaming responses",

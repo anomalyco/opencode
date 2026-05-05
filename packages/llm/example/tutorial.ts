@@ -96,10 +96,9 @@ const FakeTarget = Schema.Struct({
 type FakeTarget = Schema.Schema.Type<typeof FakeTarget>
 
 const FakeProtocol = Protocol.define<FakeTarget, string, string, void>({
-  // ProtocolID is a closed union in this package. A real new provider protocol
-  // would add its own id there; this tutorial reuses `openai-chat` so the fake
-  // provider can compile without changing production protocol ids.
-  id: "openai-chat",
+  // Protocol ids are open strings, so external packages can define their own
+  // protocols without changing this package.
+  id: "fake-echo",
   target: FakeTarget,
   prepare: (request) =>
     Effect.succeed({
@@ -129,16 +128,19 @@ const FakeAdapter = Adapter.fromProtocol({
   framing: Framing.sse,
 })
 
-// A provider module exports adapters plus model helpers. The model helper sets
-// provider identity and the protocol id used for adapter lookup.
+// A provider module exports a model helper. The model helper sets provider
+// identity, protocol id, and the adapter that can run this in-memory model
+// handle. Serialized / revived models can still use explicit provider adapters.
 const FakeEcho = {
-  adapters: [FakeAdapter],
   model: (id: string) =>
-    LLM.model({
-      id,
-      provider: "fake-echo",
-      protocol: "openai-chat",
-    }),
+    Adapter.bindModel(
+      LLM.model({
+        id,
+        provider: "fake-echo",
+        protocol: "fake-echo",
+      }),
+      FakeAdapter,
+    ),
 }
 
 // `prepare` compiles through patches, protocol lowering, validation, endpoint,
@@ -152,7 +154,7 @@ const inspectFakeProvider = Effect.gen(function* () {
   console.log("\n== fake provider prepare ==")
   console.log("adapter:", prepared.adapter)
   console.log("target:", Formatter.formatJson(prepared.target, { space: 2 }))
-}).pipe(Effect.provide(LLM.layer({ providers: [FakeEcho] })))
+}).pipe(Effect.provide(LLM.layer()))
 
 // Provide the LLM runtime and the HTTP request executor once. The default path
 // sends one live generate call and one local fake-provider prepare call.
@@ -163,6 +165,6 @@ const program = Effect.gen(function* () {
   yield* inspectFakeProvider
   // yield* streamText
   // yield* streamWithTools
-}).pipe(Effect.provide(Layer.mergeAll(LLM.layer({ providers: [OpenAI] }), RequestExecutor.defaultLayer)))
+}).pipe(Effect.provide(Layer.mergeAll(LLM.layer(), RequestExecutor.defaultLayer)))
 
 Effect.runPromise(program)

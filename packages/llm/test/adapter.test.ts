@@ -53,7 +53,7 @@ const mapText = (fn: (text: string) => string) => (request: LLMRequest): LLMRequ
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
 
-type FakeDraft = {
+type FakeTarget = {
   readonly body: string
   readonly includeUsage?: boolean
 }
@@ -80,10 +80,10 @@ const raiseChunk = (chunk: FakeChunk): import("../src/schema").LLMEvent =>
     ? { type: "request-finish", reason: chunk.reason }
     : { type: "text-delta", text: chunk.text }
 
-const fake = Adapter.unsafe<FakeDraft, FakeDraft>({
+const fake = Adapter.unsafe<FakeTarget>({
   id: "fake",
   protocol: "openai-chat",
-  validate: (draft) => Effect.succeed(draft),
+  validate: (target) => Effect.succeed(target),
   prepare: (request) =>
     Effect.succeed({
       body: [
@@ -113,7 +113,7 @@ const fake = Adapter.unsafe<FakeDraft, FakeDraft>({
     ),
 })
 
-const gemini = Adapter.unsafe<FakeDraft, FakeDraft>({
+const gemini = Adapter.unsafe<FakeTarget>({
   ...fake,
   id: "gemini-fake",
   protocol: "gemini",
@@ -140,7 +140,7 @@ describe("llm adapter", () => {
           fake.withPatches([
             fake.patch("include-usage", {
               reason: "fake target patch",
-              apply: (draft) => ({ ...draft, includeUsage: true }),
+              apply: (target) => ({ ...target, includeUsage: true }),
             }),
           ]),
         ],
@@ -169,6 +169,33 @@ describe("llm adapter", () => {
       )
 
       expect(prepared.adapter).toBe("gemini-fake")
+    }),
+  )
+
+  it.effect("falls back to adapter bound to model", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.make({ adapters: [] }).prepare(
+        LLM.updateRequest(request, {
+          model: Adapter.bindModel(updateModel(request.model, { protocol: "gemini" }), gemini),
+        }),
+      )
+
+      expect(prepared.adapter).toBe("gemini-fake")
+    }),
+  )
+
+  it.effect("explicit adapters override provider adapters", () =>
+    Effect.gen(function* () {
+      const override = Adapter.unsafe<FakeTarget>({
+        ...fake,
+        id: "fake-override",
+        prepare: () => Effect.succeed({ body: "override" }),
+      })
+
+      const prepared = yield* LLM.make({ providers: [{ adapters: [fake] }], adapters: [override] }).prepare(request)
+
+      expect(prepared.adapter).toBe("fake-override")
+      expect(prepared.target).toEqual({ body: "override" })
     }),
   )
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Azure, GitHubCopilot, OpenAI, OpenAICompatibleFamily, ProviderResolver } from "../src"
+import { Azure, GitHubCopilot, OpenAI, OpenAICompatibleFamily, OpenAICompatibleProfiles, OpenRouter, ProviderResolver } from "../src"
 
 describe("provider resolver", () => {
   test("fixed providers resolve protocol and auth defaults", () => {
@@ -28,6 +28,18 @@ describe("provider resolver", () => {
       provider: "togetherai",
       protocol: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
+      auth: "key",
+    })
+    expect(OpenAICompatibleProfiles.resolve("deepseek")).toMatchObject({
+      provider: "deepseek",
+      protocol: "openai-compatible-chat",
+      baseURL: "https://api.deepseek.com/v1",
+      auth: "key",
+    })
+    expect(OpenRouter.resolver.resolve(ProviderResolver.input("openai/gpt-4o-mini", "openrouter", {}))).toMatchObject({
+      provider: "openrouter",
+      protocol: "openai-compatible-chat",
+      baseURL: "https://openrouter.ai/api/v1",
       auth: "key",
     })
   })

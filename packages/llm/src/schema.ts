@@ -6,14 +6,7 @@ import { Schema } from "effect"
  * the runtime registry keys lookups by it. The implementation type itself is
  * `Protocol` (see `protocol.ts`).
  */
-export const ProtocolID = Schema.Literals([
-  "openai-chat",
-  "openai-compatible-chat",
-  "openai-responses",
-  "anthropic-messages",
-  "gemini",
-  "bedrock-converse",
-])
+export const ProtocolID = Schema.String
 export type ProtocolID = Schema.Schema.Type<typeof ProtocolID>
 
 export const ModelID = Schema.String.pipe(Schema.brand("LLM.ModelID"))

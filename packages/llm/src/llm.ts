@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Stream } from "effect"
-import { LLMClient, type ClientOptions } from "./adapter"
+import { LLMClient, preserveModelBinding, type AnyAdapter, type ClientOptions } from "./adapter"
 import type { RequestExecutor } from "./executor"
 import { ProviderPatch } from "./provider/patch"
 import { type Tools } from "./tool"
@@ -29,7 +29,7 @@ import {
 import type { LLMError, PreparedRequestOf } from "./schema"
 
 export interface Provider {
-  readonly adapters: ClientOptions["adapters"]
+  readonly adapters: ReadonlyArray<AnyAdapter>
 }
 
 export interface MakeOptions {
@@ -50,15 +50,13 @@ export interface Runtime {
 export class Service extends Context.Service<Service, Runtime>()("@opencode/LLM") {}
 
 const clientOptions = (options: MakeOptions): ClientOptions => ({
-  adapters: [...(options.adapters ?? []), ...(options.providers ?? []).flatMap((provider) => provider.adapters)].filter(
-    (source, index, all) => all.findIndex((item) => item.runtime.protocol === source.runtime.protocol) === index,
-  ),
+  adapters: [...(options.providers ?? []).flatMap((provider) => provider.adapters), ...(options.adapters ?? [])],
   patches: options.patches ?? ProviderPatch.defaults,
 })
 
 const requestOf = (input: LLMRequest | RequestInput) => input instanceof LLMRequest ? input : request(input)
 
-export const make = (options: MakeOptions): Runtime => {
+export const make = (options: MakeOptions = {}): Runtime => {
   const client = LLMClient.make(clientOptions(options))
   return {
     prepare: (input) => client.prepare(requestOf(input)),
@@ -71,7 +69,7 @@ export const make = (options: MakeOptions): Runtime => {
   }
 }
 
-export const layer = (options: MakeOptions): Layer.Layer<Service> =>
+export const layer = (options: MakeOptions = {}): Layer.Layer<Service> =>
   Layer.succeed(Service, Service.of(make(options)))
 
 export const prepare = <Target = unknown>(input: LLMRequest | RequestInput) =>
@@ -253,7 +251,7 @@ export const requestInput = (input: LLMRequest): RequestInput => ({
 
 export const request = (input: RequestInput) => {
   const { system: requestSystem, prompt, messages, tools, toolChoice: requestToolChoice, generation: requestGeneration, ...rest } = input
-  return new LLMRequest({
+  const result = new LLMRequest({
     ...rest,
     system: systemParts(requestSystem),
     messages: [...(messages?.map(message) ?? []), ...(prompt === undefined ? [] : [user(prompt)])],
@@ -261,6 +259,8 @@ export const request = (input: RequestInput) => {
     toolChoice: requestToolChoice ? toolChoice(requestToolChoice) : undefined,
     generation: generation(requestGeneration),
   })
+  preserveModelBinding(input.model, result.model)
+  return result
 }
 
 export const updateRequest = (input: LLMRequest, patch: Partial<RequestInput>) =>

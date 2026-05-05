@@ -3,7 +3,7 @@ import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import { OpenAIChat } from "./openai-chat"
-import { families, type ProviderFamily } from "./openai-compatible-family"
+import { families, type OpenAICompatibleProfile } from "./openai-compatible-profile"
 
 const ADAPTER = "openai-compatible-chat"
 
@@ -38,30 +38,39 @@ export const adapter = Adapter.fromProtocol({
 })
 
 export const model = (input: OpenAICompatibleChatModelInput) =>
-  llmModel({
-    ...input,
-    protocol: "openai-compatible-chat",
-    capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
-  })
+  Adapter.bindModel(
+    llmModel({
+      ...input,
+      protocol: "openai-compatible-chat",
+      capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
+    }),
+    adapter,
+  )
 
-const familyModel = (family: ProviderFamily, input: ProviderFamilyModelInput) =>
+const profileBaseURL = (profile: OpenAICompatibleProfile, input: ProviderFamilyModelInput) => {
+  const baseURL = input.baseURL ?? profile.baseURL
+  if (baseURL) return baseURL
+  throw new Error(`OpenAI-compatible profile ${profile.provider} requires a baseURL`)
+}
+
+export const profileModel = (profile: OpenAICompatibleProfile, input: ProviderFamilyModelInput) =>
   model({
     ...input,
-    provider: family.provider,
-    baseURL: input.baseURL ?? family.baseURL,
+    provider: profile.provider,
+    baseURL: profileBaseURL(profile, input),
   })
 
-export const baseten = (input: ProviderFamilyModelInput) => familyModel(families.baseten, input)
+export const baseten = (input: ProviderFamilyModelInput) => profileModel(families.baseten, input)
 
-export const cerebras = (input: ProviderFamilyModelInput) => familyModel(families.cerebras, input)
+export const cerebras = (input: ProviderFamilyModelInput) => profileModel(families.cerebras, input)
 
-export const deepinfra = (input: ProviderFamilyModelInput) => familyModel(families.deepinfra, input)
+export const deepinfra = (input: ProviderFamilyModelInput) => profileModel(families.deepinfra, input)
 
-export const deepseek = (input: ProviderFamilyModelInput) => familyModel(families.deepseek, input)
+export const deepseek = (input: ProviderFamilyModelInput) => profileModel(families.deepseek, input)
 
-export const fireworks = (input: ProviderFamilyModelInput) => familyModel(families.fireworks, input)
+export const fireworks = (input: ProviderFamilyModelInput) => profileModel(families.fireworks, input)
 
-export const togetherai = (input: ProviderFamilyModelInput) => familyModel(families.togetherai, input)
+export const togetherai = (input: ProviderFamilyModelInput) => profileModel(families.togetherai, input)
 
 export const includeUsage = adapter.patch("include-usage", {
   reason: "request final usage chunk from OpenAI-compatible Chat streaming responses",

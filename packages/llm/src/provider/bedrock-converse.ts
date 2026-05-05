@@ -1,11 +1,8 @@
-import { EventStreamCodec } from "@smithy/eventstream-codec"
-import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { AwsV4Signer } from "aws4fetch"
-import { Effect, Option, Schema, Stream } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Adapter } from "../adapter"
 import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
-import type { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import { Protocol } from "../protocol"
 import {
@@ -15,11 +12,11 @@ import {
   type LLMEvent,
   type LLMRequest,
   type MediaPart,
-  type ProviderChunkError,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema"
+import { BedrockEventStream } from "./bedrock-event-stream"
 import { ProviderShared } from "./shared"
 
 const ADAPTER = "bedrock-converse"
@@ -679,87 +676,7 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
     return [state, []] as const
   })
 
-// Bedrock streams responses using the AWS event stream binary protocol — each
-// frame is `[length:4][headers-length:4][prelude-crc:4][headers][payload][crc:4]`.
-// We use `@smithy/eventstream-codec` to validate framing and CRCs, then
-// reconstruct the JSON wrapping by `:event-type` so the chunk schema can match.
-const eventCodec = new EventStreamCodec(toUtf8, fromUtf8)
-const utf8 = new TextDecoder()
-
-// Cursor-tracking buffer state. Bytes accumulate in `buffer`; `offset` is the
-// read position. Reading by `subarray` is zero-copy. We only allocate a fresh
-// buffer when (a) a new network chunk arrives and we need to append, or (b)
-// the consumed prefix is more than half the buffer (compaction).
-interface FrameBufferState {
-  readonly buffer: Uint8Array
-  readonly offset: number
-}
-
-const initialFrameBuffer: FrameBufferState = { buffer: new Uint8Array(0), offset: 0 }
-
-const appendChunk = (state: FrameBufferState, chunk: Uint8Array): FrameBufferState => {
-  const remaining = state.buffer.length - state.offset
-  // Compact: drop the consumed prefix and append the new chunk in one alloc.
-  // This bounds buffer growth to at most one network chunk past the live
-  // window, regardless of stream length.
-  const next = new Uint8Array(remaining + chunk.length)
-  next.set(state.buffer.subarray(state.offset), 0)
-  next.set(chunk, remaining)
-  return { buffer: next, offset: 0 }
-}
-
-const consumeFrames = (state: FrameBufferState, chunk: Uint8Array) =>
-  Effect.gen(function* () {
-    let cursor = appendChunk(state, chunk)
-    const out: object[] = []
-    while (cursor.buffer.length - cursor.offset >= 4) {
-      const view = cursor.buffer.subarray(cursor.offset)
-      const totalLength = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(0, false)
-      if (view.length < totalLength) break
-
-      const decoded = yield* Effect.try({
-        try: () => eventCodec.decode(view.subarray(0, totalLength)),
-        catch: (error) =>
-          ProviderShared.chunkError(
-            ADAPTER,
-            `Failed to decode Bedrock Converse event-stream frame: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          ),
-      })
-      cursor = { buffer: cursor.buffer, offset: cursor.offset + totalLength }
-
-      if (decoded.headers[":message-type"]?.value !== "event") continue
-      const eventType = decoded.headers[":event-type"]?.value
-      if (typeof eventType !== "string") continue
-      const payload = utf8.decode(decoded.body)
-      if (!payload) continue
-      // The AWS event stream pads short payloads with a `p` field. Drop it
-      // before handing the object to the chunk schema. JSON decode goes
-      // through the shared Schema-driven codec to satisfy the package rule
-      // against ad-hoc `JSON.parse` calls.
-      const parsed = (yield* ProviderShared.parseJson(
-        ADAPTER,
-        payload,
-        "Failed to parse Bedrock Converse event-stream payload",
-      )) as Record<string, unknown>
-      delete parsed.p
-      out.push({ [eventType]: parsed })
-    }
-    return [cursor, out] as const
-  })
-
-/**
- * AWS event-stream framing for Bedrock Converse. Each frame is decoded by
- * `@smithy/eventstream-codec` (length + header + payload + CRC) and rewrapped
- * under its `:event-type` header so the chunk schema can match the JSON
- * payload directly. Reusable for any AWS service that wraps JSON payloads in
- * event-stream frames keyed by `:event-type`.
- */
-const framing: Framing<object> = {
-  id: "aws-event-stream",
-  frame: (bytes) => bytes.pipe(Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames)),
-}
+const framing = BedrockEventStream.framing(ADAPTER)
 
 // If a stream ends after `messageStop` but before `metadata` (rare but
 // possible on truncated transports), still surface a terminal finish.
@@ -803,25 +720,28 @@ export const adapter = Adapter.fromProtocol({
 
 export const model = (input: BedrockConverseModelInput) => {
   const { credentials, ...rest } = input
-  return llmModel({
-    ...rest,
-    provider: "bedrock",
-    protocol: "bedrock-converse",
-    capabilities:
-      input.capabilities ??
-      capabilities({
-        output: { reasoning: true },
-        tools: { calls: true, streamingInput: true },
-        cache: { prompt: true, contentBlocks: true },
-      }),
-    native: credentials
-      ? {
-          ...input.native,
-          aws_credentials: credentials,
-          aws_region: credentials.region,
-        }
-      : input.native,
-  })
+  return Adapter.bindModel(
+    llmModel({
+      ...rest,
+      provider: "bedrock",
+      protocol: "bedrock-converse",
+      capabilities:
+        input.capabilities ??
+        capabilities({
+          output: { reasoning: true },
+          tools: { calls: true, streamingInput: true },
+          cache: { prompt: true, contentBlocks: true },
+        }),
+      native: credentials
+        ? {
+            ...input.native,
+            aws_credentials: credentials,
+            aws_region: credentials.region,
+          }
+        : input.native,
+    }),
+    adapter,
+  )
 }
 
 export * as BedrockConverse from "./bedrock-converse"

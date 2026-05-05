@@ -513,16 +513,19 @@ export const adapter = Adapter.fromProtocol({
 })
 
 export const model = (input: AnthropicMessagesModelInput) =>
-  llmModel({
-    ...input,
-    provider: "anthropic",
-    protocol: "anthropic-messages",
-    capabilities: input.capabilities ?? capabilities({
-      output: { reasoning: true },
-      tools: { calls: true, streamingInput: true },
-      cache: { prompt: true, contentBlocks: true },
-      reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], summaries: false, encryptedContent: true },
+  Adapter.bindModel(
+    llmModel({
+      ...input,
+      provider: "anthropic",
+      protocol: "anthropic-messages",
+      capabilities: input.capabilities ?? capabilities({
+        output: { reasoning: true },
+        tools: { calls: true, streamingInput: true },
+        cache: { prompt: true, contentBlocks: true },
+        reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], summaries: false, encryptedContent: true },
+      }),
     }),
-  })
+    adapter,
+  )
 
 export * as AnthropicMessages from "./anthropic-messages"

@@ -21,49 +21,50 @@ import type {
 } from "./schema"
 import { LLMRequest as LLMRequestSchema, LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema } from "./schema"
 
-interface RuntimeAdapter {
-  readonly id: string
-  readonly protocol: ProtocolID
-  readonly patches: ReadonlyArray<Patch<unknown>>
-  readonly prepare: (request: LLMRequest) => Effect.Effect<unknown, LLMError>
-  readonly validate: (draft: unknown) => Effect.Effect<unknown, LLMError>
-  readonly toHttp: (target: unknown, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (response: HttpClientResponse.HttpClientResponse, context: HttpContext) => Stream.Stream<LLMEvent, LLMError>
-}
-
-interface RuntimeAdapterSource {
-  readonly runtime: RuntimeAdapter
-}
-
 export interface HttpContext {
   readonly request: LLMRequest
   readonly patchTrace: ReadonlyArray<PatchTrace>
 }
 
-export interface Adapter<Draft, Target> {
+export interface Adapter<Target> {
   readonly id: string
   readonly protocol: ProtocolID
-  readonly patches: ReadonlyArray<Patch<Draft>>
-  readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
-  readonly validate: (draft: Draft) => Effect.Effect<Target, LLMError>
+  readonly patches: ReadonlyArray<Patch<Target>>
+  readonly prepare: (request: LLMRequest) => Effect.Effect<Target, LLMError>
+  readonly validate: (target: Target) => Effect.Effect<Target, LLMError>
   readonly toHttp: (target: Target, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
   readonly parse: (response: HttpClientResponse.HttpClientResponse, context: HttpContext) => Stream.Stream<LLMEvent, LLMError>
 }
 
-export interface AdapterInput<Draft, Target> {
-  readonly id: string
-  readonly protocol: ProtocolID
-  readonly patches?: ReadonlyArray<Patch<Draft>>
-  readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
-  readonly validate: (draft: Draft) => Effect.Effect<Target, LLMError>
-  readonly toHttp: (target: Target, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (response: HttpClientResponse.HttpClientResponse, context: HttpContext) => Stream.Stream<LLMEvent, LLMError>
+export type AdapterInput<Target> = Omit<Adapter<Target>, "patches"> & {
+  readonly patches?: ReadonlyArray<Patch<Target>>
 }
 
-export interface AdapterDefinition<Draft, Target> extends Adapter<Draft, Target> {
-  readonly runtime: RuntimeAdapter
-  readonly patch: (id: string, input: PatchInput<Draft>) => Patch<Draft>
-  readonly withPatches: (patches: ReadonlyArray<Patch<Draft>>) => AdapterDefinition<Draft, Target>
+export interface AdapterDefinition<Target> extends Adapter<Target> {
+  readonly patch: (id: string, input: PatchInput<Target>) => Patch<Target>
+  readonly withPatches: (patches: ReadonlyArray<Patch<Target>>) => AdapterDefinition<Target>
+}
+
+// Adapter registries intentionally erase target generics after the typed
+// adapter is constructed. This keeps normal call sites on `OpenAIChat.adapter`
+// instead of leaking a separate runtime-adapter wrapper.
+// oxlint-disable-next-line typescript-eslint/no-explicit-any
+export type AnyAdapter = AdapterDefinition<any>
+
+const modelAdapters = new WeakMap<ModelRef, AnyAdapter>()
+
+export const bindModel = <Model extends ModelRef>(model: Model, adapter: AnyAdapter): Model => {
+  if (model.protocol !== adapter.protocol) {
+    throw new Error(`Cannot bind ${adapter.id} adapter (${adapter.protocol}) to ${model.provider}/${model.id} (${model.protocol})`)
+  }
+  modelAdapters.set(model, adapter)
+  return model
+}
+
+export const preserveModelBinding = <Model extends ModelRef>(source: ModelRef, target: Model): Model => {
+  const adapter = modelAdapters.get(source)
+  if (!adapter) return target
+  return bindModel(target, adapter)
 }
 
 export interface LLMClient {
@@ -85,7 +86,7 @@ export interface LLMClient {
 }
 
 export interface ClientOptions {
-  readonly adapters: ReadonlyArray<RuntimeAdapterSource>
+  readonly adapters?: ReadonlyArray<AnyAdapter>
   readonly patches?: PatchRegistry | ReadonlyArray<AnyPatch>
 }
 
@@ -108,16 +109,11 @@ const normalizeRegistry = (patches: PatchRegistry | ReadonlyArray<AnyPatch> | un
  * canonical path is `Adapter.fromProtocol(...)`. New adapters should start
  * there and prove they need otherwise before reaching for this.
  */
-export function unsafe<Draft, Target>(input: AdapterInput<Draft, Target>): AdapterDefinition<Draft, Target> {
-  const build = (patches: ReadonlyArray<Patch<Draft>>): AdapterDefinition<Draft, Target> => ({
+export function unsafe<Target>(input: AdapterInput<Target>): AdapterDefinition<Target> {
+  const build = (patches: ReadonlyArray<Patch<Target>>): AdapterDefinition<Target> => ({
     id: input.id,
     protocol: input.protocol,
     patches,
-    get runtime() {
-      // Runtime registry erases adapter draft/target generics after validation.
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      return this as unknown as RuntimeAdapter
-    },
     prepare: input.prepare,
     validate: input.validate,
     toHttp: input.toHttp,
@@ -175,7 +171,7 @@ export interface FromProtocolInput<Target, Frame, Chunk, State> {
  */
 export function fromProtocol<Target, Frame, Chunk, State>(
   input: FromProtocolInput<Target, Frame, Chunk, State>,
-): AdapterDefinition<Target, Target> {
+): AdapterDefinition<Target> {
   const auth = input.auth ?? authBearer
   const protocol = input.protocol
   const validateTarget = ProviderShared.validateWith(Schema.decodeUnknownEffect(protocol.target))
@@ -233,12 +229,10 @@ export function fromProtocol<Target, Frame, Chunk, State>(
 
 const makeClient = (options: ClientOptions): LLMClient => {
   const registry = normalizeRegistry(options.patches)
-  const adapters = new Map(
-    options.adapters.map((source) => [source.runtime.protocol, source.runtime] as const),
-  )
+  const adapters = new Map((options.adapters ?? []).map((adapter) => [adapter.protocol, adapter] as const))
 
   const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-    const adapter = adapters.get(request.model.protocol)
+    const adapter = adapters.get(request.model.protocol) ?? modelAdapters.get(request.model)
     if (!adapter) return yield* noAdapter(request.model)
 
     const requestPlan = plan({
@@ -266,13 +260,13 @@ const makeClient = (options: ClientOptions): LLMClient => {
             tools: requestBeforeToolPatches.tools.map(toolSchemaPlan.apply),
           })
     const patchContext = context({ request: patchedRequest })
-    const draft = yield* adapter.prepare(patchedRequest)
+    const candidate = yield* adapter.prepare(patchedRequest)
     const targetPlan = plan({
       phase: "target",
       context: patchContext,
       patches: [...adapter.patches, ...registry.target],
     })
-    const target = yield* adapter.validate(targetPlan.apply(draft))
+    const target = yield* adapter.validate(targetPlan.apply(candidate))
     const targetPatchTrace = [
       ...requestPlan.trace,
       ...promptPlan.trace,

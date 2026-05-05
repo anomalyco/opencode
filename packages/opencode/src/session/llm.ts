@@ -489,7 +489,8 @@ const live: Layer.Layer<
     //     (the AI SDK `messages` array isn't enough — the LLM-native bridge
     //     needs the typed parts).
     //   - The bridge can route the model to one of the protocols listed in
-    //     `NATIVE_PROTOCOLS` (today: Anthropic only).
+    //     `NATIVE_PROTOCOLS`. The adapter registry is broader than this
+    //     allowlist so we can enable providers incrementally.
     //   - If tools are present, the caller supplied a native tool definition
     //     for every AI SDK tool key so the native path can dispatch them.
     //

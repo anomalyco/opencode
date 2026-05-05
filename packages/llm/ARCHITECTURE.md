@@ -42,7 +42,7 @@ const program = Effect.gen(function* () {
   console.log(response.text)
 }).pipe(
   Effect.provide(Layer.mergeAll(
-    LLM.layer({ providers: [OpenAI] }),
+    LLM.layer(),
     RequestExecutor.defaultLayer,
   )),
 )
@@ -51,7 +51,7 @@ const program = Effect.gen(function* () {
 The public rule is:
 
 ```txt
-provider helper -> model reference -> LLM.generate / LLM.stream
+provider helper -> model handle -> LLM.generate / LLM.stream
 ```
 
 Provider helpers should feel boring at use sites.
@@ -103,7 +103,7 @@ This split is the core design choice.
 | Concept | Question it answers |
 | --- | --- |
 | `provider` | Who is the deployment or product surface? |
-| `protocol` | Which request/response shape should the runtime use? |
+| `protocol` | Which request/response shape should the runtime use? This is an open string so custom providers can add new protocol ids. |
 | `id` | Which model/deployment id should be sent? |
 | `baseURL` | Where should HTTP go? |
 | `apiKey`, `headers`, `queryParams`, `native` | What deployment-specific transport data is needed? |
@@ -129,7 +129,7 @@ type ModelRef = {
 }
 ```
 
-`ModelRef` is not a provider client. It does not send requests. It is the stable, serializable description of what should be called.
+`ModelRef` is the stable, serializable description of what should be called. Provider helpers also bind an in-memory adapter to the returned model handle so direct call sites do not need to manually register adapters; serialized copies fall back to `model.protocol` registry lookup.
 </details>
 
 ## Terrace 3: Follow A Request
@@ -140,7 +140,7 @@ At runtime, the flow is a staircase.
 LLM.generate({ model, prompt })
   -> LLM.request(...)
   -> LLMClient
-  -> adapter selected by model.protocol
+  -> adapter from the model handle, or explicit registry fallback
   -> provider-native target payload
   -> HttpClientRequest
   -> RequestExecutor
@@ -167,7 +167,7 @@ const request = LLM.request({
 })
 
 const client = LLMClient.make({
-  adapters: [OpenAIResponses.adapter, OpenAIChat.adapter],
+  adapters: [],
   patches: ProviderPatch.defaults,
 })
 
@@ -177,10 +177,10 @@ const response = yield* client.generate(request)
 <details>
 <summary>Adapter pipeline</summary>
 
-The adapter is selected by `request.model.protocol`.
+Explicit adapters passed to `LLMClient.make(...)` win first. If no explicit adapter matches, the adapter bound to the in-memory model handle is used. If the model was serialized and revived, `LLMClient` falls back to the explicit registry keyed by `request.model.protocol`.
 
 ```ts
-const adapter = adapters.get(request.model.protocol)
+const adapter = adapters.get(request.model.protocol) ?? modelAdapters.get(request.model)
 const candidate = adapter.prepare(request)
 const patched = applyTargetPatches(candidate)
 const target = adapter.validate(patched)
@@ -196,22 +196,22 @@ const events = adapter.parse(response)
 
 Keeping the current names, an `Adapter` is the runnable implementation for one registered request route.
 
-It is selected by `model.protocol`, not by `model.provider`.
+It is selected from the model handle when the provider helper created the model in the same process. Explicit adapter registration overrides that default and remains the fallback for revived models, OpenCode config bridges, and low-level tests.
 
 ```ts
 const adapters = new Map(
-  options.adapters.map((source) => [source.runtime.protocol, source.runtime] as const),
+  options.adapters.map((adapter) => [adapter.protocol, adapter] as const),
 )
 
-const adapter = adapters.get(request.model.protocol)
+const adapter = adapters.get(request.model.protocol) ?? modelAdapters.get(request.model)
 ```
 
-That means `protocol` currently has two jobs:
+That means `protocol` has two jobs only in fallback paths:
 
 | Job | Example |
 | --- | --- |
 | Describes the wire API shape | `openai-responses`, `anthropic-messages`, `gemini`. |
-| Selects the runtime adapter | `LLMClient` looks up `adapters.get(request.model.protocol)`. |
+| Selects the adapter after serialization | `LLMClient` looks up `adapters.get(request.model.protocol)`. |
 
 The adapter then owns the full compile/run boundary for that selected route.
 
@@ -241,7 +241,7 @@ So the current relationship is:
 
 ```txt
 ModelRef.protocol
-  -> selects Adapter
+  -> selects Adapter after serialization / registry lookup
   -> Adapter composes Protocol + Endpoint + Auth + Framing
   -> Adapter compiles the request and parses the response
 ```
@@ -269,7 +269,7 @@ Provider behavior is split across reusable layers instead of one large provider 
 
 ```txt
 Provider helper
-  creates ModelRef values
+  creates model handles backed by ModelRef values
 
 Provider module
   exports adapters and helper constructors
@@ -325,8 +325,8 @@ OpenAICompatible.model("gpt-4o-mini", { provider: "local-gateway", baseURL })
 
 | Layer | Owns |
 | --- | --- |
-| Provider helper | Public constructor, defaults, provider identity, model capabilities, limits. |
-| Provider module | Exported adapters and helpers passed to `LLM.layer({ providers })`. |
+| Provider helper | Public constructor, defaults, provider identity, model capabilities, limits, in-process adapter binding. |
+| Provider module | Exported adapters and helpers for explicit registry fallback. |
 | Adapter | Runtime registration and composition. |
 | Protocol | Request lowering, target schema, chunk schema, stream state machine. |
 | Endpoint | URL construction, base URL, path, query params, deployment routing. |
@@ -394,9 +394,34 @@ The difference is below the public API.
 
 | Concern | AI SDK | This package |
 | --- | --- | --- |
-| Use site | Provider creates runnable model object. | Provider creates `ModelRef`; `LLM` runtime runs it. |
+| Use site | Provider creates runnable model object. | Provider creates a runnable model handle backed by serializable `ModelRef`. |
 | Provider implementation | Usually provider-package-specific language model classes. | Protocol, endpoint, auth, framing, and patches are separate axes. |
 | OpenAI-compatible reuse | Dedicated OpenAI-compatible implementation. | Reuses `OpenAIChat.protocol` with different deployment axes. |
 | Debug/replay/parity | Mostly hidden behind provider implementation. | Exposed through request lowering, patches, adapters, and events. |
 
 The tradeoff is intentional. The public API should feel small. The internals should be inspectable enough for OpenCode to preserve provider parity, replay HTTP, diff native payloads, and migrate provider-by-provider without cloning whole adapter classes.
+
+### OpenCode Provider Loading
+
+OpenCode's current AI SDK path is more dynamic than this package's native path.
+
+```txt
+OpenCode config/models.dev
+  -> model.api.npm
+  -> import or install AI SDK provider package
+  -> create provider SDK
+  -> sdk.languageModel(...) / sdk.responses(...) / sdk.chat(...)
+```
+
+That is why OpenCode can point at many AI SDK provider packages without this repo shipping a native adapter for each one.
+
+The `@opencode-ai/llm` native path currently works in two modes:
+
+| Mode | How it works | Good for |
+| --- | --- | --- |
+| In-process model helper | `OpenAI.model(...)`, `OpenAICompatible.model(...)`, or a third-party helper returns a model handle bound to an adapter. | Library users and code that imports the provider package directly. |
+| Explicit adapter registry | `LLMClient.make({ adapters: [...] })` maps revived `ModelRef.protocol` values to shipped adapters. | OpenCode config/models.dev bridges, tests, request replay, serialized models. |
+
+So OpenCode native integration is not “import any AI SDK provider package and it just works” yet. Today it supports the protocols/providers we can resolve to known native adapters, plus generic OpenAI-compatible deployments. A config-defined provider with `@ai-sdk/openai-compatible` can resolve to `openai-compatible-chat`; a brand-new protocol needs a native adapter and resolver mapping.
+
+The core package is now open enough for external protocols: `ProtocolID` is just a string, so a third-party package can define `Protocol.define(...)`, `Adapter.fromProtocol(...)`, and a model helper without changing this package. To make OpenCode load those from config the same way it loads AI SDK packages, we would add an explicit native-provider loader/registry analogous to the AI SDK `model.api.npm` loader.
