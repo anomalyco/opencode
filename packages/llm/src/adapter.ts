@@ -33,7 +33,7 @@ export interface HttpContext {
 export interface Adapter<Target> {
   readonly id: string
   readonly protocol: ProtocolID
-  readonly target: Schema.Codec<Target, unknown>
+  readonly targetSchema: Schema.Codec<Target, unknown>
   readonly patches: ReadonlyArray<Patch<Target>>
   readonly prepare: (request: LLMRequest) => Effect.Effect<Target, LLMError>
   readonly toHttp: (
@@ -199,7 +199,7 @@ export function make<Target, Frame, Chunk, State>(
   return {
     id: input.id,
     protocol: input.protocolId ?? protocol.id,
-    target: protocol.target,
+    targetSchema: protocol.target,
     patches,
     prepare: protocol.prepare,
     toHttp,
@@ -228,7 +228,7 @@ const makeClient = (options: ClientOptions): LLMClient => {
       state: patchedRequest,
       target: candidate,
       adapterPatches: adapter.patches,
-      schema: adapter.target,
+      schema: adapter.targetSchema,
     })
     const http = yield* adapter.toHttp(patchedTarget.target, {
       request: patchedTarget.request,

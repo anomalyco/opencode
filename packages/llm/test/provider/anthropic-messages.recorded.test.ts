@@ -90,7 +90,7 @@ describe("Anthropic Messages recorded", () => {
 
   recorded.effect.with("accepts malformed assistant tool order with default patch", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const prepared: PreparedRequestOf<AnthropicMessagesTarget> = yield* anthropicWithPatches.prepare(malformedToolOrderRequest)
+      const prepared: PreparedRequestOf<AnthropicMessagesTarget> = yield* anthropicWithPatches.prepare<AnthropicMessagesTarget>(malformedToolOrderRequest)
       const response = yield* anthropicWithPatches.generate(malformedToolOrderRequest)
 
       expect(prepared.target.messages.slice(0, 2)).toMatchObject([

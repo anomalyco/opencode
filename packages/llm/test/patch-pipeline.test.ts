@@ -13,14 +13,7 @@ const request = LLM.request({
 
 const updateModel = (model: ModelRef, patch: Partial<LLM.ModelInput>) =>
   LLM.model({
-    id: model.id,
-    provider: model.provider,
-    protocol: model.protocol,
-    baseURL: model.baseURL,
-    headers: model.headers,
-    capabilities: model.capabilities,
-    limits: model.limits,
-    native: model.native,
+    ...model,
     ...patch,
   })
 
@@ -39,11 +32,7 @@ const mapText = (fn: (text: string) => string) => (request: LLMRequest): LLMRequ
 
 const updateToolDefinition = (tool: ToolDefinition, patch: Partial<ToolDefinition>) =>
   LLM.toolDefinition({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-    metadata: tool.metadata,
-    native: tool.native,
+    ...tool,
     ...patch,
   })
 
