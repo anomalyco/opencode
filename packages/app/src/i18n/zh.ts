@@ -68,6 +68,8 @@ export const dict = {
   "trellis.tasks.noProject": "打开项目后查看 Trellis 任务。",
   "trellis.tasks.desktopOnly": "Trellis 任务仅在桌面应用中可用。",
   "trellis.tasks.skipped": "{count} 个任务因缺少或格式错误的 task.json 被跳过",
+  "trellis.tasks.noPrd": "此任务文件夹下未找到 prd.md 文件。",
+  "trellis.tasks.openFolder": "打开文件夹",
 
   "command.palette": "命令面板",
 
