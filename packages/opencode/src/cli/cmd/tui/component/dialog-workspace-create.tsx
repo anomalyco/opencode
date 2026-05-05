@@ -172,15 +172,17 @@ export function DialogWorkspaceSelect(props: {
         },
         category: "Choose workspace",
       })),
-      hasMore
-        ? {
-            title: "View all workspaces",
-            value: { type: "existing-list" as const },
-            description: "Choose from all workspaces",
-            category: "Choose workspace",
-          }
-        : null,
-    ].filter(Boolean)
+      ...(hasMore
+        ? [
+            {
+              title: "View all workspaces",
+              value: { type: "existing-list" as const },
+              description: "Choose from all workspaces",
+              category: "Choose workspace",
+            },
+          ]
+        : []),
+    ]
   })
 
   if (!adapters()) return null
