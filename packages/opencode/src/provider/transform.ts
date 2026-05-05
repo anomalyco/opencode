@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai"
+import type { ModelMessage, ToolResultPart } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -18,6 +18,10 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+
+export function sanitizeSurrogates(content: string) {
+  return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
+}
 
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
@@ -45,11 +49,75 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+// TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
   _options: Record<string, unknown>,
 ): ModelMessage[] {
+  const sanitizeToolResultOutput = (content: ToolResultPart) => {
+    if (content.output.type === "text" || content.output.type === "error-text") {
+      content.output.value = sanitizeSurrogates(content.output.value)
+    }
+    if (content.output.type === "content") {
+      content.output.value = content.output.value.map((item) => {
+        if (item.type === "text") {
+          item.text = sanitizeSurrogates(item.text)
+        }
+        return item
+      })
+    }
+    return content
+  }
+
+  msgs = msgs.map((msg) => {
+    switch (msg.role) {
+      case "tool":
+        if (!Array.isArray(msg.content)) return msg
+        msg.content = msg.content.map((content) => {
+          if (content.type === "tool-result") {
+            return sanitizeToolResultOutput(content)
+          }
+          return content
+        })
+        return msg
+
+      case "system":
+        msg.content = sanitizeSurrogates(msg.content)
+        return msg
+
+      case "user":
+        if (typeof msg.content === "string") {
+          msg.content = sanitizeSurrogates(msg.content)
+        } else {
+          msg.content = msg.content.map((content) => {
+            if (content.type === "text") {
+              content.text = sanitizeSurrogates(content.text)
+            }
+            return content
+          })
+        }
+        return msg
+
+      case "assistant":
+        if (typeof msg.content === "string") {
+          msg.content = sanitizeSurrogates(msg.content)
+        } else {
+          msg.content = msg.content.map((content) => {
+            if (content.type === "text" || content.type === "reasoning") {
+              content.text = sanitizeSurrogates(content.text)
+            }
+            if (content.type === "tool-result") {
+              return sanitizeToolResultOutput(content)
+            }
+            return content
+          })
+        }
+        return msg
+    }
+    return msg
+  })
+
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
   if (model.api.npm === "@ai-sdk/anthropic") {
