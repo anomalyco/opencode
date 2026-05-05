@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { LLM, LLMEvent } from "../../src"
+import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { OpenAIChat } from "../../src/provider/openai-chat"
 import { ToolRuntime } from "../../src/tool-runtime"
-import { weatherRuntimeTool } from "../recorded-scenarios"
+import { eventSummary, weatherRuntimeTool } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 // Multi-interaction recorded test: drives the typed `ToolRuntime` against a
@@ -41,22 +41,14 @@ describe("OpenAI Chat tool-loop recorded", () => {
         yield* ToolRuntime.run(openai, { request, tools: { get_weather: weatherRuntimeTool } }).pipe(Stream.runCollect),
       )
 
-      // Two model rounds: tool-call + tool-result + final answer. Two
-      // `request-finish` events confirm both interactions in the cassette
-      // were dispatched in order.
-      const finishes = events.filter(LLMEvent.is.requestFinish)
-      expect(finishes).toHaveLength(2)
-      expect(finishes[0]?.reason).toBe("tool-calls")
-      expect(finishes.at(-1)?.reason).toBe("stop")
-
-      const toolResult = events.find(LLMEvent.is.toolResult)
-      expect(toolResult).toMatchObject({
-        type: "tool-result",
-        name: "get_weather",
-        result: { type: "json", value: { temperature: 22, condition: "sunny" } },
-      })
-
       expect(LLM.outputText({ events })).toContain("Paris")
+      expect(eventSummary(events)).toEqual([
+        { type: "tool-call", name: "get_weather", input: { city: "Paris" } },
+        { type: "finish", reason: "tool-calls" },
+        { type: "tool-result", name: "get_weather", result: { type: "json", value: { temperature: 22, condition: "sunny" } } },
+        { type: "text", value: expect.stringContaining("Paris") },
+        { type: "finish", reason: "stop" },
+      ])
     }),
   )
 })

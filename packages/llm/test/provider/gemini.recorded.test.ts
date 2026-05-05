@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { Gemini } from "../../src/provider/gemini"
-import { expectFinish, expectWeatherToolCall, textRequest, weatherToolRequest } from "../recorded-scenarios"
+import { eventSummary, textRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const model = Gemini.model({
@@ -27,9 +27,10 @@ describe("Gemini recorded", () => {
     Effect.gen(function* () {
       const response = yield* gemini.generate(request)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
-      expect(response.usage?.totalTokens).toBeGreaterThan(0)
-      expectFinish(response.events, "stop")
+      expect(eventSummary(response.events)).toEqual([
+        { type: "text", value: expect.stringMatching(/^Hello!?$/) },
+        { type: "finish", reason: "stop", usage: expect.objectContaining({ totalTokens: expect.any(Number) }) },
+      ])
     }),
   )
 
@@ -37,8 +38,10 @@ describe("Gemini recorded", () => {
     Effect.gen(function* () {
       const response = yield* gemini.generate(toolRequest)
 
-      expectWeatherToolCall(response)
-      expectFinish(response.events, "tool-calls")
+      expect(eventSummary(response.events)).toEqual([
+        { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },
+        { type: "finish", reason: "tool-calls", usage: expect.objectContaining({ totalTokens: expect.any(Number) }) },
+      ])
     }),
   )
 })

@@ -66,3 +66,66 @@ export const expectWeatherToolCall = (response: LLMResponse) =>
   expect(LLM.outputToolCalls(response)).toEqual([
     { type: "tool-call", id: expect.any(String), name: weatherToolName, input: { city: "Paris" } },
   ])
+
+const usageSummary = (usage: LLMResponse["usage"] | undefined) => {
+  if (!usage) return undefined
+  return Object.fromEntries(
+    [
+      ["inputTokens", usage.inputTokens],
+      ["outputTokens", usage.outputTokens],
+      ["reasoningTokens", usage.reasoningTokens],
+      ["cacheReadInputTokens", usage.cacheReadInputTokens],
+      ["cacheWriteInputTokens", usage.cacheWriteInputTokens],
+      ["totalTokens", usage.totalTokens],
+    ].filter((entry) => entry[1] !== undefined),
+  )
+}
+
+const pushText = (summary: Array<Record<string, unknown>>, type: "text" | "reasoning", value: string) => {
+  const last = summary.at(-1)
+  if (last?.type === type) {
+    last.value = `${last.value ?? ""}${value}`
+    return
+  }
+  summary.push({ type, value })
+}
+
+export const eventSummary = (events: ReadonlyArray<LLMEvent>) => {
+  const summary: Array<Record<string, unknown>> = []
+  for (const event of events) {
+    if (event.type === "text-delta") {
+      pushText(summary, "text", event.text)
+      continue
+    }
+    if (event.type === "reasoning-delta") {
+      pushText(summary, "reasoning", event.text)
+      continue
+    }
+    if (event.type === "tool-call") {
+      summary.push({
+        type: "tool-call",
+        name: event.name,
+        input: event.input,
+        providerExecuted: event.providerExecuted,
+      })
+      continue
+    }
+    if (event.type === "tool-result") {
+      summary.push({
+        type: "tool-result",
+        name: event.name,
+        result: event.result,
+        providerExecuted: event.providerExecuted,
+      })
+      continue
+    }
+    if (event.type === "tool-error") {
+      summary.push({ type: "tool-error", name: event.name, message: event.message })
+      continue
+    }
+    if (event.type === "request-finish") {
+      summary.push({ type: "finish", reason: event.reason, usage: usageSummary(event.usage) })
+    }
+  }
+  return summary.map((item) => Object.fromEntries(Object.entries(item).filter((entry) => entry[1] !== undefined)))
+}

@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { AnthropicMessages } from "../../src/provider/anthropic-messages"
-import { expectFinish, expectWeatherToolCall, textRequest, weatherToolRequest } from "../recorded-scenarios"
+import { eventSummary, textRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const model = AnthropicMessages.model({
@@ -28,9 +28,10 @@ describe("Anthropic Messages recorded", () => {
     Effect.gen(function* () {
       const response = yield* anthropic.generate(request)
 
-      expect(LLM.outputText(response)).toBe("Hello!")
-      expect(response.usage?.totalTokens).toBeGreaterThan(0)
-      expectFinish(response.events, "stop")
+      expect(eventSummary(response.events)).toEqual([
+        { type: "text", value: "Hello!" },
+        { type: "finish", reason: "stop", usage: expect.objectContaining({ totalTokens: expect.any(Number) }) },
+      ])
     }),
   )
 
@@ -38,9 +39,10 @@ describe("Anthropic Messages recorded", () => {
     Effect.gen(function* () {
       const response = yield* anthropic.generate(toolRequest)
 
-      expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
-      expectWeatherToolCall(response)
-      expectFinish(response.events, "tool-calls")
+      expect(eventSummary(response.events)).toEqual([
+        { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },
+        { type: "finish", reason: "tool-calls", usage: expect.objectContaining({ totalTokens: expect.any(Number) }) },
+      ])
     }),
   )
 })

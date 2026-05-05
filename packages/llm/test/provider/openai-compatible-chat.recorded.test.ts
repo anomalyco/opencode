@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { OpenAICompatibleChat } from "../../src/provider/openai-compatible-chat"
-import { expectFinish, expectWeatherToolCall, textRequest, weatherToolRequest } from "../recorded-scenarios"
+import { eventSummary, textRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const deepseekModel = OpenAICompatibleChat.deepseek({
@@ -29,8 +29,14 @@ describe("OpenAI-compatible Chat recorded", () => {
     Effect.gen(function* () {
       const response = yield* llm.generate(deepseekRequest)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
-      expectFinish(response.events, "stop")
+      expect(eventSummary(response.events)).toEqual([
+        { type: "text", value: "Hello!" },
+        {
+          type: "finish",
+          reason: "stop",
+          usage: { inputTokens: 14, outputTokens: 2, cacheReadInputTokens: 0, totalTokens: 16 },
+        },
+      ])
     }),
   )
 
@@ -38,8 +44,10 @@ describe("OpenAI-compatible Chat recorded", () => {
     Effect.gen(function* () {
       const response = yield* llm.generate(togetherRequest)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
-      expectFinish(response.events, "stop")
+      expect(eventSummary(response.events)).toEqual([
+        { type: "text", value: "Hello!" },
+        { type: "finish", reason: "stop", usage: { inputTokens: 45, outputTokens: 3, totalTokens: 48 } },
+      ])
     }),
   )
 
@@ -47,9 +55,10 @@ describe("OpenAI-compatible Chat recorded", () => {
     Effect.gen(function* () {
       const response = yield* llm.generate(togetherToolRequest)
 
-      expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
-      expectWeatherToolCall(response)
-      expectFinish(response.events, "tool-calls")
+      expect(eventSummary(response.events)).toEqual([
+        { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },
+        { type: "finish", reason: "tool-calls", usage: { inputTokens: 194, outputTokens: 19, totalTokens: 213 } },
+      ])
     }),
   )
 })
