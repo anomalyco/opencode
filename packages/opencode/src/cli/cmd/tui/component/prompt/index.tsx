@@ -173,8 +173,7 @@ export function Prompt(props: PromptProps) {
     if (!file) return
     return Locale.truncateMiddle(file, Math.max(12, Math.min(48, Math.floor(dimensions().width / 3))))
   })
-  const [editorContextHover, setEditorContextHover] = createSignal(false)
-  let lastSubmittedEditorSelectionKey: string | undefined
+  const editorContextLabelState = createMemo(() => editor.labelState())
   const [auto, setAuto] = createSignal<AutocompleteRef>()
   const [workspaceSelection, setWorkspaceSelection] = createSignal<WorkspaceSelection>()
   const [workspaceCreating, setWorkspaceCreating] = createSignal(false)
@@ -916,9 +915,8 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const editorSelection = editorContext()
-    const currentEditorSelectionKey = editorSelectionKey(editorSelection)
     const editorParts =
-      editorSelection && currentEditorSelectionKey !== lastSubmittedEditorSelectionKey
+      editorSelection && editor.labelState() === "pending"
         ? [
             {
               id: PartID.ascending(),
@@ -996,7 +994,7 @@ export function Prompt(props: PromptProps) {
           ],
         })
         .catch(() => {})
-      lastSubmittedEditorSelectionKey = currentEditorSelectionKey
+      if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
       ...store.prompt,
@@ -1011,13 +1009,15 @@ export function Prompt(props: PromptProps) {
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
-    if (!props.sessionID)
+    if (!props.sessionID) {
+      if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
       setTimeout(() => {
         route.navigate({
           type: "session",
           sessionID,
         })
       }, 50)
+    }
     input.clear()
     return true
   }
@@ -1608,16 +1608,9 @@ export function Prompt(props: PromptProps) {
           </Switch>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
-              <Show when={editorFileLabelDisplay()}>
+              <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
-                  <text
-                    fg={theme.secondary}
-                    onMouseOver={() => setEditorContextHover(true)}
-                    onMouseOut={() => setEditorContextHover(false)}
-                    onMouseUp={dismissEditorContext}
-                  >
-                    {editorContextHover() ? `x ${file()}` : file()}
-                  </text>
+                  <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>
                 )}
               </Show>
               <Switch>
