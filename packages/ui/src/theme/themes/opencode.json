@@ -88,10 +88,10 @@
       "diffDelete": "#9d7272"
     },
     "overrides": {
-      "background-base": "#181818",
+      "background-base": "#1e1e1e",
       "background-weak": "#1b1b1b",
-      "background-strong": "#181818",
-      "background-stronger": "#202020",
+      "background-strong": "#191919",
+      "background-stronger": "#181818",
       "surface-base": "#232323",
       "surface-base-hover": "#282828",
       "surface-base-active": "#2e2e2e",

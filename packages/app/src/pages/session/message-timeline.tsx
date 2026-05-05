@@ -710,7 +710,7 @@ export function MessageTimeline(props: {
                 }}
                 data-session-title
                 classList={{
-                  "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
+                  "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--main-surface-base)_48px,transparent)]": true,
                   relative: true,
                   "w-full": true,
                   "pb-4": true,
@@ -718,7 +718,7 @@ export function MessageTimeline(props: {
                   "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
                 }}
               >
-<Show when={settings.appearance.agentProgressIndicator() === "bar" && workingStatus() !== "hidden"}>
+                <Show when={settings.appearance.agentProgressIndicator() === "bar" && workingStatus() !== "hidden"}>
                   <div
                     data-component="session-progress"
                     data-state={workingStatus()}
