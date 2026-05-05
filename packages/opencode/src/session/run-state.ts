@@ -42,19 +42,10 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
-        const __id = Math.random().toString(36).slice(2, 8)
-        yield* Effect.logInfo(`SessionRunState.state init mapId=${__id} sharedRunners.size=${sharedRunners.size}`)
-        yield* Effect.addFinalizer(
-          Effect.fnUntraced(function* () {
-            yield* Effect.logInfo(
-              `SessionRunState.state finalize mapId=${__id} sharedRunners.size=${sharedRunners.size}`,
-            )
-            // Do NOT clear sharedRunners here — other layer instances may still use it.
-            // Active runners that belong to this scope will be cancelled by their own
-            // fiber's scope finalizers.
-          }),
-        )
-        return { runners: sharedRunners, scope, __id }
+        // Do NOT clear sharedRunners on finalize — other layer instances may
+        // still use it. Active runners that belong to this scope will be
+        // cancelled by their own fiber's scope finalizers.
+        return { runners: sharedRunners, scope }
       }),
     )
 
@@ -63,12 +54,8 @@ export const layer = Layer.effect(
       onInterrupt: Effect.Effect<MessageV2.WithParts>,
     ) {
       const data = yield* InstanceState.get(state)
-      const mapId = (data as { __id?: string }).__id ?? "?"
       const existing = data.runners.get(sessionID)
       if (existing) {
-        yield* Effect.logInfo(
-          `SessionRunState.runner reuse sid=${sessionID} mapId=${mapId} mapSize=${data.runners.size} stateTag=${existing.state._tag} busy=${existing.busy}`,
-        )
         return existing
       }
       const next = Runner.make<MessageV2.WithParts>(data.scope, {
@@ -83,9 +70,6 @@ export const layer = Layer.effect(
         },
       })
       data.runners.set(sessionID, next)
-      yield* Effect.logInfo(
-        `SessionRunState.runner create sid=${sessionID} mapId=${mapId} mapSize=${data.runners.size}`,
-      )
       return next
     })
 
