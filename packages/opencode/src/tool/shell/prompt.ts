@@ -17,6 +17,7 @@ const descriptions = {
 export type Limits = {
   maxLines: number
   maxBytes: number
+  defaultTimeoutMs: number
 }
 
 export function parameterSchema(description: string) {
@@ -102,7 +103,7 @@ function bashCommandSection(chain: string, limits: Limits) {
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${limits.defaultTimeoutMs}ms.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`head\`, \`tail\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
@@ -148,7 +149,7 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${limits.defaultTimeoutMs}ms.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`Select-Object -First\`, \`Select-Object -Last\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
@@ -198,7 +199,7 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${limits.defaultTimeoutMs}ms.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`more\` or other pagination commands to limit output; the full output will already be captured to a file for more precise searching.
 
