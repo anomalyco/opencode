@@ -1,9 +1,8 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
-import { checkServerHealth } from "@/utils/server-health"
+import { useCheckServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -34,6 +33,33 @@ function isLocalHost(url: string) {
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
 
+export function resolveServerList(input: {
+  props?: Array<ServerConnection.Any>
+  stored: StoredServer[]
+}): Array<ServerConnection.Any> {
+  const servers = [
+    ...input.stored.map((value) =>
+      typeof value === "string"
+        ? {
+            type: "http" as const,
+            http: { url: value },
+          }
+        : value,
+    ),
+    ...(input.props ?? []),
+  ]
+
+  const deduped = new Map<ServerConnection.Key, ServerConnection.Any>()
+  for (const value of servers) {
+    const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
+    const key = ServerConnection.key(conn)
+    if (deduped.has(key) && conn.type === "http" && !conn.authToken) continue
+    deduped.set(key, conn)
+  }
+
+  return [...deduped.values()]
+}
+
 export namespace ServerConnection {
   type Base = { displayName?: string }
 
@@ -47,6 +73,7 @@ export namespace ServerConnection {
   export type Http = {
     type: "http"
     http: HttpBase
+    authToken?: boolean
   } & Base
 
   export type Sidecar = {
@@ -95,8 +122,12 @@ export namespace ServerConnection {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
-    const platform = usePlatform()
+  init: (props: {
+    defaultServer: ServerConnection.Key
+    disableHealthCheck?: boolean
+    servers?: Array<ServerConnection.Any>
+  }) => {
+    const checkServerHealth = useCheckServerHealth()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
@@ -110,26 +141,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
-      const servers = [
-        ...(props.servers ?? []),
-        ...store.list.map((value) =>
-          typeof value === "string"
-            ? {
-                type: "http" as const,
-                http: { url: value },
-              }
-            : value,
-        ),
-      ]
-
-      const deduped = new Map(
-        servers.map((value) => {
-          const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
-          return [ServerConnection.key(conn), conn]
-        }),
-      )
-
-      return [...deduped.values()]
+      return resolveServerList({ stored: store.list, props: props.servers })
     })
 
     const [state, setState] = createStore({
@@ -171,7 +183,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
       if (!url_) return
-      const conn = { ...input, http: { ...input.http, url: url_ } }
+      const conn: ServerConnection.Http = { ...input, authToken: undefined, http: { ...input.http, url: url_ } }
       return batch(() => {
         const existing = store.list.findIndex((x) => url(x) === url_)
         if (existing !== -1) {
@@ -197,13 +209,16 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const isReady = createMemo(() => ready() && !!state.active)
 
-    const fetcher = platform.fetch ?? globalThis.fetch
-    const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http, fetcher).then((x) => x.healthy)
+    const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http).then((x) => x.healthy)
 
     createEffect(() => {
       const current_ = current()
       if (!current_) return
 
+      if (props.disableHealthCheck) {
+        setState("healthy", true)
+        return
+      }
       setState("healthy", undefined)
       onCleanup(startHealthPolling(current_))
     })

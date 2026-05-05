@@ -1,10 +1,12 @@
-import { Component, createMemo, createSignal, Show } from "solid-js"
+import { useMutation, useQueryClient } from "@tanstack/solid-query"
+import { Component, createMemo, Show } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/context/language"
+import { loadMcpQuery } from "@/context/global-sync"
 
 const statusLabels = {
   connected: "mcp.status.connected",
@@ -17,7 +19,7 @@ export const DialogSelectMcp: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
-  const [loading, setLoading] = createSignal<string | null>(null)
+  const queryClient = useQueryClient()
 
   const items = createMemo(() =>
     Object.entries(sync.data.mcp ?? {})
@@ -25,23 +27,13 @@ export const DialogSelectMcp: Component = () => {
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const toggle = async (name: string) => {
-    if (loading()) return
-    setLoading(name)
-    try {
-      const status = sync.data.mcp[name]
-      if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-      } else {
-        await sdk.client.mcp.connect({ name })
-      }
-
-      const result = await sdk.client.mcp.status()
-      if (result.data) sync.set("mcp", result.data)
-    } finally {
-      setLoading(null)
-    }
-  }
+  const toggle = useMutation(() => ({
+    mutationFn: async (name: string) => {
+      if (sync.data.mcp[name]?.status === "connected") await sdk.client.mcp.disconnect({ name })
+      else await sdk.client.mcp.connect({ name })
+    },
+    onSuccess: () => queryClient.refetchQueries({ queryKey: loadMcpQuery(sync.directory).queryKey }),
+  }))
 
   const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
   const totalCount = createMemo(() => items().length)
@@ -59,7 +51,8 @@ export const DialogSelectMcp: Component = () => {
         filterKeys={["name", "status"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
         onSelect={(x) => {
-          if (x) toggle(x.name)
+          if (!x || toggle.isPending) return
+          toggle.mutate(x.name)
         }}
       >
         {(i) => {
@@ -83,7 +76,7 @@ export const DialogSelectMcp: Component = () => {
                   <Show when={statusLabel()}>
                     <span class="text-11-regular text-text-weaker">{statusLabel()}</span>
                   </Show>
-                  <Show when={loading() === i.name}>
+                  <Show when={toggle.isPending && toggle.variables === i.name}>
                     <span class="text-11-regular text-text-weak">{language.t("common.loading.ellipsis")}</span>
                   </Show>
                 </div>
@@ -92,7 +85,14 @@ export const DialogSelectMcp: Component = () => {
                 </Show>
               </div>
               <div onClick={(e) => e.stopPropagation()}>
-                <Switch checked={enabled()} disabled={loading() === i.name} onChange={() => toggle(i.name)} />
+                <Switch
+                  checked={enabled()}
+                  disabled={toggle.isPending && toggle.variables === i.name}
+                  onChange={() => {
+                    if (toggle.isPending) return
+                    toggle.mutate(i.name)
+                  }}
+                />
               </div>
             </div>
           )

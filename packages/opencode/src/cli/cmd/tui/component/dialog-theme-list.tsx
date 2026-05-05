@@ -1,7 +1,7 @@
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
-import { onCleanup, onMount } from "solid-js"
+import { onCleanup } from "solid-js"
 
 export function DialogThemeList() {
   const theme = useTheme()

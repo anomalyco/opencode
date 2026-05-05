@@ -20,17 +20,24 @@ import type {
   ConfigUpdateErrors,
   ConfigUpdateResponses,
   EventSubscribeResponses,
-  EventTuiCommandExecute,
-  EventTuiPromptAppend,
-  EventTuiSessionSelect,
-  EventTuiToastShow,
+  EventTuiCommandExecute2,
+  EventTuiPromptAppend2,
+  EventTuiSessionSelect2,
+  EventTuiToastShow2,
+  ExperimentalConsoleGetResponses,
+  ExperimentalConsoleListOrgsResponses,
+  ExperimentalConsoleSwitchOrgResponses,
   ExperimentalResourceListResponses,
   ExperimentalSessionListResponses,
+  ExperimentalWorkspaceAdapterListResponses,
   ExperimentalWorkspaceCreateErrors,
   ExperimentalWorkspaceCreateResponses,
   ExperimentalWorkspaceListResponses,
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
+  ExperimentalWorkspaceStatusResponses,
+  ExperimentalWorkspaceWarpErrors,
+  ExperimentalWorkspaceWarpResponses,
   FileListResponses,
   FilePartInput,
   FilePartSource,
@@ -46,6 +53,8 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalUpgradeErrors,
+  GlobalUpgradeResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -77,9 +86,11 @@ import type {
   PermissionRespondResponses,
   PermissionRuleset,
   ProjectCurrentResponses,
+  ProjectInitGitResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
+  Prompt,
   ProviderAuthResponses,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
@@ -88,6 +99,8 @@ import type {
   ProviderOauthCallbackResponses,
   PtyConnectErrors,
   PtyConnectResponses,
+  PtyConnectTokenErrors,
+  PtyConnectTokenResponses,
   PtyCreateErrors,
   PtyCreateResponses,
   PtyGetErrors,
@@ -95,6 +108,7 @@ import type {
   PtyListResponses,
   PtyRemoveErrors,
   PtyRemoveResponses,
+  PtyShellsResponses,
   PtyUpdateErrors,
   PtyUpdateResponses,
   QuestionAnswer,
@@ -115,6 +129,7 @@ import type {
   SessionDeleteMessageErrors,
   SessionDeleteMessageResponses,
   SessionDeleteResponses,
+  SessionDelivery,
   SessionDiffResponses,
   SessionForkResponses,
   SessionGetErrors,
@@ -149,6 +164,13 @@ import type {
   SessionUpdateErrors,
   SessionUpdateResponses,
   SubtaskPartInput,
+  SyncHistoryListErrors,
+  SyncHistoryListResponses,
+  SyncReplayErrors,
+  SyncReplayResponses,
+  SyncStartResponses,
+  SyncStealErrors,
+  SyncStealResponses,
   TextPartInput,
   ToolIdsErrors,
   ToolIdsResponses,
@@ -171,6 +193,15 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  V2SessionCompactResponses,
+  V2SessionContextResponses,
+  V2SessionListErrors,
+  V2SessionListResponses,
+  V2SessionMessagesErrors,
+  V2SessionMessagesResponses,
+  V2SessionPromptResponses,
+  V2SessionWaitResponses,
+  VcsDiffResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
@@ -224,6 +255,169 @@ class HeyApiRegistry<T> {
 
   set(value: T, key?: string): void {
     this.instances.set(key ?? this.defaultKey, value)
+  }
+}
+
+export class Auth extends HeyApiClient {
+  /**
+   * Remove auth credentials
+   *
+   * Remove authentication credentials
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set auth credentials
+   *
+   * Set authentication credentials
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      auth?: Auth3
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { key: "auth", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class App extends HeyApiClient {
+  /**
+   * Write log
+   *
+   * Write a log entry to the server logs with specified level and metadata.
+   */
+  public log<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      service?: string
+      level?: "debug" | "info" | "error" | "warn"
+      message?: string
+      extra?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "service" },
+            { in: "body", key: "level" },
+            { in: "body", key: "message" },
+            { in: "body", key: "extra" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AppLogResponses, AppLogErrors, ThrowOnError>({
+      url: "/log",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List agents
+   *
+   * Get a list of all available AI agents in the OpenCode system.
+   */
+  public agents<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AppAgentsResponses, unknown, ThrowOnError>({
+      url: "/agent",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List skills
+   *
+   * Get a list of all available skills in the OpenCode system.
+   */
+  public skills<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AppSkillsResponses, unknown, ThrowOnError>({
+      url: "/skill",
+      ...options,
+      ...params,
+    })
   }
 }
 
@@ -302,75 +496,43 @@ export class Global extends HeyApiClient {
     })
   }
 
+  /**
+   * Upgrade opencode
+   *
+   * Upgrade opencode to the specified version or latest if not specified.
+   */
+  public upgrade<ThrowOnError extends boolean = false>(
+    parameters?: {
+      target?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "target" }] }])
+    return (options?.client ?? this.client).post<GlobalUpgradeResponses, GlobalUpgradeErrors, ThrowOnError>({
+      url: "/global/upgrade",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
   }
 }
 
-export class Auth extends HeyApiClient {
+export class Event extends HeyApiClient {
   /**
-   * Remove auth credentials
+   * Subscribe to events
    *
-   * Remove authentication credentials
+   * Get events
    */
-  public remove<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
-    return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
-      url: "/auth/{providerID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Set auth credentials
-   *
-   * Set authentication credentials
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      auth?: Auth3
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { key: "auth", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
-      url: "/auth/{providerID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Project extends HeyApiClient {
-  /**
-   * List all projects
-   *
-   * Get a list of projects that have been opened with OpenCode.
-   */
-  public list<ThrowOnError extends boolean = false>(
+  public subscribe<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
@@ -388,309 +550,8 @@ export class Project extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<ProjectListResponses, unknown, ThrowOnError>({
-      url: "/project",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Get current project
-   *
-   * Retrieve the currently active project that OpenCode is working with.
-   */
-  public current<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ProjectCurrentResponses, unknown, ThrowOnError>({
-      url: "/project/current",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Update project
-   *
-   * Update project properties such as name, icon, and commands.
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      projectID: string
-      directory?: string
-      workspace?: string
-      name?: string
-      icon?: {
-        url?: string
-        override?: string
-        color?: string
-      }
-      commands?: {
-        /**
-         * Startup script to run when creating a new workspace (worktree)
-         */
-        start?: string
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "projectID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "name" },
-            { in: "body", key: "icon" },
-            { in: "body", key: "commands" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).patch<ProjectUpdateResponses, ProjectUpdateErrors, ThrowOnError>({
-      url: "/project/{projectID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Pty extends HeyApiClient {
-  /**
-   * List PTY sessions
-   *
-   * Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<PtyListResponses, unknown, ThrowOnError>({
-      url: "/pty",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Create PTY session
-   *
-   * Create a new pseudo-terminal (PTY) session for running shell commands and processes.
-   */
-  public create<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      command?: string
-      args?: Array<string>
-      cwd?: string
-      title?: string
-      env?: {
-        [key: string]: string
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "command" },
-            { in: "body", key: "args" },
-            { in: "body", key: "cwd" },
-            { in: "body", key: "title" },
-            { in: "body", key: "env" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<PtyCreateResponses, PtyCreateErrors, ThrowOnError>({
-      url: "/pty",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Remove PTY session
-   *
-   * Remove and terminate a specific pseudo-terminal (PTY) session.
-   */
-  public remove<ThrowOnError extends boolean = false>(
-    parameters: {
-      ptyID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "ptyID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<PtyRemoveResponses, PtyRemoveErrors, ThrowOnError>({
-      url: "/pty/{ptyID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Get PTY session
-   *
-   * Retrieve detailed information about a specific pseudo-terminal (PTY) session.
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters: {
-      ptyID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "ptyID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<PtyGetResponses, PtyGetErrors, ThrowOnError>({
-      url: "/pty/{ptyID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Update PTY session
-   *
-   * Update properties of an existing pseudo-terminal (PTY) session.
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      ptyID: string
-      directory?: string
-      workspace?: string
-      title?: string
-      size?: {
-        rows: number
-        cols: number
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "ptyID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "title" },
-            { in: "body", key: "size" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<PtyUpdateResponses, PtyUpdateErrors, ThrowOnError>({
-      url: "/pty/{ptyID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Connect to PTY session
-   *
-   * Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.
-   */
-  public connect<ThrowOnError extends boolean = false>(
-    parameters: {
-      ptyID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "ptyID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<PtyConnectResponses, PtyConnectErrors, ThrowOnError>({
-      url: "/pty/{ptyID}/connect",
+    return (options?.client ?? this.client).sse.get<EventSubscribeResponses, unknown, ThrowOnError>({
+      url: "/event",
       ...options,
       ...params,
     })
@@ -796,13 +657,13 @@ export class Config2 extends HeyApiClient {
   }
 }
 
-export class Tool extends HeyApiClient {
+export class Console extends HeyApiClient {
   /**
-   * List tool IDs
+   * Get active Console provider metadata
    *
-   * Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.
+   * Get the active Console org name and the set of provider IDs managed by that Console org.
    */
-  public ids<ThrowOnError extends boolean = false>(
+  public get<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
@@ -820,24 +681,22 @@ export class Tool extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<ToolIdsResponses, ToolIdsErrors, ThrowOnError>({
-      url: "/experimental/tool/ids",
+    return (options?.client ?? this.client).get<ExperimentalConsoleGetResponses, unknown, ThrowOnError>({
+      url: "/experimental/console",
       ...options,
       ...params,
     })
   }
 
   /**
-   * List tools
+   * List switchable Console orgs
    *
-   * Get a list of available tools with their JSON schema parameters for a specific provider and model combination.
+   * Get the available Console orgs across logged-in accounts, including the current active org.
    */
-  public list<ThrowOnError extends boolean = false>(
-    parameters: {
+  public listOrgs<ThrowOnError extends boolean = false>(
+    parameters?: {
       directory?: string
       workspace?: string
-      provider: string
-      model: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -848,14 +707,159 @@ export class Tool extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { in: "query", key: "provider" },
-            { in: "query", key: "model" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).get<ToolListResponses, ToolListErrors, ThrowOnError>({
-      url: "/experimental/tool",
+    return (options?.client ?? this.client).get<ExperimentalConsoleListOrgsResponses, unknown, ThrowOnError>({
+      url: "/experimental/console/orgs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Switch active Console org
+   *
+   * Persist a new active Console account/org selection for the current local OpenCode state.
+   */
+  public switchOrg<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      accountID?: string
+      orgID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "accountID" },
+            { in: "body", key: "orgID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ExperimentalConsoleSwitchOrgResponses, unknown, ThrowOnError>({
+      url: "/experimental/console/switch",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Session extends HeyApiClient {
+  /**
+   * List sessions
+   *
+   * Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      roots?: boolean | "true" | "false"
+      start?: number
+      cursor?: number
+      search?: string
+      limit?: number
+      archived?: boolean | "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "start" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "search" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "archived" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalSessionListResponses, unknown, ThrowOnError>({
+      url: "/experimental/session",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Resource extends HeyApiClient {
+  /**
+   * Get MCP resources
+   *
+   * Get all available MCP resources from connected servers. Optionally filter by name.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalResourceListResponses, unknown, ThrowOnError>({
+      url: "/experimental/resource",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Adapter extends HeyApiClient {
+  /**
+   * List workspace adapters
+   *
+   * List all available workspace adapters for the current project.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalWorkspaceAdapterListResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/adapter",
       ...options,
       ...params,
     })
@@ -941,6 +945,36 @@ export class Workspace extends HeyApiClient {
   }
 
   /**
+   * Workspace status
+   *
+   * Get connection status for workspaces in the current project.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalWorkspaceStatusResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Remove workspace
    *
    * Remove an existing workspace.
@@ -975,24 +1009,18 @@ export class Workspace extends HeyApiClient {
       ...params,
     })
   }
-}
 
-export class Session extends HeyApiClient {
   /**
-   * List sessions
+   * Warp session into workspace
    *
-   * Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.
+   * Move a session's sync history into the target workspace, or detach it to the local project.
    */
-  public list<ThrowOnError extends boolean = false>(
+  public warp<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
-      roots?: boolean
-      start?: number
-      cursor?: number
-      search?: string
-      limit?: number
-      archived?: boolean
+      id?: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1003,60 +1031,38 @@ export class Session extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
-            { in: "query", key: "roots" },
-            { in: "query", key: "start" },
-            { in: "query", key: "cursor" },
-            { in: "query", key: "search" },
-            { in: "query", key: "limit" },
-            { in: "query", key: "archived" },
+            { in: "body", key: "id" },
+            { in: "body", key: "sessionID" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).get<ExperimentalSessionListResponses, unknown, ThrowOnError>({
-      url: "/experimental/session",
+    return (options?.client ?? this.client).post<
+      ExperimentalWorkspaceWarpResponses,
+      ExperimentalWorkspaceWarpErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/workspace/warp",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
-}
 
-export class Resource extends HeyApiClient {
-  /**
-   * Get MCP resources
-   *
-   * Get all available MCP resources from connected servers. Optionally filter by name.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ExperimentalResourceListResponses, unknown, ThrowOnError>({
-      url: "/experimental/resource",
-      ...options,
-      ...params,
-    })
+  private _adapter?: Adapter
+  get adapter(): Adapter {
+    return (this._adapter ??= new Adapter({ client: this.client }))
   }
 }
 
 export class Experimental extends HeyApiClient {
-  private _workspace?: Workspace
-  get workspace(): Workspace {
-    return (this._workspace ??= new Workspace({ client: this.client }))
+  private _console?: Console
+  get console(): Console {
+    return (this._console ??= new Console({ client: this.client }))
   }
 
   private _session?: Session
@@ -1067,6 +1073,77 @@ export class Experimental extends HeyApiClient {
   private _resource?: Resource
   get resource(): Resource {
     return (this._resource ??= new Resource({ client: this.client }))
+  }
+
+  private _workspace?: Workspace
+  get workspace(): Workspace {
+    return (this._workspace ??= new Workspace({ client: this.client }))
+  }
+}
+
+export class Tool extends HeyApiClient {
+  /**
+   * List tools
+   *
+   * Get a list of available tools with their JSON schema parameters for a specific provider and model combination.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      provider: string
+      model: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ToolListResponses, ToolListErrors, ThrowOnError>({
+      url: "/experimental/tool",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List tool IDs
+   *
+   * Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.
+   */
+  public ids<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ToolIdsResponses, ToolIdsErrors, ThrowOnError>({
+      url: "/experimental/tool/ids",
+      ...options,
+      ...params,
+    })
   }
 }
 
@@ -1210,1399 +1287,6 @@ export class Worktree extends HeyApiClient {
         ...params.headers,
       },
     })
-  }
-}
-
-export class Session2 extends HeyApiClient {
-  /**
-   * List sessions
-   *
-   * Get a list of all OpenCode sessions, sorted by most recently updated.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      roots?: boolean
-      start?: number
-      search?: string
-      limit?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "roots" },
-            { in: "query", key: "start" },
-            { in: "query", key: "search" },
-            { in: "query", key: "limit" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionListResponses, unknown, ThrowOnError>({
-      url: "/session",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Create session
-   *
-   * Create a new OpenCode session for interacting with AI assistants and managing conversations.
-   */
-  public create<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      parentID?: string
-      title?: string
-      permission?: PermissionRuleset
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "parentID" },
-            { in: "body", key: "title" },
-            { in: "body", key: "permission" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionCreateResponses, SessionCreateErrors, ThrowOnError>({
-      url: "/session",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Get session status
-   *
-   * Retrieve the current status of all sessions, including active, idle, and completed states.
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionStatusResponses, SessionStatusErrors, ThrowOnError>({
-      url: "/session/status",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Delete session
-   *
-   * Delete a session and permanently remove all associated data, including messages and history.
-   */
-  public delete<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<SessionDeleteResponses, SessionDeleteErrors, ThrowOnError>({
-      url: "/session/{sessionID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Get session
-   *
-   * Retrieve detailed information about a specific OpenCode session.
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionGetResponses, SessionGetErrors, ThrowOnError>({
-      url: "/session/{sessionID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Update session
-   *
-   * Update properties of an existing session, such as title or other metadata.
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      title?: string
-      time?: {
-        archived?: number
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "title" },
-            { in: "body", key: "time" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).patch<SessionUpdateResponses, SessionUpdateErrors, ThrowOnError>({
-      url: "/session/{sessionID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Get session children
-   *
-   * Retrieve all child sessions that were forked from the specified parent session.
-   */
-  public children<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionChildrenResponses, SessionChildrenErrors, ThrowOnError>({
-      url: "/session/{sessionID}/children",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Get session todos
-   *
-   * Retrieve the todo list associated with a specific session, showing tasks and action items.
-   */
-  public todo<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionTodoResponses, SessionTodoErrors, ThrowOnError>({
-      url: "/session/{sessionID}/todo",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Initialize session
-   *
-   * Analyze the current application and create an AGENTS.md file with project-specific agent configurations.
-   */
-  public init<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      modelID?: string
-      providerID?: string
-      messageID?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "modelID" },
-            { in: "body", key: "providerID" },
-            { in: "body", key: "messageID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionInitResponses, SessionInitErrors, ThrowOnError>({
-      url: "/session/{sessionID}/init",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Fork session
-   *
-   * Create a new session by forking an existing session at a specific message point.
-   */
-  public fork<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      messageID?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "messageID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionForkResponses, unknown, ThrowOnError>({
-      url: "/session/{sessionID}/fork",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Abort session
-   *
-   * Abort an active session and stop any ongoing AI processing or command execution.
-   */
-  public abort<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionAbortResponses, SessionAbortErrors, ThrowOnError>({
-      url: "/session/{sessionID}/abort",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Unshare session
-   *
-   * Remove the shareable link for a session, making it private again.
-   */
-  public unshare<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<SessionUnshareResponses, SessionUnshareErrors, ThrowOnError>({
-      url: "/session/{sessionID}/share",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Share session
-   *
-   * Create a shareable link for a session, allowing others to view the conversation.
-   */
-  public share<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionShareResponses, SessionShareErrors, ThrowOnError>({
-      url: "/session/{sessionID}/share",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Get message diff
-   *
-   * Get the file changes (diff) that resulted from a specific user message in the session.
-   */
-  public diff<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      messageID?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "messageID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionDiffResponses, unknown, ThrowOnError>({
-      url: "/session/{sessionID}/diff",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Summarize session
-   *
-   * Generate a concise summary of the session using AI compaction to preserve key information.
-   */
-  public summarize<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      providerID?: string
-      modelID?: string
-      auto?: boolean
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "providerID" },
-            { in: "body", key: "modelID" },
-            { in: "body", key: "auto" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionSummarizeResponses, SessionSummarizeErrors, ThrowOnError>({
-      url: "/session/{sessionID}/summarize",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Get session messages
-   *
-   * Retrieve all messages in a session, including user prompts and AI responses.
-   */
-  public messages<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      limit?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "limit" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionMessagesResponses, SessionMessagesErrors, ThrowOnError>({
-      url: "/session/{sessionID}/message",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Send message
-   *
-   * Create and send a new message to a session, streaming the AI response.
-   */
-  public prompt<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      messageID?: string
-      model?: {
-        providerID: string
-        modelID: string
-      }
-      agent?: string
-      noReply?: boolean
-      tools?: {
-        [key: string]: boolean
-      }
-      format?: OutputFormat
-      system?: string
-      variant?: string
-      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "messageID" },
-            { in: "body", key: "model" },
-            { in: "body", key: "agent" },
-            { in: "body", key: "noReply" },
-            { in: "body", key: "tools" },
-            { in: "body", key: "format" },
-            { in: "body", key: "system" },
-            { in: "body", key: "variant" },
-            { in: "body", key: "parts" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionPromptResponses, SessionPromptErrors, ThrowOnError>({
-      url: "/session/{sessionID}/message",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Delete message
-   *
-   * Permanently delete a specific message (and all of its parts) from a session. This does not revert any file changes that may have been made while processing the message.
-   */
-  public deleteMessage<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      messageID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "path", key: "messageID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<
-      SessionDeleteMessageResponses,
-      SessionDeleteMessageErrors,
-      ThrowOnError
-    >({
-      url: "/session/{sessionID}/message/{messageID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Get message
-   *
-   * Retrieve a specific message from a session by its message ID.
-   */
-  public message<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      messageID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "path", key: "messageID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SessionMessageResponses, SessionMessageErrors, ThrowOnError>({
-      url: "/session/{sessionID}/message/{messageID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Send async message
-   *
-   * Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.
-   */
-  public promptAsync<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      messageID?: string
-      model?: {
-        providerID: string
-        modelID: string
-      }
-      agent?: string
-      noReply?: boolean
-      tools?: {
-        [key: string]: boolean
-      }
-      format?: OutputFormat
-      system?: string
-      variant?: string
-      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "messageID" },
-            { in: "body", key: "model" },
-            { in: "body", key: "agent" },
-            { in: "body", key: "noReply" },
-            { in: "body", key: "tools" },
-            { in: "body", key: "format" },
-            { in: "body", key: "system" },
-            { in: "body", key: "variant" },
-            { in: "body", key: "parts" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionPromptAsyncResponses, SessionPromptAsyncErrors, ThrowOnError>({
-      url: "/session/{sessionID}/prompt_async",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Send command
-   *
-   * Send a new command to a session for execution by the AI assistant.
-   */
-  public command<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      messageID?: string
-      agent?: string
-      model?: string
-      arguments?: string
-      command?: string
-      variant?: string
-      parts?: Array<{
-        id?: string
-        type: "file"
-        mime: string
-        filename?: string
-        url: string
-        source?: FilePartSource
-      }>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "messageID" },
-            { in: "body", key: "agent" },
-            { in: "body", key: "model" },
-            { in: "body", key: "arguments" },
-            { in: "body", key: "command" },
-            { in: "body", key: "variant" },
-            { in: "body", key: "parts" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionCommandResponses, SessionCommandErrors, ThrowOnError>({
-      url: "/session/{sessionID}/command",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Run shell command
-   *
-   * Execute a shell command within the session context and return the AI's response.
-   */
-  public shell<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      agent?: string
-      model?: {
-        providerID: string
-        modelID: string
-      }
-      command?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "agent" },
-            { in: "body", key: "model" },
-            { in: "body", key: "command" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionShellResponses, SessionShellErrors, ThrowOnError>({
-      url: "/session/{sessionID}/shell",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Revert message
-   *
-   * Revert a specific message in a session, undoing its effects and restoring the previous state.
-   */
-  public revert<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-      messageID?: string
-      partID?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "messageID" },
-            { in: "body", key: "partID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionRevertResponses, SessionRevertErrors, ThrowOnError>({
-      url: "/session/{sessionID}/revert",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Restore reverted messages
-   *
-   * Restore all previously reverted messages in a session.
-   */
-  public unrevert<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SessionUnrevertResponses, SessionUnrevertErrors, ThrowOnError>({
-      url: "/session/{sessionID}/unrevert",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Part extends HeyApiClient {
-  /**
-   * Delete a part from a message
-   */
-  public delete<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      messageID: string
-      partID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "path", key: "messageID" },
-            { in: "path", key: "partID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<PartDeleteResponses, PartDeleteErrors, ThrowOnError>({
-      url: "/session/{sessionID}/message/{messageID}/part/{partID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Update a part in a message
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      messageID: string
-      partID: string
-      directory?: string
-      workspace?: string
-      part?: Part2
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "path", key: "messageID" },
-            { in: "path", key: "partID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { key: "part", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).patch<PartUpdateResponses, PartUpdateErrors, ThrowOnError>({
-      url: "/session/{sessionID}/message/{messageID}/part/{partID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Permission extends HeyApiClient {
-  /**
-   * Respond to permission
-   *
-   * Approve or deny a permission request from the AI assistant.
-   *
-   * @deprecated
-   */
-  public respond<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      permissionID: string
-      directory?: string
-      workspace?: string
-      response?: "once" | "always" | "reject"
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "path", key: "permissionID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "response" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<PermissionRespondResponses, PermissionRespondErrors, ThrowOnError>({
-      url: "/session/{sessionID}/permissions/{permissionID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Respond to permission request
-   *
-   * Approve or deny a permission request from the AI assistant.
-   */
-  public reply<ThrowOnError extends boolean = false>(
-    parameters: {
-      requestID: string
-      directory?: string
-      workspace?: string
-      reply?: "once" | "always" | "reject"
-      message?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "requestID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "reply" },
-            { in: "body", key: "message" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<PermissionReplyResponses, PermissionReplyErrors, ThrowOnError>({
-      url: "/permission/{requestID}/reply",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * List pending permissions
-   *
-   * Get all pending permission requests across all sessions.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<PermissionListResponses, unknown, ThrowOnError>({
-      url: "/permission",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Question extends HeyApiClient {
-  /**
-   * List pending questions
-   *
-   * Get all pending question requests across all sessions.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<QuestionListResponses, unknown, ThrowOnError>({
-      url: "/question",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Reply to question request
-   *
-   * Provide answers to a question request from the AI assistant.
-   */
-  public reply<ThrowOnError extends boolean = false>(
-    parameters: {
-      requestID: string
-      directory?: string
-      workspace?: string
-      answers?: Array<QuestionAnswer>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "requestID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "answers" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<QuestionReplyResponses, QuestionReplyErrors, ThrowOnError>({
-      url: "/question/{requestID}/reply",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Reject question request
-   *
-   * Reject a question request from the AI assistant.
-   */
-  public reject<ThrowOnError extends boolean = false>(
-    parameters: {
-      requestID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "requestID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<QuestionRejectResponses, QuestionRejectErrors, ThrowOnError>({
-      url: "/question/{requestID}/reject",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Oauth extends HeyApiClient {
-  /**
-   * OAuth authorize
-   *
-   * Initiate OAuth authorization for a specific AI provider to get an authorization URL.
-   */
-  public authorize<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      directory?: string
-      workspace?: string
-      method?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "method" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      ProviderOauthAuthorizeResponses,
-      ProviderOauthAuthorizeErrors,
-      ThrowOnError
-    >({
-      url: "/provider/{providerID}/oauth/authorize",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * OAuth callback
-   *
-   * Handle the OAuth callback from a provider after user authorization.
-   */
-  public callback<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      directory?: string
-      workspace?: string
-      method?: number
-      code?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "method" },
-            { in: "body", key: "code" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      ProviderOauthCallbackResponses,
-      ProviderOauthCallbackErrors,
-      ThrowOnError
-    >({
-      url: "/provider/{providerID}/oauth/callback",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Provider extends HeyApiClient {
-  /**
-   * List providers
-   *
-   * Get a list of all available AI providers, including both available and connected ones.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ProviderListResponses, unknown, ThrowOnError>({
-      url: "/provider",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Get provider auth methods
-   *
-   * Retrieve available authentication methods for all AI providers.
-   */
-  public auth<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ProviderAuthResponses, unknown, ThrowOnError>({
-      url: "/provider/auth",
-      ...options,
-      ...params,
-    })
-  }
-
-  private _oauth?: Oauth
-  get oauth(): Oauth {
-    return (this._oauth ??= new Oauth({ client: this.client }))
   }
 }
 
@@ -2806,11 +1490,235 @@ export class File extends HeyApiClient {
   }
 }
 
+export class Instance extends HeyApiClient {
+  /**
+   * Dispose instance
+   *
+   * Clean up and dispose the current OpenCode instance, releasing all resources.
+   */
+  public dispose<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<InstanceDisposeResponses, unknown, ThrowOnError>({
+      url: "/instance/dispose",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Path extends HeyApiClient {
+  /**
+   * Get paths
+   *
+   * Retrieve the current working directory and related path information for the OpenCode instance.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PathGetResponses, unknown, ThrowOnError>({
+      url: "/path",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Vcs extends HeyApiClient {
+  /**
+   * Get VCS info
+   *
+   * Retrieve version control system (VCS) information for the current project, such as git branch.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<VcsGetResponses, unknown, ThrowOnError>({
+      url: "/vcs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get VCS diff
+   *
+   * Retrieve the current git diff for the working tree or against the default branch.
+   */
+  public diff<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      mode: "git" | "branch"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "mode" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<VcsDiffResponses, unknown, ThrowOnError>({
+      url: "/vcs/diff",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Command extends HeyApiClient {
+  /**
+   * List commands
+   *
+   * Get a list of all available commands in the OpenCode system.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<CommandListResponses, unknown, ThrowOnError>({
+      url: "/command",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Lsp extends HeyApiClient {
+  /**
+   * Get LSP status
+   *
+   * Get LSP server status
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LspStatusResponses, unknown, ThrowOnError>({
+      url: "/lsp",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Formatter extends HeyApiClient {
+  /**
+   * Get formatter status
+   *
+   * Get formatter status
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<FormatterStatusResponses, unknown, ThrowOnError>({
+      url: "/formatter",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Auth2 extends HeyApiClient {
   /**
    * Remove MCP OAuth
    *
-   * Remove OAuth credentials for an MCP server
+   * Remove OAuth credentials for an MCP server.
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
@@ -2913,7 +1821,7 @@ export class Auth2 extends HeyApiClient {
   /**
    * Authenticate MCP OAuth
    *
-   * Start OAuth flow and wait for callback (opens browser)
+   * Start OAuth flow and wait for callback (opens browser).
    */
   public authenticate<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3016,7 +1924,7 @@ export class Mcp extends HeyApiClient {
   }
 
   /**
-   * Connect an MCP server
+   * Connect an MCP server.
    */
   public connect<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3046,7 +1954,7 @@ export class Mcp extends HeyApiClient {
   }
 
   /**
-   * Disconnect an MCP server
+   * Disconnect an MCP server.
    */
   public disconnect<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3081,11 +1989,2231 @@ export class Mcp extends HeyApiClient {
   }
 }
 
+export class Project extends HeyApiClient {
+  /**
+   * List all projects
+   *
+   * Get a list of projects that have been opened with OpenCode.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProjectListResponses, unknown, ThrowOnError>({
+      url: "/project",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get current project
+   *
+   * Retrieve the currently active project that OpenCode is working with.
+   */
+  public current<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProjectCurrentResponses, unknown, ThrowOnError>({
+      url: "/project/current",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Initialize git repository
+   *
+   * Create a git repository for the current project and return the refreshed project info.
+   */
+  public initGit<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProjectInitGitResponses, unknown, ThrowOnError>({
+      url: "/project/git/init",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update project
+   *
+   * Update project properties such as name, icon, and commands.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      workspace?: string
+      name?: string
+      icon?: {
+        url?: string
+        override?: string
+        color?: string
+      }
+      commands?: {
+        /**
+         * Startup script to run when creating a new workspace (worktree)
+         */
+        start?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "icon" },
+            { in: "body", key: "commands" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<ProjectUpdateResponses, ProjectUpdateErrors, ThrowOnError>({
+      url: "/project/{projectID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Pty extends HeyApiClient {
+  /**
+   * List available shells
+   *
+   * Get a list of available shells on the system.
+   */
+  public shells<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PtyShellsResponses, unknown, ThrowOnError>({
+      url: "/pty/shells",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List PTY sessions
+   *
+   * Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PtyListResponses, unknown, ThrowOnError>({
+      url: "/pty",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create PTY session
+   *
+   * Create a new pseudo-terminal (PTY) session for running shell commands and processes.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      command?: string
+      args?: Array<string>
+      cwd?: string
+      title?: string
+      env?: {
+        [key: string]: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "command" },
+            { in: "body", key: "args" },
+            { in: "body", key: "cwd" },
+            { in: "body", key: "title" },
+            { in: "body", key: "env" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PtyCreateResponses, PtyCreateErrors, ThrowOnError>({
+      url: "/pty",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove PTY session
+   *
+   * Remove and terminate a specific pseudo-terminal (PTY) session.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      ptyID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ptyID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<PtyRemoveResponses, PtyRemoveErrors, ThrowOnError>({
+      url: "/pty/{ptyID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get PTY session
+   *
+   * Retrieve detailed information about a specific pseudo-terminal (PTY) session.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      ptyID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ptyID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PtyGetResponses, PtyGetErrors, ThrowOnError>({
+      url: "/pty/{ptyID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update PTY session
+   *
+   * Update properties of an existing pseudo-terminal (PTY) session.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      ptyID: string
+      directory?: string
+      workspace?: string
+      title?: string
+      size?: {
+        rows: number
+        cols: number
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ptyID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "title" },
+            { in: "body", key: "size" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<PtyUpdateResponses, PtyUpdateErrors, ThrowOnError>({
+      url: "/pty/{ptyID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Create PTY WebSocket token
+   *
+   * Create a short-lived ticket for opening a PTY WebSocket connection.
+   */
+  public connectToken<ThrowOnError extends boolean = false>(
+    parameters: {
+      ptyID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ptyID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PtyConnectTokenResponses, PtyConnectTokenErrors, ThrowOnError>({
+      url: "/pty/{ptyID}/connect-token",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Connect to PTY session
+   *
+   * Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters: {
+      ptyID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "ptyID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PtyConnectResponses, PtyConnectErrors, ThrowOnError>({
+      url: "/pty/{ptyID}/connect",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Question extends HeyApiClient {
+  /**
+   * List pending questions
+   *
+   * Get all pending question requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<QuestionListResponses, unknown, ThrowOnError>({
+      url: "/question",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to question request
+   *
+   * Provide answers to a question request from the AI assistant.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      workspace?: string
+      answers?: Array<QuestionAnswer>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "answers" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<QuestionReplyResponses, QuestionReplyErrors, ThrowOnError>({
+      url: "/question/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject question request
+   *
+   * Reject a question request from the AI assistant.
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<QuestionRejectResponses, QuestionRejectErrors, ThrowOnError>({
+      url: "/question/{requestID}/reject",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Permission extends HeyApiClient {
+  /**
+   * List pending permissions
+   *
+   * Get all pending permission requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PermissionListResponses, unknown, ThrowOnError>({
+      url: "/permission",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Respond to permission request
+   *
+   * Approve or deny a permission request from the AI assistant.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      workspace?: string
+      reply?: "once" | "always" | "reject"
+      message?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "reply" },
+            { in: "body", key: "message" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PermissionReplyResponses, PermissionReplyErrors, ThrowOnError>({
+      url: "/permission/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Respond to permission
+   *
+   * Approve or deny a permission request from the AI assistant.
+   *
+   * @deprecated
+   */
+  public respond<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      permissionID: string
+      directory?: string
+      workspace?: string
+      response?: "once" | "always" | "reject"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "permissionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "response" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PermissionRespondResponses, PermissionRespondErrors, ThrowOnError>({
+      url: "/session/{sessionID}/permissions/{permissionID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Oauth extends HeyApiClient {
+  /**
+   * Start OAuth authorization
+   *
+   * Start the OAuth authorization flow for a provider.
+   */
+  public authorize<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+      method?: number
+      inputs?: {
+        [key: string]: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "method" },
+            { in: "body", key: "inputs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProviderOauthAuthorizeResponses,
+      ProviderOauthAuthorizeErrors,
+      ThrowOnError
+    >({
+      url: "/provider/{providerID}/oauth/authorize",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Handle OAuth callback
+   *
+   * Handle the OAuth callback from a provider after user authorization.
+   */
+  public callback<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+      method?: number
+      code?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "method" },
+            { in: "body", key: "code" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProviderOauthCallbackResponses,
+      ProviderOauthCallbackErrors,
+      ThrowOnError
+    >({
+      url: "/provider/{providerID}/oauth/callback",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Provider extends HeyApiClient {
+  /**
+   * List providers
+   *
+   * Get a list of all available AI providers, including both available and connected ones.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProviderListResponses, unknown, ThrowOnError>({
+      url: "/provider",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get provider auth methods
+   *
+   * Retrieve available authentication methods for all AI providers.
+   */
+  public auth<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProviderAuthResponses, unknown, ThrowOnError>({
+      url: "/provider/auth",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _oauth?: Oauth
+  get oauth(): Oauth {
+    return (this._oauth ??= new Oauth({ client: this.client }))
+  }
+}
+
+export class Session2 extends HeyApiClient {
+  /**
+   * List sessions
+   *
+   * Get a list of all OpenCode sessions, sorted by most recently updated.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: "project"
+      path?: string
+      roots?: boolean | "true" | "false"
+      start?: number
+      search?: string
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "path" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "start" },
+            { in: "query", key: "search" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionListResponses, unknown, ThrowOnError>({
+      url: "/session",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create session
+   *
+   * Create a new OpenCode session for interacting with AI assistants and managing conversations.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      parentID?: string
+      title?: string
+      agent?: string
+      model?: {
+        id: string
+        providerID: string
+        variant?: string
+      }
+      permission?: PermissionRuleset
+      workspaceID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "parentID" },
+            { in: "body", key: "title" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+            { in: "body", key: "permission" },
+            { in: "body", key: "workspaceID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionCreateResponses, SessionCreateErrors, ThrowOnError>({
+      url: "/session",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get session status
+   *
+   * Retrieve the current status of all sessions, including active, idle, and completed states.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionStatusResponses, SessionStatusErrors, ThrowOnError>({
+      url: "/session/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete session
+   *
+   * Delete a session and permanently remove all associated data, including messages and history.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<SessionDeleteResponses, SessionDeleteErrors, ThrowOnError>({
+      url: "/session/{sessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session
+   *
+   * Retrieve detailed information about a specific OpenCode session.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionGetResponses, SessionGetErrors, ThrowOnError>({
+      url: "/session/{sessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update session
+   *
+   * Update properties of an existing session, such as title or other metadata.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      title?: string
+      permission?: PermissionRuleset
+      time?: {
+        archived?: number
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "title" },
+            { in: "body", key: "permission" },
+            { in: "body", key: "time" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<SessionUpdateResponses, SessionUpdateErrors, ThrowOnError>({
+      url: "/session/{sessionID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get session children
+   *
+   * Retrieve all child sessions that were forked from the specified parent session.
+   */
+  public children<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionChildrenResponses, SessionChildrenErrors, ThrowOnError>({
+      url: "/session/{sessionID}/children",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session todos
+   *
+   * Retrieve the todo list associated with a specific session, showing tasks and action items.
+   */
+  public todo<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionTodoResponses, SessionTodoErrors, ThrowOnError>({
+      url: "/session/{sessionID}/todo",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get message diff
+   *
+   * Get the file changes (diff) that resulted from a specific user message in the session.
+   */
+  public diff<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      messageID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionDiffResponses, unknown, ThrowOnError>({
+      url: "/session/{sessionID}/diff",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session messages
+   *
+   * Retrieve all messages in a session, including user prompts and AI responses.
+   */
+  public messages<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      limit?: number
+      before?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "before" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionMessagesResponses, SessionMessagesErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send message
+   *
+   * Create and send a new message to a session, streaming the AI response.
+   */
+  public prompt<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      messageID?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+      agent?: string
+      noReply?: boolean
+      tools?: {
+        [key: string]: boolean
+      }
+      format?: OutputFormat
+      system?: string
+      variant?: string
+      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "model" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "noReply" },
+            { in: "body", key: "tools" },
+            { in: "body", key: "format" },
+            { in: "body", key: "system" },
+            { in: "body", key: "variant" },
+            { in: "body", key: "parts" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionPromptResponses, SessionPromptErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete message
+   *
+   * Permanently delete a specific message and all of its parts from a session without reverting file changes.
+   */
+  public deleteMessage<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      SessionDeleteMessageResponses,
+      SessionDeleteMessageErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/message/{messageID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get message
+   *
+   * Retrieve a specific message from a session by its message ID.
+   */
+  public message<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionMessageResponses, SessionMessageErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message/{messageID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Fork session
+   *
+   * Create a new session by forking an existing session at a specific message point.
+   */
+  public fork<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      messageID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionForkResponses, unknown, ThrowOnError>({
+      url: "/session/{sessionID}/fork",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Abort session
+   *
+   * Abort an active session and stop any ongoing AI processing or command execution.
+   */
+  public abort<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionAbortResponses, SessionAbortErrors, ThrowOnError>({
+      url: "/session/{sessionID}/abort",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Initialize session
+   *
+   * Analyze the current application and create an AGENTS.md file with project-specific agent configurations.
+   */
+  public init<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      modelID?: string
+      providerID?: string
+      messageID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "modelID" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "messageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionInitResponses, SessionInitErrors, ThrowOnError>({
+      url: "/session/{sessionID}/init",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Unshare session
+   *
+   * Remove the shareable link for a session, making it private again.
+   */
+  public unshare<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<SessionUnshareResponses, SessionUnshareErrors, ThrowOnError>({
+      url: "/session/{sessionID}/share",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Share session
+   *
+   * Create a shareable link for a session, allowing others to view the conversation.
+   */
+  public share<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionShareResponses, SessionShareErrors, ThrowOnError>({
+      url: "/session/{sessionID}/share",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Summarize session
+   *
+   * Generate a concise summary of the session using AI compaction to preserve key information.
+   */
+  public summarize<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      providerID?: string
+      modelID?: string
+      auto?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "modelID" },
+            { in: "body", key: "auto" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionSummarizeResponses, SessionSummarizeErrors, ThrowOnError>({
+      url: "/session/{sessionID}/summarize",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Send async message
+   *
+   * Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.
+   */
+  public promptAsync<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      messageID?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+      agent?: string
+      noReply?: boolean
+      tools?: {
+        [key: string]: boolean
+      }
+      format?: OutputFormat
+      system?: string
+      variant?: string
+      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "model" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "noReply" },
+            { in: "body", key: "tools" },
+            { in: "body", key: "format" },
+            { in: "body", key: "system" },
+            { in: "body", key: "variant" },
+            { in: "body", key: "parts" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionPromptAsyncResponses, SessionPromptAsyncErrors, ThrowOnError>({
+      url: "/session/{sessionID}/prompt_async",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Send command
+   *
+   * Send a new command to a session for execution by the AI assistant.
+   */
+  public command<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      messageID?: string
+      agent?: string
+      model?: string
+      arguments?: string
+      command?: string
+      variant?: string
+      parts?: Array<{
+        id?: string
+        type: "file"
+        mime: string
+        filename?: string
+        url: string
+        source?: FilePartSource
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+            { in: "body", key: "arguments" },
+            { in: "body", key: "command" },
+            { in: "body", key: "variant" },
+            { in: "body", key: "parts" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionCommandResponses, SessionCommandErrors, ThrowOnError>({
+      url: "/session/{sessionID}/command",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Run shell command
+   *
+   * Execute a shell command within the session context and return the AI's response.
+   */
+  public shell<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      messageID?: string
+      agent?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+      command?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+            { in: "body", key: "command" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionShellResponses, SessionShellErrors, ThrowOnError>({
+      url: "/session/{sessionID}/shell",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Revert message
+   *
+   * Revert a specific message in a session, undoing its effects and restoring the previous state.
+   */
+  public revert<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      messageID?: string
+      partID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "partID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionRevertResponses, SessionRevertErrors, ThrowOnError>({
+      url: "/session/{sessionID}/revert",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Restore reverted messages
+   *
+   * Restore all previously reverted messages in a session.
+   */
+  public unrevert<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionUnrevertResponses, SessionUnrevertErrors, ThrowOnError>({
+      url: "/session/{sessionID}/unrevert",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Part extends HeyApiClient {
+  /**
+   * Delete a part from a message.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      partID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "path", key: "partID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<PartDeleteResponses, PartDeleteErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message/{messageID}/part/{partID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update a part in a message.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      partID: string
+      directory?: string
+      workspace?: string
+      part?: Part2
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "path", key: "partID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "part", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<PartUpdateResponses, PartUpdateErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message/{messageID}/part/{partID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class History extends HeyApiClient {
+  /**
+   * List sync events
+   *
+   * List sync events for all aggregates. Keys are aggregate IDs the client already knows about, values are the last known sequence ID. Events with seq > value are returned for those aggregates. Aggregates not listed in the input get their full history.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      body?: {
+        [key: string]: number
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SyncHistoryListResponses, SyncHistoryListErrors, ThrowOnError>({
+      url: "/sync/history",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Sync extends HeyApiClient {
+  /**
+   * Start workspace sync
+   *
+   * Start sync loops for workspaces in the current project that have active sessions.
+   */
+  public start<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SyncStartResponses, unknown, ThrowOnError>({
+      url: "/sync/start",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Replay sync events
+   *
+   * Validate and replay a complete sync event history.
+   */
+  public replay<ThrowOnError extends boolean = false>(
+    parameters?: {
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+      events?: Array<{
+        id: string
+        aggregateID: string
+        seq: number
+        type: string
+        data: {
+          [key: string]: unknown
+        }
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "events" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SyncReplayResponses, SyncReplayErrors, ThrowOnError>({
+      url: "/sync/replay",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Steal session into workspace
+   *
+   * Update a session to belong to the current workspace through the sync event system.
+   */
+  public steal<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SyncStealResponses, SyncStealErrors, ThrowOnError>({
+      url: "/sync/steal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _history?: History
+  get history(): History {
+    return (this._history ??= new History({ client: this.client }))
+  }
+}
+
+export class Session3 extends HeyApiClient {
+  /**
+   * List v2 sessions
+   *
+   * Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionListResponses, V2SessionListErrors, ThrowOnError>({
+      url: "/api/session",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send v2 message
+   *
+   * Create a v2 session message and queue it for the agent loop.
+   */
+  public prompt<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      prompt?: Prompt
+      delivery?: SessionDelivery
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "delivery" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionPromptResponses, unknown, ThrowOnError>({
+      url: "/api/session/{sessionID}/prompt",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Compact v2 session
+   *
+   * Compact a v2 session conversation.
+   */
+  public compact<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionCompactResponses, unknown, ThrowOnError>({
+      url: "/api/session/{sessionID}/compact",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Wait for v2 session
+   *
+   * Wait for a v2 session agent loop to become idle.
+   */
+  public wait<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionWaitResponses, unknown, ThrowOnError>({
+      url: "/api/session/{sessionID}/wait",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get v2 session context
+   *
+   * Retrieve the active context messages for a v2 session (all messages after the last compaction).
+   */
+  public context<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionContextResponses, unknown, ThrowOnError>({
+      url: "/api/session/{sessionID}/context",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get v2 session messages
+   *
+   * Retrieve projected v2 messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.
+   */
+  public messages<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionMessagesResponses, V2SessionMessagesErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/message",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class V2 extends HeyApiClient {
+  private _session?: Session3
+  get session(): Session3 {
+    return (this._session ??= new Session3({ client: this.client }))
+  }
+}
+
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
    *
-   * Retrieve the next TUI (Terminal User Interface) request from the queue for processing.
+   * Retrieve the next TUI request from the queue for processing.
    */
   public next<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3154,7 +4282,7 @@ export class Tui extends HeyApiClient {
   /**
    * Append TUI prompt
    *
-   * Append prompt to the TUI
+   * Append prompt to the TUI.
    */
   public appendPrompt<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3221,7 +4349,7 @@ export class Tui extends HeyApiClient {
   /**
    * Open sessions dialog
    *
-   * Open the session dialog
+   * Open the session dialog.
    */
   public openSessions<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3251,7 +4379,7 @@ export class Tui extends HeyApiClient {
   /**
    * Open themes dialog
    *
-   * Open the theme dialog
+   * Open the theme dialog.
    */
   public openThemes<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3281,7 +4409,7 @@ export class Tui extends HeyApiClient {
   /**
    * Open models dialog
    *
-   * Open the model dialog
+   * Open the model dialog.
    */
   public openModels<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3311,7 +4439,7 @@ export class Tui extends HeyApiClient {
   /**
    * Submit TUI prompt
    *
-   * Submit the prompt
+   * Submit the prompt.
    */
   public submitPrompt<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3341,7 +4469,7 @@ export class Tui extends HeyApiClient {
   /**
    * Clear TUI prompt
    *
-   * Clear the prompt
+   * Clear the prompt.
    */
   public clearPrompt<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3371,7 +4499,7 @@ export class Tui extends HeyApiClient {
   /**
    * Execute TUI command
    *
-   * Execute a TUI command (e.g. agent_cycle)
+   * Execute a TUI command.
    */
   public executeCommand<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3408,7 +4536,7 @@ export class Tui extends HeyApiClient {
   /**
    * Show TUI toast
    *
-   * Show a toast notification in the TUI
+   * Show a toast notification in the TUI.
    */
   public showToast<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3451,13 +4579,13 @@ export class Tui extends HeyApiClient {
   /**
    * Publish TUI event
    *
-   * Publish a TUI event
+   * Publish a TUI event.
    */
   public publish<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
-      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+      body?: EventTuiPromptAppend2 | EventTuiCommandExecute2 | EventTuiToastShow2 | EventTuiSessionSelect2
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3528,337 +4656,6 @@ export class Tui extends HeyApiClient {
   }
 }
 
-export class Instance extends HeyApiClient {
-  /**
-   * Dispose instance
-   *
-   * Clean up and dispose the current OpenCode instance, releasing all resources.
-   */
-  public dispose<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<InstanceDisposeResponses, unknown, ThrowOnError>({
-      url: "/instance/dispose",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Path extends HeyApiClient {
-  /**
-   * Get paths
-   *
-   * Retrieve the current working directory and related path information for the OpenCode instance.
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<PathGetResponses, unknown, ThrowOnError>({
-      url: "/path",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Vcs extends HeyApiClient {
-  /**
-   * Get VCS info
-   *
-   * Retrieve version control system (VCS) information for the current project, such as git branch.
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<VcsGetResponses, unknown, ThrowOnError>({
-      url: "/vcs",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Command extends HeyApiClient {
-  /**
-   * List commands
-   *
-   * Get a list of all available commands in the OpenCode system.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<CommandListResponses, unknown, ThrowOnError>({
-      url: "/command",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class App extends HeyApiClient {
-  /**
-   * Write log
-   *
-   * Write a log entry to the server logs with specified level and metadata.
-   */
-  public log<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      service?: string
-      level?: "debug" | "info" | "error" | "warn"
-      message?: string
-      extra?: {
-        [key: string]: unknown
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "service" },
-            { in: "body", key: "level" },
-            { in: "body", key: "message" },
-            { in: "body", key: "extra" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<AppLogResponses, AppLogErrors, ThrowOnError>({
-      url: "/log",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * List agents
-   *
-   * Get a list of all available AI agents in the OpenCode system.
-   */
-  public agents<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<AppAgentsResponses, unknown, ThrowOnError>({
-      url: "/agent",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * List skills
-   *
-   * Get a list of all available skills in the OpenCode system.
-   */
-  public skills<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<AppSkillsResponses, unknown, ThrowOnError>({
-      url: "/skill",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Lsp extends HeyApiClient {
-  /**
-   * Get LSP status
-   *
-   * Get LSP server status
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<LspStatusResponses, unknown, ThrowOnError>({
-      url: "/lsp",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Formatter extends HeyApiClient {
-  /**
-   * Get formatter status
-   *
-   * Get formatter status
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<FormatterStatusResponses, unknown, ThrowOnError>({
-      url: "/formatter",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Event extends HeyApiClient {
-  /**
-   * Subscribe to events
-   *
-   * Get events
-   */
-  public subscribe<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).sse.get<EventSubscribeResponses, unknown, ThrowOnError>({
-      url: "/event",
-      ...options,
-      ...params,
-    })
-  }
-}
-
 export class OpencodeClient extends HeyApiClient {
   public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
 
@@ -3867,24 +4664,24 @@ export class OpencodeClient extends HeyApiClient {
     OpencodeClient.__registry.set(this, args?.key)
   }
 
-  private _global?: Global
-  get global(): Global {
-    return (this._global ??= new Global({ client: this.client }))
-  }
-
   private _auth?: Auth
   get auth(): Auth {
     return (this._auth ??= new Auth({ client: this.client }))
   }
 
-  private _project?: Project
-  get project(): Project {
-    return (this._project ??= new Project({ client: this.client }))
+  private _app?: App
+  get app(): App {
+    return (this._app ??= new App({ client: this.client }))
   }
 
-  private _pty?: Pty
-  get pty(): Pty {
-    return (this._pty ??= new Pty({ client: this.client }))
+  private _global?: Global
+  get global(): Global {
+    return (this._global ??= new Global({ client: this.client }))
+  }
+
+  private _event?: Event
+  get event(): Event {
+    return (this._event ??= new Event({ client: this.client }))
   }
 
   private _config?: Config2
@@ -3892,44 +4689,19 @@ export class OpencodeClient extends HeyApiClient {
     return (this._config ??= new Config2({ client: this.client }))
   }
 
-  private _tool?: Tool
-  get tool(): Tool {
-    return (this._tool ??= new Tool({ client: this.client }))
-  }
-
   private _experimental?: Experimental
   get experimental(): Experimental {
     return (this._experimental ??= new Experimental({ client: this.client }))
   }
 
+  private _tool?: Tool
+  get tool(): Tool {
+    return (this._tool ??= new Tool({ client: this.client }))
+  }
+
   private _worktree?: Worktree
   get worktree(): Worktree {
     return (this._worktree ??= new Worktree({ client: this.client }))
-  }
-
-  private _session?: Session2
-  get session(): Session2 {
-    return (this._session ??= new Session2({ client: this.client }))
-  }
-
-  private _part?: Part
-  get part(): Part {
-    return (this._part ??= new Part({ client: this.client }))
-  }
-
-  private _permission?: Permission
-  get permission(): Permission {
-    return (this._permission ??= new Permission({ client: this.client }))
-  }
-
-  private _question?: Question
-  get question(): Question {
-    return (this._question ??= new Question({ client: this.client }))
-  }
-
-  private _provider?: Provider
-  get provider(): Provider {
-    return (this._provider ??= new Provider({ client: this.client }))
   }
 
   private _find?: Find
@@ -3940,16 +4712,6 @@ export class OpencodeClient extends HeyApiClient {
   private _file?: File
   get file(): File {
     return (this._file ??= new File({ client: this.client }))
-  }
-
-  private _mcp?: Mcp
-  get mcp(): Mcp {
-    return (this._mcp ??= new Mcp({ client: this.client }))
-  }
-
-  private _tui?: Tui
-  get tui(): Tui {
-    return (this._tui ??= new Tui({ client: this.client }))
   }
 
   private _instance?: Instance
@@ -3972,11 +4734,6 @@ export class OpencodeClient extends HeyApiClient {
     return (this._command ??= new Command({ client: this.client }))
   }
 
-  private _app?: App
-  get app(): App {
-    return (this._app ??= new App({ client: this.client }))
-  }
-
   private _lsp?: Lsp
   get lsp(): Lsp {
     return (this._lsp ??= new Lsp({ client: this.client }))
@@ -3987,8 +4744,58 @@ export class OpencodeClient extends HeyApiClient {
     return (this._formatter ??= new Formatter({ client: this.client }))
   }
 
-  private _event?: Event
-  get event(): Event {
-    return (this._event ??= new Event({ client: this.client }))
+  private _mcp?: Mcp
+  get mcp(): Mcp {
+    return (this._mcp ??= new Mcp({ client: this.client }))
+  }
+
+  private _project?: Project
+  get project(): Project {
+    return (this._project ??= new Project({ client: this.client }))
+  }
+
+  private _pty?: Pty
+  get pty(): Pty {
+    return (this._pty ??= new Pty({ client: this.client }))
+  }
+
+  private _question?: Question
+  get question(): Question {
+    return (this._question ??= new Question({ client: this.client }))
+  }
+
+  private _permission?: Permission
+  get permission(): Permission {
+    return (this._permission ??= new Permission({ client: this.client }))
+  }
+
+  private _provider?: Provider
+  get provider(): Provider {
+    return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _session?: Session2
+  get session(): Session2 {
+    return (this._session ??= new Session2({ client: this.client }))
+  }
+
+  private _part?: Part
+  get part(): Part {
+    return (this._part ??= new Part({ client: this.client }))
+  }
+
+  private _sync?: Sync
+  get sync(): Sync {
+    return (this._sync ??= new Sync({ client: this.client }))
+  }
+
+  private _v2?: V2
+  get v2(): V2 {
+    return (this._v2 ??= new V2({ client: this.client }))
+  }
+
+  private _tui?: Tui
+  get tui(): Tui {
+    return (this._tui ??= new Tui({ client: this.client }))
   }
 }

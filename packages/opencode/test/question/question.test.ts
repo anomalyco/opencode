@@ -1,15 +1,66 @@
-import { test, expect } from "bun:test"
+import { afterEach, expect } from "bun:test"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { WithInstance } from "../../src/project/with-instance"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
+import { QuestionID } from "../../src/question/schema"
+import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
+import { SessionID } from "../../src/session/schema"
+import { testEffect } from "../lib/effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 
-test("ask - returns pending promise", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const promise = Question.ask({
-        sessionID: "ses_test",
+const it = testEffect(Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer))
+
+const askEffect = Effect.fn("QuestionTest.ask")(function* (input: {
+  sessionID: SessionID
+  questions: ReadonlyArray<Question.Info>
+  tool?: Question.Tool
+}) {
+  const question = yield* Question.Service
+  return yield* question.ask(input)
+})
+
+const listEffect = Question.Service.use((svc) => svc.list())
+
+const replyEffect = Effect.fn("QuestionTest.reply")(function* (input: {
+  requestID: QuestionID
+  answers: ReadonlyArray<Question.Answer>
+}) {
+  const question = yield* Question.Service
+  yield* question.reply(input)
+})
+
+const rejectEffect = Effect.fn("QuestionTest.reject")(function* (id: QuestionID) {
+  const question = yield* Question.Service
+  yield* question.reject(id)
+})
+
+afterEach(async () => {
+  await disposeAllInstances()
+})
+
+/** Reject all pending questions so dangling Deferred fibers don't hang the test. */
+const rejectAll = Effect.gen(function* () {
+  yield* Effect.forEach(yield* listEffect, (req) => rejectEffect(req.id), { discard: true })
+})
+
+const waitForPending = (count: number) =>
+  Effect.gen(function* () {
+    for (let i = 0; i < 100; i++) {
+      const pending = yield* listEffect
+      if (pending.length === count) return pending
+      yield* Effect.sleep("10 millis")
+    }
+    return yield* Effect.fail(new Error(`timed out waiting for ${count} pending question request(s)`))
+  })
+
+it.instance(
+  "ask - remains pending until answered",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
         questions: [
           {
             question: "What would you like to do?",
@@ -20,17 +71,19 @@ test("ask - returns pending promise", async () => {
             ],
           },
         ],
-      })
-      expect(promise).toBeInstanceOf(Promise)
-    },
-  })
-})
+      }).pipe(Effect.forkScoped)
 
-test("ask - adds to pending list", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* rejectAll
+      expect((yield* Fiber.await(fiber))._tag).toBe("Failure")
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - adds to pending list",
+  () =>
+    Effect.gen(function* () {
       const questions = [
         {
           question: "What would you like to do?",
@@ -42,25 +95,26 @@ test("ask - adds to pending list", async () => {
         },
       ]
 
-      Question.ask({
-        sessionID: "ses_test",
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
         questions,
-      })
+      }).pipe(Effect.forkScoped)
 
-      const pending = await Question.list()
+      const pending = yield* waitForPending(1)
       expect(pending.length).toBe(1)
       expect(pending[0].questions).toEqual(questions)
-    },
-  })
-})
+      yield* rejectAll
+      expect((yield* Fiber.await(fiber))._tag).toBe("Failure")
+    }),
+  { git: true },
+)
 
 // reply tests
 
-test("reply - resolves the pending ask with answers", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
+it.instance(
+  "reply - resolves the pending ask with answers",
+  () =>
+    Effect.gen(function* () {
       const questions = [
         {
           question: "What would you like to do?",
@@ -72,32 +126,30 @@ test("reply - resolves the pending ask with answers", async () => {
         },
       ]
 
-      const askPromise = Question.ask({
-        sessionID: "ses_test",
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
         questions,
-      })
+      }).pipe(Effect.forkScoped)
 
-      const pending = await Question.list()
+      const pending = yield* waitForPending(1)
       const requestID = pending[0].id
 
-      await Question.reply({
+      yield* replyEffect({
         requestID,
         answers: [["Option 1"]],
       })
 
-      const answers = await askPromise
-      expect(answers).toEqual([["Option 1"]])
-    },
-  })
-})
+      expect(yield* Fiber.join(fiber)).toEqual([["Option 1"]])
+    }),
+  { git: true },
+)
 
-test("reply - removes from pending list", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      Question.ask({
-        sessionID: "ses_test",
+it.instance(
+  "reply - removes from pending list",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
         questions: [
           {
             question: "What would you like to do?",
@@ -108,45 +160,41 @@ test("reply - removes from pending list", async () => {
             ],
           },
         ],
-      })
+      }).pipe(Effect.forkScoped)
 
-      const pending = await Question.list()
+      const pending = yield* waitForPending(1)
       expect(pending.length).toBe(1)
 
-      await Question.reply({
+      yield* replyEffect({
         requestID: pending[0].id,
         answers: [["Option 1"]],
       })
+      yield* Fiber.join(fiber)
 
-      const pendingAfter = await Question.list()
-      expect(pendingAfter.length).toBe(0)
-    },
-  })
-})
+      const after = yield* listEffect
+      expect(after.length).toBe(0)
+    }),
+  { git: true },
+)
 
-test("reply - does nothing for unknown requestID", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      await Question.reply({
-        requestID: "que_unknown",
-        answers: [["Option 1"]],
-      })
-      // Should not throw
-    },
-  })
-})
+it.instance(
+  "reply - does nothing for unknown requestID",
+  () =>
+    replyEffect({
+      requestID: QuestionID.make("que_unknown"),
+      answers: [["Option 1"]],
+    }),
+  { git: true },
+)
 
 // reject tests
 
-test("reject - throws RejectedError", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const askPromise = Question.ask({
-        sessionID: "ses_test",
+it.instance(
+  "reject - throws RejectedError",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
         questions: [
           {
             question: "What would you like to do?",
@@ -157,23 +205,24 @@ test("reject - throws RejectedError", async () => {
             ],
           },
         ],
-      })
+      }).pipe(Effect.forkScoped)
 
-      const pending = await Question.list()
-      await Question.reject(pending[0].id)
+      const pending = yield* waitForPending(1)
+      yield* rejectEffect(pending[0].id)
 
-      await expect(askPromise).rejects.toBeInstanceOf(Question.RejectedError)
-    },
-  })
-})
+      const exit = yield* Fiber.await(fiber)
+      expect(exit._tag).toBe("Failure")
+      if (exit._tag === "Failure") expect(exit.cause.toString()).toContain("QuestionRejectedError")
+    }),
+  { git: true },
+)
 
-test("reject - removes from pending list", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const askPromise = Question.ask({
-        sessionID: "ses_test",
+it.instance(
+  "reject - removes from pending list",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
         questions: [
           {
             question: "What would you like to do?",
@@ -184,38 +233,30 @@ test("reject - removes from pending list", async () => {
             ],
           },
         ],
-      })
+      }).pipe(Effect.forkScoped)
 
-      const pending = await Question.list()
+      const pending = yield* waitForPending(1)
       expect(pending.length).toBe(1)
 
-      await Question.reject(pending[0].id)
-      askPromise.catch(() => {}) // Ignore rejection
+      yield* rejectEffect(pending[0].id)
+      expect((yield* Fiber.await(fiber))._tag).toBe("Failure")
 
-      const pendingAfter = await Question.list()
-      expect(pendingAfter.length).toBe(0)
-    },
-  })
-})
+      const after = yield* listEffect
+      expect(after.length).toBe(0)
+    }),
+  { git: true },
+)
 
-test("reject - does nothing for unknown requestID", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      await Question.reject("que_unknown")
-      // Should not throw
-    },
-  })
+it.instance("reject - does nothing for unknown requestID", () => rejectEffect(QuestionID.make("que_unknown")), {
+  git: true,
 })
 
 // multiple questions tests
 
-test("ask - handles multiple questions", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
+it.instance(
+  "ask - handles multiple questions",
+  () =>
+    Effect.gen(function* () {
       const questions = [
         {
           question: "What would you like to do?",
@@ -235,33 +276,31 @@ test("ask - handles multiple questions", async () => {
         },
       ]
 
-      const askPromise = Question.ask({
-        sessionID: "ses_test",
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
         questions,
-      })
+      }).pipe(Effect.forkScoped)
 
-      const pending = await Question.list()
+      const pending = yield* waitForPending(1)
 
-      await Question.reply({
+      yield* replyEffect({
         requestID: pending[0].id,
         answers: [["Build"], ["Dev"]],
       })
 
-      const answers = await askPromise
-      expect(answers).toEqual([["Build"], ["Dev"]])
-    },
-  })
-})
+      expect(yield* Fiber.join(fiber)).toEqual([["Build"], ["Dev"]])
+    }),
+  { git: true },
+)
 
 // list tests
 
-test("list - returns all pending requests", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      Question.ask({
-        sessionID: "ses_test1",
+it.instance(
+  "list - returns all pending requests",
+  () =>
+    Effect.gen(function* () {
+      const fiber1 = yield* askEffect({
+        sessionID: SessionID.make("ses_test1"),
         questions: [
           {
             question: "Question 1?",
@@ -269,10 +308,10 @@ test("list - returns all pending requests", async () => {
             options: [{ label: "A", description: "A" }],
           },
         ],
-      })
+      }).pipe(Effect.forkScoped)
 
-      Question.ask({
-        sessionID: "ses_test2",
+      const fiber2 = yield* askEffect({
+        sessionID: SessionID.make("ses_test2"),
         questions: [
           {
             question: "Question 2?",
@@ -280,21 +319,114 @@ test("list - returns all pending requests", async () => {
             options: [{ label: "B", description: "B" }],
           },
         ],
-      })
+      }).pipe(Effect.forkScoped)
 
-      const pending = await Question.list()
+      const pending = yield* waitForPending(2)
       expect(pending.length).toBe(2)
-    },
-  })
-})
+      yield* rejectAll
+      expect((yield* Fiber.await(fiber1))._tag).toBe("Failure")
+      expect((yield* Fiber.await(fiber2))._tag).toBe("Failure")
+    }),
+  { git: true },
+)
 
-test("list - returns empty when no pending", async () => {
-  await using tmp = await tmpdir({ git: true })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const pending = await Question.list()
+it.instance(
+  "list - returns empty when no pending",
+  () =>
+    Effect.gen(function* () {
+      const pending = yield* listEffect
       expect(pending.length).toBe(0)
-    },
-  })
-})
+    }),
+  { git: true },
+)
+
+it.live("questions stay isolated by directory", () =>
+  Effect.gen(function* () {
+    const one = yield* tmpdirScoped({ git: true })
+    const two = yield* tmpdirScoped({ git: true })
+
+    const fiber1 = yield* askEffect({
+      sessionID: SessionID.make("ses_one"),
+      questions: [
+        {
+          question: "Question 1?",
+          header: "Q1",
+          options: [{ label: "A", description: "A" }],
+        },
+      ],
+    }).pipe(provideInstance(one), Effect.forkScoped)
+
+    const fiber2 = yield* askEffect({
+      sessionID: SessionID.make("ses_two"),
+      questions: [
+        {
+          question: "Question 2?",
+          header: "Q2",
+          options: [{ label: "B", description: "B" }],
+        },
+      ],
+    }).pipe(provideInstance(two), Effect.forkScoped)
+
+    const onePending = yield* waitForPending(1).pipe(provideInstance(one))
+    const twoPending = yield* waitForPending(1).pipe(provideInstance(two))
+
+    expect(onePending.length).toBe(1)
+    expect(twoPending.length).toBe(1)
+    expect(onePending[0].sessionID).toBe(SessionID.make("ses_one"))
+    expect(twoPending[0].sessionID).toBe(SessionID.make("ses_two"))
+
+    yield* rejectEffect(onePending[0].id).pipe(provideInstance(one))
+    yield* rejectEffect(twoPending[0].id).pipe(provideInstance(two))
+
+    expect((yield* Fiber.await(fiber1))._tag).toBe("Failure")
+    expect((yield* Fiber.await(fiber2))._tag).toBe("Failure")
+  }),
+)
+
+it.live("pending question rejects on instance dispose", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const fiber = yield* askEffect({
+      sessionID: SessionID.make("ses_dispose"),
+      questions: [
+        {
+          question: "Dispose me?",
+          header: "Dispose",
+          options: [{ label: "Yes", description: "Yes" }],
+        },
+      ],
+    }).pipe(provideInstance(dir), Effect.forkScoped)
+
+    expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
+    yield* Effect.promise(() =>
+      WithInstance.provide({ directory: dir, fn: () => InstanceRuntime.disposeInstance(Instance.current) }),
+    )
+
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Question.RejectedError)
+  }),
+)
+
+it.live("pending question rejects on instance reload", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const fiber = yield* askEffect({
+      sessionID: SessionID.make("ses_reload"),
+      questions: [
+        {
+          question: "Reload me?",
+          header: "Reload",
+          options: [{ label: "Yes", description: "Yes" }],
+        },
+      ],
+    }).pipe(provideInstance(dir), Effect.forkScoped)
+
+    expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
+    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
+
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Question.RejectedError)
+  }),
+)
