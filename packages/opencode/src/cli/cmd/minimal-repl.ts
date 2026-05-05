@@ -109,8 +109,38 @@ export async function repl(opts: ReplOptions): Promise<void> {
       process.stdout.write(EOL)
     }
 
+    let currentAbort: AbortController | undefined
+
+    const handleInterrupt = () => {
+      if (currentAbort) {
+        const controller = currentAbort
+        currentAbort = undefined
+        controller.abort()
+        // Notify server to stop processing
+        sdk.session.abort({ sessionID: state.sessionID }).catch(() => undefined)
+        process.stdout.write(EOL + UI.Style.TEXT_DIM + "Interrupted" + UI.Style.TEXT_NORMAL + EOL)
+        return
+      }
+      
+      // If no task is running, Ctrl+C should exit (standard CLI behavior)
+      process.stdout.write(EOL)
+      process.exit(0)
+    }
+
+    process.on("SIGINT", handleInterrupt)
+
     if (opts.initialPrompt && opts.initialPrompt.trim().length > 0) {
-      await turn(sdk, state, opts.initialPrompt.trim())
+      const turnAbort = new AbortController()
+      currentAbort = turnAbort
+      try {
+        await turn(sdk, state, opts.initialPrompt.trim(), turnAbort.signal)
+      } catch (e) {
+        if (!(e instanceof Error && e.name === "AbortError")) {
+          UI.error(e instanceof Error ? e.message : String(e))
+        }
+      } finally {
+        currentAbort = undefined
+      }
     }
 
     const rl = createInterface({
@@ -136,11 +166,21 @@ export async function repl(opts: ReplOptions): Promise<void> {
         if (result === "handled") continue
       }
 
-      await turn(sdk, state, trimmed).catch((e) => {
-        UI.error(e instanceof Error ? e.message : String(e))
-      })
+      const turnAbort = new AbortController()
+      currentAbort = turnAbort
+      
+      try {
+        await turn(sdk, state, trimmed, turnAbort.signal)
+      } catch (e) {
+        if (!(e instanceof Error && e.name === "AbortError")) {
+          UI.error(e instanceof Error ? e.message : String(e))
+        }
+      } finally {
+        currentAbort = undefined
+      }
     }
     rl.close()
+    process.removeListener("SIGINT", handleInterrupt)
     if (process.stdout.isTTY) process.stdout.write(EOL)
     process.exit(0)
   })
@@ -480,7 +520,7 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
   return "handled"
 }
 
-async function turn(sdk: OpencodeClient, state: State, message: string): Promise<void> {
+async function turn(sdk: OpencodeClient, state: State, message: string, signal?: AbortSignal): Promise<void> {
   await consumeUntilIdle(sdk, state, () => {
     const model = state.model ? Provider.parseModel(state.model) : undefined
     return sdk.session.prompt({
@@ -490,11 +530,15 @@ async function turn(sdk: OpencodeClient, state: State, message: string): Promise
       variant: state.variant,
       parts: [{ type: "text", text: message }],
     })
-  })
+  }, signal)
 }
 
-async function consumeUntilIdle(sdk: OpencodeClient, state: State, send: () => Promise<unknown>): Promise<void> {
+async function consumeUntilIdle(sdk: OpencodeClient, state: State, send: () => Promise<unknown>, signal?: AbortSignal): Promise<void> {
   const abort = new AbortController()
+  if (signal) {
+    if (signal.aborted) abort.abort()
+    else signal.addEventListener("abort", () => abort.abort())
+  }
   const events = await sdk.event.subscribe(undefined, { signal: abort.signal })
 
   const consume = (async () => {
