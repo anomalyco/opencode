@@ -7,6 +7,9 @@ import { InvalidRequestError, ProviderChunkError, type MediaPart, type ToolResul
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
 export const encodeJson = Schema.encodeSync(Json)
+export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
+export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
+export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
 
 /**
  * Plain-record narrowing. Excludes arrays so adapters checking nested JSON

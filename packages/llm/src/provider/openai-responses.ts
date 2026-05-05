@@ -14,7 +14,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema"
-import { ProviderShared } from "./shared"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 
 const ADAPTER = "openai-responses"
 
@@ -55,7 +55,7 @@ const OpenAIResponsesTool = Schema.Struct({
   type: Schema.Literal("function"),
   name: Schema.String,
   description: Schema.String,
-  parameters: Schema.Record(Schema.String, Schema.Unknown),
+  parameters: JsonObject,
   strict: Schema.optional(Schema.Boolean),
 })
 type OpenAIResponsesTool = Schema.Schema.Type<typeof OpenAIResponsesTool>
@@ -68,7 +68,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
 const OpenAIResponsesTargetFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
-  tools: Schema.optional(Schema.Array(OpenAIResponsesTool)),
+  tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   stream: Schema.Literal(true),
   max_output_tokens: Schema.optional(Schema.Number),
@@ -80,9 +80,9 @@ export type OpenAIResponsesTarget = Schema.Schema.Type<typeof OpenAIResponsesTar
 
 const OpenAIResponsesUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
-  input_tokens_details: Schema.optional(Schema.NullOr(Schema.Struct({ cached_tokens: Schema.optional(Schema.Number) }))),
+  input_tokens_details: optionalNull(Schema.Struct({ cached_tokens: Schema.optional(Schema.Number) })),
   output_tokens: Schema.optional(Schema.Number),
-  output_tokens_details: Schema.optional(Schema.NullOr(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) }))),
+  output_tokens_details: optionalNull(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) })),
   total_tokens: Schema.optional(Schema.Number),
 })
 type OpenAIResponsesUsage = Schema.Schema.Type<typeof OpenAIResponsesUsage>
@@ -117,8 +117,8 @@ const OpenAIResponsesChunk = Schema.Struct({
   item: Schema.optional(OpenAIResponsesStreamItem),
   response: Schema.optional(
     Schema.Struct({
-      incomplete_details: Schema.optional(Schema.NullOr(Schema.Struct({ reason: Schema.String }))),
-      usage: Schema.optional(Schema.NullOr(OpenAIResponsesUsage)),
+      incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
+      usage: optionalNull(OpenAIResponsesUsage),
     }),
   ),
   code: Schema.optional(Schema.String),

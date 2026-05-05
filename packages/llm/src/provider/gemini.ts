@@ -16,7 +16,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema"
-import { ProviderShared } from "./shared"
+import { JsonObject, optionalArray, ProviderShared } from "./shared"
 
 const ADAPTER = "gemini"
 
@@ -73,7 +73,7 @@ const GeminiSystemInstruction = Schema.Struct({
 const GeminiFunctionDeclaration = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
-  parameters: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  parameters: Schema.optional(JsonObject),
 })
 
 const GeminiTool = Schema.Struct({
@@ -83,7 +83,7 @@ const GeminiTool = Schema.Struct({
 const GeminiToolConfig = Schema.Struct({
   functionCallingConfig: Schema.Struct({
     mode: Schema.Literals(["AUTO", "NONE", "ANY"]),
-    allowedFunctionNames: Schema.optional(Schema.Array(Schema.String)),
+    allowedFunctionNames: optionalArray(Schema.String),
   }),
 })
 
@@ -96,14 +96,14 @@ const GeminiGenerationConfig = Schema.Struct({
   maxOutputTokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
-  stopSequences: Schema.optional(Schema.Array(Schema.String)),
+  stopSequences: optionalArray(Schema.String),
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
 
 const GeminiTargetFields = {
   contents: Schema.Array(GeminiContent),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
-  tools: Schema.optional(Schema.Array(GeminiTool)),
+  tools: optionalArray(GeminiTool),
   toolConfig: Schema.optional(GeminiToolConfig),
   generationConfig: Schema.optional(GeminiGenerationConfig),
 }
@@ -125,7 +125,7 @@ const GeminiCandidate = Schema.Struct({
 })
 
 const GeminiChunk = Schema.Struct({
-  candidates: Schema.optional(Schema.Array(GeminiCandidate)),
+  candidates: optionalArray(GeminiCandidate),
   usageMetadata: Schema.optional(GeminiUsage),
 })
 type GeminiChunk = Schema.Schema.Type<typeof GeminiChunk>

@@ -15,7 +15,7 @@ import {
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema"
-import { ProviderShared } from "./shared"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 
 const ADAPTER = "anthropic-messages"
 
@@ -106,7 +106,7 @@ type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
 const AnthropicTool = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
-  input_schema: Schema.Record(Schema.String, Schema.Unknown),
+  input_schema: JsonObject,
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 type AnthropicTool = Schema.Schema.Type<typeof AnthropicTool>
@@ -123,15 +123,15 @@ const AnthropicThinking = Schema.Struct({
 
 const AnthropicTargetFields = {
   model: Schema.String,
-  system: Schema.optional(Schema.Array(AnthropicTextBlock)),
+  system: optionalArray(AnthropicTextBlock),
   messages: Schema.Array(AnthropicMessage),
-  tools: Schema.optional(Schema.Array(AnthropicTool)),
+  tools: optionalArray(AnthropicTool),
   tool_choice: Schema.optional(AnthropicToolChoice),
   stream: Schema.Literal(true),
   max_tokens: Schema.Number,
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
-  stop_sequences: Schema.optional(Schema.Array(Schema.String)),
+  stop_sequences: optionalArray(Schema.String),
   thinking: Schema.optional(AnthropicThinking),
 }
 const AnthropicMessagesTarget = Schema.Struct(AnthropicTargetFields)
@@ -140,8 +140,8 @@ export type AnthropicMessagesTarget = Schema.Schema.Type<typeof AnthropicMessage
 const AnthropicUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
   output_tokens: Schema.optional(Schema.Number),
-  cache_creation_input_tokens: Schema.optional(Schema.NullOr(Schema.Number)),
-  cache_read_input_tokens: Schema.optional(Schema.NullOr(Schema.Number)),
+  cache_creation_input_tokens: optionalNull(Schema.Number),
+  cache_read_input_tokens: optionalNull(Schema.Number),
 })
 type AnthropicUsage = Schema.Schema.Type<typeof AnthropicUsage>
 
@@ -165,8 +165,8 @@ const AnthropicStreamDelta = Schema.Struct({
   thinking: Schema.optional(Schema.String),
   partial_json: Schema.optional(Schema.String),
   signature: Schema.optional(Schema.String),
-  stop_reason: Schema.optional(Schema.NullOr(Schema.String)),
-  stop_sequence: Schema.optional(Schema.NullOr(Schema.String)),
+  stop_reason: optionalNull(Schema.String),
+  stop_sequence: optionalNull(Schema.String),
 })
 
 const AnthropicChunk = Schema.Struct({

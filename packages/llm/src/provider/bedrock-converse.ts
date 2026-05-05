@@ -17,7 +17,7 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
-import { ProviderShared } from "./shared"
+import { JsonObject, optionalArray, ProviderShared } from "./shared"
 
 const ADAPTER = "bedrock-converse"
 
@@ -163,7 +163,7 @@ const BedrockTool = Schema.Struct({
     name: Schema.String,
     description: Schema.String,
     inputSchema: Schema.Struct({
-      json: Schema.Record(Schema.String, Schema.Unknown),
+      json: JsonObject,
     }),
   }),
 })
@@ -178,13 +178,13 @@ const BedrockToolChoice = Schema.Union([
 const BedrockTargetFields = {
   modelId: Schema.String,
   messages: Schema.Array(BedrockMessage),
-  system: Schema.optional(Schema.Array(BedrockSystemBlock)),
+  system: optionalArray(BedrockSystemBlock),
   inferenceConfig: Schema.optional(
     Schema.Struct({
       maxTokens: Schema.optional(Schema.Number),
       temperature: Schema.optional(Schema.Number),
       topP: Schema.optional(Schema.Number),
-      stopSequences: Schema.optional(Schema.Array(Schema.String)),
+      stopSequences: optionalArray(Schema.String),
     }),
   ),
   toolConfig: Schema.optional(
@@ -193,7 +193,7 @@ const BedrockTargetFields = {
       toolChoice: Schema.optional(BedrockToolChoice),
     }),
   ),
-  additionalModelRequestFields: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  additionalModelRequestFields: Schema.optional(JsonObject),
 }
 const BedrockConverseTarget = Schema.Struct(BedrockTargetFields)
 export type BedrockConverseTarget = Schema.Schema.Type<typeof BedrockConverseTarget>

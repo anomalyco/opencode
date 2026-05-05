@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Array as Arr, Effect, Schema } from "effect"
 import { Adapter } from "../adapter"
 import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
@@ -14,19 +14,25 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema"
-import { ProviderShared } from "./shared"
+import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 
 const ADAPTER = "openai-chat"
 
+// =============================================================================
+// Public Model Input
+// =============================================================================
 export type OpenAIChatModelInput = Omit<ModelInput, "provider" | "protocol" | "headers"> & {
   readonly apiKey?: string
   readonly headers?: Record<string, string>
 }
 
+// =============================================================================
+// Request Target Schema
+// =============================================================================
 const OpenAIChatFunction = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
-  parameters: Schema.Record(Schema.String, Schema.Unknown),
+  parameters: JsonObject,
 })
 
 const OpenAIChatTool = Schema.Struct({
@@ -51,85 +57,83 @@ const OpenAIChatMessage = Schema.Union([
   Schema.Struct({
     role: Schema.Literal("assistant"),
     content: Schema.NullOr(Schema.String),
-    tool_calls: Schema.optional(Schema.Array(OpenAIChatAssistantToolCall)),
+    tool_calls: optionalArray(OpenAIChatAssistantToolCall),
     reasoning_content: Schema.optional(Schema.String),
   }),
   Schema.Struct({ role: Schema.Literal("tool"), tool_call_id: Schema.String, content: Schema.String }),
 ])
 type OpenAIChatMessage = Schema.Schema.Type<typeof OpenAIChatMessage>
 
-const OpenAIChatToolChoiceFunction = Schema.Struct({ name: Schema.String })
-
 const OpenAIChatToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   Schema.Struct({
     type: Schema.Literal("function"),
-    function: OpenAIChatToolChoiceFunction,
+    function: Schema.Struct({ name: Schema.String }),
   }),
 ])
 
 const OpenAIChatTargetFields = {
   model: Schema.String,
   messages: Schema.Array(OpenAIChatMessage),
-  tools: Schema.optional(Schema.Array(OpenAIChatTool)),
+  tools: optionalArray(OpenAIChatTool),
   tool_choice: Schema.optional(OpenAIChatToolChoice),
   stream: Schema.Literal(true),
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
   max_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
-  stop: Schema.optional(Schema.Array(Schema.String)),
+  stop: optionalArray(Schema.String),
 }
 const OpenAIChatTarget = Schema.Struct(OpenAIChatTargetFields)
 export type OpenAIChatTarget = Schema.Schema.Type<typeof OpenAIChatTarget>
 
+// =============================================================================
+// Streaming Chunk Schema
+// =============================================================================
 const OpenAIChatUsage = Schema.Struct({
   prompt_tokens: Schema.optional(Schema.Number),
   completion_tokens: Schema.optional(Schema.Number),
   total_tokens: Schema.optional(Schema.Number),
-  prompt_tokens_details: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        cached_tokens: Schema.optional(Schema.Number),
-      }),
-    ),
+  prompt_tokens_details: optionalNull(
+    Schema.Struct({
+      cached_tokens: Schema.optional(Schema.Number),
+    }),
   ),
-  completion_tokens_details: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        reasoning_tokens: Schema.optional(Schema.Number),
-      }),
-    ),
+  completion_tokens_details: optionalNull(
+    Schema.Struct({
+      reasoning_tokens: Schema.optional(Schema.Number),
+    }),
   ),
 })
 
 const OpenAIChatToolCallDeltaFunction = Schema.Struct({
-  name: Schema.optional(Schema.NullOr(Schema.String)),
-  arguments: Schema.optional(Schema.NullOr(Schema.String)),
+  name: optionalNull(Schema.String),
+  arguments: optionalNull(Schema.String),
 })
 
 const OpenAIChatToolCallDelta = Schema.Struct({
   index: Schema.Number,
-  id: Schema.optional(Schema.NullOr(Schema.String)),
-  function: Schema.optional(Schema.NullOr(OpenAIChatToolCallDeltaFunction)),
+  id: optionalNull(Schema.String),
+  function: optionalNull(OpenAIChatToolCallDeltaFunction),
 })
 type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta>
 
 const OpenAIChatDelta = Schema.Struct({
-  content: Schema.optional(Schema.NullOr(Schema.String)),
-  tool_calls: Schema.optional(Schema.NullOr(Schema.Array(OpenAIChatToolCallDelta))),
+  content: optionalNull(Schema.String),
+  tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
 })
 
 const OpenAIChatChoice = Schema.Struct({
-  delta: Schema.optional(Schema.NullOr(OpenAIChatDelta)),
-  finish_reason: Schema.optional(Schema.NullOr(Schema.String)),
+  delta: optionalNull(OpenAIChatDelta),
+  finish_reason: optionalNull(Schema.String),
 })
 
 const OpenAIChatChunk = Schema.Struct({
   choices: Schema.Array(OpenAIChatChoice),
-  usage: Schema.optional(Schema.NullOr(OpenAIChatUsage)),
+  usage: optionalNull(OpenAIChatUsage),
 })
 type OpenAIChatChunk = Schema.Schema.Type<typeof OpenAIChatChunk>
+type OpenAIChatRequestMessage = LLMRequest["messages"][number]
 
 interface ParsedToolCall {
   readonly id: string
@@ -146,6 +150,9 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
+// =============================================================================
+// Request Lowering
+// =============================================================================
 const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
   type: "function",
   function: {
@@ -172,58 +179,61 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   },
 })
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+const openAICompatibleReasoningContent = (native: unknown) =>
+  isRecord(native) && typeof native.reasoning_content === "string" ? native.reasoning_content : undefined
+
+const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (message: OpenAIChatRequestMessage) {
+  const content: TextPart[] = []
+  for (const part of message.content) {
+    if (part.type !== "text") return yield* invalid(`OpenAI Chat user messages only support text content for now`)
+    content.push(part)
+  }
+  return { role: "user" as const, content: ProviderShared.joinText(content) }
+})
+
+const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(function* (
+  message: OpenAIChatRequestMessage,
+) {
+  const content: TextPart[] = []
+  const toolCalls: OpenAIChatAssistantToolCall[] = []
+  for (const part of message.content) {
+    if (part.type === "text") {
+      content.push(part)
+      continue
+    }
+    if (part.type === "tool-call") {
+      toolCalls.push(lowerToolCall(part))
+      continue
+    }
+    return yield* invalid(`OpenAI Chat assistant messages only support text and tool-call content for now`)
+  }
+  return {
+    role: "assistant" as const,
+    content: content.length === 0 ? null : ProviderShared.joinText(content),
+    tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
+    reasoning_content: openAICompatibleReasoningContent(message.native?.openaiCompatible),
+  }
+})
+
+const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (message: OpenAIChatRequestMessage) {
+  const messages: OpenAIChatMessage[] = []
+  for (const part of message.content) {
+    if (part.type !== "tool-result") return yield* invalid(`OpenAI Chat tool messages only support tool-result content`)
+    messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
+  }
+  return messages
+})
+
+const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: OpenAIChatRequestMessage) {
+  if (message.role === "user") return [yield* lowerUserMessage(message)]
+  if (message.role === "assistant") return [yield* lowerAssistantMessage(message)]
+  return yield* lowerToolMessages(message)
+})
 
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
-  const messages: OpenAIChatMessage[] = [...system]
-
-  for (const message of request.messages) {
-    if (message.role === "user") {
-      const content: TextPart[] = []
-      for (const part of message.content) {
-        if (part.type !== "text") return yield* invalid(`OpenAI Chat user messages only support text content for now`)
-        content.push(part)
-      }
-      messages.push({ role: "user", content: ProviderShared.joinText(content) })
-      continue
-    }
-
-    if (message.role === "assistant") {
-      const content: TextPart[] = []
-      const toolCalls: OpenAIChatAssistantToolCall[] = []
-      for (const part of message.content) {
-        if (part.type === "text") {
-          content.push(part)
-          continue
-        }
-        if (part.type === "tool-call") {
-          toolCalls.push(lowerToolCall(part))
-          continue
-        }
-        return yield* invalid(`OpenAI Chat assistant messages only support text and tool-call content for now`)
-      }
-      messages.push({
-        role: "assistant",
-        content: content.length === 0 ? null : ProviderShared.joinText(content),
-        tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
-        reasoning_content: isRecord(message.native?.openaiCompatible) && typeof message.native.openaiCompatible.reasoning_content === "string"
-          ? message.native.openaiCompatible.reasoning_content
-          : undefined,
-      })
-      continue
-    }
-
-    for (const part of message.content) {
-      if (part.type !== "tool-result")
-        return yield* invalid(`OpenAI Chat tool messages only support tool-result content`)
-      messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
-    }
-  }
-
-  return messages
+  return [...system, ...Arr.flatten(yield* Effect.forEach(request.messages, lowerMessage))]
 })
 
 const prepare = Effect.fn("OpenAIChat.prepare")(function* (request: LLMRequest) {
@@ -240,6 +250,9 @@ const prepare = Effect.fn("OpenAIChat.prepare")(function* (request: LLMRequest) 
   }
 })
 
+// =============================================================================
+// Stream Parsing
+// =============================================================================
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "stop") return "stop"
   if (reason === "length") return "length"
@@ -322,6 +335,9 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   ]
 }
 
+// =============================================================================
+// Protocol And OpenAI Adapter
+// =============================================================================
 /**
  * The OpenAI Chat protocol — request lowering, target schema, and the
  * streaming-chunk state machine. Reused by every adapter
@@ -351,6 +367,9 @@ export const adapter = Adapter.make({
   framing: Framing.sse,
 })
 
+// =============================================================================
+// Model Helper And Patches
+// =============================================================================
 export const model = (input: OpenAIChatModelInput) =>
   Adapter.bindModel(
     llmModel({
