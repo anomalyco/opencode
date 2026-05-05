@@ -2,11 +2,45 @@
 // 给 file-tabs.tsx 编辑态调,集中所有 markdown-specific CodeMirror 6 扩展。
 
 import type { Extension } from "@codemirror/state"
+import { EditorState, Prec } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view"
 import type { Command } from "@codemirror/view"
 import { foldGutter, foldKeymap } from "@codemirror/language"
 import { search, searchKeymap } from "@codemirror/search"
 import { invoke } from "@tauri-apps/api/core"
+
+// ============================================================
+// CodeMirror 内置 UI 短语翻译(@codemirror/search 走 phrase 取词)
+// ============================================================
+
+const PHRASES: Record<string, Record<string, string>> = {
+  zh: {
+    Find: "查找",
+    Replace: "替换",
+    next: "下一个",
+    previous: "上一个",
+    all: "全部",
+    "match case": "区分大小写",
+    regexp: "正则",
+    "by word": "全词匹配",
+    replace: "替换",
+    "replace all": "全部替换",
+    "Go to line": "跳转到行",
+  },
+  zht: {
+    Find: "搜尋",
+    Replace: "取代",
+    next: "下一個",
+    previous: "上一個",
+    all: "全部",
+    "match case": "區分大小寫",
+    regexp: "正則",
+    "by word": "全詞匹配",
+    replace: "取代",
+    "replace all": "全部取代",
+    "Go to line": "跳轉到行",
+  },
+}
 
 // ============================================================
 // 列表续延(普通 - / 编号 1. / 任务 - [ ])+ 块引用 > 续延
@@ -128,18 +162,22 @@ const insertLinkCommand: Command = (view) => {
 // 任务列表 toggle Ctrl+Enter — [ ] ↔ [x]
 // ============================================================
 
-const TASK_PATTERN = /^(\s*[-*+]\s+\[)( |x|X)(\]\s.*)$/
+// 允许 [], [ ], [x], [X] 全部形态(空括号当未勾选处理)
+const TASK_PATTERN = /^(\s*[-*+]\s+\[)( |x|X)?(\]\s*.*)$/
 
 const toggleTaskCheckCommand: Command = (view) => {
   const sel = view.state.selection.main
   const line = view.state.doc.lineAt(sel.from)
   const m = TASK_PATTERN.exec(line.text)
   if (!m) return false
-  const next = m[2] === " " ? "x" : " "
+  const cur = m[2] ?? ""
+  // x/X → 切回 " ";空 / " " → 切到 "x"
+  const next = cur.toLowerCase() === "x" ? " " : "x"
   const newLine = m[1] + next + m[3]
   view.dispatch({
     changes: { from: line.from, to: line.to, insert: newLine },
-    selection: { anchor: sel.from }, // 光标位置不变
+    // 光标位置不变(注意:若原本空 [],新行多了 1 字符,要补位)
+    selection: { anchor: sel.from + (newLine.length - line.text.length) },
   })
   return true
 }
@@ -154,34 +192,68 @@ const tableTabCommand: Command = (view) => {
   const line = view.state.doc.lineAt(sel.from)
   // 必须是 markdown 表格行(含至少一个 |)
   if (!line.text.includes("|")) return false
-  // 找下个 `|` 后位置
   const fromInLine = sel.from - line.from
+
+  // Case A:同行还有下个 `|` → 跳到下个 cell
   const nextPipe = line.text.indexOf("|", fromInLine)
-  if (nextPipe < 0) return false
-  // 跳到 `|` 之后第一个非空格位置
-  let target = nextPipe + 1
-  while (target < line.text.length && line.text[target] === " ") target++
-  if (target >= line.text.length) return false
-  view.dispatch({
-    selection: { anchor: line.from + target },
-    scrollIntoView: true,
-  })
-  return true
+  if (nextPipe >= 0) {
+    let target = nextPipe + 1
+    while (target < line.text.length && line.text[target] === " ") target++
+    if (target < line.text.length && line.text[target] !== "|") {
+      view.dispatch({
+        selection: { anchor: line.from + target },
+        scrollIntoView: true,
+      })
+      return true
+    }
+  }
+
+  // Case B:本行末尾 → 下一行第一个 cell(若也是表格)
+  if (line.number < view.state.doc.lines) {
+    const next = view.state.doc.line(line.number + 1)
+    if (next.text.includes("|")) {
+      // 跳过 leading space + 首个 `|` + space
+      let t = 0
+      while (t < next.text.length && next.text[t] === " ") t++
+      if (next.text[t] === "|") t++
+      while (t < next.text.length && next.text[t] === " ") t++
+      if (t < next.text.length && next.text[t] !== "|") {
+        view.dispatch({
+          selection: { anchor: next.from + t },
+          scrollIntoView: true,
+        })
+        return true
+      }
+    }
+    // Case C:在表格最末行末尾,下一行非表格 → 跳出表格到下一行开头
+    view.dispatch({
+      selection: { anchor: next.from },
+      scrollIntoView: true,
+    })
+    return true
+  }
+  // 文档最末行,无下一行可跳 → 让默认 Tab 走
+  return false
 }
 
 // ============================================================
 // 智能 URL 粘贴 — 选区非空 + 粘贴是 URL → 改写 [选中](URL)
 // ============================================================
 
-const URL_PATTERN = /^(https?:\/\/[^\s]+)$/
+const URL_PATTERN = /^https?:\/\/\S+$/
 
 function handlePasteHook(view: EditorView, event: ClipboardEvent): boolean {
   const sel = view.state.selection.main
   if (sel.empty) return false // 没选区,默认粘贴
-  const text = event.clipboardData?.getData("text/plain")?.trim() ?? ""
-  if (!URL_PATTERN.test(text)) return false // 不是 URL,默认粘贴
-  // 是 URL 且有选区 → 改写
+  // 优先 text/plain,没有再试 text/uri-list(浏览器地址栏 / Office 链接 fallback)
+  const cd = event.clipboardData
+  let text = cd?.getData("text/plain")?.trim() ?? ""
+  if (!text) text = cd?.getData("text/uri-list")?.trim() ?? ""
+  // uri-list 可能多行,取第一个
+  if (text.includes("\n")) text = text.split("\n").find((l) => !l.startsWith("#"))?.trim() ?? ""
+  if (!URL_PATTERN.test(text)) return false
   event.preventDefault()
+  event.stopPropagation()
   const selected = view.state.sliceDoc(sel.from, sel.to)
   const wrapped = `[${selected}](${text})`
   view.dispatch({
@@ -194,6 +266,8 @@ function handlePasteHook(view: EditorView, event: ClipboardEvent): boolean {
 // ============================================================
 // 拖图 / 截图粘贴 — 自动写文件 + 插入 ![](path)
 // ============================================================
+
+const IMAGE_EXT_PATTERN = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -218,9 +292,19 @@ function timestampName(originalName: string): string {
   return `pasted-${ts}.${ext}`
 }
 
+/** 计算 .md 文件相对路径所在目录的"上级数"— 用于拼 `../` 跳到 root */
+function depthOf(filePathRel: string | undefined): number {
+  if (!filePathRel) return 0
+  // 规整成 forward-slash + 去前导/末尾 /
+  const norm = filePathRel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")
+  const parts = norm.split("/").filter(Boolean)
+  // 去掉最后一段(文件名)
+  return Math.max(0, parts.length - 1)
+}
+
 async function handleImageDrop(opts: ImageOpts, view: EditorView, files: FileList): Promise<boolean> {
-  const fileDir = opts.fileDir
-  if (!fileDir) return false
+  const root = opts.projectRoot
+  if (!root) return false
 
   // 取所有 image/* 文件
   const images: File[] = []
@@ -230,19 +314,23 @@ async function handleImageDrop(opts: ImageOpts, view: EditorView, files: FileLis
   }
   if (images.length === 0) return false
 
+  // 集中放 <root>/Attachments/
+  const attachDirAbs = `${root.replace(/\\/g, "/")}/Attachments`
+  // 引用相对路径前缀:.md 在 root 下几层就 `../` 几次
+  const ups = "../".repeat(depthOf(opts.filePathRel))
+
   const insertions: string[] = []
   for (const file of images) {
     try {
       const base64 = await readFileAsBase64(file)
       const filename = file.name && /\.[a-z0-9]+$/i.test(file.name) ? file.name : timestampName(file.name || "image.png")
-      // 确保文件名唯一(避免覆盖)— 简单加时间戳
       const safeName = `pasted-${Date.now()}-${filename}`.replace(/[<>:"|?*]/g, "_")
-      const targetAbs = `${fileDir}/${safeName}`
+      const targetAbs = `${attachDirAbs}/${safeName}`
       await invoke("write_binary_file_absolute_base64", {
         path: targetAbs,
         base64Content: base64,
       })
-      insertions.push(`![](${safeName})`)
+      insertions.push(`![](${ups}Attachments/${safeName})`)
     } catch (e) {
       console.error("[md-editor] image drop failed:", e)
     }
@@ -259,7 +347,9 @@ async function handleImageDrop(opts: ImageOpts, view: EditorView, files: FileLis
 }
 
 type ImageOpts = {
-  fileDir?: string // 当前 .md 文件所在目录的绝对路径
+  projectRoot?: string // sdk.directory(绝对路径)
+  filePathRel?: string // 当前 .md 相对 projectRoot 的路径,用来算 `../` 数
+  locale?: string // app locale,用来翻译 CM 搜索面板("zh" / "zht" / "en" / ...)
 }
 
 // ============================================================
@@ -267,22 +357,27 @@ type ImageOpts = {
 // ============================================================
 
 export function markdownEditorExtensions(opts: ImageOpts = {}): Extension[] {
+  const phrases = opts.locale ? PHRASES[opts.locale] : undefined
   return [
     // Heading 折叠 + 折叠键盘(默认 Ctrl+Shift+[/])
     foldGutter(),
     keymap.of(foldKeymap),
-    // 搜索/替换(Ctrl+F / Ctrl+H 完整面板)
-    search(),
-    keymap.of(searchKeymap),
-    // 自家命令优先于 default keymap
-    keymap.of([
-      { key: "Enter", run: continueListCommand },
-      { key: "Mod-b", run: toggleBoldCommand },
-      { key: "Mod-i", run: toggleItalicCommand },
-      { key: "Mod-k", run: insertLinkCommand },
-      { key: "Mod-Enter", run: toggleTaskCheckCommand },
-      { key: "Tab", run: tableTabCommand },
-    ]),
+    // 搜索面板按 app locale 翻译(用 phrases facet 走 highest 优先,不命中 locale 退英文)
+    ...(phrases ? [Prec.highest(EditorState.phrases.of(phrases))] : []),
+    // 搜索/替换(Ctrl+F / Ctrl+H 完整面板)— 顶部悬浮 + highest 防全局 Ctrl+F 抢先
+    search({ top: true }),
+    Prec.highest(keymap.of(searchKeymap)),
+    // 自家命令也走 highest:Tab / Enter / Mod-* 必须比 default keymap (含 indentWithTab) 优先
+    Prec.highest(
+      keymap.of([
+        { key: "Enter", run: continueListCommand },
+        { key: "Mod-b", run: toggleBoldCommand },
+        { key: "Mod-i", run: toggleItalicCommand },
+        { key: "Mod-k", run: insertLinkCommand },
+        { key: "Mod-Enter", run: toggleTaskCheckCommand },
+        { key: "Tab", run: tableTabCommand },
+      ]),
+    ),
     // paste / drop handlers
     EditorView.domEventHandlers({
       paste(event, view) {
@@ -308,9 +403,25 @@ export function markdownEditorExtensions(opts: ImageOpts = {}): Extension[] {
         return true
       },
       drop(event, view) {
+        // Case A:文件树内部拖图 — 直接引用,不复制
+        const ftPlain = event.dataTransfer?.getData("text/plain") ?? ""
+        if (ftPlain.startsWith("file:")) {
+          const relRaw = ftPlain.slice(5).replace(/\\/g, "/").replace(/^\/+/, "")
+          if (IMAGE_EXT_PATTERN.test(relRaw)) {
+            event.preventDefault()
+            const ups = "../".repeat(depthOf(opts.filePathRel))
+            const ref = `![](${ups}${relRaw})`
+            const sel = view.state.selection.main
+            view.dispatch({
+              changes: { from: sel.from, to: sel.to, insert: ref },
+              selection: { anchor: sel.from + ref.length },
+            })
+            return true
+          }
+        }
+        // Case B:OS 文件管理器拖入 — 复制到 Attachments/
         const files = event.dataTransfer?.files
         if (!files || files.length === 0) return false
-        // 只处理 image/* 文件;非图给默认 drop 行为
         let hasImage = false
         for (let i = 0; i < files.length; i++) {
           if (files[i]?.type.startsWith("image/")) {

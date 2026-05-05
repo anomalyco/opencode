@@ -9,6 +9,250 @@
   font-style: normal;
 }
 
+/* FORK: 文件查看器 — 粗体/斜体视觉强化 2026-05-05
+   原因:packages/ui markdown.css 把 strong 设为 font-weight: 500(medium),中文字体下与正文几乎无差;
+        em 完全无样式,中文字体多无 italic glyph 等同正文。
+   只在 file-viewer 作用域内加强,不影响 chat 排版。 */
+[data-context="file-viewer"] [data-component="markdown"] strong,
+[data-context="file-viewer"] [data-component="markdown"] b,
+[data-context="file-viewer"] [data-component="markdown"] th {
+  font-weight: 700;
+}
+[data-context="file-viewer"] [data-component="markdown"] em,
+[data-context="file-viewer"] [data-component="markdown"] i {
+  font-style: italic;
+  /* 中文字体多无 italic glyph,加 strong 色让斜体可被识别 */
+  color: var(--text-strong);
+}
+/* 嵌套粗+斜:保留 strong 色 + italic */
+[data-context="file-viewer"] [data-component="markdown"] strong em,
+[data-context="file-viewer"] [data-component="markdown"] em strong {
+  font-weight: 700;
+  font-style: italic;
+  color: var(--text-strong);
+}
+
+/* FORK: CM 搜索面板 — VS Code / GitHub 风,2-row CSS Grid 显式定位 2026-05-05
+   DOM 顺序:search input | next | prev | select(隐) | label×3 | br(隐) | replace input | replace | replaceAll | close
+   用 :nth-of-type 把 3 个 label 精准定位;close 绝对悬浮右上,不占 grid 流位。 */
+
+/* 搜索面板容器 — sticky 在外层 ScrollView 的视口顶部,滚动时不被滚走 */
+.cm-editor > .cm-panels-top {
+  display: flex !important;
+  justify-content: flex-start !important;
+  background: transparent !important;
+  border: none !important;
+  /* sticky:钉在最近的 overflow 父(外层 ScrollView)视口顶部 */
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20;
+  padding-bottom: 4px;
+}
+
+.cm-panel.cm-search {
+  position: relative;
+  /* 不撑满,居左,自适应内容宽度 */
+  width: fit-content;
+  margin: 8px 0 0 12px;
+  /* 不透明 — 用 -non-alpha 后缀的 token(白底,深色主题下为深底)避免背后文字透出 */
+  background: var(--surface-raised-stronger-non-alpha) !important;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 10px !important;
+  /* CM6 内置 theme 注入了 padding: 2px 6px 4px(同 specificity 顺序赢)→ 必须 !important 才能盖掉 */
+  padding: 10px 64px 10px 12px !important;
+  /* 强阴影显悬浮感(VS Code / Obsidian 浮动面板风格) */
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    0 2px 4px rgba(0, 0, 0, 0.06);
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  display: grid;
+  /* 输入框收窄(200-320),其余 auto,checkbox 紧贴"上一个"右边,右侧自然留空让 close 不撞 */
+  grid-template-columns: minmax(200px, 320px) auto auto auto auto auto;
+  column-gap: 8px;
+  row-gap: 8px;
+  justify-content: start;
+  align-items: center;
+  line-height: 1.4;
+}
+
+/* 隐藏冗余的 select 按钮和换行 br(grid 不需要 br)*/
+.cm-panel.cm-search > button[name="select"],
+.cm-panel.cm-search > br {
+  display: none !important;
+}
+
+/* ── Row 1 ── */
+.cm-panel.cm-search > input[name="search"] {
+  grid-column: 1;
+  grid-row: 1;
+}
+.cm-panel.cm-search > button[name="next"] {
+  grid-column: 2;
+  grid-row: 1;
+}
+.cm-panel.cm-search > button[name="prev"] {
+  grid-column: 3;
+  grid-row: 1;
+}
+/* 三个 label(case / regexp / word)紧贴"上一个"右边,占 col 4/5/6 */
+.cm-panel.cm-search > label:nth-of-type(1) {
+  grid-column: 4;
+  grid-row: 1;
+}
+.cm-panel.cm-search > label:nth-of-type(2) {
+  grid-column: 5;
+  grid-row: 1;
+}
+.cm-panel.cm-search > label:nth-of-type(3) {
+  grid-column: 6;
+  grid-row: 1;
+}
+
+/* ── Row 2 ── */
+.cm-panel.cm-search > input[name="replace"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+.cm-panel.cm-search > button[name="replace"] {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: start;
+}
+.cm-panel.cm-search > button[name="replaceAll"] {
+  grid-column: 3 / span 2;
+  grid-row: 2;
+  justify-self: start;
+}
+
+/* ── 输入框(查找 / 替换共用 .cm-textfield)── */
+.cm-panel.cm-search .cm-textfield {
+  font-family: var(--font-family-sans) !important;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border-base);
+  background: var(--surface-base);
+  color: var(--text-base);
+  width: 100%;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.cm-panel.cm-search .cm-textfield:focus {
+  border-color: var(--text-interactive-base);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-interactive-base) 18%, transparent);
+}
+
+/* ── 按钮 ── ghost 风:默认无底色,hover 才上浅底色(VS Code / GitHub 一致风格)*/
+.cm-panel.cm-search .cm-button {
+  font-family: var(--font-family-sans) !important;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: var(--text-base);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+.cm-panel.cm-search .cm-button:hover {
+  background: var(--surface-raised-stronger) !important;
+  border-color: var(--border-weak-base) !important;
+}
+.cm-panel.cm-search .cm-button:active {
+  background: var(--surface-base) !important;
+}
+
+/* ── Checkbox 标签 ── 字号跟"上一个/下一个"按钮一致(13px)
+   CM6 内置规则 `& label { fontSize: 80% }` 同 specificity 会盖,用 !important 强制 */
+.cm-panel.cm-search > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-base);
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 0 4px;
+  margin: 0;
+}
+.cm-panel.cm-search > label input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--text-interactive-base);
+}
+
+/* FORK: CM 编辑区 — 字体色走主题 base 而非纯白(深色模式下默认白色太亮眼)2026-05-05 */
+.cm-editor .cm-content {
+  color: var(--text-base) !important;
+  caret-color: var(--text-base) !important;
+}
+.cm-editor .cm-cursor,
+.cm-editor .cm-dropCursor {
+  border-left-color: var(--text-base) !important;
+}
+/* 选区色对齐 */
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground,
+.cm-editor ::selection {
+  background: var(--surface-raised-stronger) !important;
+}
+
+/* FORK: CM 行号 gutter — 跟 DeskFox 主题对齐(默认色在深色模式下太亮突兀)2026-05-05 */
+.cm-editor .cm-gutters {
+  background: var(--surface-base) !important;
+  border-right: 1px solid var(--border-weak-base) !important;
+  color: var(--text-weak) !important;
+}
+.cm-editor .cm-lineNumbers .cm-gutterElement {
+  color: var(--text-weak) !important;
+  font-weight: 400;
+  opacity: 0.7;
+}
+.cm-editor .cm-activeLineGutter {
+  background: var(--surface-raised-base) !important;
+  color: var(--text-base) !important;
+}
+.cm-editor .cm-activeLineGutter .cm-gutterElement,
+.cm-editor .cm-lineNumbers .cm-activeLineGutter {
+  color: var(--text-base) !important;
+  opacity: 1;
+}
+
+/* ── Close 按钮 — 绝对悬浮右上,不占 grid 流(放在 padding 区域内,跟 label 留间隙)── */
+.cm-panel.cm-search > button[name="close"] {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-weak);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.cm-panel.cm-search > button[name="close"]:hover {
+  /* 用 alpha 叠加层(深色主题下也可见,跟面板底色拉开)*/
+  background: var(--surface-raised-base-active) !important;
+  color: var(--text-strong);
+}
+
 @layer components {
   @keyframes session-progress-whip {
     0% {

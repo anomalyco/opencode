@@ -640,6 +640,9 @@ export function FileTabContent(props: {
       if (activeFileTab() !== props.tab) return
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
       if (event.key.toLowerCase() !== "f") return
+      // FORK: 编辑态聚焦 CodeMirror 时让编辑器自己收 Ctrl+F(@codemirror/search 面板)2026-05-05
+      const active = document.activeElement as HTMLElement | null
+      if (active?.closest(".cm-editor")) return
 
       event.preventDefault()
       event.stopPropagation()
@@ -1451,7 +1454,9 @@ export function FileTabContent(props: {
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
           <Match when={editing() && state()?.loaded}>
-            <div class="relative overflow-hidden p-2" style={{ "min-height": "300px" }}>
+            {/* FORK: 去掉 overflow-hidden — 否则 cm-panels-top 的 position: sticky 会绑到本 wrapper(它不滚),
+                导致搜索面板被外层 ScrollView 一起滚走;让 sticky 链路穿过此 wrapper 直达 ScrollView 视口 2026-05-05 */}
+            <div class="relative p-2" style={{ "min-height": "300px" }}>
               <CodeMirrorView
                 value={contents()}
                 language={langFromExt(path() ?? "")}
@@ -1460,12 +1465,9 @@ export function FileTabContent(props: {
                 extraExtensions={
                   isMarkdownPath(path())
                     ? markdownEditorExtensions({
-                        fileDir: (() => {
-                          const root = sdk.directory
-                          const p = path()
-                          if (!root || !p) return undefined
-                          return pathDirname(`${root}/${p}`.replace(/\\/g, "/"))
-                        })(),
+                        projectRoot: sdk.directory,
+                        filePathRel: path() ?? undefined,
+                        locale: language.locale(),
                       })
                     : undefined
                 }

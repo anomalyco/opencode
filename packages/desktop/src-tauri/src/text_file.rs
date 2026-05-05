@@ -91,5 +91,12 @@ pub fn write_binary_file_absolute_base64(path: String, base64_content: String) -
     if p.exists() {
         return Err(format!("already_exists: {}", path));
     }
+    // FORK: 父目录不存在则递归建 — 支持 .md 拖图到 <root>/Attachments/ 自动建目录 2026-05-05
+    if let Some(parent) = p.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("create_dir_all failed: {}: {}", parent.display(), e))?;
+        }
+    }
     std::fs::write(&path, bytes).map_err(|e| format!("write failed: {}: {}", path, e))
 }
