@@ -70,10 +70,14 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("install-update", () => deps.installUpdate())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    const store = getStore(name)
-    const value = store.get(key)
-    if (value === undefined || value === null) return null
-    return typeof value === "string" ? value : JSON.stringify(value)
+    try {
+      const store = getStore(name)
+      const value = store.get(key)
+      if (value === undefined || value === null) return null
+      return typeof value === "string" ? value : JSON.stringify(value)
+    } catch {
+      return null
+    }
   })
   ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
     getStore(name).set(key, value)
