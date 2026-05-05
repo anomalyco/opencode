@@ -58,7 +58,6 @@ export const WorkspaceDragOverlay = (props: {
   activeWorkspace: Accessor<string | undefined>
   workspaceLabel: (directory: string, branch?: string, projectId?: string) => string
 }): JSX.Element => {
-  const globalSync = useGlobalSync()
   const language = useLanguage()
   const label = createMemo(() => {
     const project = props.sidebarProject()
@@ -66,10 +65,9 @@ export const WorkspaceDragOverlay = (props: {
     const directory = props.activeWorkspace()
     if (!directory) return
 
-    const [workspaceStore] = globalSync.child(directory, { bootstrap: false })
     const kind =
       directory === project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
-    const name = props.workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
+    const name = props.workspaceLabel(directory, undefined, project.id)
     return `${kind} : ${name}`
   })
 
@@ -96,7 +94,7 @@ const WorkspaceHeader = (props: {
 }): JSX.Element => (
   <div class="flex items-center gap-1 min-w-0 flex-1">
     <div class="flex items-center justify-center shrink-0 size-6">
-      <Show when={props.busy()} fallback={<Icon name="branch" size="small" />}>
+      <Show when={props.busy()}>
         <Spinner class="size-[15px]" />
       </Show>
     </div>
@@ -106,9 +104,7 @@ const WorkspaceHeader = (props: {
     <Show
       when={!props.local()}
       fallback={
-        <span class="text-14-medium text-text-base min-w-0 truncate">
-          {props.branch() ?? getFilename(props.directory)}
-        </span>
+        <span class="text-14-medium text-text-base min-w-0 truncate">{getFilename(props.directory)}</span>
       }
     >
       <props.InlineEditor
@@ -310,9 +306,8 @@ export const SortableWorkspace = (props: {
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
   const workspaceValue = createMemo(() => {
-    const branch = workspaceStore.vcs?.branch
-    const name = branch ?? getFilename(props.directory)
-    return props.ctx.workspaceName(props.directory, props.project.id, branch) ?? name
+    const name = getFilename(props.directory)
+    return props.ctx.workspaceName(props.directory, props.project.id) ?? name
   })
   const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())

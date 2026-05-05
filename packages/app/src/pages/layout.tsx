@@ -23,7 +23,6 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/shared/util/path"
 import { Session, type Message } from "@opencode-ai/sdk/v2/client"
@@ -617,7 +616,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>
-    workspaceName(directory, projectId, branch) ?? branch ?? getFilename(directory)
+    workspaceName(directory, projectId, branch) ?? getFilename(directory)
 
   const workspaceSetting = createMemo(() => {
     const project = currentProject()
@@ -1055,13 +1054,6 @@ export default function Layout(props: ParentProps) {
         onSelect: () => openServer(),
       },
       {
-        id: "settings.open",
-        title: language.t("command.settings.open"),
-        category: language.t("command.category.settings"),
-        keybind: "mod+comma",
-        onSelect: () => openSettings(),
-      },
-      {
         id: "session.previous",
         title: language.t("command.session.previous"),
         category: language.t("command.category.session"),
@@ -1210,14 +1202,6 @@ export default function Layout(props: ParentProps) {
     void import("@/components/dialog-select-server").then((x) => {
       if (dialogDead || dialogRun !== run) return
       dialog.show(() => <x.DialogSelectServer />)
-    })
-  }
-
-  function openSettings() {
-    const run = ++dialogRun
-    void import("@/components/dialog-settings").then((x) => {
-      if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSettings />)
     })
   }
 
@@ -2095,23 +2079,11 @@ export default function Layout(props: ParentProps) {
       if (!item) return [] as string[]
       return workspaceIds(item)
     })
-    const unseenCount = createMemo(() =>
-      workspaces().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
-    )
-    const clearNotifications = () =>
-      workspaces()
-        .filter((directory) => notification.project.unseenCount(directory) > 0)
-        .forEach((directory) => notification.project.markViewed(directory))
     const workspacesEnabled = createMemo(() => {
       const item = project()
       if (!item) return false
       if (item.vcs !== "git") return false
       return layout.sidebar.workspaces(item.worktree)()
-    })
-    const canToggle = createMemo(() => {
-      const item = project()
-      if (!item) return false
-      return item.vcs === "git" || layout.sidebar.workspaces(item.worktree)()
     })
     const homedir = createMemo(() => globalSync.data.path.home)
 
@@ -2189,73 +2161,26 @@ export default function Layout(props: ParentProps) {
                   </Tooltip>
                 </div>
 
-                <DropdownMenu modal={!sidebarHovering()}>
-                  <DropdownMenu.Trigger
-                    as={IconButton}
-                    icon="dot-grid"
+                <Tooltip placement="bottom" value={language.t("common.edit")}>
+                  <IconButton
+                    icon="edit"
                     variant="ghost"
-                    data-action="project-menu"
+                    data-action="project-edit"
                     data-project={slug()}
-                    class="shrink-0 size-6 rounded-md transition-opacity data-[expanded]:bg-surface-base-active"
+                    class="shrink-0 size-6 rounded-md transition-opacity"
                     classList={{
                       "opacity-100": panelProps.mobile || merged(),
-                      "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 data-[expanded]:opacity-100":
+                      "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100":
                         !panelProps.mobile && !merged(),
                     }}
-                    aria-label={language.t("common.moreOptions")}
+                    aria-label={language.t("common.edit")}
+                    onClick={() => {
+                      const item = project()
+                      if (!item) return
+                      showEditProjectDialog(item)
+                    }}
                   />
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content class="mt-1">
-                      <DropdownMenu.Item
-                        onSelect={() => {
-                          const item = project()
-                          if (!item) return
-                          showEditProjectDialog(item)
-                        }}
-                      >
-                        <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Item
-                        data-action="project-workspaces-toggle"
-                        data-project={slug()}
-                        disabled={!canToggle()}
-                        onSelect={() => {
-                          const item = project()
-                          if (!item) return
-                          toggleProjectWorkspaces(item)
-                        }}
-                      >
-                        <DropdownMenu.ItemLabel>
-                          {workspacesEnabled()
-                            ? language.t("sidebar.workspaces.disable")
-                            : language.t("sidebar.workspaces.enable")}
-                        </DropdownMenu.ItemLabel>
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Item
-                        data-action="project-clear-notifications"
-                        data-project={slug()}
-                        disabled={unseenCount() === 0}
-                        onSelect={clearNotifications}
-                      >
-                        <DropdownMenu.ItemLabel>
-                          {language.t("sidebar.project.clearNotifications")}
-                        </DropdownMenu.ItemLabel>
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Separator />
-                      <DropdownMenu.Item
-                        data-action="project-close-menu"
-                        data-project={slug()}
-                        onSelect={() => {
-                          const dir = worktree()
-                          if (!dir) return
-                          closeProject(dir)
-                        }}
-                      >
-                        <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
-                      </DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu>
+                </Tooltip>
               </div>
             </div>
 
@@ -2454,9 +2379,6 @@ export default function Layout(props: ParentProps) {
       openProjectKeybind={() => command.keybind("project.open")}
       onOpenProject={chooseProject}
       renderProjectOverlay={projectOverlay}
-      settingsLabel={() => language.t("sidebar.settings")}
-      settingsKeybind={() => command.keybind("settings.open")}
-      onOpenSettings={openSettings}
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }

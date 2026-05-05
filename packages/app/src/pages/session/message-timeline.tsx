@@ -821,11 +821,8 @@ export function MessageTimeline(props: {
                               icon="dot-grid"
                               variant="ghost"
                               class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                              classList={{
-                                "bg-surface-base-active": share.open || title.pendingShare,
-                              }}
                               aria-label={language.t("common.moreOptions")}
-                              aria-expanded={title.menuOpen || share.open || title.pendingShare}
+                              aria-expanded={title.menuOpen}
                               ref={(el: HTMLButtonElement) => {
                                 more = el
                               }}
@@ -838,14 +835,6 @@ export function MessageTimeline(props: {
                                     event.preventDefault()
                                     setTitle("pendingRename", false)
                                     openTitleEditor()
-                                    return
-                                  }
-                                  if (title.pendingShare) {
-                                    event.preventDefault()
-                                    requestAnimationFrame(() => {
-                                      setShare({ open: true, dismiss: null })
-                                      setTitle("pendingShare", false)
-                                    })
                                   }
                                 }}
                               >
@@ -857,21 +846,6 @@ export function MessageTimeline(props: {
                                 >
                                   <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
-                                <Show when={shareEnabled()}>
-                                  <DropdownMenu.Item
-                                    onSelect={() => {
-                                      setTitle({ pendingShare: true, menuOpen: false })
-                                    }}
-                                  >
-                                    <DropdownMenu.ItemLabel>
-                                      {language.t("session.share.action.share")}
-                                    </DropdownMenu.ItemLabel>
-                                  </DropdownMenu.Item>
-                                </Show>
-                                <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Separator />
                                 <DropdownMenu.Item
                                   onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
                                 >
