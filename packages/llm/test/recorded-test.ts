@@ -68,15 +68,15 @@ const matchesSelected = (input: {
   readonly cassette: string
   readonly tags: ReadonlyArray<string>
 }) => {
+  const prefixes = envList("RECORDED_PREFIX")
   const providers = envList("RECORDED_PROVIDER")
   const requiredTags = envList("RECORDED_TAGS")
   const tests = envList("RECORDED_TEST")
   const tags = input.tags.map((tag) => tag.toLowerCase())
   const names = [input.name, kebab(input.name), input.cassette].map((item) => item.toLowerCase())
 
-  if (providers.length > 0 && !providers.some((provider) => tags.includes(`provider:${provider}`) || input.prefix.toLowerCase() === provider)) {
-    return false
-  }
+  if (prefixes.length > 0 && !prefixes.includes(input.prefix.toLowerCase())) return false
+  if (providers.length > 0 && !providers.some((provider) => tags.includes(`provider:${provider}`))) return false
   if (requiredTags.length > 0 && !requiredTags.every((tag) => tags.includes(tag))) return false
   if (tests.length > 0 && !tests.some((test) => names.some((name) => name.includes(test)))) return false
   return true
