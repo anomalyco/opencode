@@ -11,6 +11,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
+import { useLanguage } from "@/context/language"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -30,6 +31,7 @@ export const SidebarContent = (props: {
   onOpenSettings: () => void
   renderPanel: () => JSX.Element
 }): JSX.Element => {
+  const language = useLanguage()
   const showRail = createMemo(() => props.projects().length > 1)
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
@@ -61,7 +63,16 @@ export const SidebarContent = (props: {
           >
             <DragDropSensors />
             <ConstrainDragXAxis />
-            <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
+            <div class="h-full w-full flex flex-col items-center gap-3 px-1 py-3 overflow-y-auto no-scrollbar">
+              <div class="shrink-0 w-full text-[9px] font-medium tracking-wider text-text-weak uppercase text-center leading-tight">
+                <Show
+                  when={language.t("sidebar.heading.workspaces").length > 6}
+                  fallback={language.t("sidebar.heading.workspaces")}
+                >
+                  <div>{language.t("sidebar.heading.workspaces").slice(0, 6)}</div>
+                  <div>{language.t("sidebar.heading.workspaces").slice(6)}</div>
+                </Show>
+              </div>
               <Show when={showRail()}>
                 <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                   <For each={props.projects()}>{(project) => props.renderProject(project)}</For>

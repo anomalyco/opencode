@@ -2341,10 +2341,7 @@ export default function Layout(props: ParentProps) {
                 }
               >
                 <>
-                  <div class="shrink-0 pt-4 pb-1 px-2 text-12-medium text-text-weak uppercase tracking-wide">
-                    {language.t("sidebar.heading.workspaces")}
-                  </div>
-                  <div class="shrink-0 pb-4">
+                  <div class="shrink-0 py-4">
                     <Button
                       size="large"
                       icon="plus-small"
