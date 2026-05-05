@@ -5,7 +5,7 @@ import * as Database from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
-import { nextTuiRequest, submitTuiResponse } from "../../tui"
+import { nextTuiRequest, submitTuiResponse } from "@/server/shared/tui-control"
 import { InstanceHttpApi } from "../api"
 import { CommandPayload, TuiPublishPayload } from "../groups/tui"
 

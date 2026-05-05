@@ -1,4 +1,5 @@
 import { NonNegativeInt } from "@/util/schema"
+import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -21,6 +22,9 @@ export const ReplayPayload = Schema.Struct({
 export const ReplayResponse = Schema.Struct({
   sessionID: Schema.String,
 })
+export const SessionPayload = Schema.Struct({
+  sessionID: SessionID,
+})
 export const HistoryPayload = Schema.Record(Schema.String, NonNegativeInt)
 export const HistoryEvent = Schema.Struct({
   id: Schema.String,
@@ -33,6 +37,7 @@ export const HistoryEvent = Schema.Struct({
 export const SyncPaths = {
   start: `${root}/start`,
   replay: `${root}/replay`,
+  steal: `${root}/steal`,
   history: `${root}/history`,
 } as const
 
@@ -58,6 +63,17 @@ export const SyncApi = HttpApi.make("sync")
             identifier: "sync.replay",
             summary: "Replay sync events",
             description: "Validate and replay a complete sync event history.",
+          }),
+        ),
+        HttpApiEndpoint.post("steal", SyncPaths.steal, {
+          payload: SessionPayload,
+          success: described(SessionPayload, "Session stolen into workspace"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "sync.steal",
+            summary: "Steal session into workspace",
+            description: "Update a session to belong to the current workspace through the sync event system.",
           }),
         ),
         HttpApiEndpoint.post("history", SyncPaths.history, {
