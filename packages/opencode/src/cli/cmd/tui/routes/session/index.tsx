@@ -85,6 +85,7 @@ import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { useArgs } from "../../context/args"
 import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
@@ -124,6 +125,7 @@ export function Session() {
   const event = useEvent()
   const project = useProject()
   const tuiConfig = useTuiConfig()
+  const args = useArgs()
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -182,6 +184,19 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
   const editor = useEditorContext()
+  const autoApprovedPermissions = new Set<string>()
+
+  createEffect(() => {
+    if (!args.yolo) return
+    for (const request of permissions()) {
+      if (autoApprovedPermissions.has(request.id)) continue
+      autoApprovedPermissions.add(request.id)
+      void sdk.client.permission.reply({
+        requestID: request.id,
+        reply: "once",
+      })
+    }
+  })
 
   createEffect(() => {
     const sessionID = route.sessionID
