@@ -22,6 +22,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
+import { Modelv2 } from "@/v2/model"
 import * as DateTime from "effect/DateTime"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -432,9 +433,9 @@ export const layer: Layer.Layer<
                 sessionID: ctx.sessionID,
                 agent: input.assistantMessage.agent,
                 model: {
-                  id: ctx.model.id,
-                  providerID: ctx.model.providerID,
-                  variant: input.assistantMessage.variant,
+                  id: Modelv2.ID.make(ctx.model.id),
+                  providerID: Modelv2.ProviderID.make(ctx.model.providerID),
+                  variant: Modelv2.VariantID.make(input.assistantMessage.variant ?? "default"),
                 },
                 snapshot: ctx.snapshot,
                 timestamp: DateTime.makeUnsafe(Date.now()),

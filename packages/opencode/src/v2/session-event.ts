@@ -5,8 +5,8 @@ import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
 export { FileAttachment }
 import { ToolOutput } from "./tool-output"
-import { ModelID, ProviderID } from "@/provider/schema"
 import { V2Schema } from "./schema"
+import { Modelv2 } from "./model"
 
 export const Source = Schema.Struct({
   start: NonNegativeInt,
@@ -47,9 +47,7 @@ export const ModelSwitched = EventV2.define({
   version: 1,
   schema: {
     ...Base,
-    id: ModelID,
-    providerID: ProviderID,
-    variant: Schema.String.pipe(Schema.optional),
+    model: Modelv2.Ref,
   },
 })
 export type ModelSwitched = Schema.Schema.Type<typeof ModelSwitched>
@@ -106,11 +104,7 @@ export namespace Step {
     schema: {
       ...Base,
       agent: Schema.String,
-      model: Schema.Struct({
-        id: Schema.String,
-        providerID: Schema.String,
-        variant: Schema.String.pipe(Schema.optional),
-      }),
+      model: Modelv2.Ref,
       snapshot: Schema.String.pipe(Schema.optional),
     },
   })

@@ -1,5 +1,5 @@
 import { withStatics } from "@/util/schema"
-import { Array, Context, DateTime, Effect, HashMap, Layer, Option, Order, pipe, Schema } from "effect"
+import { Array, Context, Effect, HashMap, Layer, Option, Order, pipe, Schema } from "effect"
 import { DateTimeUtcFromMillis } from "effect/Schema"
 
 export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
@@ -87,6 +87,13 @@ export const Cost = Schema.Struct({
     write: Schema.Finite,
   }),
 })
+
+export const Ref = Schema.Struct({
+  id: ID,
+  providerID: ProviderID,
+  variant: VariantID,
+})
+export type Ref = typeof Ref.Type
 
 export class Info extends Schema.Class<Info>("Model.Info")({
   id: ID,

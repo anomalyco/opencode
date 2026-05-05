@@ -20,7 +20,7 @@ model. It can stop doing all the
 
 The new agent loop needs to trigger compaction properly
 
-## Plugin API design - ???
+## Plugin API design - James?
 
 We need to figure out how we want server plugins to work and what hooks are useful.
 
@@ -49,7 +49,7 @@ I have a basic model service that allows for models to be registered dynamically
 Providers should register as plugins and autoload based on whatever logic they
 want / config. They should register models into model database
 
-## Event - Kit/James
+## Event - Kit
 
 I have this v2/event.ts but it needs to be self contained instead of using the
 old bus system

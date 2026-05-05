@@ -4,6 +4,7 @@ import { SessionEvent } from "./session-event"
 import { EventV2 } from "./event"
 import { ToolOutput } from "./tool-output"
 import { V2Schema } from "./schema"
+import { Modelv2 } from "./model"
 
 export const ID = EventV2.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -25,11 +26,7 @@ export class AgentSwitched extends Schema.Class<AgentSwitched>("Session.Message.
 export class ModelSwitched extends Schema.Class<ModelSwitched>("Session.Message.ModelSwitched")({
   ...Base,
   type: Schema.Literal("model-switched"),
-  model: Schema.Struct({
-    id: SessionEvent.ModelSwitched.fields.data.fields.id,
-    providerID: SessionEvent.ModelSwitched.fields.data.fields.providerID,
-    variant: SessionEvent.ModelSwitched.fields.data.fields.variant,
-  }),
+  model: Modelv2.Ref,
 }) {}
 
 export class User extends Schema.Class<User>("Session.Message.User")({
