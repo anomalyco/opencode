@@ -482,7 +482,7 @@ export const Terminal = (props: TerminalProps) => {
       const connectToken = async () => {
         const result = await client.pty
           .connectToken(
-            { ptyID: id },
+            { ptyID: id, directory },
             {
               throwOnError: false,
               headers: { "x-opencode-ticket": "1" },
