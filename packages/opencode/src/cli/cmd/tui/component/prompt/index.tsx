@@ -20,6 +20,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign } from "./part"
+import { getLocalSlashCommand } from "./slash"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -825,6 +826,17 @@ export function Prompt(props: PromptProps) {
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
+      return true
+    }
+    const localSlash = getLocalSlashCommand(store.prompt.input, command.hasSlash)
+    if (localSlash && command.executeSlash(localSlash)) {
+      input.extmarks.clear()
+      input.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
       return true
     }
     const selectedModel = local.model.current()

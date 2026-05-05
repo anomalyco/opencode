@@ -30,6 +30,12 @@ export type CommandOption = DialogSelectOption<string> & {
   enabled?: boolean
 }
 
+function matchesSlash(option: CommandOption, name: string) {
+  const slash = option.slash
+  if (!slash) return false
+  return slash.name === name || !!slash.aliases?.includes(name)
+}
+
 function init() {
   const root = getOwner()
   const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
@@ -83,6 +89,18 @@ function init() {
           return
         }
       }
+    },
+    hasSlash(name: string) {
+      return entries().some((option) => isVisible(option) && matchesSlash(option, name))
+    },
+    executeSlash(name: string) {
+      for (const option of entries()) {
+        if (!isVisible(option)) continue
+        if (!matchesSlash(option, name)) continue
+        option.onSelect?.(dialog)
+        return true
+      }
+      return false
     },
     slashes() {
       return visibleOptions().flatMap((option) => {
