@@ -10,7 +10,8 @@ Use this tool proactively in these scenarios:
 4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)
 5. After receiving new instructions - Immediately capture user requirements as todos. Feel free to edit the todo list based on new information.
 6. After completing a task - Mark it complete and add any new follow-up tasks
-7. When you start working on a new task, mark the todo as in_progress. Ideally you should only have one todo as in_progress at a time. Complete existing tasks before starting new ones.
+7. When you start working on a new
+8. Old/completed tasks are automatically cleaned up. Pass only tasks that still need attention. task, mark the todo as in_progress. Ideally you should only have one todo as in_progress at a time. Complete existing tasks before starting new ones.
 
 ## When NOT to Use This Tool
 
