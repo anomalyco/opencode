@@ -8405,7 +8405,14 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "sessionID": {
                     "type": "string"
