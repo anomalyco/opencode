@@ -28,7 +28,7 @@ describe("Anthropic Messages adapter", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] }).prepare(request)
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "claude-sonnet-4-5",
         system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [{ type: "text", text: "Say hello." }] }],
@@ -53,7 +53,7 @@ describe("Anthropic Messages adapter", () => {
         }),
       )
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "claude-sonnet-4-5",
         messages: [
           { role: "user", content: [{ type: "text", text: "What is the weather?" }] },
@@ -281,7 +281,7 @@ describe("Anthropic Messages adapter", () => {
         }),
       )
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         messages: [
           { role: "user", content: [{ type: "text", text: "Search for something." }] },
           {

@@ -31,9 +31,9 @@ const request = LLM.request({
 const response = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] }).generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `LLMClient.make(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `LLMClient.make(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider payload, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
-Use `LLMClient.make(...).stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.make(...).generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.make(...).prepare<Target>(request)` to compile a request through the adapter pipeline without sending it — the optional `Target` type argument narrows `.target` to the adapter's native shape (e.g. `prepare<OpenAIChatTarget>(...)` returns a `PreparedRequestOf<OpenAIChatTarget>`). The runtime payload is identical; the generic is a type-level assertion.
+Use `LLMClient.make(...).stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.make(...).generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.make(...).prepare<Payload>(request)` to compile a request through the adapter pipeline without sending it — the optional `Payload` type argument narrows `.payload` to the adapter's native shape (e.g. `prepare<OpenAIChatPayload>(...)` returns a `PreparedRequestOf<OpenAIChatPayload>`). The runtime payload is identical; the generic is a type-level assertion.
 
 Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g. `events.filter(LLMEvent.is.toolCall)`). The kebab-case `LLMEvent.guards["tool-call"]` form also works but prefer `is.*` in new code.
 
@@ -41,8 +41,8 @@ Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g.
 
 An adapter is the registered, runnable composition of four orthogonal pieces:
 
-- **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, the target schema, the chunk schema, and the streaming chunk-to-event state machine. `Adapter.make(...)` validates and JSON-encodes the target from the target schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
-- **`Endpoint`** (`src/endpoint.ts`) — URL construction. Receives the request and the validated target so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any target field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
+- **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, the payload schema, the chunk schema, and the streaming chunk-to-event state machine. `Adapter.make(...)` validates and JSON-encodes the payload from the payload schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Endpoint`** (`src/endpoint.ts`) — URL construction. Receives the request and the validated payload so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any payload field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
 - **`Auth`** (`src/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Adapter.make` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
 - **`Framing`** (`src/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
 
@@ -71,7 +71,7 @@ packages/llm/src/
   llm.ts                // request constructors and convenience helpers
   adapter.ts            // Adapter.make + LLMClient.make
   executor.ts           // RequestExecutor service + transport error mapping
-  patch.ts              // Patch system (request/prompt/tool-schema/target/stream)
+  patch.ts              // Patch system (request/prompt/tool-schema/payload/stream)
 
   protocol.ts           // Protocol type + Protocol.define
   endpoint.ts           // Endpoint type + Endpoint.baseURL
@@ -106,20 +106,20 @@ The dependency arrow points down: `provider/*.ts` files import `protocol`, `endp
 - `parseToolInput(adapter, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<adapter>` tool call `<name>`" error message. Treats empty input as `{}`. Use this in `finishToolCall` / `finalizeToolCalls`; do not roll a fresh `parseJson` callsite.
 - `parseJson(adapter, raw, message)` — generic JSON-via-Schema decode for non-tool payloads.
 - `chunkError(adapter, message, ...)` — typed `ProviderChunkError` constructor for stream-time failures.
-- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Adapter.make(...)` uses this for target validation; lower-level adapters can reuse it.
+- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Adapter.make(...)` uses this for payload validation; lower-level adapters can reuse it.
 
 If you find yourself copying a 3-to-5-line snippet between two protocols, lift it into `ProviderShared` next to these helpers rather than duplicating.
 
 ### Patches
 
-Patches are the forcing function for provider/model quirks, similar to OpenCode's `ProviderTransform`: payload cleanup, provider option shaping, schema sanitization, and target-level body tweaks. If a behavior is not universal enough for common IR, keep it as a named patch with a trace entry. Good examples:
+Patches are the forcing function for provider/model quirks, similar to OpenCode's `ProviderTransform`: payload cleanup, provider option shaping, schema sanitization, and payload-level body tweaks. If a behavior is not universal enough for common IR, keep it as a named patch with a trace entry. Good examples:
 
-- OpenAI Chat streaming usage: `target.openai-chat.include-usage` adds `stream_options.include_usage`.
+- OpenAI Chat streaming usage: `payload.openai-chat.include-usage` adds `stream_options.include_usage`.
 - Anthropic prompt caching: map common cache hints onto selected content/message blocks.
 - Mistral/OpenAI-compatible prompt cleanup: normalize empty text content or tool-call IDs only for affected models.
 - Reasoning models: map common reasoning intent to provider-specific effort, summary, or encrypted-content fields.
 
-Do not grow common request schemas just to fit one provider. Prefer adapter-local target schemas plus patches selected by provider/model predicates. Patches must not reroute a request: `model.provider`, `model.id`, and `model.protocol` are fixed before patches run, and request patches that change them are rejected.
+Do not grow common request schemas just to fit one provider. Prefer adapter-local payload schemas plus patches selected by provider/model predicates. Patches must not reroute a request: `model.provider`, `model.id`, and `model.protocol` are fixed before patches run, and request patches that change them are rejected.
 
 Current OpenCode parity map:
 
@@ -255,7 +255,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
 - [x] Add OpenAI Chat recorded tests for tool-result follow-up and usage chunks.
 - [x] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
-- [x] Add provider patch examples from real opencode quirks, starting with prompt normalization and target-level provider options.
+- [x] Add provider patch examples from real opencode quirks, starting with prompt normalization and payload-level provider options.
 - [x] Add an OpenAI Responses adapter once the Chat adapter shape feels stable.
 - [x] Add Anthropic Messages adapter coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
 - [x] Add Gemini adapter coverage for text, media input, tool calls, reasoning deltas, finish reasons, usage, and recorded cassettes.
@@ -268,7 +268,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Cover OpenAI-compatible provider families that can share the generic adapter first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
 - [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, Perplexity, and Cohere. xAI already has a thin model helper that routes to OpenAI Responses.
 - [x] Add Bedrock Converse support: wire format (messages / system / inferenceConfig / toolConfig), AWS event stream binary framing via `@smithy/eventstream-codec`, SigV4 signing via `aws4fetch` (or Bearer API key path), text/reasoning/tool/usage/finish decoding, cache hints, image/document content, deterministic tests, and recorded basic text/tool cassettes. Additional model-specific fields are still TODO.
-- [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini as Gemini target/http patch vs adapter, and Vertex Anthropic as Anthropic target/http patch vs adapter.
+- [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini as Gemini payload/http patch vs adapter, and Vertex Anthropic as Anthropic payload/http patch vs adapter.
 - [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible adapter and provider option patch model are stable.
 
 ### OpenCode Parity Patches

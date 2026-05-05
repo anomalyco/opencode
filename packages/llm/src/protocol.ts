@@ -1,4 +1,4 @@
-import type { Effect, Schema } from "effect"
+import { Schema, type Effect } from "effect"
 import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } from "./schema"
 
 /**
@@ -6,7 +6,7 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } f
  *
  * A `Protocol` owns the parts of an adapter that are intrinsic to "what does
  * this API look like": how a common `LLMRequest` lowers into a provider-native
- * shape, what target Schema that shape must satisfy before it is JSON-encoded,
+ * shape, what payload Schema that shape must satisfy before it is JSON-encoded,
  * and how the streaming response decodes back into common `LLMEvent`s.
  *
  * Examples:
@@ -25,22 +25,22 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } f
  *
  * The four type parameters reflect the pipeline:
  *
- * - `Target` — provider-native request body candidate. Target patches can
+ * - `Payload` — provider-native request payload candidate. Payload patches can
  *   transform this value, then `Adapter.make(...)` validates and
- *   JSON-encodes it with `target`.
+ *   JSON-encodes it with `payload`.
  * - `Frame` — one unit of the framed response stream. SSE: a JSON data
  *   string. AWS event stream: a parsed binary frame.
  * - `Chunk` — schema-decoded provider chunk produced from one frame.
  * - `State` — accumulator threaded through `process` to translate chunk
  *   sequences into `LLMEvent` sequences.
  */
-export interface Protocol<Target, Frame, Chunk, State> {
+export interface Protocol<Payload, Frame, Chunk, State> {
   /** Stable id matching `ModelRef.protocol` for adapter registry lookup. */
   readonly id: ProtocolID
-  /** Schema for the validated provider-native target sent as the JSON body. */
-  readonly target: Schema.Codec<Target, unknown>
-  /** Lower a common request into this protocol's provider-native target shape. */
-  readonly prepare: (request: LLMRequest) => Effect.Effect<Target, LLMError>
+  /** Schema for the validated provider-native payload sent as the JSON body. */
+  readonly payload: Schema.Codec<Payload, unknown>
+  /** Lower a common request into this protocol's provider-native payload shape. */
+  readonly prepare: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
   /** Schema for one framed response unit. */
   readonly chunk: Schema.Codec<Chunk, Frame>
   /** Initial parser state. Called once per response. */
@@ -59,8 +59,10 @@ export interface Protocol<Target, Frame, Chunk, State> {
  * as the public constructor so future cross-cutting concerns (tracing spans,
  * instrumentation) can be added in one place.
  */
-export const define = <Target, Frame, Chunk, State>(
-  input: Protocol<Target, Frame, Chunk, State>,
-): Protocol<Target, Frame, Chunk, State> => input
+export const define = <Payload, Frame, Chunk, State>(
+  input: Protocol<Payload, Frame, Chunk, State>,
+): Protocol<Payload, Frame, Chunk, State> => input
+
+export const jsonChunk = <const S extends Schema.Top>(schema: S) => Schema.fromJsonString(schema)
 
 export * as Protocol from "./protocol"

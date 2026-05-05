@@ -29,7 +29,7 @@ describe("OpenAI Responses adapter", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(request)
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "gpt-4.1-mini",
         input: [
           { role: "system", content: "You are concise." },
@@ -107,7 +107,7 @@ describe("OpenAI Responses adapter", () => {
         }),
       )
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "gpt-4.1-mini",
         input: [
           { role: "user", content: [{ type: "input_text", text: "What is the weather?" }] },

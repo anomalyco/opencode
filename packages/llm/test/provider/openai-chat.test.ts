@@ -40,17 +40,17 @@ const usageChunk = (usage: object) => ({
 })
 
 describe("OpenAI Chat adapter", () => {
-  it.effect("prepares OpenAI Chat target", () =>
+  it.effect("prepares OpenAI Chat payload", () =>
     Effect.gen(function* () {
-      // Pass the OpenAIChat target type so `prepared.target` is statically
+      // Pass the OpenAIChat payload type so `prepared.payload` is statically
       // typed to the adapter's native shape — the assertions below read field
       // names without `unknown` casts.
       const prepared = yield* LLMClient.make({
         adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])],
-      }).prepare<OpenAIChat.OpenAIChatTarget>(request)
-      const _typed: { readonly model: string; readonly stream: true } = prepared.target
+      }).prepare<OpenAIChat.OpenAIChatPayload>(request)
+      const _typed: { readonly model: string; readonly stream: true } = prepared.payload
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: "You are concise." },
@@ -61,7 +61,7 @@ describe("OpenAI Chat adapter", () => {
         max_tokens: 20,
         temperature: 0,
       })
-      expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.openai-chat.include-usage"])
+      expect(prepared.patchTrace.map((item) => item.id)).toEqual(["payload.openai-chat.include-usage"])
     }),
   )
 
@@ -128,7 +128,7 @@ describe("OpenAI Chat adapter", () => {
         }),
       )
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "gpt-4o-mini",
         messages: [
           { role: "user", content: "What is the weather?" },

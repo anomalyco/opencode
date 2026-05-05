@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect"
-import { Adapter } from "../adapter"
+import { Adapter, type AdapterModelInput } from "../adapter"
 import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
-import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { capabilities } from "../llm"
 import { Protocol } from "../protocol"
 import {
   Usage,
@@ -20,10 +20,7 @@ import { JsonObject, optionalArray, ProviderShared } from "./shared"
 
 const ADAPTER = "gemini"
 
-export type GeminiModelInput = Omit<ModelInput, "provider" | "protocol" | "headers"> & {
-  readonly apiKey?: string
-  readonly headers?: Record<string, string>
-}
+export type GeminiModelInput = AdapterModelInput
 
 const GeminiTextPart = Schema.Struct({
   text: Schema.String,
@@ -100,15 +97,15 @@ const GeminiGenerationConfig = Schema.Struct({
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
 
-const GeminiTargetFields = {
+const GeminiPayloadFields = {
   contents: Schema.Array(GeminiContent),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
   tools: optionalArray(GeminiTool),
   toolConfig: Schema.optional(GeminiToolConfig),
   generationConfig: Schema.optional(GeminiGenerationConfig),
 }
-const GeminiTarget = Schema.Struct(GeminiTargetFields)
-export type GeminiTarget = Schema.Schema.Type<typeof GeminiTarget>
+const GeminiPayload = Schema.Struct(GeminiPayloadFields)
+export type GeminiPayload = Schema.Schema.Type<typeof GeminiPayload>
 
 const GeminiUsage = Schema.Struct({
   cachedContentTokenCount: Schema.optional(Schema.Number),
@@ -440,15 +437,15 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
 }
 
 /**
- * The Gemini protocol — request lowering, target schema, and the streaming-
+ * The Gemini protocol — request lowering, payload schema, and the streaming-
  * chunk state machine. Used by Google AI Studio Gemini and
  * (once registered) Vertex Gemini.
  */
-export const protocol = Protocol.define<GeminiTarget, string, GeminiChunk, ParserState>({
-  id: "gemini",
-  target: GeminiTarget,
+export const protocol = Protocol.define<GeminiPayload, string, GeminiChunk, ParserState>({
+  id: ADAPTER,
+  payload: GeminiPayload,
   prepare,
-  chunk: Schema.fromJsonString(GeminiChunk),
+  chunk: Protocol.jsonChunk(GeminiChunk),
   initial: () => ({ hasToolCalls: false, nextToolCallId: 0 }),
   process: processChunk,
   onHalt: finish,
@@ -466,20 +463,14 @@ export const adapter = Adapter.make({
   framing: Framing.sse,
 })
 
-export const model = (input: GeminiModelInput) =>
-  Adapter.bindModel(
-    llmModel({
-      ...input,
-      provider: "google",
-      protocol: "gemini",
-      capabilities: input.capabilities ?? capabilities({
-        input: { image: true, audio: true, video: true, pdf: true },
-        output: { reasoning: true },
-        tools: { calls: true },
-        reasoning: { efforts: ["minimal", "low", "medium", "high", "xhigh", "max"] },
-      }),
-    }),
-    adapter,
-  )
+export const model = Adapter.model(adapter, {
+  provider: "google",
+  capabilities: capabilities({
+    input: { image: true, audio: true, video: true, pdf: true },
+    output: { reasoning: true },
+    tools: { calls: true },
+    reasoning: { efforts: ["minimal", "low", "medium", "high", "xhigh", "max"] },
+  }),
+})
 
 export * as Gemini from "./gemini"

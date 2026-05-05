@@ -86,20 +86,20 @@ const streamWithTools = LLM.streamWithTools({
 // Part 2: provider composition with a fake provider
 // -----------------------------------------------------------------------------
 
-// A protocol is the provider-native API shape: common request -> target body,
+// A protocol is the provider-native API shape: common request -> payload,
 // response frames -> common events. This fake one turns text prompts into a JSON
 // body and treats every SSE frame as output text.
-const FakeTarget = Schema.Struct({
+const FakePayload = Schema.Struct({
   model: Schema.String,
   input: Schema.String,
 })
-type FakeTarget = Schema.Schema.Type<typeof FakeTarget>
+type FakePayload = Schema.Schema.Type<typeof FakePayload>
 
-const FakeProtocol = Protocol.define<FakeTarget, string, string, void>({
+const FakeProtocol = Protocol.define<FakePayload, string, string, void>({
   // Protocol ids are open strings, so external packages can define their own
   // protocols without changing this package.
   id: "fake-echo",
-  target: FakeTarget,
+  payload: FakePayload,
   prepare: (request) =>
     Effect.succeed({
       model: request.model.id,
@@ -153,7 +153,7 @@ const inspectFakeProvider = Effect.gen(function* () {
 
   console.log("\n== fake provider prepare ==")
   console.log("adapter:", prepared.adapter)
-  console.log("target:", Formatter.formatJson(prepared.target, { space: 2 }))
+  console.log("payload:", Formatter.formatJson(prepared.payload, { space: 2 }))
 }).pipe(Effect.provide(LLM.layer()))
 
 // Provide the LLM runtime and the HTTP request executor once. The default path

@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect"
-import { Adapter } from "../adapter"
+import { Adapter, type AdapterModelInput } from "../adapter"
 import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
-import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { capabilities } from "../llm"
 import { Protocol } from "../protocol"
 import {
   Usage,
@@ -18,10 +18,7 @@ import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./share
 
 const ADAPTER = "openai-responses"
 
-export type OpenAIResponsesModelInput = Omit<ModelInput, "provider" | "protocol" | "headers"> & {
-  readonly apiKey?: string
-  readonly headers?: Record<string, string>
-}
+export type OpenAIResponsesModelInput = AdapterModelInput
 
 const OpenAIResponsesInputText = Schema.Struct({
   type: Schema.Literal("input_text"),
@@ -65,7 +62,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.Literal("function"), name: Schema.String }),
 ])
 
-const OpenAIResponsesTargetFields = {
+const OpenAIResponsesPayloadFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTool),
@@ -75,8 +72,8 @@ const OpenAIResponsesTargetFields = {
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
 }
-const OpenAIResponsesTarget = Schema.Struct(OpenAIResponsesTargetFields)
-export type OpenAIResponsesTarget = Schema.Schema.Type<typeof OpenAIResponsesTarget>
+const OpenAIResponsesPayload = Schema.Struct(OpenAIResponsesPayloadFields)
+export type OpenAIResponsesPayload = Schema.Schema.Type<typeof OpenAIResponsesPayload>
 
 const OpenAIResponsesUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
@@ -354,20 +351,20 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
   })
 
 /**
- * The OpenAI Responses protocol — request lowering, target schema, and the
+ * The OpenAI Responses protocol — request lowering, payload schema, and the
  * streaming-chunk state machine. Used by native OpenAI and
  * (once registered) Azure OpenAI Responses.
  */
 export const protocol = Protocol.define<
-  OpenAIResponsesTarget,
+  OpenAIResponsesPayload,
   string,
   OpenAIResponsesChunk,
   ParserState
 >({
-  id: "openai-responses",
-  target: OpenAIResponsesTarget,
+  id: ADAPTER,
+  payload: OpenAIResponsesPayload,
   prepare,
-  chunk: Schema.fromJsonString(OpenAIResponsesChunk),
+  chunk: Protocol.jsonChunk(OpenAIResponsesChunk),
   initial: () => ({ hasFunctionCall: false, tools: {} }),
   process: processChunk,
 })
@@ -380,15 +377,9 @@ export const adapter = Adapter.make({
   framing: Framing.sse,
 })
 
-export const model = (input: OpenAIResponsesModelInput) =>
-  Adapter.bindModel(
-    llmModel({
-      ...input,
-      provider: "openai",
-      protocol: "openai-responses",
-      capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
-    }),
-    adapter,
-  )
+export const model = Adapter.model(adapter, {
+  provider: "openai",
+  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+})
 
 export * as OpenAIResponses from "./openai-responses"

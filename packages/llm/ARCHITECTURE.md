@@ -72,7 +72,7 @@ For OpenAI, `OpenAI.model(...)` means Responses. Use `OpenAI.chat(...)` only whe
 <details>
 <summary>What this terrace intentionally hides</summary>
 
-The call site does not name adapters, protocols, endpoints, auth, framing, patches, target payloads, or stream parsers.
+The call site does not name adapters, protocols, endpoints, auth, framing, patches, provider payloads, or stream parsers.
 
 Those things are runtime concerns. They should be inspectable and composable, but not required for normal use.
 </details>
@@ -141,7 +141,7 @@ LLM.generate({ model, prompt })
   -> LLM.request(...)
   -> LLMClient
   -> adapter from the model handle, or explicit registry fallback
-  -> provider-native target payload
+  -> provider-native payload
   -> HttpClientRequest
   -> RequestExecutor
   -> provider response stream
@@ -182,9 +182,9 @@ Explicit adapters passed to `LLMClient.make(...)` win first. If no explicit adap
 ```ts
 const adapter = adapters.get(request.model.protocol) ?? modelAdapters.get(request.model)
 const candidate = adapter.prepare(request)
-const patched = applyTargetPatches(candidate)
-const target = adapter.validate(patched)
-const http = adapter.toHttp(target)
+const patched = applyPayloadPatches(candidate)
+const payload = adapter.validate(patched)
+const http = adapter.toHttp(payload)
 const response = yield* RequestExecutor.execute(http)
 const events = adapter.parse(response)
 ```
@@ -219,23 +219,23 @@ The adapter then owns the full compile/run boundary for that selected route.
 | --- | --- |
 | `id` | Human/debug name, prepared request metadata, patch namespace. |
 | `protocol` | Registry key used by `LLMClient` lookup. |
-| `patches` | Adapter-local target patches. |
-| `prepare(request)` | Lowers common `LLMRequest` into a provider-native target candidate. |
-| `validate(candidate)` | Validates and normalizes the target candidate with the protocol target schema. |
-| `toHttp(target, context)` | Builds the real `HttpClientRequest`. |
+| `patches` | Adapter-local payload patches. |
+| `prepare(request)` | Lowers common `LLMRequest` into a provider-native payload candidate. |
+| `validate(candidate)` | Validates and normalizes the payload candidate with the protocol payload schema. |
+| `toHttp(payload, context)` | Builds the real `HttpClientRequest`. |
 | `parse(response)` | Converts the provider response stream into common `LLMEvent`s. |
 
 `Adapter.make(...)` is the normal constructor. It builds those methods by composing four pieces.
 
 ```txt
 Adapter.make(...)
-  = Protocol.prepare / target Schema / chunk Schema / process
+  = Protocol.prepare / payload Schema / chunk Schema / process
   + Endpoint URL construction
   + Auth header/signing behavior
   + Framing bytes-to-frames behavior
 ```
 
-`Protocol` no longer has a separate `encode` function in the normal path. The adapter validates target patches and JSON-encodes the final target from `protocol.target`.
+`Protocol` no longer has a separate `encode` function in the normal path. The adapter validates payload patches and JSON-encodes the final payload from `protocol.payload`.
 
 So the current relationship is:
 
@@ -328,7 +328,7 @@ OpenAICompatible.model("gpt-4o-mini", { provider: "local-gateway", baseURL })
 | Provider helper | Public constructor, defaults, provider identity, model capabilities, limits, in-process adapter binding. |
 | Provider module | Exported adapters and helpers for explicit registry fallback. |
 | Adapter | Runtime registration and composition. |
-| Protocol | Request lowering, target schema, chunk schema, stream state machine. |
+| Protocol | Request lowering, payload schema, chunk schema, stream state machine. |
 | Endpoint | URL construction, base URL, path, query params, deployment routing. |
 | Auth | Bearer tokens, API-key headers, SigV4, future IAM/AAD signing. |
 | Framing | Bytes to frames before protocol parsing, usually SSE. |
@@ -356,7 +356,7 @@ Use a patch when behavior is real but not universal enough to belong in the comm
 ```txt
 cache.prompt-hints
 anthropic.scrub-tool-call-ids
-target.openai-chat.include-usage
+payload.openai-chat.include-usage
 ```
 
 Each patch has an id, phase, predicate, and reason. Applied patches appear in `patchTrace`.
@@ -497,10 +497,10 @@ The native patch layer exists to preserve the behavior OpenCode previously centr
    ```ts
    OpenAIChat.adapter.patch("include-usage", ...)
    OpenAICompatibleChat.adapter.patch("include-usage", ...)
-   // target.openai-chat.include-usage
+    // payload.openai-chat.include-usage
    ```
 
-   Status: ported as adapter-local target patches. This is target-body shape, not common request shape.
+    Status: ported as adapter-local payload patches. This is payload shape, not common request shape.
 
 7. DeepSeek reasoning replay and interleaved reasoning fields
 

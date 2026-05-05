@@ -1,16 +1,14 @@
-import { Adapter } from "../adapter"
+import { Adapter, type AdapterRoutedModelInput } from "../adapter"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
-import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { capabilities } from "../llm"
 import { OpenAIChat } from "./openai-chat"
 import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
 
 const ADAPTER = "openai-compatible-chat"
 
-export type OpenAICompatibleChatModelInput = Omit<ModelInput, "protocol" | "headers" | "baseURL"> & {
+export type OpenAICompatibleChatModelInput = Omit<AdapterRoutedModelInput, "baseURL"> & {
   readonly baseURL: string
-  readonly apiKey?: string
-  readonly headers?: Record<string, string>
 }
 
 export type ProviderFamilyModelInput = Omit<OpenAICompatibleChatModelInput, "provider" | "baseURL"> & {
@@ -37,15 +35,9 @@ export const adapter = Adapter.make({
   framing: Framing.sse,
 })
 
-export const model = (input: OpenAICompatibleChatModelInput) =>
-  Adapter.bindModel(
-    llmModel({
-      ...input,
-      protocol: "openai-compatible-chat",
-      capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
-    }),
-    adapter,
-  )
+export const model = Adapter.model<OpenAICompatibleChatModelInput>(adapter, {
+  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+})
 
 const profileBaseURL = (profile: OpenAICompatibleProfile, input: ProviderFamilyModelInput) => {
   const baseURL = input.baseURL ?? profile.baseURL
@@ -81,9 +73,9 @@ export const xai = (input: ProviderFamilyModelInput) => profileModel(profiles.xa
 
 export const includeUsage = adapter.patch("include-usage", {
   reason: "request final usage chunk from OpenAI-compatible Chat streaming responses",
-  apply: (target) => ({
-    ...target,
-    stream_options: { ...target.stream_options, include_usage: true },
+  apply: (payload) => ({
+    ...payload,
+    stream_options: { ...payload.stream_options, include_usage: true },
   }),
 })
 

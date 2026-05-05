@@ -69,7 +69,7 @@ describe("OpenAI-compatible Chat adapter", () => {
         apiKey: "test-key",
         queryParams: { "api-version": "2026-01-01" },
       })
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -124,7 +124,7 @@ describe("OpenAI-compatible Chat adapter", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] }).prepare(request)
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -157,7 +157,7 @@ describe("OpenAI-compatible Chat adapter", () => {
         }),
       )
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         model: "deepseek-chat",
         messages: [
           { role: "user", content: "What is the weather?" },

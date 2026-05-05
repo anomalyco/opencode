@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, ProviderPatch, ProviderRequestError, type PreparedRequestOf } from "../../src"
-import type { AnthropicMessagesTarget } from "../../src/provider/anthropic-messages"
+import type { AnthropicMessagesPayload } from "../../src/provider/anthropic-messages"
 import { LLMClient } from "../../src/adapter"
 import { AnthropicMessages } from "../../src/provider/anthropic-messages"
 import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
@@ -90,10 +90,10 @@ describe("Anthropic Messages recorded", () => {
 
   recorded.effect.with("accepts malformed assistant tool order with default patch", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const prepared: PreparedRequestOf<AnthropicMessagesTarget> = yield* anthropicWithPatches.prepare<AnthropicMessagesTarget>(malformedToolOrderRequest)
+      const prepared: PreparedRequestOf<AnthropicMessagesPayload> = yield* anthropicWithPatches.prepare<AnthropicMessagesPayload>(malformedToolOrderRequest)
       const response = yield* anthropicWithPatches.generate(malformedToolOrderRequest)
 
-      expect(prepared.target.messages.slice(0, 2)).toMatchObject([
+      expect(prepared.payload.messages.slice(0, 2)).toMatchObject([
         { role: "assistant", content: [{ type: "text", text: "I will check the weather." }] },
         { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: weatherToolName }] },
       ])

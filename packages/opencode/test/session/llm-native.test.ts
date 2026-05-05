@@ -119,7 +119,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const cacheControl = (value: unknown) => isRecord(value) ? value.cache_control : undefined
 
-const targetArray = (value: unknown, key: string) => isRecord(value) && Array.isArray(value[key]) ? value[key] : []
+const payloadArray = (value: unknown, key: string) => isRecord(value) && Array.isArray(value[key]) ? value[key] : []
 
 describe("LLMNative.request", () => {
   it.effect("builds a text-only native LLM request", () => Effect.gen(function* () {
@@ -599,7 +599,7 @@ describe("LLMNative.request", () => {
     })
     const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(request)
 
-    expect(prepared.target).toMatchObject({
+    expect(prepared.payload).toMatchObject({
       model: "gpt-5",
       input: [
         { role: "user", content: [{ type: "input_text", text: "What is the weather?" }] },
@@ -663,7 +663,7 @@ describe("LLMNative.request", () => {
       protocol: "anthropic-messages",
       apiKey: "anthropic-key",
     })
-    expect(prepared.target).toMatchObject({
+    expect(prepared.payload).toMatchObject({
       model: "claude-sonnet-4-5",
       system: [{ type: "text", text: "You are concise." }],
       messages: [
@@ -733,7 +733,7 @@ describe("LLMNative.request", () => {
       baseURL: "https://api.together.xyz/v1",
       apiKey: "together-key",
     })
-    expect(prepared.target).toMatchObject({
+    expect(prepared.payload).toMatchObject({
       model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       messages: [
         { role: "user", content: "What is the weather?" },
@@ -863,7 +863,7 @@ describe("LLMNative.request", () => {
       baseURL: "https://generativelanguage.googleapis.com/v1beta",
       apiKey: "google-key",
     })
-    expect(prepared.target).toMatchObject({
+    expect(prepared.payload).toMatchObject({
       systemInstruction: { parts: [{ text: "You are concise." }] },
       contents: [
         { role: "user", parts: [{ text: "What is the weather?" }] },
@@ -934,7 +934,7 @@ describe("LLMNative.request", () => {
         patches: ProviderPatch.defaults,
       }).prepare(request)
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         system: [
           { type: "text", text: "First", cache_control: { type: "ephemeral" } },
           { type: "text", text: "Second", cache_control: { type: "ephemeral" } },
@@ -942,7 +942,7 @@ describe("LLMNative.request", () => {
         ],
       })
       // The third system block must not carry a cache_control marker.
-      expect(cacheControl(targetArray(prepared.target, "system")[2])).toBeUndefined()
+      expect(cacheControl(payloadArray(prepared.payload, "system")[2])).toBeUndefined()
     }))
 
   it.effect("lowers cache hints to Anthropic cache_control on the last text block of the last 2 messages", () =>
@@ -959,7 +959,7 @@ describe("LLMNative.request", () => {
         patches: ProviderPatch.defaults,
       }).prepare(request)
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         messages: [
           { role: "user", content: [{ type: "text", text: "m0" }] },
           { role: "user", content: [{ type: "text", text: "m1", cache_control: { type: "ephemeral" } }] },
@@ -967,8 +967,8 @@ describe("LLMNative.request", () => {
         ],
       })
       // The first message's text must not carry cache_control.
-      const firstMessage = targetArray(prepared.target, "messages")[0]
-      expect(cacheControl(targetArray(firstMessage, "content")[0])).toBeUndefined()
+      const firstMessage = payloadArray(prepared.payload, "messages")[0]
+      expect(cacheControl(payloadArray(firstMessage, "content")[0])).toBeUndefined()
     }))
 
   it.effect("lowers cache hints to Bedrock Converse cachePoint marker blocks end-to-end", () =>
@@ -986,7 +986,7 @@ describe("LLMNative.request", () => {
         patches: ProviderPatch.defaults,
       }).prepare(request)
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         system: [{ text: "You are concise." }, { cachePoint: { type: "default" } }],
         messages: [
           {
@@ -1000,7 +1000,7 @@ describe("LLMNative.request", () => {
   it.effect("does not apply cache hints when the model does not support prompt caching", () =>
     Effect.gen(function* () {
       // gpt-5 / openai resolves to openai-responses with cache.prompt: false.
-      // The patch's `when` predicate must skip, leaving the target hint-free.
+      // The patch's `when` predicate must skip, leaving the payload hint-free.
       const mdl = model()
       const ids = [MessageID.ascending(), MessageID.ascending()]
       const request = yield* LLMNative.request({
@@ -1015,8 +1015,8 @@ describe("LLMNative.request", () => {
       }).prepare(request)
 
       // The serialized OpenAI Responses payload has no cache concept; the
-      // assertion is that nothing in the target carries a cache marker.
-      const json = JSON.stringify(prepared.target)
+      // assertion is that nothing in the payload carries a cache marker.
+      const json = JSON.stringify(prepared.payload)
       expect(json).not.toContain("cache_control")
       expect(json).not.toContain("cachePoint")
       expect(json).not.toContain("ephemeral")
@@ -1093,7 +1093,7 @@ describe("LLMNative.request", () => {
         patches: ProviderPatch.defaults,
       }).prepare(request)
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         messages: [
           { role: "user" },
           {

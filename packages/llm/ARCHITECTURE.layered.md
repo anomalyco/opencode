@@ -72,7 +72,7 @@ For OpenAI, `OpenAI.model(...)` means Responses. Use `OpenAI.chat(...)` only whe
 <details>
 <summary>Hidden implementation details</summary>
 
-The call site does not name adapters, protocols, endpoints, auth, framing, patches, target payloads, or stream parsers.
+The call site does not name adapters, protocols, endpoints, auth, framing, patches, provider payloads, or stream parsers.
 
 Those are runtime concerns. They should be inspectable and composable, but not required for normal use.
 </details>
@@ -141,7 +141,7 @@ LLM.generate({ model, prompt })
   -> LLM.request(...)
   -> LLMClient
   -> adapter selected by model.protocol
-  -> provider-native target payload
+  -> provider-native payload
   -> HttpClientRequest
   -> RequestExecutor
   -> provider response stream
@@ -257,7 +257,7 @@ OpenAICompatible.model("gpt-4o-mini", { name: "local-gateway", baseURL })
 | Provider helper | Public constructor, defaults, provider identity, model capabilities, limits. |
 | Provider module | Exported adapters and helpers passed to `LLM.layer({ providers })`. |
 | Adapter | Runtime registration and composition. |
-| Protocol | Request lowering, target schema, chunk schema, stream state machine. |
+| Protocol | Request lowering, payload schema, chunk schema, stream state machine. |
 | Endpoint | URL construction, base URL, path, query params, deployment routing. |
 | Auth | Bearer tokens, API-key headers, SigV4, future IAM/AAD signing. |
 | Framing | Bytes to frames before protocol parsing, usually SSE. |

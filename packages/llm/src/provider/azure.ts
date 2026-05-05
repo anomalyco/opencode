@@ -1,27 +1,40 @@
-import { ProviderResolver } from "../provider-resolver"
+import { Adapter } from "../adapter"
+import type { ModelInput } from "../llm"
 import { ProviderID } from "../schema"
+import { OpenAIChat } from "./openai-chat"
+import { OpenAIResponses } from "./openai-responses"
 
 export const id = ProviderID.make("azure")
 
-const stringOption = (options: Record<string, unknown>, key: string) => {
-  const value = options[key]
-  if (typeof value === "string" && value.trim() !== "") return value
-  return undefined
+export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol"> & {
+  readonly resourceName?: string
+  readonly apiVersion?: string
+  readonly useCompletionUrls?: boolean
 }
 
-const baseURL = (options: Record<string, unknown>) => {
-  const resource = stringOption(options, "resourceName")
+const resourceBaseURL = (resourceName: string | undefined) => {
+  const resource = resourceName?.trim()
   if (!resource) return undefined
   return `https://${resource}.openai.azure.com/openai/v1`
 }
 
-export const resolver = ProviderResolver.define({
-  id,
-  resolve: (input) =>
-    ProviderResolver.make(id, input.options.useCompletionUrls === true ? "openai-chat" : "openai-responses", {
-      baseURL: baseURL(input.options),
-      queryParams: { "api-version": stringOption(input.options, "apiVersion") ?? "v1" },
-    }),
-})
+export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
+
+const chatModel = Adapter.model(OpenAIChat.adapter, { provider: id })
+const responsesModel = Adapter.model(OpenAIResponses.adapter, { provider: id })
+
+export const model = (modelID: string, options: ModelOptions = {}) => {
+  const { apiVersion, resourceName, useCompletionUrls, ...rest } = options
+  const create = useCompletionUrls === true ? chatModel : responsesModel
+  return create({
+    ...rest,
+    id: modelID,
+    baseURL: rest.baseURL ?? resourceBaseURL(resourceName),
+    queryParams: {
+      ...rest.queryParams,
+      "api-version": apiVersion ?? rest.queryParams?.["api-version"] ?? "v1",
+    },
+  })
+}
 
 export * as Azure from "./azure"

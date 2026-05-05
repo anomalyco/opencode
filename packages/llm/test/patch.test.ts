@@ -20,17 +20,17 @@ describe("llm patch", () => {
       when: Model.provider("mistral"),
       apply: (request) => request,
     })
-    const target = Patch.target("fake.test", {
-      reason: "test target",
+    const payload = Patch.payload("fake.test", {
+      reason: "test payload",
       apply: (draft: { value: number }) => draft,
     })
 
-    const registry = Patch.registry([prompt, target])
+    const registry = Patch.registry([prompt, payload])
 
     expect(prompt.id).toBe("prompt.mistral.test")
-    expect(target.id).toBe("target.fake.test")
+    expect(payload.id).toBe("payload.fake.test")
     expect(registry.prompt).toEqual([prompt])
-    expect(registry.target.map((item) => item.id)).toEqual([target.id])
+    expect(registry.payload.map((item) => item.id)).toEqual([payload.id])
   })
 
   test("predicates compose", () => {
@@ -216,7 +216,7 @@ describe("llm patch", () => {
     })
   })
 
-  test("default patches compile invalid Anthropic tool-use ordering into valid target order", () => {
+  test("default patches compile invalid Anthropic tool-use ordering into valid payload order", () => {
     const prepared = Effect.runSync(
       LLMClient.make({ adapters: [AnthropicMessages.adapter], patches: ProviderPatch.defaults }).prepare(
         LLM.request({
@@ -232,7 +232,7 @@ describe("llm patch", () => {
       ),
     )
 
-    expect(prepared.target).toMatchObject({
+    expect(prepared.payload).toMatchObject({
       messages: [
         { role: "assistant", content: [{ type: "text", text: "after tool" }] },
         { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
@@ -252,7 +252,7 @@ describe("llm patch", () => {
       ),
     )
 
-    expect(prepared.target).toMatchObject({
+    expect(prepared.payload).toMatchObject({
       messages: [{ role: "assistant", content: "answer", reasoning_content: "" }],
     })
     expect(prepared.patchTrace.map((item) => item.id)).toContain("prompt.deepseek.empty-reasoning-replay")

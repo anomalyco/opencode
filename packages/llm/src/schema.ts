@@ -19,7 +19,7 @@ export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xh
 export const ReasoningEffort = Schema.Literals(ReasoningEfforts)
 export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 
-export const PatchPhase = Schema.Literals(["request", "prompt", "tool-schema", "target", "stream"])
+export const PatchPhase = Schema.Literals(["request", "prompt", "tool-schema", "payload", "stream"])
 export type PatchPhase = Schema.Schema.Type<typeof PatchPhase>
 
 export const MessageRole = Schema.Literals(["user", "assistant", "tool"])
@@ -381,23 +381,23 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
   id: Schema.String,
   adapter: Schema.String,
   model: ModelRef,
-  target: Schema.Unknown,
+  payload: Schema.Unknown,
   patchTrace: Schema.Array(PatchTrace),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
 /**
- * A `PreparedRequest` whose `target` is typed as `Target`. Use with the
- * generic on `LLMClient.prepare<Target>(...)` when the caller knows which
+ * A `PreparedRequest` whose `payload` is typed as `Payload`. Use with the
+ * generic on `LLMClient.prepare<Payload>(...)` when the caller knows which
  * adapter their request will resolve to and wants its native shape statically
  * exposed (debug UIs, request previews, plan rendering).
  *
- * The runtime payload is identical — the adapter still emits `target: unknown`
+ * The runtime payload is identical — the adapter still emits `payload: unknown`
  * — so this is a type-level assertion the caller makes about what they expect
  * to find. The prepare runtime does not validate the assertion.
  */
-export type PreparedRequestOf<Target> = Omit<PreparedRequest, "target"> & {
-  readonly target: Target
+export type PreparedRequestOf<Payload> = Omit<PreparedRequest, "payload"> & {
+  readonly payload: Payload
 }
 
 export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({

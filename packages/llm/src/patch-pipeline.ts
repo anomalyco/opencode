@@ -16,16 +16,16 @@ export interface PatchedRequest {
   readonly trace: ReadonlyArray<PatchTrace>
 }
 
-export interface PatchTargetInput<Target> {
+export interface PatchPayloadInput<Payload> {
   readonly state: PatchedRequest
-  readonly target: Target
-  readonly adapterPatches: ReadonlyArray<Patch<Target>>
-  readonly schema: Schema.Codec<Target, unknown>
+  readonly payload: Payload
+  readonly adapterPatches: ReadonlyArray<Patch<Payload>>
+  readonly schema: Schema.Codec<Payload, unknown>
 }
 
-export interface PatchedTarget<Target> {
+export interface PatchedPayload<Payload> {
   readonly request: LLMRequest
-  readonly target: Target
+  readonly payload: Payload
   readonly trace: ReadonlyArray<PatchTrace>
 }
 
@@ -36,7 +36,7 @@ export interface PatchStreamInput {
 
 export interface PatchPipeline {
   readonly patchRequest: (request: LLMRequest) => Effect.Effect<PatchedRequest, LLMError>
-  readonly patchTarget: <Target>(input: PatchTargetInput<Target>) => Effect.Effect<PatchedTarget<Target>, LLMError>
+  readonly patchPayload: <Payload>(input: PatchPayloadInput<Payload>) => Effect.Effect<PatchedPayload<Payload>, LLMError>
   readonly patchStreamEvents: (input: PatchStreamInput) => Stream.Stream<LLMEvent, LLMError>
 }
 
@@ -91,19 +91,19 @@ export const make = (patches?: PatchRegistry | ReadonlyArray<AnyPatch>): PatchPi
     }
   })
 
-  const patchTarget = Effect.fn("PatchPipeline.patchTarget")(function* <Target>(input: PatchTargetInput<Target>) {
-    const targetPlan = plan({
-      phase: "target",
+  const patchPayload = Effect.fn("PatchPipeline.patchPayload")(function* <Payload>(input: PatchPayloadInput<Payload>) {
+    const payloadPlan = plan({
+      phase: "payload",
       context: context({ request: input.state.request }),
-      patches: [...input.adapterPatches, ...(registry.target as ReadonlyArray<Patch<Target>>)],
+      patches: [...input.adapterPatches, ...(registry.payload as ReadonlyArray<Patch<Payload>>)],
     })
-    const target = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(input.schema))(
-      targetPlan.apply(input.target),
+    const payload = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(input.schema))(
+      payloadPlan.apply(input.payload),
     )
     return {
       request: input.state.request,
-      target,
-      trace: [...input.state.trace, ...targetPlan.trace],
+      payload,
+      trace: [...input.state.trace, ...payloadPlan.trace],
     }
   })
 
@@ -113,7 +113,7 @@ export const make = (patches?: PatchRegistry | ReadonlyArray<AnyPatch>): PatchPi
     return input.events.pipe(Stream.map(streamPlan.apply))
   }
 
-  return { patchRequest, patchTarget, patchStreamEvents }
+  return { patchRequest, patchPayload, patchStreamEvents }
 }
 
 export * as PatchPipeline from "./patch-pipeline"

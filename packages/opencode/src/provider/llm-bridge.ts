@@ -6,15 +6,14 @@ import {
   Google,
   LLM,
   OpenAI,
-  OpenAICompatibleFamily,
-  ProviderResolver,
+  OpenAICompatible,
+  OpenAICompatibleChat,
+  OpenAICompatibleProfiles,
   ReasoningEfforts,
   XAI,
   type CapabilitiesInput,
   type ModelRef,
-  type ProviderAuth,
-  type ProviderResolution,
-  type ProviderResolverShape,
+  type ProtocolID,
   type ReasoningEffort,
 } from "@opencode-ai/llm"
 import { isRecord } from "@/util/record"
@@ -23,22 +22,6 @@ import type * as Provider from "./provider"
 type Input = {
   readonly provider: Provider.Info
   readonly model: Provider.Model
-}
-
-const PROVIDERS: Record<string, ProviderResolverShape> = {
-  "@ai-sdk/amazon-bedrock": AmazonBedrock.resolver,
-  "@ai-sdk/anthropic": Anthropic.resolver,
-  "@ai-sdk/azure": Azure.resolver,
-  "@ai-sdk/baseten": OpenAICompatibleFamily.resolver,
-  "@ai-sdk/cerebras": OpenAICompatibleFamily.resolver,
-  "@ai-sdk/deepinfra": OpenAICompatibleFamily.resolver,
-  "@ai-sdk/fireworks": OpenAICompatibleFamily.resolver,
-  "@ai-sdk/github-copilot": GitHubCopilot.resolver,
-  "@ai-sdk/google": Google.resolver,
-  "@ai-sdk/openai": OpenAI.resolver,
-  "@ai-sdk/openai-compatible": OpenAICompatibleFamily.resolver,
-  "@ai-sdk/togetherai": OpenAICompatibleFamily.resolver,
-  "@ai-sdk/xai": XAI.resolver,
 }
 
 const REASONING_EFFORTS = new Set<ReasoningEffort>(ReasoningEfforts)
@@ -55,24 +38,19 @@ const recordOption = (options: Record<string, unknown>, key: string): Record<str
   return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
 }
 
-export const resolve = (
-  input: Input,
-  options: Record<string, unknown> = { ...input.provider.options, ...input.model.options },
-): ProviderResolution | undefined =>
-  PROVIDERS[input.model.api.npm]?.resolve(ProviderResolver.input(input.model.api.id, input.model.providerID, options))
-
-const baseURL = (input: Input, resolution: ProviderResolution, options: Record<string, unknown>) => {
+const baseURL = (input: Input, options: Record<string, unknown>, fallback?: string) => {
   const configured = stringOption(options, "baseURL") ?? input.model.api.url
   if (configured) return configured
-  return resolution.baseURL
+  return fallback
 }
 
-const apiKey = (input: Input, resolution: ProviderResolution, options: Record<string, unknown>) => {
-  if (resolution.auth === "none") return undefined
-  return stringOption(options, "apiKey") ?? input.provider.key
-}
+const apiKey = (input: Input, options: Record<string, unknown>) => stringOption(options, "apiKey") ?? input.provider.key
 
 const headers = (input: Input, options: Record<string, unknown>) => {
+  if (!isRecord(options.headers)) {
+    if (Object.keys(input.model.headers).length === 0) return undefined
+    return input.model.headers
+  }
   const result = { ...recordOption(options, "headers"), ...input.model.headers }
   return Object.keys(result).length === 0 ? undefined : result
 }
@@ -90,7 +68,7 @@ const mergeCapabilities = (base: CapabilitiesInput, override: CapabilitiesInput)
   reasoning: { ...base.reasoning, ...override?.reasoning },
 })
 
-const capabilities = (input: Input, resolution: ProviderResolution) => {
+const capabilities = (input: Input, protocol: ProtocolID, override?: CapabilitiesInput) => {
   const base: CapabilitiesInput = {
     input: {
       text: input.model.capabilities.input.text,
@@ -105,39 +83,91 @@ const capabilities = (input: Input, resolution: ProviderResolution) => {
     },
     tools: {
       calls: input.model.capabilities.toolcall,
-      streamingInput: resolution.protocol !== "gemini" && input.model.capabilities.toolcall,
+      streamingInput: protocol !== "gemini" && input.model.capabilities.toolcall,
     },
     cache: {
       // Both Anthropic Messages and Bedrock Converse honour positional cache
       // markers — Anthropic via `cache_control` on content blocks, Bedrock via
       // its `cachePoint` marker block (added to BedrockConverse in 9d7d518ac).
-      prompt: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
-      contentBlocks: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
+      prompt: ["anthropic-messages", "bedrock-converse"].includes(protocol),
+      contentBlocks: ["anthropic-messages", "bedrock-converse"].includes(protocol),
     },
     reasoning: {
       efforts: reasoningEfforts(input),
-      summaries: resolution.protocol === "openai-responses",
-      encryptedContent: resolution.protocol === "openai-responses" || resolution.protocol === "anthropic-messages",
+      summaries: protocol === "openai-responses",
+      encryptedContent: protocol === "openai-responses" || protocol === "anthropic-messages",
     },
   }
-  return LLM.capabilities(resolution.capabilities ? mergeCapabilities(base, resolution.capabilities) : base)
+  return LLM.capabilities(override ? mergeCapabilities(base, override) : base)
+}
+
+const sharedOptions = (input: Input, options: Record<string, unknown>, extra: {
+  readonly protocol: ProtocolID
+  readonly baseURL?: string
+  readonly capabilities?: CapabilitiesInput
+}) => ({
+  baseURL: extra.baseURL ?? baseURL(input, options),
+  apiKey: apiKey(input, options),
+  headers: headers(input, options),
+  capabilities: capabilities(input, extra.protocol, extra.capabilities),
+  limits: LLM.limits({ context: input.model.limit.context, output: input.model.limit.output }),
+})
+
+type ProviderModel = (input: Input, options: Record<string, unknown>) => ModelRef | undefined
+
+const azureProtocol = (options: Record<string, unknown>): ProtocolID =>
+  options.useCompletionUrls === true ? "openai-chat" : "openai-responses"
+
+const openAICompatibleModel: ProviderModel = (input, options) => {
+  const provider = String(input.model.providerID)
+  const profile = OpenAICompatibleProfiles.byProvider[provider]
+  const resolvedBaseURL = baseURL(input, options, profile?.baseURL)
+  if (!resolvedBaseURL) return undefined
+  const modelOptions = sharedOptions(input, options, {
+    protocol: "openai-compatible-chat",
+    baseURL: resolvedBaseURL,
+    capabilities: profile?.capabilities,
+  })
+  if (profile) return OpenAICompatibleChat.profileModel(profile, { ...modelOptions, id: String(input.model.api.id) })
+  return OpenAICompatible.model(String(input.model.api.id), { ...modelOptions, provider, baseURL: resolvedBaseURL })
+}
+
+const PROVIDERS: Record<string, ProviderModel> = {
+  "@ai-sdk/amazon-bedrock": (input, options) =>
+    AmazonBedrock.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "bedrock-converse" })),
+  "@ai-sdk/anthropic": (input, options) =>
+    Anthropic.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "anthropic-messages" })),
+  "@ai-sdk/azure": (input, options) =>
+    Azure.model(String(input.model.api.id), {
+      ...sharedOptions(input, options, { protocol: azureProtocol(options) }),
+      resourceName: stringOption(options, "resourceName"),
+      apiVersion: stringOption(options, "apiVersion"),
+      useCompletionUrls: options.useCompletionUrls === true,
+    }),
+  "@ai-sdk/baseten": openAICompatibleModel,
+  "@ai-sdk/cerebras": openAICompatibleModel,
+  "@ai-sdk/deepinfra": openAICompatibleModel,
+  "@ai-sdk/fireworks": openAICompatibleModel,
+  "@ai-sdk/github-copilot": (input, options) =>
+    GitHubCopilot.model(
+      String(input.model.api.id),
+      sharedOptions(input, options, {
+        protocol: GitHubCopilot.shouldUseResponsesApi(String(input.model.api.id)) ? "openai-responses" : "openai-chat",
+      }),
+    ),
+  "@ai-sdk/google": (input, options) =>
+    Google.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "gemini" })),
+  "@ai-sdk/openai": (input, options) =>
+    OpenAI.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "openai-responses" })),
+  "@ai-sdk/openai-compatible": openAICompatibleModel,
+  "@ai-sdk/togetherai": openAICompatibleModel,
+  "@ai-sdk/xai": (input, options) =>
+    XAI.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "openai-responses" })),
 }
 
 export const toModelRef = (input: Input): ModelRef | undefined => {
   const options = { ...input.provider.options, ...input.model.options }
-  const resolution = resolve(input, options)
-  if (!resolution) return undefined
-  return LLM.model({
-    id: input.model.api.id,
-    provider: resolution.provider,
-    protocol: resolution.protocol,
-    baseURL: baseURL(input, resolution, options),
-    apiKey: apiKey(input, resolution, options),
-    headers: headers(input, options),
-    queryParams: resolution.queryParams,
-    capabilities: capabilities(input, resolution),
-    limits: LLM.limits({ context: input.model.limit.context, output: input.model.limit.output }),
-  })
+  return PROVIDERS[input.model.api.npm]?.(input, options)
 }
 
 export * as ProviderLLMBridge from "./llm-bridge"

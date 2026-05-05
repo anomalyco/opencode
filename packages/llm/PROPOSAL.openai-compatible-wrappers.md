@@ -202,7 +202,7 @@ Keeping profiles as data preserves their simplicity. Thin wrappers are where beh
 
 ## Why This Is Better Than Dedicated Protocols Now
 
-A dedicated protocol would duplicate the OpenAI Chat target schema, message lowering, SSE framing, tool-call parsing, usage mapping, and finish mapping before we know those providers require it.
+A dedicated protocol would duplicate the OpenAI Chat payload schema, message lowering, SSE framing, tool-call parsing, usage mapping, and finish mapping before we know those providers require it.
 
 Thin wrappers keep one source of truth:
 
@@ -219,7 +219,7 @@ If a recorded cassette later shows a provider emits incompatible stream chunks, 
 1. Add `src/provider/mistral.ts` as the first thin wrapper because Mistral policy already exists in `ProviderPatch.defaults`.
 2. Add Mistral to exports and model-helper bridge tests.
 3. Add a recorded Mistral text cassette and tool cassette.
-4. Only then decide whether Mistral needs target patches for tool-choice or structured-output behavior.
+4. Only then decide whether Mistral needs payload patches for tool-choice or structured-output behavior.
 5. Add Groq as a profile first, unless we immediately implement reasoning/browser-search options.
 6. Add Perplexity as a thin wrapper when source/citation events or metadata are modeled.
 

@@ -24,7 +24,7 @@ const updateModel = (model: ModelRef, patch: Partial<LLM.ModelInput>) =>
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
 
-type FakeTarget = {
+type FakePayload = {
   readonly body: string
   readonly includeUsage?: boolean
 }
@@ -64,9 +64,9 @@ const raiseChunk = (chunk: FakeChunk): import("../src/schema").LLMEvent =>
     ? { type: "request-finish", reason: chunk.reason }
     : { type: "text-delta", text: chunk.text }
 
-const fakeProtocol = Protocol.define<FakeTarget, FakeChunk, FakeChunk, void>({
+const fakeProtocol = Protocol.define<FakePayload, FakeChunk, FakeChunk, void>({
   id: "fake",
-  target: Schema.Struct({
+  payload: Schema.Struct({
     body: Schema.String,
     includeUsage: Schema.optional(Schema.Boolean),
   }),
@@ -115,21 +115,21 @@ const echoLayer = dynamicResponse(({ text, respond }) =>
 const it = testEffect(echoLayer)
 
 describe("llm adapter", () => {
-  it.effect("prepare applies target patches with trace", () =>
+  it.effect("prepare applies payload patches with trace", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({
         adapters: [
           fake.withPatches([
             fake.patch("include-usage", {
-              reason: "fake target patch",
-              apply: (target) => ({ ...target, includeUsage: true }),
+              reason: "fake payload patch",
+              apply: (payload) => ({ ...payload, includeUsage: true }),
             }),
           ]),
         ],
       }).prepare(request)
 
-      expect(prepared.target).toEqual({ body: "hello", includeUsage: true })
-      expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.fake.include-usage"])
+      expect(prepared.payload).toEqual({ body: "hello", includeUsage: true })
+      expect(prepared.patchTrace.map((item) => item.id)).toEqual(["payload.fake.include-usage"])
     }),
   )
 
@@ -182,7 +182,7 @@ describe("llm adapter", () => {
       const prepared = yield* LLM.make({ providers: [{ adapters: [fake] }], adapters: [override] }).prepare(request)
 
       expect(prepared.adapter).toBe("fake-override")
-      expect(prepared.target).toEqual({ body: "override" })
+      expect(prepared.payload).toEqual({ body: "override" })
     }),
   )
 

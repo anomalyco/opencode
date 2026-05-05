@@ -66,7 +66,7 @@ describe("Bedrock Converse adapter", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [BedrockConverse.adapter] }).prepare(baseRequest)
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         modelId: "anthropic.claude-3-5-sonnet-20240620-v1:0",
         system: [{ text: "You are concise." }],
         messages: [{ role: "user", content: [{ text: "Say hello." }] }],
@@ -90,7 +90,7 @@ describe("Bedrock Converse adapter", () => {
         }),
       )
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         toolConfig: {
           tools: [
             {
@@ -123,7 +123,7 @@ describe("Bedrock Converse adapter", () => {
         }),
       )
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         messages: [
           { role: "user", content: [{ text: "What is the weather?" }] },
           {
@@ -304,7 +304,7 @@ describe("Bedrock Converse adapter", () => {
         }),
       )
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         // System: text block followed by cachePoint marker.
         system: [{ text: "System prefix." }, { cachePoint: { type: "default" } }],
         messages: [
@@ -324,7 +324,7 @@ describe("Bedrock Converse adapter", () => {
   it.effect("does not emit cachePoint when no cache hint is set", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [BedrockConverse.adapter] }).prepare(baseRequest)
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         system: [{ text: "You are concise." }],
         messages: [{ role: "user", content: [{ text: "Say hello." }] }],
       })
@@ -349,7 +349,7 @@ describe("Bedrock Converse adapter", () => {
         }),
       )
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         messages: [
           {
             role: "user",
@@ -382,7 +382,7 @@ describe("Bedrock Converse adapter", () => {
       )
 
       // Buffer.from([1,2,3,4,5]).toString("base64") === "AQIDBAU="
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         messages: [
           {
             role: "user",
@@ -408,7 +408,7 @@ describe("Bedrock Converse adapter", () => {
         }),
       )
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         messages: [
           {
             role: "user",

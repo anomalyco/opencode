@@ -4,9 +4,9 @@
 
 Patch behaviour is currently split between the generic patch primitives in `src/patch.ts` and the request compilation flow in `src/adapter.ts`. This proposal introduces a patch pipeline module that owns the patch lifecycle in one place.
 
-The pipeline is created once by `LLMClient.make(...)` with the client patch set. Each request then flows through that same pipeline instance. Adapter-local target patches are still supplied per selected Adapter because they vary by route.
+The pipeline is created once by `LLMClient.make(...)` with the client patch set. Each request then flows through that same pipeline instance. Adapter-local payload patches are still supplied per selected Adapter because they vary by route.
 
-The goal is to make patch ordering, context refresh, route invariants, tool-schema handling, target patching, stream patching, and trace assembly one deep module instead of implicit knowledge inside `LLMClient.compile(...)`.
+The goal is to make patch ordering, context refresh, route invariants, tool-schema handling, payload patching, stream patching, and trace assembly one deep module instead of implicit knowledge inside `LLMClient.compile(...)`.
 
 ## Current Shape
 
@@ -62,9 +62,9 @@ const patchedRequest = requestBeforeToolPatches.tools.length === 0 || toolSchema
   : new LLMRequest({ ...requestBeforeToolPatches, tools: requestBeforeToolPatches.tools.map(toolSchemaPlan.apply) })
 
 const candidate = yield* adapter.prepare(patchedRequest)
-const targetPlan = plan({ phase: "target", context: context({ request: patchedRequest }), patches: [...adapter.patches, ...registry.target] })
-const target = yield* adapter.validate(targetPlan.apply(candidate))
-const patchTrace = [...requestPlan.trace, ...promptPlan.trace, ...toolSchemaPlan.trace, ...targetPlan.trace]
+const payloadPlan = plan({ phase: "payload", context: context({ request: patchedRequest }), patches: [...adapter.patches, ...registry.payload] })
+const payload = yield* adapter.validate(payloadPlan.apply(candidate))
+const patchTrace = [...requestPlan.trace, ...promptPlan.trace, ...toolSchemaPlan.trace, ...payloadPlan.trace]
 ```
 
 Stream patches are another single-phase plan later in `stream(...)`:
@@ -82,12 +82,12 @@ The runtime supports five phases today:
 - `request`
 - `prompt`
 - `tool-schema`
-- `target`
+- `payload`
 - `stream`
 
 Built-in default provider policy currently uses only `prompt` through `ProviderPatch.defaults`.
 
-Built-in provider modules use `target` for opt-in adapter-local patches such as `OpenAIChat.includeUsage` and `OpenAICompatibleChat.includeUsage`.
+Built-in provider modules use `payload` for opt-in adapter-local patches such as `OpenAIChat.includeUsage` and `OpenAICompatibleChat.includeUsage`.
 
 `request`, `tool-schema`, and `stream` are real runtime seams, but today they are used by tests and consumers rather than by default package policy.
 
@@ -105,9 +105,9 @@ The deep behaviour is not in the patch module. It is spread across `LLMClient.co
 - Request and prompt patches must not reroute `model.provider`, `model.id`, or `model.protocol`.
 - Tool-schema patches apply to every tool definition, but only when tools exist and patches matched.
 - Tool-schema trace appears once per matched patch, not once per tool.
-- Target patches run after Adapter lowering because they speak provider-native target shape.
-- Adapter-local target patches and client registry target patches are combined, then ordered by patch `order` and `id`.
-- Adapter validation runs after target patches, but validation logic remains owned by the Adapter.
+- Payload patches run after Adapter lowering because they speak provider-native payload shape.
+- Adapter-local payload patches and client registry payload patches are combined, then ordered by patch `order` and `id`.
+- Adapter validation runs after payload patches, but validation logic remains owned by the Adapter.
 - Trace order must match lifecycle order.
 - Stream patches run after Adapter parsing, but use the compiled request as context.
 
@@ -136,12 +136,12 @@ The pipeline instance is immutable and reused for each request handled by that `
 ```ts
 export interface PatchPipeline {
   readonly patchRequest: (request: LLMRequest) => Effect.Effect<PatchedRequest, LLMError>
-  readonly patchTarget: <Target>(input: PatchTargetInput<Target>) => Effect.Effect<PatchedTarget<Target>, LLMError>
+  readonly patchPayload: <Payload>(input: PatchPayloadInput<Payload>) => Effect.Effect<PatchedPayload<Payload>, LLMError>
   readonly patchStreamEvents: (input: PatchStreamInput) => Stream.Stream<LLMEvent, LLMError>
 }
 ```
 
-The names should stay patch-focused. Avoid `prepareRequest` and `prepareTarget` because `LLMClient.prepare`, `Adapter.prepare`, and Protocol lowering already use prepare terminology.
+The names should stay patch-focused. Avoid `prepareRequest` and `preparePayload` because `LLMClient.prepare`, `Adapter.prepare`, and Protocol lowering already use prepare terminology.
 
 One possible state shape:
 
@@ -152,16 +152,16 @@ export interface PatchedRequest {
   readonly trace: ReadonlyArray<PatchTrace>
 }
 
-export interface PatchTargetInput<Target> {
+export interface PatchPayloadInput<Payload> {
   readonly state: PatchedRequest
-  readonly target: Target
-  readonly adapterPatches: ReadonlyArray<Patch<Target>>
-  readonly validateTarget: (target: Target) => Effect.Effect<Target, LLMError>
+  readonly payload: Payload
+  readonly adapterPatches: ReadonlyArray<Patch<Payload>>
+  readonly validatePayload: (payload: Payload) => Effect.Effect<Payload, LLMError>
 }
 
-export interface PatchedTarget<Target> {
+export interface PatchedPayload<Payload> {
   readonly request: LLMRequest
-  readonly target: Target
+  readonly payload: Payload
   readonly trace: ReadonlyArray<PatchTrace>
 }
 ```
@@ -177,24 +177,24 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
 
   const patchedRequest = yield* pipeline.patchRequest(request)
   const candidate = yield* adapter.prepare(patchedRequest.request)
-  const patchedTarget = yield* pipeline.patchTarget({
+  const patchedPayload = yield* pipeline.patchPayload({
     state: patchedRequest,
-    target: candidate,
+    payload: candidate,
     adapterPatches: adapter.patches,
-    validateTarget: adapter.validate,
+    validatePayload: adapter.validate,
   })
 
-  const http = yield* adapter.toHttp(patchedTarget.target, {
-    request: patchedTarget.request,
-    patchTrace: patchedTarget.trace,
+  const http = yield* adapter.toHttp(patchedPayload.payload, {
+    request: patchedPayload.request,
+    patchTrace: patchedPayload.trace,
   })
 
   return {
-    request: patchedTarget.request,
+    request: patchedPayload.request,
     adapter,
-    target: patchedTarget.target,
+    payload: patchedPayload.payload,
     http,
-    patchTrace: patchedTarget.trace,
+    patchTrace: patchedPayload.trace,
   }
 })
 ```
@@ -213,7 +213,7 @@ return pipeline.patchStreamEvents({
 })
 ```
 
-This is the important cleanup: `LLMClient` no longer hand-assembles phase plans, context refresh, route protection, target patch ordering, validation timing, stream patch mapping, or patch trace concatenation.
+This is the important cleanup: `LLMClient` no longer hand-assembles phase plans, context refresh, route protection, payload patch ordering, validation timing, stream patch mapping, or patch trace concatenation.
 
 ## Performance And Simplicity
 
@@ -225,7 +225,7 @@ Today, every request rebuilds phase plans:
 plan({ phase: "request", context, patches: registry.request })
 plan({ phase: "prompt", context, patches: registry.prompt })
 plan({ phase: "tool-schema", context, patches: registry.toolSchema })
-plan({ phase: "target", context, patches: [...adapter.patches, ...registry.target] })
+plan({ phase: "payload", context, patches: [...adapter.patches, ...registry.payload] })
 ```
 
 Each plan filters and sorts its phase patches. That cost is tiny compared with an LLM request, but it is still repeated work and repeated code.
@@ -245,18 +245,18 @@ At construction time, the pipeline can:
 
 Per request, the pipeline still must evaluate `when(context)` predicates because predicates depend on the current request, model, protocol, metadata, tools, and provider. That part cannot be safely precompiled away unless a future patch type declares itself unconditional.
 
-Target patches are slightly different because adapter-local target patches vary by selected Adapter. Keep the first version simple:
+Payload patches are slightly different because adapter-local payload patches vary by selected Adapter. Keep the first version simple:
 
 ```ts
-pipeline.patchTarget({
+pipeline.patchPayload({
   state,
-  target,
+  payload,
   adapterPatches: adapter.patches,
-  validateTarget: adapter.validate,
+  validatePayload: adapter.validate,
 })
 ```
 
-The pipeline can combine already-sorted client target patches with adapter patches and apply the same ordering rule. If target patch counts ever become large, the pipeline can cache the sorted merged target patch list in a `WeakMap` keyed by the Adapter or by the adapter patch array. That is an internal Implementation optimization; the Interface does not need to expose it.
+The pipeline can combine already-sorted client payload patches with adapter patches and apply the same ordering rule. If payload patch counts ever become large, the pipeline can cache the sorted merged payload patch list in a `WeakMap` keyed by the Adapter or by the adapter patch array. That is an internal Implementation optimization; the Interface does not need to expose it.
 
 The important simplicity win is bigger than the micro-performance win. `LLMClient` would stop describing the patch algorithm in five places. The pipeline becomes a reusable compiled patch lifecycle: one small Interface, one place to optimize, one place to test.
 
@@ -270,16 +270,16 @@ The patch pipeline module should own:
 - Enforcing that request-shaped patches do not change `model.provider`, `model.id`, or `model.protocol`.
 - Running tool-schema patches against every tool definition only when tools exist and patches matched.
 - Emitting tool-schema trace once per matched patch, not once per tool.
-- Combining request, prompt, tool-schema, and target traces in lifecycle order.
-- Combining adapter-local target patches with client registry target patches and applying the shared patch ordering rule.
-- Invoking Adapter target validation after target patches.
+- Combining request, prompt, tool-schema, and payload traces in lifecycle order.
+- Combining adapter-local payload patches with client registry payload patches and applying the shared patch ordering rule.
+- Invoking Adapter payload validation after payload patches.
 - Applying stream patches to parsed `LLMEvent` streams with the compiled request context.
 
 It should not own:
 
 - Adapter lookup.
 - Protocol lowering via `adapter.prepare(...)`.
-- Target validation Implementation.
+- Payload validation Implementation.
 - HTTP request construction.
 - Provider-specific patch definitions.
 - Provider stream parsing.
@@ -308,7 +308,7 @@ Provider patch modules stay focused:
 
 - `ProviderPatch.defaults` remains a list of provider facts.
 - Provider-specific patches do not need to know lifecycle ordering.
-- Adapter-local target patches keep living on the selected Adapter.
+- Adapter-local payload patches keep living on the selected Adapter.
 
 Tests get better locality:
 
@@ -333,11 +333,11 @@ Proposed Interface:
 ```ts
 const pipeline = PatchPipeline.make(options.patches)
 const request = yield* pipeline.patchRequest(input)
-const target = yield* pipeline.patchTarget({ state: request, target, adapterPatches, validateTarget })
-const events = pipeline.patchStreamEvents({ request: target.request, events })
+const payload = yield* pipeline.patchPayload({ state: request, payload, adapterPatches, validatePayload })
+const events = pipeline.patchStreamEvents({ request: payload.request, events })
 ```
 
-That Interface is deeper because callers get ordering, context refresh, route protection, tool-schema handling, target patch composition, validation timing, stream mapping, and trace assembly without knowing each step.
+That Interface is deeper because callers get ordering, context refresh, route protection, tool-schema handling, payload patch composition, validation timing, stream mapping, and trace assembly without knowing each step.
 
 ## Principles
 
@@ -347,7 +347,7 @@ Today, the real patch lifecycle is an unnamed module embedded in `LLMClient.comp
 
 ### Interface
 
-The Interface becomes the test surface. Tests should ask what the pipeline guarantees: request patches run before prompt patches, contexts refresh, route changes fail, target patches trace after tool-schema patches, validation runs after target patches, and stream patches see the compiled request.
+The Interface becomes the test surface. Tests should ask what the pipeline guarantees: request patches run before prompt patches, contexts refresh, route changes fail, payload patches trace after tool-schema patches, validation runs after payload patches, and stream patches see the compiled request.
 
 ### Depth
 
@@ -359,7 +359,7 @@ The seam moves from scattered calls to `plan(...)` into the patch pipeline Inter
 
 ### Adapter
 
-Provider-specific patches are Adapters at the patch seam: each concrete patch satisfies the patch Interface. Adapter-local target patches remain local to the selected Adapter, but the pipeline owns how those patches combine with client registry target patches.
+Provider-specific patches are Adapters at the patch seam: each concrete patch satisfies the patch Interface. Adapter-local payload patches remain local to the selected Adapter, but the pipeline owns how those patches combine with client registry payload patches.
 
 ### Leverage
 
@@ -375,7 +375,7 @@ Deleting the current `plan(...)` helper removes only a small filter/sort/reduce.
 
 ### One Adapter = Hypothetical Seam, Two Adapters = Real Seam
 
-This proposal does not add a speculative seam with fake alternative implementations. It deepens an existing real seam: many provider patches already satisfy the patch Interface, and adapter-local plus client registry target patches already vary across providers and call sites. The missing piece is locality for the lifecycle that applies those Adapters.
+This proposal does not add a speculative seam with fake alternative implementations. It deepens an existing real seam: many provider patches already satisfy the patch Interface, and adapter-local plus client registry payload patches already vary across providers and call sites. The missing piece is locality for the lifecycle that applies those Adapters.
 
 ## Benefits
 
@@ -394,8 +394,8 @@ Useful tests:
 - Tool-schema patches are skipped when there are no tools.
 - Tool-schema traces appear only when tool-schema patches ran.
 - Tool-schema trace appears once per matched patch, not once per tool.
-- Adapter target patches and client registry target patches follow the shared patch ordering rule.
-- Target validation runs after target patches.
+- Adapter payload patches and client registry payload patches follow the shared patch ordering rule.
+- Payload validation runs after payload patches.
 - Stream patches see the compiled request, not the original request.
 - Pipeline construction accepts `undefined`, a patch array, or a `PatchRegistry`.
 
@@ -407,7 +407,7 @@ Do not create a full plugin system for patch ordering.
 
 Do not move provider-specific patch logic into the pipeline.
 
-Do not make target patch typing more ambitious in this step; target patches are already typed at adapter construction sites and erased in the registry.
+Do not make payload patch typing more ambitious in this step; payload patches are already typed at adapter construction sites and erased in the registry.
 
 Do not move Adapter lookup, Protocol lowering, HTTP construction, or stream parsing into the pipeline.
 
@@ -419,7 +419,7 @@ Do not change provider behaviour while extracting the lifecycle.
 2. Keep `Patch.plan(...)` public during migration and use it internally inside the pipeline.
 3. Move `normalizeRegistry(...)` and `ensureSameRoute(...)` from `src/adapter.ts` into the pipeline module.
 4. Add `patchRequest(...)` that runs request, prompt, and tool-schema phases and returns a carried request state.
-5. Add `patchTarget(...)` that applies adapter-local target patches, client registry target patches, Adapter validation, and returns a carried target state with combined trace.
+5. Add `patchPayload(...)` that applies adapter-local payload patches, client registry payload patches, Adapter validation, and returns a carried payload state with combined trace.
 6. Add `patchStreamEvents(...)` that applies stream patches to parsed `LLMEvent` streams.
 7. Add `test/patch-pipeline.test.ts` with lifecycle tests before changing `LLMClient`.
 8. Replace handwritten phase choreography in `LLMClient.compile(...)` and `LLMClient.stream(...)` with the pipeline.
@@ -431,13 +431,13 @@ Do not change provider behaviour while extracting the lifecycle.
 
 Should `Patch.plan(...)` remain public as a low-level primitive, or should the patch pipeline become the only exported lifecycle Interface?
 
-Should stream patches be part of the same pipeline module from the first extraction, or should the first extraction focus only on request-to-target compilation?
+Should stream patches be part of the same pipeline module from the first extraction, or should the first extraction focus only on request-to-payload compilation?
 
 Should the pipeline return one combined trace array, or should it preserve phase-grouped traces internally for better debugging while exposing one ordered trace to callers?
 
-Should route protection apply only after request and prompt phases, or should the pipeline also assert that target and stream phases cannot observe changed route state?
+Should route protection apply only after request and prompt phases, or should the pipeline also assert that payload and stream phases cannot observe changed route state?
 
-Should target patch ordering keep the current global `order`/`id` rule across adapter-local and client registry patches, or should adapter-local target patches get an explicit ordering band before client registry target patches?
+Should payload patch ordering keep the current global `order`/`id` rule across adapter-local and client registry patches, or should adapter-local payload patches get an explicit ordering band before client registry payload patches?
 
 ## Recommendation
 

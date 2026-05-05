@@ -1,12 +1,18 @@
-export { Adapter, LLMClient } from "./adapter"
+export { Adapter, LLMClient, modelCapabilities, modelLimits, modelRef } from "./adapter"
 export type {
   Adapter as AdapterShape,
   AdapterDefinition,
   AdapterInput,
+  AdapterModelDefaults,
+  AdapterModelInput,
+  AdapterRoutedModelDefaults,
+  AdapterRoutedModelInput,
   AnyAdapter,
   ClientOptions,
   HttpContext,
   LLMClient as LLMClientShape,
+  ModelCapabilitiesInput,
+  ModelRefInput,
 } from "./adapter"
 export * from "./executor"
 export * from "./patch"
@@ -27,12 +33,6 @@ export type { Protocol as ProtocolDef } from "./protocol"
 export * as LLM from "./llm"
 export * as ProviderPatch from "./provider/patch"
 export type { CapabilitiesInput } from "./llm"
-export type {
-  ProviderAuth,
-  ProviderResolution,
-  ProviderResolveInput,
-  ProviderResolver as ProviderResolverShape,
-} from "./provider-resolver"
 export { AnthropicMessages } from "./provider/anthropic-messages"
 export { AmazonBedrock } from "./provider/amazon-bedrock"
 export { Anthropic } from "./provider/anthropic"
@@ -46,7 +46,6 @@ export { OpenAICompatibleChat } from "./provider/openai-compatible-chat"
 export { OpenAICompatibleFamily } from "./provider/openai-compatible-family"
 export { OpenAICompatibleProfiles } from "./provider/openai-compatible-profile"
 export { OpenAIResponses } from "./provider/openai-responses"
-export { ProviderResolver } from "./provider-resolver"
 export { OpenAI } from "./provider/openai"
 export { OpenAICompatible } from "./provider/openai-compatible"
 export { OpenRouter } from "./provider/openrouter"

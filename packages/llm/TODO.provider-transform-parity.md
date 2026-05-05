@@ -17,7 +17,7 @@ Patches are the right seam when the behavior is a provider/model quirk that muta
 - Moonshot/Kimi schema sanitizer: `ProviderPatch.sanitizeMoonshotToolSchema`.
 - Prompt cache hint placement: `ProviderPatch.cachePromptHints`.
 - Gemini schema sanitizer/projector: handled inside `Gemini.protocol` because Gemini has a distinct schema dialect.
-- OpenAI Chat/OpenAI-compatible streaming usage: adapter-local target patches.
+- OpenAI Chat/OpenAI-compatible streaming usage: adapter-local payload patches.
 
 ## Not Fully Ported
 
@@ -36,7 +36,7 @@ Native status:
 
 Likely shape:
 
-- Target patches for provider-native body knobs when the adapter target has a real field.
+- Payload patches for provider-native body knobs when the adapter payload has a real field.
 - Bridge-level lowering for opaque OpenCode provider options until each option has a typed native destination.
 
 ### `options(...)` Defaults
@@ -61,8 +61,8 @@ Native status:
 
 Likely shape:
 
-- Adapter-local target patches where the target schema can express the option.
-- New target fields only when the provider actually accepts them.
+- Adapter-local payload patches where the payload schema can express the option.
+- New payload fields only when the provider actually accepts them.
 - Avoid a generic `providerOptions` escape hatch unless the bridge still needs temporary fallback behavior.
 
 ### Reasoning Variants
@@ -81,7 +81,7 @@ Native status:
 Likely shape:
 
 - Keep the common intent small.
-- Add provider/model target patches that translate `request.reasoning` into each adapter target's native fields.
+- Add provider/model payload patches that translate `request.reasoning` into each adapter payload's native fields.
 - Add tests per provider family because invalid reasoning fields are common provider rejection causes.
 
 ### Sampling Defaults
@@ -100,7 +100,7 @@ Native status:
 
 Likely shape:
 
-- Request or target patches that fill unset generation fields for specific models.
+- Request or payload patches that fill unset generation fields for specific models.
 - Add `topK` only when enough adapters support it or when a specific adapter target needs it.
 
 ### Small Model Options
@@ -118,7 +118,7 @@ Native status:
 Likely shape:
 
 - First define how OpenCode marks a request as small in `LLMRequest` or bridge metadata.
-- Then use target patches keyed on that marker and provider/model.
+- Then use payload patches keyed on that marker and provider/model.
 
 ### Interleaved Reasoning Field Variants
 
@@ -136,11 +136,11 @@ Likely shape:
 
 - Store the chosen field in model profile/native metadata.
 - A prompt patch moves common reasoning parts into that provider-native field.
-- The OpenAI-compatible target schema/lowerer emits the selected field.
+- The OpenAI-compatible payload schema/lowerer emits the selected field.
 
 ## Suggested Order
 
-1. Add target patches for high-confidence OpenAI/OpenAI-compatible defaults that already have target fields.
+1. Add payload patches for high-confidence OpenAI/OpenAI-compatible defaults that already have payload fields.
 2. Add provider-family reasoning mapping tests before porting more variants.
 3. Define the bridge marker for “small” requests before implementing `smallOptions` parity.
 4. Keep provider option namespacing in the bridge until individual native destinations are known.

@@ -50,7 +50,7 @@ export interface PatchRegistry {
   readonly request: ReadonlyArray<Patch<LLMRequest>>
   readonly prompt: ReadonlyArray<Patch<LLMRequest>>
   readonly toolSchema: ReadonlyArray<Patch<ToolDefinition>>
-  readonly target: ReadonlyArray<Patch<unknown>>
+  readonly payload: ReadonlyArray<Patch<unknown>>
   readonly stream: ReadonlyArray<Patch<LLMEvent>>
 }
 
@@ -58,7 +58,7 @@ export const emptyRegistry: PatchRegistry = {
   request: [],
   prompt: [],
   toolSchema: [],
-  target: [],
+  payload: [],
   stream: [],
 }
 
@@ -95,7 +95,7 @@ export const prompt = (id: string, input: PatchInput<LLMRequest>) => make(`promp
 
 export const toolSchema = (id: string, input: PatchInput<ToolDefinition>) => make(`schema.${id}`, "tool-schema", input)
 
-export const target = <A>(id: string, input: PatchInput<A>) => make(`target.${id}`, "target", input)
+export const payload = <A>(id: string, input: PatchInput<A>) => make(`payload.${id}`, "payload", input)
 
 export const stream = (id: string, input: PatchInput<LLMEvent>) => make(`stream.${id}`, "stream", input)
 
@@ -104,7 +104,7 @@ export function registry(patches: ReadonlyArray<AnyPatch>): PatchRegistry {
     request: patches.filter((patch): patch is Patch<LLMRequest> => patch.phase === "request"),
     prompt: patches.filter((patch): patch is Patch<LLMRequest> => patch.phase === "prompt"),
     toolSchema: patches.filter((patch): patch is Patch<ToolDefinition> => patch.phase === "tool-schema"),
-    target: patches.filter((patch) => patch.phase === "target") as unknown as ReadonlyArray<Patch<unknown>>,
+    payload: patches.filter((patch) => patch.phase === "payload") as unknown as ReadonlyArray<Patch<unknown>>,
     stream: patches.filter((patch): patch is Patch<LLMEvent> => patch.phase === "stream"),
   }
 }
@@ -149,7 +149,7 @@ export function mergeRegistries(registries: ReadonlyArray<PatchRegistry>): Patch
       request: [...merged.request, ...registry.request],
       prompt: [...merged.prompt, ...registry.prompt],
       toolSchema: [...merged.toolSchema, ...registry.toolSchema],
-      target: [...merged.target, ...registry.target],
+      payload: [...merged.payload, ...registry.payload],
       stream: [...merged.stream, ...registry.stream],
     }),
     emptyRegistry,

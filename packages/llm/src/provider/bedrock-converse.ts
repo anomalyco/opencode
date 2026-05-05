@@ -1,9 +1,9 @@
 import { AwsV4Signer } from "aws4fetch"
 import { Effect, Option, Schema } from "effect"
-import { Adapter } from "../adapter"
+import { Adapter, type AdapterModelInput } from "../adapter"
 import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
-import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { capabilities } from "../llm"
 import { Protocol } from "../protocol"
 import {
   Usage,
@@ -34,7 +34,7 @@ export interface BedrockCredentials {
   readonly sessionToken?: string
 }
 
-export type BedrockConverseModelInput = Omit<ModelInput, "provider" | "protocol" | "headers"> & {
+export type BedrockConverseModelInput = AdapterModelInput & {
   /**
    * Bearer API key (Bedrock's newer API key auth). Sets the `Authorization`
    * header and bypasses SigV4 signing. Mutually exclusive with `credentials`.
@@ -175,7 +175,7 @@ const BedrockToolChoice = Schema.Union([
   Schema.Struct({ tool: Schema.Struct({ name: Schema.String }) }),
 ])
 
-const BedrockTargetFields = {
+const BedrockPayloadFields = {
   modelId: Schema.String,
   messages: Schema.Array(BedrockMessage),
   system: optionalArray(BedrockSystemBlock),
@@ -195,8 +195,8 @@ const BedrockTargetFields = {
   ),
   additionalModelRequestFields: Schema.optional(JsonObject),
 }
-const BedrockConverseTarget = Schema.Struct(BedrockTargetFields)
-export type BedrockConverseTarget = Schema.Schema.Type<typeof BedrockConverseTarget>
+const BedrockConversePayload = Schema.Struct(BedrockPayloadFields)
+export type BedrockConversePayload = Schema.Schema.Type<typeof BedrockConversePayload>
 
 const BedrockUsageSchema = Schema.Struct({
   inputTokens: Schema.optional(Schema.Number),
@@ -576,8 +576,7 @@ interface ParserState {
 const finishToolCall = (tool: ProviderShared.ToolAccumulator | undefined) =>
   Effect.gen(function* () {
     if (!tool) return [] as ReadonlyArray<LLMEvent>
-    const input = yield* ProviderShared.parseToolInput(ADAPTER, tool.name, tool.input)
-    return [{ type: "tool-call" as const, id: tool.id, name: tool.name, input }]
+    return [yield* ProviderShared.toolCallEvent(ADAPTER, tool)]
   })
 
 const processChunk = (state: ParserState, chunk: BedrockChunk) =>
@@ -684,17 +683,17 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
     : []
 
 /**
- * The Bedrock Converse protocol — request lowering, target schema, and the
+ * The Bedrock Converse protocol — request lowering, payload schema, and the
  * streaming-chunk state machine.
  */
 export const protocol = Protocol.define<
-  BedrockConverseTarget,
+  BedrockConversePayload,
   object,
   BedrockChunk,
   ParserState
 >({
-  id: "bedrock-converse",
-  target: BedrockConverseTarget,
+  id: ADAPTER,
+  payload: BedrockConversePayload,
   prepare,
   chunk: BedrockChunk,
   initial: () => ({ tools: {}, pendingStopReason: undefined }),
@@ -705,41 +704,46 @@ export const protocol = Protocol.define<
 export const adapter = Adapter.make({
   id: ADAPTER,
   protocol,
-  endpoint: Endpoint.baseURL({
+  endpoint: Endpoint.baseURL<BedrockConversePayload>({
     // Bedrock's URL embeds the region in the host and the validated modelId
-    // in the path. We reach into the target after target patches so the URL
+    // in the path. We reach into the payload after payload patches so the URL
     // matches the body that gets signed.
     default: ({ request }) => `https://bedrock-runtime.${region(request)}.amazonaws.com`,
-    path: ({ target }) => `/model/${encodeURIComponent(target.modelId)}/converse-stream`,
+    path: ({ payload }) => `/model/${encodeURIComponent(payload.modelId)}/converse-stream`,
   }),
   auth,
   framing,
 })
 
+export const defaultCapabilities = capabilities({
+  output: { reasoning: true },
+  tools: { calls: true, streamingInput: true },
+  cache: { prompt: true, contentBlocks: true },
+})
+
+export const nativeCredentials = (
+  native: BedrockConverseModelInput["native"],
+  credentials: BedrockCredentials | undefined,
+) =>
+  credentials
+    ? {
+        ...native,
+        aws_credentials: credentials,
+        aws_region: credentials.region,
+      }
+    : native
+
+const bedrockModel = Adapter.model(adapter, {
+  provider: "bedrock",
+  capabilities: defaultCapabilities,
+})
+
 export const model = (input: BedrockConverseModelInput) => {
   const { credentials, ...rest } = input
-  return Adapter.bindModel(
-    llmModel({
-      ...rest,
-      provider: "bedrock",
-      protocol: "bedrock-converse",
-      capabilities:
-        input.capabilities ??
-        capabilities({
-          output: { reasoning: true },
-          tools: { calls: true, streamingInput: true },
-          cache: { prompt: true, contentBlocks: true },
-        }),
-      native: credentials
-        ? {
-            ...input.native,
-            aws_credentials: credentials,
-            aws_region: credentials.region,
-          }
-        : input.native,
-    }),
-    adapter,
-  )
+  return bedrockModel({
+    ...rest,
+    native: nativeCredentials(input.native, credentials),
+  })
 }
 
 export * as BedrockConverse from "./bedrock-converse"

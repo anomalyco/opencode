@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect"
-import { Adapter } from "../adapter"
+import { Adapter, type AdapterModelInput } from "../adapter"
 import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
-import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { capabilities } from "../llm"
 import { Protocol } from "../protocol"
 import {
   Usage,
@@ -19,10 +19,7 @@ import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./share
 
 const ADAPTER = "anthropic-messages"
 
-export type AnthropicMessagesModelInput = Omit<ModelInput, "provider" | "protocol" | "headers"> & {
-  readonly apiKey?: string
-  readonly headers?: Record<string, string>
-}
+export type AnthropicMessagesModelInput = AdapterModelInput
 
 const AnthropicCacheControl = Schema.Struct({ type: Schema.Literal("ephemeral") })
 
@@ -121,7 +118,7 @@ const AnthropicThinking = Schema.Struct({
   budget_tokens: Schema.Number,
 })
 
-const AnthropicTargetFields = {
+const AnthropicPayloadFields = {
   model: Schema.String,
   system: optionalArray(AnthropicTextBlock),
   messages: Schema.Array(AnthropicMessage),
@@ -134,8 +131,8 @@ const AnthropicTargetFields = {
   stop_sequences: optionalArray(Schema.String),
   thinking: Schema.optional(AnthropicThinking),
 }
-const AnthropicMessagesTarget = Schema.Struct(AnthropicTargetFields)
-export type AnthropicMessagesTarget = Schema.Schema.Type<typeof AnthropicMessagesTarget>
+const AnthropicMessagesPayload = Schema.Struct(AnthropicPayloadFields)
+export type AnthropicMessagesPayload = Schema.Schema.Type<typeof AnthropicMessagesPayload>
 
 const AnthropicUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
@@ -365,11 +362,7 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
 const finishToolCall = (tool: ToolAccumulator | undefined) =>
   Effect.gen(function* () {
     if (!tool) return [] as ReadonlyArray<LLMEvent>
-    const input = yield* ProviderShared.parseToolInput(ADAPTER, tool.name, tool.input)
-    const event: LLMEvent = tool.providerExecuted
-      ? { type: "tool-call", id: tool.id, name: tool.name, input, providerExecuted: true }
-      : { type: "tool-call", id: tool.id, name: tool.name, input }
-    return [event]
+    return [yield* ProviderShared.toolCallEvent(ADAPTER, tool, { providerExecuted: tool.providerExecuted })]
   })
 
 // Server tool result blocks come whole in `content_block_start` (no streaming
@@ -482,21 +475,21 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
   })
 
 /**
- * The Anthropic Messages protocol — request lowering, target schema, and the
+ * The Anthropic Messages protocol — request lowering, payload schema, and the
  * streaming-chunk state machine. Used by native
  * Anthropic Cloud and (once registered) Vertex Anthropic / Bedrock-hosted
  * Anthropic passthrough.
  */
 export const protocol = Protocol.define<
-  AnthropicMessagesTarget,
+  AnthropicMessagesPayload,
   string,
   AnthropicChunk,
   ParserState
 >({
-  id: "anthropic-messages",
-  target: AnthropicMessagesTarget,
+  id: ADAPTER,
+  payload: AnthropicMessagesPayload,
   prepare,
-  chunk: Schema.fromJsonString(AnthropicChunk),
+  chunk: Protocol.jsonChunk(AnthropicChunk),
   initial: () => ({ tools: {} }),
   process: processChunk,
 })
@@ -510,20 +503,14 @@ export const adapter = Adapter.make({
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 
-export const model = (input: AnthropicMessagesModelInput) =>
-  Adapter.bindModel(
-    llmModel({
-      ...input,
-      provider: "anthropic",
-      protocol: "anthropic-messages",
-      capabilities: input.capabilities ?? capabilities({
-        output: { reasoning: true },
-        tools: { calls: true, streamingInput: true },
-        cache: { prompt: true, contentBlocks: true },
-        reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], summaries: false, encryptedContent: true },
-      }),
-    }),
-    adapter,
-  )
+export const model = Adapter.model(adapter, {
+  provider: "anthropic",
+  capabilities: capabilities({
+    output: { reasoning: true },
+    tools: { calls: true, streamingInput: true },
+    cache: { prompt: true, contentBlocks: true },
+    reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], summaries: false, encryptedContent: true },
+  }),
+})
 
 export * as AnthropicMessages from "./anthropic-messages"

@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer"
 import { Cause, Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import { InvalidRequestError, ProviderChunkError, type MediaPart, type ToolResultPart } from "../schema"
+import { InvalidRequestError, ProviderChunkError, type LLMEvent, type MediaPart, type ToolResultPart } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -29,6 +29,12 @@ export interface ToolAccumulator {
   readonly id: string
   readonly name: string
   readonly input: string
+}
+
+export interface ParsedToolCall {
+  readonly id: string
+  readonly name: string
+  readonly input: unknown
 }
 
 /**
@@ -73,6 +79,22 @@ export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) =>
  */
 export const parseToolInput = (adapter: string, name: string, raw: string) =>
   parseJson(adapter, raw || "{}", `Invalid JSON input for ${adapter} tool call ${name}`)
+
+export const parsedToolCall = (adapter: string, tool: ToolAccumulator) =>
+  parseToolInput(adapter, tool.name, tool.input).pipe(
+    Effect.map((input) => ({ id: tool.id, name: tool.name, input }) satisfies ParsedToolCall),
+  )
+
+export const toolCallEvent = (
+  adapter: string,
+  tool: ToolAccumulator,
+  options: { readonly providerExecuted?: boolean } = {},
+) =>
+  parsedToolCall(adapter, tool).pipe(
+    Effect.map((call): LLMEvent =>
+      options.providerExecuted ? { type: "tool-call", ...call, providerExecuted: true } : { type: "tool-call", ...call },
+    ),
+  )
 
 /**
  * Encode a `MediaPart`'s raw bytes for inclusion in a JSON request body.
@@ -172,21 +194,21 @@ export const invalidRequest = (message: string) => new InvalidRequestError({ mes
 
 /**
  * Build a `validate` step from a Schema decoder. Replaces the per-adapter
- * lambda body `(target) => decode(target).pipe(Effect.mapError((e) =>
+ * lambda body `(payload) => decode(payload).pipe(Effect.mapError((e) =>
  * invalid(e.message)))`. Any decode error is translated into
  * `InvalidRequestError` carrying the original parse-error message.
  */
 export const validateWith =
   <A, I, E extends { readonly message: string }>(decode: (input: I) => Effect.Effect<A, E>) =>
-  (target: I) =>
-    decode(target).pipe(Effect.mapError((error) => invalidRequest(error.message)))
+  (payload: I) =>
+    decode(payload).pipe(Effect.mapError((error) => invalidRequest(error.message)))
 
 /**
  * Build an HTTP POST with a JSON body. Sets `content-type: application/json`
  * automatically after caller-supplied headers so adapters cannot accidentally
  * send JSON with a stale content type. The body is passed pre-encoded so
  * adapters can choose between
- * `Schema.encodeSync(target)` and `ProviderShared.encodeJson(target)`.
+ * `Schema.encodeSync(payload)` and `ProviderShared.encodeJson(payload)`.
  */
 export const jsonPost = (input: {
   readonly url: string

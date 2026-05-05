@@ -147,32 +147,32 @@ describe("llm patch pipeline", () => {
     expect(result.trace.map((item) => item.id)).toEqual(["schema.test.description"])
   })
 
-  test("patches targets before validation and carries combined trace", () => {
+  test("patches payloads before validation and carries combined trace", () => {
     const pipeline = PatchPipeline.make([
-      Patch.target("client", {
-        reason: "client target patch",
+      Patch.payload("client", {
+        reason: "client payload patch",
         order: 2,
-        apply: (target: { readonly value: string }) => ({ value: `${target.value}|client` }),
+        apply: (payload: { readonly value: string }) => ({ value: `${payload.value}|client` }),
       }),
     ])
     const state = Effect.runSync(pipeline.patchRequest(request))
     const result = Effect.runSync(
-      pipeline.patchTarget({
+      pipeline.patchPayload({
         state,
-        target: { value: "start" },
+        payload: { value: "start" },
         adapterPatches: [
-          Patch.target("adapter", {
-            reason: "adapter target patch",
+          Patch.payload("adapter", {
+            reason: "adapter payload patch",
             order: 1,
-            apply: (target: { readonly value: string }) => ({ value: `${target.value}|adapter` }),
+            apply: (payload: { readonly value: string }) => ({ value: `${payload.value}|adapter` }),
           }),
         ],
         schema: Schema.Struct({ value: Schema.Literal("start|adapter|client") }),
       }),
     )
 
-    expect(result.target).toEqual({ value: "start|adapter|client" })
-    expect(result.trace.map((item) => item.id)).toEqual(["target.adapter", "target.client"])
+    expect(result.payload).toEqual({ value: "start|adapter|client" })
+    expect(result.trace.map((item) => item.id)).toEqual(["payload.adapter", "payload.client"])
   })
 
   test("patches stream events with the compiled request context", () => {

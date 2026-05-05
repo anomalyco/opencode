@@ -1,5 +1,26 @@
-import { ProviderResolver } from "../provider-resolver"
+import { Adapter, type AdapterModelInput } from "../adapter"
+import { BedrockConverse, type BedrockCredentials } from "./bedrock-converse"
 
-export const resolver = ProviderResolver.fixed("amazon-bedrock", "bedrock-converse")
+export type ModelOptions = Omit<AdapterModelInput, "id"> & {
+  readonly apiKey?: string
+  readonly headers?: Record<string, string>
+  readonly credentials?: BedrockCredentials
+}
+
+export const adapters = [BedrockConverse.adapter]
+
+const converseModel = Adapter.model(BedrockConverse.adapter, {
+  provider: "amazon-bedrock",
+  capabilities: BedrockConverse.defaultCapabilities,
+})
+
+export const model = (modelID: string, options: ModelOptions = {}) => {
+  const { credentials, ...rest } = options
+  return converseModel({
+    ...rest,
+    id: modelID,
+    native: BedrockConverse.nativeCredentials(options.native, credentials),
+  })
+}
 
 export * as AmazonBedrock from "./amazon-bedrock"

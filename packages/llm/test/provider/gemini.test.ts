@@ -28,7 +28,7 @@ describe("Gemini adapter", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [Gemini.adapter] }).prepare(request)
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
         systemInstruction: { parts: [{ text: "You are concise." }] },
         generationConfig: { maxOutputTokens: 20, temperature: 0 },
@@ -59,7 +59,7 @@ describe("Gemini adapter", () => {
         }),
       )
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         contents: [
           {
             role: "user",
@@ -101,7 +101,7 @@ describe("Gemini adapter", () => {
         }),
       )
 
-      expect(prepared.target).toEqual({
+      expect(prepared.payload).toEqual({
         contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
       })
     }),
@@ -130,7 +130,7 @@ describe("Gemini adapter", () => {
         }),
       )
 
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         tools: [{
           functionDeclarations: [{
             parameters: {

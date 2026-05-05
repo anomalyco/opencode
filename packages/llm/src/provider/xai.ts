@@ -1,7 +1,19 @@
-import { ProviderResolver } from "../provider-resolver"
+import { Adapter } from "../adapter"
+import type { ModelInput } from "../llm"
+import { OpenAICompatibleProfiles } from "./openai-compatible-profile"
+import { OpenAIResponses } from "./openai-responses"
 
-export const resolver = ProviderResolver.fixed("xai", "openai-responses", {
-  baseURL: "https://api.x.ai/v1",
-})
+export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol">
+
+export const adapters = [OpenAIResponses.adapter]
+
+const responsesModel = Adapter.model(OpenAIResponses.adapter, { provider: "xai" })
+
+export const model = (modelID: string, options: ModelOptions = {}) =>
+  responsesModel({
+    ...options,
+    id: modelID,
+    baseURL: options.baseURL ?? OpenAICompatibleProfiles.profiles.xai.baseURL,
+  })
 
 export * as XAI from "./xai"

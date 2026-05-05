@@ -1,5 +1,15 @@
 import { Context, Effect, Layer, Stream } from "effect"
-import { LLMClient, preserveModelBinding, type AnyAdapter, type ClientOptions } from "./adapter"
+import {
+  LLMClient,
+  modelCapabilities,
+  modelLimits,
+  modelRef,
+  preserveModelBinding,
+  type AnyAdapter,
+  type ClientOptions,
+  type ModelCapabilitiesInput,
+  type ModelRefInput,
+} from "./adapter"
 import type { RequestExecutor } from "./executor"
 import { ProviderPatch } from "./provider/patch"
 import { type Tools } from "./tool"
@@ -10,17 +20,9 @@ import {
   LLMRequest,
   LLMResponse,
   Message,
-  ModelCapabilities,
-  ModelID,
-  ModelLimits,
-  ModelRef,
-  ProviderID,
   ToolChoice,
   ToolDefinition,
   type ContentPart,
-  type ModelID as ModelIDType,
-  type ProviderID as ProviderIDType,
-  type ReasoningEffort,
   type SystemPart,
   type ToolCallPart,
   type ToolResultPart,
@@ -41,7 +43,7 @@ export interface MakeOptions {
 export type StreamWithToolsInput<T extends Tools> = Omit<RequestInput, "tools"> & Omit<RunOptions<T>, "request">
 
 export interface Runtime {
-  readonly prepare: <Target = unknown>(input: LLMRequest | RequestInput) => Effect.Effect<PreparedRequestOf<Target>, LLMError>
+  readonly prepare: <Payload = unknown>(input: LLMRequest | RequestInput) => Effect.Effect<PreparedRequestOf<Payload>, LLMError>
   readonly stream: (input: LLMRequest | RequestInput) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
   readonly generate: (input: LLMRequest | RequestInput) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
   readonly streamWithTools: <T extends Tools>(input: StreamWithToolsInput<T>) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
@@ -72,9 +74,9 @@ export const make = (options: MakeOptions = {}): Runtime => {
 export const layer = (options: MakeOptions = {}): Layer.Layer<Service> =>
   Layer.succeed(Service, Service.of(make(options)))
 
-export const prepare = <Target = unknown>(input: LLMRequest | RequestInput) =>
+export const prepare = <Payload = unknown>(input: LLMRequest | RequestInput) =>
   Effect.gen(function* () {
-    return yield* (yield* Service).prepare<Target>(input)
+    return yield* (yield* Service).prepare<Payload>(input)
   })
 
 export const stream = (input: LLMRequest | RequestInput) =>
@@ -96,22 +98,9 @@ export const streamWithTools = <T extends Tools>(input: StreamWithToolsInput<T>)
     }),
   )
 
-export type CapabilitiesInput = {
-  readonly input?: Partial<ModelCapabilities["input"]>
-  readonly output?: Partial<ModelCapabilities["output"]>
-  readonly tools?: Partial<ModelCapabilities["tools"]>
-  readonly cache?: Partial<ModelCapabilities["cache"]>
-  readonly reasoning?: Partial<Omit<ModelCapabilities["reasoning"], "efforts">> & {
-    readonly efforts?: ReadonlyArray<ReasoningEffort>
-  }
-}
+export type CapabilitiesInput = ModelCapabilitiesInput
 
-export type ModelInput = Omit<ConstructorParameters<typeof ModelRef>[0], "id" | "provider" | "capabilities" | "limits"> & {
-  readonly id: string | ModelIDType
-  readonly provider: string | ProviderIDType
-  readonly capabilities?: ModelCapabilities | CapabilitiesInput
-  readonly limits?: ModelLimits | ConstructorParameters<typeof ModelLimits>[0]
-}
+export type ModelInput = ModelRefInput
 
 export type MessageInput = Omit<ConstructorParameters<typeof Message>[0], "content"> & {
   readonly content: string | ContentPart | ReadonlyArray<ContentPart>
@@ -141,16 +130,9 @@ export type RequestInput = Omit<
   readonly generation?: GenerationOptions | ConstructorParameters<typeof GenerationOptions>[0]
 }
 
-export const capabilities = (input: CapabilitiesInput = {}) =>
-  new ModelCapabilities({
-    input: { text: true, image: false, audio: false, video: false, pdf: false, ...input.input },
-    output: { text: true, reasoning: false, ...input.output },
-    tools: { calls: false, streamingInput: false, providerExecuted: false, ...input.tools },
-    cache: { prompt: false, messageBlocks: false, contentBlocks: false, ...input.cache },
-    reasoning: { efforts: [], summaries: false, encryptedContent: false, ...input.reasoning },
-  })
+export const capabilities = modelCapabilities
 
-export const limits = (input: ConstructorParameters<typeof ModelLimits>[0] = {}) => new ModelLimits(input)
+export const limits = modelLimits
 
 export const text = (value: string): ContentPart => ({ type: "text", text: value })
 
@@ -175,17 +157,7 @@ export const user = (content: string | ContentPart | ReadonlyArray<ContentPart>)
 export const assistant = (content: string | ContentPart | ReadonlyArray<ContentPart>) =>
   message({ role: "assistant", content })
 
-export const model = (input: ModelInput) => {
-  const { capabilities: modelCapabilities, limits: modelLimits, ...rest } = input
-  return new ModelRef({
-    ...rest,
-    id: ModelID.make(input.id),
-    provider: ProviderID.make(input.provider),
-    protocol: input.protocol,
-    capabilities: modelCapabilities instanceof ModelCapabilities ? modelCapabilities : capabilities(modelCapabilities),
-    limits: modelLimits instanceof ModelLimits ? modelLimits : limits(modelLimits),
-  })
-}
+export const model = modelRef
 
 export const toolDefinition = (input: ToolDefinition | ConstructorParameters<typeof ToolDefinition>[0]) => {
   if (input instanceof ToolDefinition) return input

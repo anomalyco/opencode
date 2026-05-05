@@ -1,7 +1,4 @@
-import { ProviderResolver } from "../provider-resolver"
 import { Gemini, type GeminiModelInput } from "./gemini"
-
-export const resolver = ProviderResolver.fixed("google", "gemini")
 
 export const adapters = [Gemini.adapter]
 

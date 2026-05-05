@@ -2,23 +2,25 @@ import { Effect } from "effect"
 import { ProviderShared } from "./provider/shared"
 import type { LLMError, LLMRequest } from "./schema"
 
-/**
- * URL construction for one adapter.
- *
- * `Endpoint` is the deployment-side answer to "where does this request go?"
- * It receives the `LLMRequest` (so it can read `model.id`, `model.baseURL`,
- * and `model.queryParams`) and the validated `Target` (so adapters
- * whose path depends on a target field — e.g. Bedrock's `modelId` segment —
- * can read it safely after target patches).
- *
- * The result is a `URL` object so query-param composition stays correct
- * regardless of caller-provided baseURL trailing slashes.
- */
-export type Endpoint<Target> = (input: EndpointInput<Target>) => Effect.Effect<URL, LLMError>
-
-export interface EndpointInput<Target> {
+export interface EndpointInput<Payload> {
   readonly request: LLMRequest
-  readonly target: Target
+  readonly payload: Payload
+}
+
+export type EndpointPart<Payload> = string | ((input: EndpointInput<Payload>) => string)
+
+/**
+ * Declarative URL construction for one adapter.
+ *
+ * `Endpoint` is the deployment-side answer to "where does this request go?".
+ * `render(...)` interprets this data after request/payload patches, so dynamic
+ * pieces can read the final `LLMRequest` and validated provider payload.
+ */
+export interface Endpoint<Payload> {
+  readonly baseURL?: EndpointPart<Payload>
+  readonly path: EndpointPart<Payload>
+  /** Error message used when neither `model.baseURL` nor `baseURL` is set. */
+  readonly required?: string
 }
 
 /**
@@ -28,21 +30,28 @@ export interface EndpointInput<Target> {
  *
  * Both `default` and `path` may be strings or functions of the
  * `EndpointInput`, for adapters whose URL embeds the model id, region, or
- * another target field.
+ * another payload field.
  */
-export const baseURL = <Target>(input: {
-  readonly default?: string | ((input: EndpointInput<Target>) => string)
-  readonly path: string | ((input: EndpointInput<Target>) => string)
-  /** Error message used when neither `model.baseURL` nor `default` is set. */
+export const baseURL = <Payload>(input: {
+  readonly default?: string | ((input: EndpointInput<Payload>) => string)
+  readonly path: string | ((input: EndpointInput<Payload>) => string)
   readonly required?: string
-}): Endpoint<Target> => (ctx) =>
+}): Endpoint<Payload> => ({
+  baseURL: input.default,
+  path: input.path,
+  required: input.required,
+})
+
+const renderPart = <Payload>(part: EndpointPart<Payload> | undefined, input: EndpointInput<Payload>) =>
+  typeof part === "function" ? part(input) : part
+
+export const render = <Payload>(endpoint: Endpoint<Payload>, input: EndpointInput<Payload>) =>
   Effect.gen(function* () {
-    const fallback = typeof input.default === "function" ? input.default(ctx) : input.default
-    const base = ctx.request.model.baseURL ?? fallback
-    if (!base) return yield* ProviderShared.invalidRequest(input.required ?? "Missing baseURL")
-    const path = typeof input.path === "string" ? input.path : input.path(ctx)
+    const base = input.request.model.baseURL ?? renderPart(endpoint.baseURL, input)
+    if (!base) return yield* ProviderShared.invalidRequest(endpoint.required ?? "Missing baseURL")
+    const path = renderPart(endpoint.path, input)
     const url = new URL(`${ProviderShared.trimBaseUrl(base)}${path}`)
-    const params = ctx.request.model.queryParams
+    const params = input.request.model.queryParams
     if (params) for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
     return url
   })

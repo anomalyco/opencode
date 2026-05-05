@@ -106,7 +106,7 @@ describe("ProviderLLMBridge", () => {
     })
   })
 
-  test("maps GitHub Copilot through its provider resolver", () => {
+  test("maps GitHub Copilot through its provider helper", () => {
     const ref = ProviderLLMBridge.toModelRef({
       provider: provider({ id: ProviderID.make("github-copilot"), key: "copilot-key" }),
       model: model({ id: "gpt-5", providerID: "github-copilot", npm: "@ai-sdk/github-copilot" }),
@@ -212,6 +212,6 @@ describe("ProviderLLMBridge", () => {
           model: model({ id: modelID, providerID, npm }),
         }),
       ),
-    ).toEqual([undefined, undefined])
+    ).toEqual([undefined])
   })
 })

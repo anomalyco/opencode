@@ -1,8 +1,5 @@
-import { ProviderResolver } from "../provider-resolver"
 import { OpenAIChat, type OpenAIChatModelInput } from "./openai-chat"
 import { OpenAIResponses, type OpenAIResponsesModelInput } from "./openai-responses"
-
-export const resolver = ProviderResolver.fixed("openai", "openai-responses")
 
 export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
 

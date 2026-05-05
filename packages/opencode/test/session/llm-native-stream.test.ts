@@ -323,7 +323,7 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
       })
 
       const prepared = yield* LLMClient.make({ adapters, patches: ProviderPatch.defaults }).prepare(llmRequest)
-      expect(prepared.target).toMatchObject({
+      expect(prepared.payload).toMatchObject({
         tools: [
           {
             name: "lookup",
