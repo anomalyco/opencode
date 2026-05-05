@@ -2,9 +2,13 @@ import { createEffect, createResource, createMemo, For, Show, type Accessor, typ
 import { Icon, type IconName } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Dialog } from "@opencode-ai/ui/dialog"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { getFilename } from "@opencode-ai/util/path"
 import { useLanguage } from "@/context/language"
 import { usePlatform, type TrellisTask } from "@/context/platform"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { errorMessage } from "./helpers"
 
 const labelStatus = (status: string) =>
@@ -42,7 +46,7 @@ const progressColor = (task: TrellisTask): string => {
   return "text-icon-base"
 }
 
-function TaskCard(props: { task: TrellisTask; onOpen: (path: string) => void }): JSX.Element {
+function TaskCard(props: { task: TrellisTask; onOpen: (path: string) => void | Promise<void> }): JSX.Element {
   const language = useLanguage()
   const done = createMemo(
     () => props.task.completedAt || props.task.status === "done" || props.task.status === "completed",
@@ -98,6 +102,8 @@ export function TrellisTasksPanel(props: {
 }): JSX.Element {
   const platform = usePlatform()
   const language = useLanguage()
+  const dialog = useDialog()
+  const sdk = useGlobalSDK()
   const dir = createMemo(() => props.directory())
   const [data, { refetch }] = createResource(dir, async (root) => {
     if (!root) return undefined
@@ -116,12 +122,55 @@ export function TrellisTasksPanel(props: {
     (data()?.tasks ?? []).slice().sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title)),
   )
   const skipped = createMemo(() => data()?.skipped ?? 0)
-  const open = (path: string) => {
-    if (platform.openPath) {
-      void platform.openPath(path)
-      return
+  const toRelative = (absolute: string) => {
+    const root = dir().replace(/\/+$/, "")
+    const canonRoot = root.replace(/\\/g, "/")
+    const canonAbs = absolute.replace(/\\/g, "/")
+    if (!canonAbs.startsWith(canonRoot)) return absolute
+    let rel = absolute.slice(root.length)
+    if (rel.startsWith("/") || rel.startsWith("\\")) rel = rel.slice(1)
+    return rel
+  }
+
+  const open = async (path: string) => {
+    const name = getFilename(path)
+    const prdAbsPath = path.endsWith("/") ? path + "prd.md" : path + "/prd.md"
+    const prdPath = toRelative(prdAbsPath)
+    let content: string | undefined
+    try {
+      const client = sdk.createClient({ directory: dir(), throwOnError: true })
+      const res = await client.file.read({ path: prdPath })
+      content = res.data?.content
+    } catch {
     }
-    if (platform.openInFinder) void platform.openInFinder(path)
+    dialog.show(() => (
+      <Dialog
+        title={name}
+        size="x-large"
+        class="[&_[data-slot='dialog-container']]:(max-h-[90vh]! h-[90vh]!)"
+        action={
+          <div class="flex items-center gap-1">
+            <Show when={platform.openPath}>
+              <Tooltip placement="bottom" value={language.t("trellis.tasks.openFolder")}>
+                <IconButton
+                  icon="folder"
+                  variant="ghost"
+                  size="small"
+                  aria-label={language.t("trellis.tasks.openFolder")}
+                  onClick={() => void platform.openPath!(path)}
+                />
+              </Tooltip>
+            </Show>
+          </div>
+        }
+      >
+        <div class="flex-1 overflow-y-auto p-4">
+          <Show when={typeof content === "string"} fallback={<Empty text={language.t("trellis.tasks.noPrd")} />}>
+            {() => <Markdown text={content as string} />}
+          </Show>
+        </div>
+      </Dialog>
+    ))
   }
 
   return (

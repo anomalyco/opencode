@@ -58,6 +58,8 @@ export const dict = {
   "trellis.tasks.noProject": "Open a project to view Trellis tasks.",
   "trellis.tasks.desktopOnly": "Trellis tasks are available in the desktop app.",
   "trellis.tasks.skipped": "Skipped {count} task(s) with missing or invalid task.json",
+  "trellis.tasks.noPrd": "No prd.md file found in this task folder.",
+  "trellis.tasks.openFolder": "Open folder",
 
   "command.palette": "Command palette",
 
