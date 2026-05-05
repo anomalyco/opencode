@@ -286,6 +286,51 @@ html[data-theme="arc"] main {
   box-shadow: none;
 }
 
+/* Dark-mode sidebar text/icon contrast boost.
+   The sidebar sits on #4a3d47, a warm purple-gray that is brighter than
+   the previous deep-violet (#1b1826). The default dark-theme text tokens
+   (text-strong #E8E0F0, text-base #C8BED4) have enough contrast, but
+   text-weak (#9C8FA8) and icon-weak (#9C8FA8) are too close to the
+   brighter sidebar surface. Scope-override with lighter values so
+   secondary text and icons remain legible. Two-pronged: raw --token +
+   --color-* alias, same as the light-mode sidebar overrides above. */
+html[data-theme="arc"] [data-component="sidebar-rail"],
+html[data-theme="arc"] [data-component="sidebar-nav-desktop"],
+html[data-theme="arc"] [data-component="sidebar-nav-mobile"],
+html[data-theme="arc"] [data-component="sidebar-panel"],
+html[data-theme="arc"] [data-component="titlebar"] {
+  --text-weak: #b5a8be;
+  --color-text-weak: #b5a8be;
+  --icon-weak-base: #b5a8be;
+  --color-icon-weak-base: #b5a8be;
+  --color-icon-weak: #b5a8be;
+
+  --surface-base-hover: #554750;
+  --color-surface-base-hover: #554750;
+  --surface-raised-base-hover: #554750;
+  --color-surface-raised-base-hover: #554750;
+  --surface-base-active: #4d4048;
+  --color-surface-base-active: #4d4048;
+  --surface-raised-base-active: #4d4048;
+  --color-surface-raised-base-active: #4d4048;
+
+  --background-base: rgba(255, 255, 255, 0.04);
+  --color-background-base: rgba(255, 255, 255, 0.04);
+  --background-stronger: rgba(255, 255, 255, 0.07);
+  --color-background-stronger: rgba(255, 255, 255, 0.07);
+  --surface-raised-base: rgba(255, 255, 255, 0.07);
+  --color-surface-raised-base: rgba(255, 255, 255, 0.07);
+  --border-weak-base: rgba(255, 255, 255, 0.1);
+  --color-border-weak-base: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="arc"] [data-component="titlebar"] {
+  --surface-raised-base: rgba(255, 255, 255, 0.04);
+  --color-surface-raised-base: rgba(255, 255, 255, 0.04);
+  --border-weak-base: transparent;
+  --color-border-weak-base: transparent;
+}
+
 /* Dock-prompt: sync radius with cards + override hardcoded translucent dark
    background that becomes muddy grey on light canvases */
 html[data-theme="arc"] [data-dock-surface="shell"] {
