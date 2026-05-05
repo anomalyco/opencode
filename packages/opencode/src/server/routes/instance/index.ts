@@ -155,7 +155,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
     app.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
     app.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
     app.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
-    app.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.warp, (c) => handler(c.req.raw, context))
   }
 
   return app
