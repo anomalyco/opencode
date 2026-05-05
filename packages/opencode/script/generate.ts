@@ -12,11 +12,12 @@ const snapshotExists = await Bun.file(snapshotPath).exists()
 
 const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
 // Fetch and generate models.dev snapshot
-let modelsData: string
+let modelsData = ""
 if (process.env.MODELS_DEV_API_JSON) {
   modelsData = await Bun.file(process.env.MODELS_DEV_API_JSON).text()
 } else if (snapshotExists) {
   console.log("Using existing models-snapshot.js (offline mode)")
+  return
 } else {
   modelsData = await fetch(`${modelsUrl}/api.json`).then((x) => x.text())
 }

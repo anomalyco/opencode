@@ -5,7 +5,7 @@ import { bootstrap } from "../bootstrap"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
-import { colorizeDiff, inline, isDiff, renderRunningTask, renderTool } from "./render"
+import { colorizeCode, colorizeDiff, inline, isDiff, renderRunningTask, renderTool } from "./render"
 
 const SLASH_COMMANDS = [
   "help",
