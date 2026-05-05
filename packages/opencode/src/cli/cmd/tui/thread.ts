@@ -1,6 +1,6 @@
 import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
-import { repl } from "@/cli/cmd/repl"
+import { repl } from "../minimal-repl"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"

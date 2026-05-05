@@ -36,8 +36,8 @@ else
 
   # Keep our version of conflicted files
   # This preserves our custom REPL, rendering, and build logic
-  git checkout --ours packages/opencode/src/cli/cmd/repl.ts
-  git checkout --ours packages/opencode/src/cli/cmd/render.ts
+  git checkout --ours packages/opencode/src/cli/cmd/minimal-repl.ts
+  git checkout --ours packages/opencode/src/cli/cmd/minimal-render.ts
   git checkout --ours packages/opencode/src/cli/cmd/tui/thread.ts
   git checkout --ours packages/opencode/script/build.ts
   git checkout --ours packages/opencode/script/generate.ts
@@ -47,8 +47,8 @@ else
   git checkout --ours fork/
   
   # Stage resolved files
-  git add packages/opencode/src/cli/cmd/repl.ts
-  git add packages/opencode/src/cli/cmd/render.ts
+  git add packages/opencode/src/cli/cmd/minimal-repl.ts
+  git add packages/opencode/src/cli/cmd/minimal-render.ts
   git add packages/opencode/src/cli/cmd/tui/thread.ts
   git add packages/opencode/script/build.ts
   git add packages/opencode/script/generate.ts

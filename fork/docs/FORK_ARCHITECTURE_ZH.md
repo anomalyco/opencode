@@ -37,8 +37,8 @@
 
 | 文件路径 | 功能说明 |
 | :--- | :--- |
-| `packages/opencode/src/cli/cmd/repl.ts` | **核心**：极简模式的交互与命令处理逻辑 |
-| `packages/opencode/src/cli/cmd/render.ts` | **核心**：终端命令行风格的视觉渲染器 |
+| `packages/opencode/src/cli/cmd/minimal-repl.ts` | **核心**：极简模式的交互与命令处理逻辑 |
+| `packages/opencode/src/cli/cmd/minimal-render.ts` | **核心**：终端命令行风格的视觉渲染器 |
 | `fork/scripts/sync-upstream.sh` | 自动化同步脚本，内置全方位保护逻辑 |
 | `fork/scripts/build.sh` | 个人定制版编译脚本（默认单平台） |
 | `fork/docs/MAINTENANCE.md` | 维护与同步指南（中文） |

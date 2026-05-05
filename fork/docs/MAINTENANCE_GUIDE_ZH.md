@@ -17,7 +17,7 @@
 ## 二、 修改的上游文件 (Modified Upstream Files)
 这些文件是同步时的**高风险区域**，一旦上游发生变动，可能会产生冲突。
 
-### 1. `packages/opencode/src/cli/cmd/repl.ts`
+### 1. `packages/opencode/src/cli/cmd/minimal-repl.ts`
 *   **修改内容**：
     *   重写了 `repl` 函数，移除了对复杂 TUI 组件的依赖。
     *   在 `handler` 中通过 `sdk.config.get()` 获取配置，而非直接注入 Service。
@@ -31,7 +31,7 @@
     *   强制将默认模式设为 `minimal` 并调用我们的自定义 `repl`。
 *   **冲突点**：这是程序的启动总开关，上游如果重构了启动逻辑（如 `Instance` 初始化），此文件必冲突。
 
-### 3. `packages/opencode/src/cli/cmd/render.ts`
+### 3. `packages/opencode/src/cli/cmd/minimal-render.ts`
 *   **修改内容**：
     *   优化了 `colorizeDiff` 函数，去掉了昂贵的解析逻辑，改用基于 ANSI 逃逸码的红绿背景色渲染。
     *   对 `shiki` 引擎采用了动态导入（带 Fallback 路径），并使用变量绕过 TypeScript 的严格检查。
