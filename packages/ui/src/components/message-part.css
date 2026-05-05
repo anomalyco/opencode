@@ -68,6 +68,49 @@
     }
   }
 
+  /* Desktop compact attachments */
+  [data-platform="desktop"] [data-slot="user-message-attachments"] {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  [data-platform="desktop"] [data-slot="user-message-attachment"] {
+    flex-direction: row;
+    width: auto;
+    max-width: 120px;
+    height: auto;
+    padding: 4px 8px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  [data-platform="desktop"] [data-slot="user-message-attachment-file"] {
+    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+
+    [data-component="file-icon"] {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+  }
+
+  [data-platform="desktop"] [data-slot="user-message-attachment-name"] {
+    font-size: 12px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-platform="desktop"] [data-slot="user-message-attachment-image"] {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    object-fit: cover;
+  }
+
   [data-slot="user-message-attachment-image"] {
     width: 100%;
     height: 100%;

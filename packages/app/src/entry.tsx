@@ -3,7 +3,8 @@
 import * as Sentry from "@sentry/solid"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
-import { type Platform, PlatformProvider } from "@/context/platform"
+import { type Platform, PlatformProvider as AppPlatformProvider } from "@/context/platform"
+import { PlatformProvider } from "@opencode-ai/ui/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
@@ -166,14 +167,16 @@ if (root instanceof HTMLElement) {
   }
   render(
     () => (
-      <PlatformProvider value={platform}>
-        <AppBaseProviders>
-          <AppInterface
-            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
-            servers={[server]}
-            disableHealthCheck
-          />
-        </AppBaseProviders>
+      <PlatformProvider value={() => platform}>
+        <AppPlatformProvider value={platform}>
+          <AppBaseProviders>
+            <AppInterface
+              defaultServer={ServerConnection.Key.make(getDefaultUrl())}
+              servers={[server]}
+              disableHealthCheck
+            />
+          </AppBaseProviders>
+        </AppPlatformProvider>
       </PlatformProvider>
     ),
     root,
