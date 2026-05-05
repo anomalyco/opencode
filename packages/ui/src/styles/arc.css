@@ -25,29 +25,29 @@ html[data-theme="arc"] {
      through the gap. Same approach as the light-mode fix: only the
      main content pane reads as a distinct surface "floating" on the
      chrome. */
-  --canvas-base: #5b4b58;
+  --canvas-base: #4a3d47;
   --canvas-padding: 8px;
   --canvas-gap: 8px;
 
   /* Sidebar card background — warm purple-gray, Arc's signature
      panel identity against the darker main content pane. */
-  --sidebar-card-bg: #5b4b58;
+  --sidebar-card-bg: #4a3d47;
 
   /* Dock-prompt shell background — opaque (not the hardcoded
      rgb(12 12 14 / 0.34) which becomes muddy grey on light canvases). */
-  --dock-shell-bg: color-mix(in srgb, #4a3f47 68%, transparent);
+  --dock-shell-bg: color-mix(in srgb, #3d323b 68%, transparent);
 
   /* Floating card elevation (subtle violet-tinged outer shadow) */
   --card-elevation:
     0 0 0 0.5px rgba(167, 139, 250, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.25);
 
   /* Per-project rail hues — used by commit 4 to give each project a soft tint */
-  --rail-hue-1: linear-gradient(180deg, #4a5570 0%, #3f4860 100%); /* indigo */
-  --rail-hue-2: linear-gradient(180deg, #4d5a50 0%, #424d45 100%); /* moss */
-  --rail-hue-3: linear-gradient(180deg, #5d4d58 0%, #524048 100%); /* rose */
-  --rail-hue-4: linear-gradient(180deg, #5a5848 0%, #4f4a3c 100%); /* sand */
-  --rail-hue-5: linear-gradient(180deg, #4c5a5d 0%, #414d50 100%); /* sea */
-  --rail-hue-6: linear-gradient(180deg, #4a4a5a 0%, #40404f 100%); /* cloud */
+  --rail-hue-1: linear-gradient(180deg, #3d4860 0%, #333d50 100%); /* indigo */
+  --rail-hue-2: linear-gradient(180deg, #404d44 0%, #374039 100%); /* moss */
+  --rail-hue-3: linear-gradient(180deg, #4e404b 0%, #44373d 100%); /* rose */
+  --rail-hue-4: linear-gradient(180deg, #4b493d 0%, #413f34 100%); /* sand */
+  --rail-hue-5: linear-gradient(180deg, #404d50 0%, #374043 100%); /* sea */
+  --rail-hue-6: linear-gradient(180deg, #3e3e4d 0%, #353543 100%); /* cloud */
 }
 
 /* ─── Light mode ─── */
