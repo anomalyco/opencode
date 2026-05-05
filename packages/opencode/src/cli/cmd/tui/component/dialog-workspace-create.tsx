@@ -95,7 +95,7 @@ export async function warpWorkspaceSession(input: {
 }): Promise<boolean> {
   const result = await input.sdk.client.experimental.workspace
     .warp({
-      id: input.workspaceID ?? undefined,
+      id: input.workspaceID,
       sessionID: input.sessionID,
     })
     .catch(() => undefined)
