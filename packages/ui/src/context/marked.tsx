@@ -1,6 +1,9 @@
 import { marked } from "marked"
 import markedKatex from "marked-katex-extension"
 import markedShiki from "marked-shiki"
+// FORK: GitHub 风 callout(> [!NOTE] ...)+ 脚注 ([^1])2026-05-05
+import markedAlert from "marked-alert"
+import markedFootnote from "marked-footnote"
 import katex from "katex"
 import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
@@ -477,6 +480,10 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           },
         },
       },
+      // FORK: GitHub 风 callout — > [!NOTE] / > [!TIP] / > [!IMPORTANT] / > [!WARNING] / > [!CAUTION] 2026-05-05
+      markedAlert(),
+      // FORK: 脚注 [^1] + [^1]: 解释 — 学术 / 技术文档高频 2026-05-05
+      markedFootnote(),
       markedKatex({
         throwOnError: false,
         nonStandard: true,

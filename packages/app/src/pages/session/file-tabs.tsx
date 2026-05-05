@@ -27,6 +27,8 @@ import { langFromExt } from "@/utils/lang-from-ext"
 import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
 // FORK: 本地资源 protocol(.md 内 <img>/<video>/<audio> 重写 + HTML 预览 iframe)2026-05-05
 import { localAssetUrl, rewriteAssetSrc } from "@/utils/local-asset"
+// FORK: .md frontmatter 隐藏(Obsidian 风)2026-05-05
+import { stripFrontmatter } from "@/utils/markdown-frontmatter"
 
 // FORK: macOS 平台检测,用于右键菜单输入框 Option+Enter 提交支持 2026-04-30
 const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
@@ -1019,13 +1021,14 @@ export function FileTabContent(props: { tab: string }) {
 
   const renderMarkdown = (source: string) => (
     // FORK: data-context scope 让 markdown.css 单独定制文件查看器排版,不影响聊天 2026-04-29
+    // FORK: stripFrontmatter — D5 Obsidian 风默认隐藏 YAML 头 2026-05-05
     <div
       data-context="file-viewer"
       class="relative pb-40 px-6 py-4 select-text"
       onMouseDown={handlePreContextCapture}
       onContextMenu={handleSelectionContextMenu}
     >
-      <Markdown text={source} cacheKey={cacheKey()} rewriteAssetSrc={mdAssetRewriter()} />
+      <Markdown text={stripFrontmatter(source)} cacheKey={cacheKey()} rewriteAssetSrc={mdAssetRewriter()} />
     </div>
   )
 

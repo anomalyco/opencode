@@ -59,6 +59,8 @@
     "katex": "0.16.27",
     "luxon": "catalog:",
     "marked": "catalog:",
+    "marked-alert": "2.1.2",
+    "marked-footnote": "1.4.0",
     "marked-katex-extension": "5.1.6",
     "marked-shiki": "catalog:",
     "morphdom": "2.7.8",
