@@ -3,7 +3,7 @@ import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import { OpenAIChat } from "./openai-chat"
-import { families, type OpenAICompatibleProfile } from "./openai-compatible-profile"
+import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
 
 const ADAPTER = "openai-compatible-chat"
 
@@ -60,17 +60,17 @@ export const profileModel = (profile: OpenAICompatibleProfile, input: ProviderFa
     baseURL: profileBaseURL(profile, input),
   })
 
-export const baseten = (input: ProviderFamilyModelInput) => profileModel(families.baseten, input)
+export const baseten = (input: ProviderFamilyModelInput) => profileModel(profiles.baseten, input)
 
-export const cerebras = (input: ProviderFamilyModelInput) => profileModel(families.cerebras, input)
+export const cerebras = (input: ProviderFamilyModelInput) => profileModel(profiles.cerebras, input)
 
-export const deepinfra = (input: ProviderFamilyModelInput) => profileModel(families.deepinfra, input)
+export const deepinfra = (input: ProviderFamilyModelInput) => profileModel(profiles.deepinfra, input)
 
-export const deepseek = (input: ProviderFamilyModelInput) => profileModel(families.deepseek, input)
+export const deepseek = (input: ProviderFamilyModelInput) => profileModel(profiles.deepseek, input)
 
-export const fireworks = (input: ProviderFamilyModelInput) => profileModel(families.fireworks, input)
+export const fireworks = (input: ProviderFamilyModelInput) => profileModel(profiles.fireworks, input)
 
-export const togetherai = (input: ProviderFamilyModelInput) => profileModel(families.togetherai, input)
+export const togetherai = (input: ProviderFamilyModelInput) => profileModel(profiles.togetherai, input)
 
 export const includeUsage = adapter.patch("include-usage", {
   reason: "request final usage chunk from OpenAI-compatible Chat streaming responses",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Azure, GitHubCopilot, OpenAI, OpenAICompatibleFamily, OpenAICompatibleProfiles, OpenRouter, ProviderResolver } from "../src"
+import { Azure, GitHubCopilot, OpenAI, OpenAICompatibleProfiles, OpenRouter, ProviderResolver } from "../src"
 
 describe("provider resolver", () => {
   test("fixed providers resolve protocol and auth defaults", () => {
@@ -23,8 +23,8 @@ describe("provider resolver", () => {
     })
   })
 
-  test("OpenAI-compatible families carry provider-specific defaults", () => {
-    expect(OpenAICompatibleFamily.resolver.resolve(ProviderResolver.input("llama", "togetherai", {}))).toMatchObject({
+  test("OpenAI-compatible profiles carry provider-specific defaults", () => {
+    expect(OpenAICompatibleProfiles.resolver.resolve(ProviderResolver.input("llama", "togetherai", {}))).toMatchObject({
       provider: "togetherai",
       protocol: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
