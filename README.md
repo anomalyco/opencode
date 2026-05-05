@@ -15,6 +15,7 @@
 
 <p align="center">
   <img width="165" height="128" alt="image" src="https://github.com/user-attachments/assets/598d7347-39e0-4662-85da-84fc4263131e" />
+  <img width="450" height="128" alt="image" src="https://github.com/NousResearch/hermes-agent/raw/main/assets/banner.png" />
 </p>
 
 
@@ -67,6 +68,9 @@
 - **文件跳转**: 点击文件路径，预览对应文件；`cmd/ctrl + click` 用编辑器或文件管理器打开文件 (路径)
 - **重载后端**: 新增重载后端命令
 
+#### Trellis 支持
+
+- **任务列表**: 快速查看任务进度、`prd.md`
 
 #### 配置面板
 
@@ -76,10 +80,11 @@
 - 智能体 `.md` 文件
 - 全局与项目级 skill `SKILL.md` 文件
 - 插件
-- `OpenClaw`
+- `OpenClaw`, `Hermes`, `GenericAgent`
 
 <p align="center">
 
+<img src="image/README/1777965458550.png" width="32%" />
 <img src="image/README/1774018220930.png" width="32%" />
 <img src="image/README/1774018327446.png" width="32%" />
 <img src="image/README/1774018439717.png" width="32%" />
