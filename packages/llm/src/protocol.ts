@@ -55,9 +55,17 @@ export interface Protocol<Payload, Frame, Chunk, State> {
 }
 
 /**
- * Construct a `Protocol` from its parts. Currently a typed identity, but kept
- * as the public constructor so future cross-cutting concerns (tracing spans,
- * instrumentation) can be added in one place.
+ * Construct a `Protocol` from the four protocol-local pieces:
+ *
+ * - `payload` infers the provider-native request body shape.
+ * - `chunk` infers the framed response item and decoded chunk shape.
+ * - `initial`, `process`, and `onHalt` infer the parser state shape.
+ * - `prepare` ties the common `LLMRequest` to the provider payload.
+ *
+ * Provider implementations should usually call `Protocol.define({ ... })`
+ * without explicit type arguments; the schemas and parser functions are the
+ * source of truth. The constructor remains as the public seam for future
+ * cross-cutting concerns such as tracing or instrumentation.
  */
 export const define = <Payload, Frame, Chunk, State>(
   input: Protocol<Payload, Frame, Chunk, State>,

@@ -18,8 +18,14 @@ import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./share
 
 const ADAPTER = "openai-responses"
 
+// =============================================================================
+// Public Model Input
+// =============================================================================
 export type OpenAIResponsesModelInput = AdapterModelInput
 
+// =============================================================================
+// Request Payload Schema
+// =============================================================================
 const OpenAIResponsesInputText = Schema.Struct({
   type: Schema.Literal("input_text"),
   text: Schema.String,
@@ -130,6 +136,9 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
+// =============================================================================
+// Request Lowering
+// =============================================================================
 const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   type: "function",
   name: tool.name,
@@ -209,6 +218,9 @@ const prepare = Effect.fn("OpenAIResponses.prepare")(function* (request: LLMRequ
   }
 })
 
+// =============================================================================
+// Stream Parsing
+// =============================================================================
 const mapUsage = (usage: OpenAIResponsesUsage | null | undefined) => {
   if (!usage) return undefined
   return new Usage({
@@ -350,17 +362,15 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
     return [state, []] as const
   })
 
+// =============================================================================
+// Protocol And OpenAI Adapter
+// =============================================================================
 /**
  * The OpenAI Responses protocol — request lowering, payload schema, and the
  * streaming-chunk state machine. Used by native OpenAI and
  * (once registered) Azure OpenAI Responses.
  */
-export const protocol = Protocol.define<
-  OpenAIResponsesPayload,
-  string,
-  OpenAIResponsesChunk,
-  ParserState
->({
+export const protocol = Protocol.define({
   id: ADAPTER,
   payload: OpenAIResponsesPayload,
   prepare,
@@ -377,6 +387,9 @@ export const adapter = Adapter.make({
   framing: Framing.sse,
 })
 
+// =============================================================================
+// Model Helper
+// =============================================================================
 export const model = Adapter.model(adapter, {
   provider: "openai",
   capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),

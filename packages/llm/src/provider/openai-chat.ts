@@ -79,6 +79,9 @@ const OpenAIChatPayloadFields = {
   tool_choice: Schema.optional(OpenAIChatToolChoice),
   stream: Schema.Literal(true),
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
+  usage: Schema.optional(JsonObject),
+  reasoning: Schema.optional(JsonObject),
+  prompt_cache_key: Schema.optional(Schema.String),
   max_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
@@ -293,37 +296,44 @@ const pushToolDelta = (tools: Record<number, ProviderShared.ToolAccumulator>, de
     }
   })
 
+const applyToolDeltas = Effect.fn("OpenAIChat.applyToolDeltas")(function* (
+  stateTools: Record<number, ProviderShared.ToolAccumulator>,
+  toolDeltas: ReadonlyArray<OpenAIChatToolCallDelta>,
+) {
+  const tools = toolDeltas.length === 0 ? stateTools : { ...stateTools }
+  const events: LLMEvent[] = []
+  for (const tool of toolDeltas) {
+    const current = yield* pushToolDelta(tools, tool)
+    tools[tool.index] = current
+    if (tool.function?.arguments) {
+      events.push({ type: "tool-input-delta", id: current.id, name: current.name, text: tool.function.arguments })
+    }
+  }
+  return { tools, events }
+})
+
 const finalizeToolCalls = (tools: Record<number, ProviderShared.ToolAccumulator>) =>
   Effect.forEach(Object.values(tools), (tool) => ProviderShared.parsedToolCall(ADAPTER, tool))
 
 const processChunk = (state: ParserState, chunk: OpenAIChatChunk) =>
   Effect.gen(function* () {
-    const events: LLMEvent[] = []
     const usage = mapUsage(chunk.usage) ?? state.usage
     const choice = chunk.choices[0]
     const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
     const delta = choice?.delta
-    const toolDeltas = delta?.tool_calls ?? []
-    const tools = toolDeltas.length === 0 ? state.tools : { ...state.tools }
-
-    if (delta?.content) events.push({ type: "text-delta", text: delta.content })
-
-    for (const tool of toolDeltas) {
-      const current = yield* pushToolDelta(tools, tool)
-      tools[tool.index] = current
-      if (tool.function?.arguments) {
-        events.push({ type: "tool-input-delta", id: current.id, name: current.name, text: tool.function.arguments })
-      }
-    }
+    const toolDeltas = yield* applyToolDeltas(state.tools, delta?.tool_calls ?? [])
 
     // Finalize accumulated tool inputs eagerly when finish_reason arrives so
     // JSON parse failures fail the stream at the boundary rather than at halt.
     const toolCalls =
-      finishReason !== undefined && state.finishReason === undefined && Object.keys(tools).length > 0
-        ? yield* finalizeToolCalls(tools)
+      finishReason !== undefined && state.finishReason === undefined && Object.keys(toolDeltas.tools).length > 0
+        ? yield* finalizeToolCalls(toolDeltas.tools)
         : state.toolCalls
 
-    return [{ tools, toolCalls, usage, finishReason }, events] as const
+    return [
+      { tools: toolDeltas.tools, toolCalls, usage, finishReason },
+      [...(delta?.content ? ([{ type: "text-delta", text: delta.content }] satisfies LLMEvent[]) : []), ...toolDeltas.events],
+    ] as const
   })
 
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {

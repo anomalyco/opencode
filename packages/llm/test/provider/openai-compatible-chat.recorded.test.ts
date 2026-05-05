@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { OpenAICompatibleChat } from "../../src/provider/openai-compatible-chat"
+import { OpenRouter } from "../../src/provider/openrouter"
 import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
@@ -29,21 +30,18 @@ const groqModel = OpenAICompatibleChat.groq({
 const groqRequest = textRequest({ id: "recorded_groq_text", model: groqModel })
 const groqToolRequest = weatherToolRequest({ id: "recorded_groq_tool_call", model: groqModel })
 
-const openrouterModel = OpenAICompatibleChat.openrouter({
-  id: "openai/gpt-4o-mini",
+const openrouterModel = OpenRouter.model("openai/gpt-4o-mini", {
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
 })
 
 const openrouterRequest = textRequest({ id: "recorded_openrouter_text", model: openrouterModel })
 const openrouterToolRequest = weatherToolRequest({ id: "recorded_openrouter_tool_call", model: openrouterModel })
 
-const openrouterGpt55Model = OpenAICompatibleChat.openrouter({
-  id: "openai/gpt-5.5",
+const openrouterGpt55Model = OpenRouter.model("openai/gpt-5.5", {
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
 })
 
-const openrouterOpus47Model = OpenAICompatibleChat.openrouter({
-  id: "anthropic/claude-opus-4.7",
+const openrouterOpus47Model = OpenRouter.model("anthropic/claude-opus-4.7", {
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
 })
 
@@ -61,7 +59,7 @@ const xaiRequest = textRequest({ id: "recorded_xai_text", model: xaiModel })
 const xaiToolRequest = weatherToolRequest({ id: "recorded_xai_tool_call", model: xaiModel })
 
 const recorded = recordedTests({ prefix: "openai-compatible-chat", protocol: "openai-compatible-chat" })
-const llm = LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] })
+const llm = LLMClient.make({ adapters: [OpenAICompatibleChat.adapter, ...OpenRouter.adapters] })
 
 const openrouterToolLoops = [
   {

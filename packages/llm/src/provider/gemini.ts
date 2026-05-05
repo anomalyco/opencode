@@ -20,8 +20,14 @@ import { JsonObject, optionalArray, ProviderShared } from "./shared"
 
 const ADAPTER = "gemini"
 
+// =============================================================================
+// Public Model Input
+// =============================================================================
 export type GeminiModelInput = AdapterModelInput
 
+// =============================================================================
+// Request Payload Schema
+// =============================================================================
 const GeminiTextPart = Schema.Struct({
   text: Schema.String,
   thought: Schema.optional(Schema.Boolean),
@@ -140,6 +146,9 @@ const mediaData = ProviderShared.mediaBytes
 
 const isRecord = ProviderShared.isRecord
 
+// =============================================================================
+// Tool Schema Conversion
+// =============================================================================
 // Tool-schema conversion has two distinct concerns:
 //
 // 1. Sanitize — fix common authoring mistakes Gemini rejects: integer/number
@@ -253,6 +262,9 @@ const projectToolSchemaNode = (schema: unknown): Record<string, unknown> | undef
 
 const convertToolSchema = (schema: unknown) => projectToolSchemaNode(sanitizeToolSchemaNode(schema))
 
+// =============================================================================
+// Request Lowering
+// =============================================================================
 const lowerTool = (tool: ToolDefinition) => ({
   name: tool.name,
   description: tool.description,
@@ -367,6 +379,9 @@ const prepare = Effect.fn("Gemini.prepare")(function* (request: LLMRequest) {
   }
 })
 
+// =============================================================================
+// Stream Parsing
+// =============================================================================
 const mapUsage = (usage: GeminiUsage | undefined) => {
   if (!usage) return undefined
   return new Usage({
@@ -436,12 +451,15 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
   }, events] as const)
 }
 
+// =============================================================================
+// Protocol And Gemini Adapter
+// =============================================================================
 /**
  * The Gemini protocol — request lowering, payload schema, and the streaming-
  * chunk state machine. Used by Google AI Studio Gemini and
  * (once registered) Vertex Gemini.
  */
-export const protocol = Protocol.define<GeminiPayload, string, GeminiChunk, ParserState>({
+export const protocol = Protocol.define({
   id: ADAPTER,
   payload: GeminiPayload,
   prepare,
@@ -463,6 +481,9 @@ export const adapter = Adapter.make({
   framing: Framing.sse,
 })
 
+// =============================================================================
+// Model Helper
+// =============================================================================
 export const model = Adapter.model(adapter, {
   provider: "google",
   capabilities: capabilities({

@@ -19,8 +19,14 @@ import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./share
 
 const ADAPTER = "anthropic-messages"
 
+// =============================================================================
+// Public Model Input
+// =============================================================================
 export type AnthropicMessagesModelInput = AdapterModelInput
 
+// =============================================================================
+// Request Payload Schema
+// =============================================================================
 const AnthropicCacheControl = Schema.Struct({ type: Schema.Literal("ephemeral") })
 
 const AnthropicTextBlock = Schema.Struct({
@@ -188,6 +194,9 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
+// =============================================================================
+// Request Lowering
+// =============================================================================
 const cacheControl = (cache: CacheHint | undefined) => cache?.type === "ephemeral" ? { type: "ephemeral" as const } : undefined
 
 const lowerTool = (tool: ToolDefinition): AnthropicTool => ({
@@ -320,6 +329,9 @@ const prepare = Effect.fn("AnthropicMessages.prepare")(function* (request: LLMRe
   }
 })
 
+// =============================================================================
+// Stream Parsing
+// =============================================================================
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence" || reason === "pause_turn") return "stop"
   if (reason === "max_tokens") return "length"
@@ -474,18 +486,16 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
     return [state, []] as const
   })
 
+// =============================================================================
+// Protocol And Anthropic Adapter
+// =============================================================================
 /**
  * The Anthropic Messages protocol — request lowering, payload schema, and the
  * streaming-chunk state machine. Used by native
  * Anthropic Cloud and (once registered) Vertex Anthropic / Bedrock-hosted
  * Anthropic passthrough.
  */
-export const protocol = Protocol.define<
-  AnthropicMessagesPayload,
-  string,
-  AnthropicChunk,
-  ParserState
->({
+export const protocol = Protocol.define({
   id: ADAPTER,
   payload: AnthropicMessagesPayload,
   prepare,
@@ -503,6 +513,9 @@ export const adapter = Adapter.make({
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 
+// =============================================================================
+// Model Helper
+// =============================================================================
 export const model = Adapter.model(adapter, {
   provider: "anthropic",
   capabilities: capabilities({

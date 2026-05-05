@@ -21,6 +21,9 @@ import { JsonObject, optionalArray, ProviderShared } from "./shared"
 
 const ADAPTER = "bedrock-converse"
 
+// =============================================================================
+// Public Model Input
+// =============================================================================
 /**
  * AWS credentials for SigV4 signing. Bedrock also supports Bearer API key auth
  * via `model.apiKey`, which bypasses SigV4 signing. STS-vended credentials
@@ -48,6 +51,9 @@ export type BedrockConverseModelInput = AdapterModelInput & {
   readonly headers?: Record<string, string>
 }
 
+// =============================================================================
+// Request Payload Schema
+// =============================================================================
 const BedrockTextBlock = Schema.Struct({
   text: Schema.String,
 })
@@ -265,6 +271,9 @@ type BedrockChunk = Schema.Schema.Type<typeof BedrockChunk>
 
 const invalid = ProviderShared.invalidRequest
 
+// =============================================================================
+// Request Lowering
+// =============================================================================
 const region = (request: LLMRequest) => {
   const fromNative = request.model.native?.aws_region
   if (typeof fromNative === "string" && fromNative !== "") return fromNative
@@ -477,6 +486,9 @@ const prepare = Effect.fn("BedrockConverse.prepare")(function* (request: LLMRequ
   }
 })
 
+// =============================================================================
+// Auth
+// =============================================================================
 // Credentials live on `model.native.aws_credentials` so the OpenCode bridge
 // can resolve them via `@aws-sdk/credential-providers` and stuff them in
 // without exposing the auth machinery to the rest of the LLM core. Schema
@@ -544,6 +556,9 @@ const auth: Auth = (input) => {
   })
 }
 
+// =============================================================================
+// Stream Parsing
+// =============================================================================
 const mapFinishReason = (reason: string): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence") return "stop"
   if (reason === "max_tokens") return "length"
@@ -682,16 +697,14 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
     ? [{ type: "request-finish", reason: mapFinishReason(state.pendingStopReason) }]
     : []
 
+// =============================================================================
+// Protocol And Bedrock Adapter
+// =============================================================================
 /**
  * The Bedrock Converse protocol — request lowering, payload schema, and the
  * streaming-chunk state machine.
  */
-export const protocol = Protocol.define<
-  BedrockConversePayload,
-  object,
-  BedrockChunk,
-  ParserState
->({
+export const protocol = Protocol.define({
   id: ADAPTER,
   payload: BedrockConversePayload,
   prepare,
@@ -715,6 +728,9 @@ export const adapter = Adapter.make({
   framing,
 })
 
+// =============================================================================
+// Model Helper
+// =============================================================================
 export const defaultCapabilities = capabilities({
   output: { reasoning: true },
   tools: { calls: true, streamingInput: true },
