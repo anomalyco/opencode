@@ -12,6 +12,35 @@
 
 
 
+
+## [macOS] 2026.5.5.1 — 2026-05-05 23:43
+
+**主菜:Mac 端 4 天累积更新一次性出 ship** — 自 [macOS] `2026.5.4.1`(2026-05-04 00:05)以来 dev 主干推进 38 笔 commit,涉及 markdown viewer 渲染 / 编辑 / 文件树 / i18n 全面增强,与 Win 端 [`2026.5.5.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-prod-2026.5.5.1) 同源。
+
+主要内容:
+
+- **md-editing-enhance** ([changelog](features/md-editing-enhance/3-changelog.md)) — MD 编辑体验增强(Tier B 全套 + Ctrl+F 查找 + post-launch 18 轮修复);加 `@codemirror/search` dep,新 `markdown-editor-extensions.ts`(+439 行)
+- **md-office-improvements** ([changelog](features/md-office-improvements/3-changelog.md)) — MD 渲染 4 phase 全套上线:Phase 1 本地资源 protocol(.md 内 `<img>/<video>/<audio>` + HTML 预览)/ Phase 2 Frontmatter 隐藏 + Callout + 脚注 / Phase 3 Mermaid 流程图动态加载 / Phase 4 TOC 常驻面板 + MD 内链跳转;含 6 项 P0 渲染修 + 中文路径双重编码 + 脚注 SANITIZE_NAMED_PROPS 锚点 + 切 tab 文件树自动 active 高亮 + Win path 分隔符 + 4 项视觉 polish + 内链下划线密集恐惧修
+- **file-tree-ux-polish** ([changelog](features/file-tree-ux-polish/3-changelog.md)) — 文件树 UX 5 项:① LLM 响应结束自动递归刷新 ② 节点右键菜单 4 组重整(删打印 + 加复制路径/刷新)③ 空白菜单 + 修刷新递归 ④ 默认面板展开 + tab "all" ⑤ 键盘 ↑↓/Enter/F2/Delete + macOS Backspace
+- **menu-i18n** ([changelog](features/menu-i18n/3-changelog.md)) — 文件树菜单 / 对话框 / toast 接入 i18n 框架(en / zh / zht 三本 dict)
+- **filetree-ctrlc-textsel-fix** + **viewer-ctrlc-fix** — 修聊天气泡 / md 查看器 / 非 .md 文档选文本后 Ctrl+C 失效(B 路径加文本选区闸 + shadow DOM 路径修)
+- **actions-node24-bump** ([changelog](features/actions-node24-bump/3-changelog.md)) — workflows 升级 Node 20→24,清掉 GitHub 6/2 deadline 前 deprecation 警告
+- **branch-pull-rule** — 治理硬规则:开新分支前必先拉最新 dev(CLAUDE.md 分支策略 v2 段)
+- 其他治理沉淀(数据目录隔离评估暂搁 / spec 过期 frontmatter 修等)详见 [改动日志.md](../改动日志.md)
+
+**Release**:[GitHub Release `ship-mac-prod-2026.5.5.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-mac-prod-2026.5.5.1)(待 GitHub Actions 跑完 + publish 后回填)
+- 文件:`DeskFox-2026.5.5.1_aarch64.dmg`
+- 大小:(待回填)
+- 架构:Apple Silicon(arm64,`aarch64-apple-darwin`)
+- SHA256:(待回填)
+- Bundle ID:`ai.deskfox.app`(prod)
+
+key commit: (本笔 bump commit 待 commit 后回填)
+build run: (待 GitHub Actions 跑完后回填)
+
+**上游 baseline**:跟 dev 同步(同 `2026.5.4.1`,sync-2026-05-03-2 后基线)
+
+---
 ## [Windows] 2026.5.5.1 - 2026-05-05 23:39
 
 (待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
