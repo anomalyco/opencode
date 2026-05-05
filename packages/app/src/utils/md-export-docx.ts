@@ -32,16 +32,6 @@ export type ExportDocxI18n = {
 /** save 对话框函数签名,与 packages/app/src/context/platform.tsx saveFilePickerDialog 一致 */
 export type SaveFilePickerFn = (opts?: { title?: string; defaultPath?: string }) => Promise<string | null>
 
-/** Buffer → base64(浏览器侧,Buffer 在 Tauri webview 是 Uint8Array)*/
-function bufferToBase64(buf: Uint8Array | Buffer): string {
-  let binary = ""
-  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
-
 /** 把 markdown 原文导出为 .docx
  *
  * 调用方负责传入 platform.saveFilePickerDialog(viewer 菜单 callback 那一层注入)
@@ -73,9 +63,10 @@ export const exportMdAsDocx = async (opts: {
       },
     })
 
-    // 3. 序列化 + 写盘(用 fork-only Tauri command,base64 传输绕开二进制 IPC 限制)
-    const buf = await Packer.toBuffer(doc)
-    const base64 = bufferToBase64(buf as Uint8Array | Buffer)
+    // 3. 序列化为 base64 + 写盘(用 fork-only Tauri command 绕开二进制 IPC 限制)
+    // 注:Packer.toBuffer() 是 Node-only,Tauri webview 浏览器环境会报"nodebuffer is not supported";
+    //    Packer.toBase64String() 直接出 base64,既适配浏览器又省一步 buffer→base64 转换
+    const base64 = await Packer.toBase64String(doc)
     await invoke("write_binary_file_absolute_base64", { path: filePath, base64Content: base64 })
 
     showToast({ variant: "success", title: opts.i18n.success })
