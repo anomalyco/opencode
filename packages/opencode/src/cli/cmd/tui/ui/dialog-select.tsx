@@ -23,6 +23,7 @@ export interface DialogSelectProps<T> {
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
+  renderFilter?: boolean
   keybind?: {
     keybind?: Keybind.Info
     title: string
@@ -81,7 +82,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let input: InputRenderable
 
   const filtered = createMemo(() => {
-    if (props.skipFilter) return props.options.filter((x) => x.disabled !== true)
+    if (props.skipFilter || props.renderFilter === false) return props.options.filter((x) => x.disabled !== true)
     const needle = store.filter.toLowerCase()
     const options = pipe(
       props.options,
@@ -250,30 +251,32 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             esc
           </text>
         </box>
-        <box paddingTop={1}>
-          <input
-            onInput={(e) => {
-              batch(() => {
-                setStore("filter", e)
-                props.onFilter?.(e)
-              })
-            }}
-            focusedBackgroundColor={theme.backgroundPanel}
-            cursorColor={theme.primary}
-            focusedTextColor={theme.textMuted}
-            ref={(r) => {
-              input = r
-              input.traits = { status: "FILTER" }
-              setTimeout(() => {
-                if (!input) return
-                if (input.isDestroyed) return
-                input.focus()
-              }, 1)
-            }}
-            placeholder={props.placeholder ?? "Search"}
-            placeholderColor={theme.textMuted}
-          />
-        </box>
+        <Show when={props.renderFilter !== false}>
+          <box paddingTop={1}>
+            <input
+              onInput={(e) => {
+                batch(() => {
+                  setStore("filter", e)
+                  props.onFilter?.(e)
+                })
+              }}
+              focusedBackgroundColor={theme.backgroundPanel}
+              cursorColor={theme.primary}
+              focusedTextColor={theme.textMuted}
+              ref={(r) => {
+                input = r
+                input.traits = { status: "FILTER" }
+                setTimeout(() => {
+                  if (!input) return
+                  if (input.isDestroyed) return
+                  input.focus()
+                }, 1)
+              }}
+              placeholder={props.placeholder ?? "Search"}
+              placeholderColor={theme.textMuted}
+            />
+          </box>
+        </Show>
       </box>
       <Show
         when={grouped().length > 0}

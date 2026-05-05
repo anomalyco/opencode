@@ -178,12 +178,13 @@ describe("Worktree", () => {
   })
 
   describe("createFromInfo", () => {
-    wintest("creates and bootstraps git worktree", () =>
+    wintest("creates git worktree and boots asynchronously", () =>
       provideTmpdirInstance(
         (dir) =>
           Effect.gen(function* () {
             const svc = yield* Worktree.Service
             const info = yield* svc.makeWorktreeInfo("from-info-test")
+            const ready = waitReady()
             yield* svc.createFromInfo(info)
 
             const list = yield* Effect.promise(() => $`git worktree list --porcelain`.cwd(dir).quiet().text())
@@ -191,6 +192,7 @@ describe("Worktree", () => {
             const normalizedDir = info.directory.replace(/\\/g, "/")
             expect(normalizedList).toContain(normalizedDir)
 
+            yield* Effect.promise(() => ready)
             yield* svc.remove({ directory: info.directory })
           }),
         { git: true },
