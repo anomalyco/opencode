@@ -1,4 +1,4 @@
-import type { Effect } from "effect"
+import type { Effect, Schema } from "effect"
 import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } from "./schema"
 
 /**
@@ -6,8 +6,8 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } f
  *
  * A `Protocol` owns the parts of an adapter that are intrinsic to "what does
  * this API look like": how a common `LLMRequest` lowers into a provider-native
- * shape, how that shape validates and encodes onto the wire, and how the
- * streaming response decodes back into common `LLMEvent`s.
+ * shape, what target Schema that shape must satisfy before it is JSON-encoded,
+ * and how the streaming response decodes back into common `LLMEvent`s.
  *
  * Examples:
  *
@@ -23,30 +23,26 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } f
  * and `Framing`. This separation is what lets DeepSeek, TogetherAI, Cerebras,
  * etc. all reuse `OpenAIChat.protocol` without forking 300 lines per provider.
  *
- * The five type parameters reflect the pipeline:
+ * The four type parameters reflect the pipeline:
  *
- * - `Draft` — provider-native shape *before* target patches.
- * - `Target` — provider-native shape *after* target patches and Schema
- *   validation. The body sent to the provider is `encode(target)`.
+ * - `Target` — provider-native request body candidate. Target patches can
+ *   transform this value, then `Adapter.fromProtocol(...)` validates and
+ *   JSON-encodes it with `target`.
  * - `Frame` — one unit of the framed response stream. SSE: a JSON data
  *   string. AWS event stream: a parsed binary frame.
  * - `Chunk` — schema-decoded provider chunk produced from one frame.
  * - `State` — accumulator threaded through `process` to translate chunk
  *   sequences into `LLMEvent` sequences.
  */
-export interface Protocol<Draft, Target, Frame, Chunk, State> {
+export interface Protocol<Target, Frame, Chunk, State> {
   /** Stable id matching `ModelRef.protocol` for adapter registry lookup. */
   readonly id: ProtocolID
-  /** Lower a common request into this protocol's draft shape. */
-  readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
-  /** Validate the post-patch draft against the protocol's target schema. */
-  readonly validate: (draft: Draft) => Effect.Effect<Target, LLMError>
-  /** Serialize the validated target into a request body. */
-  readonly encode: (target: Target) => string
-  /** Produce a redacted copy for `PreparedRequest.redactedTarget`. */
-  readonly redact: (target: Target) => unknown
-  /** Decode one framed response unit into a typed provider chunk. */
-  readonly decode: (frame: Frame) => Effect.Effect<Chunk, ProviderChunkError>
+  /** Schema for the validated provider-native target sent as the JSON body. */
+  readonly target: Schema.Codec<Target, unknown>
+  /** Lower a common request into this protocol's provider-native target shape. */
+  readonly prepare: (request: LLMRequest) => Effect.Effect<Target, LLMError>
+  /** Schema for one framed response unit. */
+  readonly chunk: Schema.Codec<Chunk, Frame>
   /** Initial parser state. Called once per response. */
   readonly initial: () => State
   /** Translate one chunk into emitted events plus the next state. */
@@ -56,17 +52,15 @@ export interface Protocol<Draft, Target, Frame, Chunk, State> {
   ) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], ProviderChunkError>
   /** Optional flush emitted when the framed stream ends. */
   readonly onHalt?: (state: State) => ReadonlyArray<LLMEvent>
-  /** Error message used when the underlying transport fails mid-stream. */
-  readonly streamReadError: string
 }
 
 /**
  * Construct a `Protocol` from its parts. Currently a typed identity, but kept
  * as the public constructor so future cross-cutting concerns (tracing spans,
- * default redaction, instrumentation) can be added in one place.
+ * instrumentation) can be added in one place.
  */
-export const define = <Draft, Target, Frame, Chunk, State>(
-  input: Protocol<Draft, Target, Frame, Chunk, State>,
-): Protocol<Draft, Target, Frame, Chunk, State> => input
+export const define = <Target, Frame, Chunk, State>(
+  input: Protocol<Target, Frame, Chunk, State>,
+): Protocol<Target, Frame, Chunk, State> => input
 
 export * as Protocol from "./protocol"

@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./providers": "./src/providers.ts",
     "./*": "./src/*.ts"
   },
   "devDependencies": {

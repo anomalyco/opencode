@@ -44,7 +44,7 @@ export type AnyTool = Tool<ToolSchema<any>, ToolSchema<any>>
  * reuse them across every invocation without recomputing.
  *
  * ```ts
- * const getWeather = tool({
+ * const getWeather = Tool.make({
  *   description: "Get current weather",
  *   parameters: Schema.Struct({ city: Schema.String }),
  *   success: Schema.Struct({ temperature: Schema.Number }),
@@ -52,7 +52,7 @@ export type AnyTool = Tool<ToolSchema<any>, ToolSchema<any>>
  * })
  * ```
  */
-export const tool = <Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
+export const make = <Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
@@ -72,6 +72,8 @@ export const tool = <Parameters extends ToolSchema<any>, Success extends ToolSch
     inputSchema: toJsonSchema(config.parameters),
   }),
 })
+
+export const tool = make
 
 /**
  * A record of named tools. The record key becomes the tool name on the wire.

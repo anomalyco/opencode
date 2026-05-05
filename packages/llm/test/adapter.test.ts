@@ -83,7 +83,6 @@ const raiseChunk = (chunk: FakeChunk): import("../src/schema").LLMEvent =>
 const fake = Adapter.unsafe<FakeDraft, FakeDraft>({
   id: "fake",
   protocol: "openai-chat",
-  redact: (target) => ({ ...target, redacted: true }),
   validate: (draft) => Effect.succeed(draft),
   prepare: (request) =>
     Effect.succeed({
@@ -147,7 +146,7 @@ describe("llm adapter", () => {
         ],
       }).prepare(request)
 
-      expect(prepared.redactedTarget).toEqual({ body: "hello", includeUsage: true, redacted: true })
+      expect(prepared.target).toEqual({ body: "hello", includeUsage: true })
       expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.fake.include-usage"])
     }),
   )

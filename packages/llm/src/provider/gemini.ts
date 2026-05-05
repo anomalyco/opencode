@@ -107,8 +107,6 @@ const GeminiTargetFields = {
   toolConfig: Schema.optional(GeminiToolConfig),
   generationConfig: Schema.optional(GeminiGenerationConfig),
 }
-const GeminiDraft = Schema.Struct(GeminiTargetFields)
-type GeminiDraft = Schema.Schema.Type<typeof GeminiDraft>
 const GeminiTarget = Schema.Struct(GeminiTargetFields)
 export type GeminiTarget = Schema.Schema.Type<typeof GeminiTarget>
 
@@ -138,14 +136,6 @@ interface ParserState {
   readonly nextToolCallId: number
   readonly usage?: Usage
 }
-
-const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
-  adapter: ADAPTER,
-  draft: GeminiDraft,
-  target: GeminiTarget,
-  chunk: GeminiChunk,
-  chunkErrorMessage: "Invalid Gemini stream chunk",
-})
 
 const invalid = ProviderShared.invalidRequest
 
@@ -452,21 +442,18 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
 }
 
 /**
- * The Gemini protocol — request lowering, target validation, body encoding,
- * and the streaming-chunk state machine. Used by Google AI Studio Gemini and
+ * The Gemini protocol — request lowering, target schema, and the streaming-
+ * chunk state machine. Used by Google AI Studio Gemini and
  * (once registered) Vertex Gemini.
  */
-export const protocol = Protocol.define<GeminiDraft, GeminiTarget, string, GeminiChunk, ParserState>({
+export const protocol = Protocol.define<GeminiTarget, string, GeminiChunk, ParserState>({
   id: "gemini",
+  target: GeminiTarget,
   prepare,
-  validate: ProviderShared.validateWith(decodeTarget),
-  encode: encodeTarget,
-  redact: (target) => target,
-  decode: decodeChunk,
+  chunk: Schema.fromJsonString(GeminiChunk),
   initial: () => ({ hasToolCalls: false, nextToolCallId: 0 }),
   process: processChunk,
   onHalt: finish,
-  streamReadError: "Failed to read Gemini stream",
 })
 
 export const adapter = Adapter.fromProtocol({

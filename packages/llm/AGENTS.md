@@ -41,7 +41,7 @@ Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g.
 
 An adapter is the registered, runnable composition of four orthogonal pieces:
 
-- **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, target validation, body encoding, and the streaming chunk-to-event state machine. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, the target schema, the chunk schema, and the streaming chunk-to-event state machine. `Adapter.fromProtocol(...)` validates and JSON-encodes the target from the target schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
 - **`Endpoint`** (`src/endpoint.ts`) — URL construction. Receives the request and the validated target so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any target field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
 - **`Auth`** (`src/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Adapter.fromProtocol` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
 - **`Framing`** (`src/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
@@ -88,7 +88,7 @@ packages/llm/src/
     bedrock-converse.ts
     openai-compatible-chat.ts  // adapter that reuses OpenAIChat.protocol
     openai-compatible-family.ts // family lookups (deepseek, togetherai, ...)
-    azure.ts / amazon-bedrock.ts / google.ts / ...  // ProviderResolver entries
+    azure.ts / amazon-bedrock.ts / github-copilot.ts / google.ts / xai.ts / ...  // ProviderResolver entries
 
   provider-resolver.ts  // OpenCode-bridge resolver layer
   tool.ts               // typed tool() helper
@@ -107,8 +107,7 @@ The dependency arrow points down: `provider/*.ts` files import `protocol`, `endp
 - `parseToolInput(adapter, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<adapter>` tool call `<name>`" error message. Treats empty input as `{}`. Use this in `finishToolCall` / `finalizeToolCalls`; do not roll a fresh `parseJson` callsite.
 - `parseJson(adapter, raw, message)` — generic JSON-via-Schema decode for non-tool payloads.
 - `chunkError(adapter, message, ...)` — typed `ProviderChunkError` constructor for stream-time failures.
-- `validateWith(decoder)` — lifts a Schema decode effect into the protocol's `validate` shape, mapping parse errors to `InvalidRequestError`.
-- `codecs({ adapter, draft, target, chunk, chunkErrorMessage })` — the encode/decode bundle each protocol needs (request body encode, draft → target validate, chunk decode).
+- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Adapter.fromProtocol(...)` uses this for target validation; lower-level adapters can reuse it.
 
 If you find yourself copying a 3-to-5-line snippet between two protocols, lift it into `ProviderShared` next to these helpers rather than duplicating.
 
@@ -256,7 +255,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Add a generic OpenAI-compatible Chat adapter for non-OpenAI providers that expose `/chat/completions`.
 - [x] Keep OpenAI Responses as a separate first-class protocol for providers that actually implement `/responses`; do not treat generic OpenAI-compatible providers as Responses-capable by default.
 - [x] Cover OpenAI-compatible provider families that can share the generic adapter first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
-- [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, xAI, Perplexity, and Cohere.
+- [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, Perplexity, and Cohere. xAI already has a thin resolver that routes to OpenAI Responses.
 - [x] Add Bedrock Converse support: wire format (messages / system / inferenceConfig / toolConfig), AWS event stream binary framing via `@smithy/eventstream-codec`, SigV4 signing via `aws4fetch` (or Bearer API key path), text/reasoning/tool/usage/finish decoding, cache hints, image/document content, deterministic tests, and recorded basic text/tool cassettes. Additional model-specific fields are still TODO.
 - [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini as Gemini target/http patch vs adapter, and Vertex Anthropic as Anthropic target/http patch vs adapter.
 - [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible adapter and provider option patch model are stable.
@@ -268,7 +267,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] Port DeepSeek reasoning handling and interleaved reasoning field mapping.
 - [ ] Add unsupported attachment fallback patches keyed by model capabilities.
 - [ ] Add cache hint patches for Anthropic, OpenRouter, Bedrock, OpenAI-compatible, Copilot, and Alibaba-style providers.
-- [ ] Add provider option namespacing patches for Gateway, OpenRouter, Azure, OpenAI-compatible wrappers, and other provider-specific option bags.
+- [ ] Add provider option namespacing patches for Gateway, OpenRouter, OpenAI-compatible wrappers, and other provider-specific option bags. Azure already has resolver-level base URL, `api-version`, and Chat-vs-Responses routing; future Azure work should cover any remaining provider-specific option mapping.
 - [ ] Add model-specific reasoning option patches for providers that need effort, summary, or native reasoning fields.
 - [ ] Add provider-specific metadata extraction patches only where OpenCode needs returned reasoning, citations, usage details, or provider-native fields.
 
@@ -278,7 +277,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Build a pure `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tool definitions, tool choice, generation options, reasoning variants, cache hints, and attachments.
 - [x] Add a typed `ToolRuntime` that drives the tool loop with Schema-typed parameters/success per tool, single-`ToolFailure` error channel, and `maxSteps`/`stopWhen` controls.
 - [x] Provider-defined tool pass-through: `providerExecuted` flag on `tool-call`/`tool-result` events; Anthropic `server_tool_use` / `web_search_tool_result` / `code_execution_tool_result` / `web_fetch_tool_result` round-trip; OpenAI Responses hosted-tool items decoded as `tool-call` + `tool-result` pairs; runtime skips client dispatch when `providerExecuted: true`.
-- [ ] Keep auth and deployment concerns in the OpenCode bridge where possible: Bedrock credentials/region/profile, Vertex project/location/token, Azure deployment/API version, and Gateway/OpenRouter routing headers.
+- [ ] Keep auth and deployment concerns in the OpenCode bridge where possible: Bedrock credentials/region/profile, Vertex project/location/token, remaining Azure deployment concerns, and Gateway/OpenRouter routing headers. Azure resolver support already derives the resource base URL and `api-version` from provider options.
 - [ ] Keep initial OpenCode integration behind a local flag/path until request payload parity and stream event parity are proven against the existing `session/llm.test.ts` cases.
 
 ### Native OpenCode Rollout
@@ -317,7 +316,8 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] Fireworks OpenAI-compatible Chat basic streaming text and tool-call flow.
 - [ ] DeepInfra OpenAI-compatible Chat basic streaming text and tool-call flow.
 - [ ] Provider-error cassettes for stable, non-secret error bodies where the provider returns deterministic 4xx/5xx payloads.
-- [ ] Mistral, Groq, xAI, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
+- [ ] Mistral, Groq, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
+- [ ] xAI basic/tool cassettes for its OpenAI Responses resolver path.
 - [x] Bedrock Converse basic text and tool-call cassettes (recorded against `us.amazon.nova-micro-v1:0` in us-east-1). Cache-hint cassettes still TODO.
 - [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex adapter/patch shape is decided.
 - [ ] Gateway/OpenRouter routing-header cassettes after routing support lands.

@@ -325,7 +325,7 @@ describe("Gemini adapter", () => {
         )
 
       expect(error).toBeInstanceOf(ProviderChunkError)
-      expect(error.message).toContain("Invalid Gemini stream chunk")
+      expect(error.message).toContain("Invalid google/gemini stream chunk")
     }),
   )
 

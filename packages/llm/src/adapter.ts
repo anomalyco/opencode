@@ -1,9 +1,8 @@
-import { Effect, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import type { Auth } from "./auth"
 import { bearer as authBearer } from "./auth"
 import type { Endpoint } from "./endpoint"
-import * as LLM from "./llm"
 import { RequestExecutor } from "./executor"
 import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry, target as targetPatch } from "./patch"
@@ -20,17 +19,16 @@ import type {
   PreparedRequestOf,
   ProtocolID,
 } from "./schema"
-import { LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema } from "./schema"
+import { LLMRequest as LLMRequestSchema, LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema } from "./schema"
 
 interface RuntimeAdapter {
   readonly id: string
   readonly protocol: ProtocolID
   readonly patches: ReadonlyArray<Patch<unknown>>
-  readonly redact: (target: unknown) => unknown
   readonly prepare: (request: LLMRequest) => Effect.Effect<unknown, LLMError>
   readonly validate: (draft: unknown) => Effect.Effect<unknown, LLMError>
   readonly toHttp: (target: unknown, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<LLMEvent, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse, context: HttpContext) => Stream.Stream<LLMEvent, LLMError>
 }
 
 interface RuntimeAdapterSource {
@@ -46,22 +44,20 @@ export interface Adapter<Draft, Target> {
   readonly id: string
   readonly protocol: ProtocolID
   readonly patches: ReadonlyArray<Patch<Draft>>
-  readonly redact: (target: Target) => unknown
   readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
   readonly validate: (draft: Draft) => Effect.Effect<Target, LLMError>
   readonly toHttp: (target: Target, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<LLMEvent, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse, context: HttpContext) => Stream.Stream<LLMEvent, LLMError>
 }
 
 export interface AdapterInput<Draft, Target> {
   readonly id: string
   readonly protocol: ProtocolID
   readonly patches?: ReadonlyArray<Patch<Draft>>
-  readonly redact: (target: Target) => unknown
   readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
   readonly validate: (draft: Draft) => Effect.Effect<Target, LLMError>
   readonly toHttp: (target: Target, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<LLMEvent, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse, context: HttpContext) => Stream.Stream<LLMEvent, LLMError>
 }
 
 export interface AdapterDefinition<Draft, Target> extends Adapter<Draft, Target> {
@@ -72,9 +68,9 @@ export interface AdapterDefinition<Draft, Target> extends Adapter<Draft, Target>
 
 export interface LLMClient {
   /**
-   * Compile a request through the adapter pipeline (patches, prepare, validate,
-   * toHttp) without sending it. Returns the prepared request including the
-   * provider-native target.
+   * Compile a request through the adapter pipeline (patches, prepare,
+   * protocol target validation, toHttp) without sending it. Returns the
+   * prepared request including the provider-native target.
    *
    * Pass a `Target` type argument to statically expose the adapter's target
    * shape (e.g. `prepare<OpenAIChatTarget>(...)`) — the runtime payload is
@@ -122,7 +118,6 @@ export function unsafe<Draft, Target>(input: AdapterInput<Draft, Target>): Adapt
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       return this as unknown as RuntimeAdapter
     },
-    redact: input.redact,
     prepare: input.prepare,
     validate: input.validate,
     toHttp: input.toHttp,
@@ -134,11 +129,11 @@ export function unsafe<Draft, Target>(input: AdapterInput<Draft, Target>): Adapt
   return build(input.patches ?? [])
 }
 
-export interface FromProtocolInput<Draft, Target, Frame, Chunk, State> {
+export interface FromProtocolInput<Target, Frame, Chunk, State> {
   /** Adapter id used in registry lookup, error messages, and patch namespaces. */
   readonly id: string
-  /** Semantic API contract — owns lowering, validation, encoding, and parsing. */
-  readonly protocol: Protocol<Draft, Target, Frame, Chunk, State>
+  /** Semantic API contract — owns lowering, target schema, and parsing. */
+  readonly protocol: Protocol<Target, Frame, Chunk, State>
   /** Where the request is sent. */
   readonly endpoint: Endpoint<Target>
   /**
@@ -149,12 +144,12 @@ export interface FromProtocolInput<Draft, Target, Frame, Chunk, State> {
    * custom `Auth` for per-request signing (Bedrock SigV4).
    */
   readonly auth?: Auth
-  /** Stream framing — bytes -> frames before `protocol.decode`. */
+  /** Stream framing — bytes -> frames before `protocol.chunk` decoding. */
   readonly framing: Framing<Frame>
   /** Static / per-request headers added before `auth` runs. */
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
   /** Provider patches that target this adapter (e.g. include-usage). */
-  readonly patches?: ReadonlyArray<Patch<Draft>>
+  readonly patches?: ReadonlyArray<Patch<Target>>
   /**
    * Optional override for the adapter's protocol id. Defaults to
    * `protocol.id`. Only set when an adapter intentionally registers under a
@@ -178,17 +173,30 @@ export interface FromProtocolInput<Draft, Target, Frame, Chunk, State> {
  * This is the canonical adapter constructor. Reach for `unsafe(...)` only
  * when an adapter genuinely cannot fit the four-axis model.
  */
-export function fromProtocol<Draft, Target, Frame, Chunk, State>(
-  input: FromProtocolInput<Draft, Target, Frame, Chunk, State>,
-): AdapterDefinition<Draft, Target> {
+export function fromProtocol<Target, Frame, Chunk, State>(
+  input: FromProtocolInput<Target, Frame, Chunk, State>,
+): AdapterDefinition<Target, Target> {
   const auth = input.auth ?? authBearer
   const protocol = input.protocol
+  const validateTarget = ProviderShared.validateWith(Schema.decodeUnknownEffect(protocol.target))
+  const encodeTarget = Schema.encodeSync(Schema.fromJsonString(protocol.target))
+  const decodeChunkSync = Schema.decodeUnknownSync(protocol.chunk)
+  const decodeChunk = (route: string) => (frame: Frame) =>
+    Effect.try({
+      try: () => decodeChunkSync(frame),
+      catch: () =>
+        ProviderShared.chunkError(
+          input.id,
+          `Invalid ${route} stream chunk`,
+          typeof frame === "string" ? frame : ProviderShared.encodeJson(frame),
+        ),
+    })
   const buildHeaders = input.headers ?? (() => ({}))
 
   const toHttp = (target: Target, ctx: HttpContext) =>
     Effect.gen(function* () {
       const url = (yield* input.endpoint({ request: ctx.request, target })).toString()
-      const body = protocol.encode(target)
+      const body = encodeTarget(target)
       const merged = { ...buildHeaders({ request: ctx.request }), ...ctx.request.model.headers }
       const headers = yield* auth({
         request: ctx.request,
@@ -200,13 +208,13 @@ export function fromProtocol<Draft, Target, Frame, Chunk, State>(
       return ProviderShared.jsonPost({ url, body, headers })
     })
 
-  const parse = (response: HttpClientResponse.HttpClientResponse) =>
+  const parse = (response: HttpClientResponse.HttpClientResponse, ctx: HttpContext) =>
     ProviderShared.framed({
-      adapter: input.id,
+      adapter: `${ctx.request.model.provider}/${ctx.request.model.protocol}`,
       response,
-      readError: protocol.streamReadError,
+      readError: `Failed to read ${ctx.request.model.provider}/${ctx.request.model.protocol} stream`,
       framing: input.framing.frame,
-      decodeChunk: protocol.decode,
+      decodeChunk: decodeChunk(`${ctx.request.model.provider}/${ctx.request.model.protocol}`),
       initial: protocol.initial,
       process: protocol.process,
       onHalt: protocol.onHalt,
@@ -216,9 +224,8 @@ export function fromProtocol<Draft, Target, Frame, Chunk, State>(
     id: input.id,
     protocol: input.protocolId ?? protocol.id,
     patches: input.patches,
-    redact: protocol.redact,
     prepare: protocol.prepare,
-    validate: protocol.validate,
+    validate: validateTarget,
     toHttp,
     parse,
   })
@@ -252,9 +259,12 @@ const makeClient = (options: ClientOptions): LLMClient => {
       patches: registry.toolSchema,
     })
     const patchedRequest =
-      requestBeforeToolPatches.tools.length === 0
+      requestBeforeToolPatches.tools.length === 0 || toolSchemaPlan.patches.length === 0
         ? requestBeforeToolPatches
-        : LLM.updateRequest(requestBeforeToolPatches, { tools: requestBeforeToolPatches.tools.map(toolSchemaPlan.apply) })
+        : new LLMRequestSchema({
+            ...requestBeforeToolPatches,
+            tools: requestBeforeToolPatches.tools.map(toolSchemaPlan.apply),
+          })
     const patchContext = context({ request: patchedRequest })
     const draft = yield* adapter.prepare(patchedRequest)
     const targetPlan = plan({
@@ -266,7 +276,7 @@ const makeClient = (options: ClientOptions): LLMClient => {
     const targetPatchTrace = [
       ...requestPlan.trace,
       ...promptPlan.trace,
-      ...(requestBeforeToolPatches.tools.length === 0 ? [] : toolSchemaPlan.trace),
+      ...(requestBeforeToolPatches.tools.length === 0 || toolSchemaPlan.patches.length === 0 ? [] : toolSchemaPlan.trace),
       ...targetPlan.trace,
     ]
     const http = yield* adapter.toHttp(target, { request: patchedRequest, patchTrace: targetPatchTrace })
@@ -282,7 +292,6 @@ const makeClient = (options: ClientOptions): LLMClient => {
       adapter: compiled.adapter.id,
       model: compiled.request.model,
       target: compiled.target,
-      redactedTarget: compiled.adapter.redact(compiled.target),
       patchTrace: compiled.patchTrace,
     })
   })
@@ -298,7 +307,7 @@ const makeClient = (options: ClientOptions): LLMClient => {
           context: context({ request: compiled.request }),
           patches: registry.stream,
         })
-        const events = compiled.adapter.parse(response)
+        const events = compiled.adapter.parse(response, { request: compiled.request, patchTrace: compiled.patchTrace })
         if (streamPlan.patches.length === 0) return events
         return events.pipe(Stream.map(streamPlan.apply))
       }),

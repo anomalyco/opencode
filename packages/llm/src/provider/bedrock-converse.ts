@@ -198,8 +198,6 @@ const BedrockTargetFields = {
   ),
   additionalModelRequestFields: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }
-const BedrockConverseDraft = Schema.Struct(BedrockTargetFields)
-type BedrockConverseDraft = Schema.Schema.Type<typeof BedrockConverseDraft>
 const BedrockConverseTarget = Schema.Struct(BedrockTargetFields)
 export type BedrockConverseTarget = Schema.Schema.Type<typeof BedrockConverseTarget>
 
@@ -267,27 +265,6 @@ const BedrockChunk = Schema.Struct({
   serviceUnavailableException: Schema.optional(Schema.Struct({ message: Schema.String })),
 })
 type BedrockChunk = Schema.Schema.Type<typeof BedrockChunk>
-
-// The eventstream codec already gives us a UTF-8 payload that we parse once
-// per frame; we then wrap it under the `:event-type` key and hand the parsed
-// object to `decodeChunkSync`. This keeps a single JSON parse per frame —
-// avoid `Schema.fromJsonString` here which would add an extra decode/encode
-// roundtrip.
-const decodeChunkSync = Schema.decodeUnknownSync(BedrockChunk)
-
-const decodeChunk = (data: unknown) =>
-  Effect.try({
-    try: () => decodeChunkSync(data),
-    catch: () =>
-      ProviderShared.chunkError(
-        ADAPTER,
-        "Invalid Bedrock Converse stream chunk",
-        typeof data === "string" ? data : ProviderShared.encodeJson(data),
-      ),
-  })
-
-const encodeTarget = Schema.encodeSync(Schema.fromJsonString(BedrockConverseTarget))
-const decodeTarget = Schema.decodeUnknownEffect(BedrockConverseDraft.pipe(Schema.decodeTo(BedrockConverseTarget)))
 
 const invalid = ProviderShared.invalidRequest
 
@@ -792,26 +769,22 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
     : []
 
 /**
- * The Bedrock Converse protocol — request lowering, target validation,
- * body encoding, and the streaming-chunk state machine.
+ * The Bedrock Converse protocol — request lowering, target schema, and the
+ * streaming-chunk state machine.
  */
 export const protocol = Protocol.define<
-  BedrockConverseDraft,
   BedrockConverseTarget,
   object,
   BedrockChunk,
   ParserState
 >({
   id: "bedrock-converse",
+  target: BedrockConverseTarget,
   prepare,
-  validate: ProviderShared.validateWith(decodeTarget),
-  encode: encodeTarget,
-  redact: (target) => target,
-  decode: decodeChunk,
+  chunk: BedrockChunk,
   initial: () => ({ tools: {}, pendingStopReason: undefined }),
   process: processChunk,
   onHalt,
-  streamReadError: "Failed to read Bedrock Converse stream",
 })
 
 export const adapter = Adapter.fromProtocol({

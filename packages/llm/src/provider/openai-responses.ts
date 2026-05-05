@@ -75,8 +75,6 @@ const OpenAIResponsesTargetFields = {
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
 }
-const OpenAIResponsesDraft = Schema.Struct(OpenAIResponsesTargetFields)
-type OpenAIResponsesDraft = Schema.Schema.Type<typeof OpenAIResponsesDraft>
 const OpenAIResponsesTarget = Schema.Struct(OpenAIResponsesTargetFields)
 export type OpenAIResponsesTarget = Schema.Schema.Type<typeof OpenAIResponsesTarget>
 
@@ -120,21 +118,13 @@ const OpenAIResponsesChunk = Schema.Struct({
   response: Schema.optional(
     Schema.Struct({
       incomplete_details: Schema.optional(Schema.NullOr(Schema.Struct({ reason: Schema.String }))),
-      usage: Schema.optional(OpenAIResponsesUsage),
+      usage: Schema.optional(Schema.NullOr(OpenAIResponsesUsage)),
     }),
   ),
   code: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
 })
 type OpenAIResponsesChunk = Schema.Schema.Type<typeof OpenAIResponsesChunk>
-
-const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
-  adapter: ADAPTER,
-  draft: OpenAIResponsesDraft,
-  target: OpenAIResponsesTarget,
-  chunk: OpenAIResponsesChunk,
-  chunkErrorMessage: "Invalid OpenAI Responses stream chunk",
-})
 
 interface ParserState {
   readonly tools: Record<string, ProviderShared.ToolAccumulator>
@@ -224,7 +214,7 @@ const prepare = Effect.fn("OpenAIResponses.prepare")(function* (request: LLMRequ
   }
 })
 
-const mapUsage = (usage: OpenAIResponsesUsage | undefined) => {
+const mapUsage = (usage: OpenAIResponsesUsage | null | undefined) => {
   if (!usage) return undefined
   return new Usage({
     inputTokens: usage.input_tokens,
@@ -366,26 +356,22 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
   })
 
 /**
- * The OpenAI Responses protocol — request lowering, target validation, body
- * encoding, and the streaming-chunk state machine. Used by native OpenAI and
+ * The OpenAI Responses protocol — request lowering, target schema, and the
+ * streaming-chunk state machine. Used by native OpenAI and
  * (once registered) Azure OpenAI Responses.
  */
 export const protocol = Protocol.define<
-  OpenAIResponsesDraft,
   OpenAIResponsesTarget,
   string,
   OpenAIResponsesChunk,
   ParserState
 >({
   id: "openai-responses",
+  target: OpenAIResponsesTarget,
   prepare,
-  validate: ProviderShared.validateWith(decodeTarget),
-  encode: encodeTarget,
-  redact: (target) => target,
-  decode: decodeChunk,
+  chunk: Schema.fromJsonString(OpenAIResponsesChunk),
   initial: () => ({ hasFunctionCall: false, tools: {} }),
   process: processChunk,
-  streamReadError: "Failed to read OpenAI Responses stream",
 })
 
 export const adapter = Adapter.fromProtocol({

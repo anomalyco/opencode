@@ -79,8 +79,6 @@ const OpenAIChatTargetFields = {
   top_p: Schema.optional(Schema.Number),
   stop: Schema.optional(Schema.Array(Schema.String)),
 }
-const OpenAIChatDraft = Schema.Struct(OpenAIChatTargetFields)
-type OpenAIChatDraft = Schema.Schema.Type<typeof OpenAIChatDraft>
 const OpenAIChatTarget = Schema.Struct(OpenAIChatTargetFields)
 export type OpenAIChatTarget = Schema.Schema.Type<typeof OpenAIChatTarget>
 
@@ -131,14 +129,6 @@ const OpenAIChatChunk = Schema.Struct({
   usage: Schema.optional(Schema.NullOr(OpenAIChatUsage)),
 })
 type OpenAIChatChunk = Schema.Schema.Type<typeof OpenAIChatChunk>
-
-const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
-  adapter: ADAPTER,
-  draft: OpenAIChatDraft,
-  target: OpenAIChatTarget,
-  chunk: OpenAIChatChunk,
-  chunkErrorMessage: "Invalid OpenAI Chat stream chunk",
-})
 
 interface ParsedToolCall {
   readonly id: string
@@ -328,28 +318,24 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
 }
 
 /**
- * The OpenAI Chat protocol — request lowering, target validation, body
- * encoding, and the streaming-chunk state machine. Reused by every adapter
+ * The OpenAI Chat protocol — request lowering, target schema, and the
+ * streaming-chunk state machine. Reused by every adapter
  * that speaks OpenAI Chat over HTTP+SSE: native OpenAI, DeepSeek, TogetherAI,
  * Cerebras, Baseten, Fireworks, DeepInfra, and (once added) Azure OpenAI Chat.
  */
 export const protocol = Protocol.define<
-  OpenAIChatDraft,
   OpenAIChatTarget,
   string,
   OpenAIChatChunk,
   ParserState
 >({
   id: "openai-chat",
+  target: OpenAIChatTarget,
   prepare,
-  validate: ProviderShared.validateWith(decodeTarget),
-  encode: encodeTarget,
-  redact: (target) => target,
-  decode: decodeChunk,
+  chunk: Schema.fromJsonString(OpenAIChatChunk),
   initial: () => ({ tools: {}, toolCalls: [] }),
   process: processChunk,
   onHalt: finishEvents,
-  streamReadError: "Failed to read OpenAI Chat stream",
 })
 
 export const adapter = Adapter.fromProtocol({

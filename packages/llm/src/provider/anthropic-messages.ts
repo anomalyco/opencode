@@ -134,8 +134,6 @@ const AnthropicTargetFields = {
   stop_sequences: Schema.optional(Schema.Array(Schema.String)),
   thinking: Schema.optional(AnthropicThinking),
 }
-const AnthropicMessagesDraft = Schema.Struct(AnthropicTargetFields)
-type AnthropicMessagesDraft = Schema.Schema.Type<typeof AnthropicMessagesDraft>
 const AnthropicMessagesTarget = Schema.Struct(AnthropicTargetFields)
 export type AnthropicMessagesTarget = Schema.Schema.Type<typeof AnthropicMessagesTarget>
 
@@ -190,14 +188,6 @@ interface ParserState {
   readonly tools: Record<number, ToolAccumulator>
   readonly usage?: Usage
 }
-
-const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
-  adapter: ADAPTER,
-  draft: AnthropicMessagesDraft,
-  target: AnthropicMessagesTarget,
-  chunk: AnthropicChunk,
-  chunkErrorMessage: "Invalid Anthropic Messages stream chunk",
-})
 
 const invalid = ProviderShared.invalidRequest
 
@@ -494,27 +484,23 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
   })
 
 /**
- * The Anthropic Messages protocol — request lowering, target validation,
- * body encoding, and the streaming-chunk state machine. Used by native
+ * The Anthropic Messages protocol — request lowering, target schema, and the
+ * streaming-chunk state machine. Used by native
  * Anthropic Cloud and (once registered) Vertex Anthropic / Bedrock-hosted
  * Anthropic passthrough.
  */
 export const protocol = Protocol.define<
-  AnthropicMessagesDraft,
   AnthropicMessagesTarget,
   string,
   AnthropicChunk,
   ParserState
 >({
   id: "anthropic-messages",
+  target: AnthropicMessagesTarget,
   prepare,
-  validate: ProviderShared.validateWith(decodeTarget),
-  encode: encodeTarget,
-  redact: (target) => target,
-  decode: decodeChunk,
+  chunk: Schema.fromJsonString(AnthropicChunk),
   initial: () => ({ tools: {} }),
   process: processChunk,
-  streamReadError: "Failed to read Anthropic Messages stream",
 })
 
 export const adapter = Adapter.fromProtocol({

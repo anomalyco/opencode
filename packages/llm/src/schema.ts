@@ -389,7 +389,6 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
   adapter: Schema.String,
   model: ModelRef,
   target: Schema.Unknown,
-  redactedTarget: Schema.Unknown,
   patchTrace: Schema.Array(PatchTrace),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
@@ -411,7 +410,25 @@ export type PreparedRequestOf<Target> = Omit<PreparedRequest, "target"> & {
 export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),
-}) {}
+}) {
+  get text() {
+    return this.events
+      .filter(LLMEvent.is.textDelta)
+      .map((event) => event.text)
+      .join("")
+  }
+
+  get reasoning() {
+    return this.events
+      .filter(LLMEvent.is.reasoningDelta)
+      .map((event) => event.text)
+      .join("")
+  }
+
+  get toolCalls() {
+    return this.events.filter(LLMEvent.is.toolCall)
+  }
+}
 
 export class InvalidRequestError extends Schema.TaggedErrorClass<InvalidRequestError>()("LLM.InvalidRequestError", {
   message: Schema.String,

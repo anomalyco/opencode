@@ -1,3 +1,9 @@
+import { Context, Effect, Layer, Stream } from "effect"
+import { LLMClient, type ClientOptions } from "./adapter"
+import type { RequestExecutor } from "./executor"
+import { ProviderPatch } from "./provider/patch"
+import { type Tools } from "./tool"
+import { ToolRuntime, type RunOptions } from "./tool-runtime"
 import {
   GenerationOptions,
   LLMEvent,
@@ -20,6 +26,77 @@ import {
   type ToolResultPart,
   type ToolResultValue,
 } from "./schema"
+import type { LLMError, PreparedRequestOf } from "./schema"
+
+export interface Provider {
+  readonly adapters: ClientOptions["adapters"]
+}
+
+export interface MakeOptions {
+  readonly providers?: ReadonlyArray<Provider>
+  readonly adapters?: ClientOptions["adapters"]
+  readonly patches?: ClientOptions["patches"]
+}
+
+export type StreamWithToolsInput<T extends Tools> = Omit<RequestInput, "tools"> & Omit<RunOptions<T>, "request">
+
+export interface Runtime {
+  readonly prepare: <Target = unknown>(input: LLMRequest | RequestInput) => Effect.Effect<PreparedRequestOf<Target>, LLMError>
+  readonly stream: (input: LLMRequest | RequestInput) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
+  readonly generate: (input: LLMRequest | RequestInput) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
+  readonly streamWithTools: <T extends Tools>(input: StreamWithToolsInput<T>) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
+}
+
+export class Service extends Context.Service<Service, Runtime>()("@opencode/LLM") {}
+
+const clientOptions = (options: MakeOptions): ClientOptions => ({
+  adapters: [...(options.adapters ?? []), ...(options.providers ?? []).flatMap((provider) => provider.adapters)].filter(
+    (source, index, all) => all.findIndex((item) => item.runtime.protocol === source.runtime.protocol) === index,
+  ),
+  patches: options.patches ?? ProviderPatch.defaults,
+})
+
+const requestOf = (input: LLMRequest | RequestInput) => input instanceof LLMRequest ? input : request(input)
+
+export const make = (options: MakeOptions): Runtime => {
+  const client = LLMClient.make(clientOptions(options))
+  return {
+    prepare: (input) => client.prepare(requestOf(input)),
+    stream: (input) => client.stream(requestOf(input)),
+    generate: (input) => client.generate(requestOf(input)),
+    streamWithTools: (input) => {
+      const { maxSteps, concurrency, stopWhen, tools, ...rest } = input
+      return ToolRuntime.run(client, { request: request(rest), tools, maxSteps, concurrency, stopWhen })
+    },
+  }
+}
+
+export const layer = (options: MakeOptions): Layer.Layer<Service> =>
+  Layer.succeed(Service, Service.of(make(options)))
+
+export const prepare = <Target = unknown>(input: LLMRequest | RequestInput) =>
+  Effect.gen(function* () {
+    return yield* (yield* Service).prepare<Target>(input)
+  })
+
+export const stream = (input: LLMRequest | RequestInput) =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      return (yield* Service).stream(input)
+    }),
+  )
+
+export const generate = (input: LLMRequest | RequestInput) =>
+  Effect.gen(function* () {
+    return yield* (yield* Service).generate(input)
+  })
+
+export const streamWithTools = <T extends Tools>(input: StreamWithToolsInput<T>) =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      return (yield* Service).streamWithTools(input)
+    }),
+  )
 
 export type CapabilitiesInput = {
   readonly input?: Partial<ModelCapabilities["input"]>

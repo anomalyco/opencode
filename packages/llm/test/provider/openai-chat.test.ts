@@ -289,7 +289,7 @@ describe("OpenAI Chat adapter", () => {
         .generate(request)
         .pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
-      expect(error.message).toContain("Invalid OpenAI Chat stream chunk")
+      expect(error.message).toContain("Invalid openai/openai-chat stream chunk")
     }),
   )
 
@@ -302,7 +302,7 @@ describe("OpenAI Chat adapter", () => {
         .generate(request)
         .pipe(Effect.provide(layer), Effect.flip)
 
-      expect(error.message).toContain("Failed to read OpenAI Chat stream")
+      expect(error.message).toContain("Failed to read openai/openai-chat stream")
     }),
   )
 
