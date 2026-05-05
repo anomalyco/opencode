@@ -519,7 +519,7 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
 })
 
 describe("Project.fromDirectory with bare repos", () => {
-  test("worktree from bare repo should cache in bare repo, not parent", async () => {
+  test("worktree from bare repo should use checked out worktree and cache in bare repo", async () => {
     await using tmp = await tmpdir({ git: true })
 
     const parentDir = path.dirname(tmp.path)
@@ -533,7 +533,8 @@ describe("Project.fromDirectory with bare repos", () => {
       const { project } = await run((svc) => svc.fromDirectory(worktreePath))
 
       expect(project.id).not.toBe(ProjectID.global)
-      expect(project.worktree).toBe(barePath)
+      expect(project.worktree).toBe(worktreePath)
+      expect(project.sandboxes).not.toContain(worktreePath)
 
       const correctCache = path.join(barePath, "opencode")
       const wrongCache = path.join(parentDir, ".git", "opencode")
@@ -565,6 +566,8 @@ describe("Project.fromDirectory with bare repos", () => {
       const { project: projB } = await run((svc) => svc.fromDirectory(worktreeB))
 
       expect(projA.id).not.toBe(projB.id)
+      expect(projA.worktree).toBe(worktreeA)
+      expect(projB.worktree).toBe(worktreeB)
 
       const cacheA = path.join(bareA, "opencode")
       const cacheB = path.join(bareB, "opencode")
@@ -592,7 +595,7 @@ describe("Project.fromDirectory with bare repos", () => {
       const { project } = await run((svc) => svc.fromDirectory(worktreePath))
 
       expect(project.id).not.toBe(ProjectID.global)
-      expect(project.worktree).toBe(barePath)
+      expect(project.worktree).toBe(worktreePath)
 
       const correctCache = path.join(barePath, "opencode")
       expect(await Bun.file(correctCache).exists()).toBe(true)
