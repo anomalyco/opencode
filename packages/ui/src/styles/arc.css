@@ -20,31 +20,34 @@
 
 /* ─── Dark mode (default) ─── */
 html[data-theme="arc"] {
-  /* Canvas behind floating panels — slightly deeper than background-base */
-  --canvas-base: #0e0b14;
+  /* Canvas: unified with sidebar-card-bg so the rounded top-right corner
+     of the sidebar doesn't expose a mismatched darker canvas color
+     through the gap. Same approach as the light-mode fix: only the
+     main content pane reads as a distinct surface "floating" on the
+     chrome. */
+  --canvas-base: #5b4b58;
   --canvas-padding: 8px;
   --canvas-gap: 8px;
 
-  /* Sidebar card background — distinctly more saturated than main content,
-     so the rail and session list read as a separate "panel" with material
-     identity (Arc's signature warm grey-violet sidebar). */
-  --sidebar-card-bg: #1b1826;
+  /* Sidebar card background — warm purple-gray, Arc's signature
+     panel identity against the darker main content pane. */
+  --sidebar-card-bg: #5b4b58;
 
   /* Dock-prompt shell background — opaque (not the hardcoded
      rgb(12 12 14 / 0.34) which becomes muddy grey on light canvases). */
-  --dock-shell-bg: color-mix(in srgb, #221e2d 68%, transparent);
+  --dock-shell-bg: color-mix(in srgb, #4a3f47 68%, transparent);
 
   /* Floating card elevation (subtle violet-tinged outer shadow) */
   --card-elevation:
     0 0 0 0.5px rgba(167, 139, 250, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.25);
 
   /* Per-project rail hues — used by commit 4 to give each project a soft tint */
-  --rail-hue-1: linear-gradient(180deg, #2a3145 0%, #1f2433 100%); /* indigo */
-  --rail-hue-2: linear-gradient(180deg, #2d3a2c 0%, #1f2a1f 100%); /* moss */
-  --rail-hue-3: linear-gradient(180deg, #3d2d3a 0%, #2a1e2a 100%); /* rose */
-  --rail-hue-4: linear-gradient(180deg, #3a3829 0%, #2a281c 100%); /* sand */
-  --rail-hue-5: linear-gradient(180deg, #2c3a3d 0%, #1f2a2c 100%); /* sea */
-  --rail-hue-6: linear-gradient(180deg, #2a2a3a 0%, #1e1e2a 100%); /* cloud */
+  --rail-hue-1: linear-gradient(180deg, #4a5570 0%, #3f4860 100%); /* indigo */
+  --rail-hue-2: linear-gradient(180deg, #4d5a50 0%, #424d45 100%); /* moss */
+  --rail-hue-3: linear-gradient(180deg, #5d4d58 0%, #524048 100%); /* rose */
+  --rail-hue-4: linear-gradient(180deg, #5a5848 0%, #4f4a3c 100%); /* sand */
+  --rail-hue-5: linear-gradient(180deg, #4c5a5d 0%, #414d50 100%); /* sea */
+  --rail-hue-6: linear-gradient(180deg, #4a4a5a 0%, #40404f 100%); /* cloud */
 }
 
 /* ─── Light mode ─── */
@@ -241,7 +244,8 @@ html[data-theme="arc"] [data-component="layout-top-divider"] {
    conversation panel (both are the same --sidebar-card-bg). */
 html[data-theme="arc"] [data-component="sidebar-rail"] {
   background-color: var(--sidebar-card-bg);
-  box-shadow: var(--card-elevation);
+  box-shadow: none;
+  border: none;
 }
 
 /* Session sidebar nav — same treatment, sits to the right of rail.
@@ -256,7 +260,8 @@ html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
   background-color: var(--sidebar-card-bg);
   border-top-right-radius: var(--radius-xl);
   border-bottom-right-radius: var(--radius-xl);
-  box-shadow: var(--card-elevation);
+  box-shadow: none;
+  border: none;
 }
 
 /* Conversation list panel inside the sidebar.
@@ -269,6 +274,7 @@ html[data-theme="arc"] [data-component="sidebar-nav-mobile"] {
    surprises. */
 html[data-theme="arc"] [data-component="sidebar-panel"] {
   background-color: var(--sidebar-card-bg) !important;
+  border: none !important;
 }
 
 /* Main pane — the largest floating card, fully rounded top-left corner */
@@ -277,7 +283,7 @@ html[data-theme="arc"] main {
   /* Override existing xl:rounded-tl-[12px] / border-t-border-weak-base */
   border: none !important;
   border-top-left-radius: var(--radius-2xl) !important;
-  box-shadow: var(--card-elevation);
+  box-shadow: none;
 }
 
 /* Dock-prompt: sync radius with cards + override hardcoded translucent dark
