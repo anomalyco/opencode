@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { LLM, ProviderPatch } from "../src"
+import { Effect } from "effect"
+import { AnthropicMessages, LLM, LLMClient, OpenAICompatibleChat, ProviderPatch } from "../src"
 import { Model, Patch, context, plan } from "../src/patch"
 
 const request = LLM.request({
@@ -104,6 +105,157 @@ describe("llm patch", () => {
 
     expect(output.messages[0]?.content[0]).toMatchObject({ type: "tool-call", id: "callbadva" })
     expect(output.messages[1]?.content[0]).toMatchObject({ type: "tool-result", id: "callbadva" })
+  })
+
+  test("repairs Anthropic assistant turns with tool calls before text", () => {
+    const input = LLM.request({
+      id: "anthropic_tool_order",
+      model: LLM.model({ id: "claude-sonnet", provider: "anthropic", protocol: "anthropic-messages" }),
+      messages: [
+        LLM.assistant([
+          LLM.toolCall({ id: "call_1", name: "lookup", input: {} }),
+          { type: "text", text: "I will check." },
+        ]),
+      ],
+    })
+    const output = plan({
+      phase: "prompt",
+      context: context({ request: input }),
+      patches: [ProviderPatch.repairAnthropicToolUseOrder],
+    }).apply(input)
+
+    expect(output.messages).toHaveLength(2)
+    expect(output.messages[0]?.content).toEqual([{ type: "text", text: "I will check." }])
+    expect(output.messages[1]?.content).toEqual([LLM.toolCall({ id: "call_1", name: "lookup", input: {} })])
+  })
+
+  test("repairs Mistral tool messages followed by user messages", () => {
+    const input = LLM.request({
+      id: "mistral_tool_user",
+      model: LLM.model({ id: "devstral-small", provider: "mistral", protocol: "openai-chat" }),
+      messages: [
+        LLM.toolMessage({ id: "call_1", name: "lookup", result: "ok", resultType: "text" }),
+        LLM.user("next question"),
+      ],
+    })
+    const output = plan({
+      phase: "prompt",
+      context: context({ request: input }),
+      patches: [ProviderPatch.repairMistralToolResultUserSequence],
+    }).apply(input)
+
+    expect(output.messages.map((message) => message.role)).toEqual(["tool", "assistant", "user"])
+    expect(output.messages[1]?.content).toEqual([{ type: "text", text: "Done." }])
+  })
+
+  test("adds empty DeepSeek reasoning replay blocks", () => {
+    const input = LLM.request({
+      id: "deepseek_reasoning",
+      model: LLM.model({ id: "deepseek-reasoner", provider: "deepseek", protocol: "openai-compatible-chat" }),
+      messages: [LLM.assistant("answer")],
+    })
+    const output = plan({
+      phase: "prompt",
+      context: context({ request: input }),
+      patches: [ProviderPatch.addDeepSeekEmptyReasoning],
+    }).apply(input)
+
+    expect(output.messages[0]?.content).toEqual([{ type: "text", text: "answer" }])
+    expect(output.messages[0]?.native).toEqual({ openaiCompatible: { reasoning_content: "" } })
+  })
+
+  test("turns unsupported user media into model-visible text", () => {
+    const input = LLM.request({
+      id: "unsupported_media",
+      model: LLM.model({ id: "text-only", provider: "openai", protocol: "openai-chat" }),
+      messages: [
+        LLM.user({ type: "media", mediaType: "image/png", data: "abc", filename: "diagram.png" }),
+      ],
+    })
+    const output = plan({
+      phase: "prompt",
+      context: context({ request: input }),
+      patches: [ProviderPatch.unsupportedMediaFallback],
+    }).apply(input)
+
+    expect(output.messages[0]?.content).toEqual([
+      {
+        type: "text",
+        text: 'ERROR: Cannot read "diagram.png" (this model does not support image input). Inform the user.',
+      },
+    ])
+  })
+
+  test("sanitizes Moonshot/Kimi tool schemas", () => {
+    const input = LLM.request({
+      id: "moonshot_schema",
+      model: LLM.model({ id: "kimi-k2", provider: "moonshotai", protocol: "openai-compatible-chat" }),
+      tools: [
+        {
+          name: "lookup",
+          description: "Lookup",
+          inputSchema: {
+            type: "object",
+            properties: {
+              item: { $ref: "#/$defs/Item", description: "should be stripped" },
+              tuple: { type: "array", items: [{ type: "string" }, { type: "number" }] },
+            },
+          },
+        },
+      ],
+    })
+    const output = plan({
+      phase: "tool-schema",
+      context: context({ request: input }),
+      patches: [ProviderPatch.sanitizeMoonshotToolSchema],
+    }).apply(input.tools[0])
+
+    expect(output.inputSchema.properties).toEqual({
+      item: { $ref: "#/$defs/Item" },
+      tuple: { type: "array", items: { type: "string" } },
+    })
+  })
+
+  test("default patches compile invalid Anthropic tool-use ordering into valid target order", () => {
+    const prepared = Effect.runSync(
+      LLMClient.make({ adapters: [AnthropicMessages.adapter], patches: ProviderPatch.defaults }).prepare(
+        LLM.request({
+          id: "anthropic_default_tool_order",
+          model: AnthropicMessages.model({ id: "claude-sonnet" }),
+          messages: [
+            LLM.assistant([
+              LLM.toolCall({ id: "call_1", name: "lookup", input: {} }),
+              { type: "text", text: "after tool" },
+            ]),
+          ],
+        }),
+      ),
+    )
+
+    expect(prepared.target).toMatchObject({
+      messages: [
+        { role: "assistant", content: [{ type: "text", text: "after tool" }] },
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
+      ],
+    })
+    expect(prepared.patchTrace.map((item) => item.id)).toContain("prompt.anthropic.repair-tool-use-order")
+  })
+
+  test("default patches compile DeepSeek reasoning replay into OpenAI-compatible native field", () => {
+    const prepared = Effect.runSync(
+      LLMClient.make({ adapters: [OpenAICompatibleChat.adapter], patches: ProviderPatch.defaults }).prepare(
+        LLM.request({
+          id: "deepseek_default_reasoning",
+          model: OpenAICompatibleChat.deepseek({ id: "deepseek-reasoner" }),
+          messages: [LLM.assistant("answer")],
+        }),
+      ),
+    )
+
+    expect(prepared.target).toMatchObject({
+      messages: [{ role: "assistant", content: "answer", reasoning_content: "" }],
+    })
+    expect(prepared.patchTrace.map((item) => item.id)).toContain("prompt.deepseek.empty-reasoning-replay")
   })
 
   // Cache hint policy: mark first-2 system + last-2 messages with ephemeral

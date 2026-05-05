@@ -52,6 +52,7 @@ const OpenAIChatMessage = Schema.Union([
     role: Schema.Literal("assistant"),
     content: Schema.NullOr(Schema.String),
     tool_calls: Schema.optional(Schema.Array(OpenAIChatAssistantToolCall)),
+    reasoning_content: Schema.optional(Schema.String),
   }),
   Schema.Struct({ role: Schema.Literal("tool"), tool_call_id: Schema.String, content: Schema.String }),
 ])
@@ -171,6 +172,9 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   },
 })
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
@@ -205,6 +209,9 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
         role: "assistant",
         content: content.length === 0 ? null : ProviderShared.joinText(content),
         tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
+        reasoning_content: isRecord(message.native?.openaiCompatible) && typeof message.native.openaiCompatible.reasoning_content === "string"
+          ? message.native.openaiCompatible.reasoning_content
+          : undefined,
       })
       continue
     }
