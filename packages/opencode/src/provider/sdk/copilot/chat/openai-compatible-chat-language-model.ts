@@ -539,10 +539,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
                 if (toolCalls[index] == null) {
                   if (toolCallDelta.id == null) {
-                    throw new InvalidResponseDataError({
-                      data: toolCallDelta,
-                      message: `Expected 'id' to be a string.`,
-                    })
+                    toolCallDelta.id = generateId()
+                    console.warn(`[openai-compatible] Tool call missing 'id', generated fallback: ${toolCallDelta.id}`)
                   }
 
                   if (toolCallDelta.function?.name == null) {
