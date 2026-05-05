@@ -2,7 +2,7 @@ import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { readFileSync } from "fs"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import * as Bom from "../util/bom"
 
 const log = Log.create({ service: "patch" })

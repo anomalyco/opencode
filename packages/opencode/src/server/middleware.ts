@@ -1,15 +1,18 @@
-import { Provider } from "../provider"
-import { NamedError } from "@opencode-ai/shared/util/error"
-import { NotFoundError } from "../storage"
-import { Session } from "../session"
+import { Provider } from "@/provider/provider"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { NotFoundError } from "@/storage/storage"
+import { Session } from "@/session/session"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import type { ErrorHandler, MiddlewareHandler } from "hono"
 import { HTTPException } from "hono/http-exception"
-import { Log } from "../util"
-import { Flag } from "@/flag/flag"
+import * as Log from "@opencode-ai/core/util/log"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { basicAuth } from "hono/basic-auth"
 import { cors } from "hono/cors"
 import { compress } from "hono/compress"
+import * as ServerBackend from "./backend"
+import { isAllowedCorsOrigin, type CorsOptions } from "./cors"
+import { isPtyConnectPath, PTY_CONNECT_TICKET_QUERY } from "./shared/pty-ticket"
 
 const log = Log.create({ service: "server" })
 
@@ -42,6 +45,7 @@ export const AuthMiddleware: MiddlewareHandler = (c, next) => {
   if (c.req.method === "OPTIONS") return next()
   const password = Flag.OPENCODE_SERVER_PASSWORD
   if (!password) return next()
+  if (isPtyConnectPath(c.req.path) && c.req.query(PTY_CONNECT_TICKET_QUERY)) return next()
   const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
 
   if (c.req.query("auth_token")) c.req.raw.headers.set("authorization", `Basic ${c.req.query("auth_token")}`)
@@ -49,35 +53,28 @@ export const AuthMiddleware: MiddlewareHandler = (c, next) => {
   return basicAuth({ username, password })(c, next)
 }
 
-export const LoggerMiddleware: MiddlewareHandler = async (c, next) => {
-  const skip = c.req.path === "/log"
-  if (!skip) {
-    log.info("request", {
+export function LoggerMiddleware(backendAttributes: ServerBackend.Attributes): MiddlewareHandler {
+  return async (c, next) => {
+    const skip = c.req.path === "/log"
+    if (skip) return next()
+    const attributes = {
       method: c.req.method,
       path: c.req.path,
-    })
+      // If this logger grows full-URL fields, redact auth_token and ticket query params.
+      ...backendAttributes,
+    }
+    log.info("request", attributes)
+    const timer = log.time("request", attributes)
+    await next()
+    timer.stop()
   }
-  const timer = log.time("request", {
-    method: c.req.method,
-    path: c.req.path,
-  })
-  await next()
-  if (!skip) timer.stop()
 }
 
-export function CorsMiddleware(opts?: { cors?: string[] }): MiddlewareHandler {
+export function CorsMiddleware(opts?: CorsOptions): MiddlewareHandler {
   return cors({
     maxAge: 86_400,
     origin(input) {
-      if (!input) return
-
-      if (input.startsWith("http://localhost:")) return input
-      if (input.startsWith("http://127.0.0.1:")) return input
-      if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
-        return input
-
-      if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
-      if (opts?.cors?.includes(input)) return input
+      if (isAllowedCorsOrigin(input, opts)) return input
     },
   })
 }
