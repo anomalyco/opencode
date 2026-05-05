@@ -386,7 +386,13 @@ export const layer = Layer.effect(
       key: string,
       mcp: ConfigMCP.Info & { type: "local" },
     ) {
-      const [cmd, ...args] = mcp.command
+      const [baseCmd, ...baseArgs] = mcp.command
+      const isWin = process.platform === "win32"
+
+      // Inyección nativa del shell para evitar errores de entorno en Windows
+      const cmd = isWin ? "cmd.exe" : baseCmd
+      const args = isWin ? ["/c", baseCmd, ...baseArgs] : baseArgs
+
       const cwd = yield* InstanceState.directory
       const transport = new StdioClientTransport({
         stderr: "pipe",
@@ -395,7 +401,7 @@ export const layer = Layer.effect(
         cwd,
         env: {
           ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+          ...(baseCmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
       })
