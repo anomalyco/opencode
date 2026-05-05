@@ -31,13 +31,13 @@
   /* Arc theme — warm purple-gray sidebar palette.
       Light values must lighten the dusty-mauve sidebar (#756B7E) by overlay
       so hover/active rows read clearly against it. Dark values match the
-      warm purple-gray (#5b4b58). */
+      warm purple-gray (#4a3d47). */
   html[data-theme="arc"] [data-component="sidebar-session"] {
     --sidebar-session-accent: light-dark(#FFFFFF, #9B7AE8);
-    --sidebar-session-hover-bg: light-dark(#8B8294, #655561);
+    --sidebar-session-hover-bg: light-dark(#8B8294, #554750);
     --sidebar-session-hover-border: light-dark(rgba(255, 255, 255, 0.12), rgba(155, 122, 232, 0.16));
-    --sidebar-session-active-bg-top: light-dark(#948A9F, #6d5d6a);
-    --sidebar-session-active-bg-bottom: light-dark(#8A8094, #635359);
+    --sidebar-session-active-bg-top: light-dark(#948A9F, #5d4f59);
+    --sidebar-session-active-bg-bottom: light-dark(#8A8094, #534548);
     --sidebar-session-active-border: light-dark(rgba(255, 255, 255, 0.20), rgba(155, 122, 232, 0.22));
     --sidebar-session-active-shadow: light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.4));
   }
@@ -73,7 +73,7 @@
   html[data-theme="arc"] [data-component="sidebar-session"][data-active="true"]:has(:focus-visible) {
     background: light-dark(
       linear-gradient(180deg, #9C92A6, #92889B),
-      linear-gradient(180deg, #756570, #6d5d6a)
+      linear-gradient(180deg, #645760, #5d4f59)
     );
     border-color: light-dark(rgba(255, 255, 255, 0.24), rgba(155, 122, 232, 0.28));
   }
