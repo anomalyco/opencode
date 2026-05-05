@@ -198,6 +198,31 @@ function setupMermaidPlaceholders(root: HTMLDivElement) {
   }
 }
 
+// FORK: 修 SANITIZE_NAMED_PROPS=true 引发的锚点跳转失效 2026-05-05
+// DOMPurify SANITIZE_NAMED_PROPS 会把 id 加 "user-content-" 前缀防 DOM clobbering,
+// 但内部 <a href="#X"> 的 href 不会同步更新 → 脚注 / 锚点点击跳不动。
+// 后置扫所有 [id^="user-content-"],把对应 href="#原id" 改成 href="#user-content-原id"。
+function fixSanitizeNamedPropHrefs(root: HTMLDivElement) {
+  const idMap = new Map<string, string>()
+  for (const el of Array.from(root.querySelectorAll("[id]"))) {
+    const id = (el as HTMLElement).id
+    if (id.startsWith("user-content-")) {
+      const stripped = id.slice("user-content-".length)
+      idMap.set(stripped, id)
+    }
+  }
+  if (idMap.size === 0) return
+  for (const link of Array.from(root.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'))) {
+    const href = link.getAttribute("href") ?? ""
+    if (!href.startsWith("#")) continue
+    const target = href.slice(1)
+    const newId = idMap.get(target)
+    if (newId) {
+      link.setAttribute("href", "#" + newId)
+    }
+  }
+}
+
 // FORK: 相对路径 <a> 链接去掉 target=_blank — 否则 Tauri 把 _blank 路由到系统浏览器 2026-05-05
 // marked.tsx 的 link renderer 给所有 <a> 加 target=_blank,但相对路径(./other.md)
 // 应在 file viewer 内部通过 onOpenTab 跳转,不能开浏览器。
@@ -325,6 +350,8 @@ function decorate(
   setupMermaidPlaceholders(root)
   // FORK: heading id 注入 — #anchor 跳转用 2026-05-05
   assignHeadingIds(root)
+  // FORK: 修 DOMPurify SANITIZE_NAMED_PROPS 把 id 加前缀但 href 不同步 → 脚注跳转失效 2026-05-05
+  fixSanitizeNamedPropHrefs(root)
   // FORK: 相对路径 <a> 去掉 target=_blank,防 Tauri 把内链打开浏览器 2026-05-05
   fixLinkTargets(root)
   const blocks = Array.from(root.querySelectorAll("pre"))

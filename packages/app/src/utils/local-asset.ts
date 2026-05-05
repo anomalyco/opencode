@@ -91,6 +91,19 @@ export function rewriteAssetSrc(root: string, baseDir: string, src: string): str
   if (trimmed.startsWith("//")) return null // protocol-relative
   if (trimmed.startsWith("#")) return null // anchor link
 
-  const abs = resolveAbsolute(baseDir, trimmed)
+  // FORK fix 2026-05-05:marked 输出的 <img src=""> 对非 ASCII 文件名(如 ./架构图.png)
+  // 已经做了一次 percent-encode → "./%E6%9E%B6%E6%9E%84%E5%9B%BE.png"。
+  // 我们要把它解码回 raw UTF-8 字符串,再 join 路径,否则:
+  //   resolveAbsolute 拼出 "C:/.../%E6...png"(literal % 字符)
+  //   localAssetUrl 又 encodeURIComponent → "%25E6..."(双重编码)
+  //   Rust 单次 decode 后路径里还有 %E6 字面量 → canonicalize 失败 → 404
+  let decoded = trimmed
+  try {
+    decoded = decodeURIComponent(trimmed)
+  } catch {
+    // 解码失败(比如 src 里有孤立 % 而非合法转义)→ 保留原文
+  }
+
+  const abs = resolveAbsolute(baseDir, decoded)
   return localAssetUrl(root, abs)
 }
