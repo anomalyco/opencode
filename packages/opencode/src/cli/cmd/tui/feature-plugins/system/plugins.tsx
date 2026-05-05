@@ -155,7 +155,6 @@ function showInstall(api: TuiPluginApi) {
 function View(props: { api: TuiPluginApi }) {
   const size = useTerminalDimensions()
   const [list, setList] = createSignal(props.api.plugins.list())
-  const [cur, setCur] = createSignal<string | undefined>()
   const [lock, setLock] = createSignal(false)
 
   createEffect(() => {
@@ -207,15 +206,12 @@ function View(props: { api: TuiPluginApi }) {
     <DialogSelect
       title="Plugins"
       options={rows()}
-      current={cur()}
-      onMove={(item) => setCur(item.value)}
       keybind={[
         {
           title: "toggle",
           keybind: key,
           disabled: lock(),
           onTrigger: (item) => {
-            setCur(item.value)
             flip(item.value)
           },
         },
@@ -229,7 +225,6 @@ function View(props: { api: TuiPluginApi }) {
         },
       ]}
       onSelect={(item) => {
-        setCur(item.value)
         flip(item.value)
       }}
     />
