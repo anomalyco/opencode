@@ -16,7 +16,7 @@ import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
-import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
+import { cmp, directoryKey, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions, skipToken } from "@tanstack/solid-query"
 import { loadMcpQuery } from "../global-sync"
@@ -256,6 +256,7 @@ export async function bootstrapDirectory(input: {
   queryClient: QueryClient
 }) {
   const loading = input.store.status !== "complete"
+  const key = directoryKey(input.directory)
   const seededProject = projectID(input.directory, input.global.project)
   const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
   if (seededProject) input.setStore("project", seededProject)
@@ -272,7 +273,7 @@ export async function bootstrapDirectory(input: {
       () => Promise.resolve(input.loadSessions(input.directory)),
       () =>
         input.queryClient.ensureQueryData(
-          loadAgentsQuery(input.directory, input.sdk, (x) => input.setStore("agent", normalizeAgentList(x.data))),
+          loadAgentsQuery(key, input.sdk, (x) => input.setStore("agent", normalizeAgentList(x.data))),
         ),
       () =>
         retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
@@ -282,7 +283,7 @@ export async function bootstrapDirectory(input: {
       !seededPath &&
         (() =>
           input.queryClient.ensureQueryData(
-            loadPathQuery(input.directory, input.sdk, (x) => {
+            loadPathQuery(key, input.sdk, (x) => {
               const next = projectID(x.data?.directory ?? input.directory, input.global.project)
               if (next) input.setStore("project", next)
             }),
@@ -349,9 +350,9 @@ export async function bootstrapDirectory(input: {
           }),
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
-      () => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk)),
+      () => input.queryClient.fetchQuery(loadMcpQuery(key, input.sdk)),
       () =>
-        input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
+        input.queryClient.fetchQuery(loadProvidersQuery(key, input.sdk)).catch((err) => {
           const project = getFilename(input.directory)
           showToast({
             variant: "error",

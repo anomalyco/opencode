@@ -105,15 +105,15 @@ describe("layout deep links", () => {
 describe("layout workspace helpers", () => {
   test("normalizes trailing slash in workspace key", () => {
     expect(String(pathKey("/tmp/demo///"))).toBe("/tmp/demo")
-    expect(String(pathKey("C:\\tmp\\demo\\\\"))).toBe("C:/tmp/demo")
+    expect(String(pathKey("C:\\tmp\\demo\\\\"))).toBe("c:/tmp/demo")
   })
 
   test("preserves posix and drive roots in workspace key", () => {
     expect(String(pathKey("/"))).toBe("/")
     expect(String(pathKey("///"))).toBe("/")
-    expect(String(pathKey("C:\\"))).toBe("C:/")
-    expect(String(pathKey("C://"))).toBe("C:/")
-    expect(String(pathKey("C:///"))).toBe("C:/")
+    expect(String(pathKey("C:\\"))).toBe("c:/")
+    expect(String(pathKey("C://"))).toBe("c:/")
+    expect(String(pathKey("C:///"))).toBe("c:/")
   })
 
   test("keeps local first while preserving known order", () => {
