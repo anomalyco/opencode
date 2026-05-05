@@ -1468,6 +1468,22 @@ export class Agent implements ACPAgent {
       cachedWriteTokens: msg.tokens.cache?.write || undefined,
     })
 
+    // The session/prompt RPC resolves the same way whether the turn finished
+    // naturally or was interrupted by `session/cancel` — in both cases it
+    // returns the assistant message. The interrupted path tags the message
+    // with `error.name = "MessageAbortedError"` (set in
+    // `session/processor.ts` halt → `MessageV2.fromError`). ACP defines
+    // a dedicated `stopReason: "cancelled"` for exactly this case; reporting
+    // `end_turn` makes a user cancel indistinguishable from a clean
+    // completion. Usage is also unreliable on cancel — the LLM stream is
+    // killed before the SDK emits its `finish-step` event, so
+    // `msg.tokens` is still at its zero initialiser (input/output/cache
+    // all 0). Reporting `totalTokens: 0` is misleading: the provider has
+    // already consumed the prompt tokens, we just don't know the count.
+    // Omit `usage` on cancel so clients show "unknown" instead of "zero".
+    const wasCancelled = (msg: AssistantMessage | undefined): boolean =>
+      msg?.error?.name === "MessageAbortedError"
+
     if (!cmd) {
       const response = await this.sdk.session.prompt({
         sessionID,
@@ -1484,9 +1500,10 @@ export class Agent implements ACPAgent {
 
       await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
 
+      const cancelled = wasCancelled(msg)
       return {
-        stopReason: "end_turn" as const,
-        usage: msg ? buildUsage(msg) : undefined,
+        stopReason: cancelled ? ("cancelled" as const) : ("end_turn" as const),
+        usage: msg && !cancelled ? buildUsage(msg) : undefined,
         _meta: {},
       }
     }
@@ -1507,9 +1524,10 @@ export class Agent implements ACPAgent {
 
       await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
 
+      const cancelled = wasCancelled(msg)
       return {
-        stopReason: "end_turn" as const,
-        usage: msg ? buildUsage(msg) : undefined,
+        stopReason: cancelled ? ("cancelled" as const) : ("end_turn" as const),
+        usage: msg && !cancelled ? buildUsage(msg) : undefined,
         _meta: {},
       }
     }
