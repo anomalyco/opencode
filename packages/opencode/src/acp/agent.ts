@@ -1208,7 +1208,7 @@ export class Agent implements ACPAgent {
     if (currentVariant && !availableVariants.includes(currentVariant)) {
       this.sessionManager.setVariant(sessionId, undefined)
     }
-    const availableModels = buildAvailableModels(entries, { includeVariants: true })
+    const availableModels = buildAvailableModels(entries)
     const modeState = await this.resolveModeState(directory, sessionId)
     const currentModeId = modeState.currentModeId
     const modes = currentModeId
@@ -1291,13 +1291,15 @@ export class Agent implements ACPAgent {
     return {
       sessionId,
       models: {
-        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, false),
         availableModels,
       },
       modes,
       configOptions: buildConfigOptions({
-        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, false),
         availableModels,
+        currentVariant,
+        availableVariants,
         modes,
       }),
       _meta: buildVariantMeta({
@@ -1320,6 +1322,24 @@ export class Agent implements ACPAgent {
 
     const entries = sortProvidersByName(providers)
     const availableVariants = modelVariantsFromProviders(entries, selection.model)
+    const modeState = await this.resolveModeState(session.cwd, session.id)
+    const modes = modeState.currentModeId
+      ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
+      : undefined
+
+    await this.connection.sessionUpdate({
+      sessionId: session.id,
+      update: {
+        sessionUpdate: "config_option_update",
+        configOptions: buildConfigOptions({
+          currentModelId: formatModelIdWithVariant(selection.model, selection.variant, availableVariants, false),
+          availableModels: buildAvailableModels(entries),
+          currentVariant: selection.variant,
+          availableVariants,
+          modes,
+        }),
+      },
+    })
 
     return {
       _meta: buildVariantMeta({
@@ -1351,6 +1371,14 @@ export class Agent implements ACPAgent {
       const selection = parseModelSelection(params.value, providers)
       this.sessionManager.setModel(session.id, selection.model)
       this.sessionManager.setVariant(session.id, selection.variant)
+    } else if (params.configId === "effort") {
+      if (typeof params.value !== "string") throw RequestError.invalidParams("effort value must be a string")
+      const current = session.model ?? (await defaultModel(this.config, session.cwd))
+      const availableVariants = modelVariantsFromProviders(entries, current)
+      if (!availableVariants.includes(params.value)) {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Effort not found: ${params.value}` }))
+      }
+      this.sessionManager.setVariant(session.id, params.value)
     } else if (params.configId === "mode") {
       if (typeof params.value !== "string") throw RequestError.invalidParams("mode value must be a string")
       const availableModes = await this.loadAvailableModes(session.cwd)
@@ -1365,15 +1393,21 @@ export class Agent implements ACPAgent {
     const updatedSession = this.sessionManager.get(session.id)
     const model = updatedSession.model ?? (await defaultModel(this.config, session.cwd))
     const availableVariants = modelVariantsFromProviders(entries, model)
-    const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, true)
-    const availableModels = buildAvailableModels(entries, { includeVariants: true })
+    const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, false)
+    const availableModels = buildAvailableModels(entries)
     const modeState = await this.resolveModeState(session.cwd, session.id)
     const modes = modeState.currentModeId
       ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
       : undefined
 
     return {
-      configOptions: buildConfigOptions({ currentModelId, availableModels, modes }),
+      configOptions: buildConfigOptions({
+        currentModelId,
+        availableModels,
+        currentVariant: updatedSession.variant,
+        availableVariants,
+        modes,
+      }),
     }
   }
 
@@ -1655,6 +1689,9 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
 
   const opencodeProvider = providers.find((p) => p.id === "opencode")
   if (opencodeProvider) {
+    // if (opencodeProvider.models["claude-haiku-4-5"]) {
+    //   return { providerID: ProviderID.opencode, modelID: ModelID.make("claude-haiku-4-5") }
+    // }
     if (opencodeProvider.models["big-pickle"]) {
       return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
     }
@@ -1764,10 +1801,12 @@ function buildAvailableModels(
         name: `${provider.name}/${model.name}`,
       }
       if (!includeVariants || !model.variants) return [base]
-      return Object.keys(model.variants).map((variant) => ({
+      const variants = Object.keys(model.variants).filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
+      const variantOptions = variants.map((variant) => ({
         modelId: `${provider.id}/${model.id}/${variant}`,
         name: `${provider.name}/${model.name} (${variant})`,
       }))
+      return [base, ...variantOptions]
     })
   })
 }
@@ -1780,11 +1819,12 @@ function formatModelIdWithVariant(
 ) {
   const base = `${model.providerID}/${model.modelID}`
   if (!includeVariant || availableVariants.length === 0) return base
-  const selectedVariant = variant && availableVariants.includes(variant)
-    ? variant
-    : availableVariants.includes(DEFAULT_VARIANT_VALUE)
-      ? DEFAULT_VARIANT_VALUE
-      : availableVariants[0]
+  const selectedVariant =
+    variant && availableVariants.includes(variant)
+      ? variant
+      : availableVariants.includes(DEFAULT_VARIANT_VALUE)
+        ? DEFAULT_VARIANT_VALUE
+        : availableVariants[0]
   return `${base}/${selectedVariant}`
 }
 
@@ -1837,6 +1877,8 @@ function parseModelSelection(
 function buildConfigOptions(input: {
   currentModelId: string
   availableModels: ModelOption[]
+  currentVariant?: string
+  availableVariants?: string[]
   modes?: { availableModes: ModeOption[]; currentModeId: string } | undefined
 }): SessionConfigOption[] {
   const options: SessionConfigOption[] = [
@@ -1849,6 +1891,22 @@ function buildConfigOptions(input: {
       options: input.availableModels.map((m) => ({ value: m.modelId, name: m.name })),
     },
   ]
+  if (input.availableVariants?.length) {
+    options.push({
+      id: "effort",
+      name: "Effort",
+      description: "Available effort levels for this model",
+      category: "thought_level",
+      type: "select",
+      currentValue:
+        input.currentVariant && input.availableVariants.includes(input.currentVariant)
+          ? input.currentVariant
+          : input.availableVariants.includes(DEFAULT_VARIANT_VALUE)
+            ? DEFAULT_VARIANT_VALUE
+            : input.availableVariants[0],
+      options: input.availableVariants.map((variant) => ({ value: variant, name: formatVariantName(variant) })),
+    })
+  }
   if (input.modes) {
     options.push({
       id: "mode",
@@ -1864,6 +1922,13 @@ function buildConfigOptions(input: {
     })
   }
   return options
+}
+
+function formatVariantName(variant: string) {
+  return variant
+    .split(/[_-]/)
+    .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+    .join(" ")
 }
 
 export * as ACP from "./agent"
