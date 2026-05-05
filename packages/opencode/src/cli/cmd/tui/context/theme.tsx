@@ -2,7 +2,7 @@ import { CliRenderEvents, SyntaxStyle, RGBA, type TerminalColors } from "@opentu
 import path from "path"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { Glob } from "@opencode-ai/core/util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -39,9 +39,9 @@ import carbonfox from "./theme/carbonfox.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
-import { Global } from "@/global"
-import { Filesystem } from "@/util"
-import { loadThemeFile } from "../../../../config/config"
+import { Global } from "@opencode-ai/core/global"
+import { loadThemeFile } from "@/config/config"
+import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
@@ -315,7 +315,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     setStore(
       produce((draft) => {
         const lock = pick(kv.get("theme_mode_lock"))
-        const mode = lock ?? props.mode
+        const mode = lock ?? pick(renderer.themeMode) ?? props.mode
         if (!lock && pick(kv.get("theme_mode")) !== undefined) {
           kv.set("theme_mode", undefined)
         }
@@ -417,12 +417,16 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const values = createMemo(() => {
       const active = store.themes[store.active]
-      if (active) return resolveTheme(active, store.mode)
+      if (active) {
+        return resolveTheme(active, store.mode)
+      }
 
       const saved = kv.get("theme")
       if (typeof saved === "string") {
         const theme = store.themes[saved]
-        if (theme) return resolveTheme(theme, store.mode)
+        if (theme) {
+          return resolveTheme(theme, store.mode)
+        }
       }
 
       return resolveTheme(store.themes.opencode, store.mode)
@@ -504,8 +508,6 @@ async function getCustomThemes() {
     })) {
       const ext = path.extname(item)
       const name = path.basename(item, ext)
-
-      // Use JSONC parser for all theme files regardless of extension
       result[name] = await loadThemeFile(item)
     }
   }
