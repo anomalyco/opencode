@@ -221,6 +221,9 @@ const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
 const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
   properties: { value: stripeWebhook.secret },
 })
+const INCIDENT_WEBHOOK_SIGNING_SECRET = new sst.Secret("INCIDENT_WEBHOOK_SIGNING_SECRET")
+const DISCORD_INCIDENT_WEBHOOK_URL = new sst.Secret("DISCORD_INCIDENT_WEBHOOK_URL")
+
 const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 
 ////////////////
@@ -251,6 +254,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     database,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
+    INCIDENT_WEBHOOK_SIGNING_SECRET,
+    DISCORD_INCIDENT_WEBHOOK_URL,
     STRIPE_SECRET_KEY,
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,

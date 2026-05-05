@@ -12,12 +12,10 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import {
-  ServerAuthConfig,
-  authorizationRouterMiddleware,
-} from "../../src/server/routes/instance/httpapi/middleware/authorization"
+import { ServerAuth } from "../../src/server/auth"
+import { authorizationRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
-import { serveUIEffect } from "../../src/server/routes/ui"
+import { serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
 import { Server } from "../../src/server/server"
 
 void Log.init({ print: false })
@@ -81,7 +79,7 @@ function uiApp(input?: { password?: string; username?: string; client?: Layer.La
         yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
       }),
     ).pipe(
-      Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))),
+      Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))),
       Layer.provide([
         AppFileSystem.defaultLayer,
         input?.client ?? httpClient(new Response("ui")),
@@ -186,6 +184,82 @@ describe("HttpApi UI fallback", () => {
     expect(await response.text()).toBe("console.log('ok')")
   })
 
+  // Regression for #25698 (Ope): upstream `transfer-encoding: chunked` was
+  // forwarded through the proxy while the proxy itself re-frames the body,
+  // causing browsers to fail with `ERR_INVALID_CHUNKED_ENCODING`.
+  test("strips upstream transfer-encoding header from proxied assets", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
+
+    const response = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const client = yield* HttpClient.HttpClient
+        return yield* serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/")), {
+          fs,
+          client,
+        })
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AppFileSystem.defaultLayer,
+            Layer.succeed(
+              HttpClient.HttpClient,
+              HttpClient.make((request) =>
+                Effect.succeed(
+                  HttpClientResponse.fromWeb(
+                    request,
+                    new Response("<html>opencode</html>", {
+                      headers: {
+                        "transfer-encoding": "chunked",
+                        "content-type": "text/html",
+                      },
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Effect.map(HttpServerResponse.toWeb),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("transfer-encoding")).toBeNull()
+    expect(await response.text()).toBe("<html>opencode</html>")
+  })
+
+  test("serves embedded UI assets when Bun can read them but access reports missing", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    let readPath: string | undefined
+
+    const response = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        return yield* serveEmbeddedUIEffect(
+          "/assets/app.js",
+          {
+            ...fs,
+            existsSafe: () => Effect.die("embedded UI should not rely on filesystem access checks"),
+            readFile: (path) => {
+              readPath = path
+              return path === "/$bunfs/root/assets/app.js"
+                ? Effect.succeed(new TextEncoder().encode("console.log('embedded')"))
+                : Effect.die(`unexpected embedded UI path: ${path}`)
+            },
+          },
+          { "assets/app.js": "/$bunfs/root/assets/app.js" },
+        )
+      }).pipe(Effect.provide(AppFileSystem.defaultLayer), Effect.map(HttpServerResponse.toWeb)),
+    )
+
+    expect(response.status).toBe(200)
+    expect(readPath).toBe("/$bunfs/root/assets/app.js")
+    expect(response.headers.get("content-type")).toContain("text/javascript")
+    expect(await response.text()).toBe("console.log('embedded')")
+  })
+
   test("keeps matched API routes ahead of the UI fallback", async () => {
     Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
 
@@ -201,6 +275,7 @@ describe("HttpApi UI fallback", () => {
     const response = await uiApp({ password: "secret", username: "opencode" }).request("/")
 
     expect(response.status).toBe(401)
+    expect(response.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
   })
 
   test("accepts auth token for the web UI", async () => {
@@ -226,6 +301,25 @@ describe("HttpApi UI fallback", () => {
     })
 
     expect(response.status).toBe(200)
+  })
+
+  // Regression for #25698 (Ope): the browser fetches the PWA manifest and
+  // its icons via flows that don't carry app-managed credentials (the
+  // `<link rel="manifest">` request is not under page-auth control), so the
+  // server returning 401 breaks PWA install. These specific public assets
+  // should bypass auth.
+  test("serves the PWA manifest without auth even when a server password is set", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
+
+    for (const path of ["/site.webmanifest", "/web-app-manifest-192x192.png", "/web-app-manifest-512x512.png"]) {
+      const response = await uiApp({
+        password: "secret",
+        username: "opencode",
+        client: httpClient(new Response("ok")),
+      }).request(path)
+      expect(response.status).not.toBe(401)
+    }
   })
 
   test("allows web UI preflight without auth", async () => {
