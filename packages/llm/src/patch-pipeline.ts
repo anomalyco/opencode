@@ -1,7 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import type { AnyPatch, Patch, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry } from "./patch"
-import { ProviderShared } from "./provider/shared"
+import { ProviderShared } from "./protocols/shared"
 import {
   InvalidRequestError,
   LLMRequest,

@@ -1,5 +1,5 @@
 import type { Stream } from "effect"
-import { ProviderShared } from "./provider/shared"
+import { ProviderShared } from "./protocols/shared"
 import type { ProviderChunkError } from "./schema"
 
 /**

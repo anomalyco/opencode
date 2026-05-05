@@ -1,7 +1,7 @@
 import { Adapter } from "../adapter"
 import type { ModelInput } from "../llm"
 import { OpenAICompatibleProfiles } from "./openai-compatible-profile"
-import { OpenAIResponses } from "./openai-responses"
+import { OpenAIResponses } from "../protocols/openai-responses"
 
 export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol">
 

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { ProviderShared } from "./provider/shared"
+import { ProviderShared } from "./protocols/shared"
 import type { LLMError, LLMRequest } from "./schema"
 
 export interface EndpointInput<Payload> {

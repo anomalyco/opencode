@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, ProviderPatch, ProviderRequestError, type PreparedRequestOf } from "../../src"
-import type { AnthropicMessagesPayload } from "../../src/provider/anthropic-messages"
+import type { AnthropicMessagesPayload } from "../../src/protocols/anthropic-messages"
 import { LLMClient } from "../../src/adapter"
-import { AnthropicMessages } from "../../src/provider/anthropic-messages"
+import { AnthropicMessages } from "../../src/protocols/anthropic-messages"
 import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 

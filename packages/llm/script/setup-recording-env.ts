@@ -6,7 +6,7 @@ import * as prompts from "@clack/prompts"
 import { AwsV4Signer } from "aws4fetch"
 import { Config, ConfigProvider, Effect, FileSystem, PlatformError, Redacted } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import { ProviderShared } from "../src/provider/shared"
+import { ProviderShared } from "../src/protocols/shared"
 
 type Provider = {
   readonly id: string

@@ -1,5 +1,5 @@
-import { OpenAIChat, type OpenAIChatModelInput } from "./openai-chat"
-import { OpenAIResponses, type OpenAIResponsesModelInput } from "./openai-responses"
+import { OpenAIChat, type OpenAIChatModelInput } from "../protocols/openai-chat"
+import { OpenAIResponses, type OpenAIResponsesModelInput } from "../protocols/openai-responses"
 
 export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
 

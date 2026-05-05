@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
-import { OpenRouter } from "../../src/provider/openrouter"
+import { OpenRouter } from "../../src/providers/openrouter"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)

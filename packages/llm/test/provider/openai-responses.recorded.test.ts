@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
-import { OpenAIResponses } from "../../src/provider/openai-responses"
+import { OpenAIResponses } from "../../src/protocols/openai-responses"
 import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, weatherTool, weatherToolLoopRequest, weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 

@@ -1,4 +1,4 @@
-import { Gemini, type GeminiModelInput } from "./gemini"
+import { Gemini, type GeminiModelInput } from "../protocols/gemini"
 
 export const adapters = [Gemini.adapter]
 

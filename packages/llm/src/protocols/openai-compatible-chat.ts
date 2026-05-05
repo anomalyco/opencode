@@ -3,7 +3,7 @@ import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities } from "../llm"
 import { OpenAIChat } from "./openai-chat"
-import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
+import { profiles, type OpenAICompatibleProfile } from "../providers/openai-compatible-profile"
 
 const ADAPTER = "openai-compatible-chat"
 

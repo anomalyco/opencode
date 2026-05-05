@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
-import { Gemini } from "../../src/provider/gemini"
+import { Gemini } from "../../src/protocols/gemini"
 import { eventSummary, textRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 

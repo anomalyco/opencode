@@ -1,5 +1,5 @@
 import { ProviderID } from "../schema"
-import { OpenAICompatibleChat, type OpenAICompatibleChatModelInput } from "./openai-compatible-chat"
+import { OpenAICompatibleChat, type OpenAICompatibleChatModelInput } from "../protocols/openai-compatible-chat"
 
 export type ModelOptions = Omit<OpenAICompatibleChatModelInput, "id" | "provider"> & {
   readonly provider: string

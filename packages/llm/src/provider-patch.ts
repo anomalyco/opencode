@@ -1,6 +1,6 @@
-import { Model, Patch, predicate } from "../patch"
-import { CacheHint } from "../schema"
-import type { ContentPart, JsonSchema, LLMRequest, Message, ToolDefinition } from "../schema"
+import { Model, Patch, predicate } from "./patch"
+import { CacheHint } from "./schema"
+import type { ContentPart, JsonSchema, LLMRequest, Message, ToolDefinition } from "./schema"
 
 const mimeToModality = (mime: string) => {
   if (mime.startsWith("image/")) return "image"
@@ -221,4 +221,4 @@ export const defaults = [
   cachePromptHints,
 ]
 
-export * as ProviderPatch from "./patch"
+export * as ProviderPatch from "./provider-patch"

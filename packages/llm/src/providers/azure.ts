@@ -1,8 +1,8 @@
 import { Adapter } from "../adapter"
 import type { ModelInput } from "../llm"
 import { ProviderID } from "../schema"
-import { OpenAIChat } from "./openai-chat"
-import { OpenAIResponses } from "./openai-responses"
+import { OpenAIChat } from "../protocols/openai-chat"
+import { OpenAIResponses } from "../protocols/openai-responses"
 
 export const id = ProviderID.make("azure")
 

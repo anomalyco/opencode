@@ -31,22 +31,34 @@ export type { Framing as FramingDef } from "./framing"
 export type { Protocol as ProtocolDef } from "./protocol"
 
 export * as LLM from "./llm"
-export * as ProviderPatch from "./provider/patch"
+export * as ProviderPatch from "./provider-patch"
+export * as Providers from "./providers"
+export * as Protocols from "./protocols"
 export type { CapabilitiesInput } from "./llm"
-export { AnthropicMessages } from "./provider/anthropic-messages"
-export { AmazonBedrock } from "./provider/amazon-bedrock"
-export { Anthropic } from "./provider/anthropic"
-export { Azure } from "./provider/azure"
-export { BedrockConverse } from "./provider/bedrock-converse"
-export { Gemini } from "./provider/gemini"
-export { Google } from "./provider/google"
-export { GitHubCopilot } from "./provider/github-copilot"
-export { OpenAIChat } from "./provider/openai-chat"
-export { OpenAICompatibleChat } from "./provider/openai-compatible-chat"
-export { OpenAICompatibleFamily } from "./provider/openai-compatible-family"
-export { OpenAICompatibleProfiles } from "./provider/openai-compatible-profile"
-export { OpenAIResponses } from "./provider/openai-responses"
-export { OpenAI } from "./provider/openai"
-export { OpenAICompatible } from "./provider/openai-compatible"
-export { OpenRouter } from "./provider/openrouter"
-export { XAI } from "./provider/xai"
+
+// Provider facades are the normal user-facing entrypoints. Prefer importing
+// them from `@opencode-ai/llm/providers` in application code.
+export { AmazonBedrock } from "./providers/amazon-bedrock"
+export { Anthropic } from "./providers/anthropic"
+export { Azure } from "./providers/azure"
+export { Google } from "./providers/google"
+export { GitHubCopilot } from "./providers/github-copilot"
+export { OpenAI } from "./providers/openai"
+export { OpenAICompatible } from "./providers/openai-compatible"
+export { OpenRouter } from "./providers/openrouter"
+export { XAI } from "./providers/xai"
+
+// Protocol modules expose low-level adapters, protocols, and payload types for
+// tests, custom clients, and provider authors. Prefer
+// `@opencode-ai/llm/protocols` for new advanced imports.
+export { AnthropicMessages } from "./protocols/anthropic-messages"
+export { BedrockConverse } from "./protocols/bedrock-converse"
+export { Gemini } from "./protocols/gemini"
+export { OpenAIChat } from "./protocols/openai-chat"
+export { OpenAICompatibleChat } from "./protocols/openai-compatible-chat"
+export { OpenAIResponses } from "./protocols/openai-responses"
+
+// OpenAI-compatible metadata helpers are shared by provider facades and
+// advanced routing code; they are not standalone runnable providers.
+export { OpenAICompatibleFamily } from "./providers/openai-compatible-family"
+export { OpenAICompatibleProfiles } from "./providers/openai-compatible-profile"

@@ -1,5 +1,5 @@
 import { Adapter, type AdapterModelInput } from "../adapter"
-import { BedrockConverse, type BedrockCredentials } from "./bedrock-converse"
+import { BedrockConverse, type BedrockCredentials } from "../protocols/bedrock-converse"
 
 export type ModelOptions = Omit<AdapterModelInput, "id"> & {
   readonly apiKey?: string

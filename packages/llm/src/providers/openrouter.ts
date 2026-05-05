@@ -1,10 +1,10 @@
 import { Adapter, type AdapterModelInput } from "../adapter"
 import { capabilities } from "../llm"
 import { payload as payloadPatch } from "../patch"
-import { OpenAICompatibleChat } from "./openai-compatible-chat"
+import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat"
 import { OpenAICompatibleProfiles } from "./openai-compatible-profile"
-import type { OpenAIChatPayload } from "./openai-chat"
-import { isRecord } from "./shared"
+import type { OpenAIChatPayload } from "../protocols/openai-chat"
+import { isRecord } from "../protocols/shared"
 
 export const profile = OpenAICompatibleProfiles.profiles.openrouter
 

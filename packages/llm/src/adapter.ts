@@ -9,7 +9,7 @@ import { payload as payloadPatch } from "./patch"
 import { PatchPipeline } from "./patch-pipeline"
 import type { Framing } from "./framing"
 import type { Protocol } from "./protocol"
-import { ProviderShared } from "./provider/shared"
+import { ProviderShared } from "./protocols/shared"
 import type {
   LLMError,
   LLMEvent,

@@ -13,6 +13,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./providers": "./src/providers.ts",
+    "./providers/*": "./src/providers/*.ts",
+    "./protocols": "./src/protocols.ts",
+    "./protocols/*": "./src/protocols/*.ts",
+    "./provider-patch": "./src/provider-patch.ts",
     "./*": "./src/*.ts"
   },
   "devDependencies": {

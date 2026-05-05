@@ -11,7 +11,7 @@ import {
   type ModelRefInput,
 } from "./adapter"
 import type { RequestExecutor } from "./executor"
-import { ProviderPatch } from "./provider/patch"
+import { ProviderPatch } from "./provider-patch"
 import { type Tools } from "./tool"
 import { ToolRuntime, type RunOptions } from "./tool-runtime"
 import {

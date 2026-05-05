@@ -1,4 +1,4 @@
-import { AnthropicMessages, type AnthropicMessagesModelInput } from "./anthropic-messages"
+import { AnthropicMessages, type AnthropicMessagesModelInput } from "../protocols/anthropic-messages"
 
 export const adapters = [AnthropicMessages.adapter]
 
