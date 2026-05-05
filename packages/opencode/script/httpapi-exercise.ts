@@ -776,9 +776,9 @@ const scenarios: Scenario[] = [
     }))
     .status(200),
   http
-    .post("/experimental/workspace/{id}/session-restore", "experimental.workspace.sessionRestore")
+    .post("/experimental/workspace/warp", "experimental.workspace.warp")
     .at((ctx) => ({
-      path: route("/experimental/workspace/{id}/session-restore", { id: "wrk_httpapi_missing" }),
+      path: "/experimental/workspace/warp",
       headers: ctx.headers(),
       body: {},
     }))

@@ -6785,6 +6785,84 @@
         ]
       }
     },
+    "/sync/steal": {
+      "post": {
+        "tags": ["sync"],
+        "operationId": "sync.steal",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session stolen into workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionID": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["sessionID"],
+                  "additionalProperties": false,
+                  "description": "Session stolen into workspace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update a session to belong to the current workspace through the sync event system.",
+        "summary": "Steal session into workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["sessionID"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sync.steal({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/sync/history": {
       "post": {
         "tags": ["sync"],
@@ -8281,10 +8359,10 @@
         ]
       }
     },
-    "/experimental/workspace/{id}/session-restore": {
+    "/experimental/workspace/warp": {
       "post": {
         "tags": ["workspace"],
-        "operationId": "experimental.workspace.sessionRestore",
+        "operationId": "experimental.workspace.warp",
         "parameters": [
           {
             "name": "directory",
@@ -8301,36 +8379,11 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^wrk.*"
-            },
-            "required": true
           }
         ],
         "responses": {
-          "200": {
-            "description": "Session replay started",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "total": {
-                      "type": "integer",
-                      "minimum": 0
-                    }
-                  },
-                  "required": ["total"],
-                  "additionalProperties": false,
-                  "description": "Session replay started"
-                }
-              }
-            }
+          "204": {
+            "description": "Session warped"
           },
           "400": {
             "description": "Bad request",
@@ -8343,19 +8396,22 @@
             }
           }
         },
-        "description": "Replay a session's sync events into the target workspace in batches.",
-        "summary": "Restore session into workspace",
+        "description": "Move a session's sync history into the target workspace, or detach it to the local project.",
+        "summary": "Warp session into workspace",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string"
+                  },
                   "sessionID": {
                     "type": "string"
                   }
                 },
-                "required": ["sessionID"],
+                "required": ["id", "sessionID"],
                 "additionalProperties": false
               }
             }
@@ -8364,7 +8420,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.sessionRestore({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.warp({\n  ...\n})"
           }
         ]
       }
@@ -8537,9 +8593,6 @@
           },
           {
             "$ref": "#/components/schemas/EventWorkspaceFailed"
-          },
-          {
-            "$ref": "#/components/schemas/EventWorkspaceRestore"
           },
           {
             "$ref": "#/components/schemas/EventWorkspaceStatus"
@@ -10736,9 +10789,6 @@
               },
               {
                 "$ref": "#/components/schemas/EventWorkspaceFailed"
-              },
-              {
-                "$ref": "#/components/schemas/EventWorkspaceRestore"
               },
               {
                 "$ref": "#/components/schemas/EventWorkspaceStatus"
@@ -13948,17 +13998,24 @@
               "sessionID": {
                 "type": "string"
               },
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "providerID", "variant"],
+                "additionalProperties": false
               }
             },
-            "required": ["timestamp", "sessionID", "id", "providerID"],
+            "required": ["timestamp", "sessionID", "model"],
             "additionalProperties": false
           }
         },
@@ -14181,7 +14238,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID"],
+                "required": ["id", "providerID", "variant"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -14307,17 +14364,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               }
             },
             "required": ["timestamp", "sessionID", "error"],
@@ -14929,17 +14976,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               },
               "provider": {
                 "type": "object",
@@ -15793,41 +15830,6 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventWorkspaceRestore": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["workspace.restore"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "workspaceID": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string"
-              },
-              "total": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "step": {
-                "type": "integer",
-                "minimum": 0
-              }
-            },
-            "required": ["workspaceID", "sessionID", "total", "step"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventWorkspaceStatus": {
         "type": "object",
         "properties": {
@@ -16252,17 +16254,24 @@
               "sessionID": {
                 "type": "string"
               },
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "providerID", "variant"],
+                "additionalProperties": false
               }
             },
-            "required": ["timestamp", "sessionID", "id", "providerID"],
+            "required": ["timestamp", "sessionID", "model"],
             "additionalProperties": false
           }
         },
@@ -16481,7 +16490,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID"],
+                "required": ["id", "providerID", "variant"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -16565,6 +16574,20 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "SessionErrorUnknown": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["unknown"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "message"],
+        "additionalProperties": false
+      },
       "EventSessionNextStepFailed": {
         "type": "object",
         "properties": {
@@ -16585,17 +16608,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               }
             },
             "required": ["timestamp", "sessionID", "error"],
@@ -17098,17 +17111,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               },
               "provider": {
                 "type": "object",
@@ -17361,7 +17364,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           },
           "time": {
@@ -17457,7 +17460,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           }
         },
@@ -17716,17 +17719,7 @@
             "type": "object"
           },
           "error": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["type", "message"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/SessionErrorUnknown"
           }
         },
         "required": ["status", "input", "content", "structured", "error"],
@@ -17839,7 +17832,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           },
           "content": {
@@ -17906,17 +17899,7 @@
             "additionalProperties": false
           },
           "error": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["type", "message"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/SessionErrorUnknown"
           }
         },
         "required": ["id", "time", "type", "agent", "model", "content"],
