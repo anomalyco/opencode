@@ -34,4 +34,20 @@ describe("session diff", () => {
     expect(text(view, "deletions")).toBe("one\n")
     expect(text(view, "additions")).toBe("two\n")
   })
+
+  test("ignores malformed persisted patches", () => {
+    const diff = {
+      file: "a.ts",
+      patch:
+        "diff --git a/a.ts b/a.ts\nindex ff4ceb2..65a1de0 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -1,3 +1,3 @@\n keep\n+add\n same\r",
+      additions: 1,
+      deletions: 1,
+      status: "modified" as const,
+    }
+    const view = normalize(diff)
+
+    expect(view.patch).toBe(diff.patch)
+    expect(text(view, "deletions")).toBe("")
+    expect(text(view, "additions")).toBe("")
+  })
 })
