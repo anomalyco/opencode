@@ -6,7 +6,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Cause, Effect, Exit, Fiber, Schema } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 
 export interface TaskPromptOps {
@@ -122,15 +122,10 @@ export const TaskTool = Tool.define(
       const runCancel = yield* EffectBridge.make()
 
       const messageID = MessageID.ascending()
-      let cancelFiber: Fiber.Fiber<void> | undefined
-
-      const cancel = Effect.fn("TaskTool.cancelChild")(function* () {
-        cancelFiber ??= runCancel.fork(ops.cancel(nextSession.id))
-        yield* Fiber.join(cancelFiber)
-      })
+      const cancel = ops.cancel(nextSession.id)
 
       function onAbort() {
-        runCancel.fork(cancel())
+        runCancel.fork(cancel)
       }
 
       return yield* Effect.acquireUseRelease(
@@ -173,7 +168,7 @@ export const TaskTool = Tool.define(
           }),
         (_, exit) =>
           Effect.gen(function* () {
-            if (Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)) yield* cancel()
+            if (Exit.hasInterrupts(exit)) yield* cancel
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {

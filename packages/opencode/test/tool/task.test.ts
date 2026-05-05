@@ -281,56 +281,54 @@ describe("tool.task", () => {
     ),
   )
 
-  it.live("execute cancels child session when abort signal fires", () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const { chat, assistant } = yield* seed()
-        const tool = yield* TaskTool
-        const def = yield* tool.init()
-        const ready = defer<SessionPrompt.PromptInput>()
-        const cancelled = defer<SessionID>()
-        const abort = new AbortController()
-        const promptOps: TaskPromptOps = {
-          cancel: (sessionID) =>
-            Effect.sync(() => {
-              cancelled.resolve(sessionID)
-            }),
-          resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
-          prompt: (input) =>
-            Effect.promise(() => {
-              ready.resolve(input)
-              return cancelled.promise
-            }).pipe(Effect.as(reply(input, "cancelled"))),
-        }
+  it.instance("execute cancels child session when abort signal fires", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const ready = defer<SessionPrompt.PromptInput>()
+      const cancelled = defer<SessionID>()
+      const abort = new AbortController()
+      const promptOps: TaskPromptOps = {
+        cancel: (sessionID) =>
+          Effect.sync(() => {
+            cancelled.resolve(sessionID)
+          }),
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.promise(() => {
+            ready.resolve(input)
+            return cancelled.promise
+          }).pipe(Effect.as(reply(input, "cancelled"))),
+      }
 
-        const fiber = yield* def
-          .execute(
-            {
-              description: "inspect bug",
-              prompt: "look into the cache key path",
-              subagent_type: "general",
-            },
-            {
-              sessionID: chat.id,
-              messageID: assistant.id,
-              agent: "build",
-              abort: abort.signal,
-              extra: { promptOps },
-              messages: [],
-              metadata: () => Effect.void,
-              ask: () => Effect.void,
-            },
-          )
-          .pipe(Effect.forkChild)
+      const fiber = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: abort.signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.forkChild)
 
-        const input = yield* Effect.promise(() => ready.promise)
-        abort.abort()
-        expect(yield* Effect.promise(() => cancelled.promise)).toBe(input.sessionID)
+      const input = yield* Effect.promise(() => ready.promise)
+      abort.abort()
+      expect(yield* Effect.promise(() => cancelled.promise)).toBe(input.sessionID)
 
-        const exit = yield* Fiber.await(fiber)
-        expect(Exit.isSuccess(exit)).toBe(true)
-      }),
-    ),
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+    }),
   )
 
   it.live("execute creates a child when task_id does not exist", () =>
