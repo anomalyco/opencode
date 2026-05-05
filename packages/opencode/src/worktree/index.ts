@@ -291,16 +291,15 @@ export const layer: Layer.Layer<
 
     const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (info: Info, startCommand?: string) {
       yield* setup(info)
-      yield* boot(info, startCommand)
+      yield* boot(info, startCommand).pipe(
+        Effect.catchCause((cause) => Effect.sync(() => log.error("worktree bootstrap failed", { cause }))),
+        Effect.forkIn(scope),
+      )
     })
 
     const create = Effect.fn("Worktree.create")(function* (input?: CreateInput) {
       const info = yield* makeWorktreeInfo(input?.name)
-      yield* setup(info)
-      yield* boot(info, input?.startCommand).pipe(
-        Effect.catchCause((cause) => Effect.sync(() => log.error("worktree bootstrap failed", { cause }))),
-        Effect.forkIn(scope),
-      )
+      yield* createFromInfo(info, input?.startCommand)
       return info
     })
 
