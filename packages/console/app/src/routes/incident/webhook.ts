@@ -25,22 +25,22 @@ const verifyWebhook = async (request: Request) => {
   }
 }
 
-const postDiscordMessage = async (incident: Incident) =>
-  fetch(Resource.DISCORD_INCIDENT_WEBHOOK_URL.value, {
+const postDiscordMessage = async (incident: Incident) => {
+  return fetch(Resource.DISCORD_INCIDENT_WEBHOOK_URL.value, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       content: [
-        `**${incident.name ?? "Incident created"}**`,
+        `**${incident.name ?? "Incident has been created"}**`,
         incident.summary,
         "",
         "@everyone",
         "",
         incident.permalink,
       ]
-        .filter((line) => line !== undefined)
+        .filter(Boolean)
         .join("\n"),
       allowed_mentions: {
         parse: ["everyone"],
@@ -48,6 +48,7 @@ const postDiscordMessage = async (incident: Incident) =>
       flags: 4,
     }),
   })
+}
 
 export async function POST(input: APIEvent) {
   const payload = await verifyWebhook(input.request)
@@ -56,15 +57,16 @@ export async function POST(input: APIEvent) {
   }
 
   if (payload.event_type !== "public_incident.incident_created_v2") {
-    return Response.json({ message: "ignored" }, { status: 200 })
+    return Response.json({ message: "ignored event" }, { status: 200 })
   }
 
   const incident = payload["public_incident.incident_created_v2"]
-  if (!incident) return Response.json({ message: "missing incident" }, { status: 400 })
+  if (!incident) {
+    return Response.json({ message: "missing incident" }, { status: 400 })
+  }
 
   const response = await postDiscordMessage(incident)
   if (!response.ok) {
-    console.error(await response.text())
     return Response.json({ message: "discord webhook failed" }, { status: 502 })
   }
 
