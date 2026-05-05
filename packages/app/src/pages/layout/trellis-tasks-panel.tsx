@@ -166,7 +166,7 @@ export function TrellisTasksPanel(props: {
       >
         <div class="flex-1 overflow-y-auto p-4">
           <Show when={typeof content === "string"} fallback={<Empty text={language.t("trellis.tasks.noPrd")} />}>
-            {() => <Markdown text={content as string} />}
+            <Markdown text={content as string} />
           </Show>
         </div>
       </Dialog>
