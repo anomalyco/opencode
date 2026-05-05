@@ -13998,17 +13998,24 @@
               "sessionID": {
                 "type": "string"
               },
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "providerID", "variant"],
+                "additionalProperties": false
               }
             },
-            "required": ["timestamp", "sessionID", "id", "providerID"],
+            "required": ["timestamp", "sessionID", "model"],
             "additionalProperties": false
           }
         },
@@ -14231,7 +14238,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID"],
+                "required": ["id", "providerID", "variant"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -14357,17 +14364,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               }
             },
             "required": ["timestamp", "sessionID", "error"],
@@ -14979,17 +14976,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               },
               "provider": {
                 "type": "object",
@@ -16267,17 +16254,24 @@
               "sessionID": {
                 "type": "string"
               },
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "providerID", "variant"],
+                "additionalProperties": false
               }
             },
-            "required": ["timestamp", "sessionID", "id", "providerID"],
+            "required": ["timestamp", "sessionID", "model"],
             "additionalProperties": false
           }
         },
@@ -16496,7 +16490,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID"],
+                "required": ["id", "providerID", "variant"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -16580,6 +16574,20 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "SessionErrorUnknown": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["unknown"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "message"],
+        "additionalProperties": false
+      },
       "EventSessionNextStepFailed": {
         "type": "object",
         "properties": {
@@ -16600,17 +16608,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               }
             },
             "required": ["timestamp", "sessionID", "error"],
@@ -17113,17 +17111,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               },
               "provider": {
                 "type": "object",
@@ -17376,7 +17364,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           },
           "time": {
@@ -17472,7 +17460,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           }
         },
@@ -17731,17 +17719,7 @@
             "type": "object"
           },
           "error": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["type", "message"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/SessionErrorUnknown"
           }
         },
         "required": ["status", "input", "content", "structured", "error"],
@@ -17854,7 +17832,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           },
           "content": {
@@ -17921,17 +17899,7 @@
             "additionalProperties": false
           },
           "error": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["type", "message"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/SessionErrorUnknown"
           }
         },
         "required": ["id", "time", "type", "agent", "model", "content"],

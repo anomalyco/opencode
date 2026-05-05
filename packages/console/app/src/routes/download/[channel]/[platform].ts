@@ -32,13 +32,6 @@ export async function GET({ params: { platform, channel } }: APIEvent) {
 
   const resp = await fetch(
     `https://github.com/anomalyco/${channel === "stable" ? "opencode" : "opencode-beta"}/releases/latest/download/${assetName}`,
-    {
-      cf: {
-        // in case gh releases has rate limits
-        cacheTtl: 60 * 5,
-        cacheEverything: true,
-      },
-    } as any,
   )
 
   const downloadName = downloadNames[platform]
