@@ -101,7 +101,7 @@ const alertSource = new incident.AlertSource("HoneycombAlertSource", {
 })
 
 const webhookRecipient = new honeycomb.WebhookRecipient(`IncidentWebhook`, {
-  name: "Incident.io Webhook",
+  name: "Incident.io",
   url: alertSource.alertEventsUrl,
   secret: alertSource.secretToken,
   templates: [
