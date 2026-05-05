@@ -187,7 +187,11 @@ export function colorizeDiff(diff: string): string {
   const GUTTER = 4
 
   const gutter = (n: number) => String(n).padStart(GUTTER, " ")
-  const pad = (s: string) => s + " ".repeat(Math.max(0, width - Bun.stringWidth(s)))
+  const pad = (s: string) => {
+    const textWidth = Bun.stringWidth(s)
+    if (textWidth >= width) return s
+    return s + " ".repeat(width - textWidth)
+  }
 
   let oldLine = 0
   let newLine = 0
@@ -201,28 +205,31 @@ export function colorizeDiff(diff: string): string {
       return true
     })
     .map((line) => {
-      if (line.startsWith("@@")) {
-        const m = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
+      // Clean line: replace tabs with spaces and remove special NBSP characters
+      const cleanLine = line.replace(/\t/g, "  ").replace(/\u00a0/g, " ")
+      
+      if (cleanLine.startsWith("@@")) {
+        const m = cleanLine.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
         if (m) {
           oldLine = parseInt(m[1], 10)
           newLine = parseInt(m[2], 10)
         }
-        return UI.Style.TEXT_DIM + line + UI.Style.TEXT_NORMAL
+        return RESET + UI.Style.TEXT_DIM + cleanLine + RESET
       }
-      if (line.startsWith("-")) {
-        const out = pad(gutter(oldLine) + " " + line)
+      if (cleanLine.startsWith("-")) {
+        const out = pad(gutter(oldLine) + " " + cleanLine)
         oldLine++
-        return REMOVED_BG + out + RESET
+        return RESET + REMOVED_BG + out + RESET
       }
-      if (line.startsWith("+")) {
-        const out = pad(gutter(newLine) + " " + line)
+      if (cleanLine.startsWith("+")) {
+        const out = pad(gutter(newLine) + " " + cleanLine)
         newLine++
-        return ADDED_BG + out + RESET
+        return RESET + ADDED_BG + out + RESET
       }
-      const out = UI.Style.TEXT_DIM + gutter(newLine) + UI.Style.TEXT_NORMAL + " " + line
+      const out = UI.Style.TEXT_DIM + gutter(newLine) + UI.Style.TEXT_NORMAL + " " + cleanLine
       oldLine++
       newLine++
-      return out
+      return RESET + out + RESET
     })
     .join("\n")
 }
