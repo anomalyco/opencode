@@ -722,4 +722,100 @@ describe("acp.agent event subscription", () => {
       },
     })
   })
+
+  test("prompt() awaits message.updated for response messageID before returning end_turn", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sdk, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const messageID = "msg_completion_test_1"
+
+        // Mock sdk.session.prompt: resolve only when we tell it to. The
+        // returned `info` carries the messageID our fix awaits via
+        // `waitForMessageCompletion`.
+        let resolveSdkPrompt: (() => void) | null = null
+        const sdkPromptPromise = new Promise<any>((resolve) => {
+          resolveSdkPrompt = () =>
+            resolve({
+              data: {
+                info: {
+                  id: messageID,
+                  sessionID: sessionId,
+                  role: "assistant",
+                  time: { created: 1, completed: 2 },
+                  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                  cost: 0,
+                  parentID: "u1",
+                  modelID: "big-pickle",
+                  providerID: "opencode",
+                  mode: "build",
+                  agent: "build",
+                  path: { cwd, root: cwd },
+                },
+              },
+            })
+        })
+        sdk.session.prompt = async () => sdkPromptPromise
+
+        let promptDone = false
+        const promptPromise = (agent as any)
+          .prompt({
+            sessionId,
+            prompt: [{ type: "text", text: "test" }],
+          })
+          .then((r: any) => {
+            promptDone = true
+            return r
+          })
+          .catch((err: unknown) => {
+            promptDone = true
+            throw err
+          })
+
+        // Let agent.prompt() reach the `await sdk.session.prompt(...)` boundary,
+        // then resolve it. After resolution, prompt() should be blocked inside
+        // waitForMessageCompletion(messageID, ...) — the regression check.
+        await new Promise((r) => setTimeout(r, 20))
+        resolveSdkPrompt!()
+        await new Promise((r) => setTimeout(r, 60))
+        expect(promptDone).toBe(false)
+
+        // Push the assistant message-completed event. The new
+        // `case "message.updated"` handler should resolve the waiter.
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.updated",
+            properties: {
+              sessionID: sessionId,
+              info: {
+                id: messageID,
+                sessionID: sessionId,
+                role: "assistant",
+                time: { created: 1, completed: 2 },
+                parentID: "u1",
+                modelID: "big-pickle",
+                providerID: "opencode",
+                mode: "build",
+                agent: "build",
+                path: { cwd, root: cwd },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              },
+            },
+          } as any,
+        })
+
+        const result = await promptPromise
+        expect(promptDone).toBe(true)
+        expect(result.stopReason).toBe("end_turn")
+
+        stop()
+      },
+    })
+  })
 })

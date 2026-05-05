@@ -558,19 +558,33 @@ export class Agent implements ACPAgent {
   // wire AFTER the RPC reply (a protocol violation visible to ACP clients
   // as text appearing post-end_turn).
   private waitForMessageCompletion(messageId: string, timeoutMs: number): Promise<void> {
+    // Cache hit means the completion event landed before we got here. Consume
+    // the entry so the set doesn't grow unbounded over the agent's lifetime.
     if (this.completedAssistantMessageIds.has(messageId)) {
+      this.completedAssistantMessageIds.delete(messageId)
       return Promise.resolve()
     }
     return new Promise<void>((resolve) => {
       let settled = false
-      const finish = () => {
+      let timer: ReturnType<typeof setTimeout> | null = null
+      const finish = (timedOut: boolean) => {
         if (settled) return
         settled = true
+        if (timer) clearTimeout(timer)
         this.messageCompletionResolvers.delete(messageId)
+        if (timedOut) {
+          // Defensive: returning end_turn without observing completion means a
+          // chunk could still land post-reply. Log so the regression is visible
+          // in the field rather than a silent UX glitch.
+          log.warn("waitForMessageCompletion: timeout waiting for message.updated", {
+            messageId,
+            timeoutMs,
+          })
+        }
         resolve()
       }
-      this.messageCompletionResolvers.set(messageId, finish)
-      setTimeout(finish, timeoutMs)
+      this.messageCompletionResolvers.set(messageId, () => finish(false))
+      timer = setTimeout(() => finish(true), timeoutMs)
     })
   }
 
