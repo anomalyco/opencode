@@ -51,6 +51,7 @@ import {
 } from "./windows"
 import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import type { Server } from "virtual:opencode-server"
+import { migrate } from "./migrate"
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
@@ -112,6 +113,7 @@ function setupApp() {
   }
 
   void app.whenReady().then(async () => {
+    migrate()
     app.setAsDefaultProtocolClient("opencode")
     registerRendererProtocol()
     setDockIcon()
