@@ -59,6 +59,8 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  CLEAR_TASKS: "clear-tasks",
+  CLEAR_TASKS_ZH: "清除任务",
 } as const
 
 export interface Interface {
@@ -98,6 +100,23 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+
+      commands[Default.CLEAR_TASKS] = {
+        name: Default.CLEAR_TASKS,
+        description: "clear all active tasks from the todo list",
+        source: "command",
+        get template() {
+          return "Call todowrite with an empty todos array [] to clear all remaining tasks."
+        },
+      }
+      commands[Default.CLEAR_TASKS_ZH] = {
+        name: Default.CLEAR_TASKS_ZH,
+        description: "清除所有待办任务",
+        source: "command",
+        get template() {
+          return "Call todowrite with an empty todos array [] to clear all remaining tasks."
+        },
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
