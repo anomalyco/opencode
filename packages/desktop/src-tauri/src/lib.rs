@@ -1,5 +1,7 @@
 mod cli;
 mod constants;
+// FORK: 本地资源自定义 protocol(.md 图 / 音视频 / HTML 预览 iframe 共用)2026-05-05
+mod local_asset;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 #[cfg(target_os = "linux")]
@@ -439,6 +441,8 @@ pub fn run() {
         .output();
 
     let mut builder = tauri::Builder::default()
+        // FORK: 注册本地资源 protocol — .md 图 / 音视频 / HTML 预览 iframe 共用,Rust 端 canonicalize + sdk 越权防护 2026-05-05
+        .register_uri_scheme_protocol(local_asset::SCHEME, local_asset::handler)
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus existing window when another instance is launched
             if let Some(window) = app.get_webview_window(MainWindow::LABEL) {

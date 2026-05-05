@@ -173,12 +173,40 @@ function markCodeLinks(root: HTMLDivElement) {
   }
 }
 
-function decorate(root: HTMLDivElement, labels: CopyLabels) {
+// FORK: 本地资源 src 重写(.md 内 <img>/<video>/<audio>/<source>)2026-05-05
+// 把相对路径 src 转为 localasset:// URL,文件查看器侧传入 rewriteAssetSrc;
+// 聊天侧不传 → 此函数 no-op,无回归
+function rewriteAssetSources(root: HTMLDivElement, rewriter: (src: string) => string | null) {
+  const elements = Array.from(root.querySelectorAll("img, video, audio, source"))
+  for (const el of elements) {
+    const src = el.getAttribute("src")
+    if (!src) continue
+    const next = rewriter(src)
+    if (next) el.setAttribute("src", next)
+  }
+  // 处理 <video poster="...">(海报图)
+  const videos = Array.from(root.querySelectorAll("video[poster]"))
+  for (const v of videos) {
+    const poster = v.getAttribute("poster")
+    if (!poster) continue
+    const next = rewriter(poster)
+    if (next) v.setAttribute("poster", next)
+  }
+  // 处理 <picture><source srcset="...">(可选:此处只处理单 src;复杂 srcset 解析推迟)
+  // 处理 inline <a href="./local.md">(MD 内链跳转 — Phase 4 再统一)
+}
+
+function decorate(
+  root: HTMLDivElement,
+  labels: CopyLabels,
+  rewriter?: (src: string) => string | null,
+) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
   markCodeLinks(root)
+  if (rewriter) rewriteAssetSources(root, rewriter)
 }
 
 function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
@@ -243,9 +271,18 @@ export function Markdown(
     streaming?: boolean
     class?: string
     classList?: Record<string, boolean>
+    // FORK: 本地资源 src 重写钩子(文件查看器传入,聊天侧不传)2026-05-05
+    rewriteAssetSrc?: (src: string) => string | null
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, [
+    "text",
+    "cacheKey",
+    "streaming",
+    "class",
+    "classList",
+    "rewriteAssetSrc",
+  ])
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -304,7 +341,7 @@ export function Markdown(
     }
     const temp = document.createElement("div")
     temp.innerHTML = content
-    decorate(temp, labels)
+    decorate(temp, labels, local.rewriteAssetSrc)
 
     morphdom(container, temp, {
       childrenOnly: true,

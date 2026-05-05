@@ -25,6 +25,8 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import CodeMirrorView from "@/components/code-mirror-view"
 import { langFromExt } from "@/utils/lang-from-ext"
 import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
+// FORK: 本地资源 protocol(.md 内 <img>/<video>/<audio> 重写 + HTML 预览 iframe)2026-05-05
+import { localAssetUrl, rewriteAssetSrc } from "@/utils/local-asset"
 
 // FORK: macOS 平台检测,用于右键菜单输入框 Option+Enter 提交支持 2026-04-30
 const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
@@ -33,6 +35,23 @@ function isMarkdownPath(p: string | undefined): boolean {
   if (!p) return false
   const lower = p.toLowerCase()
   return lower.endsWith(".md") || lower.endsWith(".markdown")
+}
+
+// FORK: HTML 预览支持 2026-05-05
+function isHtmlPath(p: string | undefined): boolean {
+  if (!p) return false
+  const lower = p.toLowerCase()
+  return lower.endsWith(".html") || lower.endsWith(".htm")
+}
+
+// HTML 预览大文件阈值(超过退源码视图,见 spec R3)
+const HTML_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
+
+// 文件路径父目录(forward slash;支持 Windows 反斜杠)
+function pathDirname(p: string): string {
+  const fwd = p.replace(/\\/g, "/")
+  const idx = fwd.lastIndexOf("/")
+  return idx >= 0 ? fwd.slice(0, idx) : ""
 }
 
 // In-memory LRU cache for fetched office PDF binaries. Saves having to re-fetch
@@ -986,6 +1005,18 @@ export function FileTabContent(props: { tab: string }) {
     })
   })
 
+  // FORK: 给 <Markdown> 注入本地资源 src 重写(.md 同目录/相对目录 <img>/<video>/<audio> 走 localasset:// 而非 404)2026-05-05
+  // baseDir = 当前 .md 文件所在目录的绝对路径(sdk.directory + dirname(path()));聊天侧不传 rewriteAssetSrc 钩子,无回归
+  const mdAssetRewriter = createMemo(() => {
+    const root = sdk.directory
+    const p = path()
+    if (!root || !p) return undefined
+    const fileAbs = `${root}/${p}`.replace(/\\/g, "/")
+    const baseDir = pathDirname(fileAbs)
+    if (!baseDir) return undefined
+    return (src: string) => rewriteAssetSrc(root, baseDir, src)
+  })
+
   const renderMarkdown = (source: string) => (
     // FORK: data-context scope 让 markdown.css 单独定制文件查看器排版,不影响聊天 2026-04-29
     <div
@@ -994,9 +1025,14 @@ export function FileTabContent(props: { tab: string }) {
       onMouseDown={handlePreContextCapture}
       onContextMenu={handleSelectionContextMenu}
     >
-      <Markdown text={source} cacheKey={cacheKey()} />
+      <Markdown text={source} cacheKey={cacheKey()} rewriteAssetSrc={mdAssetRewriter()} />
     </div>
   )
+
+  // FORK: HTML 预览/源码切换状态 2026-05-05
+  const [htmlMode, setHtmlMode] = createSignal<"preview" | "source">("preview")
+  // 切 path 时重置回预览态(default)
+  createEffect(on(path, () => setHtmlMode("preview"), { defer: true }))
 
   // 媒体文件(audio + video):server 对 binary 扩展返 content="",走 Tauri command 直读本地成 base64
   // 用 createSignal + createEffect 手动管理(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
@@ -1166,113 +1202,165 @@ export function FileTabContent(props: { tab: string }) {
     </div>
   )
 
+  // FORK: 默认渲染路径(@pierre/diffs / fileComponent)— 提取成独立 helper 以便 HTML 源码视图复用 2026-05-05
+  const renderDefault = (source: string) => (
+    <div class="relative overflow-hidden pb-40" onMouseDown={handlePreContextCapture} onContextMenu={handleSelectionContextMenu}>
+      <Dynamic
+        component={fileComponent}
+        mode="text"
+        file={{
+          name: path() ?? "",
+          contents: source,
+          cacheKey: cacheKey(),
+        }}
+        enableLineSelection
+        enableHoverUtility
+        selectedLines={activeSelection()}
+        commentedLines={commentedLines()}
+        onRendered={() => {
+          scrollSync.queueRestore()
+        }}
+        annotations={commentsUi.annotations()}
+        renderAnnotation={commentsUi.renderAnnotation}
+        renderHoverUtility={commentsUi.renderHoverUtility}
+        onLineSelected={(range: SelectedLineRange | null) => {
+          commentsUi.onLineSelected(range)
+        }}
+        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+        onLineSelectionEnd={(range: SelectedLineRange | null) => {
+          commentsUi.onLineSelectionEnd(range)
+        }}
+        search={search}
+        class="select-text"
+        media={{
+          mode: "auto",
+          path: path(),
+          current: state()?.content,
+          onLoad: scrollSync.queueRestore,
+          onError: (args: { kind: "image" | "audio" | "svg" | "pdf" }) => {
+            if (args.kind !== "svg") return
+            showToast({
+              variant: "error",
+              title: language.t("toast.file.loadFailed.title"),
+            })
+          },
+          officeTooling: {
+            getStatus: async () =>
+              sdk.client.office.tooling
+                .status()
+                .then((x) => x.data as any)
+                .catch(() => undefined),
+            startInstall: async () =>
+              sdk.client.office.tooling
+                .install()
+                .then((x) => x.data as any)
+                .catch(() => undefined),
+            getProgress: async () =>
+              sdk.client.office.tooling
+                .progress()
+                .then((x) => x.data as any)
+                .catch(() => undefined),
+          },
+          onRetryFile: () => {
+            const p = path()
+            if (p) void file.load(p, { force: true })
+          },
+          onOpenExternal: () => {
+            const root = sdk.directory
+            const p = path()
+            if (!root || !p) return
+            const absPath = `${root}/${p}`.replace(/\\/g, "/")
+            invoke("open_path", { path: absPath, appName: null }).catch((e) => {
+              showToast({
+                variant: "error",
+                title: "无法用本机软件打开",
+                description: String(e),
+              })
+            })
+          },
+          loadOfficePdf: async (filePath: string) => {
+            const cacheKey = `${sdk.directory ?? ""}::${filePath}`
+            const cached = officePdfCacheGet(cacheKey)
+            if (cached) return cached
+            try {
+              const res = await sdk.client.file.officePdf(
+                { path: filePath },
+                { parseAs: "arrayBuffer" } as any,
+              )
+              const data = (res as any)?.data
+              let bytes: Uint8Array | undefined
+              if (data instanceof ArrayBuffer) bytes = new Uint8Array(data)
+              else if (data instanceof Uint8Array) bytes = data
+              else if (data && (data as any).byteLength != null)
+                bytes = new Uint8Array(data as ArrayBufferLike)
+              if (bytes && bytes.length > 0) {
+                officePdfCacheSet(cacheKey, bytes)
+              }
+              return bytes
+            } catch (e) {
+              console.warn("loadOfficePdf failed", e)
+              return undefined
+            }
+          },
+        }}
+      />
+    </div>
+  )
+
+  // FORK: HTML 预览 — 默认渲染后样子,iframe + sandbox(allow-same-origin,绝不开 allow-scripts)
+  // 大文件(>2MB)自动退源码;预览/源码 切换;iframe 内的相对资源(./img.png 等)走 localasset:// 自然解析 2026-05-05
+  const renderHtml = (source: string) => {
+    const root = sdk.directory
+    const p = path()
+    const sourceLen = source?.length ?? 0
+    const tooLargeForPreview = sourceLen > HTML_PREVIEW_MAX_BYTES
+    const previewUrl = root && p ? localAssetUrl(root, `${root}/${p}`) : ""
+    const effectiveMode = tooLargeForPreview ? "source" : htmlMode()
+
+    return (
+      <div class="relative flex flex-col h-full overflow-hidden">
+        <div class="flex items-center gap-2 px-4 py-1.5 border-b border-border-weak bg-surface-raised-base">
+          <button
+            type="button"
+            class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover disabled:opacity-40"
+            classList={{ "bg-surface-base-active": effectiveMode === "preview" }}
+            disabled={tooLargeForPreview}
+            title={tooLargeForPreview ? "文件 >2MB,自动退源码" : "渲染后样子"}
+            onClick={() => setHtmlMode("preview")}
+          >
+            预览
+          </button>
+          <button
+            type="button"
+            class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
+            classList={{ "bg-surface-base-active": effectiveMode === "source" }}
+            onClick={() => setHtmlMode("source")}
+          >
+            源码
+          </button>
+          <Show when={tooLargeForPreview}>
+            <span class="text-xs text-text-weak ml-2">文件 &gt;2MB,渲染禁用</span>
+          </Show>
+        </div>
+        <Show when={effectiveMode === "preview" && previewUrl} fallback={renderDefault(source)}>
+          <iframe
+            src={previewUrl}
+            sandbox="allow-same-origin"
+            referrerpolicy="no-referrer"
+            class="w-full flex-1 bg-white border-0"
+            style={{ "min-height": "60vh" }}
+          />
+        </Show>
+      </div>
+    )
+  }
+
   const renderFile = (source: string) => {
     const p = path()
     if (isMarkdownPath(p)) return renderMarkdown(source)
     if (mediaKindFromPath(p)) return renderMedia()
-    return (
-      <div class="relative overflow-hidden pb-40" onMouseDown={handlePreContextCapture} onContextMenu={handleSelectionContextMenu}>
-        <Dynamic
-          component={fileComponent}
-          mode="text"
-          file={{
-            name: path() ?? "",
-            contents: source,
-            cacheKey: cacheKey(),
-          }}
-          enableLineSelection
-          enableHoverUtility
-          selectedLines={activeSelection()}
-          commentedLines={commentedLines()}
-          onRendered={() => {
-            scrollSync.queueRestore()
-          }}
-          annotations={commentsUi.annotations()}
-          renderAnnotation={commentsUi.renderAnnotation}
-          renderHoverUtility={commentsUi.renderHoverUtility}
-          onLineSelected={(range: SelectedLineRange | null) => {
-            commentsUi.onLineSelected(range)
-          }}
-          onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
-          onLineSelectionEnd={(range: SelectedLineRange | null) => {
-            commentsUi.onLineSelectionEnd(range)
-          }}
-          search={search}
-          class="select-text"
-          media={{
-            mode: "auto",
-            path: path(),
-            current: state()?.content,
-            onLoad: scrollSync.queueRestore,
-            onError: (args: { kind: "image" | "audio" | "svg" | "pdf" }) => {
-              if (args.kind !== "svg") return
-              showToast({
-                variant: "error",
-                title: language.t("toast.file.loadFailed.title"),
-              })
-            },
-            officeTooling: {
-              getStatus: async () =>
-                sdk.client.office.tooling
-                  .status()
-                  .then((x) => x.data as any)
-                  .catch(() => undefined),
-              startInstall: async () =>
-                sdk.client.office.tooling
-                  .install()
-                  .then((x) => x.data as any)
-                  .catch(() => undefined),
-              getProgress: async () =>
-                sdk.client.office.tooling
-                  .progress()
-                  .then((x) => x.data as any)
-                  .catch(() => undefined),
-            },
-            onRetryFile: () => {
-              const p = path()
-              if (p) void file.load(p, { force: true })
-            },
-            onOpenExternal: () => {
-              const root = sdk.directory
-              const p = path()
-              if (!root || !p) return
-              const absPath = `${root}/${p}`.replace(/\\/g, "/")
-              invoke("open_path", { path: absPath, appName: null }).catch((e) => {
-                showToast({
-                  variant: "error",
-                  title: "无法用本机软件打开",
-                  description: String(e),
-                })
-              })
-            },
-            loadOfficePdf: async (filePath: string) => {
-              const cacheKey = `${sdk.directory ?? ""}::${filePath}`
-              const cached = officePdfCacheGet(cacheKey)
-              if (cached) return cached
-              try {
-                const res = await sdk.client.file.officePdf(
-                  { path: filePath },
-                  { parseAs: "arrayBuffer" } as any,
-                )
-                const data = (res as any)?.data
-                let bytes: Uint8Array | undefined
-                if (data instanceof ArrayBuffer) bytes = new Uint8Array(data)
-                else if (data instanceof Uint8Array) bytes = data
-                else if (data && (data as any).byteLength != null)
-                  bytes = new Uint8Array(data as ArrayBufferLike)
-                if (bytes && bytes.length > 0) {
-                  officePdfCacheSet(cacheKey, bytes)
-                }
-                return bytes
-              } catch (e) {
-                console.warn("loadOfficePdf failed", e)
-                return undefined
-              }
-            },
-          }}
-        />
-      </div>
-    )
+    if (isHtmlPath(p)) return renderHtml(source)
+    return renderDefault(source)
   }
 
   return (
