@@ -104,6 +104,7 @@ export async function repl(opts: ReplOptions): Promise<void> {
       process.stdout.write(
         `session ${state.sessionID.slice(-6)} · model ${state.model || "default"} · Tab to autocomplete` + EOL,
       )
+      process.stdout.write(`dir ${process.cwd()}` + EOL)
       process.stdout.write(`ctrl+d to exit · /help for commands` + UI.Style.TEXT_NORMAL + EOL)
       process.stdout.write(EOL)
     }
