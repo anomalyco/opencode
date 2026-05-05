@@ -28,15 +28,17 @@
 - **branch-pull-rule** — 治理硬规则:开新分支前必先拉最新 dev(CLAUDE.md 分支策略 v2 段)
 - 其他治理沉淀(数据目录隔离评估暂搁 / spec 过期 frontmatter 修等)详见 [改动日志.md](../改动日志.md)
 
-**Release**:[GitHub Release `ship-mac-prod-2026.5.5.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-mac-prod-2026.5.5.1)(待 GitHub Actions 跑完 + publish 后回填)
+**Release**:[GitHub Release `ship-mac-prod-2026.5.5.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-mac-prod-2026.5.5.1)
 - 文件:`DeskFox-2026.5.5.1_aarch64.dmg`
-- 大小:(待回填)
+- 大小:55.49 MB(58,185,315 bytes)
 - 架构:Apple Silicon(arm64,`aarch64-apple-darwin`)
-- SHA256:(待回填)
-- Bundle ID:`ai.deskfox.app`(prod)
+- SHA256:`84957d09bb5bba2f3f558d77e27f21778adf71ca1d42912fedffce601c341f03`
+- Bundle ID:`ai.deskfox.app`(prod,跟 sst/opencode 0 命名空间共享)
 
-key commit: (本笔 bump commit 待 commit 后回填)
-build run: (待 GitHub Actions 跑完后回填)
+key commit: `c7e7cbb57`(本笔 bump commit;基于 dev `98cbe12d7`)
+build run: [Actions run 25386808671](https://github.com/zoulukuang/deskfox/actions/runs/25386808671)(success)
+
+**Gitee 镜像**:user 在 Win 端处理(2026-05-06 起 Mac 端 ship 不跑 mirror,见 memory)
 
 **上游 baseline**:跟 dev 同步(同 `2026.5.4.1`,sync-2026-05-03-2 后基线)
 
