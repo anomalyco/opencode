@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { LLM } from "../src"
 import { Patch } from "../src/patch"
 import { PatchPipeline } from "../src/patch-pipeline"
-import { InvalidRequestError } from "../src/schema"
 import type { LLMRequest, ModelRef, ToolDefinition } from "../src/schema"
 
 const request = LLM.request({
@@ -179,11 +178,7 @@ describe("llm patch pipeline", () => {
             apply: (target: { readonly value: string }) => ({ value: `${target.value}|adapter` }),
           }),
         ],
-        validateTarget: (target) =>
-          Effect.gen(function* () {
-            if (target.value === "start|adapter|client") return target
-            return yield* new InvalidRequestError({ message: "invalid target" })
-          }),
+        schema: Schema.Struct({ value: Schema.Literal("start|adapter|client") }),
       }),
     )
 

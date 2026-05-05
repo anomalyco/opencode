@@ -33,9 +33,9 @@ export interface HttpContext {
 export interface Adapter<Target> {
   readonly id: string
   readonly protocol: ProtocolID
+  readonly target: Schema.Codec<Target, unknown>
   readonly patches: ReadonlyArray<Patch<Target>>
   readonly prepare: (request: LLMRequest) => Effect.Effect<Target, LLMError>
-  readonly validate: (target: Target) => Effect.Effect<Target, LLMError>
   readonly toHttp: (
     target: Target,
     context: HttpContext,
@@ -153,7 +153,6 @@ export function make<Target, Frame, Chunk, State>(
 ): AdapterDefinition<Target> {
   const auth = input.auth ?? authBearer
   const protocol = input.protocol
-  const validateTarget = ProviderShared.validateWith(Schema.decodeUnknownEffect(protocol.target))
   const encodeTarget = Schema.encodeSync(Schema.fromJsonString(protocol.target))
   const decodeChunkEffect = Schema.decodeUnknownEffect(protocol.chunk)
   const decodeChunk = (route: string) => (frame: Frame) =>
@@ -200,9 +199,9 @@ export function make<Target, Frame, Chunk, State>(
   return {
     id: input.id,
     protocol: input.protocolId ?? protocol.id,
+    target: protocol.target,
     patches,
     prepare: protocol.prepare,
-    validate: validateTarget,
     toHttp,
     parse,
     patch: (id, patchInput) => targetPatch(`${input.id}.${id}`, patchInput),
@@ -229,7 +228,7 @@ const makeClient = (options: ClientOptions): LLMClient => {
       state: patchedRequest,
       target: candidate,
       adapterPatches: adapter.patches,
-      validateTarget: adapter.validate,
+      schema: adapter.target,
     })
     const http = yield* adapter.toHttp(patchedTarget.target, {
       request: patchedTarget.request,

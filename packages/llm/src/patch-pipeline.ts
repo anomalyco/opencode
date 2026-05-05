@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import type { AnyPatch, Patch, PatchRegistry } from "./patch"
 import { context, emptyRegistry, registry as makePatchRegistry } from "./patch"
 import {
@@ -22,7 +22,7 @@ export interface PatchTargetInput<Target> {
   readonly state: PatchedRequest
   readonly target: Target
   readonly adapterPatches: ReadonlyArray<Patch<Target>>
-  readonly validateTarget: (target: Target) => Effect.Effect<Target, LLMError>
+  readonly schema: Schema.Codec<Target, unknown>
 }
 
 export interface PatchedTarget<Target> {
@@ -116,7 +116,9 @@ export const make = (patches?: PatchRegistry | ReadonlyArray<AnyPatch>): PatchPi
       ...input.adapterPatches,
       ...(registry.target as ReadonlyArray<Patch<Target>>),
     ], context({ request: input.state.request }))
-    const target = yield* input.validateTarget(targetPlan.apply(input.target))
+    const target = yield* Schema.decodeUnknownEffect(input.schema)(targetPlan.apply(input.target)).pipe(
+      Effect.mapError((error) => new InvalidRequestError({ message: error.message })),
+    )
     return {
       request: input.state.request,
       target,
