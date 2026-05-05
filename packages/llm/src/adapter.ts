@@ -209,7 +209,9 @@ export function make<Target, Frame, Chunk, State>(
       onHalt: protocol.onHalt,
     })
 
-  const build = (patches: ReadonlyArray<Patch<Target>>): AdapterDefinition<Target> => ({
+  const patches = input.patches ?? []
+
+  return {
     id: input.id,
     protocol: input.protocolId ?? protocol.id,
     patches,
@@ -218,10 +220,8 @@ export function make<Target, Frame, Chunk, State>(
     toHttp,
     parse,
     patch: (id, patchInput) => targetPatch(`${input.id}.${id}`, patchInput),
-    withPatches: (next) => build([...patches, ...next]),
-  })
-
-  return build(input.patches ?? [])
+    withPatches: (next) => make({ ...input, patches: [...patches, ...next] }),
+  }
 }
 
 /**
