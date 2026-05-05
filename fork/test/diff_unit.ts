@@ -1,5 +1,6 @@
 // Standalone test for colorizeDiff. Copy of the function so we don't have to
 // export it from render.ts.
+// simple edit
 
 const TEXT_DIM = "\x1b[90m"
 const TEXT_NORMAL = "\x1b[0m"

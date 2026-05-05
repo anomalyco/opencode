@@ -29,6 +29,7 @@ mkdir -p "$DIST_DIR"
 
 # Enter package directory and run Bun build
 cd "$ROOT_DIR/packages/opencode"
+export MODELS_DEV_API_JSON="$ROOT_DIR/fork/models-cache.json"
 bun run script/build.ts $BUILD_OPTS
 
 # Move build artifacts to fork/dist

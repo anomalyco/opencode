@@ -40,7 +40,6 @@ else
   git checkout --ours packages/opencode/src/cli/cmd/minimal-render.ts
   git checkout --ours packages/opencode/src/cli/cmd/tui/thread.ts
   git checkout --ours packages/opencode/script/build.ts
-  git checkout --ours packages/opencode/script/generate.ts
   git checkout --ours README.md
   
   # Protect everything in the fork/ directory
@@ -51,7 +50,6 @@ else
   git add packages/opencode/src/cli/cmd/minimal-render.ts
   git add packages/opencode/src/cli/cmd/tui/thread.ts
   git add packages/opencode/script/build.ts
-  git add packages/opencode/script/generate.ts
   git add README.md
   git add fork/
 

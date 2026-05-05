@@ -37,11 +37,9 @@
     *   对 `shiki` 引擎采用了动态导入（带 Fallback 路径），并使用变量绕过 TypeScript 的严格检查。
 *   **冲突点**：上游如果更换了语法高亮引擎或修改了 `ToolPart` 的渲染接口。
 
-### 4. `packages/opencode/script/generate.ts`
-*   **修改内容**：
-    *   增加了 `snapshotExists` 检测，支持在断网环境下复用本地 `models-snapshot.js`。
-    *   移除了会导致父进程中断的 `process.exit(0)`。
-*   **冲突点**：上游如果修改了模型 API 的获取地址或数据结构。
+### 4. `packages/opencode/script/generate.ts` (已恢复原版)
+*   **状态**：已彻底恢复至上游版本。
+*   **方案**：通过 `fork/scripts/build.sh` 注入 `MODELS_DEV_API_JSON` 环境变量来实现离线构建支持，不再直接修改此文件。
 
 ---
 
