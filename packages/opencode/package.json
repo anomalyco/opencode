@@ -154,6 +154,7 @@
     "remeda": "catalog:",
     "semver": "^7.6.3",
     "solid-js": "catalog:",
+    "string-width": "7.2.0",
     "strip-ansi": "7.1.2",
     "tree-sitter-bash": "0.25.0",
     "tree-sitter-powershell": "0.25.10",

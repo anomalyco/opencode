@@ -20,7 +20,7 @@ import { useFrecency } from "./frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { Reference } from "@/reference/reference"
 import { ConfigReference } from "@/config/reference"
-import { displayCharAt, mentionTriggerIndex } from "@/cli/cmd/prompt-display"
+import { displayCharAt, mentionTriggerIndex, promptOffsetWidth } from "@/cli/cmd/prompt-display"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -182,7 +182,7 @@ export function Autocomplete(props: {
 
     const virtualText = "@" + text
     const extmarkStart = store.index
-    const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
+    const extmarkEnd = extmarkStart + promptOffsetWidth(virtualText)
 
     const styleId = part.type === "file" ? props.fileStyleId : part.type === "agent" ? props.agentStyleId : undefined
 
@@ -557,7 +557,7 @@ export function Autocomplete(props: {
           const cursor = props.input().logicalCursor
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
+          props.input().cursorOffset = promptOffsetWidth(newText)
         },
       })
     }
