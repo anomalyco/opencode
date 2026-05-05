@@ -7,32 +7,16 @@ import { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { zodObject } from "@/util/effect-zod"
-import { AsyncQueue } from "@/util/queue"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { runRequest } from "./trace"
-
-export const TuiRequest = z.object({
-  path: z.string(),
-  body: z.any(),
-})
-
-export type TuiRequest = z.infer<typeof TuiRequest>
-
-const request = new AsyncQueue<TuiRequest>()
-const response = new AsyncQueue<unknown>()
-
-export function nextTuiRequest() {
-  return request.next()
-}
-
-export function submitTuiRequest(body: TuiRequest) {
-  request.push(body)
-}
-
-export function submitTuiResponse(body: unknown) {
-  response.push(body)
-}
+import {
+  TuiRequest,
+  nextTuiRequest,
+  nextTuiResponse,
+  submitTuiRequest,
+  submitTuiResponse,
+} from "@/server/shared/tui-control"
 
 export async function callTui(ctx: Context) {
   const body = await ctx.req.json()
@@ -40,7 +24,7 @@ export async function callTui(ctx: Context) {
     path: ctx.req.path,
     body,
   })
-  return response.next()
+  return nextTuiResponse()
 }
 
 const TuiControlRoutes = new Hono()

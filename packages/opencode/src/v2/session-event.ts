@@ -5,8 +5,8 @@ import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
 export { FileAttachment }
 import { ToolOutput } from "./tool-output"
-import { ModelID, ProviderID } from "@/provider/schema"
 import { V2Schema } from "./schema"
+import { Modelv2 } from "./model"
 
 export const Source = Schema.Struct({
   start: NonNegativeInt,
@@ -21,6 +21,14 @@ const Base = {
   timestamp: V2Schema.DateTimeUtcFromMillis,
   sessionID: SessionID,
 }
+
+export const UnknownError = Schema.Struct({
+  type: Schema.Literal("unknown"),
+  message: Schema.String,
+}).annotate({
+  identifier: "Session.Error.Unknown",
+})
+export type UnknownError = Schema.Schema.Type<typeof UnknownError>
 
 export const AgentSwitched = EventV2.define({
   type: "session.next.agent.switched",
@@ -39,9 +47,7 @@ export const ModelSwitched = EventV2.define({
   version: 1,
   schema: {
     ...Base,
-    id: ModelID,
-    providerID: ProviderID,
-    variant: Schema.String.pipe(Schema.optional),
+    model: Modelv2.Ref,
   },
 })
 export type ModelSwitched = Schema.Schema.Type<typeof ModelSwitched>
@@ -98,11 +104,7 @@ export namespace Step {
     schema: {
       ...Base,
       agent: Schema.String,
-      model: Schema.Struct({
-        id: Schema.String,
-        providerID: Schema.String,
-        variant: Schema.String.pipe(Schema.optional),
-      }),
+      model: Modelv2.Ref,
       snapshot: Schema.String.pipe(Schema.optional),
     },
   })
@@ -128,6 +130,16 @@ export namespace Step {
     },
   })
   export type Ended = Schema.Schema.Type<typeof Ended>
+
+  export const Failed = EventV2.define({
+    type: "session.next.step.failed",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      error: UnknownError,
+    },
+  })
+  export type Failed = Schema.Schema.Type<typeof Failed>
 }
 
 export namespace Text {
@@ -275,23 +287,20 @@ export namespace Tool {
   })
   export type Success = Schema.Schema.Type<typeof Success>
 
-  export const Error = EventV2.define({
-    type: "session.next.tool.error",
+  export const Failed = EventV2.define({
+    type: "session.next.tool.failed",
     aggregate: "sessionID",
     schema: {
       ...Base,
       callID: Schema.String,
-      error: Schema.Struct({
-        type: Schema.String,
-        message: Schema.String,
-      }),
+      error: UnknownError,
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       }),
     },
   })
-  export type Error = Schema.Schema.Type<typeof Error>
+  export type Failed = Schema.Schema.Type<typeof Failed>
 }
 
 export const RetryError = Schema.Struct({
@@ -359,6 +368,7 @@ export const All = Schema.Union(
     Shell.Ended,
     Step.Started,
     Step.Ended,
+    Step.Failed,
     Text.Started,
     Text.Delta,
     Text.Ended,
@@ -368,7 +378,7 @@ export const All = Schema.Union(
     Tool.Called,
     Tool.Progress,
     Tool.Success,
-    Tool.Error,
+    Tool.Failed,
     Reasoning.Started,
     Reasoning.Delta,
     Reasoning.Ended,
