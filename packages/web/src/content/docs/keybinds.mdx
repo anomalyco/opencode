@@ -167,6 +167,27 @@ The OpenCode desktop app prompt input supports common Readline/Emacs-style short
 
 Some terminals don't send modifier keys with Enter by default. You may need to configure your terminal to send `Shift+Enter` as an escape sequence.
 
+### Alacritty
+
+Open your `alacritty.toml` usually at `~/.config/alacritty/alacritty.toml` and add the new key bindig:
+
+```toml
+[[keyboard.bindings]]
+key = "Return"
+mods = "Shift"
+chars = "\u001b[13;2u"
+```
+
+### Tmux
+
+Open your `.tmux.conf` usually at `~/.tmux.conf` and add the new key bindig:
+
+```conf
+set -g xterm-keys on
+set -g extended-keys on
+set -g allow-passthrough on
+```
+
 ### Windows Terminal
 
 Open your `settings.json` at:
