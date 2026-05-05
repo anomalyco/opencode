@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
-import { OpenRouter } from "../../src/providers/openrouter"
+import * as OpenRouter from "../../src/providers/openrouter"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
@@ -15,7 +15,7 @@ describe("OpenRouter", () => {
       expect(model).toMatchObject({
         id: "openai/gpt-4o-mini",
         provider: "openrouter",
-        protocol: "openai-compatible-chat",
+        protocol: "openrouter-chat",
         baseURL: "https://openrouter.ai/api/v1",
         apiKey: "test-key",
       })
@@ -24,7 +24,7 @@ describe("OpenRouter", () => {
         LLM.request({ model, prompt: "Say hello." }),
       )
 
-      expect(prepared.adapter).toBe("openai-compatible-chat")
+      expect(prepared.adapter).toBe("openrouter")
       expect(prepared.payload).toMatchObject({
         model: "openai/gpt-4o-mini",
         messages: [{ role: "user", content: "Say hello." }],
@@ -51,7 +51,6 @@ describe("OpenRouter", () => {
         reasoning: { effort: "high" },
         prompt_cache_key: "session_123",
       })
-      expect(prepared.patchTrace.map((item) => item.id)).toContain("payload.openrouter.options")
     }),
   )
 })

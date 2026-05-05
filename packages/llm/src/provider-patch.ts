@@ -117,7 +117,7 @@ export const addDeepSeekEmptyReasoning = Patch.prompt("deepseek.empty-reasoning-
 
 export const moveOpenAICompatibleReasoningToNative = Patch.prompt("openai-compatible.reasoning-native-field", {
   reason: "OpenAI-compatible reasoning providers replay reasoning in provider-native assistant fields",
-  when: Model.protocol("openai-compatible-chat"),
+  when: Model.adapter("openai-compatible-chat"),
   apply: (request) => ({
     ...request,
     messages: request.messages.map((message) => {

@@ -1,5 +1,5 @@
 import { Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { Adapter, Auth, Endpoint, Framing, LLM, Protocol, RequestExecutor, Tool } from "@opencode-ai/llm"
+import { Adapter, Auth, Endpoint, Framing, LLM, LLMClient, Protocol, RequestExecutor, Tool } from "@opencode-ai/llm"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
 /**
@@ -100,7 +100,7 @@ const FakeProtocol = Protocol.define<FakePayload, string, string, void>({
   // protocols without changing this package.
   id: "fake-echo",
   payload: FakePayload,
-  prepare: (request) =>
+  toPayload: (request) =>
     Effect.succeed({
       model: request.model.id,
       input: request.messages
@@ -143,18 +143,21 @@ const FakeEcho = {
     ),
 }
 
-// `prepare` compiles through patches, protocol lowering, validation, endpoint,
-// auth, and HTTP construction without sending anything over the network.
+// `LLMClient.prepare` is the lower-level inspection hook: it compiles through
+// patches, payload conversion, validation, endpoint, auth, and HTTP construction
+// without sending anything over the network.
 const inspectFakeProvider = Effect.gen(function* () {
-  const prepared = yield* LLM.prepare({
-    model: FakeEcho.model("tiny-echo"),
-    prompt: "Show me the provider pipeline.",
-  })
+  const prepared = yield* LLMClient.make({ adapters: [FakeAdapter] }).prepare(
+    LLM.request({
+      model: FakeEcho.model("tiny-echo"),
+      prompt: "Show me the provider pipeline.",
+    }),
+  )
 
   console.log("\n== fake provider prepare ==")
   console.log("adapter:", prepared.adapter)
   console.log("payload:", Formatter.formatJson(prepared.payload, { space: 2 }))
-}).pipe(Effect.provide(LLM.layer()))
+})
 
 // Provide the LLM runtime and the HTTP request executor once. The default path
 // sends one live generate call and one local fake-provider prepare call.

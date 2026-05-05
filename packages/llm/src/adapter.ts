@@ -9,12 +9,12 @@ import { payload as payloadPatch } from "./patch"
 import { PatchPipeline } from "./patch-pipeline"
 import type { Framing } from "./framing"
 import type { Protocol } from "./protocol"
-import { ProviderShared } from "./protocols/shared"
+import * as ProviderShared from "./protocols/shared"
 import type {
+  AdapterID,
   LLMError,
   LLMEvent,
   LLMRequest,
-  PatchTrace,
   PreparedRequestOf,
   ProtocolID,
 } from "./schema"
@@ -31,7 +31,6 @@ import {
 
 export interface HttpContext {
   readonly request: LLMRequest
-  readonly patchTrace: ReadonlyArray<PatchTrace>
 }
 
 export interface Adapter<Payload> {
@@ -39,7 +38,7 @@ export interface Adapter<Payload> {
   readonly protocol: ProtocolID
   readonly payloadSchema: Schema.Codec<Payload, unknown>
   readonly patches: ReadonlyArray<Patch<Payload>>
-  readonly prepare: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
+  readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
   readonly toHttp: (
     payload: Payload,
     context: HttpContext,
@@ -79,21 +78,22 @@ export type ModelCapabilitiesInput = {
 
 export type ModelRefInput = Omit<
   ConstructorParameters<typeof ModelRef>[0],
-  "id" | "provider" | "capabilities" | "limits"
+  "id" | "provider" | "adapter" | "capabilities" | "limits"
 > & {
   readonly id: string | ModelID
   readonly provider: string | ProviderID
+  readonly adapter?: string | AdapterID
   readonly capabilities?: ModelCapabilities | ModelCapabilitiesInput
   readonly limits?: ModelLimits | ConstructorParameters<typeof ModelLimits>[0]
 }
 
-export type AdapterModelInput = Omit<ModelRefInput, "provider" | "protocol">
+export type AdapterModelInput = Omit<ModelRefInput, "provider" | "adapter" | "protocol">
 
-export type AdapterModelDefaults = Omit<ModelRefInput, "id" | "protocol">
+export type AdapterModelDefaults = Omit<ModelRefInput, "id" | "adapter" | "protocol">
 
-export type AdapterRoutedModelInput = Omit<ModelRefInput, "protocol">
+export type AdapterRoutedModelInput = Omit<ModelRefInput, "adapter" | "protocol">
 
-export type AdapterRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "protocol">>
+export type AdapterRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "adapter" | "protocol">>
 
 export const modelCapabilities = (input: ModelCapabilities | ModelCapabilitiesInput | undefined) => {
   if (input instanceof ModelCapabilities) return input
@@ -116,15 +116,16 @@ export const modelRef = (input: ModelRefInput) =>
     ...input,
     id: ModelID.make(input.id),
     provider: ProviderID.make(input.provider),
+    adapter: input.adapter ?? input.protocol,
     protocol: input.protocol,
     capabilities: modelCapabilities(input.capabilities),
     limits: modelLimits(input.limits),
   })
 
 export const bindModel = <Model extends ModelRef>(model: Model, adapter: AnyAdapter): Model => {
-  if (model.protocol !== adapter.protocol) {
+  if (model.adapter !== adapter.id || model.protocol !== adapter.protocol) {
     throw new Error(
-      `Cannot bind ${adapter.id} adapter (${adapter.protocol}) to ${model.provider}/${model.id} (${model.protocol})`,
+      `Cannot bind ${adapter.id} adapter (${adapter.protocol}) to ${model.provider}/${model.id} via ${model.adapter} (${model.protocol})`,
     )
   }
   modelAdapters.set(model, adapter)
@@ -139,7 +140,7 @@ function model<Input extends AdapterRoutedModelInput = AdapterRoutedModelInput>(
   adapter: AnyAdapter,
   defaults?: AdapterRoutedModelDefaults,
 ): (input: Input) => ModelRef
-function model(adapter: AnyAdapter, defaults: Partial<Omit<ModelRefInput, "id" | "protocol">> = {}) {
+function model(adapter: AnyAdapter, defaults: Partial<Omit<ModelRefInput, "id" | "adapter" | "protocol">> = {}) {
   return (input: AdapterRoutedModelInput) => {
     const provider = defaults.provider ?? input.provider
     if (!provider) throw new Error(`Adapter.model(${adapter.id}) requires a provider`)
@@ -148,6 +149,7 @@ function model(adapter: AnyAdapter, defaults: Partial<Omit<ModelRefInput, "id" |
         ...defaults,
         ...input,
         provider,
+        adapter: adapter.id,
         protocol: adapter.protocol,
         capabilities: input.capabilities ?? defaults.capabilities,
         limits: input.limits ?? defaults.limits,
@@ -165,12 +167,12 @@ export const preserveModelBinding = <Model extends ModelRef>(source: ModelRef, t
 
 export interface LLMClient {
   /**
-   * Compile a request through the adapter pipeline (patches, prepare,
+   * Compile a request through the adapter pipeline (patches, toPayload,
    * protocol payload validation, toHttp) without sending it. Returns the
    * prepared request including the provider-native payload.
    *
    * Pass a `Payload` type argument to statically expose the adapter's payload
-   * shape (e.g. `prepare<OpenAIChatPayload>(...)`) — the runtime payload is
+    * shape (e.g. `prepare<OpenAIChatPayload>(...)`) — the runtime payload is
    * identical, so this is a type-level assertion the caller makes about which
    * adapter the request will resolve to.
    */
@@ -185,7 +187,7 @@ export interface ClientOptions {
 }
 
 const noAdapter = (model: ModelRef) =>
-  new NoAdapterError({ protocol: model.protocol, provider: model.provider, model: model.id })
+  new NoAdapterError({ adapter: model.adapter, protocol: model.protocol, provider: model.provider, model: model.id })
 
 export interface MakeInput<Payload, Frame, Chunk, State> {
   /** Adapter id used in registry lookup, error messages, and patch namespaces. */
@@ -208,13 +210,6 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
   /** Provider patches that target this adapter (e.g. include-usage). */
   readonly patches?: ReadonlyArray<Patch<Payload>>
-  /**
-   * Optional override for the adapter's protocol id. Defaults to
-   * `protocol.id`. Only set when an adapter intentionally registers under a
-   * different protocol than the wire it speaks (today: OpenAI-compatible Chat
-   * uses OpenAI Chat protocol but registers under `openai-compatible-chat`).
-   */
-  readonly protocolId?: ProtocolID
 }
 
 /**
@@ -268,11 +263,11 @@ export function make<Payload, Frame, Chunk, State>(
 
   const parse = (response: HttpClientResponse.HttpClientResponse, ctx: HttpContext) =>
     ProviderShared.framed({
-      adapter: `${ctx.request.model.provider}/${ctx.request.model.protocol}`,
+      adapter: `${ctx.request.model.provider}/${ctx.request.model.adapter}`,
       response,
-      readError: `Failed to read ${ctx.request.model.provider}/${ctx.request.model.protocol} stream`,
+      readError: `Failed to read ${ctx.request.model.provider}/${ctx.request.model.adapter} stream`,
       framing: input.framing.frame,
-      decodeChunk: decodeChunk(`${ctx.request.model.provider}/${ctx.request.model.protocol}`),
+      decodeChunk: decodeChunk(`${ctx.request.model.provider}/${ctx.request.model.adapter}`),
       initial: protocol.initial,
       process: protocol.process,
       onHalt: protocol.onHalt,
@@ -282,10 +277,10 @@ export function make<Payload, Frame, Chunk, State>(
 
   return {
     id: input.id,
-    protocol: input.protocolId ?? protocol.id,
+    protocol: protocol.id,
     payloadSchema: protocol.payload,
     patches,
-    prepare: protocol.prepare,
+    toPayload: protocol.toPayload,
     toHttp,
     parse,
     patch: (id, patchInput) => payloadPatch(`${input.id}.${id}`, patchInput),
@@ -300,14 +295,14 @@ export function make<Payload, Frame, Chunk, State>(
  */
 const makeClient = (options: ClientOptions): LLMClient => {
   const pipeline = PatchPipeline.make(options.patches)
-  const adapters = new Map((options.adapters ?? []).map((adapter) => [adapter.protocol, adapter] as const))
+  const adapters = new Map((options.adapters ?? []).map((adapter) => [adapter.id, adapter] as const))
 
   const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-    const adapter = adapters.get(request.model.protocol) ?? modelAdapters.get(request.model)
+    const adapter = adapters.get(request.model.adapter) ?? modelAdapters.get(request.model)
     if (!adapter) return yield* noAdapter(request.model)
 
     const patchedRequest = yield* pipeline.patchRequest(request)
-    const candidate = yield* adapter.prepare(patchedRequest.request)
+    const candidate = yield* adapter.toPayload(patchedRequest.request)
     const patchedPayload = yield* pipeline.patchPayload({
       state: patchedRequest,
       payload: candidate,
@@ -316,7 +311,6 @@ const makeClient = (options: ClientOptions): LLMClient => {
     })
     const http = yield* adapter.toHttp(patchedPayload.payload, {
       request: patchedPayload.request,
-      patchTrace: patchedPayload.trace,
     })
 
     return {
@@ -324,11 +318,10 @@ const makeClient = (options: ClientOptions): LLMClient => {
       adapter,
       payload: patchedPayload.payload,
       http,
-      patchTrace: patchedPayload.trace,
     }
   })
 
-  const prepare = Effect.fn("LLM.prepare")(function* (request: LLMRequest) {
+  const prepare = Effect.fn("LLMClient.prepare")(function* (request: LLMRequest) {
     const compiled = yield* compile(request)
 
     return new PreparedRequest({
@@ -336,7 +329,6 @@ const makeClient = (options: ClientOptions): LLMClient => {
       adapter: compiled.adapter.id,
       model: compiled.request.model,
       payload: compiled.payload,
-      patchTrace: compiled.patchTrace,
     })
   })
 
@@ -347,7 +339,7 @@ const makeClient = (options: ClientOptions): LLMClient => {
         const executor = yield* RequestExecutor.Service
         const response = yield* executor.execute(compiled.http)
 
-        const events = compiled.adapter.parse(response, { request: compiled.request, patchTrace: compiled.patchTrace })
+        const events = compiled.adapter.parse(response, { request: compiled.request })
 
         return pipeline.patchStreamEvents({ request: compiled.request, events })
       }),

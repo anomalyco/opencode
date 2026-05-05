@@ -13,6 +13,7 @@ const capabilities = new ModelCapabilities({
 const model = new ModelRef({
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
+  adapter: "openai-chat",
   protocol: "openai-chat",
   capabilities,
   limits: new ModelLimits({}),
@@ -35,15 +36,16 @@ describe("llm schema", () => {
     expect(decoded.messages[0]?.content[0]?.type).toBe("text")
   })
 
-  test("accepts custom protocol ids", () => {
+  test("accepts custom adapter and protocol ids", () => {
     const decoded = Schema.decodeUnknownSync(LLMRequest)({
-      model: { ...model, protocol: "custom-protocol" },
+      model: { ...model, adapter: "custom-adapter", protocol: "custom-protocol" },
       system: [],
       messages: [],
       tools: [],
       generation: {},
     })
 
+    expect(decoded.model.adapter).toBe("custom-adapter")
     expect(decoded.model.protocol).toBe("custom-protocol")
   })
 

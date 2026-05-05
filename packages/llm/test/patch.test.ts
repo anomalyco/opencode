@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { AnthropicMessages, LLM, LLMClient, OpenAICompatibleChat, ProviderPatch } from "../src"
+import { AnthropicMessages, LLM, LLMClient, OpenAICompatible, OpenAICompatibleChat, ProviderPatch } from "../src"
 import { Model, Patch, context, plan } from "../src/patch"
 
 const request = LLM.request({
@@ -41,7 +41,7 @@ describe("llm patch", () => {
     expect(Model.provider("mistral").not()(ctx)).toBe(false)
   })
 
-  test("plan filters, sorts, applies, and traces deterministically", () => {
+  test("plan filters, sorts, and applies deterministically", () => {
     const patches = [
       Patch.prompt("b", {
         reason: "second alphabetically",
@@ -60,10 +60,8 @@ describe("llm patch", () => {
       }),
     ]
 
-    const patchPlan = plan({ phase: "prompt", context: context({ request }), patches })
-    const output = patchPlan.apply(request)
+    const output = plan({ phase: "prompt", context: context({ request }), patches }).apply(request)
 
-    expect(patchPlan.trace.map((item) => item.id)).toEqual(["prompt.a", "prompt.b"])
     expect(output.metadata).toEqual({ a: true, b: true })
   })
 
@@ -151,7 +149,7 @@ describe("llm patch", () => {
   test("adds empty DeepSeek reasoning replay blocks", () => {
     const input = LLM.request({
       id: "deepseek_reasoning",
-      model: LLM.model({ id: "deepseek-reasoner", provider: "deepseek", protocol: "openai-compatible-chat" }),
+      model: LLM.model({ id: "deepseek-reasoner", provider: "deepseek", adapter: "openai-compatible-chat", protocol: "openai-chat" }),
       messages: [LLM.assistant("answer")],
     })
     const output = plan({
@@ -189,7 +187,7 @@ describe("llm patch", () => {
   test("sanitizes Moonshot/Kimi tool schemas", () => {
     const input = LLM.request({
       id: "moonshot_schema",
-      model: LLM.model({ id: "kimi-k2", provider: "moonshotai", protocol: "openai-compatible-chat" }),
+      model: LLM.model({ id: "kimi-k2", provider: "moonshotai", adapter: "openai-compatible-chat", protocol: "openai-chat" }),
       tools: [
         {
           name: "lookup",
@@ -238,7 +236,6 @@ describe("llm patch", () => {
         { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
       ],
     })
-    expect(prepared.patchTrace.map((item) => item.id)).toContain("prompt.anthropic.repair-tool-use-order")
   })
 
   test("default patches compile DeepSeek reasoning replay into OpenAI-compatible native field", () => {
@@ -246,7 +243,7 @@ describe("llm patch", () => {
       LLMClient.make({ adapters: [OpenAICompatibleChat.adapter], patches: ProviderPatch.defaults }).prepare(
         LLM.request({
           id: "deepseek_default_reasoning",
-          model: OpenAICompatibleChat.deepseek({ id: "deepseek-reasoner" }),
+          model: OpenAICompatible.deepseek.model("deepseek-reasoner"),
           messages: [LLM.assistant("answer")],
         }),
       ),
@@ -255,7 +252,6 @@ describe("llm patch", () => {
     expect(prepared.payload).toMatchObject({
       messages: [{ role: "assistant", content: "answer", reasoning_content: "" }],
     })
-    expect(prepared.patchTrace.map((item) => item.id)).toContain("prompt.deepseek.empty-reasoning-replay")
   })
 
   // Cache hint policy: mark first-2 system + last-2 messages with ephemeral

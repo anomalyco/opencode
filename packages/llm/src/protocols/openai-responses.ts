@@ -205,7 +205,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
   return input
 })
 
-const prepare = Effect.fn("OpenAIResponses.prepare")(function* (request: LLMRequest) {
+const toPayload = Effect.fn("OpenAIResponses.toPayload")(function* (request: LLMRequest) {
   return {
     model: request.model.id,
     input: yield* lowerMessages(request),
@@ -373,7 +373,7 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
 export const protocol = Protocol.define({
   id: ADAPTER,
   payload: OpenAIResponsesPayload,
-  prepare,
+  toPayload,
   chunk: Protocol.jsonChunk(OpenAIResponsesChunk),
   initial: () => ({ hasFunctionCall: false, tools: {} }),
   process: processChunk,

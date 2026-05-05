@@ -28,7 +28,7 @@ import {
   type ToolResultPart,
   type ToolResultValue,
 } from "./schema"
-import type { LLMError, PreparedRequestOf } from "./schema"
+import type { LLMError } from "./schema"
 
 export interface Provider {
   readonly adapters: ReadonlyArray<AnyAdapter>
@@ -43,7 +43,6 @@ export interface MakeOptions {
 export type StreamWithToolsInput<T extends Tools> = Omit<RequestInput, "tools"> & Omit<RunOptions<T>, "request">
 
 export interface Runtime {
-  readonly prepare: <Payload = unknown>(input: LLMRequest | RequestInput) => Effect.Effect<PreparedRequestOf<Payload>, LLMError>
   readonly stream: (input: LLMRequest | RequestInput) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
   readonly generate: (input: LLMRequest | RequestInput) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
   readonly streamWithTools: <T extends Tools>(input: StreamWithToolsInput<T>) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
@@ -61,7 +60,6 @@ const requestOf = (input: LLMRequest | RequestInput) => input instanceof LLMRequ
 export const make = (options: MakeOptions = {}): Runtime => {
   const client = LLMClient.make(clientOptions(options))
   return {
-    prepare: (input) => client.prepare(requestOf(input)),
     stream: (input) => client.stream(requestOf(input)),
     generate: (input) => client.generate(requestOf(input)),
     streamWithTools: (input) => {
@@ -73,11 +71,6 @@ export const make = (options: MakeOptions = {}): Runtime => {
 
 export const layer = (options: MakeOptions = {}): Layer.Layer<Service> =>
   Layer.succeed(Service, Service.of(make(options)))
-
-export const prepare = <Payload = unknown>(input: LLMRequest | RequestInput) =>
-  Effect.gen(function* () {
-    return yield* (yield* Service).prepare<Payload>(input)
-  })
 
 export const stream = (input: LLMRequest | RequestInput) =>
   Stream.unwrap(

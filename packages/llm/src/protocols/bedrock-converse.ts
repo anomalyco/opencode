@@ -461,7 +461,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
 const lowerSystem = (system: ReadonlyArray<LLMRequest["system"][number]>): BedrockSystemBlock[] =>
   system.flatMap((part) => textWithCache(part.text, part.cache))
 
-const prepare = Effect.fn("BedrockConverse.prepare")(function* (request: LLMRequest) {
+const toPayload = Effect.fn("BedrockConverse.toPayload")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   return {
     modelId: request.model.id,
@@ -707,7 +707,7 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
 export const protocol = Protocol.define({
   id: ADAPTER,
   payload: BedrockConversePayload,
-  prepare,
+  toPayload,
   chunk: BedrockChunk,
   initial: () => ({ tools: {}, pendingStopReason: undefined }),
   process: processChunk,

@@ -3,7 +3,8 @@ import { Effect, Layer, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
-import { OpenAICompatibleChat } from "../../src/protocols/openai-compatible-chat"
+import * as OpenAICompatible from "../../src/providers/openai-compatible"
+import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { testEffect } from "../lib/effect"
 import { dynamicResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
@@ -42,12 +43,12 @@ const usageChunk = (usage: object) => ({
 })
 
 const providerFamilies = [
-  ["baseten", OpenAICompatibleChat.baseten, "https://inference.baseten.co/v1"],
-  ["cerebras", OpenAICompatibleChat.cerebras, "https://api.cerebras.ai/v1"],
-  ["deepinfra", OpenAICompatibleChat.deepinfra, "https://api.deepinfra.com/v1/openai"],
-  ["deepseek", OpenAICompatibleChat.deepseek, "https://api.deepseek.com/v1"],
-  ["fireworks", OpenAICompatibleChat.fireworks, "https://api.fireworks.ai/inference/v1"],
-  ["togetherai", OpenAICompatibleChat.togetherai, "https://api.together.xyz/v1"],
+  ["baseten", OpenAICompatible.baseten, "https://inference.baseten.co/v1"],
+  ["cerebras", OpenAICompatible.cerebras, "https://api.cerebras.ai/v1"],
+  ["deepinfra", OpenAICompatible.deepinfra, "https://api.deepinfra.com/v1/openai"],
+  ["deepseek", OpenAICompatible.deepseek, "https://api.deepseek.com/v1"],
+  ["fireworks", OpenAICompatible.fireworks, "https://api.fireworks.ai/inference/v1"],
+  ["togetherai", OpenAICompatible.togetherai, "https://api.together.xyz/v1"],
 ] as const
 
 describe("OpenAI-compatible Chat adapter", () => {
@@ -64,7 +65,8 @@ describe("OpenAI-compatible Chat adapter", () => {
       expect(prepared.model).toMatchObject({
         id: "deepseek-chat",
         provider: "deepseek",
-        protocol: "openai-compatible-chat",
+        adapter: "openai-compatible-chat",
+        protocol: "openai-chat",
         baseURL: "https://api.deepseek.test/v1/",
         apiKey: "test-key",
         queryParams: { "api-version": "2026-01-01" },
@@ -87,11 +89,12 @@ describe("OpenAI-compatible Chat adapter", () => {
   it.effect("provides model helpers for compatible provider families", () =>
     Effect.gen(function* () {
       expect(
-        providerFamilies.map(([provider, makeModel]) => {
-          const model = makeModel({ id: `${provider}-model`, apiKey: "test-key" })
+        providerFamilies.map(([provider, family]) => {
+          const model = family.model(`${provider}-model`, { apiKey: "test-key" })
           return {
             id: String(model.id),
             provider: String(model.provider),
+            adapter: model.adapter,
             protocol: model.protocol,
             baseURL: model.baseURL,
             apiKey: model.apiKey,
@@ -101,20 +104,21 @@ describe("OpenAI-compatible Chat adapter", () => {
         providerFamilies.map(([provider, _, baseURL]) => ({
           id: `${provider}-model`,
           provider,
-          protocol: "openai-compatible-chat",
+          adapter: "openai-compatible-chat",
+          protocol: "openai-chat",
           baseURL,
           apiKey: "test-key",
         })),
       )
 
-      const custom = OpenAICompatibleChat.deepseek({
-        id: "deepseek-chat",
+      const custom = OpenAICompatible.deepseek.model("deepseek-chat", {
         apiKey: "test-key",
         baseURL: "https://custom.deepseek.test/v1",
       })
       expect(custom).toMatchObject({
         provider: "deepseek",
-        protocol: "openai-compatible-chat",
+        adapter: "openai-compatible-chat",
+        protocol: "openai-chat",
         baseURL: "https://custom.deepseek.test/v1",
       })
     }),

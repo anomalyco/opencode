@@ -309,7 +309,7 @@ const thinkingBudget = (request: LLMRequest) => {
   return 8000
 }
 
-const prepare = Effect.fn("AnthropicMessages.prepare")(function* (request: LLMRequest) {
+const toPayload = Effect.fn("AnthropicMessages.toPayload")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const budget = thinkingBudget(request)
   return {
@@ -498,7 +498,7 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
 export const protocol = Protocol.define({
   id: ADAPTER,
   payload: AnthropicMessagesPayload,
-  prepare,
+  toPayload,
   chunk: Protocol.jsonChunk(AnthropicChunk),
   initial: () => ({ tools: {} }),
   process: processChunk,

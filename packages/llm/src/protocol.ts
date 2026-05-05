@@ -35,12 +35,12 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } f
  *   sequences into `LLMEvent` sequences.
  */
 export interface Protocol<Payload, Frame, Chunk, State> {
-  /** Stable id matching `ModelRef.protocol` for adapter registry lookup. */
+  /** Stable id for the wire protocol implementation. */
   readonly id: ProtocolID
   /** Schema for the validated provider-native payload sent as the JSON body. */
   readonly payload: Schema.Codec<Payload, unknown>
-  /** Lower a common request into this protocol's provider-native payload shape. */
-  readonly prepare: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
+  /** Convert a common request into this protocol's provider-native payload shape. */
+  readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
   /** Schema for one framed response unit. */
   readonly chunk: Schema.Codec<Chunk, Frame>
   /** Initial parser state. Called once per response. */
@@ -60,7 +60,7 @@ export interface Protocol<Payload, Frame, Chunk, State> {
  * - `payload` infers the provider-native request body shape.
  * - `chunk` infers the framed response item and decoded chunk shape.
  * - `initial`, `process`, and `onHalt` infer the parser state shape.
- * - `prepare` ties the common `LLMRequest` to the provider payload.
+ * - `toPayload` ties the common `LLMRequest` to the provider payload.
  *
  * Provider implementations should usually call `Protocol.define({ ... })`
  * without explicit type arguments; the schemas and parser functions are the

@@ -26,7 +26,7 @@ export type OpenAIChatModelInput = AdapterModelInput
 // =============================================================================
 // Request Payload Schema
 // =============================================================================
-// The payload schema is the provider-native JSON body. `prepare` below builds
+// The payload schema is the provider-native JSON body. `toPayload` below builds
 // this shape from the common `LLMRequest`, then `Adapter.make` validates and
 // JSON-encodes it before transport.
 const OpenAIChatFunction = Schema.Struct({
@@ -72,22 +72,19 @@ const OpenAIChatToolChoice = Schema.Union([
   }),
 ])
 
-const OpenAIChatPayloadFields = {
+export const payloadFields = {
   model: Schema.String,
   messages: Schema.Array(OpenAIChatMessage),
   tools: optionalArray(OpenAIChatTool),
   tool_choice: Schema.optional(OpenAIChatToolChoice),
   stream: Schema.Literal(true),
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
-  usage: Schema.optional(JsonObject),
-  reasoning: Schema.optional(JsonObject),
-  prompt_cache_key: Schema.optional(Schema.String),
   max_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
   stop: optionalArray(Schema.String),
 }
-const OpenAIChatPayload = Schema.Struct(OpenAIChatPayloadFields)
+const OpenAIChatPayload = Schema.Struct(payloadFields)
 export type OpenAIChatPayload = Schema.Schema.Type<typeof OpenAIChatPayload>
 
 // =============================================================================
@@ -239,8 +236,8 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   return [...system, ...Arr.flatten(yield* Effect.forEach(request.messages, lowerMessage))]
 })
 
-const prepare = Effect.fn("OpenAIChat.prepare")(function* (request: LLMRequest) {
-  // `prepare` returns the provider payload only. Endpoint, auth, framing,
+const toPayload = Effect.fn("OpenAIChat.toPayload")(function* (request: LLMRequest) {
+  // `toPayload` returns the provider payload only. Endpoint, auth, framing,
   // patches, validation, and HTTP execution are all composed by `Adapter.make`.
   return {
     model: request.model.id,
@@ -296,44 +293,37 @@ const pushToolDelta = (tools: Record<number, ProviderShared.ToolAccumulator>, de
     }
   })
 
-const applyToolDeltas = Effect.fn("OpenAIChat.applyToolDeltas")(function* (
-  stateTools: Record<number, ProviderShared.ToolAccumulator>,
-  toolDeltas: ReadonlyArray<OpenAIChatToolCallDelta>,
-) {
-  const tools = toolDeltas.length === 0 ? stateTools : { ...stateTools }
-  const events: LLMEvent[] = []
-  for (const tool of toolDeltas) {
-    const current = yield* pushToolDelta(tools, tool)
-    tools[tool.index] = current
-    if (tool.function?.arguments) {
-      events.push({ type: "tool-input-delta", id: current.id, name: current.name, text: tool.function.arguments })
-    }
-  }
-  return { tools, events }
-})
-
 const finalizeToolCalls = (tools: Record<number, ProviderShared.ToolAccumulator>) =>
   Effect.forEach(Object.values(tools), (tool) => ProviderShared.parsedToolCall(ADAPTER, tool))
 
 const processChunk = (state: ParserState, chunk: OpenAIChatChunk) =>
   Effect.gen(function* () {
+    const events: LLMEvent[] = []
     const usage = mapUsage(chunk.usage) ?? state.usage
     const choice = chunk.choices[0]
     const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
     const delta = choice?.delta
-    const toolDeltas = yield* applyToolDeltas(state.tools, delta?.tool_calls ?? [])
+    const toolDeltas = delta?.tool_calls ?? []
+    const tools = toolDeltas.length === 0 ? state.tools : { ...state.tools }
+
+    if (delta?.content) events.push({ type: "text-delta", text: delta.content })
+
+    for (const tool of toolDeltas) {
+      const current = yield* pushToolDelta(tools, tool)
+      tools[tool.index] = current
+      if (tool.function?.arguments) {
+        events.push({ type: "tool-input-delta", id: current.id, name: current.name, text: tool.function.arguments })
+      }
+    }
 
     // Finalize accumulated tool inputs eagerly when finish_reason arrives so
     // JSON parse failures fail the stream at the boundary rather than at halt.
     const toolCalls =
-      finishReason !== undefined && state.finishReason === undefined && Object.keys(toolDeltas.tools).length > 0
-        ? yield* finalizeToolCalls(toolDeltas.tools)
+      finishReason !== undefined && state.finishReason === undefined && Object.keys(tools).length > 0
+        ? yield* finalizeToolCalls(tools)
         : state.toolCalls
 
-    return [
-      { tools: toolDeltas.tools, toolCalls, usage, finishReason },
-      [...(delta?.content ? ([{ type: "text-delta", text: delta.content }] satisfies LLMEvent[]) : []), ...toolDeltas.events],
-    ] as const
+    return [{ tools, toolCalls, usage, finishReason }, events] as const
   })
 
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
@@ -357,7 +347,7 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
 export const protocol = Protocol.define({
   id: ADAPTER,
   payload: OpenAIChatPayload,
-  prepare,
+  toPayload,
   chunk: Protocol.jsonChunk(OpenAIChatChunk),
   initial: () => ({ tools: {}, toolCalls: [] }),
   process: processChunk,
@@ -380,8 +370,8 @@ export const adapter = Adapter.make({
 // =============================================================================
 export const model = Adapter.model(adapter, {
   // `Adapter.model` creates a user-facing model factory bound to this adapter.
-  // The model protocol is derived from `adapter.protocol`, so provider authors
-  // only specify provider identity and defaults here.
+  // The model adapter route and protocol are derived from the adapter, so
+  // provider authors only specify provider identity and defaults here.
   provider: "openai",
   capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
 })

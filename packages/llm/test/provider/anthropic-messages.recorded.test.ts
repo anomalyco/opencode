@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { LLM, ProviderPatch, ProviderRequestError, type PreparedRequestOf } from "../../src"
 import type { AnthropicMessagesPayload } from "../../src/protocols/anthropic-messages"
 import { LLMClient } from "../../src/adapter"
-import { AnthropicMessages } from "../../src/protocols/anthropic-messages"
+import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
@@ -97,7 +97,6 @@ describe("Anthropic Messages recorded", () => {
         { role: "assistant", content: [{ type: "text", text: "I will check the weather." }] },
         { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: weatherToolName }] },
       ])
-      expect(prepared.patchTrace.map((item) => item.id)).toContain("prompt.anthropic.repair-tool-use-order")
       expect(response.events.at(-1)).toMatchObject({ type: "request-finish" })
     }),
   )

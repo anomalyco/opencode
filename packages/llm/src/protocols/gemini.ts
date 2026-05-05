@@ -355,7 +355,7 @@ const thinkingBudget = (effort: ReasoningEffort | undefined) => {
   return 8192
 }
 
-const prepare = Effect.fn("Gemini.prepare")(function* (request: LLMRequest) {
+const toPayload = Effect.fn("Gemini.toPayload")(function* (request: LLMRequest) {
   const toolsEnabled = request.tools.length > 0 && request.toolChoice?.type !== "none"
   const generationConfig = {
     maxOutputTokens: request.generation.maxTokens,
@@ -462,7 +462,7 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
 export const protocol = Protocol.define({
   id: ADAPTER,
   payload: GeminiPayload,
-  prepare,
+  toPayload,
   chunk: Protocol.jsonChunk(GeminiChunk),
   initial: () => ({ hasToolCalls: false, nextToolCallId: 0 }),
   process: processChunk,

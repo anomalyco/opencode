@@ -1,9 +1,9 @@
-import type { LLMEvent, LLMRequest, ModelRef, PatchPhase, ProtocolID, ToolDefinition } from "./schema"
-import { PatchTrace } from "./schema"
+import type { AdapterID, LLMEvent, LLMRequest, ModelRef, PatchPhase, ProtocolID, ToolDefinition } from "./schema"
 
 export interface PatchContext {
   readonly request: LLMRequest
   readonly model: ModelRef
+  readonly adapter: ModelRef["adapter"]
   readonly protocol: ModelRef["protocol"]
 }
 
@@ -42,7 +42,6 @@ export interface PatchPredicate {
 export interface PatchPlan<A> {
   readonly phase: PatchPhase
   readonly patches: ReadonlyArray<Patch<A>>
-  readonly trace: ReadonlyArray<PatchTrace>
   readonly apply: (value: A) => A
 }
 
@@ -75,6 +74,7 @@ export const predicate = (run: (context: PatchContext) => boolean): PatchPredica
 
 export const Model = {
   provider: (provider: string) => predicate((context) => context.model.provider === provider),
+  adapter: (adapter: AdapterID) => predicate((context) => context.adapter === adapter),
   protocol: (protocol: ProtocolID) => predicate((context) => context.protocol === protocol),
   id: (id: string) => predicate((context) => context.model.id === id),
   idIncludes: (value: string) => predicate((context) => context.model.id.toLowerCase().includes(value.toLowerCase())),
@@ -115,6 +115,7 @@ export function context(input: {
   return {
     request: input.request,
     model: input.request.model,
+    adapter: input.request.model.adapter,
     protocol: input.request.model.protocol,
   }
 }
@@ -131,14 +132,6 @@ export function plan<A>(input: {
   return {
     phase: input.phase,
     patches,
-    trace: patches.map(
-      (patch) =>
-        new PatchTrace({
-          id: patch.id,
-          phase: patch.phase,
-          reason: patch.reason,
-        }),
-    ),
     apply: (value) => patches.reduce((next, patch) => patch.apply(next, input.context), value),
   }
 }

@@ -1,19 +1,17 @@
 import { Effect, Schema, Stream } from "effect"
 import type { AnyPatch, Patch, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry } from "./patch"
-import { ProviderShared } from "./protocols/shared"
+import * as ProviderShared from "./protocols/shared"
 import {
   InvalidRequestError,
   LLMRequest,
   type LLMError,
   type LLMEvent,
   type ModelRef,
-  type PatchTrace,
 } from "./schema"
 
 export interface PatchedRequest {
   readonly request: LLMRequest
-  readonly trace: ReadonlyArray<PatchTrace>
 }
 
 export interface PatchPayloadInput<Payload> {
@@ -26,7 +24,6 @@ export interface PatchPayloadInput<Payload> {
 export interface PatchedPayload<Payload> {
   readonly request: LLMRequest
   readonly payload: Payload
-  readonly trace: ReadonlyArray<PatchTrace>
 }
 
 export interface PatchStreamInput {
@@ -48,9 +45,14 @@ const normalizeRegistry = (patches: PatchRegistry | ReadonlyArray<AnyPatch> | un
 
 const ensureSameRoute = (original: ModelRef, next: ModelRef) =>
   Effect.gen(function* () {
-    if (next.provider === original.provider && next.id === original.id && next.protocol === original.protocol) return
+    if (
+      next.provider === original.provider &&
+      next.id === original.id &&
+      next.adapter === original.adapter &&
+      next.protocol === original.protocol
+    ) return
     return yield* new InvalidRequestError({
-      message: `Patches cannot change model routing (${original.provider}/${original.id}/${original.protocol} -> ${next.provider}/${next.id}/${next.protocol})`,
+      message: `Patches cannot change model routing (${original.provider}/${original.id}/${original.adapter}/${original.protocol} -> ${next.provider}/${next.id}/${next.adapter}/${next.protocol})`,
     })
   })
 
@@ -83,11 +85,6 @@ export const make = (patches?: PatchRegistry | ReadonlyArray<AnyPatch>): PatchPi
 
     return {
       request: patchedRequest,
-      trace: [
-        ...requestPlan.trace,
-        ...promptPlan.trace,
-        ...(hasToolSchemaPatches ? toolSchemaPlan.trace : []),
-      ],
     }
   })
 
@@ -103,7 +100,6 @@ export const make = (patches?: PatchRegistry | ReadonlyArray<AnyPatch>): PatchPi
     return {
       request: input.state.request,
       payload,
-      trace: [...input.state.trace, ...payloadPlan.trace],
     }
   })
 

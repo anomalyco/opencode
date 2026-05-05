@@ -12,6 +12,7 @@ const updateModel = (model: ModelRef, patch: Partial<LLM.ModelInput>) =>
   LLM.model({
     id: model.id,
     provider: model.provider,
+    adapter: model.adapter,
     protocol: model.protocol,
     baseURL: model.baseURL,
     headers: model.headers,
@@ -54,7 +55,8 @@ const request = LLM.request({
   model: LLM.model({
     id: "fake-model",
     provider: "fake-provider",
-    protocol: "openai-chat",
+    adapter: "fake",
+    protocol: "fake",
   }),
   prompt: "hello",
 })
@@ -71,7 +73,7 @@ const fakeProtocol = Protocol.define<FakePayload, FakeChunk, FakeChunk, void>({
     includeUsage: Schema.optional(Schema.Boolean),
   }),
   chunk: FakeChunk,
-  prepare: (request) =>
+  toPayload: (request) =>
     Effect.succeed({
       body: [
         ...request.messages
@@ -88,7 +90,6 @@ const fakeProtocol = Protocol.define<FakePayload, FakeChunk, FakeChunk, void>({
 const fake = Adapter.make({
   id: "fake",
   protocol: fakeProtocol,
-  protocolId: "openai-chat",
   endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
   framing: fakeFraming,
 })
@@ -96,7 +97,6 @@ const fake = Adapter.make({
 const gemini = Adapter.make({
   id: "gemini-fake",
   protocol: fakeProtocol,
-  protocolId: "gemini",
   endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
   framing: fakeFraming,
 })
@@ -115,7 +115,7 @@ const echoLayer = dynamicResponse(({ text, respond }) =>
 const it = testEffect(echoLayer)
 
 describe("llm adapter", () => {
-  it.effect("prepare applies payload patches with trace", () =>
+  it.effect("prepare applies payload patches", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({
         adapters: [
@@ -129,7 +129,6 @@ describe("llm adapter", () => {
       }).prepare(request)
 
       expect(prepared.payload).toEqual({ body: "hello", includeUsage: true })
-      expect(prepared.patchTrace.map((item) => item.id)).toEqual(["payload.fake.include-usage"])
     }),
   )
 
@@ -144,10 +143,10 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("selects adapters by request protocol", () =>
+  it.effect("selects adapters by request adapter", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [fake, gemini] }).prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { protocol: "gemini" }) }),
+        LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "gemini-fake" }) }),
       )
 
       expect(prepared.adapter).toBe("gemini-fake")
@@ -158,7 +157,7 @@ describe("llm adapter", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [] }).prepare(
         LLM.updateRequest(request, {
-          model: Adapter.bindModel(updateModel(request.model, { protocol: "gemini" }), gemini),
+          model: Adapter.bindModel(updateModel(request.model, { adapter: "gemini-fake" }), gemini),
         }),
       )
 
@@ -169,20 +168,18 @@ describe("llm adapter", () => {
   it.effect("explicit adapters override provider adapters", () =>
     Effect.gen(function* () {
       const override = Adapter.make({
-        id: "fake-override",
+        id: "fake",
         protocol: Protocol.define({
           ...fakeProtocol,
-          prepare: () => Effect.succeed({ body: "override" }),
+          toPayload: () => Effect.succeed({ body: "override" }),
         }),
-        protocolId: "openai-chat",
         endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
         framing: fakeFraming,
       })
 
-      const prepared = yield* LLM.make({ providers: [{ adapters: [fake] }], adapters: [override] }).prepare(request)
+      const response = yield* LLM.make({ providers: [{ adapters: [fake] }], adapters: [override] }).generate(request)
 
-      expect(prepared.adapter).toBe("fake-override")
-      expect(prepared.payload).toEqual({ body: "override" })
+      expect(response.text).toBe('echo:{"body":"override"}')
     }),
   )
 
@@ -204,11 +201,11 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("rejects protocol mismatch", () =>
+  it.effect("rejects missing adapter", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.make({ adapters: [fake] })
         .prepare(
-          LLM.updateRequest(request, { model: updateModel(request.model, { protocol: "gemini" }) }),
+          LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "missing" }) }),
         )
         .pipe(Effect.flip)
 

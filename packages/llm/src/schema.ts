@@ -2,12 +2,16 @@ import { Schema } from "effect"
 
 /**
  * Stable string identifier for a protocol implementation. The discriminator
- * value lives on `ModelRef.protocol` and on the `Adapter.protocol` field;
- * the runtime registry keys lookups by it. The implementation type itself is
- * `Protocol` (see `protocol.ts`).
+ * value lives on `ModelRef.protocol` and on the `Adapter.protocol` field. This
+ * describes the wire semantics: payload lowering, chunk decoding, and stream
+ * parsing. Runtime lookup uses `AdapterID` instead.
  */
 export const ProtocolID = Schema.String
 export type ProtocolID = Schema.Schema.Type<typeof ProtocolID>
+
+/** Stable string identifier for the runnable adapter route. */
+export const AdapterID = Schema.String
+export type AdapterID = Schema.Schema.Type<typeof AdapterID>
 
 export const ModelID = Schema.String.pipe(Schema.brand("LLM.ModelID"))
 export type ModelID = typeof ModelID.Type
@@ -68,6 +72,7 @@ export class ModelLimits extends Schema.Class<ModelLimits>("LLM.ModelLimits")({
 export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   id: ModelID,
   provider: ProviderID,
+  adapter: AdapterID,
   protocol: ProtocolID,
   baseURL: Schema.optional(Schema.String),
   /**
@@ -371,18 +376,11 @@ export const LLMEvent = Object.assign(llmEventTagged, {
 })
 export type LLMEvent = Schema.Schema.Type<typeof llmEventTagged>
 
-export class PatchTrace extends Schema.Class<PatchTrace>("LLM.PatchTrace")({
-  id: Schema.String,
-  phase: PatchPhase,
-  reason: Schema.String,
-}) {}
-
 export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.PreparedRequest")({
   id: Schema.String,
   adapter: Schema.String,
   model: ModelRef,
   payload: Schema.Unknown,
-  patchTrace: Schema.Array(PatchTrace),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
@@ -428,12 +426,13 @@ export class InvalidRequestError extends Schema.TaggedErrorClass<InvalidRequestE
 }) {}
 
 export class NoAdapterError extends Schema.TaggedErrorClass<NoAdapterError>()("LLM.NoAdapterError", {
+  adapter: AdapterID,
   protocol: ProtocolID,
   provider: ProviderID,
   model: ModelID,
 }) {
   override get message() {
-    return `No LLM adapter for ${this.provider}/${this.model} using ${this.protocol}`
+    return `No LLM adapter for ${this.provider}/${this.model} using ${this.adapter} (${this.protocol})`
   }
 }
 

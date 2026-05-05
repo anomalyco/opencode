@@ -37,7 +37,7 @@ const updateToolDefinition = (tool: ToolDefinition, patch: Partial<ToolDefinitio
   })
 
 describe("llm patch pipeline", () => {
-  test("patches request, prompt, and tool-schema phases with one ordered trace", () => {
+  test("patches request, prompt, and tool-schema phases in order", () => {
     const result = Effect.runSync(
       PatchPipeline.make([
         Patch.request("test.id", {
@@ -62,11 +62,6 @@ describe("llm patch pipeline", () => {
     expect(result.request.id).toBe("req_patched")
     expect(result.request.messages[0]?.content).toEqual([{ type: "text", text: "patched" }])
     expect(result.request.tools[0]?.description).toBe("patched tool")
-    expect(result.trace.map((item) => item.id)).toEqual([
-      "request.test.id",
-      "prompt.test.message",
-      "schema.test.description",
-    ])
   })
 
   test("prompt predicates see request patches", () => {
@@ -85,10 +80,6 @@ describe("llm patch pipeline", () => {
     )
 
     expect(result.request.messages[0]?.content).toEqual([{ type: "text", text: "rewrote-hello" }])
-    expect(result.trace.map((item) => item.id)).toEqual([
-      "request.mark-request",
-      "prompt.rewrite-only-when-marked",
-    ])
   })
 
   test("rejects request-shaped patches that change model routing", () => {
@@ -123,10 +114,9 @@ describe("llm patch pipeline", () => {
     )
 
     expect(result.request.tools).toEqual([])
-    expect(result.trace).toEqual([])
   })
 
-  test("traces tool-schema patches once per patch, not once per tool", () => {
+  test("applies tool-schema patches to every tool", () => {
     const result = Effect.runSync(
       PatchPipeline.make([
         Patch.toolSchema("test.description", {
@@ -144,10 +134,9 @@ describe("llm patch pipeline", () => {
     )
 
     expect(result.request.tools.map((tool) => tool.description)).toEqual(["patched first", "patched second"])
-    expect(result.trace.map((item) => item.id)).toEqual(["schema.test.description"])
   })
 
-  test("patches payloads before validation and carries combined trace", () => {
+  test("patches payloads before validation", () => {
     const pipeline = PatchPipeline.make([
       Patch.payload("client", {
         reason: "client payload patch",
@@ -172,7 +161,6 @@ describe("llm patch pipeline", () => {
     )
 
     expect(result.payload).toEqual({ value: "start|adapter|client" })
-    expect(result.trace.map((item) => item.id)).toEqual(["payload.adapter", "payload.client"])
   })
 
   test("patches stream events with the compiled request context", () => {
