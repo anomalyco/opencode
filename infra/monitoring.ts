@@ -3,6 +3,7 @@ const displayName = (s: string) =>
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ")
+    .replace(/(?<=\d) (?=\d)/g, ".")
 
 const resourceName = (s: string) => displayName(s).replace(/[^a-zA-Z0-9]/g, "")
 
@@ -200,8 +201,7 @@ new incident.AlertRoute("HoneycombAlertRoute", {
     },
     incidentMode: {
       value: {
-        literal: "standard",
-        // literal: $app.stage === "production" ? "standard" : "test",
+        literal: $app.stage === "production" ? "standard" : "test",
       },
     },
   },
@@ -254,8 +254,34 @@ const httpErrors: Trigger = ({ model, product }: { model: string; product: Produ
 
 const models: Model[] = [
   { id: "kimi-k2.6", products: ["go", "zen"], triggers: [httpErrors] },
-  { id: "claude-opus-4.7", products: ["zen"], triggers: [httpErrors] },
+  { id: "kimi-k2.5", products: ["go", "zen"], triggers: [httpErrors] },
+  { id: "deepseek-v4-flash", products: ["go", "zen"], triggers: [httpErrors] },
+  { id: "deepseek-v4-pro", products: ["go", "zen"], triggers: [httpErrors] },
+  { id: "glm-5.1", products: ["go", "zen"], triggers: [httpErrors] },
+  { id: "glm-5", products: ["go"], triggers: [httpErrors] },
+  { id: "qwen3.6-plus", products: ["go", "zen"], triggers: [httpErrors] },
+  { id: "minimax-m2.7", products: ["go", "zen"], triggers: [httpErrors] },
+  { id: "minimax-m2.5", products: ["go", "zen"], triggers: [httpErrors] },
+  { id: "qwen3.5-plus", products: ["go"], triggers: [httpErrors] },
+  { id: "mimo-v2.5-pro", products: ["go"], triggers: [httpErrors] },
+  { id: "mimo-v2.5", products: ["go"], triggers: [httpErrors] },
+  { id: "mimo-v2-omni", products: ["go"], triggers: [httpErrors] },
+  { id: "mimo-v2-pro", products: ["go"], triggers: [httpErrors] },
+  { id: "claude-opus-4-7", products: ["zen"], triggers: [httpErrors] },
+  { id: "claude-opus-4-6", products: ["zen"], triggers: [httpErrors] },
+  { id: "claude-sonnet-4-6", products: ["zen"], triggers: [httpErrors] },
+  { id: "gpt-5.5", products: ["zen"], triggers: [httpErrors] },
+  { id: "big-pickle", products: ["zen"], triggers: [httpErrors] },
+  { id: "minimax-m2.5-free", products: ["zen"], triggers: [httpErrors] },
+  { id: "hy3-preview-free", products: ["zen"], triggers: [httpErrors] },
+  { id: "nemotron-3-super-free", products: ["zen"], triggers: [httpErrors] },
+  { id: "trinity-large-preview-free", products: ["zen"], triggers: [httpErrors] },
+  { id: "ling-2.6-flash-free", products: ["zen"], triggers: [httpErrors] },
 ]
+
+if ($app.stage !== "production") {
+  models.splice(1)
+}
 
 for (const model of models) {
   for (const product of model.products) {
