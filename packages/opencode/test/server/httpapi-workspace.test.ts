@@ -168,7 +168,7 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "local-test", branch: null, extra: null }),
+        body: JSON.stringify({ type: "local-test", branch: null }),
       })
       expect(created.status).toBe(200)
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
@@ -202,14 +202,13 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "local-test", branch: null, extra: null }),
+        body: JSON.stringify({ type: "local-test", branch: null }),
       })
 
       expect(created.status).toBe(200)
       expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
         type: "local-test",
         name: "local-test",
-        extra: null,
       })
     }),
   )
@@ -222,7 +221,7 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "worktree", branch: null, extra: null }),
+        body: JSON.stringify({ type: "worktree", branch: null }),
       })
 
       const body = yield* Effect.promise(() => created.text())
@@ -254,7 +253,6 @@ describe("workspace HttpApi", () => {
       expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
         type: "local-test",
         name: "local-test",
-        extra: null,
       })
     }),
   )
@@ -269,7 +267,7 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "local-target", branch: null, extra: null }),
+        body: JSON.stringify({ type: "local-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
 
@@ -324,7 +322,7 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "remote-target", branch: null, extra: null }),
+        body: JSON.stringify({ type: "remote-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
 
@@ -391,7 +389,7 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "remote-session-target", branch: null, extra: null }),
+        body: JSON.stringify({ type: "remote-session-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
       const session = yield* Session.Service.use((svc) => svc.create()).pipe(

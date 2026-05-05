@@ -515,8 +515,6 @@ export const layer = Layer.effect(
 
     const sessionWarp = Effect.fn("Workspace.sessionWarp")(function* (input: SessionWarpInput) {
       return yield* Effect.gen(function* () {
-        yield* prompt.cancel(input.sessionID)
-
         log.info("session warp requested", {
           workspaceID: input.workspaceID,
           sessionID: input.sessionID,
@@ -548,6 +546,8 @@ export const layer = Layer.effect(
                   }),
                 ),
               )
+            } else {
+              yield* prompt.cancel(input.sessionID)
             }
 
             // "claim" this session so any future events coming from

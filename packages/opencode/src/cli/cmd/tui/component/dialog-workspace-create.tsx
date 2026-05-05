@@ -74,7 +74,6 @@ export async function warpWorkspaceSession(input: {
   workspaceID: string | null
   sessionID: string
   done?: () => void
-  showSuccessToast?: boolean
 }): Promise<boolean> {
   const result = await input.sdk.client.experimental.workspace
     .warp({
@@ -82,7 +81,7 @@ export async function warpWorkspaceSession(input: {
       sessionID: input.sessionID,
     })
     .catch(() => undefined)
-  if (!result || result.error) {
+  if (!result?.data) {
     input.toast.show({
       message: `Failed to warp session: ${errorMessage(result?.error ?? "no response")}`,
       variant: "error",
@@ -95,10 +94,6 @@ export async function warpWorkspaceSession(input: {
   await input.sync.bootstrap({ fatal: false }).catch(() => undefined)
 
   await Promise.all([input.project.workspace.sync(), input.sync.session.refresh()])
-
-  if (input.showSuccessToast !== false) {
-    input.toast.show({ message: "Session warped", variant: "success" })
-  }
 
   input.done?.()
   if (input.done) return true

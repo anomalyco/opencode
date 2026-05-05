@@ -51,7 +51,6 @@ import { WorkspaceLabel, type WorkspaceStatus } from "../workspace-label"
 export type PromptProps = {
   sessionID?: string
   workspaceID?: string
-  onWorkspaceCreatingChange?: (creating: boolean) => void
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
@@ -190,7 +189,6 @@ export function Prompt(props: PromptProps) {
 
   function setCreatingWorkspace(creating: boolean) {
     setWorkspaceCreating(creating)
-    props.onWorkspaceCreatingChange?.(creating)
   }
 
   function showWarpNotice(name: string) {
@@ -251,7 +249,6 @@ export function Prompt(props: PromptProps) {
       toast,
       workspaceID: workspace.id,
       sessionID: props.sessionID,
-      showSuccessToast: false,
     })
     if (warped) showWarpNotice(workspace.name)
   }
