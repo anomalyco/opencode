@@ -239,9 +239,9 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
   }
   const headers = { ...model.headers, ...input.headers }
   const requestModel = Object.keys(headers).length === 0 ? model : LLM.model({ ...model, headers })
-  // Cache hints, tool-id scrubbing, and other adapter-aware patches live in
-  // `@opencode-ai/llm`'s `ProviderPatch` registry. Callers wire them in at
-  // `client({ adapters, patches: ProviderPatch.defaults })` time so the
+  // Cache hints, tool-id scrubbing, and other adapter-aware transforms live in
+  // `@opencode-ai/llm`'s `ProviderTransform` registry. Callers wire them in at
+  // `client({ adapters, transforms: ProviderTransform.defaults })` time so the
   // bridge stays focused on shape conversion.
   return LLM.request({
     id: input.id,

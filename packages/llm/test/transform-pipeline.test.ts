@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM } from "../src"
-import { Patch } from "../src/patch"
-import { PatchPipeline } from "../src/patch-pipeline"
+import { Transform } from "../src/transform"
+import { TransformPipeline } from "../src/transform-pipeline"
 import type { LLMRequest, ModelRef, ToolDefinition } from "../src/schema"
 
 const request = LLM.request({
@@ -36,23 +36,23 @@ const updateToolDefinition = (tool: ToolDefinition, patch: Partial<ToolDefinitio
     ...patch,
   })
 
-describe("llm patch pipeline", () => {
-  test("patches request, prompt, and tool-schema phases in order", () => {
+describe("llm transform pipeline", () => {
+  test("transforms request, prompt, and tool-schema phases in order", () => {
     const result = Effect.runSync(
-      PatchPipeline.make([
-        Patch.request("test.id", {
+      TransformPipeline.make([
+        Transform.request("test.id", {
           reason: "rewrite request id",
           apply: (request) => LLM.updateRequest(request, { id: "req_patched" }),
         }),
-        Patch.prompt("test.message", {
+        Transform.prompt("test.message", {
           reason: "rewrite prompt text",
           apply: mapText(() => "patched"),
         }),
-        Patch.toolSchema("test.description", {
+        Transform.toolSchema("test.description", {
           reason: "rewrite tool description",
           apply: (tool) => updateToolDefinition(tool, { description: "patched tool" }),
         }),
-      ]).patchRequest(
+      ]).transformRequest(
         LLM.updateRequest(request, {
           tools: [{ name: "lookup", description: "original", inputSchema: {} }],
         }),
@@ -64,25 +64,25 @@ describe("llm patch pipeline", () => {
     expect(result.request.tools[0]?.description).toBe("patched tool")
   })
 
-  test("prompt predicates see request patches", () => {
+  test("prompt predicates see request transforms", () => {
     const result = Effect.runSync(
-      PatchPipeline.make([
-        Patch.request("mark-request", {
+      TransformPipeline.make([
+        Transform.request("mark-request", {
           reason: "mark request before prompt phase",
           apply: (request) => LLM.updateRequest(request, { metadata: { ...request.metadata, promptPatchEnabled: true } }),
         }),
-        Patch.prompt("rewrite-only-when-marked", {
+        Transform.prompt("rewrite-only-when-marked", {
           reason: "rewrite prompt text only after request marker",
           when: (ctx) => ctx.request.metadata?.promptPatchEnabled === true,
           apply: mapText((text) => `rewrote-${text}`),
         }),
-      ]).patchRequest(request),
+      ]).transformRequest(request),
     )
 
     expect(result.request.messages[0]?.content).toEqual([{ type: "text", text: "rewrote-hello" }])
   })
 
-  test("rejects request-shaped patches that change model routing", () => {
+  test("rejects request-shaped transforms that change model routing", () => {
     const changedRoutes = [
       { provider: "other-provider" },
       { id: "other-model" },
@@ -91,39 +91,39 @@ describe("llm patch pipeline", () => {
 
     for (const patch of changedRoutes) {
       const error = Effect.runSync(
-        PatchPipeline.make([
-          Patch.request("route", {
+        TransformPipeline.make([
+          Transform.request("route", {
             reason: "attempt to rewrite route",
             apply: (request) => LLM.updateRequest(request, { model: updateModel(request.model, patch) }),
           }),
-        ]).patchRequest(request).pipe(Effect.flip),
+        ]).transformRequest(request).pipe(Effect.flip),
       )
 
-      expect(error.message).toContain("Patches cannot change model routing")
+      expect(error.message).toContain("Transforms cannot change model routing")
     }
   })
 
-  test("skips tool-schema patches when there are no tools", () => {
+  test("skips tool-schema transforms when there are no tools", () => {
     const result = Effect.runSync(
-      PatchPipeline.make([
-        Patch.toolSchema("test.description", {
+      TransformPipeline.make([
+        Transform.toolSchema("test.description", {
           reason: "rewrite tool description",
           apply: (tool) => updateToolDefinition(tool, { description: "patched tool" }),
         }),
-      ]).patchRequest(request),
+      ]).transformRequest(request),
     )
 
     expect(result.request.tools).toEqual([])
   })
 
-  test("applies tool-schema patches to every tool", () => {
+  test("applies tool-schema transforms to every tool", () => {
     const result = Effect.runSync(
-      PatchPipeline.make([
-        Patch.toolSchema("test.description", {
+      TransformPipeline.make([
+        Transform.toolSchema("test.description", {
           reason: "rewrite tool description",
           apply: (tool) => updateToolDefinition(tool, { description: `patched ${tool.name}` }),
         }),
-      ]).patchRequest(
+      ]).transformRequest(
         LLM.updateRequest(request, {
           tools: [
             { name: "first", description: "original", inputSchema: {} },
@@ -136,49 +136,43 @@ describe("llm patch pipeline", () => {
     expect(result.request.tools.map((tool) => tool.description)).toEqual(["patched first", "patched second"])
   })
 
-  test("patches payloads before validation", () => {
-    const pipeline = PatchPipeline.make([
-      Patch.payload("client", {
-        reason: "client payload patch",
-        order: 2,
-        apply: (payload: { readonly value: string }) => ({ value: `${payload.value}|client` }),
-      }),
-    ])
-    const state = Effect.runSync(pipeline.patchRequest(request))
+  test("adapter-local payload transforms run before validation", () => {
+    const pipeline = TransformPipeline.make()
+    const state = Effect.runSync(pipeline.transformRequest(request))
     const result = Effect.runSync(
-      pipeline.patchPayload({
+      pipeline.transformPayload({
         state,
         payload: { value: "start" },
-        adapterPatches: [
-          Patch.payload("adapter", {
-            reason: "adapter payload patch",
+        adapterTransforms: [
+          Transform.payload("adapter", {
+            reason: "adapter payload transform",
             order: 1,
             apply: (payload: { readonly value: string }) => ({ value: `${payload.value}|adapter` }),
           }),
         ],
-        schema: Schema.Struct({ value: Schema.Literal("start|adapter|client") }),
+        schema: Schema.Struct({ value: Schema.Literal("start|adapter") }),
       }),
     )
 
-    expect(result.payload).toEqual({ value: "start|adapter|client" })
+    expect(result.payload).toEqual({ value: "start|adapter" })
   })
 
-  test("patches stream events with the compiled request context", () => {
-    const pipeline = PatchPipeline.make([
-      Patch.request("mark-request", {
+  test("transforms stream events with the compiled request context", () => {
+    const pipeline = TransformPipeline.make([
+      Transform.request("mark-request", {
         reason: "mark request before stream phase",
         apply: (request) => LLM.updateRequest(request, { metadata: { ...request.metadata, streamPatchEnabled: true } }),
       }),
-      Patch.stream("uppercase", {
+      Transform.stream("uppercase", {
         reason: "uppercase when compiled request is marked",
         when: (ctx) => ctx.request.metadata?.streamPatchEnabled === true,
         apply: (event) => (event.type === "text-delta" ? { ...event, text: event.text.toUpperCase() } : event),
       }),
     ])
-    const patched = Effect.runSync(pipeline.patchRequest(request))
+    const transformed = Effect.runSync(pipeline.transformRequest(request))
     const events = Effect.runSync(
-      pipeline.patchStreamEvents({
-        request: patched.request,
+      pipeline.transformStreamEvents({
+        request: transformed.request,
         events: Stream.fromIterable([{ type: "text-delta", text: "hello" }]),
       }).pipe(Stream.runCollect),
     )
@@ -186,14 +180,14 @@ describe("llm patch pipeline", () => {
     expect(Array.from(events)).toEqual([{ type: "text-delta", text: "HELLO" }])
   })
 
-  test("accepts a prebuilt patch registry", () => {
+  test("accepts a prebuilt transform registry", () => {
     const result = Effect.runSync(
-      PatchPipeline.make(Patch.registry([
-        Patch.prompt("test.message", {
+      TransformPipeline.make(Transform.registry([
+        Transform.prompt("test.message", {
           reason: "rewrite prompt text",
           apply: mapText(() => "patched"),
         }),
-      ])).patchRequest(request),
+      ])).transformRequest(request),
     )
 
     expect(result.request.messages[0]?.content).toEqual([{ type: "text", text: "patched" }])

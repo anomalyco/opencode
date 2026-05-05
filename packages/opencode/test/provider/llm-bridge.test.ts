@@ -100,7 +100,7 @@ describe("ProviderLLMBridge", () => {
     expect(ref).toMatchObject({
       id: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       provider: "togetherai",
-      protocol: "openai-compatible-chat",
+      protocol: "openai-chat",
       baseURL: "https://api.together.xyz/v1",
       apiKey: "together-key",
     })
@@ -171,7 +171,7 @@ describe("ProviderLLMBridge", () => {
     })
 
     expect(ref).toMatchObject({
-      protocol: "openai-compatible-chat",
+      protocol: "openai-chat",
       baseURL: "https://custom.cerebras.test/v1",
       apiKey: "cerebras-key",
       headers: {

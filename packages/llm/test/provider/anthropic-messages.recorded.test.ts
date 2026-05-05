@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, ProviderPatch, ProviderRequestError, type PreparedRequestOf } from "../../src"
+import { LLM, ProviderRequestError, ProviderTransform, type PreparedRequestOf } from "../../src"
 import type { AnthropicMessagesPayload } from "../../src/protocols/anthropic-messages"
 import { LLMClient } from "../../src/adapter"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
@@ -33,7 +33,7 @@ const recorded = recordedTests({
   options: { requestHeaders: ["content-type", "anthropic-version"] },
 })
 const anthropic = LLMClient.make({ adapters: [AnthropicMessages.adapter] })
-const anthropicWithPatches = LLMClient.make({ adapters: [AnthropicMessages.adapter], patches: ProviderPatch.defaults })
+const anthropicWithTransforms = LLMClient.make({ adapters: [AnthropicMessages.adapter], transforms: ProviderTransform.defaults })
 
 const malformedToolOrderRequest = LLM.request({
   id: "recorded_anthropic_malformed_tool_order",
@@ -78,7 +78,7 @@ describe("Anthropic Messages recorded", () => {
     }),
   )
 
-  recorded.effect.with("rejects malformed assistant tool order without patch", { tags: ["tool", "sad-path"] }, () =>
+  recorded.effect.with("rejects malformed assistant tool order without transform", { tags: ["tool", "sad-path"] }, () =>
     Effect.gen(function* () {
       const error = yield* anthropic.generate(malformedToolOrderRequest).pipe(Effect.flip)
 
@@ -88,10 +88,10 @@ describe("Anthropic Messages recorded", () => {
     }),
   )
 
-  recorded.effect.with("accepts malformed assistant tool order with default patch", { tags: ["tool"] }, () =>
+  recorded.effect.with("accepts malformed assistant tool order with default transform", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const prepared: PreparedRequestOf<AnthropicMessagesPayload> = yield* anthropicWithPatches.prepare<AnthropicMessagesPayload>(malformedToolOrderRequest)
-      const response = yield* anthropicWithPatches.generate(malformedToolOrderRequest)
+      const prepared: PreparedRequestOf<AnthropicMessagesPayload> = yield* anthropicWithTransforms.prepare<AnthropicMessagesPayload>(malformedToolOrderRequest)
+      const response = yield* anthropicWithTransforms.generate(malformedToolOrderRequest)
 
       expect(prepared.payload.messages.slice(0, 2)).toMatchObject([
         { role: "assistant", content: [{ type: "text", text: "I will check the weather." }] },

@@ -238,7 +238,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
 
 const toPayload = Effect.fn("OpenAIChat.toPayload")(function* (request: LLMRequest) {
   // `toPayload` returns the provider payload only. Endpoint, auth, framing,
-  // patches, validation, and HTTP execution are all composed by `Adapter.make`.
+  // transforms, validation, and HTTP execution are all composed by `Adapter.make`.
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request),
@@ -366,7 +366,7 @@ export const adapter = Adapter.make({
 })
 
 // =============================================================================
-// Model Helper And Patches
+// Model Helper And Transforms
 // =============================================================================
 export const model = Adapter.model(adapter, {
   // `Adapter.model` creates a user-facing model factory bound to this adapter.
@@ -376,9 +376,9 @@ export const model = Adapter.model(adapter, {
   capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
 })
 
-export const includeUsage = adapter.patch("include-usage", {
-  // Adapter-local patches are named payload transforms. They are inspectable in
-  // patch traces and cannot reroute the request to another model/protocol.
+export const includeUsage = adapter.transform("include-usage", {
+  // Adapter-local transforms are named payload rewrites. They cannot reroute
+  // the request to another model/protocol.
   reason: "request final usage chunk from OpenAI Chat streaming responses",
   apply: (payload) => ({
     ...payload,

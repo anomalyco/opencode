@@ -25,7 +25,7 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } f
  *
  * The four type parameters reflect the pipeline:
  *
- * - `Payload` — provider-native request payload candidate. Payload patches can
+ * - `Payload` — provider-native request payload candidate. Payload transforms can
  *   transform this value, then `Adapter.make(...)` validates and
  *   JSON-encodes it with `payload`.
  * - `Frame` — one unit of the framed response stream. SSE: a JSON data

@@ -1,7 +1,7 @@
 import { Adapter } from "../adapter"
 import type { ModelInput } from "../llm"
-import { OpenAICompatibleProfiles } from "./openai-compatible-profile"
-import { OpenAIResponses } from "../protocols/openai-responses"
+import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
+import * as OpenAIResponses from "../protocols/openai-responses"
 
 export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol">
 
@@ -15,5 +15,3 @@ export const model = (modelID: string, options: ModelOptions = {}) =>
     id: modelID,
     baseURL: options.baseURL ?? OpenAICompatibleProfiles.profiles.xai.baseURL,
   })
-
-export * as XAI from "./xai"

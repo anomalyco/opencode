@@ -1,5 +1,11 @@
 import { Cause, Context, Effect, Layer } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http"
 import { ProviderRequestError, TransportError, type LLMError } from "./schema"
 
 export interface Interface {

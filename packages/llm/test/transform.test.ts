@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { AnthropicMessages, LLM, LLMClient, OpenAICompatible, OpenAICompatibleChat, ProviderPatch } from "../src"
-import { Model, Patch, context, plan } from "../src/patch"
+import { AnthropicMessages, LLM, LLMClient, OpenAICompatible, OpenAICompatibleChat, ProviderTransform } from "../src"
+import { Model, Transform, context, plan } from "../src/transform"
 
 const request = LLM.request({
   id: "req_1",
@@ -13,24 +13,23 @@ const request = LLM.request({
   prompt: "hi",
 })
 
-describe("llm patch", () => {
+describe("llm transform", () => {
   test("constructors prefix ids and registry groups by phase", () => {
-    const prompt = Patch.prompt("mistral.test", {
+    const prompt = Transform.prompt("mistral.test", {
       reason: "test prompt",
       when: Model.provider("mistral"),
       apply: (request) => request,
     })
-    const payload = Patch.payload("fake.test", {
+    const payload = Transform.payload("fake.test", {
       reason: "test payload",
       apply: (draft: { value: number }) => draft,
     })
 
-    const registry = Patch.registry([prompt, payload])
+    const registry = Transform.registry([prompt])
 
     expect(prompt.id).toBe("prompt.mistral.test")
     expect(payload.id).toBe("payload.fake.test")
     expect(registry.prompt).toEqual([prompt])
-    expect(registry.payload.map((item) => item.id)).toEqual([payload.id])
   })
 
   test("predicates compose", () => {
@@ -42,30 +41,30 @@ describe("llm patch", () => {
   })
 
   test("plan filters, sorts, and applies deterministically", () => {
-    const patches = [
-      Patch.prompt("b", {
+    const transforms = [
+      Transform.prompt("b", {
         reason: "second alphabetically",
         order: 1,
         apply: (request) => ({ ...request, metadata: { ...request.metadata, b: true } }),
       }),
-      Patch.prompt("a", {
+      Transform.prompt("a", {
         reason: "first alphabetically",
         order: 1,
         apply: (request) => ({ ...request, metadata: { ...request.metadata, a: true } }),
       }),
-      Patch.prompt("skip", {
+      Transform.prompt("skip", {
         reason: "not selected",
         when: Model.provider("anthropic"),
         apply: (request) => ({ ...request, metadata: { ...request.metadata, skip: true } }),
       }),
     ]
 
-    const output = plan({ phase: "prompt", context: context({ request }), patches }).apply(request)
+    const output = plan({ phase: "prompt", context: context({ request }), transforms }).apply(request)
 
     expect(output.metadata).toEqual({ a: true, b: true })
   })
 
-  test("provider patch examples remove empty Anthropic content", () => {
+  test("provider transform examples remove empty Anthropic content", () => {
     const input = LLM.request({
       id: "anthropic_empty",
       model: LLM.model({ id: "claude-sonnet", provider: "anthropic", protocol: "anthropic-messages" }),
@@ -78,7 +77,7 @@ describe("llm patch", () => {
     const output = plan({
       phase: "prompt",
       context: context({ request: input }),
-      patches: [ProviderPatch.removeEmptyAnthropicContent],
+      transforms: [ProviderTransform.removeEmptyAnthropicContent],
     }).apply(input)
 
     expect(output.system).toEqual([])
@@ -86,7 +85,7 @@ describe("llm patch", () => {
     expect(output.messages[0]?.content).toEqual([{ type: "text", text: "hello" }])
   })
 
-  test("provider patch examples scrub model-specific tool call ids", () => {
+  test("provider transform examples scrub model-specific tool call ids", () => {
     const input = LLM.request({
       id: "mistral_tool_ids",
       model: LLM.model({ id: "devstral-small", provider: "mistral", protocol: "openai-chat" }),
@@ -98,7 +97,7 @@ describe("llm patch", () => {
     const output = plan({
       phase: "prompt",
       context: context({ request: input }),
-      patches: [ProviderPatch.scrubMistralToolIds],
+      transforms: [ProviderTransform.scrubMistralToolIds],
     }).apply(input)
 
     expect(output.messages[0]?.content[0]).toMatchObject({ type: "tool-call", id: "callbadva" })
@@ -119,7 +118,7 @@ describe("llm patch", () => {
     const output = plan({
       phase: "prompt",
       context: context({ request: input }),
-      patches: [ProviderPatch.repairAnthropicToolUseOrder],
+      transforms: [ProviderTransform.repairAnthropicToolUseOrder],
     }).apply(input)
 
     expect(output.messages).toHaveLength(2)
@@ -139,7 +138,7 @@ describe("llm patch", () => {
     const output = plan({
       phase: "prompt",
       context: context({ request: input }),
-      patches: [ProviderPatch.repairMistralToolResultUserSequence],
+      transforms: [ProviderTransform.repairMistralToolResultUserSequence],
     }).apply(input)
 
     expect(output.messages.map((message) => message.role)).toEqual(["tool", "assistant", "user"])
@@ -155,7 +154,7 @@ describe("llm patch", () => {
     const output = plan({
       phase: "prompt",
       context: context({ request: input }),
-      patches: [ProviderPatch.addDeepSeekEmptyReasoning],
+      transforms: [ProviderTransform.addDeepSeekEmptyReasoning],
     }).apply(input)
 
     expect(output.messages[0]?.content).toEqual([{ type: "text", text: "answer" }])
@@ -173,7 +172,7 @@ describe("llm patch", () => {
     const output = plan({
       phase: "prompt",
       context: context({ request: input }),
-      patches: [ProviderPatch.unsupportedMediaFallback],
+      transforms: [ProviderTransform.unsupportedMediaFallback],
     }).apply(input)
 
     expect(output.messages[0]?.content).toEqual([
@@ -205,7 +204,7 @@ describe("llm patch", () => {
     const output = plan({
       phase: "tool-schema",
       context: context({ request: input }),
-      patches: [ProviderPatch.sanitizeMoonshotToolSchema],
+      transforms: [ProviderTransform.sanitizeMoonshotToolSchema],
     }).apply(input.tools[0])
 
     expect(output.inputSchema.properties).toEqual({
@@ -214,9 +213,9 @@ describe("llm patch", () => {
     })
   })
 
-  test("default patches compile invalid Anthropic tool-use ordering into valid payload order", () => {
+  test("default transforms compile invalid Anthropic tool-use ordering into valid payload order", () => {
     const prepared = Effect.runSync(
-      LLMClient.make({ adapters: [AnthropicMessages.adapter], patches: ProviderPatch.defaults }).prepare(
+      LLMClient.make({ adapters: [AnthropicMessages.adapter], transforms: ProviderTransform.defaults }).prepare(
         LLM.request({
           id: "anthropic_default_tool_order",
           model: AnthropicMessages.model({ id: "claude-sonnet" }),
@@ -238,9 +237,9 @@ describe("llm patch", () => {
     })
   })
 
-  test("default patches compile DeepSeek reasoning replay into OpenAI-compatible native field", () => {
+  test("default transforms compile DeepSeek reasoning replay into OpenAI-compatible native field", () => {
     const prepared = Effect.runSync(
-      LLMClient.make({ adapters: [OpenAICompatibleChat.adapter], patches: ProviderPatch.defaults }).prepare(
+      LLMClient.make({ adapters: [OpenAICompatibleChat.adapter], transforms: ProviderTransform.defaults }).prepare(
         LLM.request({
           id: "deepseek_default_reasoning",
           model: OpenAICompatible.deepseek.model("deepseek-reasoner"),
@@ -266,11 +265,11 @@ describe("llm patch", () => {
         capabilities: LLM.capabilities({ cache: { prompt: true, contentBlocks: true } }),
       })
 
-    const runCachePatch = (input: ReturnType<typeof LLM.request>) =>
+    const runCacheTransform = (input: ReturnType<typeof LLM.request>) =>
       plan({
         phase: "prompt",
         context: context({ request: input }),
-        patches: [ProviderPatch.cachePromptHints],
+        transforms: [ProviderTransform.cachePromptHints],
       }).apply(input)
 
     test("marks first 2 system parts with an ephemeral cache hint", () => {
@@ -280,7 +279,7 @@ describe("llm patch", () => {
         system: ["First", "Second", "Third"].map(LLM.system),
         prompt: "hello",
       })
-      const output = runCachePatch(input)
+      const output = runCacheTransform(input)
 
       expect(output.system).toHaveLength(3)
       expect(output.system[0]).toMatchObject({ text: "First", cache: { type: "ephemeral" } })
@@ -299,7 +298,7 @@ describe("llm patch", () => {
           LLM.user([{ type: "text", text: "m2" }]),
         ],
       })
-      const output = runCachePatch(input)
+      const output = runCacheTransform(input)
 
       expect(output.messages).toHaveLength(3)
       // First message untouched.
@@ -322,7 +321,7 @@ describe("llm patch", () => {
           ]),
         ],
       })
-      const output = runCachePatch(input)
+      const output = runCacheTransform(input)
 
       const content = output.messages[0].content
       expect(content[0]).toMatchObject({ type: "text", text: "calling tool", cache: { type: "ephemeral" } })
@@ -337,7 +336,7 @@ describe("llm patch", () => {
           LLM.toolMessage({ id: "call_1", name: "lookup", result: { ok: true } }),
         ],
       })
-      const output = runCachePatch(input)
+      const output = runCacheTransform(input)
 
       expect(output.messages[0].content[0]).toMatchObject({ type: "tool-result", id: "call_1" })
       // No text part to mark, so the content array is identity-equal — the
@@ -357,7 +356,7 @@ describe("llm patch", () => {
         system: ["A", "B"].map(LLM.system),
         messages: [LLM.user([{ type: "text", text: "hi" }])],
       })
-      const output = runCachePatch(input)
+      const output = runCacheTransform(input)
 
       // Every text part should be free of cache hints.
       for (const part of output.system) expect(part.cache).toBeUndefined()

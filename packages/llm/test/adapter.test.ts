@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { Endpoint, LLM, Protocol } from "../src"
 import { Adapter, LLMClient } from "../src/adapter"
-import { Patch } from "../src/patch"
+import { Transform } from "../src/transform"
 import type { FramingDef } from "../src"
 import type { ModelRef } from "../src/schema"
 import { testEffect } from "./lib/effect"
@@ -115,13 +115,13 @@ const echoLayer = dynamicResponse(({ text, respond }) =>
 const it = testEffect(echoLayer)
 
 describe("llm adapter", () => {
-  it.effect("prepare applies payload patches", () =>
+  it.effect("prepare applies payload transforms", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({
         adapters: [
-          fake.withPatches([
-            fake.patch("include-usage", {
-              reason: "fake payload patch",
+          fake.withTransforms([
+            fake.transform("include-usage", {
+              reason: "fake payload transform",
               apply: (payload) => ({ ...payload, includeUsage: true }),
             }),
           ]),
@@ -183,12 +183,12 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("stream patches transform raised events", () =>
+  it.effect("stream transforms rewrite raised events", () =>
     Effect.gen(function* () {
       const llm = LLMClient.make({
         adapters: [fake],
-        patches: [
-          Patch.stream("test.uppercase", {
+        transforms: [
+          Transform.stream("test.uppercase", {
             reason: "uppercase text deltas",
             apply: (event) => (event.type === "text-delta" ? { ...event, text: event.text.toUpperCase() } : event),
           }),

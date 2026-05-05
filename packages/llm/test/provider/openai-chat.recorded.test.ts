@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
-import { OpenAIChat } from "../../src/protocols/openai-chat"
+import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { eventSummary, textRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
@@ -37,7 +37,7 @@ const recorded = recordedTests({
   requires: ["OPENAI_API_KEY"],
 })
 const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
-const openaiWithUsage = LLMClient.make({ adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])] })
+const openaiWithUsage = LLMClient.make({ adapters: [OpenAIChat.adapter.withTransforms([OpenAIChat.includeUsage])] })
 
 describe("OpenAI Chat recorded", () => {
   recorded.effect("streams text", () =>

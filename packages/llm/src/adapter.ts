@@ -4,9 +4,9 @@ import type { Auth } from "./auth"
 import { bearer as authBearer } from "./auth"
 import { type Endpoint, render as renderEndpoint } from "./endpoint"
 import { RequestExecutor } from "./executor"
-import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
-import { payload as payloadPatch } from "./patch"
-import { PatchPipeline } from "./patch-pipeline"
+import type { AnyRuntimeTransform, Transform, TransformInput, TransformRegistry } from "./transform"
+import { payload as payloadTransform } from "./transform"
+import { TransformPipeline } from "./transform-pipeline"
 import type { Framing } from "./framing"
 import type { Protocol } from "./protocol"
 import * as ProviderShared from "./protocols/shared"
@@ -37,7 +37,7 @@ export interface Adapter<Payload> {
   readonly id: string
   readonly protocol: ProtocolID
   readonly payloadSchema: Schema.Codec<Payload, unknown>
-  readonly patches: ReadonlyArray<Patch<Payload>>
+  readonly transforms: ReadonlyArray<Transform<Payload, "payload">>
   readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
   readonly toHttp: (
     payload: Payload,
@@ -49,13 +49,13 @@ export interface Adapter<Payload> {
   ) => Stream.Stream<LLMEvent, LLMError>
 }
 
-export type AdapterInput<Payload> = Omit<Adapter<Payload>, "patches"> & {
-  readonly patches?: ReadonlyArray<Patch<Payload>>
+export type AdapterInput<Payload> = Omit<Adapter<Payload>, "transforms"> & {
+  readonly transforms?: ReadonlyArray<Transform<Payload, "payload">>
 }
 
 export interface AdapterDefinition<Payload> extends Adapter<Payload> {
-  readonly patch: (id: string, input: PatchInput<Payload>) => Patch<Payload>
-  readonly withPatches: (patches: ReadonlyArray<Patch<Payload>>) => AdapterDefinition<Payload>
+  readonly transform: (id: string, input: TransformInput<Payload>) => Transform<Payload, "payload">
+  readonly withTransforms: (transforms: ReadonlyArray<Transform<Payload, "payload">>) => AdapterDefinition<Payload>
 }
 
 // Adapter registries intentionally erase payload generics after the typed
@@ -167,7 +167,7 @@ export const preserveModelBinding = <Model extends ModelRef>(source: ModelRef, t
 
 export interface LLMClient {
   /**
-   * Compile a request through the adapter pipeline (patches, toPayload,
+   * Compile a request through the adapter pipeline (transforms, toPayload,
    * protocol payload validation, toHttp) without sending it. Returns the
    * prepared request including the provider-native payload.
    *
@@ -183,14 +183,14 @@ export interface LLMClient {
 
 export interface ClientOptions {
   readonly adapters?: ReadonlyArray<AnyAdapter>
-  readonly patches?: PatchRegistry | ReadonlyArray<AnyPatch>
+  readonly transforms?: TransformRegistry | ReadonlyArray<AnyRuntimeTransform>
 }
 
 const noAdapter = (model: ModelRef) =>
   new NoAdapterError({ adapter: model.adapter, protocol: model.protocol, provider: model.provider, model: model.id })
 
 export interface MakeInput<Payload, Frame, Chunk, State> {
-  /** Adapter id used in registry lookup, error messages, and patch namespaces. */
+  /** Adapter id used in registry lookup, error messages, and transform namespaces. */
   readonly id: string
   /** Semantic API contract — owns lowering, payload schema, and parsing. */
   readonly protocol: Protocol<Payload, Frame, Chunk, State>
@@ -208,8 +208,8 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
   readonly framing: Framing<Frame>
   /** Static / per-request headers added before `auth` runs. */
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
-  /** Provider patches that target this adapter (e.g. include-usage). */
-  readonly patches?: ReadonlyArray<Patch<Payload>>
+  /** Provider transforms that target this adapter payload (e.g. include-usage). */
+  readonly transforms?: ReadonlyArray<Transform<Payload, "payload">>
 }
 
 /**
@@ -220,7 +220,7 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
  * - `Auth` — how do I authenticate it?
  * - `Framing` — how do I cut the response stream into protocol frames?
  *
- * Plus optional `headers` and `patches` for cross-cutting deployment concerns
+ * Plus optional `headers` and `transforms` for cross-cutting deployment concerns
  * (provider version pins, per-deployment quirks).
  *
  * This is the canonical adapter constructor. If a new adapter does not fit
@@ -273,18 +273,18 @@ export function make<Payload, Frame, Chunk, State>(
       onHalt: protocol.onHalt,
     })
 
-  const patches = input.patches ?? []
+  const transforms = input.transforms ?? []
 
   return {
     id: input.id,
     protocol: protocol.id,
     payloadSchema: protocol.payload,
-    patches,
+    transforms,
     toPayload: protocol.toPayload,
     toHttp,
     parse,
-    patch: (id, patchInput) => payloadPatch(`${input.id}.${id}`, patchInput),
-    withPatches: (next) => make({ ...input, patches: [...patches, ...next] }),
+    transform: (id, transformInput) => payloadTransform(`${input.id}.${id}`, transformInput),
+    withTransforms: (next) => make({ ...input, transforms: [...transforms, ...next] }),
   }
 }
 
@@ -294,29 +294,29 @@ export function make<Payload, Frame, Chunk, State>(
  * but does not execute transport.
  */
 const makeClient = (options: ClientOptions): LLMClient => {
-  const pipeline = PatchPipeline.make(options.patches)
+  const pipeline = TransformPipeline.make(options.transforms)
   const adapters = new Map((options.adapters ?? []).map((adapter) => [adapter.id, adapter] as const))
 
   const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
     const adapter = adapters.get(request.model.adapter) ?? modelAdapters.get(request.model)
     if (!adapter) return yield* noAdapter(request.model)
 
-    const patchedRequest = yield* pipeline.patchRequest(request)
-    const candidate = yield* adapter.toPayload(patchedRequest.request)
-    const patchedPayload = yield* pipeline.patchPayload({
-      state: patchedRequest,
+    const transformedRequest = yield* pipeline.transformRequest(request)
+    const candidate = yield* adapter.toPayload(transformedRequest.request)
+    const transformedPayload = yield* pipeline.transformPayload({
+      state: transformedRequest,
       payload: candidate,
-      adapterPatches: adapter.patches,
+      adapterTransforms: adapter.transforms,
       schema: adapter.payloadSchema,
     })
-    const http = yield* adapter.toHttp(patchedPayload.payload, {
-      request: patchedPayload.request,
+    const http = yield* adapter.toHttp(transformedPayload.payload, {
+      request: transformedPayload.request,
     })
 
     return {
-      request: patchedPayload.request,
+      request: transformedPayload.request,
       adapter,
-      payload: patchedPayload.payload,
+      payload: transformedPayload.payload,
       http,
     }
   })
@@ -341,7 +341,7 @@ const makeClient = (options: ClientOptions): LLMClient => {
 
         const events = compiled.adapter.parse(response, { request: compiled.request })
 
-        return pipeline.patchStreamEvents({ request: compiled.request, events })
+        return pipeline.transformStreamEvents({ request: compiled.request, events })
       }),
     )
 

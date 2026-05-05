@@ -16,7 +16,7 @@
     "./providers/*": "./src/providers/*.ts",
     "./protocols": "./src/protocols.ts",
     "./protocols/*": "./src/protocols/*.ts",
-    "./provider-patch": "./src/provider-patch.ts",
+    "./provider-transform": "./src/provider-transform.ts",
     "./*": "./src/*.ts"
   },
   "devDependencies": {

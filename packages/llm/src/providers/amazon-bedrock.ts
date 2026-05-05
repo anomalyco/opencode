@@ -1,5 +1,6 @@
 import { Adapter, type AdapterModelInput } from "../adapter"
-import { BedrockConverse, type BedrockCredentials } from "../protocols/bedrock-converse"
+import * as BedrockConverse from "../protocols/bedrock-converse"
+import type { BedrockCredentials } from "../protocols/bedrock-converse"
 
 export type ModelOptions = Omit<AdapterModelInput, "id"> & {
   readonly apiKey?: string
@@ -22,5 +23,3 @@ export const model = (modelID: string, options: ModelOptions = {}) => {
     native: BedrockConverse.nativeCredentials(options.native, credentials),
   })
 }
-
-export * as AmazonBedrock from "./amazon-bedrock"

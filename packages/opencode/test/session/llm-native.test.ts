@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AnthropicMessages, BedrockConverse, Gemini, LLMClient, OpenAICompatibleChat, OpenAIResponses, ProviderPatch } from "@opencode-ai/llm"
+import { AnthropicMessages, BedrockConverse, Gemini, LLMClient, OpenAICompatibleChat, OpenAIResponses, ProviderTransform } from "@opencode-ai/llm"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { LLMNative } from "../../src/session/llm-native"
@@ -894,7 +894,7 @@ describe("LLMNative.request", () => {
   }))
 
   // Cache hint policy. The bridge produces a hint-free `LLMRequest`; the
-  // `ProviderPatch.cachePromptHints` patch (loaded in `ProviderPatch.defaults`)
+  // `ProviderTransform.cachePromptHints` transform (loaded in `ProviderTransform.defaults`)
   // marks first-2 system parts and last-2 messages with ephemeral cache
   // hints when the model advertises `capabilities.cache.prompt`. Adapters
   // then lower the hints to the provider-specific marker — `cache_control`
@@ -931,7 +931,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [AnthropicMessages.adapter],
-        patches: ProviderPatch.defaults,
+        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       expect(prepared.payload).toMatchObject({
@@ -956,7 +956,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [AnthropicMessages.adapter],
-        patches: ProviderPatch.defaults,
+        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       expect(prepared.payload).toMatchObject({
@@ -983,7 +983,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [BedrockConverse.adapter],
-        patches: ProviderPatch.defaults,
+        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       expect(prepared.payload).toMatchObject({
@@ -1011,7 +1011,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [OpenAIResponses.adapter],
-        patches: ProviderPatch.defaults,
+        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       // The serialized OpenAI Responses payload has no cache concept; the
@@ -1090,7 +1090,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [AnthropicMessages.adapter],
-        patches: ProviderPatch.defaults,
+        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       expect(prepared.payload).toMatchObject({

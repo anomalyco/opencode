@@ -11,7 +11,7 @@ import {
   type ModelRefInput,
 } from "./adapter"
 import type { RequestExecutor } from "./executor"
-import { ProviderPatch } from "./provider-patch"
+import { ProviderTransform } from "./provider-transform"
 import { type Tools } from "./tool"
 import { ToolRuntime, type RunOptions } from "./tool-runtime"
 import {
@@ -37,7 +37,7 @@ export interface Provider {
 export interface MakeOptions {
   readonly providers?: ReadonlyArray<Provider>
   readonly adapters?: ClientOptions["adapters"]
-  readonly patches?: ClientOptions["patches"]
+  readonly transforms?: ClientOptions["transforms"]
 }
 
 export type StreamWithToolsInput<T extends Tools> = Omit<RequestInput, "tools"> & Omit<RunOptions<T>, "request">
@@ -52,7 +52,7 @@ export class Service extends Context.Service<Service, Runtime>()("@opencode/LLM"
 
 const clientOptions = (options: MakeOptions): ClientOptions => ({
   adapters: [...(options.providers ?? []).flatMap((provider) => provider.adapters), ...(options.adapters ?? [])],
-  patches: options.patches ?? ProviderPatch.defaults,
+  transforms: options.transforms ?? ProviderTransform.defaults,
 })
 
 const requestOf = (input: LLMRequest | RequestInput) => input instanceof LLMRequest ? input : request(input)

@@ -2,28 +2,26 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
-import { OpenAICompatibleChat } from "../../src/protocols/openai-compatible-chat"
-import { OpenRouter } from "../../src/providers/openrouter"
+import * as OpenAICompatible from "../../src/providers/openai-compatible"
+import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
+import * as OpenRouter from "../../src/providers/openrouter"
 import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
-const deepseekModel = OpenAICompatibleChat.deepseek({
-  id: "deepseek-chat",
+const deepseekModel = OpenAICompatible.deepseek.model("deepseek-chat", {
   apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture",
 })
 
 const deepseekRequest = textRequest({ id: "recorded_deepseek_text", model: deepseekModel })
 
-const togetherModel = OpenAICompatibleChat.togetherai({
-  id: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+const togetherModel = OpenAICompatible.togetherai.model("meta-llama/Llama-3.3-70B-Instruct-Turbo", {
   apiKey: process.env.TOGETHER_AI_API_KEY ?? "fixture",
 })
 
 const togetherRequest = textRequest({ id: "recorded_togetherai_text", model: togetherModel })
 const togetherToolRequest = weatherToolRequest({ id: "recorded_togetherai_tool_call", model: togetherModel })
 
-const groqModel = OpenAICompatibleChat.groq({
-  id: "llama-3.3-70b-versatile",
+const groqModel = OpenAICompatible.groq.model("llama-3.3-70b-versatile", {
   apiKey: process.env.GROQ_API_KEY ?? "fixture",
 })
 
@@ -45,13 +43,11 @@ const openrouterOpus47Model = OpenRouter.model("anthropic/claude-opus-4.7", {
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
 })
 
-const xaiModel = OpenAICompatibleChat.xai({
-  id: "grok-3-mini",
+const xaiModel = OpenAICompatible.xai.model("grok-3-mini", {
   apiKey: process.env.XAI_API_KEY ?? "fixture",
 })
 
-const xaiFlagshipModel = OpenAICompatibleChat.xai({
-  id: "grok-4.3",
+const xaiFlagshipModel = OpenAICompatible.xai.model("grok-4.3", {
   apiKey: process.env.XAI_API_KEY ?? "fixture",
 })
 

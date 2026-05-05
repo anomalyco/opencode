@@ -1,4 +1,4 @@
-import { Model, Patch, predicate } from "./patch"
+import { Model, Transform, predicate } from "./transform"
 import { CacheHint } from "./schema"
 import type { ContentPart, JsonSchema, LLMRequest, Message, ToolDefinition } from "./schema"
 
@@ -38,7 +38,7 @@ const rewriteToolIds = (request: LLMRequest, scrub: (id: string) => string): LLM
   }),
 })
 
-export const removeEmptyAnthropicContent = Patch.prompt("anthropic.remove-empty-content", {
+export const removeEmptyAnthropicContent = Transform.prompt("anthropic.remove-empty-content", {
   reason: "remove empty text/reasoning blocks for providers that reject empty content",
   when: Model.provider("anthropic").or(Model.provider("bedrock"), Model.provider("amazon-bedrock")),
   apply: (request) => ({
@@ -50,19 +50,19 @@ export const removeEmptyAnthropicContent = Patch.prompt("anthropic.remove-empty-
   }),
 })
 
-export const scrubClaudeToolIds = Patch.prompt("anthropic.scrub-tool-call-ids", {
+export const scrubClaudeToolIds = Transform.prompt("anthropic.scrub-tool-call-ids", {
   reason: "Claude tool_use ids only accept alphanumeric, underscore, and dash characters",
   when: Model.idIncludes("claude"),
   apply: (request) => rewriteToolIds(request, (id) => id.replace(/[^a-zA-Z0-9_-]/g, "_")),
 })
 
-export const scrubMistralToolIds = Patch.prompt("mistral.scrub-tool-call-ids", {
+export const scrubMistralToolIds = Transform.prompt("mistral.scrub-tool-call-ids", {
   reason: "Mistral tool call ids must be short alphanumeric identifiers",
   when: Model.provider("mistral").or(Model.idIncludes("mistral"), Model.idIncludes("devstral")),
   apply: (request) => rewriteToolIds(request, (id) => id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 9).padEnd(9, "0")),
 })
 
-export const repairAnthropicToolUseOrder = Patch.prompt("anthropic.repair-tool-use-order", {
+export const repairAnthropicToolUseOrder = Transform.prompt("anthropic.repair-tool-use-order", {
   reason: "Anthropic rejects assistant turns where tool_use blocks are followed by non-tool content",
   when: Model.provider("anthropic").or(Model.provider("google-vertex-anthropic"), Model.idIncludes("claude")),
   apply: (request) => ({
@@ -80,7 +80,7 @@ export const repairAnthropicToolUseOrder = Patch.prompt("anthropic.repair-tool-u
   }),
 })
 
-export const repairMistralToolResultUserSequence = Patch.prompt("mistral.repair-tool-user-sequence", {
+export const repairMistralToolResultUserSequence = Transform.prompt("mistral.repair-tool-user-sequence", {
   reason: "Mistral rejects tool messages followed immediately by user messages",
   when: Model.provider("mistral").or(Model.idIncludes("mistral"), Model.idIncludes("devstral")),
   apply: (request) => ({
@@ -93,7 +93,7 @@ export const repairMistralToolResultUserSequence = Patch.prompt("mistral.repair-
   }),
 })
 
-export const addDeepSeekEmptyReasoning = Patch.prompt("deepseek.empty-reasoning-replay", {
+export const addDeepSeekEmptyReasoning = Transform.prompt("deepseek.empty-reasoning-replay", {
   reason: "DeepSeek expects assistant history to carry reasoning_content, even when empty",
   when: Model.idIncludes("deepseek"),
   apply: (request) => ({
@@ -115,7 +115,7 @@ export const addDeepSeekEmptyReasoning = Patch.prompt("deepseek.empty-reasoning-
   }),
 })
 
-export const moveOpenAICompatibleReasoningToNative = Patch.prompt("openai-compatible.reasoning-native-field", {
+export const moveOpenAICompatibleReasoningToNative = Transform.prompt("openai-compatible.reasoning-native-field", {
   reason: "OpenAI-compatible reasoning providers replay reasoning in provider-native assistant fields",
   when: Model.adapter("openai-compatible-chat"),
   apply: (request) => ({
@@ -139,7 +139,7 @@ export const moveOpenAICompatibleReasoningToNative = Patch.prompt("openai-compat
   }),
 })
 
-export const unsupportedMediaFallback = Patch.prompt("capabilities.unsupported-media-fallback", {
+export const unsupportedMediaFallback = Transform.prompt("capabilities.unsupported-media-fallback", {
   reason: "turn unsupported user media into model-visible error text instead of provider request failures",
   apply: (request) => ({
     ...request,
@@ -161,7 +161,7 @@ export const unsupportedMediaFallback = Patch.prompt("capabilities.unsupported-m
   }),
 })
 
-export const sanitizeMoonshotToolSchema = Patch.toolSchema("moonshot.schema", {
+export const sanitizeMoonshotToolSchema = Transform.toolSchema("moonshot.schema", {
   reason: "Moonshot/Kimi rejects $ref sibling keywords and tuple-style array items",
   when: Model.provider("moonshotai").or(Model.idIncludes("kimi")),
   apply: (tool): ToolDefinition => ({
@@ -170,7 +170,7 @@ export const sanitizeMoonshotToolSchema = Patch.toolSchema("moonshot.schema", {
   }),
 })
 
-// Single shared CacheHint instance — the cache patch reuses this one object
+// Single shared CacheHint instance — the cache transform reuses this one object
 // across every marked part. Adapters lower CacheHint structurally
 // (`cache?.type === "ephemeral"`) so reference equality is incidental, but
 // keeping a class instance preserves any consumer that checks
@@ -192,7 +192,7 @@ const withCacheOnLastText = (content: ReadonlyArray<ContentPart>): ReadonlyArray
 // this a no-op for adapters that don't advertise prompt-level caching, so
 // non-cache providers (OpenAI Responses, Gemini, OpenAI-compatible Chat)
 // are unaffected.
-export const cachePromptHints = Patch.prompt("cache.prompt-hints", {
+export const cachePromptHints = Transform.prompt("cache.prompt-hints", {
   reason: "mark first 2 system parts and last 2 messages with ephemeral cache hints on cache-capable adapters",
   when: predicate((context) => context.model.capabilities.cache?.prompt === true),
   apply: (request) => ({
@@ -221,4 +221,4 @@ export const defaults = [
   cachePromptHints,
 ]
 
-export * as ProviderPatch from "./provider-patch"
+export * as ProviderTransform from "./provider-transform"

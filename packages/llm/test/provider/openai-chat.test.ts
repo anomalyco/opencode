@@ -46,7 +46,7 @@ describe("OpenAI Chat adapter", () => {
       // typed to the adapter's native shape — the assertions below read field
       // names without `unknown` casts.
       const prepared = yield* LLMClient.make({
-        adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])],
+        adapters: [OpenAIChat.adapter.withTransforms([OpenAIChat.includeUsage])],
       }).prepare<OpenAIChat.OpenAIChatPayload>(request)
       const _typed: { readonly model: string; readonly stream: true } = prepared.payload
 

@@ -3,7 +3,7 @@ import { Adapter, type AdapterModelInput } from "../adapter"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities } from "../llm"
-import { payload as payloadPatch } from "../patch"
+import { payload as payloadTransform } from "../transform"
 import { Protocol } from "../protocol"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
@@ -55,7 +55,7 @@ const nativeOptions = (options: ModelOptions) => {
   return { ...options.native, openrouter }
 }
 
-export const applyOptions = payloadPatch<OpenRouterPayload>("openrouter.options", {
+export const applyOptions = payloadTransform<OpenRouterPayload>("openrouter.options", {
   reason: "apply OpenRouter provider options to the Chat payload",
   when: (context) => context.model.provider === profile.provider && Object.keys(payloadOptions(context.model.native?.openrouter)).length > 0,
   apply: (payload, context) => {
@@ -70,7 +70,7 @@ export const adapter = Adapter.make({
   protocol,
   endpoint: Endpoint.baseURL({ default: profile.baseURL, path: "/chat/completions" }),
   framing: Framing.sse,
-  patches: [applyOptions],
+  transforms: [applyOptions],
 })
 
 export const adapters = [adapter]

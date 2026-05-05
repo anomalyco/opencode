@@ -7,7 +7,7 @@ import {
   OpenAIChat,
   OpenAICompatibleChat,
   OpenAIResponses,
-  ProviderPatch,
+  ProviderTransform,
   RequestExecutor,
 } from "@opencode-ai/llm"
 import { Effect, Layer, Ref, Schema, Stream } from "effect"
@@ -127,7 +127,7 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         messages: [userMessage(mdl, userID, [userPart(userID, "Say hello.")])],
       })
 
-      const client = LLMClient.make({ adapters, patches: ProviderPatch.defaults })
+      const client = LLMClient.make({ adapters, transforms: ProviderTransform.defaults })
       const map = LLMNativeEvents.mapper()
 
       const body = sseBody([
@@ -245,7 +245,7 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         { type: "message_stop" },
       ])
 
-      const client = LLMClient.make({ adapters, patches: ProviderPatch.defaults })
+      const client = LLMClient.make({ adapters, transforms: ProviderTransform.defaults })
       const map = LLMNativeEvents.mapper()
 
       const events = yield* LLMNativeTools.runWithTools({
@@ -322,7 +322,7 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         tools: [lookupTool],
       })
 
-      const prepared = yield* LLMClient.make({ adapters, patches: ProviderPatch.defaults }).prepare(llmRequest)
+      const prepared = yield* LLMClient.make({ adapters, transforms: ProviderTransform.defaults }).prepare(llmRequest)
       expect(prepared.payload).toMatchObject({
         tools: [
           {

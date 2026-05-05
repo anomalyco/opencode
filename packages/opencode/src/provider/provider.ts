@@ -25,7 +25,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined, withStatics } from "@/util/schema"
-import { GitHubCopilot } from "@opencode-ai/llm/providers/github-copilot"
+import * as GitHubCopilot from "@opencode-ai/llm/providers/github-copilot"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"

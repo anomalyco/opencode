@@ -1,8 +1,8 @@
 import { Adapter } from "../adapter"
 import type { ModelInput } from "../llm"
 import { ProviderID } from "../schema"
-import { OpenAIChat } from "../protocols/openai-chat"
-import { OpenAIResponses } from "../protocols/openai-responses"
+import * as OpenAIChat from "../protocols/openai-chat"
+import * as OpenAIResponses from "../protocols/openai-responses"
 
 export const id = ProviderID.make("github-copilot")
 
@@ -23,5 +23,3 @@ export const model = (modelID: string, options: ModelOptions = {}) => {
   const create = shouldUseResponsesApi(modelID) ? responsesModel : chatModel
   return create({ ...options, id: modelID })
 }
-
-export * as GitHubCopilot from "./github-copilot"

@@ -21,5 +21,3 @@ export const profiles = {
 export const byProvider: Record<string, OpenAICompatibleProfile> = Object.fromEntries(
   Object.values(profiles).map((profile) => [profile.provider, profile]),
 )
-
-export * as OpenAICompatibleProfiles from "./openai-compatible-profile"

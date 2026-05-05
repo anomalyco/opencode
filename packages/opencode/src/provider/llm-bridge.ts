@@ -7,7 +7,6 @@ import {
   LLM,
   OpenAI,
   OpenAICompatible,
-  OpenAICompatibleChat,
   OpenAICompatibleProfiles,
   ReasoningEfforts,
   XAI,
@@ -124,11 +123,11 @@ const openAICompatibleModel: ProviderModel = (input, options) => {
   const resolvedBaseURL = baseURL(input, options, profile?.baseURL)
   if (!resolvedBaseURL) return undefined
   const modelOptions = sharedOptions(input, options, {
-    protocol: "openai-compatible-chat",
+    protocol: "openai-chat",
     baseURL: resolvedBaseURL,
     capabilities: profile?.capabilities,
   })
-  if (profile) return OpenAICompatibleChat.profileModel(profile, { ...modelOptions, id: String(input.model.api.id) })
+  if (profile) return OpenAICompatible.profileModel(profile, String(input.model.api.id), modelOptions)
   return OpenAICompatible.model(String(input.model.api.id), { ...modelOptions, provider, baseURL: resolvedBaseURL })
 }
 

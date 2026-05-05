@@ -193,7 +193,7 @@ describe("OpenAI-compatible Chat adapter", () => {
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.make({
-        adapters: [OpenAICompatibleChat.adapter.withPatches([OpenAICompatibleChat.includeUsage])],
+        adapters: [OpenAICompatibleChat.adapter.withTransforms([OpenAICompatibleChat.includeUsage])],
       })
         .generate(request)
         .pipe(

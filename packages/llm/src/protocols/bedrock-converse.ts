@@ -719,7 +719,7 @@ export const adapter = Adapter.make({
   protocol,
   endpoint: Endpoint.baseURL<BedrockConversePayload>({
     // Bedrock's URL embeds the region in the host and the validated modelId
-    // in the path. We reach into the payload after payload patches so the URL
+    // in the path. We reach into the payload after payload transforms so the URL
     // matches the body that gets signed.
     default: ({ request }) => `https://bedrock-runtime.${region(request)}.amazonaws.com`,
     path: ({ payload }) => `/model/${encodeURIComponent(payload.modelId)}/converse-stream`,

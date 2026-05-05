@@ -165,7 +165,7 @@ const isRecord = ProviderShared.isRecord
 //    allowlist (e.g. `additionalProperties`, `$ref`) is silently dropped.
 //
 // Sanitize runs first, then project. Both passes live here so the adapter
-// owns the full transformation; consumers don't need to register a patch.
+// owns the full transformation; consumers don't need to register a transform.
 
 const SCHEMA_INTENT_KEYS = [
   "type",

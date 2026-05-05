@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { ProviderShared } from "./protocols/shared"
+import * as ProviderShared from "./protocols/shared"
 import type { LLMError, LLMRequest } from "./schema"
 
 export interface EndpointInput<Payload> {
@@ -13,7 +13,7 @@ export type EndpointPart<Payload> = string | ((input: EndpointInput<Payload>) =>
  * Declarative URL construction for one adapter.
  *
  * `Endpoint` is the deployment-side answer to "where does this request go?".
- * `render(...)` interprets this data after request/payload patches, so dynamic
+ * `render(...)` interprets this data after request/payload transforms, so dynamic
  * pieces can read the final `LLMRequest` and validated provider payload.
  */
 export interface Endpoint<Payload> {

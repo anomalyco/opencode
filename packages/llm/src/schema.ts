@@ -23,8 +23,8 @@ export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xh
 export const ReasoningEffort = Schema.Literals(ReasoningEfforts)
 export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 
-export const PatchPhase = Schema.Literals(["request", "prompt", "tool-schema", "payload", "stream"])
-export type PatchPhase = Schema.Schema.Type<typeof PatchPhase>
+export const TransformPhase = Schema.Literals(["request", "prompt", "tool-schema", "payload", "stream"])
+export type TransformPhase = Schema.Schema.Type<typeof TransformPhase>
 
 export const MessageRole = Schema.Literals(["user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
