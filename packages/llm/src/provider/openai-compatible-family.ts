@@ -1,5 +1,4 @@
-import { byProvider, profiles, resolve, resolver } from "./openai-compatible-profile"
-import type { OpenAICompatibleProfile } from "./openai-compatible-profile"
+import { byProvider, profiles, resolve, resolver, type OpenAICompatibleProfile } from "./openai-compatible-profile"
 
 export type ProviderFamily = OpenAICompatibleProfile
 export const families = profiles
