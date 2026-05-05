@@ -141,6 +141,7 @@ export async function repl(opts: ReplOptions): Promise<void> {
     }
     rl.close()
     if (process.stdout.isTTY) process.stdout.write(EOL)
+    process.exit(0)
   })
 }
 
