@@ -25,12 +25,12 @@ export const TuiOptions = z.object({
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
   session_bar: z.object({
-    context: z.boolean().default(true).describe("Show session bar context"),
-    cost: z.boolean().default(true).describe("Show session bar cost"),
+    context: z.boolean().default(true).describe("Show context usage in session bar"),
+    cost: z.boolean().default(true).describe("Show cost in session bar"),
   }).optional().describe("Session bar settings"),
   sidebar: z.object({
-    context: z.boolean().default(true).describe("Show sidebar context"),
-    cost: z.boolean().default(true).describe("Show sidebar cost"),
+    context: z.boolean().default(true).describe("Show context usage in sidebar"),
+    cost: z.boolean().default(true).describe("Show cost in sidebar"),
   }).optional().describe("Sidebar settings"),
 })
 
