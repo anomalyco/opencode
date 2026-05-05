@@ -24,6 +24,8 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import CodeMirrorView from "@/components/code-mirror-view"
 import { langFromExt } from "@/utils/lang-from-ext"
+// FORK: .md 编辑增强(列表续延 / Ctrl+B/I/K / 拖图 / 智能粘贴 / Ctrl+F 等)2026-05-05
+import { markdownEditorExtensions } from "@/utils/markdown-editor-extensions"
 import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
 // FORK: 本地资源 protocol(.md 内 <img>/<video>/<audio> 重写 + HTML 预览 iframe)2026-05-05
 import { localAssetUrl, resolveAbsolute, rewriteAssetSrc } from "@/utils/local-asset"
@@ -432,6 +434,8 @@ export function FileTabContent(props: {
     try {
       await performWrite(root, p, draft() ?? "", loadedMtime())
       await reloadAndExitEdit(p)
+      // FORK: 保存成功后清掉残留的 dirtyConflict toast(修"保存后双提示框"bug)2026-05-05
+      file.dismissDirtyConflict(p)
       showToast({ variant: "success", title: "Saved" })
     } catch (e) {
       const msg = String(e)
@@ -445,12 +449,14 @@ export function FileTabContent(props: {
           try {
             await performWrite(root, p, draft() ?? "", null)
             await reloadAndExitEdit(p)
+            file.dismissDirtyConflict(p)
             showToast({ variant: "success", title: "Overwritten" })
           } catch (e2) {
             showToast({ variant: "error", title: `Overwrite failed: ${e2}` })
           }
         } else {
           await reloadAndExitEdit(p)
+          file.dismissDirtyConflict(p)
           showToast({ variant: "success", title: "Reloaded from disk" })
         }
       } else if (msg.includes("readonly:")) {
@@ -1450,6 +1456,19 @@ export function FileTabContent(props: {
                 value={contents()}
                 language={langFromExt(path() ?? "")}
                 onChange={setDraft}
+                // FORK: .md 文件编辑态注入 markdown 增强扩展 — 列表续延 / 拖图 / Ctrl+F 等 2026-05-05
+                extraExtensions={
+                  isMarkdownPath(path())
+                    ? markdownEditorExtensions({
+                        fileDir: (() => {
+                          const root = sdk.directory
+                          const p = path()
+                          if (!root || !p) return undefined
+                          return pathDirname(`${root}/${p}`.replace(/\\/g, "/"))
+                        })(),
+                      })
+                    : undefined
+                }
               />
             </div>
           </Match>

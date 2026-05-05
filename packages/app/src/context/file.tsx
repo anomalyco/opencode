@@ -1,7 +1,7 @@
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast, toaster } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useSDK } from "./sdk"
@@ -232,6 +232,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     // 且 2 秒内可能有多次连续 edit。按 path + 时间窗去重,避免 toast 洪泛。
     const dirtyConflictWindowMs = 2000
     const recentDirtyConflicts = new Map<string, number>()
+    // FORK: 跟踪每个 path 的活跃 dirtyConflict toast id,便于保存后 dismiss
+    // (修"保存后双提示框"bug — 详 docs/features/md-editing-enhance/3-changelog.md)2026-05-05
+    const dirtyConflictToastIds = new Map<string, number>()
     const notifyDirtyConflict = (file: string) => {
       const now = Date.now()
       const last = recentDirtyConflicts.get(file)
@@ -243,12 +246,35 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           if (now - t >= dirtyConflictWindowMs) recentDirtyConflicts.delete(p)
         }
       }
-      showToast({
+      // 同一 path 旧的 toast 还活着 → 先 dismiss(避免叠加)
+      const old = dirtyConflictToastIds.get(file)
+      if (old !== undefined) {
+        try {
+          toaster.dismiss(old)
+        } catch {
+          /* ignore */
+        }
+      }
+      const id = showToast({
         variant: "default",
         icon: "warning",
         title: language.t("toast.file.dirtyConflict.title"),
         description: language.t("toast.file.dirtyConflict.description"),
       })
+      if (typeof id === "number") dirtyConflictToastIds.set(file, id)
+    }
+    // FORK: 给 file-tabs.tsx saveEdit 成功后调,清掉残留的 dirtyConflict toast 2026-05-05
+    const dismissDirtyConflict = (input: string) => {
+      const file = path.normalize(input)
+      const id = dirtyConflictToastIds.get(file)
+      if (id !== undefined) {
+        try {
+          toaster.dismiss(id)
+        } catch {
+          /* ignore */
+        }
+        dirtyConflictToastIds.delete(file)
+      }
     }
 
     const stop = sdk.event.listen((e) => {
@@ -335,6 +361,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       // FORK: 编辑态 dirty 守卫(查看器-自动刷新)2026-04-28
       markDirty,
       isDirty,
+      // FORK: 保存成功后让调用方清掉 dirtyConflict toast(修"保存后双提示框"bug)2026-05-05
+      dismissDirtyConflict,
       scrollTop,
       scrollLeft,
       setScrollTop,

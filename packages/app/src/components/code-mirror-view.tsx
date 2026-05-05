@@ -1,5 +1,5 @@
 import { onCleanup, onMount, createEffect } from "solid-js"
-import { EditorState } from "@codemirror/state"
+import { EditorState, type Extension } from "@codemirror/state"
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view"
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { defaultHighlightStyle, syntaxHighlighting, type LanguageSupport } from "@codemirror/language"
@@ -8,6 +8,8 @@ type Props = {
   value: string
   language?: LanguageSupport
   onChange?: (value: string) => void
+  // FORK: 上层注入语言/场景专用 extensions(如 markdown 列表续延 / 拖图 / 表格)2026-05-05
+  extraExtensions?: Extension[]
 }
 
 export default function CodeMirrorView(props: Props) {
@@ -16,11 +18,13 @@ export default function CodeMirrorView(props: Props) {
 
   onMount(() => {
     if (!parent) return
-    const extensions = [
+    const extensions: Extension[] = [
       lineNumbers(),
       highlightActiveLine(),
       history(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      // FORK: extraExtensions 在 defaultKeymap 之前,自定义 keymap 优先 2026-05-05
+      ...(props.extraExtensions ?? []),
       keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) props.onChange?.(u.state.doc.toString())
