@@ -33,19 +33,19 @@ import {
   PermissionResponsePayload,
   PromptPayload,
   RevertPayload,
-  SessionNotFoundError,
   ShellPayload,
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
+import * as ApiError from "../errors"
 
 type StorageNotFound = InstanceType<typeof NotFoundError>
 
-const sessionNotFound = (error: StorageNotFound) =>
-  new SessionNotFoundError({ name: "NotFoundError", data: error.data })
+const sessionNotFound = (error: StorageNotFound) => ApiError.notFound(error.data.message)
 
-const mapNotFound = <A, R>(self: Effect.Effect<A, StorageNotFound, R>): Effect.Effect<A, SessionNotFoundError, R> =>
-  self.pipe(Effect.mapError(sessionNotFound))
+const mapNotFound = <A, R>(
+  self: Effect.Effect<A, StorageNotFound, R>,
+): Effect.Effect<A, ApiError.ApiNotFoundError, R> => self.pipe(Effect.mapError(sessionNotFound))
 
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
   Effect.gen(function* () {

@@ -7,6 +7,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { nextTuiRequest, submitTuiResponse } from "@/server/shared/tui-control"
 import { InstanceHttpApi } from "../api"
+import * as ApiError from "../errors"
 import { CommandPayload, TuiPublishPayload } from "../groups/tui"
 
 const commandAliases = {
@@ -103,7 +104,7 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
           db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, ctx.payload.sessionID)).get(),
         ),
       )
-      if (!row) return yield* new HttpApiError.NotFound({})
+      if (!row) return yield* ApiError.notFound(`Session not found: ${ctx.payload.sessionID}`)
       yield* bus.publish(TuiEvent.SessionSelect, ctx.payload)
       return true
     })
