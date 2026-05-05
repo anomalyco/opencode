@@ -22,13 +22,13 @@ let highlighter: any = null
 export async function initHighlighter() {
   if (highlighter) return
   try {
-    const corePath = "shiki/core"
+    const corePath = ["shiki", "core"].join("/")
     const { createHighlighterCore } = await import(corePath)
-    // Use string variables to avoid TypeScript's strict module resolution check
-    const jsEnginePath = "shiki/engine/javascript"
-    const fallbackEnginePath = "@shikijs/engine-javascript"
-    const engineModule: any = await import(jsEnginePath).catch(() => import(fallbackEnginePath))
-    const createJavaScriptEngine = engineModule.createJavaScriptEngine
+    
+    // Use a runtime-constructed string to bypass Bun's static analysis during build
+    const jsEnginePath = ["shiki", "engine", "javascript"].join("/")
+    const engineModule: any = await import(jsEnginePath).catch(() => undefined)
+    const createJavaScriptEngine = engineModule?.createJavaScriptEngine
 
     // Import themes and languages statically so they are bundled by Bun
     const nord = (await import("shiki/themes/nord.mjs")).default
