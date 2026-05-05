@@ -247,6 +247,63 @@ const filePath = await save({
 
 ---
 
+## 9. PoC 后实施细节修订(2026-05-05,只补不改)
+
+> spec 锁版 + PoC 阶段实测后发现:**`@turbodocx/html-to-docx` 代码块视觉根本问题不可解决**(行间距巨大 / 无 syntax 高亮 / 字体非等宽),换库决议见下。本节作为 §2 需求 #3 的补充,**不改原 §2 内容**,以本节为最新实施依据。
+
+### 9.1 DOCX 路线换库
+
+| 维度 | 原 spec(`@turbodocx/html-to-docx`)| **修订(`@jinzhongjia/markdown-docx@1.0.4`)** |
+|---|---|---|
+| 输入 | HTML 字符串(viewer 渲染好的 DOM serialize)| **markdown 原文 string**(库内部 marked + docx 库构造)|
+| 代码块视觉 | ⭐⭐(无 syntax 高亮,字体非等宽,行间距巨大)| **⭐⭐⭐⭐**(Consolas + 灰底 + syntax 高亮 + 紧凑行距 + 整框边线)|
+| 中文 | ✅ | ✅ |
+| 表格 / 列表 / 引用块 | ✅ | ✅(更佳)|
+| Mermaid SVG → PNG 转换 | 必须做 | **不需要做** — 库不渲染 mermaid,直接出原 markdown 代码 fenced block(用户拿到 docx 时 mermaid 是 mermaid 源码块,可读不可视)|
+| 任务列表 ☑ | ❌ | ✅ |
+| 包体积 | ~180 KB | ~120 KB |
+| 维护活跃度 | 中 | 活跃 |
+
+### 9.2 关键 monkey-patch(必须)
+
+```ts
+import { styles } from '@jinzhongjia/markdown-docx'
+// 库 default 把代码块每段的 between 边框设成跟 top 一样,导致段间画线;改 none
+styles.markdown.code.paragraph.border.between = { style: 'none', size: 0 }
+```
+
+### 9.3 已知遗留(对 user 透明)
+
+**代码块空行 paragraph 两侧仍出现横线** — 库内部把空行当独立段落处理,top/bottom border 仍渲染。`between=none` 解决了真代码行之间的横线,**但空行段两侧的 top/bottom 还在**。
+
+- **触发场景**:代码块里有空行(分段) — 看起来像 import 之后空一行,然后 function;空行两侧出现横线把代码切成块
+- **为什么不在本笔解决**:fork 库改空行处理逻辑投入大,换库要重测,**投入产出比低**
+- **接受**:v1 出货带此遗留,user 验收时会看到
+- **记录**:已入需求池 `OPENCODE-PLAN/DeskFox.Ai 需求池.md` 第 15 项,等触发条件(大量反馈 / 换库时机)再处理
+
+### 9.4 Mermaid 处理简化
+
+- 原 spec 计划 SVG → PNG 中间转换 → docx 嵌图 — **删除**
+- markdown-docx 不渲染 mermaid,直接输出 fenced code block(```mermaid)
+- 用户拿到 docx 看到 mermaid 源码块(等同纯文本),想看图回 viewer 看
+- **接受**:DOCX 不带 mermaid 图,PDF(走 print)仍带
+
+### 9.5 规模重估
+
+| 段 | 原估 | **修订估** |
+|---|---|---|
+| viewer 右键菜单 + 选区判定 | ~60-100 | ~50 |
+| PDF helper(window.print + CSS @media print)| ~40 | ~30 |
+| DOCX helper(turbodocx 转换 + Mermaid SVG→PNG + 错误处理)| ~80-150 | **~25**(直接调 markdown-docx + 1 行 patch + save dialog)|
+| i18n 6 key × 3 dict | ~18 | ~18 |
+| 1 dep 加到 package.json | ~1 | ~1 |
+| `@media print` CSS 规则 | ~10-20 | ~10-20 |
+| **总** | **200-350 行** | **~130 行** |
+
+**Medium → Tiny-Medium 边缘**(单一主题 + ~130 行,docs 三文档全要;不缩规范层级)
+
+---
+
 ## 8. 二轮决议(2026-05-05 锁版)
 
 | # | 问题 | 决议 |
