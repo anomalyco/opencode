@@ -250,6 +250,8 @@ const FileTreeNode = (
   return (
     <Dynamic
       component={local.as ?? "div"}
+      // FORK: data-tree-path — 让外部(session-side-panel)能 scrollIntoView 到指定节点 2026-05-05
+      data-tree-path={local.node.path}
       classList={{
         "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
         "bg-surface-base-active": local.node.path === local.active || !!local.contextOpen,

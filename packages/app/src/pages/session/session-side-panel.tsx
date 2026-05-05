@@ -158,6 +158,32 @@ export function SessionSidePanel(props: {
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
 
+  // FORK: 切 tab(包括 .md 内链跳转)→ 文件树 active 高亮 + 自动展开父目录 + 滚动入视野 2026-05-05
+  const activeFilePath = createMemo<string | undefined>(() => {
+    const tab = activeFileTab()
+    if (!tab) return undefined
+    return file.pathFromTab(tab) ?? undefined
+  })
+
+  createEffect(() => {
+    const p = activeFilePath()
+    if (!p) return
+    // 展开所有父目录(file.tree.expand 是 idempotent,重复 expand 已展开目录无副作用)
+    const parts = p.split("/")
+    for (let i = 1; i < parts.length; i++) {
+      file.tree.expand(parts.slice(0, i).join("/"))
+    }
+    // 滚动到 active 节点(等 DOM 更新 + 父目录展开后)
+    queueMicrotask(() => {
+      // CSS.escape 防 path 含特殊字符破坏 selector
+      const sel = `[data-tree-path="${CSS.escape(p)}"]`
+      const node = document.querySelector(sel)
+      if (node instanceof HTMLElement) {
+        node.scrollIntoView({ behavior: "smooth", block: "nearest" })
+      }
+    })
+  })
+
   const fileTreeTab = () => layout.fileTree.tab()
 
   const setFileTreeTabValue = (value: string) => {
@@ -439,6 +465,7 @@ export function SessionSidePanel(props: {
                           class="pt-3"
                           modified={diffFiles()}
                           kinds={kinds()}
+                          active={activeFilePath()}
                           onFileClick={(node) => openTab(file.tab(node.path))}
                         />
                       </Match>
