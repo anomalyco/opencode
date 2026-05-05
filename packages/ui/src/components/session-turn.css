@@ -102,7 +102,6 @@
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;
-    background-color: var(--background-stronger);
     height: 44px;
   }
 

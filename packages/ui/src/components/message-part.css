@@ -434,7 +434,6 @@
       display: none;
     }
   }
-
 }
 
 [data-component="edit-trigger"],
@@ -454,7 +453,6 @@
   }
 
   [data-slot="message-part-title"] {
-    flex: 1 1 auto;
     display: flex;
     align-items: center;
     gap: 8px;
