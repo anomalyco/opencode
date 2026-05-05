@@ -40,11 +40,12 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
   })()
 
   const serviceName = process.env.OTEL_SERVICE_NAME ?? attributes["service.name"] ?? "opencode"
-  const { "service.name": _removed, "deployment.environment.name": _env, ...remainingAttributes } = attributes
+  const serviceVersion = attributes["service.version"] ?? InstallationVersion
+  const { "service.name": _n, "service.version": _v, "deployment.environment.name": _env, ...remainingAttributes } = attributes
 
   return {
     serviceName,
-    serviceVersion: InstallationVersion,
+    serviceVersion,
     attributes: {
       ...remainingAttributes,
       "deployment.environment.name": attributes["deployment.environment.name"] ?? InstallationChannel,
