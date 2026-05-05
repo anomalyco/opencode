@@ -5,22 +5,22 @@ import { bearer as authBearer } from "./auth"
 import type { Endpoint } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
-import { context, emptyRegistry, plan, registry as makePatchRegistry, target as targetPatch } from "./patch"
+import { target as targetPatch } from "./patch"
+import { PatchPipeline } from "./patch-pipeline"
 import type { Framing } from "./framing"
 import type { Protocol } from "./protocol"
 import { ProviderShared } from "./provider/shared"
 import type {
   LLMError,
   LLMEvent,
+  LLMRequest,
   ModelRef,
   PatchTrace,
   PreparedRequestOf,
   ProtocolID,
 } from "./schema"
 import {
-  LLMRequest,
   LLMResponse,
-  InvalidRequestError,
   NoAdapterError,
   PreparedRequest,
 } from "./schema"
@@ -102,20 +102,6 @@ export interface ClientOptions {
 
 const noAdapter = (model: ModelRef) =>
   new NoAdapterError({ protocol: model.protocol, provider: model.provider, model: model.id })
-
-const ensureSameRoute = (original: ModelRef, next: ModelRef) =>
-  Effect.gen(function* () {
-    if (next.provider === original.provider && next.id === original.id && next.protocol === original.protocol) return
-    return yield* new InvalidRequestError({
-      message: `Patches cannot change model routing (${original.provider}/${original.id}/${original.protocol} -> ${next.provider}/${next.id}/${next.protocol})`,
-    })
-  })
-
-const normalizeRegistry = (patches: PatchRegistry | ReadonlyArray<AnyPatch> | undefined): PatchRegistry => {
-  if (!patches) return emptyRegistry
-  if ("request" in patches) return patches
-  return makePatchRegistry(patches)
-}
 
 export interface MakeInput<Target, Frame, Chunk, State> {
   /** Adapter id used in registry lookup, error messages, and patch namespaces. */
@@ -230,69 +216,33 @@ export function make<Target, Frame, Chunk, State>(
  * but does not execute transport.
  */
 const makeClient = (options: ClientOptions): LLMClient => {
-  const registry = normalizeRegistry(options.patches)
+  const pipeline = PatchPipeline.make(options.patches)
   const adapters = new Map((options.adapters ?? []).map((adapter) => [adapter.protocol, adapter] as const))
 
   const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-    // Routing is fixed up front. Patches can reshape payloads, but cannot
-    // silently move a request to a different provider/model/protocol.
     const adapter = adapters.get(request.model.protocol) ?? modelAdapters.get(request.model)
     if (!adapter) return yield* noAdapter(request.model)
 
-    // Request-shaped phases run before adapter lowering so provider quirks can
-    // clean up prompt content and tool schemas while staying traceable.
-    const requestPlan = plan({
-      phase: "request",
-      context: context({ request }),
-      patches: registry.request,
+    const patchedRequest = yield* pipeline.patchRequest(request)
+    const candidate = yield* adapter.prepare(patchedRequest.request)
+    const patchedTarget = yield* pipeline.patchTarget({
+      state: patchedRequest,
+      target: candidate,
+      adapterPatches: adapter.patches,
+      validateTarget: adapter.validate,
     })
-    const requestAfterRequestPatches = requestPlan.apply(request)
-    yield* ensureSameRoute(request.model, requestAfterRequestPatches.model)
-
-    const promptPlan = plan({
-      phase: "prompt",
-      context: context({ request: requestAfterRequestPatches }),
-      patches: registry.prompt,
+    const http = yield* adapter.toHttp(patchedTarget.target, {
+      request: patchedTarget.request,
+      patchTrace: patchedTarget.trace,
     })
-    const requestBeforeToolPatches = promptPlan.apply(requestAfterRequestPatches)
-    yield* ensureSameRoute(request.model, requestBeforeToolPatches.model)
 
-    const toolSchemaPlan = plan({
-      phase: "tool-schema",
-      context: context({ request: requestBeforeToolPatches }),
-      patches: registry.toolSchema,
-    })
-    const patchedRequest =
-      requestBeforeToolPatches.tools.length === 0 || toolSchemaPlan.patches.length === 0
-        ? requestBeforeToolPatches
-        : new LLMRequest({
-            ...requestBeforeToolPatches,
-            tools: requestBeforeToolPatches.tools.map(toolSchemaPlan.apply),
-          })
-
-    // Adapter prepare lowers common messages/options into the provider target.
-    // Target patches run after lowering because they speak provider-native body
-    // shape rather than common request shape.
-    const patchContext = context({ request: patchedRequest })
-    const candidate = yield* adapter.prepare(patchedRequest)
-    const targetPlan = plan({
-      phase: "target",
-      context: patchContext,
-      patches: [...adapter.patches, ...registry.target],
-    })
-    const target = yield* adapter.validate(targetPlan.apply(candidate))
-    const targetPatchTrace = [
-      ...requestPlan.trace,
-      ...promptPlan.trace,
-      ...(requestBeforeToolPatches.tools.length === 0 || toolSchemaPlan.patches.length === 0
-        ? []
-        : toolSchemaPlan.trace),
-      ...targetPlan.trace,
-    ]
-
-    const http = yield* adapter.toHttp(target, { request: patchedRequest, patchTrace: targetPatchTrace })
-
-    return { request: patchedRequest, adapter, target, http, patchTrace: targetPatchTrace }
+    return {
+      request: patchedTarget.request,
+      adapter,
+      target: patchedTarget.target,
+      http,
+      patchTrace: patchedTarget.trace,
+    }
   })
 
   const prepare = Effect.fn("LLM.prepare")(function* (request: LLMRequest) {
@@ -314,15 +264,9 @@ const makeClient = (options: ClientOptions): LLMClient => {
         const executor = yield* RequestExecutor.Service
         const response = yield* executor.execute(compiled.http)
 
-        const streamPlan = plan({
-          phase: "stream",
-          context: context({ request: compiled.request }),
-          patches: registry.stream,
-        })
         const events = compiled.adapter.parse(response, { request: compiled.request, patchTrace: compiled.patchTrace })
 
-        if (streamPlan.patches.length === 0) return events
-        return events.pipe(Stream.map(streamPlan.apply))
+        return pipeline.patchStreamEvents({ request: compiled.request, events })
       }),
     )
 

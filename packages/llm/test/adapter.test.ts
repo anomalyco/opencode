@@ -4,18 +4,9 @@ import { Endpoint, LLM, Protocol } from "../src"
 import { Adapter, LLMClient } from "../src/adapter"
 import { Patch } from "../src/patch"
 import type { FramingDef } from "../src"
-import type { LLMRequest, Message, ModelRef, ToolDefinition } from "../src/schema"
+import type { ModelRef } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
-
-const updateMessageContent = (message: Message, content: Message["content"]) =>
-  LLM.message({
-    id: message.id,
-    role: message.role,
-    content,
-    metadata: message.metadata,
-    native: message.native,
-  })
 
 const updateModel = (model: ModelRef, patch: Partial<LLM.ModelInput>) =>
   LLM.model({
@@ -28,26 +19,6 @@ const updateModel = (model: ModelRef, patch: Partial<LLM.ModelInput>) =>
     limits: model.limits,
     native: model.native,
     ...patch,
-  })
-
-const updateToolDefinition = (tool: ToolDefinition, patch: Partial<ToolDefinition>) =>
-  LLM.toolDefinition({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-    metadata: tool.metadata,
-    native: tool.native,
-    ...patch,
-  })
-
-const mapText = (fn: (text: string) => string) => (request: LLMRequest): LLMRequest =>
-  LLM.updateRequest(request, {
-    messages: request.messages.map((message) =>
-      updateMessageContent(
-        message,
-        message.content.map((part) => (part.type === "text" ? { ...part, text: fn(part.text) } : part)),
-      ),
-    ),
   })
 
 const Json = Schema.fromJsonString(Schema.Unknown)
@@ -183,42 +154,6 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("rejects request patches that change model routing", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.make({
-        adapters: [fake, gemini],
-        patches: [
-          Patch.request("route-gemini", {
-            reason: "attempt to rewrite protocol after adapter selection",
-            apply: (request) => LLM.updateRequest(request, { model: updateModel(request.model, { protocol: "gemini" }) }),
-          }),
-        ],
-      })
-        .prepare(request)
-        .pipe(Effect.flip)
-
-      expect(error.message).toContain("Patches cannot change model routing")
-    }),
-  )
-
-  it.effect("rejects prompt patches that change model routing", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.make({
-        adapters: [fake, gemini],
-        patches: [
-          Patch.prompt("route-gemini", {
-            reason: "attempt to rewrite protocol after adapter selection",
-            apply: (request) => LLM.updateRequest(request, { model: updateModel(request.model, { protocol: "gemini" }) }),
-          }),
-        ],
-      })
-        .prepare(request)
-        .pipe(Effect.flip)
-
-      expect(error.message).toContain("Patches cannot change model routing")
-    }),
-  )
-
   it.effect("falls back to adapter bound to model", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [] }).prepare(
@@ -251,91 +186,6 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("request, prompt, and tool-schema patches run before adapter prepare", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({
-        adapters: [fake],
-        patches: [
-          Patch.request("test.id", {
-            reason: "rewrite request id",
-            apply: (request) => LLM.updateRequest(request, { id: "req_patched" }),
-          }),
-          Patch.prompt("test.message", {
-            reason: "rewrite prompt text",
-            apply: mapText(() => "patched"),
-          }),
-          Patch.toolSchema("test.description", {
-            reason: "rewrite tool description",
-            apply: (tool) => updateToolDefinition(tool, { description: "patched tool" }),
-          }),
-        ],
-      }).prepare(
-        LLM.updateRequest(request, {
-          tools: [{ name: "lookup", description: "original", inputSchema: {} }],
-        }),
-      )
-
-      expect(prepared.id).toBe("req_patched")
-      expect(prepared.target).toEqual({ body: "patched\ntool:lookup:patched tool" })
-      expect(prepared.patchTrace.map((item) => item.id)).toEqual([
-        "request.test.id",
-        "prompt.test.message",
-        "schema.test.description",
-      ])
-    }),
-  )
-
-  it.effect("request patches feed into prompt-patch predicates so phases see updated context", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({
-        adapters: [fake],
-        patches: [
-          // Earlier phase marks the request, later phase only fires for the
-          // marked request. If `compile` re-uses a stale PatchContext this
-          // test fails because the prompt patch's `when` would not match.
-          Patch.request("mark-request", {
-            reason: "mark request before prompt phase",
-            apply: (request) =>
-              LLM.updateRequest(request, { metadata: { ...request.metadata, promptPatchEnabled: true } }),
-          }),
-          Patch.prompt("rewrite-only-when-marked", {
-            reason: "rewrite prompt text only after request marker",
-            when: (ctx) => ctx.request.metadata?.promptPatchEnabled === true,
-            apply: mapText((text) => `rewrote-${text}`),
-          }),
-        ],
-      }).prepare(request)
-
-      expect(prepared.target).toEqual({ body: "rewrote-hello" })
-      expect(prepared.patchTrace.map((item) => item.id)).toEqual([
-        "request.mark-request",
-        "prompt.rewrite-only-when-marked",
-      ])
-    }),
-  )
-
-  it.effect("patches with the same order sort by id for deterministic application", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({
-        adapters: [fake],
-        patches: [
-          Patch.prompt("zeta", {
-            reason: "later id",
-            order: 1,
-            apply: mapText((text) => `${text}|zeta`),
-          }),
-          Patch.prompt("alpha", {
-            reason: "earlier id",
-            order: 1,
-            apply: mapText((text) => `${text}|alpha`),
-          }),
-        ],
-      }).prepare(request)
-
-      expect(prepared.target).toEqual({ body: "hello|alpha|zeta" })
-    }),
-  )
-
   it.effect("stream patches transform raised events", () =>
     Effect.gen(function* () {
       const llm = LLMClient.make({
@@ -351,29 +201,6 @@ describe("llm adapter", () => {
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
 
       expect(events[0]).toEqual({ type: "text-delta", text: 'ECHO:{"BODY":"HELLO"}' })
-    }),
-  )
-
-  it.effect("stream patches transform multiple events per stream", () =>
-    Effect.gen(function* () {
-      // Verifies stream patches run on every event, not just the first.
-      const seen: string[] = []
-      const llm = LLMClient.make({
-        adapters: [fake],
-        patches: [
-          Patch.stream("test.tap", {
-            reason: "record every event type",
-            apply: (event) => {
-              seen.push(event.type)
-              return event
-            },
-          }),
-        ],
-      })
-
-      yield* llm.stream(request).pipe(Stream.runDrain)
-
-      expect(seen).toEqual(["text-delta", "request-finish"])
     }),
   )
 
