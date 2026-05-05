@@ -1,7 +1,9 @@
 import { Database } from "bun:sqlite"
+import { mkdir, symlink } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
-import { expect, test } from "bun:test"
-import { offsetToPosition, resolveZedSelection } from "../../../src/cli/cmd/tui/context/editor-zed"
+import { expect, spyOn, test } from "bun:test"
+import { offsetToPosition, resolveZedDbPath, resolveZedSelection } from "../../../src/cli/cmd/tui/context/editor-zed"
 import { tmpdir } from "../../fixture/fixture"
 
 type ZedFixtureOptions = {
@@ -64,6 +66,23 @@ test("offsetToPosition converts Zed offsets to 1-based editor positions", () => 
     line: 2,
     character: 1,
   })
+})
+
+test("resolveZedDbPath skips candidates that cannot be stated", async () => {
+  await using tmp = await tmpdir()
+  const loop = path.join(tmp.path, "loop")
+  await symlink(loop, loop)
+  const home = spyOn(os, "homedir").mockImplementation(() => tmp.path)
+  const previous = process.env.OPENCODE_ZED_DB
+  process.env.OPENCODE_ZED_DB = loop
+
+  try {
+    expect(resolveZedDbPath()).toBeUndefined()
+  } finally {
+    if (previous === undefined) delete process.env.OPENCODE_ZED_DB
+    else process.env.OPENCODE_ZED_DB = previous
+    home.mockRestore()
+  }
 })
 
 test("resolveZedSelection returns active editor selection", async () => {
@@ -247,6 +266,71 @@ test("resolveZedSelection returns empty when no workspace matches", async () => 
   const fixture = await writeZedFixture(tmp.path, {
     workspacePaths: JSON.stringify([path.join(path.dirname(tmp.path), "other-workspace")]),
   })
+
+  expect(await resolveZedSelection(fixture.dbPath, tmp.path)).toEqual({ type: "empty" })
+})
+
+test("resolveZedSelection matches a Zed workspace that contains the session directory", async () => {
+  await using tmp = await tmpdir()
+  const fixture = await writeZedFixture(tmp.path)
+
+  expect(await resolveZedSelection(fixture.dbPath, path.join(tmp.path, "packages", "app"))).toEqual({
+    type: "selection",
+    selection: {
+      filePath: fixture.filePath,
+      source: "zed",
+      ranges: [
+        {
+          text: "two",
+          selection: {
+            start: { line: 2, character: 1 },
+            end: { line: 2, character: 4 },
+          },
+        },
+      ],
+    },
+  })
+})
+
+test("resolveZedSelection prefers the most specific containing Zed workspace", async () => {
+  await using tmp = await tmpdir()
+  const fixture = await writeZedFixture(tmp.path)
+  const child = path.join(tmp.path, "packages")
+  const childFile = path.join(child, "child.ts")
+  await mkdir(child, { recursive: true })
+  await Bun.write(childFile, "child")
+
+  const db = new Database(fixture.dbPath)
+  db.run("insert into workspaces values (2, ?, ?)", [JSON.stringify([child]), "2026-01-01"])
+  db.run("insert into panes values (2, 2, 1)")
+  db.run("insert into items values (2, 2, 2, 1, ?)", ["Editor"])
+  db.run("insert into editors values (2, 2, ?, ?)", [childFile, "child"])
+  db.run("insert into editor_selections values (2, 2, 0, 5)")
+  db.close()
+
+  expect(await resolveZedSelection(fixture.dbPath, path.join(child, "app"))).toEqual({
+    type: "selection",
+    selection: {
+      filePath: childFile,
+      source: "zed",
+      ranges: [
+        {
+          text: "child",
+          selection: {
+            start: { line: 1, character: 1 },
+            end: { line: 1, character: 6 },
+          },
+        },
+      ],
+    },
+  })
+})
+
+test("resolveZedSelection ignores a Zed workspace nested inside the session directory", async () => {
+  await using tmp = await tmpdir()
+  const child = path.join(tmp.path, "effect-lab")
+  await mkdir(child, { recursive: true })
+  const fixture = await writeZedFixture(child)
 
   expect(await resolveZedSelection(fixture.dbPath, tmp.path)).toEqual({ type: "empty" })
 })
