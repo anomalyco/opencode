@@ -1205,7 +1205,10 @@ const layer: Layer.Layer<
               name,
               providerID: ProviderID.make(providerID),
               capabilities: {
-                temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+                temperature:
+                  model.temperature ??
+                  existingModel?.capabilities.temperature ??
+                  (apiNpm === "@ai-sdk/openai-compatible" ? true : false),
                 reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
                 attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
