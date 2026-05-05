@@ -2,6 +2,7 @@ import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { FetchHttpClient, HttpClient, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
+import { Backup } from "@/backup"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
@@ -51,6 +52,7 @@ import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
 import { EventApi, eventHandlers } from "./event"
+import { backupHandlers } from "./handlers/backup"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
 import { experimentalHandlers } from "./handlers/experimental"
@@ -107,6 +109,7 @@ const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
 )
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
+    backupHandlers,
     configHandlers,
     experimentalHandlers,
     fileHandlers,
@@ -151,6 +154,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       Account.defaultLayer,
       Agent.defaultLayer,
       Auth.defaultLayer,
+      Backup.defaultLayer,
       Command.defaultLayer,
       Config.defaultLayer,
       File.defaultLayer,

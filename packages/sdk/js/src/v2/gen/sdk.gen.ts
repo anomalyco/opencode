@@ -13,6 +13,11 @@ import type {
   AuthRemoveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  BackupExportErrors,
+  BackupExportResponses,
+  BackupImportErrors,
+  BackupImportResponses,
+  BackupListResponses,
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
@@ -72,6 +77,7 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  Message,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -117,6 +123,7 @@ import type {
   QuestionRejectResponses,
   QuestionReplyErrors,
   QuestionReplyResponses,
+  Session as Session4,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -172,6 +179,7 @@ import type {
   SyncStealErrors,
   SyncStealResponses,
   TextPartInput,
+  Todo,
   ToolIdsErrors,
   ToolIdsResponses,
   ToolListErrors,
@@ -554,6 +562,119 @@ export class Event extends HeyApiClient {
       url: "/event",
       ...options,
       ...params,
+    })
+  }
+}
+
+export class Backup extends HeyApiClient {
+  /**
+   * List backup sessions
+   *
+   * List all local sessions available for backup export.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<BackupListResponses, unknown, ThrowOnError>({
+      url: "/backup/list",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Export session backup
+   *
+   * Return the full JSON backup payload for a single session.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<BackupExportResponses, BackupExportErrors, ThrowOnError>({
+      url: "/backup/export",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Import session backup
+   *
+   * Restore a single session from a JSON backup payload.
+   */
+  public import<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      payload?: {
+        info: Session4
+        messages: Array<{
+          info: Message
+          parts: Array<Part2>
+        }>
+        todos: Array<Todo>
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "payload" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<BackupImportResponses, BackupImportErrors, ThrowOnError>({
+      url: "/backup/import",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -4682,6 +4803,11 @@ export class OpencodeClient extends HeyApiClient {
   private _event?: Event
   get event(): Event {
     return (this._event ??= new Event({ client: this.client }))
+  }
+
+  private _backup?: Backup
+  get backup(): Backup {
+    return (this._backup ??= new Backup({ client: this.client }))
   }
 
   private _config?: Config2

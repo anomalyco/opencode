@@ -24,9 +24,9 @@ import { FileRoutes } from "./file"
 import { ConfigRoutes } from "./config"
 import { ExperimentalRoutes } from "./experimental"
 import { ProviderRoutes } from "./provider"
+import { BackupRoutes } from "./backup"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
-import { InstanceMiddleware } from "./middleware"
 import { jsonRequest } from "./trace"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
 import { EventPaths } from "./httpapi/event"
@@ -35,6 +35,7 @@ import { FilePaths } from "./httpapi/groups/file"
 import { InstancePaths } from "./httpapi/groups/instance"
 import { McpPaths } from "./httpapi/groups/mcp"
 import { PtyPaths } from "./httpapi/groups/pty"
+import { BackupPaths } from "./httpapi/groups/backup"
 import { SessionPaths } from "./httpapi/groups/session"
 import { SyncPaths } from "./httpapi/groups/sync"
 import { TuiPaths } from "./httpapi/groups/tui"
@@ -100,6 +101,9 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
     app.delete(McpPaths.auth, (c) => handler(c.req.raw, context))
     app.post(McpPaths.connect, (c) => handler(c.req.raw, context))
     app.post(McpPaths.disconnect, (c) => handler(c.req.raw, context))
+    app.post(BackupPaths.list, (c) => handler(c.req.raw, context))
+    app.post(BackupPaths.export, (c) => handler(c.req.raw, context))
+    app.post(BackupPaths.import, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
@@ -167,6 +171,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
+    .route("/backup", BackupRoutes())
     .route("/sync", SyncRoutes())
     .route("/", FileRoutes())
     .route("/", EventRoutes())

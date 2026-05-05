@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { HttpApi } from "effect/unstable/httpapi"
+import { BackupApi } from "./groups/backup"
 import { BusEvent } from "@/bus/bus-event"
 import { SyncEvent } from "@/sync"
 import { ConfigApi } from "./groups/config"
@@ -29,6 +30,7 @@ const SyncEventSchemas = SyncEvent.effectPayloads()
 export const RootHttpApi = HttpApi.make("opencode-root").addHttpApi(ControlApi).addHttpApi(GlobalApi)
 
 export const InstanceHttpApi = HttpApi.make("opencode-instance")
+  .addHttpApi(BackupApi)
   .addHttpApi(ConfigApi)
   .addHttpApi(ExperimentalApi)
   .addHttpApi(FileApi)
