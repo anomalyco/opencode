@@ -1642,6 +1642,97 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Perplexity
+
+Perplexity exposes its [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) (OpenAI Responses-compatible) and [Search API](https://docs.perplexity.ai/docs/search/quickstart) for grounded, citation-backed answers.
+
+1. Create an API key in the [Perplexity API key dashboard](https://www.perplexity.ai/account/api/keys).
+
+2. Run the `/connect` command and select **Other** (Perplexity is not yet in the built-in directory).
+
+   ```txt
+   /connect
+   ```
+
+3. Enter `perplexity` as the provider ID and paste your API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Add the following to your `opencode.json`. Because the Agent API is [OpenAI Responses-compatible](https://docs.perplexity.ai/docs/agent-api/openai-compatibility), use the `@ai-sdk/openai` package. The Agent API routes to many [third-party models](https://docs.perplexity.ai/docs/agent-api/models), so list the ones you want under `models`.
+
+   ```json title="opencode.json" {5-9}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "perplexity": {
+         "npm": "@ai-sdk/openai",
+         "name": "Perplexity",
+         "options": {
+           "baseURL": "https://api.perplexity.ai/v1",
+           "apiKey": "{env:PERPLEXITY_API_KEY}"
+         },
+         "models": {
+           "openai/gpt-5.4": {
+             "name": "GPT-5.4 (via Perplexity)"
+           },
+           "anthropic/claude-sonnet-4-6": {
+             "name": "Claude Sonnet 4.6 (via Perplexity)"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+5. Run `/models` and pick a model. See the [Agent API models](https://docs.perplexity.ai/docs/agent-api/models) page for the full list. [Presets](https://docs.perplexity.ai/docs/agent-api/presets) (for example `pro-search`) and the [Agent API reference](https://docs.perplexity.ai/api-reference/agent-post) cover advanced options like fallback model lists.
+
+   ```txt
+   /models
+   ```
+
+#### Search API
+
+For raw, ranked web search results (separate from chat completions), Perplexity also offers the [Search API](https://docs.perplexity.ai/docs/search/quickstart). Two ways to use it from opencode:
+
+**Direct HTTP** for scripts and one-off calls:
+
+```bash
+curl -X POST https://api.perplexity.ai/search \
+  -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "latest AI policy updates",
+    "max_results": 5,
+    "search_recency_filter": "month"
+  }'
+```
+
+**Via MCP** so the agent can call search as a tool. Perplexity ships an [official MCP server](https://github.com/perplexityai/modelcontextprotocol) on npm (`@perplexity-ai/mcp-server`); run it locally over stdio:
+
+```json title="opencode.json" {4-13}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "perplexity": {
+      "type": "local",
+      "command": ["npx", "-y", "@perplexity-ai/mcp-server"],
+      "environment": {
+        "PERPLEXITY_API_KEY": "{env:PERPLEXITY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+The server exposes a `perplexity_search` tool (backed by the Search API) plus optional research and reasoning tools. See the [MCP server README](https://github.com/perplexityai/modelcontextprotocol#available-tools) for the tool list and the [Search API reference](https://docs.perplexity.ai/api-reference/search-post) for available filters and the response shape.
+
+---
+
 ### LLM Gateway
 
 1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.

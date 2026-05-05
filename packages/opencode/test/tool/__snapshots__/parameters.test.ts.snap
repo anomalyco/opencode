@@ -427,7 +427,7 @@ exports[`tool parameters JSON Schema (wire shape) websearch 1`] = `
       "type": "number",
     },
     "livecrawl": {
-      "description": "Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback')",
+      "description": "Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback'). Exa-only; ignored when Perplexity backend is in use.",
       "enum": [
         "fallback",
         "preferred",
@@ -443,7 +443,7 @@ exports[`tool parameters JSON Schema (wire shape) websearch 1`] = `
       "type": "string",
     },
     "type": {
-      "description": "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search",
+      "description": "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search. Exa-only; ignored when Perplexity backend is in use.",
       "enum": [
         "auto",
         "fast",

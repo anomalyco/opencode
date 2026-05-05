@@ -256,12 +256,21 @@ Allows the LLM to fetch and read web pages. Useful for looking up documentation 
 
 Search the web for information.
 
+The `websearch` tool supports two backends:
+
+- **Perplexity Search API** (default when `PERPLEXITY_API_KEY` is set). Calls Perplexity's `/search` REST endpoint directly.
+- **Exa**. Used when `OPENCODE_ENABLE_EXA=1` is set or when the hosted `opencode` provider is in use.
+
+Set `OPENCODE_DISABLE_PERPLEXITY=1` to force Exa even when a Perplexity key is present.
+
 :::note
-This tool is only available when using the OpenCode provider or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
+This tool is only available when using the OpenCode provider, when `PERPLEXITY_API_KEY` is set, or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
 
 To enable when launching OpenCode:
 
 ```bash
+PERPLEXITY_API_KEY=pplx-... opencode
+# or
 OPENCODE_ENABLE_EXA=1 opencode
 ```
 
@@ -276,9 +285,9 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-Performs web searches using Exa AI to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
+Performs web searches to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
 
-No API key is required — the tool connects directly to Exa AI's hosted MCP service without authentication.
+When the Perplexity backend is in use, the tool calls `https://api.perplexity.ai/search` with your `PERPLEXITY_API_KEY`. When the Exa backend is in use, the tool connects directly to Exa AI's hosted MCP service without authentication.
 
 :::tip
 Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
