@@ -13,7 +13,8 @@ type IncidentWebhookPayload = {
   "public_incident.incident_created_v2"?: Incident
 }
 
-const verifyIncidentWebhook = (request: Request, body: string) => {
+const verifyWebhook = async (request: Request) => {
+  const body = await request.text()
   try {
     return new Webhook(Resource.INCIDENT_WEBHOOK_SIGNING_SECRET.value).verify(
       body,
@@ -24,7 +25,7 @@ const verifyIncidentWebhook = (request: Request, body: string) => {
   }
 }
 
-const postToDiscord = async (incident: Incident) =>
+const postDiscordMessage = async (incident: Incident) =>
   fetch(Resource.DISCORD_INCIDENT_WEBHOOK_URL.value, {
     method: "POST",
     headers: {
@@ -49,8 +50,7 @@ const postToDiscord = async (incident: Incident) =>
   })
 
 export async function POST(input: APIEvent) {
-  const body = await input.request.text()
-  const payload = verifyIncidentWebhook(input.request, body)
+  const payload = await verifyWebhook(input.request)
   if (!payload) {
     return Response.json({ message: "invalid signature" }, { status: 401 })
   }
@@ -62,7 +62,7 @@ export async function POST(input: APIEvent) {
   const incident = payload["public_incident.incident_created_v2"]
   if (!incident) return Response.json({ message: "missing incident" }, { status: 400 })
 
-  const response = await postToDiscord(incident)
+  const response = await postDiscordMessage(incident)
   if (!response.ok) {
     console.error(await response.text())
     return Response.json({ message: "discord webhook failed" }, { status: 502 })
