@@ -278,6 +278,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
     }) {
+      // Capture per-request instance + workspace bindings before forking the
+      // prompt fiber into the handler scope. Without this, the forked fiber
+      // resolves InstanceRef from whatever request last touched the LocalContext,
+      // and concurrent promptAsync calls (e.g. OMO injections) end up sharing or
+      // racing on different InstanceState.runners maps — producing two fibers
+      // running session generation in parallel under one user message.
+      const instance = yield* InstanceState.context
+      const workspace = yield* InstanceState.workspaceID
       yield* promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
@@ -288,6 +296,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
             })
           }),
         ),
+        Effect.provideService(InstanceRef, instance),
+        Effect.provideService(WorkspaceRef, workspace),
         Effect.forkIn(scope, { startImmediately: true }),
       )
       return HttpApiSchema.NoContent.make()

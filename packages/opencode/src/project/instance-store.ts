@@ -104,6 +104,9 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const existing = cache.get(directory)
+          yield* Effect.logInfo(
+            `InstanceStore.load called inputDir=${input.directory} resolvedDir=${directory} cacheSize=${cache.size} cacheHit=${existing ? "yes" : "no"} cacheKeys=${JSON.stringify([...cache.keys()])}`,
+          )
           if (existing) return yield* restore(Deferred.await(existing.deferred))
 
           const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>() }
