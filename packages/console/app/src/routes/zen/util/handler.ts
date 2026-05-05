@@ -141,7 +141,10 @@ export async function handler(
       )
       validateModelSettings(billingSource, authInfo)
       updateProviderKey(authInfo, providerInfo)
-      logger.metric({ provider: providerInfo.id })
+      logger.metric({
+        provider: providerInfo.id,
+        "provider.model": providerInfo.model,
+      })
 
       const startTimestamp = Date.now()
       const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
@@ -149,12 +152,25 @@ export async function handler(
         providerInfo.modifyBody({
           ...createBodyConverter(opts.format, providerInfo.format)(body),
           model: providerInfo.model,
-          ...providerInfo.payloadModifier,
-          ...Object.fromEntries(
-            Object.entries(providerInfo.payloadMappings ?? {})
-              .map(([k, v]) => [k, input.request.headers.get(v)])
-              .filter(([_k, v]) => !!v),
-          ),
+          ...(() => {
+            const replacer = (obj: Record<string, any>): Record<string, any> =>
+              Object.fromEntries(
+                Object.entries(obj).flatMap(([k, v]) => {
+                  if (Array.isArray(v)) return [[k, v]]
+                  if (typeof v === "object") return [[k, replacer(v)]]
+                  if (typeof v === "string") {
+                    if (v === "$ip") return [[k, ip]]
+                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v.startsWith("$header.")) {
+                      const headerValue = input.request.headers.get(v.slice(8))
+                      return headerValue ? [[k, headerValue]] : []
+                    }
+                  }
+                  return [[k, v]]
+                }),
+              )
+            return replacer(providerInfo.payloadModifier ?? {})
+          })(),
         }),
       )
       logger.debug("REQUEST URL: " + reqUrl)
@@ -514,7 +530,6 @@ export async function handler(
           reqModel,
           providerModel: modelProvider.model,
           adjustCacheUsage: providerProps.adjustCacheUsage,
-          safetyIdentifier: modelProvider.safetyIdentifier ? ip : undefined,
           workspaceID: authInfo?.workspaceID,
         }
         if (format === "anthropic") return anthropicHelper(opts)
@@ -904,6 +919,13 @@ export async function handler(
       "tokens.cache_read": cacheReadTokens,
       "tokens.cache_write_5m": cacheWrite5mTokens,
       "tokens.cache_write_1h": cacheWrite1hTokens,
+      "cost.input.microcents": centsToMicroCents(inputCost),
+      "cost.output.microcents": centsToMicroCents(outputCost),
+      "cost.reasoning.microcents": reasoningCost ? centsToMicroCents(reasoningCost) : undefined,
+      "cost.cache_read.microcents": cacheReadCost ? centsToMicroCents(cacheReadCost) : undefined,
+      "cost.cache_write.microcents": cacheWrite5mCost ? centsToMicroCents(cacheWrite5mCost) : undefined,
+      "cost.total.microcents": centsToMicroCents(totalCostInCent),
+      // deprecated - remove after May 20, 2026
       "cost.input": Math.round(inputCost),
       "cost.output": Math.round(outputCost),
       "cost.reasoning": reasoningCost ? Math.round(reasoningCost) : undefined,

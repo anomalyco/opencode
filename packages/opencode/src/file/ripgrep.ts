@@ -12,7 +12,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { sanitizedProcessEnv } from "@opencode-ai/core/util/opencode-process"
 import { which } from "@/util/which"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "ripgrep" })
 const VERSION = "15.1.0"
@@ -27,19 +27,19 @@ const PLATFORM = {
 } as const
 
 const TimeStats = Schema.Struct({
-  secs: Schema.Number,
-  nanos: Schema.Number,
+  secs: NonNegativeInt,
+  nanos: NonNegativeInt,
   human: Schema.String,
 })
 
 const Stats = Schema.Struct({
   elapsed: TimeStats,
-  searches: Schema.Number,
-  searches_with_match: Schema.Number,
-  bytes_searched: Schema.Number,
-  bytes_printed: Schema.Number,
-  matched_lines: Schema.Number,
-  matches: Schema.Number,
+  searches: NonNegativeInt,
+  searches_with_match: NonNegativeInt,
+  bytes_searched: NonNegativeInt,
+  bytes_printed: NonNegativeInt,
+  matched_lines: NonNegativeInt,
+  matches: NonNegativeInt,
 })
 
 const PathText = Schema.Struct({
@@ -58,15 +58,15 @@ export const SearchMatch = Schema.Struct({
   lines: Schema.Struct({
     text: Schema.String,
   }),
-  line_number: Schema.Number,
-  absolute_offset: Schema.Number,
+  line_number: NonNegativeInt,
+  absolute_offset: NonNegativeInt,
   submatches: Schema.Array(
     Schema.Struct({
       match: Schema.Struct({
         text: Schema.String,
       }),
-      start: Schema.Number,
-      end: Schema.Number,
+      start: NonNegativeInt,
+      end: NonNegativeInt,
     }),
   ),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -80,7 +80,7 @@ const End = Schema.Struct({
   type: Schema.Literal("end"),
   data: Schema.Struct({
     path: PathText,
-    binary_offset: Schema.NullOr(Schema.Number),
+    binary_offset: Schema.NullOr(NonNegativeInt),
     stats: Stats,
   }),
 })
