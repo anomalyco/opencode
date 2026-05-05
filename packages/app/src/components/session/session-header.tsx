@@ -1,20 +1,30 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
+import { usePrompt } from "@/context/prompt"
+import { useSync } from "@/context/sync"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function SessionHeader() {
   const layout = useLayout()
   const command = useCommand()
+  const prompt = usePrompt()
   const platform = usePlatform()
   const language = useLanguage()
+  const sync = useSync()
   const { view } = useSessionLayout()
+  const skills = createMemo(() =>
+    sync.data.command
+      .filter((cmd) => cmd.source === "skill")
+      .map((cmd) => ({ name: cmd.name, description: cmd.description }))
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
+  )
 
   const isDesktopBeta = platform.platform === "desktop" && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
   const tree = createMemo(() => !isDesktopBeta)
@@ -24,11 +34,41 @@ export function SessionHeader() {
     setRightMount(document.getElementById("opencode-titlebar-right"))
   })
 
+  const select = (name: string) => {
+    const text = `/${name} `
+    const images = prompt.current().filter((part) => part.type === "image")
+    prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
+    command.trigger("input.focus")
+  }
+
   return (
     <Show when={rightMount()}>
       {(mount) => (
         <Portal mount={mount()}>
           <div class="flex items-center gap-2">
+            <Show when={skills().length > 0}>
+              <div class="hidden md:flex items-center gap-0.5 max-w-[min(30vw,320px)] overflow-x-auto no-scrollbar px-1">
+                <For each={skills()}>
+                  {(skill) => (
+                    <Tooltip
+                      placement="bottom"
+                      inactive={!skill.description}
+                      value={<div class="max-w-72">{skill.description}</div>}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="small"
+                        class="h-6 w-32 px-1.5 text-11-regular text-text-base shrink-0"
+                        onClick={() => select(skill.name)}
+                        aria-label={`/${skill.name}`}
+                      >
+                        <span class="truncate">{skill.name}</span>
+                      </Button>
+                    </Tooltip>
+                  )}
+                </For>
+              </div>
+            </Show>
             <div class="flex items-center gap-1">
               <div class="hidden md:flex items-center gap-1 shrink-0">
                 <TooltipKeybind
