@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "openai-compatible-chat/groq-streams-tool-call",
+    "recordedAt": "2026-05-03T20:24:43.863Z",
+    "tags": [
+      "prefix:openai-compatible-chat",
+      "protocol:openai-compatible-chat",
+      "provider:groq",
+      "tool"
+    ]
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"llama-3.3-70b-versatile\",\"messages\":[{\"role\":\"system\",\"content\":\"Call tools exactly as requested.\"},{\"role\":\"user\",\"content\":\"Call get_weather with city exactly Paris.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}},\"stream\":true,\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"chatcmpl-139534c9-5df5-489a-a91a-d215f06356ac\",\"object\":\"chat.completion.chunk\",\"created\":1777839883,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_ba38bbab80\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null},\"logprobs\":null,\"finish_reason\":null}],\"x_groq\":{\"id\":\"req_01kqqr7h6tea2vaw3rgtr91wat\",\"seed\":320929235}}\n\ndata: {\"id\":\"chatcmpl-139534c9-5df5-489a-a91a-d215f06356ac\",\"object\":\"chat.completion.chunk\",\"created\":1777839883,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_ba38bbab80\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"id\":\"bt6nsesre\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},\"index\":0}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-139534c9-5df5-489a-a91a-d215f06356ac\",\"object\":\"chat.completion.chunk\",\"created\":1777839883,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_ba38bbab80\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"x_groq\":{\"id\":\"req_01kqqr7h6tea2vaw3rgtr91wat\",\"usage\":{\"queue_time\":0.29997468,\"prompt_tokens\":249,\"prompt_time\":0.030829202,\"completion_tokens\":10,\"completion_time\":0.039937486,\"total_tokens\":259,\"total_time\":0.070766688}},\"usage\":{\"queue_time\":0.29997468,\"prompt_tokens\":249,\"prompt_time\":0.030829202,\"completion_tokens\":10,\"completion_time\":0.039937486,\"total_tokens\":259,\"total_time\":0.070766688}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

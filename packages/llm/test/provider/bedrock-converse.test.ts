@@ -7,7 +7,7 @@ import { LLMClient } from "../../src/adapter"
 import { BedrockConverse } from "../../src/provider/bedrock-converse"
 import { testEffect } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
-import { eventSummary, weatherTool, weatherToolName } from "../recorded-scenarios"
+import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, weatherTool, weatherToolLoopRequest, weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const codec = new EventStreamCodec(toUtf8, fromUtf8)
@@ -531,6 +531,16 @@ describe("Bedrock Converse recorded", () => {
         { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },
         { type: "finish", reason: "tool-calls", usage: { inputTokens: 419, outputTokens: 16, totalTokens: 435 } },
       ])
+    }),
+  )
+
+  recorded.effect.with("drives a tool loop", { tags: ["tool", "tool-loop", "golden"] }, () =>
+    Effect.gen(function* () {
+      const llm = LLMClient.make({ adapters: [BedrockConverse.adapter] })
+      expectWeatherToolLoop(yield* runWeatherToolLoop(llm, weatherToolLoopRequest({
+        id: "recorded_bedrock_tool_loop",
+        model: recordedModel(),
+      })))
     }),
   )
 })

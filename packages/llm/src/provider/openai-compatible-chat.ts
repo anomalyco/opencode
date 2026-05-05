@@ -71,7 +71,13 @@ export const deepseek = (input: ProviderFamilyModelInput) => profileModel(profil
 
 export const fireworks = (input: ProviderFamilyModelInput) => profileModel(profiles.fireworks, input)
 
+export const groq = (input: ProviderFamilyModelInput) => profileModel(profiles.groq, input)
+
+export const openrouter = (input: ProviderFamilyModelInput) => profileModel(profiles.openrouter, input)
+
 export const togetherai = (input: ProviderFamilyModelInput) => profileModel(profiles.togetherai, input)
+
+export const xai = (input: ProviderFamilyModelInput) => profileModel(profiles.xai, input)
 
 export const includeUsage = adapter.patch("include-usage", {
   reason: "request final usage chunk from OpenAI-compatible Chat streaming responses",
