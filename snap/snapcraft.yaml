@@ -30,8 +30,9 @@ platforms:
 apps:
   opencode-cli:
     command: bin/opencode-cli
+    aliases: [opencode-cli]
   opencode:
-    command: bin/OpenCode
+    command: bin/opencode-desktop
     desktop: usr/share/applications/OpenCode.desktop
 
 parts:
@@ -92,7 +93,6 @@ parts:
       - libgtk-3-dev
       - libsoup-3.0-dev
       - nodejs
-      - npm
     stage-packages:
       - libwebkit2gtk-4.1-0
       - libgtk-3-0
@@ -148,10 +148,15 @@ parts:
         *)       echo "Unsupported architecture: $(uname -m)" && exit 1 ;;
       esac
 
-      # Install the desktop binary as OpenCode
+      # Install the entire unpacked electron app directory
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/opencode"
+      cp -r "dist/${DESKTOP_ARCH}/." "$SNAPCRAFT_PART_INSTALL/usr/share/opencode/"
+
+      # Wrapper script (@ in filename is not valid in snap command field)
       mkdir -p "$SNAPCRAFT_PART_INSTALL/bin"
-      # The main executable inside the unpacked dir matches the productName
-      cp "dist/${DESKTOP_ARCH}/OpenCode" "$SNAPCRAFT_PART_INSTALL/bin/OpenCode"
+      printf '#!/bin/sh\nexec "$SNAP/usr/share/opencode/@opencode-aidesktop-electron" --no-sandbox "$@"\n' \
+        > "$SNAPCRAFT_PART_INSTALL/bin/opencode-desktop"
+      chmod +x "$SNAPCRAFT_PART_INSTALL/bin/opencode-desktop"
 
       # Install desktop integration files
       mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/applications"
