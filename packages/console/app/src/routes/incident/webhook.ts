@@ -3,6 +3,7 @@ import { Resource } from "@opencode-ai/console-resource"
 import { Webhook } from "svix"
 
 type Incident = {
+  mode?: "test" | "standard"
   name?: string
   permalink?: string
   summary?: string
@@ -33,14 +34,14 @@ const postDiscordMessage = async (incident: Incident) => {
     },
     body: JSON.stringify({
       content: [
-        `**${incident.name ?? "Incident has been created"}**`,
+        `**${incident.mode === "test" ? "[TEST] " : ""}${incident.name ?? "Incident has been created"}**`,
         incident.summary,
         "",
         "@everyone",
         "",
         incident.permalink,
       ]
-        .filter(Boolean)
+        .filter((line) => line !== undefined)
         .join("\n"),
       allowed_mentions: {
         parse: ["everyone"],
