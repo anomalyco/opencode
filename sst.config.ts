@@ -27,7 +27,7 @@ export default $config({
     await import("./infra/app.js")
     await import("./infra/console.js")
     await import("./infra/enterprise.js")
-    if ($app.stage === "production" || $app.stage === "vimtor") {
+    if ($app.stage === "production") {
       await import("./infra/monitoring.js")
     }
   },

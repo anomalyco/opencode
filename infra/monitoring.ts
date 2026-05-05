@@ -297,7 +297,8 @@ for (const model of models) {
         description: spec.description,
         queryJson: honeycomb.getQuerySpecificationOutput(spec.json).json,
         alertType: "on_change",
-        frequency: 900, // This is the minimum when using % change detection
+        // This is the minimum when using % change detection
+        frequency: 900,
         baselineDetails: [{ type: "percentage", offsetMinutes: spec.baseline / 60 }],
         thresholds: [{ ...spec.threshold, exceededLimit: 1 }],
         recipients: [
