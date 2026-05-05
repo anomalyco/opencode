@@ -133,14 +133,22 @@ describe("tui sync", () => {
 
     try {
       expect(kv.get("session_directory_filter_enabled", true)).toBe(true)
-      expect(session.at(-1)?.searchParams.get("scope")).toBeNull()
-      expect(session.at(-1)?.searchParams.get("path")).toBe("packages/opencode")
+      const directoryRequest = session.at(-1)
+      expect(directoryRequest?.searchParams.get("scope")).toBeNull()
+      expect(directoryRequest?.searchParams.get("path")).toBe("packages/opencode")
+      expect(directoryRequest?.searchParams.get("roots")).toBe("true")
+      expect(directoryRequest?.searchParams.get("limit")).toBe("1000")
+      expect(directoryRequest?.searchParams.get("start")).toBeNull()
 
       kv.set("session_directory_filter_enabled", false)
       await sync.session.refresh()
 
-      expect(session.at(-1)?.searchParams.get("scope")).toBe("project")
-      expect(session.at(-1)?.searchParams.get("path")).toBeNull()
+      const projectRequest = session.at(-1)
+      expect(projectRequest?.searchParams.get("scope")).toBe("project")
+      expect(projectRequest?.searchParams.get("path")).toBeNull()
+      expect(projectRequest?.searchParams.get("roots")).toBe("true")
+      expect(projectRequest?.searchParams.get("limit")).toBe("1000")
+      expect(projectRequest?.searchParams.get("start")).toBeNull()
     } finally {
       app.renderer.destroy()
       Global.Path.state = previous
