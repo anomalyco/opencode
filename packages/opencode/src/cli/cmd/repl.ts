@@ -98,12 +98,11 @@ export async function repl(opts: ReplOptions): Promise<void> {
     }
 
     if (process.stdout.isTTY) {
+      process.stdout.write(UI.Style.TEXT_DIM + "opencode" + EOL)
       process.stdout.write(
-        UI.Style.TEXT_DIM +
-          `opencode · session ${state.sessionID.slice(-6)} · model ${state.model || "default"} · ctrl+d to exit · /help for commands · Tab to autocomplete` +
-          UI.Style.TEXT_NORMAL +
-          EOL,
+        `session ${state.sessionID.slice(-6)} · model ${state.model || "default"} · Tab to autocomplete` + EOL,
       )
+      process.stdout.write(`ctrl+d to exit · /help for commands` + UI.Style.TEXT_NORMAL + EOL)
       process.stdout.write(EOL)
     }
 
