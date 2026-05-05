@@ -1,13 +1,12 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Instance } from "../../src/project/instance"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
-import { MessageID, PartID } from "../../src/session/schema"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
@@ -34,6 +33,14 @@ const it = testEffect(
     ToolRegistry.defaultLayer,
   ),
 )
+
+function defer<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   const session = yield* Session.Service
@@ -66,7 +73,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
 
 function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
   return {
-    cancel() {},
+    cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
       Effect.sync(() => {
@@ -270,6 +277,58 @@ describe("tool.task", () => {
             subagent_type: "general",
           },
         })
+      }),
+    ),
+  )
+
+  it.live("execute cancels child session when abort signal fires", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const ready = defer<SessionPrompt.PromptInput>()
+        const cancelled = defer<SessionID>()
+        const abort = new AbortController()
+        const promptOps: TaskPromptOps = {
+          cancel: (sessionID) =>
+            Effect.sync(() => {
+              cancelled.resolve(sessionID)
+            }),
+          resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+          prompt: (input) =>
+            Effect.promise(() => {
+              ready.resolve(input)
+              return cancelled.promise
+            }).pipe(Effect.as(reply(input, "cancelled"))),
+        }
+
+        const fiber = yield* def
+          .execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: abort.signal,
+              extra: { promptOps },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.forkChild)
+
+        const input = yield* Effect.promise(() => ready.promise)
+        abort.abort()
+        expect(yield* Effect.promise(() => cancelled.promise)).toBe(input.sessionID)
+
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
       }),
     ),
   )
