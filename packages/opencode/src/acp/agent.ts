@@ -1764,12 +1764,10 @@ function buildAvailableModels(
         name: `${provider.name}/${model.name}`,
       }
       if (!includeVariants || !model.variants) return [base]
-      const variants = Object.keys(model.variants).filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
-      const variantOptions = variants.map((variant) => ({
+      return Object.keys(model.variants).map((variant) => ({
         modelId: `${provider.id}/${model.id}/${variant}`,
         name: `${provider.name}/${model.name} (${variant})`,
       }))
-      return [base, ...variantOptions]
     })
   })
 }
@@ -1781,8 +1779,13 @@ function formatModelIdWithVariant(
   includeVariant: boolean,
 ) {
   const base = `${model.providerID}/${model.modelID}`
-  if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
-  return `${base}/${variant}`
+  if (!includeVariant || availableVariants.length === 0) return base
+  const selectedVariant = variant && availableVariants.includes(variant)
+    ? variant
+    : availableVariants.includes(DEFAULT_VARIANT_VALUE)
+      ? DEFAULT_VARIANT_VALUE
+      : availableVariants[0]
+  return `${base}/${selectedVariant}`
 }
 
 function buildVariantMeta(input: {
