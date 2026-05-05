@@ -39,14 +39,16 @@ export function recentConnectedWorkspaces<WorkspaceInfo extends { id: string }>(
   status: (workspaceID: string) => string | undefined
   limit?: number
 }) {
-  return input.sessions
+  const workspaces = input.sessions
     .toSorted((a, b) => b.time.updated - a.time.updated)
     .flatMap((session) => {
       const workspace = session.workspaceID ? input.get(session.workspaceID) : undefined
       return workspace && input.status(workspace.id) === "connected" ? [workspace] : []
     })
     .filter((workspace, index, list) => list.findIndex((item) => item.id === workspace.id) === index)
-    .slice(0, input.limit ?? 3)
+  const recent = workspaces.slice(0, input.limit ?? 3)
+
+  return { recent, hasMore: recent.length < workspaces.length }
 }
 
 async function loadWorkspaceAdapters(input: {
@@ -141,7 +143,7 @@ export function DialogWorkspaceSelect(props: {
   const options = createMemo<DialogSelectOption<WorkspaceSelectValue>[]>(() => {
     const list = adapters()
     if (!list) return []
-    const recent = recentConnectedWorkspaces({
+    const { recent, hasMore } = recentConnectedWorkspaces({
       sessions: sync.data.session,
       get: project.workspace.get,
       status: project.workspace.status,
@@ -170,13 +172,15 @@ export function DialogWorkspaceSelect(props: {
         },
         category: "Choose workspace",
       })),
-      {
-        title: "View all workspaces",
-        value: { type: "existing-list" as const },
-        description: "Choose from all workspaces",
-        category: "Choose workspace",
-      },
-    ]
+      hasMore
+        ? {
+            title: "View all workspaces",
+            value: { type: "existing-list" as const },
+            description: "Choose from all workspaces",
+            category: "Choose workspace",
+          }
+        : null,
+    ].filter(Boolean)
   })
 
   if (!adapters()) return null
