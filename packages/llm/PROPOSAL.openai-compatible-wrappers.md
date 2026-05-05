@@ -6,7 +6,7 @@ Keep `OpenAICompatibleChat` as the shared implementation for providers that expo
 
 | Level | Use When | Example |
 | --- | --- | --- |
-| Profile | Provider only needs `provider`, `baseURL`, capabilities, and resolver defaults. | DeepSeek text/tool basics, TogetherAI, Cerebras, Fireworks. |
+| Profile | Provider only needs `provider`, `baseURL`, and capabilities. | DeepSeek text/tool basics, TogetherAI, Cerebras, Fireworks. |
 | Thin wrapper | Provider speaks OpenAI Chat shape but needs named options, patches, capability defaults, metadata extraction, or provider-defined tools. | Mistral, Groq, Perplexity. |
 | Dedicated protocol | Request lowering or stream parsing stops being OpenAI Chat-compatible. | Not justified for these providers yet. |
 
@@ -71,10 +71,12 @@ const llm = LLMClient.make({ adapters: OpenAICompatible.adapters })
 Current OpenCode bridge shape:
 
 ```ts
-const resolved = OpenAICompatibleProfiles.resolve("deepseek")
-// provider: "deepseek"
-// protocol: "openai-compatible-chat"
-// baseURL: "https://api.deepseek.com/v1"
+OpenAICompatible.model("deepseek-chat", {
+  provider: "deepseek",
+  baseURL: OpenAICompatibleProfiles.profiles.deepseek.baseURL,
+  apiKey,
+})
+// provider: "deepseek", protocol: "openai-compatible-chat"
 ```
 
 Current default patches already contain provider-specific OpenAI-compatible policy:
@@ -105,7 +107,7 @@ The lesson is not “copy AI SDK and create full dedicated adapters.” The less
 
 ## Proposed Shape
 
-A thin wrapper is a provider-local module that reuses the common OpenAI-compatible adapter and protocol, then exports provider-specific model helpers, resolver, and patches.
+A thin wrapper is a provider-local module that reuses the common OpenAI-compatible adapter and protocol, then exports provider-specific model helpers, adapters, and patches.
 
 Example Mistral wrapper:
 
@@ -132,8 +134,6 @@ export const patches = [
 export const adapters = [
   OpenAICompatibleChat.adapter.withPatches([mistralIncludeUsage]),
 ]
-
-export const resolver = OpenAICompatibleProfiles.resolverFor(profile)
 
 export * as Mistral from "./mistral"
 ```
@@ -162,13 +162,15 @@ const model = OpenAICompatible.model("some-model", {
 })
 ```
 
-OpenCode resolver call sites become clearer:
+OpenCode bridge call sites become clearer:
 
 ```ts
-Mistral.resolver.resolve(ProviderResolver.input("mistral-large-latest", "mistral", {}))
-// provider: "mistral"
-// protocol: "openai-compatible-chat"
-// baseURL: "https://api.mistral.ai/v1"
+Mistral.chat({
+  id: "mistral-large-latest",
+  apiKey,
+})
+// provider: "mistral", protocol: "openai-compatible-chat"
+// baseURL defaults to "https://api.mistral.ai/v1"
 ```
 
 ## Provider Recommendations
@@ -180,7 +182,7 @@ Mistral.resolver.resolve(ProviderResolver.input("mistral-large-latest", "mistral
 | Mistral | No profile helper yet, but default Mistral patches exist. | Add thin wrapper. | Policy already exists and AI SDK has enough Mistral-specific behavior to justify a named home. |
 | Groq | No profile helper yet. | Start as profile or thin wrapper with only base URL; promote when reasoning/browser-search lands. | Basic OpenAI-compatible flow should work, but provider-defined tools and reasoning options need a wrapper. |
 | Perplexity | No profile helper yet. | Add thin wrapper if citations/sources matter; otherwise start as profile for text only. | The value of Perplexity is source/search metadata, not just text. |
-| xAI/Grok | Resolver currently points to `openai-responses`. | Keep separate from generic profiles. | xAI search/reasoning behavior is provider policy, and AI SDK treats chat as dedicated. |
+| xAI/Grok | Model helper currently points to `openai-responses`. | Keep separate from generic profiles. | xAI search/reasoning behavior is provider policy, and AI SDK treats chat as dedicated. |
 
 ## Why This Is Better Than Adding More Profiles Only
 
@@ -215,7 +217,7 @@ If a recorded cassette later shows a provider emits incompatible stream chunks, 
 ## Implementation Plan
 
 1. Add `src/provider/mistral.ts` as the first thin wrapper because Mistral policy already exists in `ProviderPatch.defaults`.
-2. Add Mistral to exports and provider resolver tests.
+2. Add Mistral to exports and model-helper bridge tests.
 3. Add a recorded Mistral text cassette and tool cassette.
 4. Only then decide whether Mistral needs target patches for tool-choice or structured-output behavior.
 5. Add Groq as a profile first, unless we immediately implement reasoning/browser-search options.
