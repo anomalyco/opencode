@@ -159,39 +159,45 @@ export function SessionSidePanel(props: {
   const activeFileTab = tabState.activeFileTab
 
   // FORK: 切 tab(包括 .md 内链跳转)→ 文件树 active 高亮 + 自动展开父目录 + 滚动入视野 2026-05-05
+  // 关键:Windows 文件树用 backslash 作 path 分隔符(server 原生),而 file.pathFromTab 返回 forward slash
+  // (URL 风格)→ 必须转成 OS 原生分隔符,否则:
+  //   1. file.tree.expand("test/phase4") 在 store 建一个新 entry,跟 file tree 的 expanded() 查的
+  //      "test\phase4" 是两个独立 key → Collapsible 不展开 → 子行不入 DOM
+  //   2. node.path === active 永远不匹配 → 不高亮
+  //   3. data-tree-path selector 找不到
+  const isWindowsPath =
+    typeof navigator !== "undefined" && /\bWindows\b/i.test(navigator.userAgent)
+  const toFsPath = (p: string) => (isWindowsPath ? p.replaceAll("/", "\\") : p)
+  const fsSep = isWindowsPath ? "\\" : "/"
+
   const activeFilePath = createMemo<string | undefined>(() => {
     const tab = activeFileTab()
     if (!tab) return undefined
-    return file.pathFromTab(tab) ?? undefined
+    const p = file.pathFromTab(tab)
+    if (!p) return undefined
+    return toFsPath(p)
   })
 
   createEffect(() => {
     const p = activeFilePath()
-    // FORK: 临时 diagnostic — 让 user 在 DevTools 验证 effect 是否触发 + 拿到的 path 对不对 2026-05-05
-    console.debug("[md-office-improvements] activeFilePath effect fired:", { p, tab: activeFileTab() })
     if (!p) return
-    // 展开所有父目录(file.tree.expand 是 idempotent,重复 expand 已展开目录无副作用;
-    // 内部 listDir 是异步,子目录加载完后 FileTree 会自动 re-render)
-    const parts = p.split("/")
+    // 展开所有父目录(file.tree.expand 是 idempotent;内部 listDir 异步)
+    const parts = p.split(fsSep)
     for (let i = 1; i < parts.length; i++) {
-      const ancestor = parts.slice(0, i).join("/")
-      file.tree.expand(ancestor)
-      console.debug("[md-office-improvements] expand:", ancestor)
+      file.tree.expand(parts.slice(0, i).join(fsSep))
     }
-    // 滚动到 active 节点 — listDir 异步,DOM 节点会在加载完 + render 后才出现。
-    // queueMicrotask 太早(子目录 listDir 还未 resolve);用 rAF 重试 30 帧(~500ms)兜底:
+    // 滚动到 active 节点 — listDir 异步,DOM 节点在加载完 + render 后才出现。
+    // 用 rAF 重试 30 帧(~500ms)等渲染:
     const sel = `[data-tree-path="${CSS.escape(p)}"]`
     let attempts = 0
     const tryScroll = () => {
       const node = document.querySelector(sel)
       if (node instanceof HTMLElement) {
-        console.debug("[md-office-improvements] scroll into view, attempts:", attempts)
         node.scrollIntoView({ behavior: "smooth", block: "nearest" })
         return
       }
       attempts++
       if (attempts < 30) requestAnimationFrame(tryScroll)
-      else console.debug("[md-office-improvements] 30 frames passed, no node found for sel:", sel)
     }
     requestAnimationFrame(tryScroll)
   })

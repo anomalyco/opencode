@@ -359,10 +359,37 @@
   text-decoration: underline;
 }
 
-/* FORK: Mermaid 流程图容器(渲染后)2026-05-05 */
+/* FORK: Mermaid 流程图容器 — 加载占位 + 渲染后 + 错误回退 + spinner 2026-05-05 */
 [data-component="markdown"] .markdown-mermaid {
   margin: 1rem 0;
   text-align: center;
+}
+
+/* 加载占位:有 data-mermaid-source 属性 = 还未渲染完;用 spinner 替代纯文字 */
+[data-component="markdown"] .markdown-mermaid[data-mermaid-source] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--text-weak);
+}
+
+[data-component="markdown"] .markdown-mermaid[data-mermaid-source]::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-weak-base);
+  border-top-color: var(--text-interactive-base);
+  border-radius: 50%;
+  animation: markdown-mermaid-spin 0.8s linear infinite;
+  flex: none;
+}
+
+@keyframes markdown-mermaid-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 [data-component="markdown"] .markdown-mermaid.markdown-mermaid-rendered {
@@ -370,6 +397,8 @@
   border-radius: 6px;
   padding: 1rem;
   overflow-x: auto;
+  display: flex;
+  justify-content: center;
 }
 
 [data-component="markdown"] .markdown-mermaid.markdown-mermaid-error {
@@ -381,16 +410,28 @@
 [data-component="markdown"] .markdown-mermaid svg {
   max-width: 100%;
   height: auto;
+  display: block;
+  margin: 0 auto;
 }
 
 /* FORK: 内部链接(相对路径)与外链区分样式 — fixLinkTargets 加 .internal-link class 2026-05-05 */
 [data-component="markdown"] a.internal-link {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
-  text-decoration-color: var(--border-base);
+  text-decoration-color: var(--text-interactive-base);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background-color 0.12s ease;
 }
 
 [data-component="markdown"] a.internal-link:hover {
   text-decoration-style: solid;
-  text-decoration-color: currentColor;
+  text-decoration-thickness: 2px;
+  background-color: var(--surface-base-hover);
+  padding: 0 2px;
+  margin: 0 -2px;
+}
+
+[data-component="markdown"] a.external-link {
+  cursor: pointer;
 }

@@ -110,3 +110,69 @@ git revert 9f093780e f7b79f5b9 6a752ec42 5fe16d193
   - 文件引用跳转 v2/v3(代码 import 识别)— 留独立 backlog
   - 导出 PDF — 独立需求,走文件树右键菜单
   - markdown 内嵌 inline HTML 复杂样式 url(...)— v2 再考虑
+
+---
+
+## Post-release 修复记录(2026-05-05 user runtime 反馈)
+
+初版 8 项 scope + 4 Phase 提交后,user 多轮 runtime 反馈共 10+ 项问题,陆续修复(共 4 笔 fix commit)。下面按问题类型归类:
+
+### 渲染失效(Phase 2/3 plugin 链)
+
+| 问题 | 根因 | 修复 |
+|---|---|---|
+| Mermaid 整体没渲染(Phase 3) | marked-shiki highlight callback 在我之前就把 ```mermaid 替换成 shiki HTML | marked.tsx 在 highlight callback 里加 `if (lang === "mermaid") return placeholder` 早返,跳过 shiki |
+| Callout `[!NOTE]` 没渲染(Phase 2) | DOMPurify USE_PROFILES 缺 `svg: true`,marked-alert 输出的 SVG 图标被 strip | markdown.tsx config 加 `svg + svgFilters` profile;markdown.css 加 5 种 callout 颜色样式 |
+| 脚注 `[^1]` 没跳转(Phase 2) | DOMPurify `SANITIZE_NAMED_PROPS=true` 把 `<li id="footnote-1">` 加前缀成 `id="user-content-footnote-1"`,但 `<a href="#footnote-1">` 不同步 → 锚点不匹配 | decorate 加 `fixSanitizeNamedPropHrefs`:扫所有 `[id^="user-content-"]` 建映射,把对应 `href` 加同样前缀 |
+
+### 链接行为(Phase 4)
+
+| 问题 | 根因 | 修复 |
+|---|---|---|
+| .md 内链点击同时打开浏览器 | marked.tsx link renderer 给所有 `<a>` 加 `target="_blank"` → Tauri 把 _blank 路由系统浏览器 | decorate 加 `fixLinkTargets`:相对链接去 target/rel,加 `internal-link` class;外链保持 `target="_blank"` 走系统浏览器(D5 期望) |
+| 越权链接也开浏览器 | 同上 | 同上(同时 click handler 永远 preventDefault) |
+| 不存在文件开空 tab | onOpenTab 不检查文件存在 | handleMdLinkClick 加 invoke `get_file_mtime` pre-check,不存在 → showToast |
+
+### 资产渲染(Phase 1 边角)
+
+| 问题 | 根因 | 修复 |
+|---|---|---|
+| 中文路径/文件名图不显示 | marked 输出的 `<img src>` 已经把非 ASCII percent-encode → 我没解码就当路径,然后 localAssetUrl 又 encodeURIComponent → 双重编码 | rewriteAssetSrc 在 resolveAbsolute 之前 try `decodeURIComponent`(单次还原)|
+| 视频进度条无法拖动 | Rust handler 不支持 HTTP Range request → 浏览器 seek 拿不到 partial content | local_asset.rs handle_inner 加 `range_header` 参数,解析 "bytes=start-end" → seek + read_exact + 206 Partial + Content-Range header;`Accept-Ranges: bytes` 加全 200/206 路径 |
+
+### 文件树同步(Phase 4 #8 升级)
+
+| 问题 | 根因 | 修复 |
+|---|---|---|
+| 跳转后文件树无任何反应(高亮/展开/滚动) | "all" tab 的 FileTree 没传 `active` prop;且没有"切 tab → 展开父目录"机制 | activeFilePath createMemo + createEffect + FileTree active prop |
+| **Windows path 分隔符不一致**(关键踩坑) | `file.pathFromTab` 返回 forward slash,但文件树 server 给的 `node.path` 是 backslash → 我 `expand("test/phase4")` 在 store 创建一个 entry,文件树 `expanded(state("test\\phase4"))` 查另一个 → state 不互通 → Collapsible 不展开 → DOM 不渲染子行 | `isWindowsPath` 检测 + `toFsPath` 转 OS 原生分隔符;activeFilePath / expand / scrollIntoView selector 全用 backslash on Windows |
+| TOC 大纲面板 user 不需要 | — | 移除整个 aside JSX + 相关 signals;保留 `mdContainerRef` + `handleMdLinkClick`(内链拦截需要)|
+
+### 视觉 polish(2026-05-05 user 验收后顺手)
+
+| 项 | 改动 |
+|---|---|
+| 内链 vs 外链区分 | internal-link 加 dotted underline + hover background;title 提示"在文件查看器打开"vs"在浏览器打开" |
+| Mermaid SVG 居中 + 自适应 | `display: block; margin: 0 auto; max-width: 100%`;容器 flex justify-center |
+| Mermaid 加载占位 | 纯文字 "渲染流程图中…" → 加 14px 旋转圆环 spinner(纯 CSS keyframes,0 JS) |
+| 文件树 active 行 VSCode 风左竖条 | classList 加 `shadow-[inset_2px_0_0_0_var(--text-interactive-base)]` — box-shadow inset 不占布局 |
+
+### Tauri 配置
+
+- 调试期短暂开了 `tauri = features=["devtools"]` 帮助 user 抓 console 日志,问题定位后**关掉**(release 不该带 devtools);user 仍可临时改 Cargo.toml 加回来自调
+
+## Post-release fix commit hash(粗序)
+
+| commit | 内容 |
+|---|---|
+| `2c2102295` | 6 项 P0/P1 一锅端(Mermaid bypass + Callout SVG profile + 脚注 — 当时还没修对 / 内链 target=_blank / 视频 Range / TOC 移除 / 不存在文件 toast)|
+| `b7cdfdcc7` | 中文路径双重编码 + 脚注 SANITIZE_NAMED_PROPS hrefs patch |
+| `b878d6f75` | 文件树 active 高亮 + 展开父目录 + 滚动入视野(初版,**有 Windows 分隔符 bug**)|
+| (本笔 / 同收尾笔) | 修 Windows path 分隔符 + 4 项视觉 polish + 关 devtools |
+
+## 经验沉淀(给未来 fork 自己看)
+
+1. **Windows path 分隔符是地雷** — fork 多处使用 forward slash(URL 风格),server 用 backslash。两端混用就会出"看似正确但 store key 不互通"的 bug。**今后凡涉及 file.tree.state(path) 比较 / DOM querySelector 的 path,先 normalize 一致**。
+2. **plugin chain 顺序敏感** — marked-shiki 在 token 阶段拦 code block,后置的 markdown.tsx decorate 找不到原 code class。今后加 marked plugin 处理特殊 lang,优先在 marked-shiki callback 里 early-return。
+3. **DOMPurify SANITIZE_NAMED_PROPS 的副作用** — 改 id 加前缀但不改 href 锚点,任何依赖 `#id` 跳转的功能都会断。fork 不是关闭它(安全机制),而是后置 patch hrefs。
+4. **AI debug 能力极限** — code 静态分析无法发现 runtime state 不一致(如 path 分隔符 cross-store);**必须靠 user DevTools console 抓真实 state value**。后续 user runtime 反馈时,优先让 user 在 DevTools 跑 `__deskfox_*` 全局调试句柄,几行 console.log 比纯靠分析快 10x。

@@ -226,18 +226,23 @@ function fixSanitizeNamedPropHrefs(root: HTMLDivElement) {
 // FORK: 相对路径 <a> 链接去掉 target=_blank — 否则 Tauri 把 _blank 路由到系统浏览器 2026-05-05
 // marked.tsx 的 link renderer 给所有 <a> 加 target=_blank,但相对路径(./other.md)
 // 应在 file viewer 内部通过 onOpenTab 跳转,不能开浏览器。
+// 顺便加 title 提示 — hover 时让 user 直观知道点击是"内部跳"还是"外部打开"。
 function fixLinkTargets(root: HTMLDivElement) {
   const links = Array.from(root.querySelectorAll("a"))
   for (const link of links) {
     const href = link.getAttribute("href") ?? ""
     if (!href) continue
     // 外链(http/https/mailto/ftp/tel)保持 target=_blank
-    if (/^(https?|mailto|ftp|tel):/i.test(href)) continue
+    if (/^(https?|mailto|ftp|tel):/i.test(href)) {
+      if (!link.title) link.title = "在浏览器打开:" + href
+      continue
+    }
     // 相对路径 / 锚点(#xxx)→ 去掉 target/rel,改用 internal-link class 区分样式
     link.removeAttribute("target")
     link.removeAttribute("rel")
     link.classList.remove("external-link")
     link.classList.add("internal-link")
+    if (!link.title) link.title = "在文件查看器打开:" + href
   }
 }
 
