@@ -13,6 +13,7 @@ import { compress } from "hono/compress"
 import * as ServerBackend from "./backend"
 import { isAllowedCorsOrigin, type CorsOptions } from "./cors"
 import { isPtyConnectPath, PTY_CONNECT_TICKET_QUERY } from "./shared/pty-ticket"
+import { isPublicUIPath } from "./shared/public-ui"
 
 const log = Log.create({ service: "server" })
 
@@ -45,6 +46,7 @@ export const AuthMiddleware: MiddlewareHandler = (c, next) => {
   if (c.req.method === "OPTIONS") return next()
   const password = Flag.OPENCODE_SERVER_PASSWORD
   if (!password) return next()
+  if (isPublicUIPath(c.req.method, c.req.path)) return next()
   if (isPtyConnectPath(c.req.path) && c.req.query(PTY_CONNECT_TICKET_QUERY)) return next()
   const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
 

@@ -85,7 +85,9 @@ const fileFromPatchChunk = (chunk: string) => {
 }
 
 const splitGitPatch = (patch: Git.Patch) => {
-  const starts = [...patch.text.matchAll(/^diff --git /gm)].map((match) => match.index)
+  const starts = [...patch.text.matchAll(/(?:^|\n)diff --git /g)].map((match) =>
+    match[0].startsWith("\n") ? match.index + 1 : match.index,
+  )
   const chunks = starts.map((start, index) => patch.text.slice(start, starts[index + 1] ?? patch.text.length))
   if (!patch.truncated) return chunks
   return chunks.slice(0, -1)
