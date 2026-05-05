@@ -162,10 +162,10 @@ parts:
       mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/applications"
       mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/32x32/apps"
       mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/128x128/apps"
-      mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/256x256@2/apps"
+      mkdir -p "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/256x256/apps"
 
       # Desktop file
-      printf '[Desktop Entry]\nCategories=Development;\nComment=The open source AI coding agent\nExec=OpenCode\nStartupWMClass=OpenCode\nIcon=OpenCode\nName=OpenCode\nTerminal=false\nType=Application\nMimeType=x-scheme-handler/opencode\n' \
+      printf '[Desktop Entry]\nCategories=Development;\nComment=The open source AI coding agent\nExec=OpenCode\nStartupWMClass=OpenCode\nIcon=${SNAP}/usr/share/icons/hicolor/128x128/apps/OpenCode.png\nName=OpenCode\nTerminal=false\nType=Application\nMimeType=x-scheme-handler/opencode\n' \
         > "$SNAPCRAFT_PART_INSTALL/usr/share/applications/OpenCode.desktop"
 
       # Icons from the source icons/prod directory
@@ -174,4 +174,4 @@ parts:
       cp "icons/prod/128x128.png" \
         "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/128x128/apps/OpenCode.png"
       cp "icons/prod/128x128@2x.png" \
-        "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/256x256@2/apps/OpenCode.png"
+        "$SNAPCRAFT_PART_INSTALL/usr/share/icons/hicolor/256x256/apps/OpenCode.png"
