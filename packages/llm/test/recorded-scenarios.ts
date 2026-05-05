@@ -1,4 +1,3 @@
-import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { LLM, type LLMEvent, type LLMResponse, type ModelRef } from "../src"
 import { tool } from "../src/tool"
@@ -56,16 +55,6 @@ export const weatherToolRequest = (input: {
     toolChoice: LLM.toolChoice(weatherTool),
     generation: { maxTokens: input.maxTokens ?? 80, temperature: 0 },
   })
-
-export const expectFinish = (
-  events: ReadonlyArray<LLMEvent>,
-  reason: Extract<LLMEvent, { readonly type: "request-finish" }>["reason"],
-) => expect(events.at(-1)).toMatchObject({ type: "request-finish", reason })
-
-export const expectWeatherToolCall = (response: LLMResponse) =>
-  expect(LLM.outputToolCalls(response)).toEqual([
-    { type: "tool-call", id: expect.any(String), name: weatherToolName, input: { city: "Paris" } },
-  ])
 
 const usageSummary = (usage: LLMResponse["usage"] | undefined) => {
   if (!usage) return undefined

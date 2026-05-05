@@ -1,6 +1,7 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { test, type TestOptions } from "bun:test"
 import { Effect, Layer } from "effect"
+import * as fs from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 import { RequestExecutor } from "../src/executor"
@@ -137,7 +138,7 @@ export const recordedTests = (options: RecordedTestsOptions) => {
       if (missingEnv([...(options.requires ?? []), ...(caseOptions.requires ?? [])]).length > 0) {
         return test.skip(name, () => {}, testOptions)
       }
-    } else if (!HttpRecorder.hasCassetteSync(cassette, layerOptions)) {
+    } else if (!fs.existsSync(HttpRecorder.cassettePath(cassette, FIXTURES_DIR))) {
       return test.skip(name, () => {}, testOptions)
     }
 

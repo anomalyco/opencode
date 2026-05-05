@@ -7,7 +7,7 @@ import { LLMClient } from "../../src/adapter"
 import { BedrockConverse } from "../../src/provider/bedrock-converse"
 import { testEffect } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
-import { expectFinish, expectWeatherToolCall, weatherTool } from "../recorded-scenarios"
+import { eventSummary, weatherTool, weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const codec = new EventStreamCodec(toUtf8, fromUtf8)
@@ -505,8 +505,10 @@ describe("Bedrock Converse recorded", () => {
         }),
       )
 
-      expect(LLM.outputText(response)).toMatch(/hello/i)
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish" })
+      expect(eventSummary(response.events)).toEqual([
+        { type: "text", value: "Hello" },
+        { type: "finish", reason: "stop", usage: { inputTokens: 12, outputTokens: 2, totalTokens: 14 } },
+      ])
     }),
   )
 
@@ -525,9 +527,10 @@ describe("Bedrock Converse recorded", () => {
         }),
       )
 
-      expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
-      expectWeatherToolCall(response)
-      expectFinish(response.events, "tool-calls")
+      expect(eventSummary(response.events)).toEqual([
+        { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },
+        { type: "finish", reason: "tool-calls", usage: { inputTokens: 419, outputTokens: 16, totalTokens: 435 } },
+      ])
     }),
   )
 })
