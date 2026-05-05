@@ -36,6 +36,8 @@ jobs:
           PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
           PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
           STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
+          HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
+          INCIDENT_API_KEY: ${{ secrets.INCIDENT_API_KEY }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
