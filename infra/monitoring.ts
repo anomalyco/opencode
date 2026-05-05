@@ -102,7 +102,7 @@ const alertSource = new incident.AlertSource("HoneycombAlertSource", {
 })
 
 const webhookRecipient = new honeycomb.WebhookRecipient(`IncidentWebhook`, {
-  name: "Incident.io",
+  name: $app.stage === "production" ? "Incident.io" : `Incident.io (${$app.stage})`,
   url: alertSource.alertEventsUrl,
   secret: alertSource.secretToken,
   templates: [
@@ -214,13 +214,14 @@ type Trigger = (opts: { model: string; product: Product }) => {
   title: string
   description: string
   json: honeycomb.GetQuerySpecificationOutputArgs
-  thresholds: honeycomb.TriggerArgs["thresholds"]
+  threshold: { op: ">=" | "<="; value: number }
+  baseline: 3600 | 86400
 }
 
 type Model = { id: string; products: Product[]; triggers: Trigger[] }
 
-const httpErrors: Trigger = ({ model, product }: { model: string; product: Product }) => ({
-  id: `IncreasedHttpErrors`,
+const httpErrors: Trigger = ({ model, product }) => ({
+  id: "increased-http-errors",
   title: `Increased HTTP Errors for ${displayName(model)} on ${displayName(product)}`,
   description: `Detected increased rate of HTTP errors for ${displayName(model)} on OpenCode ${displayName(product)}`,
   json: {
@@ -249,7 +250,10 @@ const httpErrors: Trigger = ({ model, product }: { model: string; product: Produ
     formulas: [{ name: "ERROR", expression: "$FAILED / $TOTAL" }],
     timeRange: 900,
   },
-  thresholds: [{ op: ">=", value: 50, exceededLimit: 1 }],
+  // Alert when errors surge 50% compared to the previous period
+  threshold: { op: ">=", value: 50 },
+  // What previous time period to evaluate against
+  baseline: 3600,
 })
 
 const models: Model[] = [
@@ -288,14 +292,14 @@ for (const model of models) {
     for (const trigger of model.triggers) {
       const spec = trigger({ model: model.id, product })
 
-      new honeycomb.Trigger(`${spec.id}${resourceName(product)}${resourceName(model.id)}`, {
+      new honeycomb.Trigger(resourceName(`${spec.id}-${product}-${model.id}`), {
         name: spec.title,
         description: spec.description,
         queryJson: honeycomb.getQuerySpecificationOutput(spec.json).json,
-        frequency: 900,
         alertType: "on_change",
-        baselineDetails: [{ type: "percentage", offsetMinutes: 60 }],
-        thresholds: spec.thresholds,
+        frequency: 900, // This is the minimum when using % change detection
+        baselineDetails: [{ type: "percentage", offsetMinutes: spec.baseline / 60 }],
+        thresholds: [{ ...spec.threshold, exceededLimit: 1 }],
         recipients: [
           {
             id: webhookRecipient.id,
