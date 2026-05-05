@@ -350,7 +350,8 @@ export function SessionSidePanel(props: {
                   </Show>
 
                   <Show when={activeFileTab()} keyed>
-                    {(tab) => <FileTabContent tab={tab} />}
+                    {/* FORK: 接通 openTab 让 .md 内链 [link](./other.md) 点击在查看器打开 2026-05-05 */}
+                    {(tab) => <FileTabContent tab={tab} onOpenTab={(path) => openTab(file.tab(path))} />}
                   </Show>
                 </Tabs>
                 <DragOverlay>

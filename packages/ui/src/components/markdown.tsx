@@ -284,6 +284,17 @@ function rewriteAssetSources(root: HTMLDivElement, rewriter: (src: string) => st
   // 处理 inline <a href="./local.md">(MD 内链跳转 — Phase 4 再统一)
 }
 
+// FORK: 给 H1-H6 注入 id(锚点跳转 + TOC 面板需要)2026-05-05
+function assignHeadingIds(root: HTMLDivElement) {
+  const headings = root.querySelectorAll("h1, h2, h3, h4, h5, h6")
+  let counter = 0
+  for (const h of Array.from(headings)) {
+    if (!h.id) {
+      h.id = `md-h-${++counter}`
+    }
+  }
+}
+
 function decorate(
   root: HTMLDivElement,
   labels: CopyLabels,
@@ -291,6 +302,8 @@ function decorate(
 ) {
   // FORK: Mermaid 占位先于 ensureCodeWrapper(否则 wrapper 会包住 <pre> 让我们替换变脏)2026-05-05
   setupMermaidPlaceholders(root)
+  // FORK: heading id 注入 — TOC 锚点跳转用 2026-05-05
+  assignHeadingIds(root)
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
