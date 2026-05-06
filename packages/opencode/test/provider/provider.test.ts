@@ -1705,6 +1705,81 @@ it.effect("plugin config providers persist after instance dispose", () =>
   }).pipe(provideMultiInstance),
 )
 
+it.effect("provider hook runs for config-only providers and preserves config model overrides", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const configDir = path.join(dir, ".opencode")
+    const root = path.join(configDir, "plugin")
+    yield* Effect.promise(() => mkdir(root, { recursive: true }))
+    yield* Effect.promise(() => markPluginDependenciesReady(configDir))
+    yield* Effect.promise(() => markPluginDependenciesReady(Global.Path.config))
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(root, "demo-provider-hook.ts"),
+        [
+          "export default {",
+          '  id: "demo.provider-hook",',
+          "  server: async () => ({",
+          "    provider: {",
+          '      id: "demo",',
+          "      async models(provider) {",
+          "        return {",
+          "          ...provider.models,",
+          "          chat: {",
+          '            ...provider.models.chat,',
+          '            name: "Hook Chat",',
+          "          },",
+          "          live: {",
+          '            ...provider.models.chat,',
+          '            api: { ...provider.models.chat.api, id: "live" },',
+          '            name: "Hook Live",',
+          "          },",
+          "        }",
+          "      },",
+          "    },",
+          "  }),",
+          "}",
+          "",
+        ].join("\n"),
+      ),
+    )
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            demo: {
+              name: "Demo Provider",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://example.com/v1",
+              models: {
+                chat: {
+                  name: "Config Chat",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    )
+
+    const loadAndList = Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const provider = yield* Provider.Service
+      yield* plugin.init()
+      return yield* provider.list()
+    }).pipe(provideInstanceEffect(dir))
+
+    const providers = yield* loadAndList
+    expect(providers[ProviderV2.ID.make("demo")]).toBeDefined()
+    expect(providers[ProviderV2.ID.make("demo")].models[ModelV2.ID.make("live")]).toBeDefined()
+    expect(providers[ProviderV2.ID.make("demo")].models[ModelV2.ID.make("chat")].name).toBe("Config Chat")
+  }).pipe(provideMultiInstance),
+)
+
 it.instance(
   "plugin config enabled and disabled providers are honored",
   Effect.gen(function* () {
