@@ -129,11 +129,11 @@ export function DialogWorkspaceSelect(props: {
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .flatMap((session) => (session.workspaceID ? [session.workspaceID] : []))
       .filter((workspaceID, index, list) => list.indexOf(workspaceID) === index)
-      .slice(0, 3)
       .flatMap((workspaceID) => {
         const workspace = project.workspace.get(workspaceID)
-        return workspace ? [workspace] : []
+        return workspace && project.workspace.status(workspace.id) === "connected" ? [workspace] : []
       })
+      .slice(0, 3)
     return [
       ...list.map((adapter) => ({
         title: adapter.name,

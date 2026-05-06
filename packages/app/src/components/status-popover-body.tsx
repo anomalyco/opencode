@@ -15,7 +15,7 @@ import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
-import { loadMcpQuery } from "@/context/global-sync"
+import { mcpQueryKey } from "@/context/global-sync"
 
 const pollMs = 10_000
 
@@ -145,7 +145,7 @@ const useMcpToggleMutation = () => {
       const status = sync.data.mcp[name]
       await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
     },
-    onSuccess: () => queryClient.refetchQueries({ queryKey: loadMcpQuery(sync.directory).queryKey }),
+    onSuccess: () => queryClient.refetchQueries({ queryKey: mcpQueryKey(sync.directory) }),
     onError: (err) => {
       showToast({
         variant: "error",

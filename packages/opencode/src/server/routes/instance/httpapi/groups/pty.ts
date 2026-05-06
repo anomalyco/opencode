@@ -6,6 +6,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "e
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { ApiNotFoundError } from "../errors"
 import { described } from "./metadata"
 
 const root = "/pty"
@@ -64,7 +65,7 @@ export const PtyApi = HttpApi.make("pty")
         HttpApiEndpoint.get("get", PtyPaths.get, {
           params: { ptyID: PtyID },
           success: described(Pty.Info, "Session info"),
-          error: HttpApiError.NotFound,
+          error: ApiNotFoundError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.get",
@@ -76,7 +77,7 @@ export const PtyApi = HttpApi.make("pty")
           params: { ptyID: PtyID },
           payload: Pty.UpdateInput,
           success: described(Pty.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.update",
@@ -87,7 +88,7 @@ export const PtyApi = HttpApi.make("pty")
         HttpApiEndpoint.delete("remove", PtyPaths.remove, {
           params: { ptyID: PtyID },
           success: described(Schema.Boolean, "Session removed"),
-          error: HttpApiError.NotFound,
+          error: ApiNotFoundError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.remove",
@@ -98,7 +99,7 @@ export const PtyApi = HttpApi.make("pty")
         HttpApiEndpoint.post("connectToken", PtyPaths.connectToken, {
           params: { ptyID: PtyID },
           success: described(PtyTicket.ConnectToken, "WebSocket connect token"),
-          error: [HttpApiError.Forbidden, HttpApiError.NotFound],
+          error: [HttpApiError.Forbidden, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.connectToken",
