@@ -16,7 +16,8 @@ import { ConfigPlugin } from "@/config/plugin"
 import { ConfigKeybinds } from "@/config/keybinds"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
-import { Filesystem, Log } from "@/util"
+import { Filesystem } from "@/util/filesystem"
+import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
 
@@ -67,29 +68,73 @@ function normalize(raw: Record<string, unknown>) {
   }
 }
 
-async function resolvePlugins(config: Info, configFilepath: string) {
-  if (!config.plugin) return config
-  for (let i = 0; i < config.plugin.length; i++) {
-    config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], configFilepath)
-  }
-  return config
-}
-
-async function mergeFile(acc: Acc, file: string, ctx: { directory: string }) {
-  const data = await loadFile(file)
-  acc.result = mergeDeep(acc.result, data)
-  if (!data.plugin?.length) return
-
-  const scope = pluginScope(file, ctx)
-  const plugins = ConfigPlugin.deduplicatePluginOrigins([
-    ...(acc.result.plugin_origins ?? []),
-    ...data.plugin.map((spec) => ({ spec, scope, source: file })),
-  ])
-  acc.result.plugin = plugins.map((item) => item.spec)
-  acc.result.plugin_origins = plugins
-}
-
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
+  const afs = yield* AppFileSystem.Service
+
+  const resolvePlugins = (config: Info, configFilepath: string): Effect.Effect<Info> =>
+    Effect.gen(function* () {
+      const plugins = config.plugin
+      if (!plugins) return config
+      for (let i = 0; i < plugins.length; i++) {
+        plugins[i] = yield* Effect.promise(() => ConfigPlugin.resolvePluginSpec(plugins[i], configFilepath))
+      }
+      return config
+    })
+
+  const load = (text: string, configFilepath: string): Effect.Effect<Info> =>
+    Effect.gen(function* () {
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute({ text, type: "path", path: configFilepath, missing: "empty" }),
+      )
+      const data = ConfigParse.jsonc(expanded, configFilepath)
+      if (!isRecord(data)) return {} as Info
+      // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
+      // (mirroring the old opencode.json shape) still get their settings applied.
+      const validated = ConfigParse.schema(Info, normalize(data), configFilepath)
+      return yield* resolvePlugins(validated, configFilepath)
+    }).pipe(
+      // catchCause (not tapErrorCause + orElseSucceed) because ConfigParse.jsonc/.schema
+      // can sync-throw — those become defects, which orElseSucceed wouldn't catch.
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          log.warn("invalid tui config", { path: configFilepath, cause })
+          return {} as Info
+        }),
+      ),
+    )
+
+  const loadFile = (filepath: string): Effect.Effect<Info> =>
+    Effect.gen(function* () {
+      // Silent-swallow non-NotFound read errors (perms, EISDIR, IO) → log + skip.
+      // Matches how parse/schema/plugin failures in load() are handled — every
+      // broken-config path degrades gracefully rather than crashing TUI startup.
+      const text = yield* afs.readFileStringSafe(filepath).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            log.warn("failed to read tui config", { path: filepath, cause })
+            return undefined
+          }),
+        ),
+      )
+      if (!text) return {} as Info
+      return yield* load(text, filepath)
+    })
+
+  const mergeFile = (acc: Acc, file: string) =>
+    Effect.gen(function* () {
+      const data = yield* loadFile(file)
+      acc.result = mergeDeep(acc.result, data)
+      if (!data.plugin?.length) return
+
+      const scope = pluginScope(file, ctx)
+      const plugins = ConfigPlugin.deduplicatePluginOrigins([
+        ...(acc.result.plugin_origins ?? []),
+        ...data.plugin.map((spec) => ({ spec, scope, source: file })),
+      ])
+      acc.result.plugin = plugins.map((item) => item.spec)
+      acc.result.plugin_origins = plugins
+    })
+
   // Every config dir we may read from: global config dir, any `.opencode`
   // folders between cwd and home, and OPENCODE_CONFIG_DIR.
   const directories = yield* ConfigPaths.directories(ctx.directory)
@@ -103,19 +148,19 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
 
   // 1. Global tui config (lowest precedence).
   for (const file of ConfigPaths.fileInDirectory(Global.Path.config, "tui")) {
-    yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
+    yield* mergeFile(acc, file)
   }
 
   // 2. Explicit OPENCODE_TUI_CONFIG override, if set.
   if (Flag.OPENCODE_TUI_CONFIG) {
     const configFile = Flag.OPENCODE_TUI_CONFIG
-    yield* Effect.promise(() => mergeFile(acc, configFile, ctx)).pipe(Effect.orDie)
+    yield* mergeFile(acc, configFile)
     log.debug("loaded custom tui config", { path: configFile })
   }
 
   // 3. Project tui files, applied root-first so the closest file wins.
   for (const file of projectFiles) {
-    yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
+    yield* mergeFile(acc, file)
   }
 
   // 4. `.opencode` directories (and OPENCODE_CONFIG_DIR) discovered while
@@ -126,7 +171,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   for (const dir of dirs) {
     if (!dir.endsWith(".opencode") && dir !== Flag.OPENCODE_CONFIG_DIR) continue
     for (const file of ConfigPaths.fileInDirectory(dir, "tui")) {
-      yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
+      yield* mergeFile(acc, file)
     }
   }
 
@@ -190,30 +235,4 @@ export async function waitForDependencies() {
 
 export async function get() {
   return runPromise((svc) => svc.get())
-}
-
-async function loadFile(filepath: string): Promise<Info> {
-  const text = await ConfigPaths.readFile(filepath)
-  if (!text) return {}
-  return load(text, filepath).catch((error) => {
-    log.warn("failed to load tui config", { path: filepath, error })
-    return {}
-  })
-}
-
-async function load(text: string, configFilepath: string): Promise<Info> {
-  return ConfigVariable.substitute({ text, type: "path", path: configFilepath, missing: "empty" })
-    .then((expanded) => ConfigParse.jsonc(expanded, configFilepath))
-    .then((data) => {
-      if (!isRecord(data)) return {}
-
-      // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
-      // (mirroring the old opencode.json shape) still get their settings applied.
-      return ConfigParse.schema(Info, normalize(data), configFilepath)
-    })
-    .then((data) => resolvePlugins(data, configFilepath))
-    .catch((error) => {
-      log.warn("invalid tui config", { path: configFilepath, error })
-      return {}
-    })
 }

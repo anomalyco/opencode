@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai"
+import type { ModelMessage, ToolResultPart } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -18,6 +18,10 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+
+export function sanitizeSurrogates(content: string) {
+  return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
+}
 
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
@@ -41,15 +45,85 @@ function sdkKey(npm: string): string | undefined {
       return "gateway"
     case "@openrouter/ai-sdk-provider":
       return "openrouter"
+    case "ai-gateway-provider":
+      // ai-gateway-provider/unified wraps createOpenAICompatible({ name: "Unified" }),
+      // and @ai-sdk/openai-compatible parses compatibleOptions from one of
+      // "openai-compatible" / "openaiCompatible" / "Unified" / "unified". The
+      // "openai-compatible" key emits a deprecation warning at runtime, so we
+      // pick the camelCase form the SDK now treats as canonical.
+      return "openaiCompatible"
   }
   return undefined
 }
 
+// TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
   _options: Record<string, unknown>,
 ): ModelMessage[] {
+  const sanitizeToolResultOutput = (content: ToolResultPart) => {
+    if (content.output.type === "text" || content.output.type === "error-text") {
+      content.output.value = sanitizeSurrogates(content.output.value)
+    }
+    if (content.output.type === "content") {
+      content.output.value = content.output.value.map((item) => {
+        if (item.type === "text") {
+          item.text = sanitizeSurrogates(item.text)
+        }
+        return item
+      })
+    }
+    return content
+  }
+
+  msgs = msgs.map((msg) => {
+    switch (msg.role) {
+      case "tool":
+        if (!Array.isArray(msg.content)) return msg
+        msg.content = msg.content.map((content) => {
+          if (content.type === "tool-result") {
+            return sanitizeToolResultOutput(content)
+          }
+          return content
+        })
+        return msg
+
+      case "system":
+        msg.content = sanitizeSurrogates(msg.content)
+        return msg
+
+      case "user":
+        if (typeof msg.content === "string") {
+          msg.content = sanitizeSurrogates(msg.content)
+        } else {
+          msg.content = msg.content.map((content) => {
+            if (content.type === "text") {
+              content.text = sanitizeSurrogates(content.text)
+            }
+            return content
+          })
+        }
+        return msg
+
+      case "assistant":
+        if (typeof msg.content === "string") {
+          msg.content = sanitizeSurrogates(msg.content)
+        } else {
+          msg.content = msg.content.map((content) => {
+            if (content.type === "text" || content.type === "reasoning") {
+              content.text = sanitizeSurrogates(content.text)
+            }
+            if (content.type === "tool-result") {
+              return sanitizeToolResultOutput(content)
+            }
+            return content
+          })
+        }
+        return msg
+    }
+  })
+
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
   if (model.api.npm === "@ai-sdk/anthropic") {
@@ -197,7 +271,7 @@ function normalizeMessages(
   }
 
   // Deepseek requires all assistant messages to have reasoning on them
-  if (model.api.id.includes("deepseek")) {
+  if (model.api.id.toLowerCase().includes("deepseek")) {
     msgs = msgs.map((msg) => {
       if (msg.role !== "assistant") return msg
       if (Array.isArray(msg.content)) {
@@ -427,6 +501,36 @@ export function topK(model: Provider.Model) {
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+// OpenAI rolled out the `none` reasoning_effort tier on this date (Responses API).
+// Models released before it 400 on `reasoning_effort: "none"`, so we only expose
+// it as a variant for models new enough to accept it.
+const OPENAI_NONE_EFFORT_RELEASE_DATE = "2025-11-13"
+
+// OpenAI rolled out the `xhigh` reasoning_effort tier on this date. Same reasoning.
+const OPENAI_XHIGH_EFFORT_RELEASE_DATE = "2025-12-04"
+
+// Matches members of the gpt-5 family across the id formats we encounter:
+//   "gpt-5", "gpt-5-nano", "gpt-5.4", "openai/gpt-5.4-codex".
+// Anchored to start-of-string or "/" so it doesn't false-match "gpt-50" or "gpt-5o".
+const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
+
+// Computes the reasoning_effort tiers an OpenAI (or OpenAI-compatible upstream
+// routed through it, e.g. cf-ai-gateway) model exposes. Returns null for models
+// with no tunable effort knob (gpt-5-pro). Effort order: weakest to strongest.
+function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | null {
+  const id = apiId.toLowerCase()
+  if (id === "gpt-5-pro" || id === "openai/gpt-5-pro") return null
+  if (id.includes("codex")) {
+    if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+    return [...WIDELY_SUPPORTED_EFFORTS]
+  }
+  const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+  if (GPT5_FAMILY_RE.test(id)) efforts.unshift("minimal")
+  if (releaseDate >= OPENAI_NONE_EFFORT_RELEASE_DATE) efforts.unshift("none")
+  if (releaseDate >= OPENAI_XHIGH_EFFORT_RELEASE_DATE) efforts.push("xhigh")
+  return efforts
+}
+
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
   if (["opus-4-7", "opus-4.7"].some((v) => apiId.includes(v))) {
     return ["low", "medium", "high", "xhigh", "max"]
@@ -475,6 +579,21 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@openrouter/ai-sdk-provider":
       if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("claude")) return {}
       return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
+
+    case "ai-gateway-provider": {
+      // Cloudflare AI Gateway routes every upstream through its OpenAI-compatible
+      // /v1/compat endpoint, so the body is always OAI-shaped. The gateway
+      // translates `reasoning_effort` to the upstream provider's native control
+      // (e.g. Anthropic thinking budgets) when needed. Variants therefore stay
+      // OAI-style for all upstreams, with an extended effort set for OpenAI
+      // models that support it.
+      if (model.api.id.startsWith("openai/")) {
+        const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
+        if (!efforts) return {}
+        return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
+      }
+      return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+    }
 
     case "@ai-sdk/gateway":
       if (model.id.includes("anthropic")) {
@@ -573,7 +692,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
-      if (model.api.id.includes("deepseek-v4")) {
+      if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
       }
       return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
@@ -595,28 +714,12 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           },
         ]),
       )
-    case "@ai-sdk/openai":
+    case "@ai-sdk/openai": {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
-      if (id === "gpt-5-pro") return {}
-      const openaiEfforts = iife(() => {
-        if (id.includes("codex")) {
-          if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-          return WIDELY_SUPPORTED_EFFORTS
-        }
-        const arr = [...WIDELY_SUPPORTED_EFFORTS]
-        if (id.includes("gpt-5-") || id === "gpt-5") {
-          arr.unshift("minimal")
-        }
-        if (model.release_date >= "2025-11-13") {
-          arr.unshift("none")
-        }
-        if (model.release_date >= "2025-12-04") {
-          arr.push("xhigh")
-        }
-        return arr
-      })
+      const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
+      if (!efforts) return {}
       return Object.fromEntries(
-        openaiEfforts.map((effort) => [
+        efforts.map((effort) => [
           effort,
           {
             reasoningEffort: effort,
@@ -625,21 +728,23 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           },
         ]),
       )
+    }
 
     case "@ai-sdk/anthropic":
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
     case "@ai-sdk/google-vertex/anthropic":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
-
-      if (model.providerID === "github-copilot") {
-        if (model.api.id.includes("opus-4.7")) {
-          return Object.fromEntries(["medium"].map((effort) => [effort, { reasoningEffort: effort }]))
-        }
-      }
-
       if (adaptiveEfforts) {
+        let efforts = [...adaptiveEfforts]
+        if (model.providerID === "github-copilot") {
+          if (model.api.id.includes("opus-4.7")) {
+            efforts = ["medium"]
+          }
+          // Efforts currently supported are: low, medium, high
+          efforts = efforts.filter((v) => v !== "max" && v !== "xhigh")
+        }
         return Object.fromEntries(
-          adaptiveEfforts.map((effort) => [
+          efforts.map((effort) => [
             effort,
             {
               thinking: {
@@ -759,9 +864,15 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
       // https://docs.mistral.ai/capabilities/reasoning/adjustable
       if (!model.capabilities.reasoning) return {}
-      // Only Mistral Small 4 supports reasoning (mistral-small-2603, mistral-small-latest)
+      // Only Mistral Small 4 and Medium 3.5 support reasoning
+      const MISTRAL_REASONING_IDS = [
+        "mistral-small-2603",
+        "mistral-small-latest",
+        "mistral-medium-3.5",
+        "mistral-medium-2604",
+      ]
       const mistralId = model.api.id.toLowerCase()
-      if (!mistralId.includes("mistral-small-2603") && !mistralId.includes("mistral-small-latest")) return {}
+      if (!MISTRAL_REASONING_IDS.some((id) => mistralId.includes(id))) return {}
       return {
         high: { reasoningEffort: "high" },
       }
@@ -847,7 +958,10 @@ export function options(input: {
 }): Record<string, any> {
   const result: Record<string, any> = {}
 
-  if (input.model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+  if (
+    input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+    (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic")
+  ) {
     result["toolStreaming"] = false
   }
 
@@ -861,7 +975,7 @@ export function options(input: {
   }
 
   if (input.model.api.npm === "@ai-sdk/azure") {
-    result["store"] = true
+    result["store"] = false
     result["promptCacheKey"] = input.sessionID
   }
 
@@ -1053,7 +1167,16 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     return result
   }
 
-  const key = sdkKey(model.api.npm) ?? model.providerID
+  // AI SDK packages that resolve providerOptionsName by splitting the
+  // provider name on "." (e.g. "wafer.ai" -> "wafer") need the same
+  // logic here so the key we write matches the key they read.
+  // Other SDKs (xai, mistral, groq, cohere, etc.) use hardcoded keys
+  // like "xai" or "cohere" - applying .split(".")[0] would break those.
+  const usesDotSplitOptions =
+    model.api.npm === "@ai-sdk/openai-compatible" ||
+    model.api.npm === "@ai-sdk/openai" ||
+    model.api.npm === "@ai-sdk/anthropic"
+  const key = sdkKey(model.api.npm) ?? (usesDotSplitOptions ? model.providerID.split(".")[0] : model.providerID)
   // @ai-sdk/azure delegates to OpenAIChatLanguageModel which reads from
   // providerOptions["openai"], but OpenAIResponsesLanguageModel checks
   // "azure" first. Pass both so model options work on either code path.
@@ -1085,6 +1208,21 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
     }
   }
   */
+
+  if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
+    const sanitizeMoonshot = (obj: unknown): unknown => {
+      if (obj === null || typeof obj !== "object") return obj
+      if (Array.isArray(obj)) return obj.map(sanitizeMoonshot)
+      // Moonshot expands $ref before validation and rejects sibling keywords like description on the same node.
+      if ("$ref" in obj && typeof obj.$ref === "string") return { $ref: obj.$ref }
+      const result = Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value)]))
+      // MFJS does not support tuple-style `items` arrays; it requires one schema object for all array items.
+      if (Array.isArray(result.items)) result.items = result.items[0] ?? {}
+      return result
+    }
+
+    schema = sanitizeMoonshot(schema) as JSONSchema.BaseSchema | JSONSchema7
+  }
 
   // Convert integer enums to string enums for Google/Gemini
   if (model.providerID === "google" || model.api.id.includes("gemini")) {
@@ -1167,3 +1305,5 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
 
   return schema as JSONSchema7
 }
+
+export * as ProviderTransform from "./transform"

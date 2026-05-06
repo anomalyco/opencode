@@ -11,7 +11,7 @@ import { useToast } from "../ui/toast"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -397,23 +397,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
-      if (!value) return
-      if (value.model) {
-        if (isModelValid(value.model))
-          model.set({
-            providerID: value.model.providerID,
-            modelID: value.model.modelID,
-          })
-        else
-          toast.show({
-            variant: "warning",
-            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
-            duration: 3000,
-          })
-      }
+      if (!value?.model) return
+      if (isModelValid(value.model)) return
+      toast.show({
+        variant: "warning",
+        message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
+        duration: 3000,
+      })
     })
 
     const result = {

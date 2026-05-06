@@ -77,3 +77,5 @@ export function pluralize(count: number, singular: string, plural: string): stri
   const template = count === 1 ? singular : plural
   return template.replace("{}", count.toString())
 }
+
+export * as Locale from "./locale"
