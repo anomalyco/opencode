@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { $ } from "bun"
 import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
@@ -170,6 +171,47 @@ describe("session.list", () => {
         ).map((s) => s.id)
         expect(pathIDs).toContain(current.id)
         expect(pathIDs).not.toContain(sibling.id)
+      },
+    })
+  })
+
+  test("filters root worktree sessions by directory when path is empty", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const main = path.join(dir, "main")
+        const feature = path.join(dir, "feature")
+        await mkdir(main, { recursive: true })
+        await $`git init`.cwd(main).quiet()
+        await $`git config core.fsmonitor false`.cwd(main).quiet()
+        await $`git config commit.gpgsign false`.cwd(main).quiet()
+        await $`git config user.email "test@opencode.test"`.cwd(main).quiet()
+        await $`git config user.name "Test"`.cwd(main).quiet()
+        await $`git commit --allow-empty -m "root commit"`.cwd(main).quiet()
+        await $`git worktree add ${feature} -b feature`.cwd(main).quiet()
+        return { main, feature }
+      },
+    })
+
+    const main = await WithInstance.provide({
+      directory: tmp.extra.main,
+      fn: async () => svc.create({ title: "main-root" }),
+    })
+    const feature = await WithInstance.provide({
+      directory: tmp.extra.feature,
+      fn: async () => svc.create({ title: "feature-root" }),
+    })
+
+    expect(main.projectID).toBe(feature.projectID)
+    expect(main.path).toBe("")
+    expect(feature.path).toBe("")
+
+    await WithInstance.provide({
+      directory: tmp.extra.feature,
+      fn: async () => {
+        const ids = (await svc.list({ directory: tmp.extra.feature, path: "" })).map((s) => s.id)
+        expect(ids).toContain(feature.id)
+        expect(ids).not.toContain(main.id)
       },
     })
   })
