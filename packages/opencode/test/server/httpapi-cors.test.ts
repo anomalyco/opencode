@@ -65,12 +65,10 @@ describe("HttpApi CORS", () => {
 
   it.live("adds CORS headers to legacy unauthorized responses", () =>
     Effect.gen(function* () {
-      const response = yield* Effect.promise(() =>
-        Promise.resolve(
-          Server.Legacy().app.request("/global/config", {
-            headers: { origin: "https://app.opencode.ai" },
-          }),
-        ),
+      const response = yield* Effect.promise(async () =>
+        Server.Legacy().app.request("/global/config", {
+          headers: { origin: "https://app.opencode.ai" },
+        }),
       )
 
       expect(response.status).toBe(401)
