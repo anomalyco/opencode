@@ -89,15 +89,19 @@ export function retryable(error: Err) {
     }
   })
   if (!json || typeof json !== "object") return undefined
-  const code = typeof json.code === "string" ? json.code : ""
+  const codes = [
+    typeof json.code === "string" ? json.code : "",
+    typeof json.error?.code === "string" ? json.error.code : "",
+    typeof json.error?.type === "string" ? json.error.type : "",
+  ]
 
   if (json.type === "error" && json.error?.type === "too_many_requests") {
     return "Too Many Requests"
   }
-  if (code.includes("exhausted") || code.includes("unavailable")) {
+  if (codes.some((code) => code.includes("exhausted") || code.includes("unavailable") || code.includes("overloaded"))) {
     return "Provider is overloaded"
   }
-  if (json.type === "error" && typeof json.error?.code === "string" && json.error.code.includes("rate_limit")) {
+  if (json.type === "error" && codes.some((code) => code.includes("rate_limit"))) {
     return "Rate Limited"
   }
   return undefined
