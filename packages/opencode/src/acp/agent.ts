@@ -655,11 +655,21 @@ export class Agent implements ACPAgent {
 
       const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
       if (lastUser?.role === "user") {
-        result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
-        this.sessionManager.setModel(sessionId, {
+        const restoredModel = {
           providerID: ProviderID.make(lastUser.model.providerID),
           modelID: ModelID.make(lastUser.model.modelID),
+        }
+        const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
+        const availableVariants = modelVariantsFromProviders(sortProvidersByName(providers), restoredModel)
+        const restoredVariant =
+          lastUser.model.variant && availableVariants.includes(lastUser.model.variant) ? lastUser.model.variant : undefined
+
+        result.models.currentModelId = formatModelIdWithVariant(restoredModel, restoredVariant, availableVariants, false)
+        this.sessionManager.setModel(sessionId, {
+          providerID: restoredModel.providerID,
+          modelID: restoredModel.modelID,
         })
+        this.sessionManager.setVariant(sessionId, restoredVariant)
         if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
           result.modes.currentModeId = lastUser.agent
           this.sessionManager.setMode(sessionId, lastUser.agent)
@@ -667,7 +677,14 @@ export class Agent implements ACPAgent {
         result.configOptions = buildConfigOptions({
           currentModelId: result.models.currentModelId,
           availableModels: result.models.availableModels,
+          currentVariant: restoredVariant,
+          availableVariants,
           modes: result.modes,
+        })
+        result._meta = buildVariantMeta({
+          model: restoredModel,
+          variant: restoredVariant,
+          availableVariants,
         })
       }
 
@@ -1687,14 +1704,11 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
 
   if (specified && !providers.length) return specified
 
+  const lastUsed = await lastUsedModel(sdk, directory, providers)
+  if (lastUsed) return lastUsed
+
   const opencodeProvider = providers.find((p) => p.id === "opencode")
   if (opencodeProvider) {
-    // if (opencodeProvider.models["claude-haiku-4-5"]) {
-    //   return { providerID: ProviderID.opencode, modelID: ModelID.make("claude-haiku-4-5") }
-    // }
-    if (opencodeProvider.models["big-pickle"]) {
-      return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
-    }
     const [best] = Provider.sort(Object.values(opencodeProvider.models))
     if (best) {
       return {
@@ -1714,8 +1728,38 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
   }
 
   if (specified) return specified
+  throw new Error("No models available")
+}
 
-  return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
+async function lastUsedModel(
+  sdk: OpencodeClient,
+  directory: string,
+  providers: Array<{ id: string; models: Record<string, unknown> }>,
+): Promise<{ providerID: ProviderID; modelID: ModelID } | undefined> {
+  const session = await sdk.session
+    .list({ directory, roots: true, limit: 1 }, { throwOnError: true })
+    .then((x) => x.data?.[0])
+    .catch((error) => {
+      log.error("failed to list sessions for default model", { error })
+      return undefined
+    })
+  if (!session) return
+
+  const lastUser = await sdk.session
+    .messages({ sessionID: session.id, directory, limit: 20 }, { throwOnError: true })
+    .then((x) => x.data?.findLast((message) => message.info.role === "user")?.info)
+    .catch((error) => {
+      log.error("failed to load session messages for default model", { error, sessionID: session.id })
+      return undefined
+    })
+  if (lastUser?.role !== "user") return
+
+  const provider = providers.find((entry) => entry.id === lastUser.model.providerID)
+  if (!provider?.models[lastUser.model.modelID]) return
+  return {
+    providerID: ProviderID.make(lastUser.model.providerID),
+    modelID: ModelID.make(lastUser.model.modelID),
+  }
 }
 
 function parseUri(
