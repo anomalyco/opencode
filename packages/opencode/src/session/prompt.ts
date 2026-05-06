@@ -758,12 +758,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
             const model = input.model ?? agent.model ?? (yield* lastModel(input.sessionID))
             const userMsg: MessageV2.User = {
-              id: input.messageID ?? MessageID.ascending(),
+              id: MessageID.ascending(),
               sessionID: input.sessionID,
               time: { created: Date.now() },
               role: "user",
               agent: input.agent,
               model: { providerID: model.providerID, modelID: model.modelID },
+              clientMessageID: input.messageID,
             }
             yield* sessions.updateMessage(userMsg)
             const userPart: MessageV2.Part = {
@@ -940,7 +941,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
       const info: MessageV2.User = {
-        id: input.messageID ?? MessageID.ascending(),
+        id: MessageID.ascending(),
         role: "user",
         sessionID: input.sessionID,
         time: { created: Date.now() },
@@ -953,6 +954,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
         system: input.system,
         format: input.format,
+        clientMessageID: input.messageID,
       }
 
       const current = Database.use((db) =>
