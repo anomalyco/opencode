@@ -26,7 +26,9 @@ export namespace Skill {
 
   export const Info = z.object({
     name: z.string(),
+    title: z.string().optional(),
     description: z.string(),
+    aliases: z.array(z.string()).optional(),
     location: z.string(),
     content: z.string(),
   })
@@ -52,6 +54,7 @@ export namespace Skill {
 
   type State = {
     skills: Record<string, Info>
+    aliases: Record<string, string>
     dirs: Set<string>
   }
 
@@ -82,7 +85,7 @@ export namespace Skill {
 
     if (!md) return
 
-    const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+    const parsed = Info.pick({ name: true, title: true, description: true, aliases: true }).safeParse(md.data)
     if (!parsed.success) return
 
     if (state.skills[parsed.data.name]) {
@@ -93,12 +96,29 @@ export namespace Skill {
       })
     }
 
+    const aliases = [...new Set((parsed.data.aliases ?? []).map((alias) => alias.trim()))]
+      .filter((alias) => alias && alias !== parsed.data.name && !/\s/.test(alias))
+      .filter((alias) => {
+        if (!state.aliases[alias]) return true
+        log.warn("duplicate skill alias", {
+          alias,
+          existing: state.aliases[alias],
+          duplicate: parsed.data.name,
+        })
+        return false
+      })
     state.dirs.add(path.dirname(match))
     state.skills[parsed.data.name] = {
       name: parsed.data.name,
+      title: parsed.data.title,
       description: parsed.data.description,
+      aliases,
       location: match,
       content: md.content,
+    }
+
+    for (const alias of aliases) {
+      state.aliases[alias] = parsed.data.name
     }
   })
 
@@ -197,7 +217,7 @@ export namespace Skill {
       const fsys = yield* AppFileSystem.Service
       const state = yield* InstanceState.make(
         Effect.fn("Skill.state")(function* (ctx) {
-          const s: State = { skills: {}, dirs: new Set() }
+          const s: State = { skills: {}, aliases: {}, dirs: new Set() }
           yield* loadSkills(s, config, discovery, bus, fsys, ctx.directory, ctx.worktree)
           return s
         }),
@@ -205,7 +225,8 @@ export namespace Skill {
 
       const get = Effect.fn("Skill.get")(function* (name: string) {
         const s = yield* InstanceState.get(state)
-        return s.skills[name]
+        const alias = s.aliases[name]
+        return s.skills[name] ?? (alias ? s.skills[alias] : undefined)
       })
 
       const all = Effect.fn("Skill.all")(function* () {
@@ -246,7 +267,11 @@ export namespace Skill {
           .flatMap((skill) => [
             "  <skill>",
             `    <name>${skill.name}</name>`,
+            ...(skill.title ? [`    <title>${skill.title}</title>`] : []),
             `    <description>${skill.description}</description>`,
+            ...(skill.aliases?.length
+              ? ["    <aliases>", ...skill.aliases.map((alias) => `      <alias>${alias}</alias>`), "    </aliases>"]
+              : []),
             `    <location>${pathToFileURL(skill.location).href}</location>`,
             "  </skill>",
           ]),
@@ -258,7 +283,11 @@ export namespace Skill {
       "## Available Skills",
       ...list
         .toSorted((a, b) => a.name.localeCompare(b.name))
-        .map((skill) => `- **${skill.name}**: ${skill.description}`),
+        .map((skill) => {
+          const label = skill.title ? `${skill.name} (${skill.title})` : skill.name
+          const aliases = skill.aliases?.length ? ` aliases: ${skill.aliases.join(", ")}` : ""
+          return `- **${label}**${aliases}: ${skill.description}`
+        }),
     ].join("\n")
   }
 }

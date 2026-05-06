@@ -37,7 +37,9 @@ Each `SKILL.md` must start with YAML frontmatter.
 Only these fields are recognized:
 
 - `name` (required)
+- `title` (optional)
 - `description` (required)
+- `aliases` (optional)
 - `license` (optional)
 - `compatibility` (optional)
 - `metadata` (optional, string-to-string map)
@@ -69,6 +71,11 @@ Equivalent regex:
 `description` must be 1-1024 characters.
 Keep it specific enough for the agent to choose correctly.
 
+`title` is the human-readable display name. Use it when the UI should show a localized or friendlier name while `name` stays a stable ID.
+
+`aliases` is a list of alternate slash-command names. Aliases can be localized and resolve to the canonical `name`.
+Each alias is trimmed and must be non-empty without whitespace.
+
 ---
 
 ## Use an example
@@ -78,7 +85,10 @@ Create `.opencode/skills/git-release/SKILL.md` like this:
 ```markdown
 ---
 name: git-release
+title: Git release
 description: Create consistent releases and changelogs
+aliases:
+  - release
 license: MIT
 compatibility: opencode
 metadata:
@@ -104,12 +114,17 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 OpenCode lists available skills in the `skill` tool description.
 Each entry includes the skill name and description:
+If a skill defines `title` or `aliases`, those are included too.
 
 ```xml
 <available_skills>
   <skill>
     <name>git-release</name>
+    <title>Git release</title>
     <description>Create consistent releases and changelogs</description>
+    <aliases>
+      <alias>release</alias>
+    </aliases>
   </skill>
 </available_skills>
 ```
@@ -118,6 +133,12 @@ The agent loads a skill by calling the tool:
 
 ```
 skill({ name: "git-release" })
+```
+
+Aliases can also be used:
+
+```
+skill({ name: "release" })
 ```
 
 ---

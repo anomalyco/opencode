@@ -9,7 +9,7 @@ import { Skill } from "../skill"
 import { Tool } from "./tool"
 
 const Parameters = z.object({
-  name: z.string().describe("The name of the skill from available_skills"),
+  name: z.string().describe("The name or alias of the skill from available_skills"),
 })
 
 export const SkillTool = Tool.define(
@@ -48,14 +48,14 @@ export const SkillTool = Tool.define(
               const info = yield* skill.get(params.name)
               if (!info) {
                 const all = yield* skill.all()
-                const available = all.map((item) => item.name).join(", ")
+                const available = all.flatMap((item) => [item.name, ...(item.aliases ?? [])]).join(", ")
                 throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
               }
 
               yield* ctx.ask({
                 permission: "skill",
-                patterns: [params.name],
-                always: [params.name],
+                patterns: [info.name],
+                always: [info.name],
                 metadata: {},
               })
 
@@ -71,10 +71,10 @@ export const SkillTool = Tool.define(
               )
 
               return {
-                title: `Loaded skill: ${info.name}`,
+                title: `Loaded skill: ${info.title ?? info.name}`,
                 output: [
                   `<skill_content name="${info.name}">`,
-                  `# Skill: ${info.name}`,
+                  `# Skill: ${info.title ?? info.name}`,
                   "",
                   info.content.trim(),
                   "",

@@ -627,14 +627,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync.data.command.map((cmd) => ({
-      id: `custom.${cmd.name}`,
-      trigger: cmd.name,
-      title: cmd.name,
-      description: cmd.description,
-      type: "custom" as const,
-      source: cmd.source,
-    }))
+    const custom = sync.data.command.map((cmd) => {
+      const title = cmd.title ?? cmd.name
+      const trigger = cmd.source === "skill" ? (cmd.aliases?.[0] ?? cmd.name) : cmd.name
+      return {
+        id: `custom.${cmd.name}`,
+        trigger,
+        title,
+        aliases: cmd.aliases,
+        search: [cmd.name, ...(cmd.aliases ?? [])].join(" "),
+        description: cmd.description,
+        type: "custom" as const,
+        source: cmd.source,
+      }
+    })
 
     return [...custom, ...builtin]
   })
@@ -666,7 +672,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
-    filterKeys: ["trigger", "title"],
+    filterKeys: ["trigger", "title", "search"],
     onSelect: handleSlashSelect,
   })
 

@@ -189,4 +189,64 @@ Use this skill.
       { git: true },
     ),
   )
+
+  it.live("execute accepts skill aliases", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const skill = path.join(dir, ".opencode", "skill", "report")
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(skill, "SKILL.md"),
+              `---
+name: report
+title: Отчет
+description: Сформировать отчет на русском языке.
+aliases:
+  - отчет
+---
+
+# Report
+
+Use this skill.
+`,
+            ),
+          )
+
+          const home = process.env.OPENCODE_TEST_HOME
+          process.env.OPENCODE_TEST_HOME = dir
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              process.env.OPENCODE_TEST_HOME = home
+            }),
+          )
+
+          const registry = yield* ToolRegistry.Service
+          const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
+          const tool = (yield* registry.tools({
+            providerID: "opencode" as any,
+            modelID: "gpt-5" as any,
+            agent,
+          })).find((tool) => tool.id === SkillTool.id)
+          if (!tool) throw new Error("Skill tool not found")
+
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          const ctx: Tool.Context = {
+            ...baseCtx,
+            ask: (req) =>
+              Effect.sync(() => {
+                requests.push(req)
+              }),
+          }
+
+          const result = yield* tool.execute({ name: "отчет" }, ctx)
+
+          expect(requests[0].patterns).toContain("report")
+          expect(result.title).toBe("Loaded skill: Отчет")
+          expect(result.metadata.name).toBe("report")
+          expect(result.output).toContain(`<skill_content name="report">`)
+        }),
+      { git: true },
+    ),
+  )
 })

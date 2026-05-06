@@ -37,7 +37,9 @@ opencode выполняет поиск в следующих местах:
 Распознаются только эти поля:
 
 - `name` (required)
+- `title` (необязательно)
 - `description` (required)
+- `aliases` (необязательно)
 - `license` (необязательно)
 - `compatibility` (необязательно)
 - `metadata` (необязательно, преобразование строк в строки)
@@ -69,6 +71,11 @@ opencode выполняет поиск в следующих местах:
 `description` должно содержать от 1 до 1024 символов.
 Держите его достаточно конкретным, чтобы агент мог сделать правильный выбор.
 
+`title` — человекочитаемое название для интерфейса. Используйте его, когда нужно показать локализованное или более понятное имя, а `name` оставить стабильным идентификатором.
+
+`aliases` — список альтернативных имен slash-команд. Алиасы могут быть локализованными и разрешаются в канонический `name`.
+Каждый алиас обрезается по краям и должен быть непустым, без пробельных символов.
+
 ---
 
 ## Используйте пример
@@ -78,7 +85,10 @@ opencode выполняет поиск в следующих местах:
 ```markdown
 ---
 name: git-release
-description: Create consistent releases and changelogs
+title: Релиз
+description: Подготовить релиз и changelog
+aliases:
+  - релиз
 license: MIT
 compatibility: opencode
 metadata:
@@ -104,12 +114,17 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 opencode перечисляет доступные навыки в описании инструмента `skill`.
 Каждая запись включает название и описание навыка:
+Если навык задает `title` или `aliases`, они тоже включаются.
 
 ```xml
 <available_skills>
   <skill>
     <name>git-release</name>
-    <description>Create consistent releases and changelogs</description>
+    <title>Релиз</title>
+    <description>Подготовить релиз и changelog</description>
+    <aliases>
+      <alias>релиз</alias>
+    </aliases>
   </skill>
 </available_skills>
 ```
@@ -118,6 +133,12 @@ opencode перечисляет доступные навыки в описан�
 
 ```
 skill({ name: "git-release" })
+```
+
+Также можно использовать алиас:
+
+```
+skill({ name: "релиз" })
 ```
 
 ---

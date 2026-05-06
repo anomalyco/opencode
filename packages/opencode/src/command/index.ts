@@ -17,6 +17,7 @@ export namespace Command {
 
   type State = {
     commands: Record<string, Info>
+    aliases: Record<string, string>
   }
 
   export const Event = {
@@ -34,7 +35,9 @@ export namespace Command {
   export const Info = z
     .object({
       name: z.string(),
+      title: z.string().optional(),
       description: z.string().optional(),
+      aliases: z.array(z.string()).optional(),
       agent: z.string().optional(),
       model: z.string().optional(),
       source: z.enum(["command", "mcp", "skill"]).optional(),
@@ -84,6 +87,7 @@ export namespace Command {
         const cfg = yield* config.get()
         const bridge = yield* EffectBridge.make()
         const commands: Record<string, Info> = {}
+        const aliases: Record<string, string> = {}
 
         commands[Default.INIT] = {
           name: Default.INIT,
@@ -153,17 +157,33 @@ export namespace Command {
           if (commands[item.name]) continue
           commands[item.name] = {
             name: item.name,
+            title: item.title,
             description: item.description,
+            aliases: item.aliases,
             source: "skill",
             get template() {
               return item.content
             },
             hints: [],
           }
+
+          for (const alias of item.aliases ?? []) {
+            if (commands[alias]) continue
+            if (aliases[alias]) {
+              log.warn("duplicate command alias", {
+                alias,
+                existing: aliases[alias],
+                duplicate: item.name,
+              })
+              continue
+            }
+            aliases[alias] = item.name
+          }
         }
 
         return {
           commands,
+          aliases,
         }
       })
 
@@ -171,7 +191,8 @@ export namespace Command {
 
       const get = Effect.fn("Command.get")(function* (name: string) {
         const s = yield* InstanceState.get(state)
-        return s.commands[name]
+        const alias = s.aliases[name]
+        return s.commands[name] ?? (alias ? s.commands[alias] : undefined)
       })
 
       const list = Effect.fn("Command.list")(function* () {

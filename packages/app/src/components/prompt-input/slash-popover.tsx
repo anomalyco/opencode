@@ -11,6 +11,8 @@ export interface SlashCommand {
   id: string
   trigger: string
   title: string
+  aliases?: string[]
+  search?: string
   description?: string
   keybind?: string
   type: "builtin" | "custom"
@@ -111,6 +113,9 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                   >
                     <div class="flex items-center gap-2 min-w-0">
                       <span class="text-14-regular text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
+                      <Show when={cmd.title !== cmd.trigger}>
+                        <span class="text-14-regular text-text-base truncate">{cmd.title}</span>
+                      </Show>
                       <Show when={cmd.description}>
                         <span class="text-14-regular text-text-weak truncate">{cmd.description}</span>
                       </Show>

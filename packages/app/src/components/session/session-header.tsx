@@ -22,8 +22,13 @@ export function SessionHeader() {
   const skills = createMemo(() =>
     sync.data.command
       .filter((cmd) => cmd.source === "skill")
-      .map((cmd) => ({ name: cmd.name, description: cmd.description }))
-      .toSorted((a, b) => a.name.localeCompare(b.name)),
+      .map((cmd) => ({
+        name: cmd.name,
+        title: cmd.title ?? cmd.name,
+        aliases: cmd.aliases ?? [],
+        description: cmd.description,
+      }))
+      .toSorted((a, b) => a.title.localeCompare(b.title)),
   )
 
   const isDesktopBeta = platform.platform === "desktop" && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
@@ -34,8 +39,8 @@ export function SessionHeader() {
     setRightMount(document.getElementById("opencode-titlebar-right"))
   })
 
-  const select = (name: string) => {
-    const text = `/${name} `
+  const select = (skill: { name: string; aliases: string[] }) => {
+    const text = `/${skill.aliases[0] ?? skill.name} `
     const images = prompt.current().filter((part) => part.type === "image")
     prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
     command.trigger("input.focus")
@@ -59,10 +64,10 @@ export function SessionHeader() {
                         variant="ghost"
                         size="small"
                         class="h-6 w-32 px-1.5 text-11-regular text-text-base shrink-0"
-                        onClick={() => select(skill.name)}
-                        aria-label={`/${skill.name}`}
+                        onClick={() => select(skill)}
+                        aria-label={`/${skill.aliases[0] ?? skill.name}`}
                       >
-                        <span class="truncate">{skill.name}</span>
+                        <span class="truncate">{skill.title}</span>
                       </Button>
                     </Tooltip>
                   )}

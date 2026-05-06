@@ -2122,7 +2122,9 @@ export type VcsFileDiff = {
 
 export type Command = {
   name: string
+  title?: string
   description?: string
+  aliases?: Array<string>
   agent?: string
   model?: string
   source?: "command" | "mcp" | "skill"
@@ -5418,7 +5420,9 @@ export type AppSkillsResponses = {
    */
   200: Array<{
     name: string
+    title?: string
     description: string
+    aliases?: Array<string>
     location: string
     content: string
   }>

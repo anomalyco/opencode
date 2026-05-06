@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
+import { Command } from "../../src/command"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideInstance, provideTmpdirInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -10,6 +11,7 @@ import fs from "fs/promises"
 const node = CrossSpawnSpawner.defaultLayer
 
 const it = testEffect(Layer.mergeAll(Skill.defaultLayer, node))
+const cmd = testEffect(Layer.mergeAll(Command.defaultLayer, node))
 
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")
@@ -69,6 +71,85 @@ Instructions here.
           expect(item).toBeDefined()
           expect(item!.description).toBe("A test skill for verification.")
           expect(item!.location).toContain(path.join("skill", "test-skill", "SKILL.md"))
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("discovers skill title and aliases", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "report", "SKILL.md"),
+              `---
+name: report
+title: Отчет
+description: Сформировать отчет на русском языке.
+aliases:
+  - отчет
+---
+
+# Report
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = yield* skill.all()
+          expect(list.length).toBe(1)
+          expect(list[0].name).toBe("report")
+          expect(list[0].title).toBe("Отчет")
+          expect(list[0].aliases).toEqual(["отчет"])
+          expect((yield* skill.get("отчет"))?.name).toBe("report")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("ignores invalid and duplicate skill aliases", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".opencode", "skill", "first", "SKILL.md"),
+                `---
+name: first
+description: First skill.
+aliases:
+  - отчет
+  - ""
+  - "bad alias"
+---
+
+# First
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skill", "second", "SKILL.md"),
+                `---
+name: second
+description: Second skill.
+aliases:
+  - отчет
+---
+
+# Second
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const list = yield* skill.all()
+          const owner = list.find((item) => item.aliases?.includes("отчет"))
+          expect(owner).toBeDefined()
+          expect(list.filter((item) => item.aliases?.includes("отчет")).length).toBe(1)
+          expect((yield* skill.get("отчет"))?.name).toBe(owner?.name)
+          expect(yield* skill.get("bad alias")).toBeUndefined()
         }),
       { git: true },
     ),
@@ -384,6 +465,42 @@ description: A skill in the .opencode/skills directory.
 
           const skill = yield* Skill.Service
           expect((yield* skill.dirs()).length).toBe(4)
+        }),
+      { git: true },
+    ),
+  )
+})
+
+describe("skill commands", () => {
+  cmd.live("resolves skill command aliases", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "report", "SKILL.md"),
+              `---
+name: report
+title: Отчет
+description: Сформировать отчет на русском языке.
+aliases:
+  - отчет
+---
+
+# Report
+
+Use this skill.
+`,
+            ),
+          )
+
+          const command = yield* Command.Service
+          const item = yield* command.get("отчет")
+          expect(item?.name).toBe("report")
+          expect(item?.title).toBe("Отчет")
+          expect(item?.aliases).toEqual(["отчет"])
+          expect(yield* Effect.promise(async () => item?.template)).toContain("Use this skill.")
+          expect((yield* command.list()).map((item) => item.name)).toEqual(["init", "review", "report"])
         }),
       { git: true },
     ),
