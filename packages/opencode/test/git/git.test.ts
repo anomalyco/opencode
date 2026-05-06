@@ -114,6 +114,53 @@ describe("Git", () => {
     })
   })
 
+  test("patch() returns capped native patch output", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, weird), "before\n", "utf-8")
+    await fs.writeFile(path.join(tmp.path, "other.txt"), "old\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+    await fs.writeFile(path.join(tmp.path, weird), "after\n", "utf-8")
+    await fs.writeFile(path.join(tmp.path, "other.txt"), "new\n", "utf-8")
+
+    await withGit(async (rt) => {
+      const [patch, all, capped] = await Promise.all([
+        rt.runPromise(Git.Service.use((git) => git.patch(tmp.path, "HEAD", weird, { context: 2_147_483_647 }))),
+        rt.runPromise(Git.Service.use((git) => git.patchAll(tmp.path, "HEAD", { context: 2_147_483_647 }))),
+        rt.runPromise(Git.Service.use((git) => git.patch(tmp.path, "HEAD", weird, { maxOutputBytes: 1 }))),
+      ])
+
+      expect(patch.truncated).toBe(false)
+      expect(patch.text).toContain("diff --git")
+      expect(patch.text).toContain("-before")
+      expect(patch.text).toContain("+after")
+      expect(all.truncated).toBe(false)
+      expect(all.text).toContain("diff --git")
+      expect(all.text).toContain("other.txt")
+      expect(all.text).toContain("+new")
+      expect(capped.truncated).toBe(true)
+      expect(capped.text).toBe("")
+    })
+  })
+
+  test("patchUntracked() and statUntracked() handle added files", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, weird), "one\ntwo\n", "utf-8")
+
+    await withGit(async (rt) => {
+      const [patch, stat] = await Promise.all([
+        rt.runPromise(Git.Service.use((git) => git.patchUntracked(tmp.path, weird, { context: 2_147_483_647 }))),
+        rt.runPromise(Git.Service.use((git) => git.statUntracked(tmp.path, weird))),
+      ])
+
+      expect(patch.truncated).toBe(false)
+      expect(patch.text).toContain("diff --git")
+      expect(patch.text).toContain("+one")
+      expect(patch.text).toContain("+two")
+      expect(stat).toEqual(expect.objectContaining({ file: weird, additions: 2, deletions: 0 }))
+    })
+  })
+
   test("show() returns empty text for binary blobs", async () => {
     await using tmp = await tmpdir({ git: true })
     await fs.writeFile(path.join(tmp.path, "bin.dat"), new Uint8Array([0, 1, 2, 3]))
@@ -123,33 +170,6 @@ describe("Git", () => {
     await withGit(async (rt) => {
       const text = await rt.runPromise(Git.Service.use((git) => git.show(tmp.path, "HEAD", "bin.dat")))
       expect(text).toBe("")
-    })
-  })
-
-  test("showMany() preserves exact text for multiple blobs", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await fs.writeFile(path.join(tmp.path, "a.txt"), "alpha\n\n", "utf-8")
-    await fs.writeFile(path.join(tmp.path, "b.txt"), " bravo  \n", "utf-8")
-    await $`git add .`.cwd(tmp.path).quiet()
-    await $`git commit --no-gpg-sign -m "add files"`.cwd(tmp.path).quiet()
-
-    await withGit(async (rt) => {
-      const text = await rt.runPromise(Git.Service.use((git) => git.showMany(tmp.path, "HEAD", ["a.txt", "b.txt"])))
-      expect(text.get("a.txt")).toBe("alpha\n\n")
-      expect(text.get("b.txt")).toBe(" bravo  \n")
-    })
-  })
-
-  test("showMany() falls back for newline paths", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const file = "line\nbreak.txt"
-    await fs.writeFile(path.join(tmp.path, file), "hello\n", "utf-8")
-    await $`git add .`.cwd(tmp.path).quiet()
-    await $`git commit --no-gpg-sign -m "add newline path"`.cwd(tmp.path).quiet()
-
-    await withGit(async (rt) => {
-      const text = await rt.runPromise(Git.Service.use((git) => git.showMany(tmp.path, "HEAD", [file])))
-      expect(text.get(file)).toBe("hello\n")
     })
   })
 })

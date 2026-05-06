@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import type { Context } from "hono"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { TuiEvent } from "../../src/cli/cmd/tui/event"
 import { SessionID } from "../../src/session/schema"
 import { Instance } from "../../src/project/instance"
 import { TuiApi, TuiPaths } from "../../src/server/routes/instance/httpapi/groups/tui"
@@ -9,15 +10,22 @@ import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { OpenApi } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { waitGlobalBusEventPromise } from "./global-bus"
 
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return Server.Default().app
+function app(experimental = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
+  return experimental ? Server.Default().app : Server.Legacy().app
+}
+
+function nextCommandExecute() {
+  return waitGlobalBusEventPromise({
+    predicate: (event) => event.payload.type === TuiEvent.CommandExecute.type,
+  }).then((event) => event.payload.properties?.command)
 }
 
 async function expectTrue(path: string, headers: Record<string, string>, body?: unknown) {
@@ -32,13 +40,13 @@ async function expectTrue(path: string, headers: Record<string, string>, body?: 
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
 describe("tui HttpApi bridge", () => {
   test("documents legacy bad request responses", async () => {
-    const legacy = await Server.openapi()
+    const legacy = await Server.openapiHono()
     const effect = OpenApi.fromApi(TuiApi)
     for (const path of [TuiPaths.appendPrompt, TuiPaths.executeCommand, TuiPaths.publish, TuiPaths.selectSession]) {
       expect(legacy.paths[path].post?.responses?.[400]).toBeDefined()
@@ -64,12 +72,46 @@ describe("tui HttpApi bridge", () => {
       properties: { text: "from publish" },
     })
 
+    const missingSessionID = SessionID.descending()
     const missing = await app().request(TuiPaths.selectSession, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ sessionID: SessionID.descending() }),
+      body: JSON.stringify({ sessionID: missingSessionID }),
     })
     expect(missing.status).toBe(404)
+  })
+
+  test("matches Hono missing selected session error body", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const body = JSON.stringify({ sessionID: SessionID.descending() })
+
+    const hono = await app(false).request(TuiPaths.selectSession, { method: "POST", headers, body })
+    const httpapi = await app().request(TuiPaths.selectSession, { method: "POST", headers, body })
+
+    expect(httpapi.status).toBe(hono.status)
+    expect(await httpapi.json()).toEqual(await hono.json())
+  })
+
+  test("matches legacy unknown execute command behavior", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const body = JSON.stringify({ command: "unknown_command" })
+
+    const legacyCommand = nextCommandExecute()
+    const legacy = await app(false).request(TuiPaths.executeCommand, { method: "POST", headers, body })
+    expect(legacy.status).toBe(200)
+    expect(await legacy.json()).toBe(true)
+
+    const effectCommand = nextCommandExecute()
+    const effect = await app().request(TuiPaths.executeCommand, { method: "POST", headers, body })
+    expect(effect.status).toBe(200)
+    expect(await effect.json()).toBe(true)
+
+    const legacyPublished = await legacyCommand
+    const effectPublished = await effectCommand
+    expect(effectPublished).toBe(legacyPublished)
+    expect(legacyPublished).toBeUndefined()
   })
 
   test("serves TUI control queue through experimental Effect routes", async () => {

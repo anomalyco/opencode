@@ -24,6 +24,7 @@ const fail = (err: unknown) =>
     text: () => "",
     stdout: Buffer.alloc(0),
     stderr: Buffer.from(err instanceof Error ? err.message : String(err)),
+    truncated: false,
   }) satisfies Result
 
 export type Kind = "added" | "deleted" | "modified"
@@ -45,16 +46,28 @@ export type Stat = {
   readonly deletions: number
 }
 
+export type Patch = {
+  readonly text: string
+  readonly truncated: boolean
+}
+
+export interface PatchOptions {
+  readonly context?: number
+  readonly maxOutputBytes?: number
+}
+
 export interface Result {
   readonly exitCode: number
   readonly text: () => string
   readonly stdout: Buffer
   readonly stderr: Buffer
+  readonly truncated: boolean
 }
 
 export interface Options {
   readonly cwd: string
   readonly env?: Record<string, string>
+  readonly maxOutputBytes?: number
 }
 
 export interface Interface {
@@ -65,10 +78,13 @@ export interface Interface {
   readonly hasHead: (cwd: string) => Effect.Effect<boolean>
   readonly mergeBase: (cwd: string, base: string, head?: string) => Effect.Effect<string | undefined>
   readonly show: (cwd: string, ref: string, file: string, prefix?: string) => Effect.Effect<string>
-  readonly showMany: (cwd: string, ref: string, files: string[], prefix?: string) => Effect.Effect<Map<string, string>>
   readonly status: (cwd: string) => Effect.Effect<Item[]>
   readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[]>
   readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[]>
+  readonly patch: (cwd: string, ref: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
+  readonly patchAll: (cwd: string, ref: string, options?: PatchOptions) => Effect.Effect<Patch>
+  readonly patchUntracked: (cwd: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
+  readonly statUntracked: (cwd: string, file: string) => Effect.Effect<Stat | undefined>
 }
 
 const kind = (code: string): Kind => {
@@ -97,15 +113,31 @@ export const layer = Layer.effect(
           stderr: "pipe",
         })
         const handle = yield* spawner.spawn(proc)
-        const [stdout, stderr] = yield* Effect.all(
-          [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
-          { concurrency: 2 },
-        )
+        const collect = (stream: typeof handle.stdout) =>
+          Stream.runFold(
+            stream,
+            () => ({ chunks: [] as Uint8Array[], bytes: 0, truncated: false }),
+            (acc, chunk) => {
+              if (opts.maxOutputBytes === undefined) {
+                acc.chunks.push(chunk)
+                acc.bytes += chunk.length
+                return acc
+              }
+
+              const remaining = opts.maxOutputBytes - acc.bytes
+              if (remaining > 0) acc.chunks.push(remaining >= chunk.length ? chunk : chunk.slice(0, remaining))
+              acc.bytes += chunk.length
+              acc.truncated = acc.truncated || acc.bytes > opts.maxOutputBytes
+              return acc
+            },
+          ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
+        const [stdout, stderr] = yield* Effect.all([collect(handle.stdout), collect(handle.stderr)], { concurrency: 2 })
         return {
           exitCode: yield* handle.exitCode,
-          text: () => stdout,
-          stdout: Buffer.from(stdout),
-          stderr: Buffer.from(stderr),
+          text: () => stdout.buffer.toString("utf8"),
+          stdout: stdout.buffer,
+          stderr: stderr.buffer,
+          truncated: stdout.truncated || stderr.truncated,
         } satisfies Result
       },
       Effect.scoped,
@@ -193,82 +225,6 @@ export const layer = Layer.effect(
       return result.text()
     })
 
-    const showMany = Effect.fn("Git.showMany")(function* (cwd: string, ref: string, files: string[], prefix = "") {
-      if (!files.length) return new Map<string, string>()
-
-      const fallback = Effect.fnUntraced(function* () {
-        return new Map<string, string>(
-          yield* Effect.forEach(
-            files,
-            (file) =>
-              Effect.gen(function* () {
-                return [file, yield* show(cwd, ref, file, prefix)] as const
-              }),
-            { concurrency: 8 },
-          ),
-        )
-      })
-
-      const batch = Effect.fnUntraced(
-        function* () {
-          const items = files.map((file) => ({ file, target: `${ref}:${prefix ? `${prefix}${file}` : file}` }))
-          if (items.some((item) => item.target.includes("\n") || item.target.includes("\r"))) return
-
-          const proc = ChildProcess.make("git", [...cfg, "cat-file", "--batch"], {
-            cwd,
-            extendEnv: true,
-            stdin: Stream.make(new TextEncoder().encode(items.map((item) => item.target).join("\n") + "\n")),
-            stdout: "pipe",
-            stderr: "pipe",
-          })
-          const handle = yield* spawner.spawn(proc)
-          const [stdout] = yield* Effect.all(
-            [Stream.mkUint8Array(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
-            { concurrency: 2 },
-          )
-
-          if ((yield* handle.exitCode) !== 0) return
-
-          const result = new Map<string, string>()
-          const decoder = new TextDecoder()
-          let offset = 0
-
-          for (const item of items) {
-            let end = offset
-            while (end < stdout.length && stdout[end] !== 10) end++
-            if (end >= stdout.length) return
-
-            const header = decoder.decode(stdout.slice(offset, end))
-            offset = end + 1
-            if (header.endsWith(" missing")) {
-              result.set(item.file, "")
-              continue
-            }
-
-            const match = header.match(/^[0-9a-f]+ blob (\d+)$/)
-            if (!match) return
-
-            const size = Number(match[1])
-            if (!Number.isInteger(size) || size < 0 || offset + size >= stdout.length || stdout[offset + size] !== 10) {
-              return
-            }
-
-            const content = stdout.slice(offset, offset + size)
-            result.set(item.file, content.includes(0) ? "" : decoder.decode(content))
-            offset += size + 1
-          }
-
-          if (offset !== stdout.length) return
-
-          return result
-        },
-        Effect.scoped,
-        Effect.catch(() => Effect.void),
-      )
-
-      return (yield* batch()) ?? (yield* fallback())
-    })
-
     const status = Effect.fn("Git.status")(function* (cwd: string) {
       return nuls(
         yield* text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], {
@@ -317,6 +273,61 @@ export const layer = Layer.effect(
       })
     })
 
+    const patch = Effect.fn("Git.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
+      const result = yield* run(
+        ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`, ref, "--", file],
+        { cwd, maxOutputBytes: options?.maxOutputBytes },
+      )
+      return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
+    })
+
+    const patchAll = Effect.fn("Git.patchAll")(function* (cwd: string, ref: string, options?: PatchOptions) {
+      const result = yield* run(
+        ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`, ref, "--", "."],
+        { cwd, maxOutputBytes: options?.maxOutputBytes },
+      )
+      return { text: result.text(), truncated: result.truncated } satisfies Patch
+    })
+
+    const patchUntracked = Effect.fn("Git.patchUntracked")(function* (
+      cwd: string,
+      file: string,
+      options?: PatchOptions,
+    ) {
+      const result = yield* run(
+        [
+          "diff",
+          "--no-index",
+          "--patch",
+          "--no-ext-diff",
+          "--no-renames",
+          `--unified=${options?.context ?? 3}`,
+          "--",
+          "/dev/null",
+          file,
+        ],
+        { cwd, maxOutputBytes: options?.maxOutputBytes },
+      )
+      return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
+    })
+
+    const statUntracked = Effect.fn("Git.statUntracked")(function* (cwd: string, file: string) {
+      const result = yield* run(["diff", "--no-index", "--numstat", "--", "/dev/null", file], {
+        cwd,
+        maxOutputBytes: 4096,
+      })
+      if (result.truncated) return
+      const parts = result.text().split("\t")
+      if (parts.length < 2) return
+      const additions = parts[0] === "-" ? 0 : Number.parseInt(parts[0] || "0", 10)
+      const deletions = parts[1] === "-" ? 0 : Number.parseInt(parts[1] || "0", 10)
+      return {
+        file,
+        additions: Number.isFinite(additions) ? additions : 0,
+        deletions: Number.isFinite(deletions) ? deletions : 0,
+      } satisfies Stat
+    })
+
     return Service.of({
       run,
       branch,
@@ -325,10 +336,13 @@ export const layer = Layer.effect(
       hasHead,
       mergeBase,
       show,
-      showMany,
       status,
       diff,
       stats,
+      patch,
+      patchAll,
+      patchUntracked,
+      statUntracked,
     })
   }),
 )
