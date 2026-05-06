@@ -26,7 +26,7 @@ const it = testEffect(Layer.empty)
 describe("Anthropic Messages adapter", () => {
   it.effect("prepares Anthropic Messages target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] }).prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toEqual({
         model: "claude-sonnet-4-5",
@@ -41,7 +41,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("prepares tool call and tool result messages", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] }).prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -80,7 +80,7 @@ describe("Anthropic Messages adapter", () => {
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 2 } },
         { type: "message_stop" },
       )
-      const response = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+      const response = yield* LLMClient
         .generate(request)
         .pipe(Effect.provide(fixedResponse(body)))
 
@@ -106,7 +106,7 @@ describe("Anthropic Messages adapter", () => {
         { type: "content_block_stop", index: 0 },
         { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
       )
-      const response = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+      const response = yield* LLMClient
         .generate(
           LLM.updateRequest(request, {
             tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
@@ -130,7 +130,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("emits provider-error events for mid-stream provider errors", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+      const response = yield* LLMClient
         .generate(request)
         .pipe(
           Effect.provide(
@@ -144,7 +144,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("fails HTTP provider errors before stream parsing", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+      const error = yield* LLMClient
         .generate(request)
         .pipe(
           Effect.provide(
@@ -184,7 +184,7 @@ describe("Anthropic Messages adapter", () => {
         { type: "content_block_stop", index: 2 },
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
       )
-      const response = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+      const response = yield* LLMClient
         .generate(
           LLM.updateRequest(request, {
             tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
@@ -232,7 +232,7 @@ describe("Anthropic Messages adapter", () => {
         { type: "content_block_stop", index: 1 },
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
       )
-      const response = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+      const response = yield* LLMClient
         .generate(
           LLM.updateRequest(request, {
             tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
@@ -253,7 +253,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("round-trips provider-executed assistant content into server tool blocks", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] }).prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_round_trip",
           model,
@@ -304,7 +304,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("rejects round-trip for unknown server tool names", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+      const error = yield* LLMClient
         .prepare(
           LLM.request({
             id: "req_unknown_server_tool",
@@ -330,7 +330,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+      const error = yield* LLMClient
         .prepare(
           LLM.request({
             id: "req_media",

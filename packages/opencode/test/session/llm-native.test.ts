@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { LLMClient } from "@opencode-ai/llm"
-import { AnthropicMessages, BedrockConverse, Gemini, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm/protocols"
+import "@opencode-ai/llm/protocols"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { LLMNative } from "../../src/session/llm-native"
@@ -598,7 +598,7 @@ describe("LLMNative.request", () => {
       tools: [lookupTool],
       toolChoice: "lookup",
     })
-    const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(request)
+    const prepared = yield* LLMClient.prepare(request)
 
     expect(prepared.payload).toMatchObject({
       model: "gpt-5",
@@ -657,7 +657,7 @@ describe("LLMNative.request", () => {
       tools: [lookupTool],
       toolChoice: "lookup",
     })
-    const prepared = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] }).prepare(request)
+    const prepared = yield* LLMClient.prepare(request)
 
     expect(request.model).toMatchObject({
       provider: "anthropic",
@@ -726,7 +726,7 @@ describe("LLMNative.request", () => {
       tools: [lookupTool],
       toolChoice: "lookup",
     })
-    const prepared = yield* LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] }).prepare(request)
+    const prepared = yield* LLMClient.prepare(request)
 
     expect(request.model).toMatchObject({
       provider: "togetherai",
@@ -857,7 +857,7 @@ describe("LLMNative.request", () => {
       tools: [lookupTool],
       toolChoice: "lookup",
     })
-    const prepared = yield* LLMClient.make({ adapters: [Gemini.adapter] }).prepare(request)
+    const prepared = yield* LLMClient.prepare(request)
 
     expect(request.model).toMatchObject({
       provider: "google",
@@ -929,9 +929,7 @@ describe("LLMNative.request", () => {
         system: ["First", "Second", "Third"],
         messages: [userMessage(mdl, userID, [textPart(userID, "hello")])],
       })
-      const prepared = yield* LLMClient.make({
-        adapters: [AnthropicMessages.adapter],
-      }).prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toMatchObject({
         system: [
@@ -953,9 +951,7 @@ describe("LLMNative.request", () => {
         model: mdl,
         messages: messageIds.map((id, index) => userMessage(mdl, id, [textPart(id, `m${index}`)])),
       })
-      const prepared = yield* LLMClient.make({
-        adapters: [AnthropicMessages.adapter],
-      }).prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toMatchObject({
         messages: [
@@ -979,9 +975,7 @@ describe("LLMNative.request", () => {
         system: ["You are concise."],
         messages: [userMessage(mdl, userID, [textPart(userID, "hello")])],
       })
-      const prepared = yield* LLMClient.make({
-        adapters: [BedrockConverse.adapter],
-      }).prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toMatchObject({
         system: [{ text: "You are concise." }, { cachePoint: { type: "default" } }],
@@ -1006,9 +1000,7 @@ describe("LLMNative.request", () => {
         system: ["A", "B", "C"],
         messages: ids.map((id, index) => userMessage(mdl, id, [textPart(id, `m${index}`)])),
       })
-      const prepared = yield* LLMClient.make({
-        adapters: [OpenAIResponses.adapter],
-      }).prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       // The serialized OpenAI Responses payload has no cache concept; the
       // assertion is that nothing in the payload carries a cache marker.
@@ -1084,9 +1076,7 @@ describe("LLMNative.request", () => {
           ]),
         ],
       })
-      const prepared = yield* LLMClient.make({
-        adapters: [AnthropicMessages.adapter],
-      }).prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toMatchObject({
         messages: [

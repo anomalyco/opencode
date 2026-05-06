@@ -11,14 +11,7 @@ import {
   type ProtocolID,
 } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/adapter"
-import {
-  AnthropicMessages,
-  BedrockConverse,
-  Gemini,
-  OpenAIChat,
-  OpenAICompatibleChat,
-  OpenAIResponses,
-} from "@opencode-ai/llm/protocols"
+import "@opencode-ai/llm/protocols"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
@@ -499,19 +492,6 @@ const live: Layer.Layer<
     // existing AI SDK path. The return shape is deliberately narrow — we are
     // not yet committed to native-by-default for any provider.
     const NATIVE_PROTOCOLS = new Set<ProtocolID>(["anthropic-messages"])
-    const NATIVE_ADAPTERS = [
-      AnthropicMessages.adapter,
-      OpenAIChat.adapter,
-      OpenAIResponses.adapter,
-      Gemini.adapter,
-      OpenAICompatibleChat.adapter,
-      BedrockConverse.adapter,
-    ]
-
-    const nativeClient = LLMClient.make({
-      adapters: NATIVE_ADAPTERS,
-    })
-
     const runNative = Effect.fn("LLM.runNative")(function* (input: StreamRequest, prepared: PreparedStream) {
       if (!Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE) return undefined
       if (!input.nativeMessages || input.nativeMessages.length === 0) return undefined
@@ -599,13 +579,12 @@ const live: Layer.Layer<
       //     subsequent tool-call streaming.
       const map = LLMNativeEvents.mapper()
       const upstream = filteredNativeTools && filteredNativeTools.length > 0
-        ? LLMNativeTools.runWithTools({
-            client: nativeClient,
-            request: llmRequest,
-            tools: filteredAITools,
-            abort: input.abort,
-          })
-        : nativeClient.stream(llmRequest)
+          ? LLMNativeTools.runWithTools({
+              request: llmRequest,
+              tools: filteredAITools,
+              abort: input.abort,
+            })
+          : LLMClient.stream(llmRequest)
       return upstream.pipe(
         Stream.flatMap((event) => Stream.fromIterable(map.map(event))),
         Stream.concat(Stream.unwrap(Effect.sync(() => Stream.fromIterable(map.flush())))),

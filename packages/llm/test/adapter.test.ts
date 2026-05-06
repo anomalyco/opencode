@@ -101,7 +101,7 @@ const it = testEffect(echoLayer)
 describe("llm adapter", () => {
   it.effect("stream and generate use the adapter pipeline", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [fake] })
+      const llm = LLMClient
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
       const response = yield* llm.generate(request)
 
@@ -112,7 +112,7 @@ describe("llm adapter", () => {
 
   it.effect("selects adapters by request adapter", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [fake, gemini] }).prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "gemini-fake" }) }),
       )
 
@@ -122,7 +122,7 @@ describe("llm adapter", () => {
 
   it.effect("uses registered adapters by model adapter id", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [] }).prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "gemini-fake" }) }),
       )
 
@@ -147,24 +147,6 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("explicit adapters override provider adapters", () =>
-    Effect.gen(function* () {
-      const override = Adapter.make({
-        id: "fake",
-        protocol: Protocol.define({
-          ...fakeProtocol,
-          toPayload: () => Effect.succeed({ body: "override" }),
-        }),
-        endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
-        framing: fakeFraming,
-      })
-
-      const response = yield* LLMClient.make({ adapters: [override] }).generate(request)
-
-      expect(response.text).toBe('echo:{"body":"override"}')
-    }),
-  )
-
   it.effect("keeps the first registered adapter as the default", () =>
     Effect.gen(function* () {
       Adapter.make({
@@ -177,7 +159,7 @@ describe("llm adapter", () => {
         framing: fakeFraming,
       })
 
-      const response = yield* LLMClient.make().generate(request)
+      const response = yield* LLMClient.generate(request)
 
       expect(response.text).toBe('echo:{"body":"hello"}')
     }),
@@ -185,7 +167,7 @@ describe("llm adapter", () => {
 
   it.effect("rejects missing adapter", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.make({ adapters: [fake] })
+      const error = yield* LLMClient
         .prepare(
           LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "missing" }) }),
         )

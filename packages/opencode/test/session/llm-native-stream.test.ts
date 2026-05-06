@@ -1,16 +1,7 @@
 import { describe, expect } from "bun:test"
-import {
-  LLMClient,
-} from "@opencode-ai/llm"
+import { LLMClient } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/adapter"
-import {
-  AnthropicMessages,
-  BedrockConverse,
-  Gemini,
-  OpenAIChat,
-  OpenAICompatibleChat,
-  OpenAIResponses,
-} from "@opencode-ai/llm/protocols"
+import "@opencode-ai/llm/protocols"
 import { Effect, Layer, Ref, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { tool, jsonSchema } from "ai"
@@ -100,17 +91,6 @@ const userMessage = (mdl: Provider.Model, id: MessageID, parts: MessageV2.Part[]
   parts,
 })
 
-// What `runNative` builds. Kept in sync with `session/llm.ts`'s
-// NATIVE_ADAPTERS list — if a protocol is added there, add it here.
-const adapters = [
-  AnthropicMessages.adapter,
-  OpenAIChat.adapter,
-  OpenAIResponses.adapter,
-  Gemini.adapter,
-  OpenAICompatibleChat.adapter,
-  BedrockConverse.adapter,
-]
-
 const it = testEffect(Layer.empty)
 
 describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
@@ -128,7 +108,6 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         messages: [userMessage(mdl, userID, [userPart(userID, "Say hello.")])],
       })
 
-      const client = LLMClient.make({ adapters })
       const map = LLMNativeEvents.mapper()
 
       const body = sseBody([
@@ -141,7 +120,7 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         { type: "message_stop" },
       ])
 
-      const events = yield* client.stream(llmRequest).pipe(
+      const events = yield* LLMClient.stream(llmRequest).pipe(
         Stream.flatMap((event) => Stream.fromIterable(map.map(event))),
         Stream.concat(Stream.unwrap(Effect.sync(() => Stream.fromIterable(map.flush())))),
         Stream.runCollect,
@@ -246,11 +225,9 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         { type: "message_stop" },
       ])
 
-      const client = LLMClient.make({ adapters })
       const map = LLMNativeEvents.mapper()
 
       const events = yield* LLMNativeTools.runWithTools({
-        client,
         request: llmRequest,
         tools: { lookup: aiTool },
         abort: new AbortController().signal,
@@ -323,7 +300,7 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         tools: [lookupTool],
       })
 
-      const prepared = yield* LLMClient.make({ adapters }).prepare(llmRequest)
+      const prepared = yield* LLMClient.prepare(llmRequest)
       expect(prepared.payload).toMatchObject({
         tools: [
           {

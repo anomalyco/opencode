@@ -1,14 +1,11 @@
 export { Adapter, LLMClient, modelCapabilities, modelLimits, modelRef } from "./client"
 export type {
   Adapter as AdapterShape,
-  AdapterDefinition,
-  AdapterInput,
   AdapterModelDefaults,
   AdapterModelInput,
   AdapterRoutedModelDefaults,
   AdapterRoutedModelInput,
   AnyAdapter,
-  ClientOptions,
   HttpContext,
   LLMClient as LLMClientShape,
   ModelCapabilitiesInput,

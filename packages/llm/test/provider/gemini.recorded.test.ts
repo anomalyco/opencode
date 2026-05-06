@@ -20,7 +20,7 @@ const recorded = recordedTests({
   protocol: "gemini",
   requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
 })
-const gemini = LLMClient.make({ adapters: [Gemini.adapter] })
+const gemini = LLMClient
 
 describe("Gemini recorded", () => {
   recorded.effect("streams text", () =>

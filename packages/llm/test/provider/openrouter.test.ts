@@ -20,7 +20,7 @@ describe("OpenRouter", () => {
         apiKey: "test-key",
       })
 
-      const prepared = yield* LLMClient.make({ adapters: OpenRouter.adapters }).prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({ model, prompt: "Say hello." }),
       )
 
@@ -35,7 +35,7 @@ describe("OpenRouter", () => {
 
   it.effect("applies OpenRouter payload options from the model helper", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: OpenRouter.adapters }).prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           model: OpenRouter.model("anthropic/claude-3.7-sonnet:thinking", {
             providerOptions: {

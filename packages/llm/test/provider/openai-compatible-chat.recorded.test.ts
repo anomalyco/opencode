@@ -55,7 +55,7 @@ const xaiRequest = textRequest({ id: "recorded_xai_text", model: xaiModel })
 const xaiToolRequest = weatherToolRequest({ id: "recorded_xai_tool_call", model: xaiModel })
 
 const recorded = recordedTests({ prefix: "openai-compatible-chat", protocol: "openai-compatible-chat" })
-const llm = LLMClient.make({ adapters: [OpenAICompatibleChat.adapter, ...OpenRouter.adapters] })
+const llm = LLMClient
 
 const openrouterToolLoops = [
   {
@@ -128,7 +128,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("groq llama 3.3 70b drives a tool loop", { provider: "groq", requires: ["GROQ_API_KEY"], tags: ["tool", "tool-loop", "golden"] }, () =>
     Effect.gen(function* () {
-      expectWeatherToolLoop(yield* runWeatherToolLoop(llm, weatherToolLoopRequest({
+      expectWeatherToolLoop(yield* runWeatherToolLoop(weatherToolLoopRequest({
         id: "recorded_groq_llama_3_3_70b_tool_loop",
         model: groqModel,
       })))
@@ -158,7 +158,7 @@ describe("OpenAI-compatible Chat recorded", () => {
   openrouterToolLoops.forEach((scenario) =>
     recorded.effect.with(scenario.name, { provider: "openrouter", requires: ["OPENROUTER_API_KEY"], tags: scenario.tags }, () =>
       Effect.gen(function* () {
-        expectWeatherToolLoop(yield* runWeatherToolLoop(llm, weatherToolLoopRequest({
+        expectWeatherToolLoop(yield* runWeatherToolLoop(weatherToolLoopRequest({
           id: scenario.id,
           model: scenario.model,
           system: "Use the get_weather tool exactly once, then answer in one short sentence.",
@@ -188,7 +188,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("xai grok 4.3 drives a tool loop", { provider: "xai", requires: ["XAI_API_KEY"], tags: ["tool", "tool-loop", "golden", "flagship"] }, () =>
     Effect.gen(function* () {
-      expectWeatherToolLoop(yield* runWeatherToolLoop(llm, weatherToolLoopRequest({
+      expectWeatherToolLoop(yield* runWeatherToolLoop(weatherToolLoopRequest({
         id: "recorded_xai_grok_4_3_tool_loop",
         model: xaiFlagshipModel,
       })))

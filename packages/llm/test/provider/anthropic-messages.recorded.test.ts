@@ -31,7 +31,7 @@ const recorded = recordedTests({
   requires: ["ANTHROPIC_API_KEY"],
   options: { requestHeaders: ["content-type", "anthropic-version"] },
 })
-const anthropic = LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+const anthropic = LLMClient
 
 const malformedToolOrderRequest = LLM.request({
   id: "recorded_anthropic_malformed_tool_order",
@@ -72,7 +72,7 @@ describe("Anthropic Messages recorded", () => {
 
   recorded.effect.with("claude opus 4.7 drives a tool loop", { tags: ["tool", "tool-loop", "golden", "flagship"] }, () =>
     Effect.gen(function* () {
-      expectWeatherToolLoop(yield* runWeatherToolLoop(anthropic, flagshipToolLoopRequest))
+      expectWeatherToolLoop(yield* runWeatherToolLoop(flagshipToolLoopRequest))
     }),
   )
 

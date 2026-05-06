@@ -41,7 +41,7 @@ const recorded = recordedTests({
   protocol: "openai-responses",
   requires: ["OPENAI_API_KEY"],
 })
-const openai = LLMClient.make({ adapters: [OpenAIResponses.adapter] })
+const openai = LLMClient
 
 describe("OpenAI Responses recorded", () => {
   recorded.effect.with("gpt-5.5 streams text", { tags: ["flagship"] }, () =>
@@ -71,7 +71,7 @@ describe("OpenAI Responses recorded", () => {
 
   recorded.effect.with("gpt-5.5 drives a tool loop", { tags: ["tool", "tool-loop", "golden", "flagship"] }, () =>
     Effect.gen(function* () {
-      expectWeatherToolLoop(yield* runWeatherToolLoop(openai, loopRequest))
+      expectWeatherToolLoop(yield* runWeatherToolLoop(loopRequest))
     }),
   )
 })

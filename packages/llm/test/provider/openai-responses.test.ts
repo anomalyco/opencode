@@ -29,7 +29,7 @@ const it = testEffect(Layer.empty)
 describe("OpenAI Responses adapter", () => {
   it.effect("prepares OpenAI Responses target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make().prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toEqual({
         model: "gpt-4.1-mini",
@@ -46,7 +46,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
-      yield* LLMClient.make()
+      yield* LLMClient
         .generate(LLM.updateRequest(request, { model: OpenAIResponses.model({ ...model, queryParams: { "api-version": "v1" } }) }))
         .pipe(
           Effect.provide(
@@ -66,7 +66,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("uses Azure api-key header for static OpenAI Responses keys", () =>
     Effect.gen(function* () {
-      yield* LLMClient.make()
+      yield* LLMClient
         .generate(
           LLM.updateRequest(request, {
             model: Azure.model("gpt-4.1-mini", {
@@ -95,7 +95,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("prepares function call and function output input items", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make().prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -121,7 +121,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("maps OpenAI provider options to Responses options", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make().prepare<OpenAIResponses.OpenAIResponsesPayload>(
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesPayload>(
         LLM.request({
           model: OpenAI.model("gpt-5.2", { baseURL: "https://api.openai.test/v1/" }),
           prompt: "think",
@@ -146,7 +146,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("request OpenAI provider options override model defaults", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make().prepare<OpenAIResponses.OpenAIResponsesPayload>(
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesPayload>(
         LLM.request({
           model: OpenAI.model("gpt-4.1-mini", {
             baseURL: "https://api.openai.test/v1/",
@@ -179,7 +179,7 @@ describe("OpenAI Responses adapter", () => {
           },
         },
       )
-      const response = yield* LLMClient.make()
+      const response = yield* LLMClient
         .generate(request)
         .pipe(Effect.provide(fixedResponse(body)))
 
@@ -230,7 +230,7 @@ describe("OpenAI Responses adapter", () => {
         },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.make()
+      const response = yield* LLMClient
         .generate(
           LLM.updateRequest(request, {
             tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
@@ -264,7 +264,7 @@ describe("OpenAI Responses adapter", () => {
         { type: "response.output_item.done", item },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.make()
+      const response = yield* LLMClient
         .generate(request)
         .pipe(Effect.provide(fixedResponse(body)))
 
@@ -302,7 +302,7 @@ describe("OpenAI Responses adapter", () => {
         { type: "response.output_item.done", item },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.make()
+      const response = yield* LLMClient
         .generate(request)
         .pipe(Effect.provide(fixedResponse(body)))
 
@@ -327,7 +327,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.make()
+      const error = yield* LLMClient
         .prepare(
           LLM.request({
             id: "req_media",
@@ -343,7 +343,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("emits provider-error events for mid-stream provider errors", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.make()
+      const response = yield* LLMClient
         .generate(request)
         .pipe(
           Effect.provide(
@@ -357,7 +357,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("falls back to error code when no message is present", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.make()
+      const response = yield* LLMClient
         .generate(request)
         .pipe(Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error" }))))
 
@@ -367,7 +367,7 @@ describe("OpenAI Responses adapter", () => {
 
   it.effect("fails HTTP provider errors before stream parsing", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.make()
+      const error = yield* LLMClient
         .generate(request)
         .pipe(
           Effect.provide(

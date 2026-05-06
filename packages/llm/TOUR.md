@@ -124,7 +124,7 @@ The runtime pipeline is concentrated in [`src/adapter/client.ts`](./src/adapter/
 The important functions are:
 
 - `Adapter.model`, which binds a user-facing model helper to the adapter that can run it.
-- `LLMClient.make`, which selects an adapter, builds the payload, sends HTTP, and parses the response.
+- `LLMClient`, which selects a registered adapter, builds the payload, sends HTTP, and parses the response.
 - `Adapter.make`, which composes protocol semantics with endpoint, auth, and framing.
 
 At runtime, the flow is easier to read as a sequence of values. There are two levels to keep separate:
@@ -185,19 +185,17 @@ const request: LLMRequest = LLM.request(input)
 
 // The caller hands that request to the client and chooses one exit path:
 // inspect the compiled request, stream events, or collect a final response.
-const client: LLMClient = LLMClient.make()
-
 // Alternative A: compile without sending HTTP. Useful for request-shape tests.
 // LLMRequest -> PreparedRequestOf<Payload>
-const prepared: PreparedRequestOf<Payload> = client.prepare<Payload>(request)
+const prepared: PreparedRequestOf<Payload> = LLMClient.prepare<Payload>(request)
 
 // Alternative B: send HTTP and expose normalized stream events.
 // LLMRequest -> Stream<LLMEvent>
-const streamed: Stream.Stream<LLMEvent, LLMError> = client.stream(request)
+const streamed: Stream.Stream<LLMEvent, LLMError> = LLMClient.stream(request)
 
 // Alternative C: send HTTP and collect those same events into one response.
 // LLMRequest -> LLMResponse
-const generated: LLMResponse = client.generate(request)
+const generated: LLMResponse = LLMClient.generate(request)
 
 // -----------------------------------------------------------------------------
 // Stage 3: Client Compiles The Request
@@ -205,8 +203,7 @@ const generated: LLMResponse = client.generate(request)
 
 // Internally, all three alternatives start by compiling the request. The client
 // first resolves model defaults plus request overrides, then selects the
-// runnable adapter from the model binding or an explicit registry keyed by
-// `request.model.adapter`.
+// runnable adapter from the registry keyed by `request.model.adapter`.
 const resolvedRequest: LLMRequest = resolveModelAndCallOptions(request)
 const adapter: Adapter<Payload> = resolveAdapter(request.model)
 

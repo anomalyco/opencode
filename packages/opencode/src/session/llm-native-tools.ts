@@ -1,6 +1,6 @@
 import {
   LLM,
-  type LLMClient,
+  LLMClient,
   type LLMError,
   type LLMEvent,
   type LLMRequest,
@@ -129,7 +129,6 @@ const dispatchTool = (
 // `done` resolves with the accumulated state so the multi-round driver can
 // decide whether to recurse.
 const runOneRound = (
-  client: LLMClient,
   request: LLMRequest,
   tools: Record<string, Tool>,
   abort: AbortSignal,
@@ -149,7 +148,7 @@ const runOneRound = (
 
     yield* Effect.forkScoped(
       Effect.gen(function* () {
-        yield* client.stream(request).pipe(
+        yield* LLMClient.stream(request).pipe(
           Stream.runForEach((event) =>
             Effect.gen(function* () {
               accumulate(state, event)
@@ -219,7 +218,6 @@ const continuationRequest = (request: LLMRequest, state: RoundState): LLMRequest
  * interrupted (e.g. via the abort signal).
  */
 export const runWithTools = (input: {
-  readonly client: LLMClient
   readonly request: LLMRequest
   readonly tools: Record<string, Tool>
   readonly abort: AbortSignal
@@ -229,7 +227,7 @@ export const runWithTools = (input: {
   const round = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const { events, done } = yield* runOneRound(input.client, request, input.tools, input.abort)
+        const { events, done } = yield* runOneRound(request, input.tools, input.abort)
         const continuation = Stream.unwrap(
           Effect.gen(function* () {
             const state = yield* Deferred.await(done)

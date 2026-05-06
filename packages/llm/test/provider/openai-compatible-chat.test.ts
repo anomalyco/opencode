@@ -54,7 +54,7 @@ const providerFamilies = [
 describe("OpenAI-compatible Chat adapter", () => {
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] }).prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.updateRequest(request, {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
           toolChoice: { type: "required" },
@@ -127,7 +127,7 @@ describe("OpenAI-compatible Chat adapter", () => {
 
   it.effect("matches AI SDK compatible basic request body fixture", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] }).prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toEqual({
         model: "deepseek-chat",
@@ -145,7 +145,7 @@ describe("OpenAI-compatible Chat adapter", () => {
 
   it.effect("matches AI SDK compatible tool request body fixture", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] }).prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_tool_parity",
           model,
@@ -195,7 +195,7 @@ describe("OpenAI-compatible Chat adapter", () => {
 
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] })
+      const response = yield* LLMClient
         .generate(request)
         .pipe(
           Effect.provide(

@@ -1,7 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMEvent, type LLMRequest, type LLMResponse, type ModelRef } from "../src"
-import type { LLMClient } from "../src/adapter"
 import { tool } from "../src/tool"
 import { ToolRuntime } from "../src/tool-runtime"
 
@@ -76,8 +75,8 @@ export const weatherToolLoopRequest = (input: {
       : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
   })
 
-export const runWeatherToolLoop = (client: LLMClient, request: LLMRequest) =>
-  ToolRuntime.run(client, { request, tools: { [weatherToolName]: weatherRuntimeTool } }).pipe(
+export const runWeatherToolLoop = (request: LLMRequest) =>
+  ToolRuntime.run({ request, tools: { [weatherToolName]: weatherRuntimeTool } }).pipe(
     Stream.runCollect,
     Effect.map((events) => Array.from(events)),
   )

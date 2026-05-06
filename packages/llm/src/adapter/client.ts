@@ -52,20 +52,17 @@ export interface Adapter<Payload> {
   ) => Stream.Stream<LLMEvent, LLMError>
 }
 
-export type AdapterInput<Payload> = Adapter<Payload>
-
-export interface AdapterDefinition<Payload> extends Adapter<Payload> {}
-
-// Adapter registries intentionally erase payload generics after the typed
-// adapter is constructed. This keeps normal call sites on `OpenAIChat.adapter`
-// instead of leaking a separate runtime-adapter wrapper.
+// Adapter registries intentionally erase payload generics after construction.
+// Normal call sites use `OpenAIChat.adapter`; callers only need payload types
+// when preparing a request with a protocol-specific type assertion.
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
-export type AnyAdapter = AdapterDefinition<any>
+export type AnyAdapter = Adapter<any>
 
 const adapterRegistry = new Map<string, AnyAdapter>()
 
-// The first adapter registered for an id is the package default. Tests and
-// advanced callers can still override per-client via `LLMClient.make({ adapters })`.
+// The first adapter registered for an id is the package default. Adapter lookup
+// is intentionally global: model refs name an adapter id, and importing the
+// provider/protocol/custom-adapter module registers the runnable implementation.
 const register = <Adapter extends AnyAdapter>(adapter: Adapter): Adapter => {
   if (!adapterRegistry.has(adapter.id)) adapterRegistry.set(adapter.id, adapter)
   return adapter
@@ -202,10 +199,6 @@ export interface LLMClient {
   readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
 }
 
-export interface ClientOptions {
-  readonly adapters?: ReadonlyArray<AnyAdapter>
-}
-
 const noAdapter = (model: ModelRef) =>
   new NoAdapterError({ adapter: model.adapter, protocol: model.protocol, provider: model.provider, model: model.id })
 
@@ -254,7 +247,7 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
  */
 export function make<Payload, Frame, Chunk, State>(
   input: MakeInput<Payload, Frame, Chunk, State>,
-): AdapterDefinition<Payload> {
+): Adapter<Payload> {
   const auth = input.auth ?? authBearer
   const protocol = input.protocol
   const encodePayload = Schema.encodeSync(Schema.fromJsonString(protocol.payload))
@@ -321,77 +314,68 @@ export function make<Payload, Frame, Chunk, State>(
   })
 }
 
-/**
- * Build the lower-level runtime. `compile` is the important boundary: it turns
- * a common `LLMRequest` into a validated provider payload plus HTTP request,
- * but does not execute transport.
- */
-const makeClient = (options: ClientOptions = {}): LLMClient => {
-  const adapters = new Map((options.adapters ?? []).map((adapter) => [adapter.id, adapter] as const))
+// `compile` is the important boundary: it turns a common `LLMRequest` into a
+// validated provider payload plus HTTP request, but does not execute transport.
+const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
+  const resolved = resolveRequestOptions(request)
+  const adapter = registeredAdapter(resolved.model.adapter)
+  if (!adapter) return yield* noAdapter(resolved.model)
 
-  const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-    const resolved = resolveRequestOptions(request)
-    const adapter = adapters.get(resolved.model.adapter) ?? registeredAdapter(resolved.model.adapter)
-    if (!adapter) return yield* noAdapter(resolved.model)
-
-    const payload = yield* adapter.toPayload(resolved).pipe(
-      Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(adapter.payloadSchema))),
-    )
-    const http = yield* adapter.toHttp(payload, {
-      request: resolved,
-    })
-
-    return {
-      request: resolved,
-      adapter,
-      payload,
-      http,
-    }
+  const payload = yield* adapter.toPayload(resolved).pipe(
+    Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(adapter.payloadSchema))),
+  )
+  const http = yield* adapter.toHttp(payload, {
+    request: resolved,
   })
 
-  const prepare = Effect.fn("LLMClient.prepare")(function* (request: LLMRequest) {
-    const compiled = yield* compile(request)
+  return {
+    request: resolved,
+    adapter,
+    payload,
+    http,
+  }
+})
 
-    return new PreparedRequest({
-      id: compiled.request.id ?? "request",
-      adapter: compiled.adapter.id,
-      model: compiled.request.model,
-      payload: compiled.payload,
-    })
+const prepare = Effect.fn("LLMClient.prepare")(function* (request: LLMRequest) {
+  const compiled = yield* compile(request)
+
+  return new PreparedRequest({
+    id: compiled.request.id ?? "request",
+    adapter: compiled.adapter.id,
+    model: compiled.request.model,
+    payload: compiled.payload,
   })
+})
 
-  const stream = (request: LLMRequest) =>
-    Stream.unwrap(
-      Effect.gen(function* () {
-        const compiled = yield* compile(request)
-        const executor = yield* RequestExecutor.Service
-        const response = yield* executor.execute(compiled.http)
+const stream = (request: LLMRequest) =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const compiled = yield* compile(request)
+      const executor = yield* RequestExecutor.Service
+      const response = yield* executor.execute(compiled.http)
 
-        return compiled.adapter.parse(response, { request: compiled.request })
-      }),
-    )
+      return compiled.adapter.parse(response, { request: compiled.request })
+    }),
+  )
 
-  const generate = Effect.fn("LLM.generate")(function* (request: LLMRequest) {
-    return new LLMResponse(
-      yield* stream(request).pipe(
-        Stream.runFold(
-          () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
-          (acc, event) => {
-            acc.events.push(event)
-            if ("usage" in event && event.usage !== undefined) acc.usage = event.usage
-            return acc
-          },
-        ),
+const generate = Effect.fn("LLM.generate")(function* (request: LLMRequest) {
+  return new LLMResponse(
+    yield* stream(request).pipe(
+      Stream.runFold(
+        () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
+        (acc, event) => {
+          acc.events.push(event)
+          if ("usage" in event && event.usage !== undefined) acc.usage = event.usage
+          return acc
+        },
       ),
-    )
-  })
-
-  // The runtime always emits a `PreparedRequest` (payload: unknown). Callers
-  // who supply a `Payload` type argument assert the shape they expect from
-  // their adapter; the cast hands them a typed view of the same payload.
-  return { prepare: prepare as LLMClient["prepare"], stream, generate }
-}
+    ),
+  )
+})
 
 export const Adapter = { make, model } as const
 
-export const LLMClient = { make: makeClient }
+// The runtime always emits a `PreparedRequest` (payload: unknown). Callers who
+// supply a `Payload` type argument assert the shape they expect from their
+// adapter; the cast hands them a typed view of the same payload.
+export const LLMClient: LLMClient = { prepare: prepare as LLMClient["prepare"], stream, generate }

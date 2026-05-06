@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { LLM, LLMEvent, LLMRequest } from "../src"
-import { LLMClient, RequestExecutor } from "../src/adapter"
+import { LLMClient } from "../src/adapter"
+import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { tool, ToolFailure } from "../src/tool"
 import { ToolRuntime } from "../src/tool-runtime"
@@ -40,11 +41,10 @@ const get_weather = tool({
 describe("ToolRuntime", () => {
   it.effect("uses the registered model adapter when adding runtime tools", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make()
       const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -70,7 +70,7 @@ describe("ToolRuntime", () => {
         }),
       )
 
-      yield* ToolRuntime.run(LLMClient.make(), {
+      yield* ToolRuntime.run({
         request: LLMRequest.update(baseRequest, {
           generation: LLM.generation({ maxTokens: 50 }),
           toolChoice: LLM.toolChoice("auto"),
@@ -104,14 +104,13 @@ describe("ToolRuntime", () => {
 
   it.effect("dispatches a tool call, appends results, and resumes streaming", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "It's sunny in Paris." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -131,14 +130,13 @@ describe("ToolRuntime", () => {
 
   it.effect("emits tool-error for unknown tools so the model can self-correct", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "missing_tool", "{}"), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Sorry." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -158,14 +156,13 @@ describe("ToolRuntime", () => {
 
   it.effect("emits tool-error when the LLM input fails the parameters schema", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":42}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -179,14 +176,13 @@ describe("ToolRuntime", () => {
 
   it.effect("emits tool-error when the handler returns a ToolFailure", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"FAIL"}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Sorry." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -200,11 +196,10 @@ describe("ToolRuntime", () => {
 
   it.effect("stops when the model finishes without requesting more tools", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -217,7 +212,6 @@ describe("ToolRuntime", () => {
 
   it.effect("respects maxSteps and stops the loop", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       // Every script entry asks for another tool call. With maxSteps: 2 the
       // runtime should run at most two model rounds and then exit even though
       // the model still wants to keep going.
@@ -225,7 +219,7 @@ describe("ToolRuntime", () => {
       const layer = scriptedResponses([toolCallStep, toolCallStep, toolCallStep])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather }, maxSteps: 2 }).pipe(
+        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather }, maxSteps: 2 }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -237,14 +231,13 @@ describe("ToolRuntime", () => {
 
   it.effect("stops when stopWhen returns true after the first step", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Should not run." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, {
+        yield* ToolRuntime.run({
           request: baseRequest,
           tools: { get_weather },
           stopWhen: (state) => state.step >= 0,
@@ -258,47 +251,42 @@ describe("ToolRuntime", () => {
 
   it.effect("does not dispatch provider-executed tool calls", () =>
     Effect.gen(function* () {
-      // Stub client emits a provider-executed tool-call followed by its
-      // tool-result and a stop. The runtime must not dispatch a handler (no
-      // tool-error for unknown name) and must not loop (no second stream).
       let streams = 0
-      const stub: LLMClient = {
-        prepare: () => Effect.die("not used"),
-        generate: () => Effect.die("not used"),
-        stream: () => {
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() => {
           streams++
-          return Stream.fromIterable<LLMEvent>([
-            { type: "request-start", id: "req_1", model: baseRequest.model },
-            {
-              type: "tool-call",
-              id: "srvtoolu_abc",
-              name: "web_search",
-              input: { query: "x" },
-              providerExecuted: true,
-            },
-            {
-              type: "tool-result",
-              id: "srvtoolu_abc",
-              name: "web_search",
-              result: { type: "json", value: { results: [] } },
-              providerExecuted: true,
-            },
-            { type: "text-delta", text: "Done." },
-            { type: "request-finish", reason: "stop" },
-          ])
-        },
-      }
-
-      // The runtime's stream type carries `RequestExecutor.Service` because
-      // adapters use it. Our stub never executes HTTP, but the type still
-      // demands the service — provide a noop so the test compiles.
-      const noopExecutor = Layer.succeed(RequestExecutor.Service, {
-        execute: () => Effect.die("stub client never executes HTTP"),
-      })
+          return input.respond(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "server_tool_use", id: "srvtoolu_abc", name: "web_search" } },
+              { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":"x"}' } },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "content_block_start",
+                index: 1,
+                content_block: {
+                  type: "web_search_tool_result",
+                  tool_use_id: "srvtoolu_abc",
+                  content: [{ type: "web_search_result", url: "https://example.com", title: "Example" }],
+                },
+              },
+              { type: "content_block_stop", index: 1 },
+              { type: "content_block_start", index: 2, content_block: { type: "text", text: "" } },
+              { type: "content_block_delta", index: 2, delta: { type: "text_delta", text: "Done." } },
+              { type: "content_block_stop", index: 2 },
+              { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
+            ),
+            { headers: { "content-type": "text/event-stream" } },
+          )
+        }),
+      )
       const events = Array.from(
-        yield* ToolRuntime.run(stub, { request: baseRequest, tools: {} }).pipe(
+        yield* ToolRuntime.run({
+          request: LLM.updateRequest(baseRequest, { model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }) }),
+          tools: {},
+        }).pipe(
           Stream.runCollect,
-          Effect.provide(noopExecutor),
+          Effect.provide(layer),
         ),
       )
 
@@ -319,7 +307,6 @@ describe("ToolRuntime", () => {
 
   it.effect("dispatches multiple tool calls in one step concurrently", () =>
     Effect.gen(function* () {
-      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(
           deltaChunk({
@@ -335,7 +322,7 @@ describe("ToolRuntime", () => {
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),

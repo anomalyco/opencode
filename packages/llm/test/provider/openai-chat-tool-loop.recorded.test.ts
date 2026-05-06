@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { LLM } from "../../src"
-import { LLMClient } from "../../src/adapter"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { ToolRuntime } from "../../src/tool-runtime"
 import { eventSummary, weatherRuntimeTool } from "../recorded-scenarios"
@@ -32,13 +31,11 @@ const recorded = recordedTests({
   protocol: "openai-chat",
   requires: ["OPENAI_API_KEY"],
 })
-const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
-
 describe("OpenAI Chat tool-loop recorded", () => {
   recorded.effect.with("drives a tool loop end-to-end", { tags: ["tool", "tool-loop"] }, () =>
     Effect.gen(function* () {
       const events = Array.from(
-        yield* ToolRuntime.run(openai, { request, tools: { get_weather: weatherRuntimeTool } }).pipe(Stream.runCollect),
+        yield* ToolRuntime.run({ request, tools: { get_weather: weatherRuntimeTool } }).pipe(Stream.runCollect),
       )
 
       expect(LLM.outputText({ events })).toContain("Paris")

@@ -36,7 +36,7 @@ const recorded = recordedTests({
   protocol: "openai-chat",
   requires: ["OPENAI_API_KEY"],
 })
-const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
+const openai = LLMClient
 
 describe("OpenAI Chat recorded", () => {
   recorded.effect("streams text", () =>

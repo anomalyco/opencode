@@ -30,12 +30,12 @@ const request = LLM.request({
   prompt: "Say hello.",
 })
 
-const response = yield* LLMClient.make().generate(request)
+const response = yield* LLMClient.generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `LLMClient.make(...)` selects an adapter from the model binding or explicit registry by `request.model.adapter`, prepares a typed provider payload, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` selects a registered adapter by `request.model.adapter`, prepares a typed provider payload, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
-Use `LLMClient.make(...).stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.make(...).generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.make(...).prepare<Payload>(request)` to compile a request through the adapter pipeline without sending it — the optional `Payload` type argument narrows `.payload` to the adapter's native shape (e.g. `prepare<OpenAIChatPayload>(...)` returns a `PreparedRequestOf<OpenAIChatPayload>`). The runtime payload is identical; the generic is a type-level assertion.
+Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.prepare<Payload>(request)` to compile a request through the adapter pipeline without sending it — the optional `Payload` type argument narrows `.payload` to the adapter's native shape (e.g. `prepare<OpenAIChatPayload>(...)` returns a `PreparedRequestOf<OpenAIChatPayload>`). The runtime payload is identical; the generic is a type-level assertion.
 
 Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g. `events.filter(LLMEvent.is.toolCall)`). The kebab-case `LLMEvent.guards["tool-call"]` form also works but prefer `is.*` in new code.
 
@@ -73,7 +73,7 @@ packages/llm/src/
   llm.ts                // request constructors and convenience helpers
   adapter/
     index.ts            // @opencode-ai/llm/adapter advanced barrel
-    client.ts           // Adapter.make + LLMClient.make
+    client.ts           // Adapter.make + LLMClient.prepare/stream/generate
     executor.ts         // RequestExecutor service + transport error mapping
     protocol.ts         // Protocol type + Protocol.define
     endpoint.ts         // Endpoint type + Endpoint.baseURL
@@ -131,7 +131,7 @@ Adapters lower this into provider-native assistant tool-call messages and tool-r
 
 ### Tool runtime
 
-`ToolRuntime.run(client, options)` orchestrates the tool loop with full type safety:
+`ToolRuntime.run(options)` orchestrates the tool loop with full type safety:
 
 ```ts
 const get_weather = tool({
@@ -147,7 +147,7 @@ const get_weather = tool({
     }),
 })
 
-const events = yield* ToolRuntime.run(client, {
+const events = yield* ToolRuntime.run({
   request,
   tools: { get_weather, get_time, ... },
   maxSteps: 10,
@@ -231,7 +231,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 ### Completed Foundation
 
-- [x] Add an adapter registry so `LLMClient.make(...)` can choose an adapter by provider/protocol instead of requiring a single adapter.
+- [x] Add an adapter registry so `LLMClient` can choose an adapter by provider/protocol instead of requiring a single adapter.
 - [x] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
 - [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
 - [x] Add OpenAI Chat recorded tests for tool-result follow-up and usage chunks.
@@ -276,7 +276,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Add a native event bridge that maps `LLMEvent` streams into the existing `SessionProcessor` event contract without creating a second processor.
 - [ ] Extract runtime-neutral OpenCode tool resolution from `SessionPrompt.resolveTools`, then build both existing-stream and native `@opencode-ai/llm` tool adapters from the same resolved shape.
 - [ ] Map `Permission.RejectedError`, `Permission.CorrectedError`, validation failures, thrown tool failures, and aborts into model-visible native tool error/results.
-- [ ] Wire a native stream producer behind an explicit local flag and provider allowlist; the producer should consume `nativeMessages`, call `LLMNative.request(...)`, stream through `LLMClient.make(...)`, and feed `LLMNativeEvents.mapper()` into `SessionProcessor`.
+- [ ] Wire a native stream producer behind an explicit local flag and provider allowlist; the producer should consume `nativeMessages`, call `LLMNative.request(...)`, stream through `LLMClient.stream(...)`, and feed `LLMNativeEvents.mapper()` into `SessionProcessor`.
 - [ ] Add end-to-end native stream tests through the actual session loop for text, reasoning, tool-call streaming, tool success, rejected permission, corrected permission, thrown tool error, abort, and provider-executed tool history.
 - [ ] Dogfood native streaming with the flag enabled for OpenAI first, then Anthropic, Gemini, OpenAI-compatible providers, Bedrock, and Copilot provider-by-provider.
 - [ ] Flip native streaming to default only after request parity, stream parity, tool execution, typecheck, focused provider tests, recorded cassettes, and manual dogfood pass for the enabled provider set.

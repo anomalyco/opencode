@@ -172,7 +172,7 @@ const FakeEcho = {
 // payload conversion, validation, endpoint, auth, and HTTP construction without
 // sending anything over the network.
 const inspectFakeProvider = Effect.gen(function* () {
-  const prepared = yield* LLMClient.make().prepare(
+  const prepared = yield* LLMClient.prepare(
     LLM.request({
       model: FakeEcho.model("tiny-echo"),
       prompt: "Show me the provider pipeline.",
@@ -190,9 +190,9 @@ const inspectFakeProvider = Effect.gen(function* () {
 const program = Effect.gen(function* () {
   // yield* generateOnce
   // yield* inspectFakeProvider
-  // yield* LLMClient.make().prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.payload))))
+  // yield* LLMClient.prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.payload))))
   // yield* streamText
   yield* streamWithTools
-}).pipe(Effect.provide(Layer.mergeAll(LLM.layer(), RequestExecutor.defaultLayer)))
+}).pipe(Effect.provide(LLM.layer.pipe(Layer.provide(RequestExecutor.defaultLayer))))
 
 Effect.runPromise(program)

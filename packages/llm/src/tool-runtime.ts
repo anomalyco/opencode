@@ -1,6 +1,6 @@
 import { Effect, Stream } from "effect"
 import type { Concurrency } from "effect/Types"
-import type { LLMClient } from "./adapter/client"
+import { LLMClient } from "./adapter/client"
 import type { RequestExecutor } from "./adapter/executor"
 import {
   type ContentPart,
@@ -56,10 +56,7 @@ export interface RunOptions<T extends Tools> {
  * Tool handler dependencies are closed over at tool definition time, so the
  * runtime's only environment requirement is the `RequestExecutor.Service`.
  */
-export const run = <T extends Tools>(
-  client: LLMClient,
-  options: RunOptions<T>,
-): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> => {
+export const run = <T extends Tools>(options: RunOptions<T>): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> => {
   const maxSteps = options.maxSteps ?? 10
   const concurrency = options.concurrency ?? 10
   const tools = options.tools as Tools
@@ -80,7 +77,7 @@ export const run = <T extends Tools>(
       Effect.gen(function* () {
         const state: StepState = { assistantContent: [], toolCalls: [], finishReason: undefined }
 
-        const modelStream = client.stream(request).pipe(
+        const modelStream = LLMClient.stream(request).pipe(
           Stream.tap((event) => Effect.sync(() => accumulate(state, event))),
         )
 

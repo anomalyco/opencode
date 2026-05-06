@@ -7,7 +7,7 @@ import {
   type ModelCapabilitiesInput,
   type ModelRefInput,
 } from "./adapter/client"
-import type { RequestExecutor } from "./adapter/executor"
+import { RequestExecutor } from "./adapter/executor"
 import { type Tools } from "./tool"
 import { ToolRuntime, type RunOptions } from "./tool-runtime"
 import {
@@ -31,31 +31,37 @@ import type { LLMError } from "./schema"
 
 export type StreamWithToolsInput<T extends Tools> = Omit<RequestInput, "tools"> & Omit<RunOptions<T>, "request">
 
-export interface Runtime {
-  readonly stream: (input: LLMRequest | RequestInput) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
-  readonly generate: (input: LLMRequest | RequestInput) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
+export interface Interface {
+  readonly stream: (input: LLMRequest | RequestInput) => Stream.Stream<LLMEvent, LLMError>
+  readonly generate: (input: LLMRequest | RequestInput) => Effect.Effect<LLMResponse, LLMError>
   readonly streamWithTools: <T extends Tools>(
     input: StreamWithToolsInput<T>,
-  ) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
+  ) => Stream.Stream<LLMEvent, LLMError>
 }
 
-export class Service extends Context.Service<Service, Runtime>()("@opencode/LLM") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
 const requestOf = (input: LLMRequest | RequestInput) => (input instanceof LLMRequest ? input : request(input))
 
-export const make = (): Runtime => {
-  const client = LLMClient.make()
-  return {
-    stream: (input) => client.stream(requestOf(input)),
-    generate: (input) => client.generate(requestOf(input)),
+export const make = (executor: RequestExecutor.Interface): Interface => ({
+  stream: (input) =>
+    LLMClient.stream(requestOf(input)).pipe(Stream.provideService(RequestExecutor.Service, executor)),
+  generate: (input) =>
+    LLMClient.generate(requestOf(input)).pipe(Effect.provideService(RequestExecutor.Service, executor)),
     streamWithTools: (input) => {
       const { maxSteps, concurrency, stopWhen, tools, ...rest } = input
-      return ToolRuntime.run(client, { request: request(rest), tools, maxSteps, concurrency, stopWhen })
+      return ToolRuntime.run({ request: request(rest), tools, maxSteps, concurrency, stopWhen }).pipe(
+        Stream.provideService(RequestExecutor.Service, executor),
+      )
     },
-  }
-}
+})
 
-export const layer = (): Layer.Layer<Service> => Layer.succeed(Service, Service.of(make()))
+export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    return Service.of(make(yield* RequestExecutor.Service))
+  }),
+)
 
 export const stream = (input: LLMRequest | RequestInput) =>
   Stream.unwrap(
