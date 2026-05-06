@@ -13,6 +13,12 @@
 
 
 
+## [Windows] 2026.5.6.1 - 2026-05-06 15:23
+
+(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
+
+---
+
 ## [macOS] 2026.5.5.1 — 2026-05-05 23:43
 
 **主菜:Mac 端 4 天累积更新一次性出 ship** — 自 [macOS] `2026.5.4.1`(2026-05-04 00:05)以来 dev 主干推进 38 笔 commit,涉及 markdown viewer 渲染 / 编辑 / 文件树 / i18n 全面增强,与 Win 端 [`2026.5.5.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-prod-2026.5.5.1) 同源。
