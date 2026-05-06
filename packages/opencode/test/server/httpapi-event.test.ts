@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
@@ -9,11 +8,9 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
 function app(experimental = true) {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return experimental ? Server.Default().app : Server.Legacy().app
+  return experimental ? Server.Default().app : Server.Default().app
 }
 
 async function readFirstChunk(response: Response) {
@@ -36,7 +33,6 @@ async function readFirstEvent(response: Response) {
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
   await resetDatabase()
 })

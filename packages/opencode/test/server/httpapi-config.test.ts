@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
@@ -9,10 +8,8 @@ import { waitGlobalBusEventPromise } from "./global-bus"
 
 void Log.init({ print: false })
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
 function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
   return Server.Default().app
 }
 
@@ -24,7 +21,6 @@ async function waitDisposed(directory: string) {
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
   await resetDatabase()
 })

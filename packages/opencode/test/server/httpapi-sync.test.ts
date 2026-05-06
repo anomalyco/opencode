@@ -13,13 +13,11 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
-const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const context = Context.empty() as Context.Context<unknown>
 
 function app(httpapi = true) {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpapi
-  return httpapi ? Server.Default().app : Server.Legacy().app
+  return httpapi ? Server.Default().app : Server.Default().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
@@ -28,7 +26,6 @@ function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
 
 afterEach(async () => {
   mock.restore()
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await disposeAllInstances()
   await resetDatabase()

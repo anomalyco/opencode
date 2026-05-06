@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
@@ -13,10 +12,8 @@ import * as Log from "@opencode-ai/core/util/log"
 
 void Log.init({ print: false })
 
-const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
 function app(input: { password?: string; username?: string }) {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
   const handler = HttpRouter.toWebHandler(
     ExperimentalHttpApiServer.routes.pipe(
       Layer.provide(
@@ -48,7 +45,6 @@ async function cancelBody(response: Response) {
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
   await disposeAllInstances()
   await resetDatabase()
 })
