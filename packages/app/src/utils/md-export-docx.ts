@@ -105,62 +105,55 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(bstr)
 }
 
-// FORK: emoji 预处理(B1)— Word 默认字体不一定含 emoji glyphs,有些 emoji 渲染为方框 / 乱码
-// 替换为文字符号(覆盖常用 ~30 个,其他 emoji 接受现状)2026-05-06
-const EMOJI_MAP: Record<string, string> = {
-  "📝": "[NOTE]",
-  "📌": "[PIN]",
-  "📍": "[LOC]",
-  "📋": "[CLIPBOARD]",
-  "📚": "[BOOKS]",
-  "📖": "[BOOK]",
-  "🚀": "[ROCKET]",
-  "✅": "[OK]",
-  "❌": "[X]",
-  "⚠️": "[WARN]",
-  "⚠": "[WARN]",
-  "🔍": "[SEARCH]",
-  "💡": "[IDEA]",
-  "🔥": "[HOT]",
-  "🎯": "[TARGET]",
-  "🐛": "[BUG]",
-  "🔧": "[FIX]",
-  "⚡": "[FAST]",
-  "🌟": "[STAR]",
-  "⭐": "[STAR]",
-  "🎉": "[PARTY]",
-  "🤔": "[THINK]",
-  "👀": "[EYES]",
-  "✓": "[v]",
-  "✗": "[x]",
-  "→": "->",
-  "←": "<-",
-  "↑": "^",
-  "↓": "v",
-  "🔴": "[red]",
-  "🟢": "[green]",
-  "🟡": "[yellow]",
-  "🔵": "[blue]",
-  "💻": "[CODE]",
-  "🛠️": "[TOOLS]",
-  "🛠": "[TOOLS]",
-  "📦": "[PACKAGE]",
-  "🚧": "[CONSTRUCTION]",
-  "🆕": "[NEW]",
-  "❗": "[!]",
-  "❓": "[?]",
-  "ℹ️": "[INFO]",
-  "ℹ": "[INFO]",
-}
+// FORK: B1+ — emoji & 普通 unicode 符号正确渲染 2026-05-06
+// 老方案(已废弃):把 emoji / 箭头 / ✓✗ 全替换成 ASCII 文字 — 但 ↓→"v" 误像字母,emoji→[TARGET] 又丑
+// 新方案:保留原 unicode 字符,post-process 时把含 emoji 的 run 切分成多段,emoji 段 rFonts 改 emoji 字体
+//        让 Word 直接渲染彩色 emoji。箭头 / ✓✗ 是普通 unicode,默认字体支持,不动。
+const EMOJI_REGEX = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]/u
+// emoji 字体优先级:Win 内置 Segoe UI Emoji,Mac 找不到时自动 fallback 到 Apple Color Emoji
+const EMOJI_RFONTS =
+  '<w:rFonts w:ascii="Segoe UI Emoji" w:hAnsi="Segoe UI Emoji" w:cs="Segoe UI Emoji" w:eastAsia="Segoe UI Emoji"/>'
 
-function preprocessMarkdown(md: string): string {
-  let out = md
-  for (const [emo, txt] of Object.entries(EMOJI_MAP)) {
-    if (out.includes(emo)) {
-      out = out.replaceAll(emo, txt)
+/** 把含 emoji 的 run 按"emoji vs 非 emoji"切分,emoji 段单独成 run + emoji 字体覆盖 */
+function splitRunsForEmoji(docXml: string): string {
+  return docXml.replace(/(<w:r\b[^>]*>)([\s\S]*?)(<\/w:r>)/g, (full, open, inner, close) => {
+    const tMatch = inner.match(/(<w:t[^>]*>)([\s\S]*?)<\/w:t>/)
+    if (!tMatch) return full
+    const text = tMatch[2]
+    if (!EMOJI_REGEX.test(text)) return full
+
+    const rPrMatch = inner.match(/<w:rPr>[\s\S]*?<\/w:rPr>/)
+    const rPr = rPrMatch ? rPrMatch[0] : ""
+
+    // 按 codepoint 遍历(自动处理 surrogate pair),分组成 [{t,e}] 序列
+    const segments: Array<{ t: string; e: boolean }> = []
+    let buf = ""
+    let bufIsE: boolean | null = null
+    for (const ch of text) {
+      const isE = EMOJI_REGEX.test(ch)
+      if (bufIsE === null) {
+        buf = ch
+        bufIsE = isE
+      } else if (isE === bufIsE) {
+        buf += ch
+      } else {
+        segments.push({ t: buf, e: bufIsE })
+        buf = ch
+        bufIsE = isE
+      }
     }
-  }
-  return out
+    if (buf) segments.push({ t: buf, e: bufIsE! })
+
+    const emojiRPr = rPr
+      ? rPr.includes("<w:rFonts")
+        ? rPr.replace(/<w:rFonts\b[^/]*\/>/, EMOJI_RFONTS)
+        : rPr.replace("<w:rPr>", `<w:rPr>${EMOJI_RFONTS}`)
+      : `<w:rPr>${EMOJI_RFONTS}</w:rPr>`
+
+    return segments
+      .map((s) => `${open}${s.e ? emojiRPr : rPr}<w:t xml:space="preserve">${s.t}</w:t>${close}`)
+      .join("")
+  })
 }
 
 // FORK: Mermaid SVG → PNG (A2) — 库不渲染 mermaid,会出 ```mermaid 源码块
@@ -351,9 +344,9 @@ export const exportMdAsDocx = async (opts: {
     })
     if (!filePath) return // user 取消,静默退出
 
-    // 2. 预处理 markdown:emoji 替换 + Mermaid SVG → PNG + 本地图片 base64 嵌入
-    let processedMd = preprocessMarkdown(opts.markdownText)
-    processedMd = await inlineMermaidPngs(processedMd, opts.viewerEl)
+    // 2. 预处理 markdown:Mermaid SVG → PNG + 本地图片 base64 嵌入
+    //    (emoji 不再做文本替换 — 改用 docx XML 层面的 splitRunsForEmoji,见步骤 4)
+    let processedMd = await inlineMermaidPngs(opts.markdownText, opts.viewerEl)
     processedMd = await inlineLocalImages(processedMd, opts.mdFileDir)
 
     // 3. markdown → docx(库内部 marked + docx@9.x 构造,带 syntax 高亮)
@@ -364,12 +357,14 @@ export const exportMdAsDocx = async (opts: {
       },
     })
 
-    // 4. 序列化 → post-process(合并连续 MdCode 段为 single-paragraph + soft break)→ 写盘
+    // 4. 序列化 → 双重 post-process(合并代码块段 + emoji run 切分)→ 写盘
     // 注:Packer.toBuffer() Node-only,浏览器报"nodebuffer is not supported";用 toBase64String + atob/btoa 转字节
     const base64Original = await Packer.toBase64String(doc)
     const zipObj = unzipSync(base64ToBytes(base64Original))
-    const docXml = strFromU8(zipObj["word/document.xml"])
-    zipObj["word/document.xml"] = strToU8(mergeCodeBlockParagraphs(docXml))
+    let docXml = strFromU8(zipObj["word/document.xml"])
+    docXml = mergeCodeBlockParagraphs(docXml)
+    docXml = splitRunsForEmoji(docXml)
+    zipObj["word/document.xml"] = strToU8(docXml)
     const base64 = bytesToBase64(zipSync(zipObj))
     await invoke("write_binary_file_absolute_base64", { path: filePath, base64Content: base64 })
 
