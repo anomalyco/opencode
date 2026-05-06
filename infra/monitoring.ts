@@ -215,7 +215,6 @@ type Trigger = (opts: { model: string; product: Product }) => {
   description: string
   json: honeycomb.GetQuerySpecificationOutputArgs
   threshold: { op: ">=" | "<="; value: number }
-  baseline: 3600 | 86400
 }
 
 type Model = { id: string; products: Product[]; triggers: Trigger[] }
@@ -250,10 +249,7 @@ const httpErrors: Trigger = ({ model, product }) => ({
     formulas: [{ name: "ERROR", expression: "$FAILED / $TOTAL" }],
     timeRange: 900,
   },
-  // Alert when errors surge 50% compared to the previous period
-  threshold: { op: ">=", value: 50 },
-  // What previous time period to evaluate against
-  baseline: 3600,
+  threshold: { op: ">=", value: 0.8 },
 })
 
 const models: Model[] = [
@@ -296,10 +292,8 @@ for (const model of models) {
         name: spec.title,
         description: spec.description,
         queryJson: honeycomb.getQuerySpecificationOutput(spec.json).json,
-        alertType: "on_change",
-        // This is the minimum when using % change detection
-        frequency: 900,
-        baselineDetails: [{ type: "percentage", offsetMinutes: spec.baseline / 60 }],
+        alertType: "on_true",
+        frequency: 300,
         thresholds: [{ ...spec.threshold, exceededLimit: 1 }],
         recipients: [
           {
