@@ -817,7 +817,7 @@ export function Prompt(props: PromptProps) {
           messageID,
           agent: agent.name,
           model: selectedModel,
-          imageModel: local.model.imageModel.current(),
+          imageModel: local.model.parsed().supportsImages ? undefined : local.model.imageModel.current(),
           variant,
           parts: [
             ...editorParts,
@@ -1249,7 +1249,15 @@ export function Prompt(props: PromptProps) {
                             {local.model.parsed().model}
                           </text>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
-                          <Show when={local.model.imageModel.parsed()}>
+                          <Show when={showVariant()}>
+                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
+                            <text>
+                              <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
+                                {local.model.variant.current()}
+                              </span>
+                            </text>
+                          </Show>
+                          <Show when={!local.model.parsed().supportsImages && local.model.imageModel.parsed()}>
                             {(parsed) => (
                               <>
                                 <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
@@ -1258,14 +1266,6 @@ export function Prompt(props: PromptProps) {
                                 </text>
                               </>
                             )}
-                          </Show>
-                          <Show when={showVariant()}>
-                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
-                            <text>
-                              <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                                {local.model.variant.current()}
-                              </span>
-                            </text>
                           </Show>
                         </box>
                       </Show>
