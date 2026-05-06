@@ -7,6 +7,7 @@ import { Session } from "@/session/session"
 import { HttpApiProxy } from "./proxy"
 import * as Fence from "@/server/shared/fence"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/shared/workspace-routing"
+import { NotFoundError } from "@/storage/storage"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer } from "effect"
 import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -178,7 +179,10 @@ function routeHttpApiWorkspace<E>(
     const request = yield* HttpServerRequest.HttpServerRequest
     const sessionID = getWorkspaceRouteSessionID(requestURL(request))
     const session = sessionID
-      ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(Effect.catchDefect(() => Effect.void))
+      ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(
+          Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)),
+          Effect.catchDefect(() => Effect.succeed(undefined)),
+        )
       : undefined
     const plan = yield* planRequest(request, session?.workspaceID)
     return yield* routeWorkspace(client, effect, plan)
