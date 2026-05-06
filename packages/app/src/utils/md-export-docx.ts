@@ -288,10 +288,45 @@ export const exportMdAsDocx = async (opts: {
 
     showToast({ variant: "success", title: opts.i18n.success })
   } catch (e) {
+    // FORK: B2 — 错误友好化,把英文 raw error 关键字映射到中文友好描述,原 message 保留作 detail
+    const raw = e instanceof Error ? e.message : String(e)
     showToast({
       variant: "error",
       title: opts.i18n.fail,
-      description: e instanceof Error ? e.message : String(e),
+      description: friendlyError(raw),
     })
   }
+}
+
+/** 错误友好化:常见 Tauri / 库错误关键字 → 中文 */
+function friendlyError(raw: string): string {
+  const lower = raw.toLowerCase()
+  // 文件系统错误
+  if (lower.includes("permission denied") || lower.includes("eacces") || lower.includes("eperm")) {
+    return `保存路径无写入权限。请选其他位置或检查文件夹权限。\n[详细] ${raw}`
+  }
+  if (lower.includes("no space") || lower.includes("enospc") || lower.includes("disk full")) {
+    return `磁盘空间不足。请清理磁盘后重试。\n[详细] ${raw}`
+  }
+  if (lower.includes("read-only") || lower.includes("erofs")) {
+    return `保存目录为只读。请选可写位置。\n[详细] ${raw}`
+  }
+  if (lower.includes("path too long") || lower.includes("enametoolong")) {
+    return `路径过长。请用更短的文件名或路径。\n[详细] ${raw}`
+  }
+  if (lower.includes("file too large") || lower.includes("emfile")) {
+    return `文件过大,超出限制。\n[详细] ${raw}`
+  }
+  if (lower.includes("not found") || lower.includes("enoent")) {
+    return `路径不存在。\n[详细] ${raw}`
+  }
+  // 库内部错误
+  if (lower.includes("nodebuffer")) {
+    return `内部转换错误(浏览器环境兼容)。请反馈开发者。\n[详细] ${raw}`
+  }
+  if (lower.includes("invalid markdown") || lower.includes("parse")) {
+    return `markdown 语法解析失败。\n[详细] ${raw}`
+  }
+  // 兜底
+  return raw
 }
