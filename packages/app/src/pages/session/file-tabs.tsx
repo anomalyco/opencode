@@ -964,6 +964,38 @@ export function FileTabContent(props: {
     setMdMenu({ open: true, x: event.clientX, y: event.clientY, text, mode: "menu" })
   }
 
+  // FORK: light DOM 右键菜单 — 直接读浏览器原生选区,不走历史栈。 2026-05-06
+  // 历史栈机制(pickBestRecentSelection)原本只为对抗 Pierre Shadow DOM 在 WebKit 上的
+  // selection collapse(右键瞬间选区被 OS 强制 collapse 成单词)。light DOM(.md 自渲染)
+  // 上浏览器自己保选区,栈反而引入两个 bug:
+  //   ① 选完文字 → 点空白 → 别处右键 → 旧选区从栈里复活,菜单命中旧选区
+  //   ② 连选两段 → 别处右键 → 算法挑"最长那条"而非最近,命中第一段不是第二段
+  // light DOM 不需要历史栈,直接读 window.getSelection() 即可。
+  const handleLightDomContextMenu = (event: MouseEvent) => {
+    if (editing()) return
+    event.preventDefault()
+
+    let text = ""
+    let range: Range | null = null
+    const sel = typeof window !== "undefined" ? window.getSelection() : null
+    if (sel && sel.rangeCount > 0) {
+      const t = sel.toString()
+      if (t.trim()) {
+        text = t
+        range = sel.getRangeAt(0).cloneRange()
+      }
+    }
+
+    if (text.trim() && range) {
+      setSelectionHighlight(range)
+    } else {
+      setSelectionHighlight(null)
+    }
+
+    setMdComment("")
+    setMdMenu({ open: true, x: event.clientX, y: event.clientY, text, mode: "menu" })
+  }
+
   const startEditFromMenu = () => {
     closeMdMenu()
     if (canEdit() && state()?.loaded) void startEdit()
@@ -1090,8 +1122,7 @@ export function FileTabContent(props: {
       ref={setMdContainerRef}
       data-context="file-viewer"
       class="relative pb-40 px-6 py-4 select-text"
-      onMouseDown={handlePreContextCapture}
-      onContextMenu={handleSelectionContextMenu}
+      onContextMenu={handleLightDomContextMenu}
       onClick={handleMdLinkClick}
     >
       <Markdown text={stripFrontmatter(source)} cacheKey={cacheKey()} rewriteAssetSrc={mdAssetRewriter()} />
