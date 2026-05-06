@@ -12,6 +12,14 @@ export default $config({
           apiKey: process.env.STRIPE_SECRET_KEY!,
         },
         planetscale: "0.4.1",
+        honeycomb: {
+          version: "0.49.0",
+          apiKey: process.env.HONEYCOMB_API_KEY!,
+        },
+        incident: {
+          version: "5.35.0",
+          apiKey: process.env.INCIDENT_API_KEY!,
+        },
       },
     }
   },
@@ -19,5 +27,8 @@ export default $config({
     await import("./infra/app.js")
     await import("./infra/console.js")
     await import("./infra/enterprise.js")
+    if ($app.stage === "production") {
+      await import("./infra/monitoring.js")
+    }
   },
 })

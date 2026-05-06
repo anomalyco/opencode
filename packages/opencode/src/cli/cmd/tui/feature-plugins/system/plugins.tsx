@@ -1,4 +1,4 @@
-import { Keybind } from "@/util"
+import { Keybind } from "@/util/keybind"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"

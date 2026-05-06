@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.14.19",
+  "version": "1.14.39",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -25,6 +25,8 @@
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
+    "test": "bun test src",
+    "test:ci": "mkdir -p .artifacts/unit && bun test src --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
@@ -44,7 +46,7 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/shared": "workspace:*",
+    "@opencode-ai/core": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/bounds": "0.1.3",

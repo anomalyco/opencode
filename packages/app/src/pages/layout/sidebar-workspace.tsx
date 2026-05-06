@@ -3,8 +3,8 @@ import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "so
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { createMediaQuery } from "@solid-primitives/media"
-import { base64Encode } from "@opencode-ai/shared/util/encode"
-import { getFilename } from "@opencode-ai/shared/util/path"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { Button } from "@opencode-ai/ui/button"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -14,11 +14,12 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
-import { loadSessionsQuery, useGlobalSync } from "@/context/global-sync"
+import { loadSessionsQueryKey, useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { pathKey } from "@/utils/path-key"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
-import { sortedRootSessions, workspaceKey } from "./helpers"
-import { useQuery } from "@tanstack/solid-query"
+import { sortedRootSessions } from "./helpers"
+import { useIsFetching } from "@tanstack/solid-query"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -309,7 +310,7 @@ export const SortableWorkspace = (props: {
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
   const local = createMemo(() => props.directory === props.project.worktree)
-  const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
+  const active = createMemo(() => pathKey(props.ctx.currentDir()) === pathKey(props.directory))
   const workspaceValue = createMemo(() => {
     const branch = workspaceStore.vcs?.branch
     const name = branch ?? getFilename(props.directory)
@@ -319,9 +320,9 @@ export const SortableWorkspace = (props: {
   const boot = createMemo(() => open() || active())
   const count = createMemo(() => sessions()?.length ?? 0)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
-  const query = useQuery(() => ({ ...loadSessionsQuery(props.project.worktree) }))
+  const fetching = useIsFetching(() => ({ queryKey: loadSessionsQueryKey(props.directory) }))
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
-  const loading = () => query.isLoading && count() === 0
+  const loading = () => fetching() > 0 && count() === 0
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
   const loadMore = async () => {
@@ -426,7 +427,7 @@ export const SortableWorkspace = (props: {
             mobile={props.mobile}
             ctx={props.ctx}
             showNew={showNew}
-            loading={() => query.isLoading && count() === 0}
+            loading={loading}
             sessions={sessions}
             hasMore={hasMore}
             loadMore={loadMore}
@@ -453,9 +454,9 @@ export const LocalWorkspace = (props: {
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
   const count = createMemo(() => sessions()?.length ?? 0)
-  const query = useQuery(() => ({ ...loadSessionsQuery(props.project.worktree) }))
+  const fetching = useIsFetching(() => ({ queryKey: loadSessionsQueryKey(props.project.worktree) }))
   const hasMore = createMemo(() => workspace().store.sessionTotal > count())
-  const loading = () => query.isLoading && count() === 0
+  const loading = () => fetching() > 0 && count() === 0
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)

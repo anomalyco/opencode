@@ -1,0 +1,1 @@
+ALTER TABLE `event_sequence` ADD `owner_id` text;

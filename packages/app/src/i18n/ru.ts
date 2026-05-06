@@ -227,7 +227,7 @@ export const dict = {
   "common.default": "По умолчанию",
   "common.attachment": "вложение",
 
-  "prompt.placeholder.shell": "Введите команду оболочки...",
+  "prompt.placeholder.shell": "Введите команду оболочки... {{example}}",
   "prompt.placeholder.normal": 'Спросите что угодно... "{{example}}"',
   "prompt.placeholder.simple": "Спросите что угодно...",
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",
@@ -448,6 +448,8 @@ export const dict = {
   "error.page.description": "Произошла ошибка при загрузке приложения.",
   "error.page.details.label": "Детали ошибки",
   "error.page.action.restart": "Перезапустить",
+  "error.page.action.report": "Сообщить об ошибке",
+  "error.page.action.reported": "Об ошибке сообщено",
   "error.page.action.checking": "Проверка...",
   "error.page.action.checkUpdates": "Проверить обновления",
   "error.page.action.updateTo": "Обновить до {{version}}",
@@ -656,6 +658,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
+  "settings.general.row.showSessionProgressBar.title": "Показывать индикатор прогресса сессии",
+  "settings.general.row.showSessionProgressBar.description":
+    "Показывать анимированный индикатор прогресса вверху сессии, когда агент работает",
   "settings.general.row.wayland.title": "Использовать нативный Wayland",
   "settings.general.row.wayland.description": "Отключить X11 fallback на Wayland. Требуется перезапуск.",
   "settings.general.row.wayland.tooltip":
@@ -805,8 +810,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Получение контента по URL",
   "settings.permissions.tool.websearch.title": "Web Search",
   "settings.permissions.tool.websearch.description": "Поиск в интернете",
-  "settings.permissions.tool.codesearch.title": "Code Search",
-  "settings.permissions.tool.codesearch.description": "Поиск кода в интернете",
   "settings.permissions.tool.external_directory.title": "Внешняя директория",
   "settings.permissions.tool.external_directory.description": "Доступ к файлам вне директории проекта",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
