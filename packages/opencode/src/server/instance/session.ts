@@ -848,8 +848,26 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          stream.write(JSON.stringify(msg))
+
+          // Long synchronous tool calls (large `kubectl` queries, multi-step
+          // git ops, etc.) can hold the response stream silent for many
+          // minutes while `SessionPrompt.prompt` runs. HTTP clients with
+          // finite per-recv timeouts (httpx defaults to 5s; some downstream
+          // workflow runners cap at minutes-to-hours) hit ReadTimeout before
+          // any byte is sent. Emit a periodic newline so the connection
+          // produces traffic; the response stays application/json because
+          // JSON parsers ignore leading whitespace before a value.
+          const keepalive = setInterval(() => {
+            stream.write("\n").catch(() => {})
+          }, 30_000)
+
+          try {
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            clearInterval(keepalive)
+            await stream.write(JSON.stringify(msg))
+          } finally {
+            clearInterval(keepalive)
+          }
         })
       },
     )
