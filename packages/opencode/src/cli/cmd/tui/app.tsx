@@ -379,6 +379,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       } else {
         route.navigate({ type: "session", sessionID: match })
       }
+    } else if (sync.status !== "loading") {
+      // No sessions exist — fall back to home instead of leaving the dummy route active
+      continued = true
+      route.navigate({ type: "home" })
     }
   })
 
