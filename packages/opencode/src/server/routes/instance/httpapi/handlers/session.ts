@@ -25,6 +25,7 @@ import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/htt
 import { InstanceHttpApi } from "../api"
 import {
   CommandPayload,
+  CommandAsyncPayload,
   DiffQuery,
   ForkPayload,
   InitPayload,
@@ -293,6 +294,31 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* promptSvc.command({ ...ctx.payload, sessionID: ctx.params.sessionID })
     })
 
+    const commandAsync = Effect.fn("SessionHttpApi.commandAsync")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof CommandAsyncPayload.Type
+    }) {
+      yield* promptSvc
+        .command({
+          ...ctx.payload,
+          sessionID: ctx.params.sessionID,
+          model: ctx.payload.model ? `${ctx.payload.model.providerID}/${ctx.payload.model.modelID}` : undefined,
+        })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.gen(function* () {
+              yield* Effect.logError("command_async failed", { sessionID: ctx.params.sessionID, cause })
+              yield* bus.publish(Session.Event.Error, {
+                sessionID: ctx.params.sessionID,
+                error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
+              })
+            }),
+          ),
+          Effect.forkIn(scope, { startImmediately: true }),
+        )
+      return HttpApiSchema.NoContent.make()
+    })
+
     const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof ShellPayload.Type
@@ -372,6 +398,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("command", command)
+      .handle("commandAsync", commandAsync)
       .handle("shell", shell)
       .handle("revert", revert)
       .handle("unrevert", unrevert)

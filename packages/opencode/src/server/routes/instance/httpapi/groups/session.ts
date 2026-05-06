@@ -62,6 +62,10 @@ export const SummarizePayload = Schema.Struct({
 })
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))
 export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"]))
+export const CommandAsyncPayload = Schema.Struct({
+  ...Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID", "model"]),
+  model: Schema.optional(SessionPrompt.PromptInput.fields.model),
+})
 export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
 export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
 export const PermissionResponsePayload = Schema.Struct({
@@ -88,6 +92,7 @@ export const SessionPaths = {
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   command: `${root}/:sessionID/command`,
+  commandAsync: `${root}/:sessionID/command_async`,
   shell: `${root}/:sessionID/shell`,
   revert: `${root}/:sessionID/revert`,
   unrevert: `${root}/:sessionID/unrevert`,
@@ -327,6 +332,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.command",
             summary: "Send command",
             description: "Send a new command to a session for execution by the AI assistant.",
+          }),
+        ),
+        HttpApiEndpoint.post("commandAsync", SessionPaths.commandAsync, {
+          params: { sessionID: SessionID },
+          payload: CommandAsyncPayload,
+          success: described(HttpApiSchema.NoContent, "Command accepted"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.command_async",
+            summary: "Send async command",
+            description:
+              "Send a new command to a session asynchronously, starting the session if needed and returning immediately.",
           }),
         ),
         HttpApiEndpoint.post("shell", SessionPaths.shell, {

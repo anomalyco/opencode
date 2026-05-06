@@ -613,6 +613,27 @@ describe("HttpApi SDK", () => {
     ),
   )
 
+  parity("matches generated SDK async command route across backends", (backend) =>
+    withStandardProject(backend, ({ sdk }) =>
+      Effect.gen(function* () {
+        const session = yield* capture(() => sdk.session.create({ title: "command async" }))
+        const sessionID = String(record(session.data).id)
+        const commandAsync = yield* capture(() =>
+          sdk.session.commandAsync({
+            sessionID,
+            command: "/unknown-sdk-command",
+            arguments: "",
+            model: { providerID: "test", modelID: "test-model" },
+          }),
+        )
+
+        return {
+          statuses: statuses({ session, commandAsync }),
+        }
+      }),
+    ),
+  )
+
   parity("matches generated SDK prompt streaming through fake LLM across backends", (backend) =>
     withFakeLlm(backend, ({ sdk, llm }) =>
       Effect.gen(function* () {

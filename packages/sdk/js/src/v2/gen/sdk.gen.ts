@@ -3638,7 +3638,7 @@ export class Session2 extends HeyApiClient {
   /**
    * Send async command
    *
-   * Send a new command to a session asynchronously, starting the session if needed and returning immediately with 204. Subscribe to Session.Event.Error filtered by sessionID before posting to receive background failures.
+   * Send a new command to a session asynchronously, starting the session if needed and returning immediately.
    */
   public commandAsync<ThrowOnError extends boolean = false>(
     parameters: {
@@ -3647,7 +3647,6 @@ export class Session2 extends HeyApiClient {
       workspace?: string
       messageID?: string
       agent?: string
-      model?: string
       arguments?: string
       command?: string
       variant?: string
@@ -3659,6 +3658,10 @@ export class Session2 extends HeyApiClient {
         url: string
         source?: FilePartSource
       }>
+      model?: {
+        providerID: string
+        modelID: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3672,11 +3675,11 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "messageID" },
             { in: "body", key: "agent" },
-            { in: "body", key: "model" },
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
             { in: "body", key: "variant" },
             { in: "body", key: "parts" },
+            { in: "body", key: "model" },
           ],
         },
       ],

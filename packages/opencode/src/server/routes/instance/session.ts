@@ -23,7 +23,7 @@ import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
-import { zodObject } from "@/util/effect-zod"
+import { zod, zodObject } from "@/util/effect-zod"
 import { Bus } from "@/bus"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { jsonRequest, runRequest } from "./trace"
@@ -38,6 +38,21 @@ const QueryBoolean = z.union([
 function queryBoolean(value: z.infer<typeof QueryBoolean> | undefined) {
   if (value === undefined) return
   return value === true || value === "true"
+}
+
+const CommandAsyncBody = zodObject(SessionPrompt.CommandInput)
+  .omit({ sessionID: true, model: true })
+  .extend({ model: zod(SessionPrompt.PromptInput.fields.model).optional() })
+type CommandAsyncBody = Omit<SessionPrompt.CommandInput, "sessionID" | "model"> & {
+  model?: SessionPrompt.PromptInput["model"]
+}
+
+function commandAsyncInput(body: CommandAsyncBody, sessionID: SessionID): SessionPrompt.CommandInput {
+  return {
+    ...body,
+    sessionID,
+    model: body.model ? `${body.model.providerID}/${body.model.modelID}` : undefined,
+  }
 }
 
 export const SessionRoutes = lazy(() =>
@@ -1004,16 +1019,16 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", zodObject(SessionPrompt.CommandInput).omit({ sessionID: true })),
+      validator("json", CommandAsyncBody),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const body = c.req.valid("json") as Omit<SessionPrompt.CommandInput, "sessionID">
+        const body = c.req.valid("json") as CommandAsyncBody
         // c is only used to build OTel span attributes (method, url, params), all read
         // synchronously before this handler returns, so there is no post-204 access to c.
         void runRequest(
           "SessionRoutes.command_async",
           c,
-          SessionPrompt.Service.use((svc) => svc.command({ ...body, sessionID })).pipe(
+          SessionPrompt.Service.use((svc) => svc.command(commandAsyncInput(body, sessionID))).pipe(
             Effect.catchCause((cause) => {
               const err = Cause.squash(cause)
               log.error("command_async failed", { sessionID, error: err })

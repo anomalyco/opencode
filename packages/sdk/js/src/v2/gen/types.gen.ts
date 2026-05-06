@@ -5729,7 +5729,6 @@ export type SessionCommandAsyncData = {
   body?: {
     messageID?: string
     agent?: string
-    model?: string
     arguments: string
     command: string
     variant?: string
@@ -5741,6 +5740,10 @@ export type SessionCommandAsyncData = {
       url: string
       source?: FilePartSource
     }>
+    model?: {
+      providerID: string
+      modelID: string
+    }
   }
   path: {
     sessionID: string
