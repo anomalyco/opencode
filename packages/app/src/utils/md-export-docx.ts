@@ -20,6 +20,64 @@ import { showToast } from "@opencode-ai/ui/toast"
 // 用 any cast 绕过库类型 readonly
 ;(styles as any).markdown.code.paragraph.border.between = { style: "none", size: 0 }
 
+// FORK: emoji 预处理(B1)— Word 默认字体不一定含 emoji glyphs,有些 emoji 渲染为方框 / 乱码
+// 替换为文字符号(覆盖常用 ~30 个,其他 emoji 接受现状)2026-05-06
+const EMOJI_MAP: Record<string, string> = {
+  "📝": "[NOTE]",
+  "📌": "[PIN]",
+  "📍": "[LOC]",
+  "📋": "[CLIPBOARD]",
+  "📚": "[BOOKS]",
+  "📖": "[BOOK]",
+  "🚀": "[ROCKET]",
+  "✅": "[OK]",
+  "❌": "[X]",
+  "⚠️": "[WARN]",
+  "⚠": "[WARN]",
+  "🔍": "[SEARCH]",
+  "💡": "[IDEA]",
+  "🔥": "[HOT]",
+  "🎯": "[TARGET]",
+  "🐛": "[BUG]",
+  "🔧": "[FIX]",
+  "⚡": "[FAST]",
+  "🌟": "[STAR]",
+  "⭐": "[STAR]",
+  "🎉": "[PARTY]",
+  "🤔": "[THINK]",
+  "👀": "[EYES]",
+  "✓": "[v]",
+  "✗": "[x]",
+  "→": "->",
+  "←": "<-",
+  "↑": "^",
+  "↓": "v",
+  "🔴": "[red]",
+  "🟢": "[green]",
+  "🟡": "[yellow]",
+  "🔵": "[blue]",
+  "💻": "[CODE]",
+  "🛠️": "[TOOLS]",
+  "🛠": "[TOOLS]",
+  "📦": "[PACKAGE]",
+  "🚧": "[CONSTRUCTION]",
+  "🆕": "[NEW]",
+  "❗": "[!]",
+  "❓": "[?]",
+  "ℹ️": "[INFO]",
+  "ℹ": "[INFO]",
+}
+
+function preprocessMarkdown(md: string): string {
+  let out = md
+  for (const [emo, txt] of Object.entries(EMOJI_MAP)) {
+    if (out.includes(emo)) {
+      out = out.replaceAll(emo, txt)
+    }
+  }
+  return out
+}
+
 export type ExportDocxI18n = {
   /** save 对话框标题 */
   title: string
@@ -55,15 +113,18 @@ export const exportMdAsDocx = async (opts: {
     })
     if (!filePath) return // user 取消,静默退出
 
-    // 2. markdown → docx(库内部 marked + docx@9.x 构造,带 syntax 高亮)
-    const doc = await markdownDocx(opts.markdownText, {
+    // 2. 预处理 markdown:emoji 替换(防 Word 字体不含 emoji)
+    const processedMd = preprocessMarkdown(opts.markdownText)
+
+    // 3. markdown → docx(库内部 marked + docx@9.x 构造,带 syntax 高亮)
+    const doc = await markdownDocx(processedMd, {
       codeHighlight: {
         enabled: true,
         theme: "github-light", // 浅色主题更适合 Word 打印
       },
     })
 
-    // 3. 序列化为 base64 + 写盘(用 fork-only Tauri command 绕开二进制 IPC 限制)
+    // 4. 序列化为 base64 + 写盘(用 fork-only Tauri command 绕开二进制 IPC 限制)
     // 注:Packer.toBuffer() 是 Node-only,Tauri webview 浏览器环境会报"nodebuffer is not supported";
     //    Packer.toBase64String() 直接出 base64,既适配浏览器又省一步 buffer→base64 转换
     const base64 = await Packer.toBase64String(doc)
