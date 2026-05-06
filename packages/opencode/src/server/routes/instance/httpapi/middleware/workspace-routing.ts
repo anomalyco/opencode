@@ -180,10 +180,7 @@ function routeHttpApiWorkspace<E>(
     const sessionID = getWorkspaceRouteSessionID(requestURL(request))
     const session = sessionID
       ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(
-          Effect.catchIf(
-            (error): error is InstanceType<typeof NotFoundError> => NotFoundError.isInstance(error),
-            () => Effect.succeed(undefined),
-          ),
+          Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)),
           Effect.catchDefect(() => Effect.succeed(undefined)),
         )
       : undefined

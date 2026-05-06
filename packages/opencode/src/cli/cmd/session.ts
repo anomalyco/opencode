@@ -61,10 +61,7 @@ export const SessionDeleteCommand = effectCmd({
     const svc = yield* Session.Service
     const sessionID = SessionID.make(args.sessionID)
     yield* svc.remove(sessionID).pipe(
-      Effect.catchIf(
-        (error): error is InstanceType<typeof NotFoundError> => NotFoundError.isInstance(error),
-        () => fail(`Session not found: ${args.sessionID}`),
-      ),
+      Effect.catchIf(NotFoundError.isInstance, () => fail(`Session not found: ${args.sessionID}`)),
     )
     UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
   }),
