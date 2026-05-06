@@ -1,8 +1,7 @@
 import { AwsV4Signer } from "aws4fetch"
 import { Effect, Option, Schema } from "effect"
 import { Headers } from "effect/unstable/http"
-import { Auth } from "../../adapter/auth"
-import type { Auth as AuthFn } from "../../adapter/auth"
+import { Auth, type AuthInput } from "../../adapter/auth"
 import type { LLMRequest } from "../../schema"
 import { ProviderShared } from "../shared"
 
@@ -75,8 +74,8 @@ const signRequest = (input: {
  * set; otherwise sign the exact JSON bytes with SigV4 using credentials from
  * `model.native.aws_credentials`.
  */
-export const auth: AuthFn = (input) => {
-  if (input.request.model.apiKey) return Auth.bearer(input)
+export const auth = Auth.custom((input: AuthInput) => {
+  if (input.request.model.apiKey) return Auth.toEffect(Auth.bearer())(input)
   return Effect.gen(function* () {
     const credentials = credentialsFromInput(input.request)
     if (!credentials) {
@@ -88,7 +87,7 @@ export const auth: AuthFn = (input) => {
     const signed = yield* signRequest({ url: input.url, body: input.body, headers: headersForSigning, credentials })
     return Headers.setAll(headersForSigning, signed)
   })
-}
+})
 
 export const nativeCredentials = (native: Record<string, unknown> | undefined, credentials: Credentials | undefined) =>
   credentials

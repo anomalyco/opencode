@@ -219,12 +219,10 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   adapter: AdapterID,
   protocol: ProtocolID,
   baseURL: Schema.optional(Schema.String),
-  /**
-   * Auth secret read by `Auth.bearer` / `Auth.apiKeyHeader` at request time.
-   * Lives here so authentication is not baked into `headers` at construction
-   * time and the `Auth` axis can actually do its job per request.
-   */
+  /** Provider-specific API key convenience. Provider helpers normalize this into `auth`. */
   apiKey: Schema.optional(Schema.String),
+  /** Optional transport auth policy. Opaque because it may contain functions. */
+  auth: Schema.optional(Schema.Any),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   /**
    * Query params appended to the request URL by `Endpoint.baseURL`. Used for
@@ -260,6 +258,7 @@ export namespace ModelRef {
     protocol: model.protocol,
     baseURL: model.baseURL,
     apiKey: model.apiKey,
+    auth: model.auth,
     headers: model.headers,
     queryParams: model.queryParams,
     capabilities: model.capabilities,

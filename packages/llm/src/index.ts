@@ -1,4 +1,5 @@
 export { LLMClient, modelCapabilities, modelLimits, modelRef } from "./adapter/client"
+export { Auth } from "./adapter/auth"
 export type {
   AdapterModelInput,
   AdapterRoutedModelInput,

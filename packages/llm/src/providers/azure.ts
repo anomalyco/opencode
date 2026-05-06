@@ -1,6 +1,5 @@
-import { Headers } from "effect/unstable/http"
 import { Auth } from "../adapter/auth"
-import type { Auth as AuthFn } from "../adapter/auth"
+import type { ProviderAuthOption } from "../adapter/auth-options"
 import { Adapter } from "../adapter/client"
 import type { ModelInput } from "../llm"
 import { ProviderID } from "../schema"
@@ -10,10 +9,9 @@ import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-opt
 
 export const id = ProviderID.make("azure")
 const MISSING_BASE_URL = "Azure OpenAI requires resourceName or baseURL"
-const apiKeyAuth = Auth.apiKeyHeader("api-key")
-const auth: AuthFn = (input) => apiKeyAuth({ ...input, headers: Headers.remove(input.headers, "authorization") })
+const adapterAuth = Auth.remove("authorization").andThen(Auth.apiKeyHeader("api-key"))
 
-export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol"> & {
+export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol" | "apiKey" | "auth"> & ProviderAuthOption<"optional"> & {
   readonly resourceName?: string
   readonly apiVersion?: string
   readonly useCompletionUrls?: boolean
@@ -29,14 +27,14 @@ const resourceBaseURL = (resourceName: string | undefined) => {
 
 const responsesAdapter = OpenAIResponses.makeAdapter({
   id: "azure-openai-responses",
-  auth,
+  auth: adapterAuth,
   defaultBaseURL: false,
   endpointRequired: MISSING_BASE_URL,
 })
 
 const chatAdapter = OpenAIChat.makeAdapter({
   id: "azure-openai-chat",
-  auth,
+  auth: adapterAuth,
   defaultBaseURL: false,
   endpointRequired: MISSING_BASE_URL,
 })
@@ -47,6 +45,13 @@ const mapInput = (input: AzureModelInput) => {
   const { apiVersion, resourceName, useCompletionUrls, ...rest } = input
   return {
     ...withOpenAIOptions(input.id, rest),
+    auth: "auth" in input && input.auth
+      ? input.auth
+      : Auth.remove("authorization").andThen(
+        Auth.optional("apiKey" in input ? input.apiKey : undefined, "apiKey")
+          .orElse(Auth.config("AZURE_OPENAI_API_KEY"))
+          .pipe(Auth.header("api-key")),
+      ),
     baseURL: rest.baseURL ?? resourceBaseURL(resourceName),
     queryParams: {
       ...rest.queryParams,

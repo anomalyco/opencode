@@ -1,7 +1,6 @@
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import type { Auth } from "./auth"
-import { bearer as authBearer } from "./auth"
+import { Auth, type Auth as AuthDef } from "./auth"
 import { type Endpoint, render as renderEndpoint } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import type { Framing } from "./framing"
@@ -75,11 +74,12 @@ export type HttpOptionsInput = HttpOptions.Input
 
 export type ModelRefInput = Omit<
   ConstructorParameters<typeof ModelRef>[0],
-  "id" | "provider" | "adapter" | "capabilities" | "limits" | "generation" | "http"
+  "id" | "provider" | "adapter" | "capabilities" | "limits" | "generation" | "http" | "auth"
 > & {
   readonly id: string | ModelID
   readonly provider: string | ProviderID
   readonly adapter?: string | AdapterID
+  readonly auth?: AuthDef
   readonly capabilities?: ModelCapabilities.Input
   readonly limits?: ModelLimits.Input
   readonly generation?: GenerationOptions.Input
@@ -195,14 +195,8 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
   readonly protocol: Protocol<Payload, Frame, Chunk, State>
   /** Where the request is sent. */
   readonly endpoint: Endpoint<Payload>
-  /**
-   * Per-request transport authentication. Defaults to `Auth.bearer`, which
-   * sets `Authorization: Bearer <model.apiKey>` when `model.apiKey` is set
-   * and is a no-op otherwise. Override with `Auth.apiKeyHeader(name)` for
-   * providers that use a custom header (Anthropic, Gemini), or supply a
-   * custom `Auth` for per-request signing (Bedrock SigV4).
-   */
-  readonly auth?: Auth
+  /** Per-request transport auth. Model-level `Auth` overrides this. */
+  readonly auth?: AuthDef
   /** Stream framing — bytes -> frames before `protocol.chunk` decoding. */
   readonly framing: Framing<Frame>
   /** Static / per-request headers added before `auth` runs. */
@@ -227,7 +221,7 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
 export function make<Payload, Frame, Chunk, State>(
   input: MakeInput<Payload, Frame, Chunk, State>,
 ): Adapter<Payload> {
-  const auth = input.auth ?? authBearer
+  const auth = input.auth ?? Auth.bearer()
   const protocol = input.protocol
   const encodePayload = Schema.encodeSync(Schema.fromJsonString(protocol.payload))
   const decodeChunkEffect = Schema.decodeUnknownEffect(protocol.chunk)
@@ -265,7 +259,7 @@ export function make<Payload, Frame, Chunk, State>(
         ...ctx.request.model.headers,
         ...ctx.request.http?.headers,
       })
-      const headers = yield* auth({
+      const headers = yield* Auth.toEffect(Auth.isAuth(ctx.request.model.auth) ? ctx.request.model.auth : auth)({
         request: ctx.request,
         method: "POST",
         url,

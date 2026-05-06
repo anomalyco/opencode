@@ -2,11 +2,11 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { LLM } from "../src"
-import { AuthPolicy } from "../src/adapter/auth-policy"
+import { Auth } from "../src/adapter/auth"
 import { it } from "./lib/effect"
 
 const request = LLM.request({
-  id: "req_auth_policy",
+  id: "req_auth",
   model: LLM.model({ id: "fake-model", provider: "fake", protocol: "fake" }),
   prompt: "hello",
 })
@@ -21,10 +21,10 @@ const input = {
 
 const withEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
 
-describe("AuthPolicy", () => {
+describe("Auth", () => {
   it.effect("renders a config credential as bearer auth", () =>
     Effect.gen(function* () {
-      const headers = yield* AuthPolicy.config("OPENAI_API_KEY").bearer().apply(input).pipe(
+      const headers = yield* Auth.config("OPENAI_API_KEY").bearer().apply(input).pipe(
         withEnv({ OPENAI_API_KEY: "sk-test" }),
       )
 
@@ -35,9 +35,9 @@ describe("AuthPolicy", () => {
 
   it.effect("falls back between credential sources before rendering", () =>
     Effect.gen(function* () {
-      const headers = yield* AuthPolicy.config("PRIMARY_KEY")
-        .orElse(AuthPolicy.value("fallback-key"))
-        .pipe(AuthPolicy.header("x-api-key"))
+      const headers = yield* Auth.config("PRIMARY_KEY")
+        .orElse(Auth.value("fallback-key"))
+        .pipe(Auth.header("x-api-key"))
         .apply(input)
         .pipe(withEnv({}))
 
@@ -46,10 +46,10 @@ describe("AuthPolicy", () => {
     }),
   )
 
-  it.effect("composes header policies in sequence", () =>
+  it.effect("composes header auth in sequence", () =>
     Effect.gen(function* () {
-      const headers = yield* AuthPolicy.headers({ "x-tenant-id": "tenant-1" })
-        .andThen(AuthPolicy.value("gateway-token").bearer())
+      const headers = yield* Auth.headers({ "x-tenant-id": "tenant-1" })
+        .andThen(Auth.bearer("gateway-token"))
         .apply(input)
 
       expect(headers["x-tenant-id"]).toBe("tenant-1")
@@ -58,11 +58,20 @@ describe("AuthPolicy", () => {
     }),
   )
 
-  it.effect("falls back between full auth policies", () =>
+  it.effect("renders a direct secret as a custom header", () =>
     Effect.gen(function* () {
-      const headers = yield* AuthPolicy.config("OPENAI_API_KEY")
+      const headers = yield* Auth.header("api-key", "direct-key").apply(input)
+
+      expect(headers["api-key"]).toBe("direct-key")
+      expect(headers["x-existing"]).toBe("yes")
+    }),
+  )
+
+  it.effect("falls back between full auth values", () =>
+    Effect.gen(function* () {
+      const headers = yield* Auth.config("OPENAI_API_KEY")
         .bearer()
-        .orElse(AuthPolicy.headers({ authorization: "Bearer supplied" }))
+        .orElse(Auth.headers({ authorization: "Bearer supplied" }))
         .apply(input)
         .pipe(withEnv({}))
 
@@ -73,7 +82,7 @@ describe("AuthPolicy", () => {
 
   it.effect("can intentionally leave auth untouched", () =>
     Effect.gen(function* () {
-      const headers = yield* AuthPolicy.none.apply(input)
+      const headers = yield* Auth.none.apply(input)
 
       expect(headers.authorization).toBeUndefined()
       expect(headers["x-existing"]).toBe("yes")
