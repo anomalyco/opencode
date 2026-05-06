@@ -70,8 +70,8 @@ OpenCode er også tilgjengelig som en desktop-app. Last ned direkte fra [release
 
 | Plattform             | Nedlasting                            |
 | --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg` |
+| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe`    |
 | Linux                 | `.deb`, `.rpm` eller AppImage         |
 
