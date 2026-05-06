@@ -20,8 +20,8 @@ import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
-// FORK: .md 导出 PDF / Word [feat: md-export-pdf-word] 2026-05-05
-import { exportMdAsPdf } from "@/utils/md-export-pdf"
+// FORK: .md 导出 Word [feat: md-export-pdf-word] 2026-05-05
+// PDF 路线 v1 drop(Tauri WKWebView window.print silent,见 spec §9.6)
 import { exportMdAsDocx } from "@/utils/md-export-docx"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -1015,12 +1015,7 @@ export function FileTabContent(props: {
     closeMdMenu()
   }
 
-  // FORK-BEGIN: .md 导出 PDF / Word [feat: md-export-pdf-word] 2026-05-05
-  const onExportPdf = () => {
-    closeMdMenu()
-    exportMdAsPdf({ hintText: language.t("fileViewer.toast.exportPdfHint") })
-  }
-
+  // FORK-BEGIN: .md 导出 Word [feat: md-export-pdf-word] 2026-05-05
   const onExportDocx = async () => {
     closeMdMenu()
     const p = path()
@@ -1584,20 +1579,12 @@ export function FileTabContent(props: {
                 <Show
                   when={mdMenu().text.trim()}
                   fallback={
-                    <>
-                      <button
-                        class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
-                        onClick={onExportPdf}
-                      >
-                        {language.t("fileViewer.menu.exportPdf")}
-                      </button>
-                      <button
-                        class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
-                        onClick={() => void onExportDocx()}
-                      >
-                        {language.t("fileViewer.menu.exportDocx")}
-                      </button>
-                    </>
+                    <button
+                      class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
+                      onClick={() => void onExportDocx()}
+                    >
+                      {language.t("fileViewer.menu.exportDocx")}
+                    </button>
                   }
                 >
                   <button

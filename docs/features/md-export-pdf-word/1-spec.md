@@ -302,6 +302,32 @@ styles.markdown.code.paragraph.border.between = { style: 'none', size: 0 }
 
 **Medium → Tiny-Medium 边缘**(单一主题 + ~130 行,docs 三文档全要;不缩规范层级)
 
+### 9.6 PDF 路线 v1 drop(2026-05-06,只补不改)
+
+> 实施时发现 **Tauri 2.x macOS WKWebView 上 `window.print()` 是 silent 的**(Wry 没实现 NSPrintOperation delegate,Tauri GitHub issue #5330 长期未修)。spec §9.1 / §2 需求 #2 假设 `window.print()` 能 work,但实测翻车。三个备选(Tauri native createPDF plugin / jsPDF 降级 / pandoc.wasm)各有大坑,**user 2026-05-06 决议:v1 drop PDF,只交付 Word**。
+
+**操作清单**:
+- 删 `packages/app/src/utils/md-export-pdf.ts`
+- 删 i18n key `fileViewer.menu.exportPdf` + `fileViewer.toast.exportPdfHint`(en/zh/zht 三本)
+- 删 viewer 右键菜单"导出为 PDF"按钮 + `onExportPdf` callback
+- 改 §2 需求 #1 显示规则:没选文字时只显"导出为 Word"(单按钮)
+
+**后续 backlog**(进 OPENCODE-PLAN 需求池):
+- 等 Tauri 上游修 #5330,或用户强烈需 PDF 反馈,触发后另开独立 feat
+
+### 9.7 Word "极致优化"6 项(2026-05-06,本 feat 内实施)
+
+User 决议 drop PDF 后转向"把 Word 优化到极致":
+
+| # | 项 | 优先级 | 实施位置 |
+|---|---|---|---|
+| **A1** | 代码块空行段两侧仍有横线 | P1 | markdown 预处理 / 库 fork |
+| **A2** | Mermaid SVG → PNG 嵌入(主受众痛点)| P0 | 走 viewer 拿渲染好的 SVG → canvas 转 PNG → 替换 markdown 块 |
+| **A5** | .md 内本地图片相对路径 → base64 嵌入 | P0 | Tauri command 读文件 + base64 + replace markdown ![]() |
+| **B1** | emoji 预处理(防字体不含,渲染成方框)| P0 | markdown 文本预处理替换为文字符号 |
+| **B2** | 错误友好 toast 提示 | P1 | helper try-catch 中文友好 description |
+| **C1** | UX:选了文字也显导出菜单 | P1 | 改 file-tabs.tsx menu Show 逻辑 |
+
 ---
 
 ## 8. 二轮决议(2026-05-05 锁版)

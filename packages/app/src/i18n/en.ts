@@ -1024,12 +1024,10 @@ export const dict = {
   "fileTree.toast.undoFailedPartial": "Undo failed (partial)",
   "fileTree.toast.copyPathSuccessSingle": "Path copied",
   "fileTree.toast.copyPathSuccessBulk": "{{count}} paths copied",
-  // FORK: md-export-pdf-word — viewer 右键导出 PDF / Word 菜单 i18n 2026-05-05
-  "fileViewer.menu.exportPdf": "Export as PDF",
+  // FORK: md-export-pdf-word — viewer 右键导出 Word 菜单 i18n(PDF v1 drop)2026-05-05
   "fileViewer.menu.exportDocx": "Export as Word",
   "fileViewer.dialog.exportDocxTitle": "Save as Word document",
   "fileViewer.toast.exportDocxSuccess": "Exported to Word",
   "fileViewer.toast.exportDocxFail": "Export failed",
-  "fileViewer.toast.exportPdfHint": "The system print dialog will open. Choose \"Save as PDF\".",
   // FORK-END
 }
