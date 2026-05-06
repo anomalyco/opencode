@@ -538,10 +538,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                 const index = toolCallDelta.index
 
                 if (toolCalls[index] == null) {
-                  if (toolCallDelta.id == null) {
-                    toolCallDelta.id = generateId()
-                    console.warn(`[openai-compatible] Tool call missing 'id', generated fallback: ${toolCallDelta.id}`)
-                  }
+                  const toolCallId = toolCallDelta.id ?? generateId()
 
                   if (toolCallDelta.function?.name == null) {
                     throw new InvalidResponseDataError({
@@ -552,12 +549,12 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
                   controller.enqueue({
                     type: "tool-input-start",
-                    id: toolCallDelta.id,
+                    id: toolCallId,
                     toolName: toolCallDelta.function.name,
                   })
 
                   toolCalls[index] = {
-                    id: toolCallDelta.id,
+                    id: toolCallId,
                     type: "function",
                     function: {
                       name: toolCallDelta.function.name,
