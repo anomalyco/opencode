@@ -1,4 +1,4 @@
-export { Adapter, LLMClient, modelCapabilities, modelLimits, modelRef, updateLLMRequest } from "./adapter"
+export { Adapter, LLMClient, modelCapabilities, modelLimits, modelRef } from "./adapter"
 export type {
   Adapter as AdapterShape,
   AdapterDefinition,

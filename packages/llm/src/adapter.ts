@@ -9,22 +9,28 @@ import type { Protocol } from "./protocol"
 import * as ProviderShared from "./protocols/shared"
 import type {
   AdapterID,
+  GenerationOptionsInput,
   LLMError,
   LLMEvent,
   PreparedRequestOf,
   ProtocolID,
 } from "./schema"
 import {
+  GenerationOptions,
+  HttpOptions,
   LLMRequest,
   LLMResponse,
   ModelCapabilities,
   ModelID,
   ModelLimits,
-  ModelPolicy,
   ModelRef,
   NoAdapterError,
   PreparedRequest,
   ProviderID,
+  mergeGenerationOptions,
+  mergeHttpOptions,
+  mergeJsonRecords,
+  mergeProviderOptions,
 } from "./schema"
 
 export interface HttpContext {
@@ -56,19 +62,14 @@ export interface AdapterDefinition<Payload> extends Adapter<Payload> {}
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
 export type AnyAdapter = AdapterDefinition<any>
 
-const MODEL_ADAPTER = Symbol.for("@opencode-ai/llm.model-adapter")
-type BoundModel = ModelRef & { readonly [MODEL_ADAPTER]?: AnyAdapter }
+const adapterRegistry = new Map<string, AnyAdapter>()
 
-const modelAdapters = new WeakMap<ModelRef, AnyAdapter>()
-
-const modelAdapter = (model: ModelRef) => (model as BoundModel)[MODEL_ADAPTER] ?? modelAdapters.get(model)
-const bindModelAdapter = (model: ModelRef, adapter: AnyAdapter) => {
-  if (!Object.isExtensible(model)) {
-    modelAdapters.set(model, adapter)
-    return
-  }
-  Object.defineProperty(model, MODEL_ADAPTER, { value: adapter, configurable: true })
+const register = <Adapter extends AnyAdapter>(adapter: Adapter): Adapter => {
+  if (!adapterRegistry.has(adapter.id)) adapterRegistry.set(adapter.id, adapter)
+  return adapter
 }
+
+const registeredAdapter = (id: string) => adapterRegistry.get(id)
 
 export type ModelCapabilitiesInput = {
   readonly input?: Partial<ModelCapabilities["input"]>
@@ -80,18 +81,19 @@ export type ModelCapabilitiesInput = {
   }
 }
 
-export type ModelPolicyInput = ModelPolicy | ConstructorParameters<typeof ModelPolicy>[0]
+export type HttpOptionsInput = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
 
 export type ModelRefInput = Omit<
   ConstructorParameters<typeof ModelRef>[0],
-  "id" | "provider" | "adapter" | "capabilities" | "limits" | "policy"
+  "id" | "provider" | "adapter" | "capabilities" | "limits" | "generation" | "http"
 > & {
   readonly id: string | ModelID
   readonly provider: string | ProviderID
   readonly adapter?: string | AdapterID
   readonly capabilities?: ModelCapabilities | ModelCapabilitiesInput
   readonly limits?: ModelLimits | ConstructorParameters<typeof ModelLimits>[0]
-  readonly policy?: ModelPolicyInput
+  readonly generation?: GenerationOptionsInput
+  readonly http?: HttpOptionsInput
 }
 
 export type AdapterModelInput = Omit<ModelRefInput, "provider" | "adapter" | "protocol">
@@ -124,9 +126,14 @@ export const modelLimits = (input: ModelLimits | ConstructorParameters<typeof Mo
   return new ModelLimits(input ?? {})
 }
 
-export const modelPolicy = (input: ModelPolicyInput | undefined) => {
-  if (input === undefined || input instanceof ModelPolicy) return input
-  return new ModelPolicy(input)
+export const generationOptions = (input: GenerationOptionsInput | undefined) => {
+  if (input === undefined || input instanceof GenerationOptions) return input
+  return new GenerationOptions(input)
+}
+
+export const httpOptions = (input: HttpOptionsInput | undefined) => {
+  if (input === undefined || input instanceof HttpOptions) return input
+  return new HttpOptions(input)
 }
 
 export const modelRef = (input: ModelRefInput) =>
@@ -138,18 +145,9 @@ export const modelRef = (input: ModelRefInput) =>
     protocol: input.protocol,
     capabilities: modelCapabilities(input.capabilities),
     limits: modelLimits(input.limits),
-    policy: modelPolicy(input.policy),
+    generation: generationOptions(input.generation),
+    http: httpOptions(input.http),
   })
-
-export const bindModel = <Model extends ModelRef>(model: Model, adapter: AnyAdapter): Model => {
-  if (model.adapter !== adapter.id || model.protocol !== adapter.protocol) {
-    throw new Error(
-      `Cannot bind ${adapter.id} adapter (${adapter.protocol}) to ${model.provider}/${model.id} via ${model.adapter} (${model.protocol})`,
-    )
-  }
-  bindModelAdapter(model, adapter)
-  return model
-}
 
 function model<Input extends AdapterModelInput = AdapterModelInput>(
   adapter: AnyAdapter,
@@ -170,49 +168,20 @@ function model<Input extends AdapterMappedModelInput>(
     const mapped = options.mapInput?.(input) ?? input
     const provider = defaults.provider ?? ("provider" in mapped ? mapped.provider : undefined)
     if (!provider) throw new Error(`Adapter.model(${adapter.id}) requires a provider`)
-    return bindModel(
-      modelRef({
-        ...defaults,
-        ...mapped,
-        provider,
-        adapter: adapter.id,
-        protocol: adapter.protocol,
-        capabilities: mapped.capabilities ?? defaults.capabilities,
-        limits: mapped.limits ?? defaults.limits,
-      }),
-      adapter,
-    )
+    register(adapter)
+    return modelRef({
+      ...defaults,
+      ...mapped,
+      provider,
+      adapter: adapter.id,
+      protocol: adapter.protocol,
+      capabilities: mapped.capabilities ?? defaults.capabilities,
+      limits: mapped.limits ?? defaults.limits,
+      generation: mergeGenerationOptions(defaults.generation, mapped.generation),
+      providerOptions: mergeProviderOptions(defaults.providerOptions, mapped.providerOptions),
+      http: mergeHttpOptions(httpOptions(defaults.http), httpOptions(mapped.http)),
+    })
   }
-}
-
-export const preserveModelBinding = <Model extends ModelRef>(source: ModelRef, target: Model): Model => {
-  const adapter = modelAdapter(source)
-  if (!adapter) return target
-  return bindModel(target, adapter)
-}
-
-export const updateLLMRequest = (
-  request: LLMRequest,
-  patch: Partial<ConstructorParameters<typeof LLMRequest>[0]>,
-) => {
-  const model = patch.model ?? request.model
-  const next = new LLMRequest({
-    id: request.id,
-    model,
-    system: request.system,
-    messages: request.messages,
-    tools: request.tools,
-    toolChoice: request.toolChoice,
-    generation: request.generation,
-    reasoning: request.reasoning,
-    cache: request.cache,
-    responseFormat: request.responseFormat,
-    metadata: request.metadata,
-    native: request.native,
-    ...patch,
-  })
-  preserveModelBinding(model, next.model)
-  return next
 }
 
 export interface LLMClient {
@@ -292,12 +261,25 @@ export function make<Payload, Frame, Chunk, State>(
       ),
     )
   const buildHeaders = input.headers ?? (() => ({}))
+  const applyQuery = (url: string, query: Record<string, string> | undefined) => {
+    if (!query) return url
+    const next = new URL(url)
+    Object.entries(query).forEach(([key, value]) => next.searchParams.set(key, value))
+    return next.toString()
+  }
 
   const toHttp = (payload: Payload, ctx: HttpContext) =>
     Effect.gen(function* () {
-      const url = (yield* renderEndpoint(input.endpoint, { request: ctx.request, payload })).toString()
-      const body = encodePayload(payload)
-      const merged = { ...buildHeaders({ request: ctx.request }), ...ctx.request.model.headers }
+      const url = applyQuery(
+        (yield* renderEndpoint(input.endpoint, { request: ctx.request, payload })).toString(),
+        ctx.request.http?.query,
+      )
+      const body = ctx.request.http?.body === undefined
+        ? encodePayload(payload)
+        : ProviderShared.isRecord(payload)
+        ? ProviderShared.encodeJson(mergeJsonRecords(payload, ctx.request.http.body) ?? {})
+        : yield* ProviderShared.invalidRequest("http.body can only overlay JSON object request bodies")
+      const merged = { ...buildHeaders({ request: ctx.request }), ...ctx.request.model.headers, ...ctx.request.http?.headers }
       const headers = yield* auth({
         request: ctx.request,
         method: "POST",
@@ -320,14 +302,14 @@ export function make<Payload, Frame, Chunk, State>(
       onHalt: protocol.onHalt,
     })
 
-  return {
+  return register({
     id: input.id,
     protocol: protocol.id,
     payloadSchema: protocol.payload,
     toPayload: protocol.toPayload,
     toHttp,
     parse,
-  }
+  })
 }
 
 /**
@@ -339,7 +321,7 @@ const makeClient = (options: ClientOptions = {}): LLMClient => {
   const adapters = new Map((options.adapters ?? []).map((adapter) => [adapter.id, adapter] as const))
 
   const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-    const adapter = adapters.get(request.model.adapter) ?? modelAdapter(request.model)
+    const adapter = adapters.get(request.model.adapter) ?? registeredAdapter(request.model.adapter)
     if (!adapter) return yield* noAdapter(request.model)
 
     const payload = yield* adapter.toPayload(request).pipe(
@@ -400,6 +382,6 @@ const makeClient = (options: ClientOptions = {}): LLMClient => {
   return { prepare: prepare as LLMClient["prepare"], stream, generate }
 }
 
-export const Adapter = { bindModel, make, model } as const
+export const Adapter = { make, model, register } as const
 
 export const LLMClient = { make: makeClient }

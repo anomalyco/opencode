@@ -38,6 +38,46 @@ describe("llm constructors", () => {
     expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
   })
 
+  test("merges model defaults with call options", () => {
+    const request = LLM.request({
+      model: LLM.model({
+        id: "fake-model",
+        provider: "fake",
+        protocol: "openai-chat",
+        generation: { maxTokens: 100, temperature: 1 },
+        providerOptions: { openai: { store: false, metadata: { model: true } } },
+        http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
+      }),
+      prompt: "Say hello.",
+      generation: { temperature: 0 },
+      providerOptions: { openai: { store: true, metadata: { request: true } } },
+      http: { body: { metadata: { request: true } }, headers: { "x-shared": "request" }, query: { request: "1" } },
+    })
+
+    expect(request.generation).toEqual({ maxTokens: 100, temperature: 0 })
+    expect(request.providerOptions).toEqual({ openai: { store: true, metadata: { model: true, request: true } } })
+    expect(request.http).toEqual({
+      body: { metadata: { model: true, request: true } },
+      headers: { "x-shared": "request" },
+      query: { model: "1", request: "1" },
+    })
+  })
+
+  test("updates canonical requests from the request datatype", () => {
+    const base = LLM.request({
+      id: "req_1",
+      model: LLM.model({ id: "fake-model", provider: "fake", protocol: "openai-chat" }),
+      prompt: "Say hello.",
+    })
+    const updated = LLMRequest.update(base, { messages: [...base.messages, LLM.assistant("Hi.")] })
+
+    expect(updated).toBeInstanceOf(LLMRequest)
+    expect(updated.id).toBe("req_1")
+    expect(LLMRequest.input(updated).id).toBe("req_1")
+    expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
+    expect(LLMRequest.update(updated, {})).toBe(updated)
+  })
+
   test("builds tool choices from names and tools", () => {
     const tool = LLM.toolDefinition({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })
 

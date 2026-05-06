@@ -26,9 +26,6 @@ export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 export const TextVerbosity = Schema.Literals(["low", "medium", "high"])
 export type TextVerbosity = Schema.Schema.Type<typeof TextVerbosity>
 
-export const TransformPhase = Schema.Literals(["request", "prompt", "tool-schema", "payload", "stream"])
-export type TransformPhase = Schema.Schema.Type<typeof TransformPhase>
-
 export const MessageRole = Schema.Literals(["user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
 
@@ -37,6 +34,105 @@ export type FinishReason = Schema.Schema.Type<typeof FinishReason>
 
 export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
 export type JsonSchema = Schema.Schema.Type<typeof JsonSchema>
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+export const mergeJsonRecords = (...items: ReadonlyArray<Record<string, unknown> | undefined>): Record<string, unknown> | undefined => {
+  const result: Record<string, unknown> = items.reduce<Record<string, unknown>>((acc, item) => {
+    if (!item) return acc
+    return Object.entries(item).reduce<Record<string, unknown>>((next, [key, value]) => {
+      if (value === undefined) return next
+      return {
+        ...next,
+        [key]: isRecord(next[key]) && isRecord(value) ? mergeJsonRecords(next[key], value) : value,
+      }
+    }, acc)
+  }, {})
+  return Object.keys(result).length === 0 ? undefined : result
+}
+
+const mergeStringRecords = (...items: ReadonlyArray<Record<string, string> | undefined>): Record<string, string> | undefined => {
+  const result = Object.fromEntries(
+    items.flatMap((item) => Object.entries(item ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+  )
+  return Object.keys(result).length === 0 ? undefined : result
+}
+
+export const ProviderOptions = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
+export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
+
+export const mergeProviderOptions = (...items: ReadonlyArray<ProviderOptions | undefined>): ProviderOptions | undefined => {
+  const result = Object.fromEntries(
+    Object.entries(
+      items.reduce<Record<string, Record<string, unknown>>>((acc, item) => {
+        if (!item) return acc
+        return Object.entries(item).reduce<Record<string, Record<string, unknown>>>((next, [provider, options]) => ({
+          ...next,
+          [provider]: mergeJsonRecords(next[provider], options) ?? {},
+        }), acc)
+      }, {}),
+    ).filter((entry) => Object.keys(entry[1]).length > 0),
+  )
+  return Object.keys(result).length === 0 ? undefined : result
+}
+
+export class HttpOptions extends Schema.Class<HttpOptions>("LLM.HttpOptions")({
+  body: Schema.optional(JsonSchema),
+  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+}) {}
+
+export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined>): HttpOptions | undefined => {
+  const body = mergeJsonRecords(...items.map((item) => item?.body))
+  const headers = mergeStringRecords(...items.map((item) => item?.headers))
+  const query = mergeStringRecords(...items.map((item) => item?.query))
+  if (!body && !headers && !query) return undefined
+  return new HttpOptions({ body, headers, query })
+}
+
+export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({
+  maxTokens: Schema.optional(Schema.Number),
+  temperature: Schema.optional(Schema.Number),
+  topP: Schema.optional(Schema.Number),
+  topK: Schema.optional(Schema.Number),
+  frequencyPenalty: Schema.optional(Schema.Number),
+  presencePenalty: Schema.optional(Schema.Number),
+  seed: Schema.optional(Schema.Number),
+  stop: Schema.optional(Schema.Array(Schema.String)),
+}) {}
+
+export type GenerationOptionsFields = {
+  readonly maxTokens?: number
+  readonly temperature?: number
+  readonly topP?: number
+  readonly topK?: number
+  readonly frequencyPenalty?: number
+  readonly presencePenalty?: number
+  readonly seed?: number
+  readonly stop?: ReadonlyArray<string>
+}
+
+export type GenerationOptionsInput = GenerationOptions | GenerationOptionsFields
+
+const latestGeneration = <Key extends keyof GenerationOptionsFields>(
+  items: ReadonlyArray<GenerationOptionsInput | undefined>,
+  key: Key,
+) => items.findLast((item) => item?.[key] !== undefined)?.[key]
+
+export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptionsInput | undefined>) => {
+  const result = new GenerationOptions({
+    maxTokens: latestGeneration(items, "maxTokens"),
+    temperature: latestGeneration(items, "temperature"),
+    topP: latestGeneration(items, "topP"),
+    topK: latestGeneration(items, "topK"),
+    frequencyPenalty: latestGeneration(items, "frequencyPenalty"),
+    presencePenalty: latestGeneration(items, "presencePenalty"),
+    seed: latestGeneration(items, "seed"),
+    stop: latestGeneration(items, "stop"),
+  })
+  return Object.values(result).some((value) => value !== undefined) ? result : undefined
+}
 
 export class ModelCapabilities extends Schema.Class<ModelCapabilities>("LLM.ModelCapabilities")({
   input: Schema.Struct({
@@ -72,30 +168,6 @@ export class ModelLimits extends Schema.Class<ModelLimits>("LLM.ModelLimits")({
   output: Schema.optional(Schema.Number),
 }) {}
 
-export class ModelPolicy extends Schema.Class<ModelPolicy>("LLM.ModelPolicy")({
-  retention: Schema.optional(Schema.Struct({
-    store: Schema.optional(Schema.Boolean),
-    dataCollection: Schema.optional(Schema.Literals(["allow", "deny"])),
-  })),
-  reasoning: Schema.optional(Schema.Struct({
-    effort: Schema.optional(ReasoningEffort),
-    summary: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("auto")])),
-    encryptedState: Schema.optional(Schema.Boolean),
-    display: Schema.optional(Schema.Literals(["summarized", "omitted"])),
-  })),
-  text: Schema.optional(Schema.Struct({
-    verbosity: Schema.optional(TextVerbosity),
-  })),
-  cache: Schema.optional(Schema.Struct({
-    promptKey: Schema.optional(Schema.String),
-    ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
-  })),
-  usage: Schema.optional(Schema.Struct({
-    include: Schema.optional(Schema.Boolean),
-    includeCost: Schema.optional(Schema.Boolean),
-  })),
-}) {}
-
 export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   id: ModelID,
   provider: ProviderID,
@@ -118,13 +190,12 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   queryParams: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   capabilities: ModelCapabilities,
   limits: ModelLimits,
-  /**
-   * Provider-agnostic defaults and policy that protocols can lower into their
-   * native fields. Request-level options override these defaults.
-   */
-  policy: Schema.optional(ModelPolicy),
+  /** Provider-neutral generation defaults. Request-level values override them. */
+  generation: Schema.optional(GenerationOptions),
   /** Provider-owned typed-at-the-facade options for non-portable knobs. */
-  providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerOptions: Schema.optional(ProviderOptions),
+  /** Serializable raw HTTP overlays applied to the final outgoing request. */
+  http: Schema.optional(HttpOptions),
   /**
    * Provider-specific opaque options. Reach for this only when the value is
    * genuinely provider-private and does not fit a typed axis (e.g. Bedrock's
@@ -164,30 +235,50 @@ export const MediaPart = Schema.Struct({
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
-export const ToolResultValue = Schema.Struct({
+const isToolResultValue = (value: unknown): value is ToolResultValue =>
+  isRecord(value) && (value.type === "text" || value.type === "json" || value.type === "error") && "value" in value
+
+export const ToolResultValue = Object.assign(Schema.Struct({
   type: Schema.Literals(["json", "text", "error"]),
   value: Schema.Unknown,
-}).annotate({ identifier: "LLM.ToolResult" })
+}).annotate({ identifier: "LLM.ToolResult" }), {
+  make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue =>
+    isToolResultValue(value) ? value : { type, value },
+})
 export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>
 
-export const ToolCallPart = Schema.Struct({
+export const ToolCallPart = Object.assign(Schema.Struct({
   type: Schema.Literal("tool-call"),
   id: Schema.String,
   name: Schema.String,
   input: Schema.Unknown,
   providerExecuted: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.Content.ToolCall" })
+}).annotate({ identifier: "LLM.Content.ToolCall" }), {
+  make: (input: Omit<ToolCallPart, "type">): ToolCallPart => ({ type: "tool-call", ...input }),
+})
 export type ToolCallPart = Schema.Schema.Type<typeof ToolCallPart>
 
-export const ToolResultPart = Schema.Struct({
+export const ToolResultPart = Object.assign(Schema.Struct({
   type: Schema.Literal("tool-result"),
   id: Schema.String,
   name: Schema.String,
   result: ToolResultValue,
   providerExecuted: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.Content.ToolResult" })
+}).annotate({ identifier: "LLM.Content.ToolResult" }), {
+  make: (input: Omit<ToolResultPart, "type" | "result"> & {
+    readonly result: unknown
+    readonly resultType?: ToolResultValue["type"]
+  }): ToolResultPart => ({
+    type: "tool-result",
+    id: input.id,
+    name: input.name,
+    result: ToolResultValue.make(input.result, input.resultType),
+    providerExecuted: input.providerExecuted,
+    metadata: input.metadata,
+  }),
+})
 export type ToolResultPart = Schema.Schema.Type<typeof ToolResultPart>
 
 export const ReasoningPart = Schema.Struct({
@@ -211,6 +302,30 @@ export class Message extends Schema.Class<Message>("LLM.Message")({
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
+export namespace Message {
+  export type ContentInput = string | ContentPart | ReadonlyArray<ContentPart>
+  export type Input = Omit<ConstructorParameters<typeof Message>[0], "content"> & {
+    readonly content: ContentInput
+  }
+
+  export const text = (value: string): ContentPart => ({ type: "text", text: value })
+
+  export const content = (input: ContentInput) =>
+    typeof input === "string" ? [text(input)] : Array.isArray(input) ? [...input] : [input]
+
+  export const make = (input: Message | Input) => {
+    if (input instanceof Message) return input
+    return new Message({ ...input, content: content(input.content) })
+  }
+
+  export const user = (content: ContentInput) => make({ role: "user", content })
+
+  export const assistant = (content: ContentInput) => make({ role: "assistant", content })
+
+  export const tool = (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
+    make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
+}
+
 export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefinition")({
   name: Schema.String,
   description: Schema.String,
@@ -222,25 +337,6 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
 export class ToolChoice extends Schema.Class<ToolChoice>("LLM.ToolChoice")({
   type: Schema.Literals(["auto", "none", "required", "tool"]),
   name: Schema.optional(Schema.String),
-}) {}
-
-export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({
-  maxTokens: Schema.optional(Schema.Number),
-  temperature: Schema.optional(Schema.Number),
-  topP: Schema.optional(Schema.Number),
-  stop: Schema.optional(Schema.Array(Schema.String)),
-}) {}
-
-export class ReasoningIntent extends Schema.Class<ReasoningIntent>("LLM.ReasoningIntent")({
-  enabled: Schema.Boolean,
-  effort: Schema.optional(ReasoningEffort),
-  summary: Schema.optional(Schema.Boolean),
-  encryptedContent: Schema.optional(Schema.Boolean),
-}) {}
-
-export class CacheIntent extends Schema.Class<CacheIntent>("LLM.CacheIntent")({
-  enabled: Schema.Boolean,
-  key: Schema.optional(Schema.String),
 }) {}
 
 export const ResponseFormat = Schema.Union([
@@ -258,12 +354,38 @@ export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   tools: Schema.Array(ToolDefinition),
   toolChoice: Schema.optional(ToolChoice),
   generation: GenerationOptions,
-  reasoning: Schema.optional(ReasoningIntent),
-  cache: Schema.optional(CacheIntent),
+  providerOptions: Schema.optional(ProviderOptions),
+  http: Schema.optional(HttpOptions),
   responseFormat: Schema.optional(ResponseFormat),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
+
+export namespace LLMRequest {
+  export type Input = ConstructorParameters<typeof LLMRequest>[0]
+
+  export const input = (request: LLMRequest): Input => ({
+    id: request.id,
+    model: request.model,
+    system: request.system,
+    messages: request.messages,
+    tools: request.tools,
+    toolChoice: request.toolChoice,
+    generation: request.generation,
+    providerOptions: request.providerOptions,
+    http: request.http,
+    responseFormat: request.responseFormat,
+    metadata: request.metadata,
+  })
+
+  export const update = (request: LLMRequest, patch: Partial<Input>) => {
+    if (Object.keys(patch).length === 0) return request
+    return new LLMRequest({
+      ...input(request),
+      ...patch,
+      model: patch.model ?? request.model,
+    })
+  }
+}
 
 export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   inputTokens: Schema.optional(Schema.Number),

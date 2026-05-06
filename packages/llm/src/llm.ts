@@ -4,7 +4,6 @@ import {
   modelCapabilities,
   modelLimits,
   modelRef,
-  preserveModelBinding,
   type ModelCapabilitiesInput,
   type ModelRefInput,
 } from "./adapter"
@@ -13,19 +12,20 @@ import { type Tools } from "./tool"
 import { ToolRuntime, type RunOptions } from "./tool-runtime"
 import {
   GenerationOptions,
-  CacheIntent,
+  HttpOptions,
   LLMEvent,
   LLMRequest,
   LLMResponse,
   Message,
-  ReasoningIntent,
   ToolChoice,
   ToolDefinition,
   type ContentPart,
   type SystemPart,
-  type ToolCallPart,
-  type ToolResultPart,
-  type ToolResultValue,
+  ToolCallPart,
+  ToolResultPart,
+  mergeGenerationOptions,
+  mergeHttpOptions,
+  mergeProviderOptions,
 } from "./schema"
 import type { LLMError } from "./schema"
 
@@ -80,21 +80,16 @@ export type CapabilitiesInput = ModelCapabilitiesInput
 
 export type ModelInput = ModelRefInput
 
-export type MessageInput = Omit<ConstructorParameters<typeof Message>[0], "content"> & {
-  readonly content: string | ContentPart | ReadonlyArray<ContentPart>
-}
+export type MessageInput = Message.Input
 
 export type ToolChoiceInput = ToolChoice | ConstructorParameters<typeof ToolChoice>[0] | ToolDefinition | string
 export type ToolChoiceMode = Exclude<ToolChoice["type"], "tool">
 
-export type ToolResultInput = Omit<ToolResultPart, "type" | "result"> & {
-  readonly result: unknown
-  readonly resultType?: ToolResultValue["type"]
-}
+export type ToolResultInput = Parameters<typeof ToolResultPart.make>[0]
 
 export type RequestInput = Omit<
   ConstructorParameters<typeof LLMRequest>[0],
-  "system" | "messages" | "tools" | "toolChoice" | "generation"
+  "system" | "messages" | "tools" | "toolChoice" | "generation" | "http"
 > & {
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
@@ -102,33 +97,27 @@ export type RequestInput = Omit<
   readonly tools?: ReadonlyArray<ToolDefinition | ConstructorParameters<typeof ToolDefinition>[0]>
   readonly toolChoice?: ToolChoiceInput
   readonly generation?: GenerationOptions | ConstructorParameters<typeof GenerationOptions>[0]
+  readonly http?: HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
 }
 
 export const capabilities = modelCapabilities
 
 export const limits = modelLimits
 
-export const text = (value: string): ContentPart => ({ type: "text", text: value })
+export const text = Message.text
 
 export const system = (value: string): SystemPart => ({ type: "text", text: value })
-
-const contentParts = (input: string | ContentPart | ReadonlyArray<ContentPart>) =>
-  typeof input === "string" ? [text(input)] : Array.isArray(input) ? [...input] : [input]
 
 const systemParts = (input?: string | SystemPart | ReadonlyArray<SystemPart>) => {
   if (input === undefined) return []
   return typeof input === "string" ? [system(input)] : Array.isArray(input) ? [...input] : [input]
 }
 
-export const message = (input: Message | MessageInput) => {
-  if (input instanceof Message) return input
-  return new Message({ ...input, content: contentParts(input.content) })
-}
+export const message = Message.make
 
-export const user = (content: string | ContentPart | ReadonlyArray<ContentPart>) => message({ role: "user", content })
+export const user = Message.user
 
-export const assistant = (content: string | ContentPart | ReadonlyArray<ContentPart>) =>
-  message({ role: "assistant", content })
+export const assistant = Message.assistant
 
 export const model = modelRef
 
@@ -137,30 +126,11 @@ export const toolDefinition = (input: ToolDefinition | ConstructorParameters<typ
   return new ToolDefinition(input)
 }
 
-export const toolCall = (input: Omit<ToolCallPart, "type">): ToolCallPart => ({ type: "tool-call", ...input })
+export const toolCall = ToolCallPart.make
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+export const toolResult = ToolResultPart.make
 
-const isToolResultValue = (value: unknown): value is ToolResultValue =>
-  isRecord(value) && (value.type === "text" || value.type === "json" || value.type === "error") && "value" in value
-
-const toolResultValue = (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
-  if (isToolResultValue(value)) return value
-  return { type, value }
-}
-
-export const toolResult = (input: ToolResultInput): ToolResultPart => ({
-  type: "tool-result",
-  id: input.id,
-  name: input.name,
-  result: toolResultValue(input.result, input.resultType),
-  providerExecuted: input.providerExecuted,
-  metadata: input.metadata,
-})
-
-export const toolMessage = (input: ToolResultPart | ToolResultInput) =>
-  message({ role: "tool", content: ["type" in input ? input : toolResult(input)] })
+export const toolMessage = Message.tool
 
 export const toolChoiceName = (name: string) => new ToolChoice({ type: "tool", name })
 
@@ -180,29 +150,13 @@ export const generation = (input: GenerationOptions | ConstructorParameters<type
   return new GenerationOptions(input)
 }
 
-const reasoning = (input: ReasoningIntent | ConstructorParameters<typeof ReasoningIntent>[0] | undefined) => {
-  if (input === undefined || input instanceof ReasoningIntent) return input
-  return new ReasoningIntent(input)
-}
-
-const cache = (input: CacheIntent | ConstructorParameters<typeof CacheIntent>[0] | undefined) => {
-  if (input === undefined || input instanceof CacheIntent) return input
-  return new CacheIntent(input)
+const http = (input: HttpOptions | ConstructorParameters<typeof HttpOptions>[0] | undefined) => {
+  if (input === undefined || input instanceof HttpOptions) return input
+  return new HttpOptions(input)
 }
 
 export const requestInput = (input: LLMRequest): RequestInput => ({
-  id: input.id,
-  model: input.model,
-  system: input.system,
-  messages: input.messages,
-  tools: input.tools,
-  toolChoice: input.toolChoice,
-  generation: input.generation,
-  reasoning: input.reasoning,
-  cache: input.cache,
-  responseFormat: input.responseFormat,
-  metadata: input.metadata,
-  native: input.native,
+  ...LLMRequest.input(input),
 })
 
 export const request = (input: RequestInput) => {
@@ -213,20 +167,20 @@ export const request = (input: RequestInput) => {
     tools,
     toolChoice: requestToolChoice,
     generation: requestGeneration,
+    providerOptions: requestProviderOptions,
+    http: requestHttp,
     ...rest
   } = input
-  const result = new LLMRequest({
+  return new LLMRequest({
     ...rest,
     system: systemParts(requestSystem),
     messages: [...(messages?.map(message) ?? []), ...(prompt === undefined ? [] : [user(prompt)])],
     tools: tools?.map(toolDefinition) ?? [],
     toolChoice: requestToolChoice ? toolChoice(requestToolChoice) : undefined,
-    generation: generation(requestGeneration),
-    reasoning: reasoning(rest.reasoning),
-    cache: cache(rest.cache),
+    generation: mergeGenerationOptions(input.model.generation, generation(requestGeneration)) ?? generation(),
+    providerOptions: mergeProviderOptions(input.model.providerOptions, requestProviderOptions),
+    http: mergeHttpOptions(input.model.http, http(requestHttp)),
   })
-  preserveModelBinding(input.model, result.model)
-  return result
 }
 
 export const updateRequest = (input: LLMRequest, patch: Partial<RequestInput>) =>

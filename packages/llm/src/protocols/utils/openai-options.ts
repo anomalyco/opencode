@@ -1,46 +1,55 @@
 import { Schema } from "effect"
-import type { LLMRequest, ReasoningEffort } from "../../schema"
-import { ReasoningEfforts, TextVerbosity } from "../../schema"
+import type { LLMRequest, ReasoningEffort, TextVerbosity as TextVerbosityValue } from "../../schema"
+import { ReasoningEfforts, TextVerbosity, mergeProviderOptions } from "../../schema"
 
 export const OpenAIReasoningEfforts = ReasoningEfforts.filter(
   (effort): effort is Exclude<ReasoningEffort, "max"> => effort !== "max",
 )
 export type OpenAIReasoningEffort = typeof OpenAIReasoningEfforts[number]
 
-const OPENAI_REASONING_EFFORTS = new Set<ReasoningEffort>(OpenAIReasoningEfforts)
+const REASONING_EFFORTS = new Set<string>(ReasoningEfforts)
+const OPENAI_REASONING_EFFORTS = new Set<string>(OpenAIReasoningEfforts)
+const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
 
 export const OpenAIReasoningEffort = Schema.Literals(OpenAIReasoningEfforts)
 export const OpenAITextVerbosity = TextVerbosity
 
-export const isReasoningEffort = (effort: ReasoningEffort): effort is OpenAIReasoningEffort =>
-  OPENAI_REASONING_EFFORTS.has(effort)
+const isAnyReasoningEffort = (effort: unknown): effort is ReasoningEffort =>
+  typeof effort === "string" && REASONING_EFFORTS.has(effort)
 
-export const store = (request: LLMRequest) =>
-  typeof request.model.policy?.retention?.store === "boolean" ? request.model.policy.retention.store : undefined
+export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEffort =>
+  typeof effort === "string" && OPENAI_REASONING_EFFORTS.has(effort)
+
+const isTextVerbosity = (value: unknown): value is TextVerbosityValue =>
+  typeof value === "string" && TEXT_VERBOSITY.has(value)
+
+const options = (request: LLMRequest) => mergeProviderOptions(request.model.providerOptions, request.providerOptions)?.openai
+
+export const store = (request: LLMRequest): boolean | undefined => {
+  const value = options(request)?.store
+  return typeof value === "boolean" ? value : undefined
+}
 
 export const reasoningEffort = (request: LLMRequest): ReasoningEffort | undefined => {
-  if (request.reasoning?.enabled === false) return undefined
-  return request.reasoning?.effort ?? request.model.policy?.reasoning?.effort
+  const value = options(request)?.reasoningEffort
+  return isAnyReasoningEffort(value) ? value : undefined
 }
 
 export const reasoningSummary = (request: LLMRequest): "auto" | undefined => {
-  if (request.reasoning?.enabled === false) return undefined
-  if (request.reasoning?.summary !== undefined) return request.reasoning.summary ? "auto" : undefined
-  const summary = request.model.policy?.reasoning?.summary
-  return summary === true || summary === "auto" ? "auto" : undefined
+  return options(request)?.reasoningSummary === "auto" ? "auto" : undefined
 }
 
-export const encryptedReasoning = (request: LLMRequest) => {
-  if (request.reasoning?.enabled === false) return undefined
-  if (request.reasoning?.encryptedContent !== undefined) return request.reasoning.encryptedContent
-  return request.model.policy?.reasoning?.encryptedState
-}
+export const encryptedReasoning = (request: LLMRequest) =>
+  options(request)?.includeEncryptedReasoning === true ? true : undefined
 
 export const promptCacheKey = (request: LLMRequest) => {
-  if (request.cache?.enabled === false) return undefined
-  return request.cache?.key ?? request.model.policy?.cache?.promptKey
+  const value = options(request)?.promptCacheKey
+  return typeof value === "string" ? value : undefined
 }
 
-export const textVerbosity = (request: LLMRequest) => request.model.policy?.text?.verbosity
+export const textVerbosity = (request: LLMRequest) => {
+  const value = options(request)?.textVerbosity
+  return isTextVerbosity(value) ? value : undefined
+}
 
 export * as OpenAIOptions from "./openai-options"

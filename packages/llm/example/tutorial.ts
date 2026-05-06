@@ -129,18 +129,9 @@ const FakeAdapter = Adapter.make({
 })
 
 // A provider module exports a model helper. The model helper sets provider
-// identity, protocol id, and the adapter that can run this model handle.
-// Serialized / revived models can still use explicit provider adapters.
+// identity, protocol id, and the adapter id resolved by the registry.
 const FakeEcho = {
-  model: (id: string) =>
-    Adapter.bindModel(
-      LLM.model({
-        id,
-        provider: "fake-echo",
-        protocol: "fake-echo",
-      }),
-      FakeAdapter,
-    ),
+  model: (id: string) => Adapter.model(FakeAdapter, { provider: "fake-echo" })({ id }),
 }
 
 // `LLMClient.prepare` is the lower-level inspection hook: it compiles through

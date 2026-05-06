@@ -133,12 +133,10 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("falls back to adapter bound to model", () =>
+  it.effect("uses registered adapters by model adapter id", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [] }).prepare(
-        LLM.updateRequest(request, {
-          model: Adapter.bindModel(updateModel(request.model, { adapter: "gemini-fake" }), gemini),
-        }),
+        LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "gemini-fake" }) }),
       )
 
       expect(prepared.adapter).toBe("gemini-fake")
@@ -174,9 +172,7 @@ describe("llm adapter", () => {
         framing: fakeFraming,
       })
 
-      const response = yield* LLMClient.make({ adapters: [override] }).generate(
-        LLM.updateRequest(request, { model: Adapter.bindModel(updateModel(request.model, { adapter: "fake" }), fake) }),
-      )
+      const response = yield* LLMClient.make({ adapters: [override] }).generate(request)
 
       expect(response.text).toBe('echo:{"body":"override"}')
     }),

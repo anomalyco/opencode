@@ -1,6 +1,6 @@
 import { Effect, Stream } from "effect"
 import type { Concurrency } from "effect/Types"
-import { updateLLMRequest, type LLMClient } from "./adapter"
+import type { LLMClient } from "./adapter"
 import type { RequestExecutor } from "./executor"
 import {
   type ContentPart,
@@ -9,8 +9,9 @@ import {
   type LLMEvent,
   LLMRequest,
   Message,
-  type ToolCallPart,
   type ToolResultValue,
+  ToolCallPart,
+  ToolResultPart,
 } from "./schema"
 import { ToolFailure } from "./schema"
 import { type AnyTool, type Tools, toDefinitions } from "./tool"
@@ -64,12 +65,15 @@ export const run = <T extends Tools>(
   const tools = options.tools as Tools
   const runtimeTools = toDefinitions(tools)
   const runtimeToolNames = new Set(runtimeTools.map((tool) => tool.name))
-  const initialRequest = updateLLMRequest(options.request, {
-    tools: [
-      ...options.request.tools.filter((tool) => !runtimeToolNames.has(tool.name)),
-      ...runtimeTools,
-    ],
-  })
+  const initialRequest =
+    runtimeTools.length === 0
+      ? options.request
+      : LLMRequest.update(options.request, {
+          tools: [
+            ...options.request.tools.filter((tool) => !runtimeToolNames.has(tool.name)),
+            ...runtimeTools,
+          ],
+        })
 
   const loop = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> =>
     Stream.unwrap(
@@ -91,12 +95,12 @@ export const run = <T extends Tools>(
               (call) => dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
               { concurrency },
             )
-            const followUp = updateLLMRequest(request, {
+            const followUp = LLMRequest.update(request, {
               messages: [
                 ...request.messages,
-                assistant(state.assistantContent),
+                Message.assistant(state.assistantContent),
                 ...dispatched.map(([call, result]) =>
-                  toolMessage({ id: call.id, name: call.name, result }),
+                  Message.tool({ id: call.id, name: call.name, result }),
                 ),
               ],
             })
@@ -130,7 +134,7 @@ const accumulate = (state: StepState, event: LLMEvent) => {
     return
   }
   if (event.type === "tool-call") {
-    const part = toolCall({
+    const part = ToolCallPart.make({
       id: event.id,
       name: event.name,
       input: event.input,
@@ -145,7 +149,7 @@ const accumulate = (state: StepState, event: LLMEvent) => {
     return
   }
   if (event.type === "tool-result" && event.providerExecuted) {
-    state.assistantContent.push(toolResult({
+    state.assistantContent.push(ToolResultPart.make({
       id: event.id,
       name: event.name,
       result: event.result,
@@ -166,29 +170,6 @@ const appendStreamingText = (state: StepState, type: "text" | "reasoning", text:
   }
   state.assistantContent.push({ type, text })
 }
-
-const assistant = (content: ReadonlyArray<ContentPart>) => new Message({ role: "assistant", content })
-
-const toolCall = (input: Omit<ToolCallPart, "type">): ToolCallPart => ({ type: "tool-call", ...input })
-
-const toolResult = (input: {
-  readonly id: string
-  readonly name: string
-  readonly result: ToolResultValue
-  readonly providerExecuted?: boolean
-}): ContentPart => ({
-  type: "tool-result",
-  id: input.id,
-  name: input.name,
-  result: input.result,
-  providerExecuted: input.providerExecuted,
-})
-
-const toolMessage = (input: {
-  readonly id: string
-  readonly name: string
-  readonly result: ToolResultValue
-}) => new Message({ role: "tool", content: [toolResult(input)] })
 
 const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<ToolResultValue> => {
   const tool = tools[call.name]
