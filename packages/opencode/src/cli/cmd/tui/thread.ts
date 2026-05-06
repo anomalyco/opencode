@@ -215,6 +215,7 @@ export const TuiThreadCommand = cmd({
         await validateSession({
           url: transport.url,
           sessionID: args.session,
+          continue: args.continue,
           directory: cwd,
           fetch: transport.fetch,
         })

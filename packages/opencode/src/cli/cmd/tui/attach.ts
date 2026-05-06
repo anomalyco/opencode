@@ -73,6 +73,7 @@ export const AttachCommand = cmd({
         await validateSession({
           url: args.url,
           sessionID: args.session,
+          continue: args.continue,
           directory,
           headers,
         })
