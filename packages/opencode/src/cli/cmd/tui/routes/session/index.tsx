@@ -1067,8 +1067,8 @@ export function Session() {
                 paddingLeft: 1,
                 visible: showScrollbar(),
                 trackOptions: {
-                  backgroundColor: theme.backgroundElement,
-                  foregroundColor: theme.border,
+                  backgroundColor: theme.background,
+                  foregroundColor: theme.borderActive,
                 },
               }}
               stickyScroll={true}
