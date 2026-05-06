@@ -306,11 +306,19 @@ it.instance("falls back to generic username when system user info is unavailable
   }),
 )
 
+it.instance(
+  "loads session summarize config",
+  Effect.gen(function* () {
+    const config = yield* Config.use.get()
+    expect(config.session?.summarize).toBe(false)
+  }),
+  { config: { session: { summarize: false } } },
+)
+
 it.effect("creates global jsonc config with schema when no global configs exist", () =>
   withGlobalConfig({}, ({ dir }) =>
     Effect.gen(function* () {
       yield* Config.use.get().pipe(provideInstanceEffect(dir))
-
       const content = yield* AppFileSystem.use.readFileString(path.join(dir, "opencode.jsonc"))
       expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),

@@ -1411,7 +1411,7 @@ export const layer = Layer.effect(
               })
             }
 
-            if (step === 1)
+            if (step === 1 && (yield* config.get()).session?.summarize !== false)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
 
             if (step > 1 && lastFinished) {

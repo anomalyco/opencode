@@ -59,10 +59,15 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 
 void Log.init({ print: false })
 
+let summarizeCalls = 0
+
 const summary = Layer.succeed(
   SessionSummary.Service,
   SessionSummary.Service.of({
-    summarize: () => Effect.void,
+    summarize: () =>
+      Effect.sync(() => {
+        summarizeCalls++
+      }),
     diff: () => Effect.succeed([]),
     computeDiff: () => Effect.succeed([]),
   }),
@@ -366,6 +371,14 @@ const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
 }
 
+
+function providerCfgWithSession(url: string, session: Config.Info["session"]) {
+  return {
+    ...providerCfg(url),
+    session,
+  }
+}
+
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
@@ -557,6 +570,54 @@ noLLMServer.instance.skip(
   { config: cfg },
 )
 
+it.instance("loop schedules automatic summaries by default", () =>
+  Effect.gen(function* () {
+    summarizeCalls = 0
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("world")
+
+    yield* prompt.loop({ sessionID: session.id })
+    yield* Effect.sleep("10 millis")
+    expect(summarizeCalls).toBe(2)
+  }),
+)
+
+it.instance("loop skips session summary when session.summarize is false", () =>
+  Effect.gen(function* () {
+    summarizeCalls = 0
+    const { llm } = yield* useServerConfig((url) => providerCfgWithSession(url, { summarize: false }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("world")
+
+    yield* prompt.loop({ sessionID: session.id })
+    yield* Effect.sleep("10 millis")
+    expect(summarizeCalls).toBe(0)
+  }),
+)
+
 it.instance("static loop returns assistant text through local provider", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
@@ -583,7 +644,6 @@ it.instance("static loop returns assistant text through local provider", () =>
     expect(yield* llm.pending).toBe(0)
   }),
 )
-
 it.instance("static loop consumes queued replies across turns", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
