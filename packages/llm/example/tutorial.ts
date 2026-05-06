@@ -1,5 +1,5 @@
 import { Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { LLM, LLMClient, Tool, ToolRuntime } from "@opencode-ai/llm"
+import { LLM, LLMClient, Provider, ProviderID, Tool, ToolRuntime, type ProviderModelOptions } from "@opencode-ai/llm"
 import { Adapter, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode-ai/llm/adapter"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
@@ -172,11 +172,13 @@ const FakeAdapter = Adapter.make({
   framing: Framing.sse,
 })
 
-// A provider module exports a model helper. The model helper sets provider
-// identity, protocol id, and the adapter id resolved by the registry.
-const FakeEcho = {
-  model: (id: string) => Adapter.model(FakeAdapter, { provider: "fake-echo" })({ id }),
-}
+// A provider module exports a Provider definition. The default `model` helper
+// sets provider identity, protocol id, and the adapter id resolved by the registry.
+const fakeEchoModel = Adapter.model(FakeAdapter, { provider: "fake-echo" })
+const FakeEcho = Provider.make({
+  id: ProviderID.make("fake-echo"),
+  model: (id: string, options: ProviderModelOptions = {}) => fakeEchoModel({ id, ...options }),
+})
 
 // `LLMClient.prepare` is the lower-level inspection hook: it compiles through
 // payload conversion, validation, endpoint, auth, and HTTP construction without

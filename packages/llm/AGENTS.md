@@ -25,7 +25,7 @@ The intended callsite is:
 
 ```ts
 const request = LLM.request({
-  model: OpenAIChat.model({ id: "gpt-4o-mini", apiKey }),
+  model: OpenAI.model("gpt-4o-mini", { apiKey }),
   system: "You are concise.",
   prompt: "Say hello.",
 })
@@ -64,6 +64,32 @@ The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Basete
 New adapters should start with `Adapter.make(...)`. If a future provider genuinely cannot fit the four-axis model, add a purpose-built constructor for that case rather than widening the public surface preemptively.
 
 When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), the seam is `Framing` plus a parallel `Endpoint` / `Auth` interpretation — not a fork of the adapter contract.
+
+### Provider Definitions
+
+Provider-facing APIs are defined with `Provider.make(...)` from `src/provider.ts`:
+
+```ts
+export const provider = Provider.make({
+  id: ProviderID.make("openai"),
+  model: responses,
+  apis: { responses, chat },
+})
+
+export const model = provider.model
+export const apis = provider.apis
+```
+
+Keep provider definitions small and explicit:
+
+- Use only `id`, `model`, and optional `apis` in `Provider.make(...)`.
+- Use branded `ProviderID.make(...)` and `ModelID.make(...)` where ids are constructed directly.
+- Use `model` for the default API path and `apis` for named provider-native alternatives such as OpenAI `responses` versus `chat`.
+- Do not add author-facing `kind`, `version`, or `adapters` fields.
+- Export lower-level `adapters` arrays separately only when advanced internal wiring needs them.
+- Prefer `apiKey` as provider-specific sugar and `auth` as the explicit override; keep them mutually exclusive in provider option types with `ProviderAuthOption`.
+
+Built-in providers are namespace modules from `src/providers/index.ts`, so aliases like `OpenAI.model(...)`, `OpenAI.responses(...)`, and `OpenAI.apis.chat(...)` are fine. External provider packages should default-export the `Provider.make(...)` result and may add named aliases if useful.
 
 ### Folder layout
 

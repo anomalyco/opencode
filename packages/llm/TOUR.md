@@ -16,7 +16,7 @@ packages/llm/
     llm.ts                 public constructors and runtime helpers
     adapter/               adapter composition, transport, auth, framing, protocol contracts
     protocols/             OpenAI, Anthropic, Gemini, Bedrock, and compatible protocols
-    providers/             model helpers and provider-specific routing metadata
+    providers/             provider definitions and provider-specific routing metadata
     tool*.ts               typed tool definitions and tool-loop runtime
   test/                    deterministic fixtures, recorded cassettes, and unit coverage
   script/                  package scripts
@@ -123,7 +123,7 @@ The runtime pipeline is concentrated in [`src/adapter/client.ts`](./src/adapter/
 
 The important functions are:
 
-- `Adapter.model`, which binds a user-facing model helper to the adapter that can run it.
+- `Adapter.model`, which binds a provider model factory to the adapter that can run it.
 - `LLMClient`, which selects a registered adapter, builds the payload, sends HTTP, and parses the response.
 - `Adapter.make`, which composes protocol semantics with endpoint, auth, and framing.
 
@@ -485,20 +485,41 @@ Provider family wiring lives here:
 - Provider profiles and capabilities: [`src/providers/openai-compatible-profile.ts`](./src/providers/openai-compatible-profile.ts)
 - OpenRouter wrapper with provider-specific options: [`src/providers/openrouter.ts`](./src/providers/openrouter.ts)
 
-## 7. Provider Helpers Keep Call Sites Boring
+## 7. Provider Definitions Keep Call Sites Boring
 
-The provider modules exported from [`src/providers/index.ts`](./src/providers/index.ts) are thin use-site APIs.
+The provider modules exported from [`src/providers/index.ts`](./src/providers/index.ts) are thin use-site APIs built around [`Provider.make`](./src/provider.ts).
+
+`Provider.make(...)` is the public contract for provider packages:
+
+```ts
+export const provider = Provider.make({
+  id: ProviderID.make("openai"),
+  model: responses,
+  apis: { responses, chat },
+})
+
+export const model = provider.model
+export const apis = provider.apis
+```
+
+The shape is intentionally small:
+
+- `id`: branded provider id used for routing and option namespaces.
+- `model`: default model factory, usually the provider's recommended API.
+- `apis`: optional named API-specific factories, for providers where one model id can route through different native APIs.
+
+Built-in providers export namespace modules such as `OpenAI`, `Azure`, and `OpenRouter`. Those modules expose `provider` plus ergonomic aliases like `model`, `chat`, `responses`, or `apis` so internal call sites stay direct. External provider packages should make their default export the `Provider.make(...)` result and may also export named aliases for convenience.
 
 Examples:
 
-- `OpenAI.model` defaults to Responses, and `OpenAI.chat` constructs a Chat model in [`src/providers/openai.ts`](./src/providers/openai.ts).
+- `OpenAI.model` defaults to Responses, while `OpenAI.apis.chat` and `OpenAI.chat` construct a Chat model in [`src/providers/openai.ts`](./src/providers/openai.ts).
 - `Anthropic.model` constructs a Messages model in [`src/providers/anthropic.ts`](./src/providers/anthropic.ts).
 - `Google.model` constructs a Gemini model in [`src/providers/google.ts`](./src/providers/google.ts).
 - `AmazonBedrock.model` constructs a Bedrock Converse model with credentials in [`src/providers/amazon-bedrock.ts`](./src/providers/amazon-bedrock.ts).
 - `OpenAICompatible.deepseek.model` constructs a named OpenAI-compatible deployment model in [`src/providers/openai-compatible.ts`](./src/providers/openai-compatible.ts).
 - `OpenRouter.model` constructs an OpenAI-compatible Chat model with OpenRouter options in [`src/providers/openrouter.ts`](./src/providers/openrouter.ts).
 
-Provider helpers should usually not contain stream parsing, JSON decoding, or protocol details. They set provider identity, defaults, capabilities, deployment options, and model-bound adapters.
+Provider definitions should usually not contain stream parsing, JSON decoding, or protocol details. They set provider identity, defaults, capabilities, deployment options, auth defaults, and model-bound adapters. Keep lower-level adapter arrays as separate advanced exports; they are implementation details, not fields on `Provider.make(...)`.
 
 ## 8. Provider Options Lower In Providers Or Protocols
 
