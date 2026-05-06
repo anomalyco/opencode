@@ -19,53 +19,43 @@ See `instance-context.md` for the phased plan to remove the legacy ALS / promise
 
 ## Service shape
 
-Every service follows the same pattern — a single namespace with the service definition, layer, `runPromise`, and async facade functions:
+Every service follows the same pattern: one module, flat top-level exports, traced Effect methods, and a self-reexport at the bottom when the file is the public module.
 
 ```ts
-export namespace Foo {
-  export interface Interface {
-    readonly get: (id: FooID) => Effect.Effect<FooInfo, FooError>
-  }
-
-  export class Service extends Context.Service<Service, Interface>()("@opencode/Foo") {}
-
-  export const layer = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      // For instance-scoped services:
-      const state = yield* InstanceState.make<State>(
-        Effect.fn("Foo.state")(() => Effect.succeed({ ... })),
-      )
-
-      const get = Effect.fn("Foo.get")(function* (id: FooID) {
-        const s = yield* InstanceState.get(state)
-        // ...
-      })
-
-      return Service.of({ get })
-    }),
-  )
-
-  // Optional: wire dependencies
-  export const defaultLayer = layer.pipe(Layer.provide(FooDep.layer))
-
-  // Per-service runtime (inside the namespace)
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  // Async facade functions
-  export async function get(id: FooID) {
-    return runPromise((svc) => svc.get(id))
-  }
+export interface Interface {
+  readonly get: (id: FooID) => Effect.Effect<FooInfo, FooError>
 }
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/Foo") {}
+
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const state = yield* InstanceState.make<State>(
+      Effect.fn("Foo.state")(() => Effect.succeed({ ... })),
+    )
+
+    const get = Effect.fn("Foo.get")(function* (id: FooID) {
+      const s = yield* InstanceState.get(state)
+      // ...
+    })
+
+    return Service.of({ get })
+  }),
+)
+
+export const defaultLayer = layer.pipe(Layer.provide(FooDep.layer))
+
+export * as Foo from "."
 ```
 
 Rules:
 
-- Keep everything in one namespace, one file — no separate `service.ts` / `index.ts` split
-- `runPromise` goes inside the namespace (not exported unless tests need it)
-- Facade functions are plain `async function` — no `fn()` wrappers
-- Use `Effect.fn("Namespace.method")` for all Effect functions (for tracing)
-- No `Layer.fresh` — InstanceState handles per-directory isolation
+- Keep the service surface in one module; prefer flat top-level exports over `export namespace Foo { ... }`
+- Use `Effect.fn("Foo.method")` for Effect methods
+- Use a self-reexport (`export * as Foo from "."` or `"./foo"`) for the public namespace projection
+- Avoid service-local `makeRuntime(...)` facades unless a file is still intentionally in the older migration phase
+- No `Layer.fresh` for normal per-directory isolation; use `InstanceState`
 
 ## Schema → Zod interop
 
@@ -266,7 +256,7 @@ Tool-specific filesystem cleanup notes live in `tools.md`.
 
 ## Destroying the facades
 
-This phase is still broadly open. As of 2026-04-13 there are still 15 `makeRuntime(...)` call sites under `src/`, with 13 still in scope for facade removal. The live checklist now lives in `facades.md`.
+This phase is no longer broadly open. There are 5 `makeRuntime(...)` call sites under `src/`, and only a small subset are still ordinary facade-removal targets. The live checklist now lives in `facades.md`.
 
 These facades exist because cyclic imports used to force each service to build its own independent runtime. Now that the layer DAG is acyclic and `AppRuntime` (`src/effect/app-runtime.ts`) composes everything into one `ManagedRuntime`, we're removing them.
 
@@ -297,11 +287,11 @@ For each service, the migration is roughly:
 - `ShareNext` — migrated 2026-04-11. Swapped remaining async callers to `AppRuntime.runPromise(ShareNext.Service.use(...))`, removed the `makeRuntime(...)` facade, and kept instance bootstrap on the shared app runtime.
 - `SessionTodo` — migrated 2026-04-10. Already matched the target service shape in `session/todo.ts`: single namespace, traced Effect methods, and no `makeRuntime(...)` facade remained; checklist updated to reflect the completed migration.
 - `Storage` — migrated 2026-04-10. One production caller (`Session.diff`) and all storage.test.ts tests converted to effectful style. Facades and `makeRuntime` removed.
-- `SessionRunState` — migrated 2026-04-11. Single caller in `server/instance/session.ts` converted; facade removed.
-- `Account` — migrated 2026-04-11. Callers in `server/instance/experimental.ts` and `cli/cmd/account.ts` converted; facade removed.
+- `SessionRunState` — migrated 2026-04-11. Single caller in `server/routes/instance/session.ts` converted; facade removed.
+- `Account` — migrated 2026-04-11. Callers in `server/routes/instance/experimental.ts` and `cli/cmd/account.ts` converted; facade removed.
 - `Instruction` — migrated 2026-04-11. Test-only callers converted; facade removed.
 - `FileWatcher` — migrated 2026-04-11. Callers in `project/bootstrap.ts` and test converted; facade removed.
-- `Question` — migrated 2026-04-11. Callers in `server/instance/question.ts` and test converted; facade removed.
+- `Question` — migrated 2026-04-11. Callers in `server/routes/instance/question.ts` and test converted; facade removed.
 - `Truncate` — migrated 2026-04-11. Caller in `tool/tool.ts` and test converted; facade removed.
 
 ## Route handler effectification

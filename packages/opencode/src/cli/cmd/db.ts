@@ -1,11 +1,11 @@
 import type { Argv } from "yargs"
 import { spawn } from "child_process"
-import { Database } from "../../storage"
+import { Database } from "@/storage/db"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { Database as BunDatabase } from "bun:sqlite"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { JsonMigration } from "../../storage"
+import { JsonMigration } from "@/storage/json-migration"
 import { EOL } from "os"
 import { errorMessage } from "../../util/error"
 

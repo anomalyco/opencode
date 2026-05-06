@@ -10,6 +10,11 @@ export const schema = z.object({
       // every version looks like: `{model.id}-YYYY-MM-DD`
       version: z.string(),
       supported_endpoints: z.array(z.string()).optional(),
+      policy: z
+        .object({
+          state: z.string().optional(),
+        })
+        .optional(),
       capabilities: z.object({
         family: z.string(),
         limits: z.object({
@@ -53,7 +58,7 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
 
   const isMsgApi = remote.supported_endpoints?.includes("/v1/messages")
 
-  return {
+  const model: Model = {
     id: key,
     providerID: "github-copilot",
     api: {
@@ -102,8 +107,50 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     release_date:
       prev?.release_date ??
       (remote.version.startsWith(`${remote.id}-`) ? remote.version.slice(remote.id.length + 1) : remote.version),
-    variants: prev?.variants ?? {},
   }
+
+  const efforts = remote.capabilities.supports.reasoning_effort
+  const variants: NonNullable<Model["variants"]> = {}
+  if (!isMsgApi && efforts?.length) {
+    efforts.forEach((effort) => {
+      variants[effort] = {
+        reasoningEffort: effort,
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      }
+    })
+  } else {
+    if (efforts?.length && remote.capabilities.supports.adaptive_thinking) {
+      efforts.forEach((effort) => {
+        variants[effort] = {
+          thinking: {
+            type: "adaptive",
+            ...(model.api.id.includes("opus-4.7") ? { display: "summarized" } : {}),
+          },
+          effort,
+        }
+      })
+    } else if (remote.capabilities.supports.max_thinking_budget) {
+      const max = remote.capabilities.supports.max_thinking_budget
+      variants["max"] = {
+        thinking: {
+          type: "enabled",
+          budgetTokens: max - 1,
+        },
+      }
+      variants["high"] = {
+        thinking: {
+          type: "enabled",
+          budgetTokens: Math.floor(max / 2),
+        },
+      }
+    }
+  }
+  if (Object.keys(variants).length > 0) {
+    model.variants = variants
+  }
+
+  return model
 }
 
 export async function get(
@@ -122,7 +169,9 @@ export async function get(
   })
 
   const result = { ...existing }
-  const remote = new Map(data.data.filter((m) => m.model_picker_enabled).map((m) => [m.id, m] as const))
+  const remote = new Map(
+    data.data.filter((m) => m.model_picker_enabled && m.policy?.state !== "disabled").map((m) => [m.id, m] as const),
+  )
 
   // prune existing models whose api.id isn't in the endpoint response
   for (const [key, model] of Object.entries(result)) {

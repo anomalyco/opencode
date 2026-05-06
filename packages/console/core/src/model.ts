@@ -34,11 +34,12 @@ export namespace ZenData {
       z.object({
         id: z.string(),
         model: z.string(),
+        priority: z.number().optional(),
+        tpmLimit: z.number().optional(),
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
         payloadModifier: z.record(z.string(), z.any()).optional(),
-        safetyIdentifier: z.boolean().optional(),
       }),
     ),
   })
@@ -123,10 +124,16 @@ export namespace ZenData {
       ),
       models: (() => {
         const normalize = (model: z.infer<typeof ModelSchema>) => {
-          const composite = model.providers.find((p) => compositeProviders[p.id].length > 1)
+          const providers = model.providers.map((p) => ({
+            ...p,
+            priority: p.priority ?? Infinity,
+            weight: p.weight ?? 1,
+          }))
+          const composite = providers.find((p) => compositeProviders[p.id].length > 1)
           if (!composite)
             return {
               trialProvider: model.trialProvider ? [model.trialProvider] : undefined,
+              providers,
             }
 
           const weightMulti = compositeProviders[composite.id].length
@@ -137,17 +144,16 @@ export namespace ZenData {
               if (model.trialProvider === composite.id) return compositeProviders[composite.id].map((p) => p.id)
               return [model.trialProvider]
             })(),
-            providers: model.providers.flatMap((p) =>
+            providers: providers.flatMap((p) =>
               p.id === composite.id
                 ? compositeProviders[p.id].map((sub) => ({
                     ...p,
                     id: sub.id,
-                    weight: p.weight ?? 1,
                   }))
                 : [
                     {
                       ...p,
-                      weight: (p.weight ?? 1) * weightMulti,
+                      weight: p.weight * weightMulti,
                     },
                   ],
             ),

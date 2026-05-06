@@ -9,11 +9,13 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
+import { useProject } from "../../context/project"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import { Keybind } from "@/util"
-import { Locale } from "@/util"
-import { Global } from "@/global"
+import { Keybind } from "@/util/keybind"
+import { Locale } from "@/util/locale"
+import { Global } from "@opencode-ai/core/global"
+import { ShellID } from "@/tool/shell/id"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
@@ -131,6 +133,7 @@ function TextBody(props: { title: string; description?: string; icon?: string })
 
 export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sdk = useSDK()
+  const project = useProject()
   const sync = useSync()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
@@ -187,6 +190,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             void sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,
+              workspace: project.workspace.current(),
             })
           }}
         />
@@ -198,6 +202,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               reply: "reject",
               requestID: props.request.id,
               message: message || undefined,
+              workspace: project.workspace.current(),
             })
           }}
           onCancel={() => {
@@ -283,7 +288,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
-            if (permission === "bash") {
+            if (permission === ShellID.ToolID) {
               const title =
                 typeof data.description === "string" && data.description ? data.description : "Shell command"
               const command = typeof data.command === "string" ? data.command : ""
@@ -336,21 +341,6 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               return {
                 icon: "◈",
                 title: `Exa Web Search "${query}"`,
-                body: (
-                  <Show when={query}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Query: " + query}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "codesearch") {
-              const query = typeof data.query === "string" ? data.query : ""
-              return {
-                icon: "◇",
-                title: `Exa Code Search "${query}"`,
                 body: (
                   <Show when={query}>
                     <box paddingLeft={1}>
@@ -450,12 +440,14 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   void sdk.client.permission.reply({
                     reply: "reject",
                     requestID: props.request.id,
+                    workspace: project.workspace.current(),
                   })
                   return
                 }
                 void sdk.client.permission.reply({
                   reply: "once",
                   requestID: props.request.id,
+                  workspace: project.workspace.current(),
                 })
               }}
             />

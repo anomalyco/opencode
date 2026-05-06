@@ -4,14 +4,15 @@ import fs from "fs/promises"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
-import { LSP } from "../../src/lsp"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { WithInstance } from "../../src/project/with-instance"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { LSP } from "@/lsp/lsp"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
-import { Truncate } from "../../src/tool"
+import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
@@ -26,13 +27,8 @@ const ctx = {
 }
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
-
-async function touch(file: string, time: number) {
-  const date = new Date(time)
-  await fs.utimes(file, date, date)
-}
 
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(
@@ -78,7 +74,7 @@ describe("tool.edit", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "newfile.txt")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -101,11 +97,42 @@ describe("tool.edit", () => {
       })
     })
 
+    test("preserves BOM when oldString is empty on existing files", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "existing.cs")
+      const bom = String.fromCharCode(0xfeff)
+      await fs.writeFile(filepath, `${bom}using System;\n`, "utf-8")
+
+      await WithInstance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await resolve()
+          const result = await Effect.runPromise(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "",
+                newString: "using Up;\n",
+              },
+              ctx,
+            ),
+          )
+
+          expect(result.metadata.diff).toContain("-using System;")
+          expect(result.metadata.diff).toContain("+using Up;")
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content.charCodeAt(0)).toBe(0xfeff)
+          expect(content.slice(1)).toBe("using Up;\n")
+        },
+      })
+    })
+
     test("creates new file with nested directories", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "nested", "dir", "file.txt")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -130,7 +157,7 @@ describe("tool.edit", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "new.txt")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const { FileWatcher } = await import("../../src/file/watcher")
@@ -165,7 +192,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "existing.txt")
       await fs.writeFile(filepath, "old content here", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -188,11 +215,43 @@ describe("tool.edit", () => {
       })
     })
 
+    test("replaces the first visible line in BOM files", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "existing.cs")
+      const bom = String.fromCharCode(0xfeff)
+      await fs.writeFile(filepath, `${bom}using System;\nclass Test {}\n`, "utf-8")
+
+      await WithInstance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await resolve()
+          const result = await Effect.runPromise(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "using System;",
+                newString: "using Up;",
+              },
+              ctx,
+            ),
+          )
+
+          expect(result.metadata.diff).toContain("-using System;")
+          expect(result.metadata.diff).toContain("+using Up;")
+          expect(result.metadata.diff).not.toContain(bom)
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content.charCodeAt(0)).toBe(0xfeff)
+          expect(content.slice(1)).toBe("using Up;\nclass Test {}\n")
+        },
+      })
+    })
+
     test("throws error when file does not exist", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "nonexistent.txt")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -217,7 +276,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "content", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -242,7 +301,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "actual content", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -267,7 +326,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "foo bar foo baz foo", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -294,7 +353,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "original", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const { FileWatcher } = await import("../../src/file/watcher")
@@ -329,7 +388,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -355,7 +414,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "line1\r\nold\r\nline3", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -381,7 +440,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "content", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -406,7 +465,7 @@ describe("tool.edit", () => {
       const dirpath = path.join(tmp.path, "adir")
       await fs.mkdir(dirpath)
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -431,7 +490,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -500,7 +559,7 @@ describe("tool.edit", () => {
         },
       })
 
-      return await Instance.provide({
+      return await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
@@ -639,42 +698,56 @@ describe("tool.edit", () => {
   })
 
   describe("concurrent editing", () => {
-    test("serializes concurrent edits to same file", async () => {
+    test("preserves concurrent edits to different sections of the same file", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
-      await fs.writeFile(filepath, "0", "utf-8")
+      await fs.writeFile(filepath, "top = 0\nmiddle = keep\nbottom = 0\n", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
+          let asks = 0
+          const firstAsk = Promise.withResolvers<void>()
+          const delayedCtx = {
+            ...ctx,
+            ask: () =>
+              Effect.gen(function* () {
+                asks++
+                if (asks !== 1) return
+                firstAsk.resolve()
+                yield* Effect.promise(() => Bun.sleep(50))
+              }),
+          }
 
-          // Two concurrent edits
           const promise1 = Effect.runPromise(
             edit.execute(
               {
                 filePath: filepath,
-                oldString: "0",
-                newString: "1",
+                oldString: "top = 0",
+                newString: "top = 1",
               },
-              ctx,
+              delayedCtx,
             ),
           )
+
+          await firstAsk.promise
 
           const promise2 = Effect.runPromise(
             edit.execute(
               {
                 filePath: filepath,
-                oldString: "0",
-                newString: "2",
+                oldString: "bottom = 0",
+                newString: "bottom = 2",
               },
-              ctx,
+              delayedCtx,
             ),
           )
 
-          // Both should complete without error (though one might fail due to content mismatch)
           const results = await Promise.allSettled([promise1, promise2])
-          expect(results.some((r) => r.status === "fulfilled")).toBe(true)
+          expect(results[0]?.status).toBe("fulfilled")
+          expect(results[1]?.status).toBe("fulfilled")
+          expect(await fs.readFile(filepath, "utf-8")).toBe("top = 1\nmiddle = keep\nbottom = 2\n")
         },
       })
     })
