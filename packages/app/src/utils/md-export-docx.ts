@@ -6,20 +6,104 @@
 // - 比 turbodocx 强(后者代码块视觉根本问题不可解决)
 // - 库内置 200+ 语言 syntax 高亮(默认 github-light 主题)
 // - 库基于成熟的 docx@9.x(5k stars 主流)
-//
-// 已知遗留(对 user 透明,已记需求池):
-// - 代码块**空行段两侧仍有横线分隔**(库内部把空行当独立段落,top/bottom border 仍渲染)
-// - between=none monkey-patch 解决了真代码行之间的横线,但空行段仍有
 
 import markdownDocx, { Packer, styles } from "@jinzhongjia/markdown-docx"
 import { invoke } from "@tauri-apps/api/core"
 import { showToast } from "@opencode-ai/ui/toast"
+import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate"
 import { resolveAbsolute } from "@/utils/local-asset"
 
 // FORK: monkey-patch 关代码块段间分隔线 — 库 default 把 between 边框设成跟 top 一样,
 // 导致每段画线;改 none 让段间只是普通行距 2026-05-05
 // 用 any cast 绕过库类型 readonly
 ;(styles as any).markdown.code.paragraph.border.between = { style: "none", size: 0 }
+
+// FORK: A1 — 代码块切分根治 2026-05-06
+// 根因:库每行代码生成 1 个 <w:p>,首段 pBdr=[top,l,r] / 中段 [l,r] / 尾段 [bottom,l,r]。
+// WPS 渲染时按"边框集合相同才合并 box"判断 — 首尾段集合不同,被切成 3+ 个独立 box。
+// 解:post-process docx zip,把每组连续 MdCode 段合并成 1 个 <w:p>,行间用 <w:br/>,
+//    pBdr 改成完整四边 — 单段单 box,绝对不切。
+const FULL_BORDER =
+  `<w:pBdr>` +
+  `<w:top w:val="single" w:color="E1E4E8" w:sz="1" w:space="8"/>` +
+  `<w:left w:val="single" w:color="E1E4E8" w:sz="1" w:space="8"/>` +
+  `<w:bottom w:val="single" w:color="E1E4E8" w:sz="1" w:space="8"/>` +
+  `<w:right w:val="single" w:color="E1E4E8" w:sz="1" w:space="8"/>` +
+  `</w:pBdr>`
+
+function mergeCodeBlockParagraphs(docXml: string): string {
+  const pPattern = /<w:p\b[^>]*>[\s\S]*?<\/w:p>/g
+  const paragraphs = [...docXml.matchAll(pPattern)]
+  if (paragraphs.length === 0) return docXml
+
+  // 注:用段落级 pStyle 精确匹配,不能用 includes("w:val=\"MdCode\"") —
+  // 因为 inline code(反引号)在 OOXML 里是 <w:rStyle w:val="MdCode"/>(字符样式),
+  // 含 inline code 的列表项 / 段落会被误判成代码块段并被错误合并。
+  const isCode = paragraphs.map((m) => {
+    const pPr = m[0].match(/<w:pPr>[\s\S]*?<\/w:pPr>/)
+    return pPr ? /<w:pStyle\s+w:val="MdCode"/.test(pPr[0]) : false
+  })
+  const groups: Array<[number, number]> = []
+  let i = 0
+  while (i < isCode.length) {
+    if (isCode[i]) {
+      let j = i
+      while (j < isCode.length && isCode[j]) j++
+      if (j - i >= 2) groups.push([i, j])
+      i = j
+    } else i++
+  }
+  if (groups.length === 0) return docXml
+
+  let result = docXml
+  for (let g = groups.length - 1; g >= 0; g--) {
+    const [start, end] = groups[g]
+    const segs = paragraphs.slice(start, end).map((m) => m[0])
+
+    const firstPPrMatch = segs[0].match(/<w:pPr>[\s\S]*?<\/w:pPr>/)
+    if (!firstPPrMatch) continue
+    let mergedPPr = firstPPrMatch[0]
+
+    if (mergedPPr.includes("<w:pBdr>")) {
+      mergedPPr = mergedPPr.replace(/<w:pBdr>[\s\S]*?<\/w:pBdr>/, FULL_BORDER)
+    } else {
+      mergedPPr = mergedPPr.replace("<w:pStyle", FULL_BORDER + "<w:pStyle")
+    }
+    mergedPPr = mergedPPr
+      .replace(/(<w:spacing[^/]*?)w:before="\d+"/g, '$1w:before="0"')
+      .replace(/(<w:spacing[^/]*?)w:after="\d+"/g, '$1w:after="0"')
+
+    const mergedRuns = segs
+      .map((seg) => [...seg.matchAll(/<w:r\b[^>]*>[\s\S]*?<\/w:r>/g)].map((m) => m[0]).join(""))
+      .join('<w:r><w:br/></w:r>')
+
+    const mergedP = `<w:p>${mergedPPr}${mergedRuns}</w:p>`
+
+    const replaceStart = paragraphs[start].index!
+    const lastSeg = paragraphs[end - 1]
+    const replaceEnd = lastSeg.index! + lastSeg[0].length
+    result = result.slice(0, replaceStart) + mergedP + result.slice(replaceEnd)
+  }
+  return result
+}
+
+/** base64 → Uint8Array(浏览器 atob)*/
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+/** Uint8Array → base64(分块避免 String.fromCharCode 栈溢出)*/
+function bytesToBase64(bytes: Uint8Array): string {
+  let bstr = ""
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bstr += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(bstr)
+}
 
 // FORK: emoji 预处理(B1)— Word 默认字体不一定含 emoji glyphs,有些 emoji 渲染为方框 / 乱码
 // 替换为文字符号(覆盖常用 ~30 个,其他 emoji 接受现状)2026-05-06
@@ -280,10 +364,13 @@ export const exportMdAsDocx = async (opts: {
       },
     })
 
-    // 4. 序列化为 base64 + 写盘(用 fork-only Tauri command 绕开二进制 IPC 限制)
-    // 注:Packer.toBuffer() 是 Node-only,Tauri webview 浏览器环境会报"nodebuffer is not supported";
-    //    Packer.toBase64String() 直接出 base64,既适配浏览器又省一步 buffer→base64 转换
-    const base64 = await Packer.toBase64String(doc)
+    // 4. 序列化 → post-process(合并连续 MdCode 段为 single-paragraph + soft break)→ 写盘
+    // 注:Packer.toBuffer() Node-only,浏览器报"nodebuffer is not supported";用 toBase64String + atob/btoa 转字节
+    const base64Original = await Packer.toBase64String(doc)
+    const zipObj = unzipSync(base64ToBytes(base64Original))
+    const docXml = strFromU8(zipObj["word/document.xml"])
+    zipObj["word/document.xml"] = strToU8(mergeCodeBlockParagraphs(docXml))
+    const base64 = bytesToBase64(zipSync(zipObj))
     await invoke("write_binary_file_absolute_base64", { path: filePath, base64Content: base64 })
 
     showToast({ variant: "success", title: opts.i18n.success })
