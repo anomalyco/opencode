@@ -8,6 +8,7 @@ import { mergeDeep } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import {
   LLMClient,
+  type LLMClientService,
   type ProtocolID,
 } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/adapter"
@@ -103,7 +104,7 @@ const live: Layer.Layer<
   | Provider.Service
   | Plugin.Service
   | Permission.Service
-  | RequestExecutor.Service
+  | LLMClientService
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -112,11 +113,7 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
-    // Required by the LLM-native stream path. The default layer wires it on
-    // top of `FetchHttpClient.layer`. Yielded here (not inside `runNative`)
-    // so the executor instance is shared across every native stream the
-    // service hands out.
-    const executor = yield* RequestExecutor.Service
+    const llmClient = yield* LLMClient.Service
 
     const prepare = Effect.fn("LLM.prepareStream")(function* (input: StreamRequest) {
       const [language, cfg, item, info] = yield* Effect.all(
@@ -581,14 +578,14 @@ const live: Layer.Layer<
       const upstream = filteredNativeTools && filteredNativeTools.length > 0
           ? LLMNativeTools.runWithTools({
               request: llmRequest,
+              client: llmClient,
               tools: filteredAITools,
               abort: input.abort,
             })
-          : LLMClient.stream(llmRequest)
+          : llmClient.stream(llmRequest)
       return upstream.pipe(
         Stream.flatMap((event) => Stream.fromIterable(map.map(event))),
         Stream.concat(Stream.unwrap(Effect.sync(() => Stream.fromIterable(map.flush())))),
-        Stream.provideService(RequestExecutor.Service, executor),
       )
     })
 
@@ -620,15 +617,16 @@ const live: Layer.Layer<
 
 export const layer = live.pipe(Layer.provide(Permission.defaultLayer))
 
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
+export const defaultLayer = Layer.suspend(() => {
+  const llmClientLayer = LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer))
+  return layer.pipe(
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
-    Layer.provide(RequestExecutor.defaultLayer),
-  ),
-)
+    Layer.provide(llmClientLayer),
+  )
+})
 
 function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
   const disabled = Permission.disabled(

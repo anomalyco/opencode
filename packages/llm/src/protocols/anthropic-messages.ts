@@ -314,6 +314,7 @@ const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (re
 
 const toPayload = Effect.fn("AnthropicMessages.toPayload")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
+  const generation = request.generation
   return {
     model: request.model.id,
     system: request.system.length === 0
@@ -323,11 +324,11 @@ const toPayload = Effect.fn("AnthropicMessages.toPayload")(function* (request: L
     tools: request.tools.length === 0 || request.toolChoice?.type === "none" ? undefined : request.tools.map(lowerTool),
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: request.generation.maxTokens ?? request.model.limits.output ?? 4096,
-    temperature: request.generation.temperature,
-    top_p: request.generation.topP,
-    top_k: request.generation.topK,
-    stop_sequences: request.generation.stop,
+    max_tokens: generation?.maxTokens ?? request.model.limits.output ?? 4096,
+    temperature: generation?.temperature,
+    top_p: generation?.topP,
+    top_k: generation?.topK,
+    stop_sequences: generation?.stop,
     thinking: yield* lowerThinking(request),
   }
 })

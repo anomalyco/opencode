@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src"
+import { LLM, type LLMRequest } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { eventSummary, textRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
+import * as TestLLMClient from "../lib/llm-client"
 
 const model = OpenAIChat.model({
   id: "gpt-4o-mini",
@@ -36,12 +37,15 @@ const recorded = recordedTests({
   protocol: "openai-chat",
   requires: ["OPENAI_API_KEY"],
 })
-const openai = LLMClient
+const generate = (request: LLMRequest) =>
+  Effect.gen(function* () {
+    return yield* TestLLMClient.generate(request)
+  })
 
 describe("OpenAI Chat recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
-      const response = yield* openai.generate(request)
+      const response = yield* generate(request)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "text", value: "Hello!" },
@@ -62,7 +66,7 @@ describe("OpenAI Chat recorded", () => {
 
   recorded.effect.with("streams tool call", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* openai.generate(toolRequest)
+      const response = yield* generate(toolRequest)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },
@@ -77,7 +81,7 @@ describe("OpenAI Chat recorded", () => {
 
   recorded.effect.with("continues after tool result", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* openai.generate(toolResultRequest)
+      const response = yield* generate(toolResultRequest)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "text", value: "The weather in Paris is sunny with a temperature of 22°C." },

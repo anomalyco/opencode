@@ -1,9 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { LLM, ProviderChunkError } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as Gemini from "../../src/protocols/gemini"
-import { testEffect } from "../lib/effect"
+import { it } from "../lib/effect"
+import * as TestLLMClient from "../lib/llm-client"
 import { fixedResponse } from "../lib/http"
 import { sseEvents, sseRaw } from "../lib/sse"
 
@@ -21,12 +22,10 @@ const request = LLM.request({
   generation: { maxTokens: 20, temperature: 0 },
 })
 
-const it = testEffect(Layer.empty)
-
 describe("Gemini adapter", () => {
   it.effect("prepares Gemini target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(request)
+      const prepared = yield* TestLLMClient.prepare(request)
 
       expect(prepared.payload).toEqual({
         contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
@@ -38,7 +37,7 @@ describe("Gemini adapter", () => {
 
   it.effect("prepares multimodal user input and tool history", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* TestLLMClient.prepare(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -91,7 +90,7 @@ describe("Gemini adapter", () => {
 
   it.effect("omits tools when tool choice is none", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* TestLLMClient.prepare(
         LLM.request({
           id: "req_no_tools",
           model,
@@ -109,7 +108,7 @@ describe("Gemini adapter", () => {
 
   it.effect("sanitizes integer enums, dangling required, untyped arrays, and scalar object keys", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* TestLLMClient.prepare(
         LLM.request({
           id: "req_schema_patch",
           model,
@@ -177,8 +176,7 @@ describe("Gemini adapter", () => {
           },
         },
       )
-      const response = yield* LLMClient
-        .generate(request)
+      const response = yield* TestLLMClient.generate(request)
         .pipe(Effect.provide(fixedResponse(body)))
 
       expect(LLM.outputText(response)).toBe("Hello!")
@@ -230,8 +228,7 @@ describe("Gemini adapter", () => {
           usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
         },
       )
-      const response = yield* LLMClient
-        .generate(
+      const response = yield* TestLLMClient.generate(
           LLM.updateRequest(request, {
             tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
           }),
@@ -266,8 +263,7 @@ describe("Gemini adapter", () => {
           }],
         },
       )
-      const response = yield* LLMClient
-        .generate(
+      const response = yield* TestLLMClient.generate(
           LLM.updateRequest(request, {
             tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
           }),
@@ -284,15 +280,13 @@ describe("Gemini adapter", () => {
 
   it.effect("maps length and content-filter finish reasons", () =>
     Effect.gen(function* () {
-      const length = yield* LLMClient
-        .generate(request)
+      const length = yield* TestLLMClient.generate(request)
         .pipe(
           Effect.provide(
             fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "MAX_TOKENS" }] })),
           ),
         )
-      const filtered = yield* LLMClient
-        .generate(request)
+      const filtered = yield* TestLLMClient.generate(request)
         .pipe(
           Effect.provide(
             fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "SAFETY" }] })),
@@ -306,8 +300,7 @@ describe("Gemini adapter", () => {
 
   it.effect("leaves total usage undefined when component counts are missing", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient
-        .generate(request)
+      const response = yield* TestLLMClient.generate(request)
         .pipe(Effect.provide(fixedResponse(sseEvents({ usageMetadata: { thoughtsTokenCount: 1 } }))))
 
       expect(response.usage).toMatchObject({ reasoningTokens: 1 })
@@ -317,8 +310,7 @@ describe("Gemini adapter", () => {
 
   it.effect("fails invalid stream chunks", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient
-        .generate(request)
+      const error = yield* TestLLMClient.generate(request)
         .pipe(
           Effect.provide(fixedResponse(sseRaw("data: {not json}"))),
           Effect.flip,
@@ -331,8 +323,7 @@ describe("Gemini adapter", () => {
 
   it.effect("rejects unsupported assistant media content", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient
-        .prepare(
+      const error = yield* TestLLMClient.prepare(
           LLM.request({
             id: "req_media",
             model,

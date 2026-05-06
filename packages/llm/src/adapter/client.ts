@@ -1,5 +1,5 @@
-import { Effect, Schema, Stream } from "effect"
-import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import type { Auth } from "./auth"
 import { bearer as authBearer } from "./auth"
 import { type Endpoint, render as renderEndpoint } from "./endpoint"
@@ -183,7 +183,7 @@ function model<Input extends AdapterMappedModelInput>(
   }
 }
 
-export interface LLMClient {
+export interface Interface {
   /**
    * Compile a request through protocol payload lowering, validation, and HTTP
    * construction without sending it. Returns the prepared request including the
@@ -195,9 +195,11 @@ export interface LLMClient {
    * adapter the request will resolve to.
    */
   readonly prepare: <Payload = unknown>(request: LLMRequest) => Effect.Effect<PreparedRequestOf<Payload>, LLMError>
-  readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
-  readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
+  readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
+  readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError>
 }
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
 const noAdapter = (model: ModelRef) =>
   new NoAdapterError({ adapter: model.adapter, protocol: model.protocol, provider: model.provider, model: model.id })
@@ -281,7 +283,11 @@ export function make<Payload, Frame, Chunk, State>(
         : ProviderShared.isRecord(payload)
         ? ProviderShared.encodeJson(mergeJsonRecords(payload, ctx.request.http.body) ?? {})
         : yield* ProviderShared.invalidRequest("http.body can only overlay JSON object request bodies")
-      const merged = { ...buildHeaders({ request: ctx.request }), ...ctx.request.model.headers, ...ctx.request.http?.headers }
+      const merged = Headers.fromInput({
+        ...buildHeaders({ request: ctx.request }),
+        ...ctx.request.model.headers,
+        ...ctx.request.http?.headers,
+      })
       const headers = yield* auth({
         request: ctx.request,
         method: "POST",
@@ -347,18 +353,17 @@ const prepare = Effect.fn("LLMClient.prepare")(function* (request: LLMRequest) {
   })
 })
 
-const stream = (request: LLMRequest) =>
+const streamWith = (executor: RequestExecutor.Interface) => (request: LLMRequest) =>
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request)
-      const executor = yield* RequestExecutor.Service
       const response = yield* executor.execute(compiled.http)
 
       return compiled.adapter.parse(response, { request: compiled.request })
     }),
   )
 
-const generate = Effect.fn("LLM.generate")(function* (request: LLMRequest) {
+const generateWith = (stream: Interface["stream"]) => Effect.fn("LLM.generate")(function* (request: LLMRequest) {
   return new LLMResponse(
     yield* stream(request).pipe(
       Stream.runFold(
@@ -373,9 +378,17 @@ const generate = Effect.fn("LLM.generate")(function* (request: LLMRequest) {
   )
 })
 
+export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const stream = streamWith(yield* RequestExecutor.Service)
+    return Service.of({ prepare: prepare as Interface["prepare"], stream, generate: generateWith(stream) })
+  }),
+)
+
 export const Adapter = { make, model } as const
 
-// The runtime always emits a `PreparedRequest` (payload: unknown). Callers who
-// supply a `Payload` type argument assert the shape they expect from their
-// adapter; the cast hands them a typed view of the same payload.
-export const LLMClient: LLMClient = { prepare: prepare as LLMClient["prepare"], stream, generate }
+export const LLMClient = {
+  Service,
+  layer,
+} as const

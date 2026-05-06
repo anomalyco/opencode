@@ -101,7 +101,7 @@ const it = testEffect(echoLayer)
 describe("llm adapter", () => {
   it.effect("stream and generate use the adapter pipeline", () =>
     Effect.gen(function* () {
-      const llm = LLMClient
+      const llm = yield* LLMClient.Service
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
       const response = yield* llm.generate(request)
 
@@ -112,7 +112,8 @@ describe("llm adapter", () => {
 
   it.effect("selects adapters by request adapter", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const llm = yield* LLMClient.Service
+      const prepared = yield* llm.prepare(
         LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "gemini-fake" }) }),
       )
 
@@ -122,7 +123,8 @@ describe("llm adapter", () => {
 
   it.effect("uses registered adapters by model adapter id", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const llm = yield* LLMClient.Service
+      const prepared = yield* llm.prepare(
         LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "gemini-fake" }) }),
       )
 
@@ -159,7 +161,8 @@ describe("llm adapter", () => {
         framing: fakeFraming,
       })
 
-      const response = yield* LLMClient.generate(request)
+      const llm = yield* LLMClient.Service
+      const response = yield* llm.generate(request)
 
       expect(response.text).toBe('echo:{"body":"hello"}')
     }),
@@ -167,7 +170,8 @@ describe("llm adapter", () => {
 
   it.effect("rejects missing adapter", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient
+      const llm = yield* LLMClient.Service
+      const error = yield* llm
         .prepare(
           LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "missing" }) }),
         )

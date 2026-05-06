@@ -2,7 +2,8 @@ export { LLMClient, modelCapabilities, modelLimits, modelRef } from "./adapter/c
 export type {
   AdapterModelInput,
   AdapterRoutedModelInput,
-  LLMClient as LLMClientShape,
+  Interface as LLMClientShape,
+  Service as LLMClientService,
   ModelCapabilitiesInput,
   ModelRefInput,
 } from "./adapter/client"

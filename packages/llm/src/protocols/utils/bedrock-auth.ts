@@ -1,5 +1,6 @@
 import { AwsV4Signer } from "aws4fetch"
 import { Effect, Option, Schema } from "effect"
+import { Headers } from "effect/unstable/http"
 import { Auth } from "../../adapter/auth"
 import type { Auth as AuthFn } from "../../adapter/auth"
 import type { LLMRequest } from "../../schema"
@@ -45,7 +46,7 @@ const credentialsFromInput = (request: LLMRequest): Credentials | undefined =>
 const signRequest = (input: {
   readonly url: string
   readonly body: string
-  readonly headers: Record<string, string>
+  readonly headers: Headers.Headers
   readonly credentials: Credentials
 }) =>
   Effect.tryPromise({
@@ -83,9 +84,9 @@ export const auth: AuthFn = (input) => {
         "Bedrock Converse requires either model.apiKey or AWS credentials in model.native.aws_credentials",
       )
     }
-    const headersForSigning = { ...input.headers, "content-type": "application/json" }
+    const headersForSigning = Headers.set(input.headers, "content-type", "application/json")
     const signed = yield* signRequest({ url: input.url, body: input.body, headers: headersForSigning, credentials })
-    return { ...headersForSigning, ...signed }
+    return Headers.setAll(headersForSigning, signed)
   })
 }
 

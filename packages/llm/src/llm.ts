@@ -1,15 +1,10 @@
-import { Context, Effect, Layer, Stream } from "effect"
 import {
-  LLMClient,
   modelCapabilities,
   modelLimits,
   modelRef,
   type ModelCapabilitiesInput,
   type ModelRefInput,
 } from "./adapter/client"
-import { RequestExecutor } from "./adapter/executor"
-import { type Tools } from "./tool"
-import { ToolRuntime, type RunOptions } from "./tool-runtime"
 import {
   GenerationOptions,
   HttpOptions,
@@ -23,64 +18,7 @@ import {
   type SystemPart,
   ToolCallPart,
   ToolResultPart,
-  mergeGenerationOptions,
-  mergeHttpOptions,
-  mergeProviderOptions,
 } from "./schema"
-import type { LLMError } from "./schema"
-
-export type StreamWithToolsInput<T extends Tools> = Omit<RequestInput, "tools"> & Omit<RunOptions<T>, "request">
-
-export interface Interface {
-  readonly stream: (input: LLMRequest | RequestInput) => Stream.Stream<LLMEvent, LLMError>
-  readonly generate: (input: LLMRequest | RequestInput) => Effect.Effect<LLMResponse, LLMError>
-  readonly streamWithTools: <T extends Tools>(
-    input: StreamWithToolsInput<T>,
-  ) => Stream.Stream<LLMEvent, LLMError>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
-
-const requestOf = (input: LLMRequest | RequestInput) => (input instanceof LLMRequest ? input : request(input))
-
-export const make = (executor: RequestExecutor.Interface): Interface => ({
-  stream: (input) =>
-    LLMClient.stream(requestOf(input)).pipe(Stream.provideService(RequestExecutor.Service, executor)),
-  generate: (input) =>
-    LLMClient.generate(requestOf(input)).pipe(Effect.provideService(RequestExecutor.Service, executor)),
-    streamWithTools: (input) => {
-      const { maxSteps, concurrency, stopWhen, tools, ...rest } = input
-      return ToolRuntime.run({ request: request(rest), tools, maxSteps, concurrency, stopWhen }).pipe(
-        Stream.provideService(RequestExecutor.Service, executor),
-      )
-    },
-})
-
-export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    return Service.of(make(yield* RequestExecutor.Service))
-  }),
-)
-
-export const stream = (input: LLMRequest | RequestInput) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      return (yield* Service).stream(input)
-    }),
-  )
-
-export const generate = (input: LLMRequest | RequestInput) =>
-  Effect.gen(function* () {
-    return yield* (yield* Service).generate(input)
-  })
-
-export const streamWithTools = <T extends Tools>(input: StreamWithToolsInput<T>) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      return (yield* Service).streamWithTools(input)
-    }),
-  )
 
 export type CapabilitiesInput = ModelCapabilitiesInput
 
@@ -95,7 +33,7 @@ export type ToolResultInput = Parameters<typeof ToolResultPart.make>[0]
 
 export type RequestInput = Omit<
   ConstructorParameters<typeof LLMRequest>[0],
-  "system" | "messages" | "tools" | "toolChoice" | "generation" | "http"
+  "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
 > & {
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
@@ -103,6 +41,7 @@ export type RequestInput = Omit<
   readonly tools?: ReadonlyArray<ToolDefinition | ConstructorParameters<typeof ToolDefinition>[0]>
   readonly toolChoice?: ToolChoiceInput
   readonly generation?: GenerationOptions | ConstructorParameters<typeof GenerationOptions>[0]
+  readonly providerOptions?: ConstructorParameters<typeof LLMRequest>[0]["providerOptions"]
   readonly http?: HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
 }
 
@@ -183,9 +122,9 @@ export const request = (input: RequestInput) => {
     messages: [...(messages?.map(message) ?? []), ...(prompt === undefined ? [] : [user(prompt)])],
     tools: tools?.map(toolDefinition) ?? [],
     toolChoice: requestToolChoice ? toolChoice(requestToolChoice) : undefined,
-    generation: mergeGenerationOptions(input.model.generation, generation(requestGeneration)) ?? generation(),
-    providerOptions: mergeProviderOptions(input.model.providerOptions, requestProviderOptions),
-    http: mergeHttpOptions(input.model.http, http(requestHttp)),
+    generation: requestGeneration === undefined ? undefined : generation(requestGeneration),
+    providerOptions: requestProviderOptions,
+    http: http(requestHttp),
   })
 }
 

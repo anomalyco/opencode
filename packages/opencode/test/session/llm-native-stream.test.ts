@@ -11,7 +11,7 @@ import { LLMNative } from "../../src/session/llm-native"
 import { LLMNativeEvents } from "../../src/session/llm-native-events"
 import { LLMNativeTools } from "../../src/session/llm-native-tools"
 import { ProviderTest } from "../fake/provider"
-import { testEffect } from "../lib/effect"
+import { it } from "../lib/effect"
 import type { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
 import type { Tool } from "../../src/tool/tool"
@@ -19,8 +19,8 @@ import type { Tool } from "../../src/tool/tool"
 // Inline HTTP layer that returns a single fixed body. Mirrors the
 // `fixedResponse` helper in `packages/llm/test/lib/http.ts` — duplicated here
 // rather than imported across packages so this test stays self-contained.
-const fixedResponse = (body: BodyInit, init: ResponseInit = { headers: { "content-type": "text/event-stream" } }) =>
-  RequestExecutor.layer.pipe(
+const fixedResponse = (body: BodyInit, init: ResponseInit = { headers: { "content-type": "text/event-stream" } }) => {
+  const requestExecutorLayer = RequestExecutor.layer.pipe(
     Layer.provide(
       Layer.succeed(
         HttpClient.HttpClient,
@@ -30,12 +30,14 @@ const fixedResponse = (body: BodyInit, init: ResponseInit = { headers: { "conten
       ),
     ),
   )
+  return Layer.merge(requestExecutorLayer, LLMClient.layer.pipe(Layer.provide(requestExecutorLayer)))
+}
 
 // Scripted multi-response HTTP layer. Each request consumes the next body in
 // order; the final body repeats if more requests arrive. Mirrors the
 // `scriptedResponses` helper in `packages/llm/test/lib/http.ts`.
-const scriptedResponses = (bodies: ReadonlyArray<BodyInit>, init: ResponseInit = { headers: { "content-type": "text/event-stream" } }) =>
-  RequestExecutor.layer.pipe(
+const scriptedResponses = (bodies: ReadonlyArray<BodyInit>, init: ResponseInit = { headers: { "content-type": "text/event-stream" } }) => {
+  const requestExecutorLayer = RequestExecutor.layer.pipe(
     Layer.provide(
       Layer.unwrap(
         Effect.gen(function* () {
@@ -54,6 +56,8 @@ const scriptedResponses = (bodies: ReadonlyArray<BodyInit>, init: ResponseInit =
       ),
     ),
   )
+  return Layer.merge(requestExecutorLayer, LLMClient.layer.pipe(Layer.provide(requestExecutorLayer)))
+}
 
 // Encode an Anthropic SSE body. Each event becomes a `data:` line; the codec
 // also expects `event:` lines but the package's SSE framing only reads the
@@ -91,8 +95,6 @@ const userMessage = (mdl: Provider.Model, id: MessageID, parts: MessageV2.Part[]
   parts,
 })
 
-const it = testEffect(Layer.empty)
-
 describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
   it.effect("converts an Anthropic SSE response into session events via the LLMNative path", () =>
     Effect.gen(function* () {
@@ -120,7 +122,9 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         { type: "message_stop" },
       ])
 
-      const events = yield* LLMClient.stream(llmRequest).pipe(
+      const events = yield* Stream.unwrap(Effect.gen(function* () {
+        return (yield* LLMClient.Service).stream(llmRequest)
+      })).pipe(
         Stream.flatMap((event) => Stream.fromIterable(map.map(event))),
         Stream.concat(Stream.unwrap(Effect.sync(() => Stream.fromIterable(map.flush())))),
         Stream.runCollect,
@@ -226,12 +230,14 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
       ])
 
       const map = LLMNativeEvents.mapper()
-
-      const events = yield* LLMNativeTools.runWithTools({
-        request: llmRequest,
-        tools: { lookup: aiTool },
-        abort: new AbortController().signal,
-      }).pipe(
+      const events = yield* Stream.unwrap(Effect.gen(function* () {
+        return LLMNativeTools.runWithTools({
+          client: yield* LLMClient.Service,
+          request: llmRequest,
+          tools: { lookup: aiTool },
+          abort: new AbortController().signal,
+        })
+      })).pipe(
         Stream.flatMap((event) => Stream.fromIterable(map.map(event))),
         Stream.concat(Stream.unwrap(Effect.sync(() => Stream.fromIterable(map.flush())))),
         Stream.runCollect,
@@ -300,7 +306,9 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         tools: [lookupTool],
       })
 
-      const prepared = yield* LLMClient.prepare(llmRequest)
+      const prepared = yield* Effect.gen(function* () {
+        return yield* (yield* LLMClient.Service).prepare(llmRequest)
+      }).pipe(Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer))))
       expect(prepared.payload).toMatchObject({
         tools: [
           {

@@ -1,16 +1,17 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { test, type TestOptions } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
-import { RequestExecutor } from "../src/adapter"
 import { testEffect } from "./lib/effect"
+import { runtimeLayer, type RuntimeEnv } from "./lib/http"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
+type RecordedEnv = RuntimeEnv
 
 type RecordedTestsOptions = {
   readonly prefix: string
@@ -107,7 +108,7 @@ export const recordedTests = (options: RecordedTestsOptions) => {
   const run = <A, E>(
     name: string,
     caseOptions: RecordedCaseOptions,
-    body: Body<A, E, RequestExecutor.Service>,
+    body: Body<A, E, RecordedEnv>,
     testOptions?: number | TestOptions,
   ) => {
     const cassette = cassetteName(options.prefix, name, caseOptions)
@@ -142,21 +143,19 @@ export const recordedTests = (options: RecordedTestsOptions) => {
       return test.skip(name, () => {}, testOptions)
     }
 
-    return testEffect(
-      RequestExecutor.layer.pipe(Layer.provide(HttpRecorder.cassetteLayer(cassette, layerOptions))),
-    ).live(name, body, testOptions)
+    return testEffect(runtimeLayer(HttpRecorder.cassetteLayer(cassette, layerOptions))).live(name, body, testOptions)
   }
 
   const effect = <A, E>(
     name: string,
-    body: Body<A, E, RequestExecutor.Service>,
+    body: Body<A, E, RecordedEnv>,
     testOptions?: number | TestOptions,
   ) => run(name, {}, body, testOptions)
 
   effect.with = <A, E>(
     name: string,
     caseOptions: RecordedCaseOptions,
-    body: Body<A, E, RequestExecutor.Service>,
+    body: Body<A, E, RecordedEnv>,
     testOptions?: number | TestOptions,
   ) => run(name, caseOptions, body, testOptions)
 

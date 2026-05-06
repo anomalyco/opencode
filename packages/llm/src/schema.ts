@@ -382,7 +382,7 @@ export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   messages: Schema.Array(Message),
   tools: Schema.Array(ToolDefinition),
   toolChoice: Schema.optional(ToolChoice),
-  generation: GenerationOptions,
+  generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
   responseFormat: Schema.optional(ResponseFormat),

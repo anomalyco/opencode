@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, ProviderRequestError } from "../../src"
+import { LLM, ProviderRequestError, type LLMRequest } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
+import * as TestLLMClient from "../lib/llm-client"
 
 const model = AnthropicMessages.model({
   id: "claude-haiku-4-5-20251001",
@@ -31,7 +32,10 @@ const recorded = recordedTests({
   requires: ["ANTHROPIC_API_KEY"],
   options: { requestHeaders: ["content-type", "anthropic-version"] },
 })
-const anthropic = LLMClient
+const generate = (request: LLMRequest) =>
+  Effect.gen(function* () {
+    return yield* TestLLMClient.generate(request)
+  })
 
 const malformedToolOrderRequest = LLM.request({
   id: "recorded_anthropic_malformed_tool_order",
@@ -50,7 +54,7 @@ const malformedToolOrderRequest = LLM.request({
 describe("Anthropic Messages recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
-      const response = yield* anthropic.generate(request)
+      const response = yield* generate(request)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "text", value: "Hello!" },
@@ -61,7 +65,7 @@ describe("Anthropic Messages recorded", () => {
 
   recorded.effect.with("streams tool call", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* anthropic.generate(toolRequest)
+      const response = yield* generate(toolRequest)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },
@@ -78,7 +82,7 @@ describe("Anthropic Messages recorded", () => {
 
   recorded.effect.with("rejects malformed assistant tool order", { tags: ["tool", "sad-path"] }, () =>
     Effect.gen(function* () {
-      const error = yield* anthropic.generate(malformedToolOrderRequest).pipe(Effect.flip)
+      const error = yield* generate(malformedToolOrderRequest).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(ProviderRequestError)
       expect(error).toMatchObject({ status: 400 })

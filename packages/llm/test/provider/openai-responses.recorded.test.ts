@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src"
+import { LLM, type LLMRequest } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as OpenAIResponses from "../../src/protocols/openai-responses"
 import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, weatherTool, weatherToolLoopRequest, weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
+import * as TestLLMClient from "../lib/llm-client"
 
 const model = OpenAIResponses.model({
   id: "gpt-5.5",
@@ -41,12 +42,15 @@ const recorded = recordedTests({
   protocol: "openai-responses",
   requires: ["OPENAI_API_KEY"],
 })
-const openai = LLMClient
+const generate = (request: LLMRequest) =>
+  Effect.gen(function* () {
+    return yield* TestLLMClient.generate(request)
+  })
 
 describe("OpenAI Responses recorded", () => {
   recorded.effect.with("gpt-5.5 streams text", { tags: ["flagship"] }, () =>
     Effect.gen(function* () {
-      const response = yield* openai.generate(textRequest)
+      const response = yield* generate(textRequest)
 
       expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
       expect(response.usage?.totalTokens).toBeGreaterThan(0)
@@ -56,7 +60,7 @@ describe("OpenAI Responses recorded", () => {
 
   recorded.effect.with("gpt-5.5 streams tool call", { tags: ["tool", "flagship"] }, () =>
     Effect.gen(function* () {
-      const response = yield* openai.generate(toolRequest)
+      const response = yield* generate(toolRequest)
 
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
       expect(response.events.find((event) => event.type === "tool-call")).toMatchObject({

@@ -76,10 +76,13 @@ export const weatherToolLoopRequest = (input: {
   })
 
 export const runWeatherToolLoop = (request: LLMRequest) =>
-  ToolRuntime.run({ request, tools: { [weatherToolName]: weatherRuntimeTool } }).pipe(
-    Stream.runCollect,
-    Effect.map((events) => Array.from(events)),
-  )
+  Effect.gen(function* () {
+    const runtime = yield* ToolRuntime.Service
+    return yield* runtime.run({ request, tools: { [weatherToolName]: weatherRuntimeTool } }).pipe(
+      Stream.runCollect,
+      Effect.map((events) => Array.from(events)),
+    )
+  })
 
 export const expectFinish = (
   events: ReadonlyArray<LLMEvent>,

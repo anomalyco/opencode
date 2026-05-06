@@ -1,6 +1,10 @@
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { RequestExecutor } from "../../src/adapter"
+import { LLMClient, RequestExecutor } from "../../src/adapter"
+import type { Service as LLMClientService } from "../../src/adapter/client"
+import type { Service as RequestExecutorService } from "../../src/adapter/executor"
+import { ToolRuntime } from "../../src/tool-runtime"
+import type { Service as ToolRuntimeService } from "../../src/tool-runtime"
 
 export type HandlerInput = {
   readonly request: HttpClientRequest.HttpClientRequest
@@ -26,8 +30,13 @@ const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
     ),
   )
 
-const executorWith = (layer: Layer.Layer<HttpClient.HttpClient>) =>
-  RequestExecutor.layer.pipe(Layer.provide(layer))
+export type RuntimeEnv = RequestExecutorService | LLMClientService | ToolRuntimeService
+
+export const runtimeLayer = (layer: Layer.Layer<HttpClient.HttpClient>): Layer.Layer<RuntimeEnv> => {
+  const requestExecutorLayer = RequestExecutor.layer.pipe(Layer.provide(layer))
+  const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
+  return Layer.mergeAll(requestExecutorLayer, llmClientLayer, ToolRuntime.layer.pipe(Layer.provide(llmClientLayer)))
+}
 
 const SSE_HEADERS = { "content-type": "text/event-stream" } as const
 
@@ -40,12 +49,12 @@ const SSE_HEADERS = { "content-type": "text/event-stream" } as const
 export const fixedResponse = (
   body: ConstructorParameters<typeof Response>[0],
   init: ResponseInit = { headers: SSE_HEADERS },
-) => executorWith(handlerLayer((input) => Effect.succeed(input.respond(body, init))))
+) => runtimeLayer(handlerLayer((input) => Effect.succeed(input.respond(body, init))))
 
 /**
  * Layer that builds a response per request. Useful for echo servers.
  */
-export const dynamicResponse = (handler: Handler) => executorWith(handlerLayer(handler))
+export const dynamicResponse = (handler: Handler) => runtimeLayer(handlerLayer(handler))
 
 /**
  * Layer that emits the supplied SSE chunks and then aborts mid-stream. Used to

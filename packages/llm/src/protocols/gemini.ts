@@ -265,12 +265,13 @@ const thinkingConfig = (request: LLMRequest) => {
 
 const toPayload = Effect.fn("Gemini.toPayload")(function* (request: LLMRequest) {
   const toolsEnabled = request.tools.length > 0 && request.toolChoice?.type !== "none"
+  const generation = request.generation
   const generationConfig = {
-    maxOutputTokens: request.generation.maxTokens,
-    temperature: request.generation.temperature,
-    topP: request.generation.topP,
-    topK: request.generation.topK,
-    stopSequences: request.generation.stop,
+    maxOutputTokens: generation?.maxTokens,
+    temperature: generation?.temperature,
+    topP: generation?.topP,
+    topK: generation?.topK,
+    stopSequences: generation?.stop,
     thinkingConfig: thinkingConfig(request),
   }
 

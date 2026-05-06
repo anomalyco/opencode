@@ -1,12 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src"
+import { LLM, type LLMRequest } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import * as OpenRouter from "../../src/providers/openrouter"
 import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
+import * as TestLLMClient from "../lib/llm-client"
 
 const deepseekModel = OpenAICompatible.deepseek.model("deepseek-chat", {
   apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture",
@@ -55,7 +56,10 @@ const xaiRequest = textRequest({ id: "recorded_xai_text", model: xaiModel })
 const xaiToolRequest = weatherToolRequest({ id: "recorded_xai_tool_call", model: xaiModel })
 
 const recorded = recordedTests({ prefix: "openai-compatible-chat", protocol: "openai-compatible-chat" })
-const llm = LLMClient
+const generate = (request: LLMRequest) =>
+  Effect.gen(function* () {
+    return yield* TestLLMClient.generate(request)
+  })
 
 const openrouterToolLoops = [
   {
@@ -81,7 +85,7 @@ const openrouterToolLoops = [
 describe("OpenAI-compatible Chat recorded", () => {
   recorded.effect.with("deepseek streams text", { provider: "deepseek", requires: ["DEEPSEEK_API_KEY"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(deepseekRequest)
+      const response = yield* generate(deepseekRequest)
 
       expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
@@ -90,7 +94,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("togetherai streams text", { provider: "togetherai", requires: ["TOGETHER_AI_API_KEY"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(togetherRequest)
+      const response = yield* generate(togetherRequest)
 
       expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
@@ -99,7 +103,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("togetherai streams tool call", { provider: "togetherai", requires: ["TOGETHER_AI_API_KEY"], tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(togetherToolRequest)
+      const response = yield* generate(togetherToolRequest)
 
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
       expectWeatherToolCall(response)
@@ -109,7 +113,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("groq streams text", { provider: "groq", requires: ["GROQ_API_KEY"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(groqRequest)
+      const response = yield* generate(groqRequest)
 
       expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
@@ -118,7 +122,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("groq streams tool call", { provider: "groq", requires: ["GROQ_API_KEY"], tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(groqToolRequest)
+      const response = yield* generate(groqToolRequest)
 
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
       expectWeatherToolCall(response)
@@ -138,7 +142,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("openrouter streams text", { provider: "openrouter", requires: ["OPENROUTER_API_KEY"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(openrouterRequest)
+      const response = yield* generate(openrouterRequest)
 
       expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
@@ -147,7 +151,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("openrouter streams tool call", { provider: "openrouter", requires: ["OPENROUTER_API_KEY"], tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(openrouterToolRequest)
+      const response = yield* generate(openrouterToolRequest)
 
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
       expectWeatherToolCall(response)
@@ -169,7 +173,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("xai streams text", { provider: "xai", requires: ["XAI_API_KEY"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(xaiRequest)
+      const response = yield* generate(xaiRequest)
 
       expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
@@ -178,7 +182,7 @@ describe("OpenAI-compatible Chat recorded", () => {
 
   recorded.effect.with("xai streams tool call", { provider: "xai", requires: ["XAI_API_KEY"], tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* llm.generate(xaiToolRequest)
+      const response = yield* generate(xaiToolRequest)
 
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
       expectWeatherToolCall(response)

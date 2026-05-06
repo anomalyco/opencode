@@ -1,11 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as OpenRouter from "../../src/providers/openrouter"
-import { testEffect } from "../lib/effect"
-
-const it = testEffect(Layer.empty)
+import { it } from "../lib/effect"
+import * as TestLLMClient from "../lib/llm-client"
 
 describe("OpenRouter", () => {
   it.effect("prepares OpenRouter models through the OpenAI-compatible Chat route", () =>
@@ -20,7 +19,7 @@ describe("OpenRouter", () => {
         apiKey: "test-key",
       })
 
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* TestLLMClient.prepare(
         LLM.request({ model, prompt: "Say hello." }),
       )
 
@@ -35,7 +34,7 @@ describe("OpenRouter", () => {
 
   it.effect("applies OpenRouter payload options from the model helper", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* TestLLMClient.prepare(
         LLM.request({
           model: OpenRouter.model("anthropic/claude-3.7-sonnet:thinking", {
             providerOptions: {

@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer"
 import { Cause, Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
-import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import { InvalidRequestError, ProviderChunkError, type MediaPart, type ToolResultPart } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
@@ -189,10 +189,10 @@ export const validateWith =
 export const jsonPost = (input: {
   readonly url: string
   readonly body: string
-  readonly headers?: Record<string, string>
+  readonly headers?: Headers.Input
 }) =>
   HttpClientRequest.post(input.url).pipe(
-    HttpClientRequest.setHeaders({ ...input.headers, "content-type": "application/json" }),
+    HttpClientRequest.setHeaders(Headers.set(Headers.fromInput(input.headers), "content-type", "application/json")),
     HttpClientRequest.bodyText(input.body, "application/json"),
   )
 

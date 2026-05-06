@@ -257,6 +257,7 @@ const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LL
 const toPayload = Effect.fn("OpenAIChat.toPayload")(function* (request: LLMRequest) {
   // `toPayload` returns the provider payload only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Adapter.make`.
+  const generation = request.generation
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request),
@@ -264,13 +265,13 @@ const toPayload = Effect.fn("OpenAIChat.toPayload")(function* (request: LLMReque
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     stream_options: { include_usage: true },
-    max_tokens: request.generation.maxTokens,
-    temperature: request.generation.temperature,
-    top_p: request.generation.topP,
-    frequency_penalty: request.generation.frequencyPenalty,
-    presence_penalty: request.generation.presencePenalty,
-    seed: request.generation.seed,
-    stop: request.generation.stop,
+    max_tokens: generation?.maxTokens,
+    temperature: generation?.temperature,
+    top_p: generation?.topP,
+    frequency_penalty: generation?.frequencyPenalty,
+    presence_penalty: generation?.presencePenalty,
+    seed: generation?.seed,
+    stop: generation?.stop,
     ...(yield* lowerOptions(request)),
   }
 })

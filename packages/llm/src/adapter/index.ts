@@ -7,7 +7,8 @@ export type {
   AdapterRoutedModelInput,
   AnyAdapter,
   HttpContext,
-  LLMClient as LLMClientShape,
+  Interface as LLMClientShape,
+  Service as LLMClientService,
   ModelCapabilitiesInput,
   ModelRefInput,
 } from "./client"

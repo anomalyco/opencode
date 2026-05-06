@@ -16,7 +16,7 @@ describe("llm constructors", () => {
     expect(request.messages[0]).toBeInstanceOf(Message)
     expect(request.system).toEqual([{ type: "text", text: "You are concise." }])
     expect(request.messages[0]?.content).toEqual([{ type: "text", text: "Say hello." }])
-    expect(request.generation).toEqual({})
+    expect(request.generation).toBeUndefined()
     expect(request.tools).toEqual([])
   })
 
@@ -38,7 +38,7 @@ describe("llm constructors", () => {
     expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
   })
 
-  test("merges model defaults with call options", () => {
+  test("keeps request options separate from model defaults", () => {
     const request = LLM.request({
       model: LLM.model({
         id: "fake-model",
@@ -54,12 +54,12 @@ describe("llm constructors", () => {
       http: { body: { metadata: { request: true } }, headers: { "x-shared": "request" }, query: { request: "1" } },
     })
 
-    expect(request.generation).toEqual({ maxTokens: 100, temperature: 0 })
-    expect(request.providerOptions).toEqual({ openai: { store: true, metadata: { model: true, request: true } } })
+    expect(request.generation).toEqual({ temperature: 0 })
+    expect(request.providerOptions).toEqual({ openai: { store: true, metadata: { request: true } } })
     expect(request.http).toEqual({
-      body: { metadata: { model: true, request: true } },
+      body: { metadata: { request: true } },
       headers: { "x-shared": "request" },
-      query: { model: "1", request: "1" },
+      query: { request: "1" },
     })
   })
 

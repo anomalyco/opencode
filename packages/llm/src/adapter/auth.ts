@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { Headers } from "effect/unstable/http"
 import type { LLMError, LLMRequest } from "../schema"
 
 /**
@@ -17,14 +18,14 @@ import type { LLMError, LLMRequest } from "../schema"
  * future Azure AAD) implement `Auth` as a function that hashes the body,
  * mints a signature, and merges signed headers into the result.
  */
-export type Auth = (input: AuthInput) => Effect.Effect<Record<string, string>, LLMError>
+export type Auth = (input: AuthInput) => Effect.Effect<Headers.Headers, LLMError>
 
 export interface AuthInput {
   readonly request: LLMRequest
   readonly method: "POST" | "GET"
   readonly url: string
   readonly body: string
-  readonly headers: Record<string, string>
+  readonly headers: Headers.Headers
 }
 
 /**
@@ -40,11 +41,13 @@ export const passthrough: Auth = ({ headers }) => Effect.succeed(headers)
  * `model.apiKey` is unset, so callers who pre-set their own auth header keep
  * working. The shared core for `bearer` and `apiKeyHeader`.
  */
-const fromApiKey = (from: (apiKey: string) => Record<string, string>): Auth => ({ request, headers }) => {
-  const key = request.model.apiKey
-  if (!key) return Effect.succeed(headers)
-  return Effect.succeed({ ...headers, ...from(key) })
-}
+const fromApiKey =
+  (from: (apiKey: string) => Headers.Input): Auth =>
+  ({ request, headers }) => {
+    const key = request.model.apiKey
+    if (!key) return Effect.succeed(headers)
+    return Effect.succeed(Headers.setAll(headers, from(key)))
+  }
 
 /**
  * `Authorization: Bearer <apiKey>` from `request.model.apiKey`. No-op when
@@ -61,12 +64,9 @@ export const openAI: Auth = ({ request, headers }) => {
   const key = request.model.apiKey
   if (!key) return Effect.succeed(headers)
   if (request.model.provider === "azure") {
-    return Effect.succeed({
-      ...Object.fromEntries(Object.entries(headers).filter(([name]) => name.toLowerCase() !== "authorization")),
-      "api-key": key,
-    })
+    return Effect.succeed(Headers.set(Headers.remove(headers, "authorization"), "api-key", key))
   }
-  return Effect.succeed({ ...headers, authorization: `Bearer ${key}` })
+  return Effect.succeed(Headers.set(headers, "authorization", `Bearer ${key}`))
 }
 
 /**

@@ -1,12 +1,13 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMEvent, LLMRequest } from "../src"
 import { LLMClient } from "../src/adapter"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { tool, ToolFailure } from "../src/tool"
 import { ToolRuntime } from "../src/tool-runtime"
-import { testEffect } from "./lib/effect"
+import { it } from "./lib/effect"
+import * as TestToolRuntime from "./lib/tool-runtime"
 import { dynamicResponse, scriptedResponses } from "./lib/http"
 import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
@@ -25,8 +26,6 @@ const baseRequest = LLM.request({
   prompt: "Use the tool.",
 })
 
-const it = testEffect(Layer.empty)
-
 const get_weather = tool({
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
@@ -44,7 +43,7 @@ describe("ToolRuntime", () => {
       const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
 
       const events = Array.from(
-        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -70,7 +69,7 @@ describe("ToolRuntime", () => {
         }),
       )
 
-      yield* ToolRuntime.run({
+      yield* TestToolRuntime.runTools({
         request: LLMRequest.update(baseRequest, {
           generation: LLM.generation({ maxTokens: 50 }),
           toolChoice: LLM.toolChoice("auto"),
@@ -110,7 +109,7 @@ describe("ToolRuntime", () => {
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -136,7 +135,7 @@ describe("ToolRuntime", () => {
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -162,7 +161,7 @@ describe("ToolRuntime", () => {
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -182,7 +181,7 @@ describe("ToolRuntime", () => {
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -199,7 +198,7 @@ describe("ToolRuntime", () => {
       const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
 
       const events = Array.from(
-        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -219,7 +218,7 @@ describe("ToolRuntime", () => {
       const layer = scriptedResponses([toolCallStep, toolCallStep, toolCallStep])
 
       const events = Array.from(
-        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather }, maxSteps: 2 }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather }, maxSteps: 2 }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -237,7 +236,7 @@ describe("ToolRuntime", () => {
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run({
+        yield* TestToolRuntime.runTools({
           request: baseRequest,
           tools: { get_weather },
           stopWhen: (state) => state.step >= 0,
@@ -281,7 +280,7 @@ describe("ToolRuntime", () => {
         }),
       )
       const events = Array.from(
-        yield* ToolRuntime.run({
+        yield* TestToolRuntime.runTools({
           request: LLM.updateRequest(baseRequest, { model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }) }),
           tools: {},
         }).pipe(
@@ -322,7 +321,7 @@ describe("ToolRuntime", () => {
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),

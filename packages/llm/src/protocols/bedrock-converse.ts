@@ -326,21 +326,22 @@ const lowerSystem = (system: ReadonlyArray<LLMRequest["system"][number]>): Bedro
 
 const toPayload = Effect.fn("BedrockConverse.toPayload")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
+  const generation = request.generation
   return {
     modelId: request.model.id,
     messages: yield* lowerMessages(request),
     system: request.system.length === 0 ? undefined : lowerSystem(request.system),
     inferenceConfig:
-      request.generation.maxTokens === undefined &&
-      request.generation.temperature === undefined &&
-      request.generation.topP === undefined &&
-      (request.generation.stop === undefined || request.generation.stop.length === 0)
+      generation?.maxTokens === undefined &&
+      generation?.temperature === undefined &&
+      generation?.topP === undefined &&
+      (generation?.stop === undefined || generation.stop.length === 0)
         ? undefined
         : {
-            maxTokens: request.generation.maxTokens,
-            temperature: request.generation.temperature,
-            topP: request.generation.topP,
-            stopSequences: request.generation.stop,
+            maxTokens: generation?.maxTokens,
+            temperature: generation?.temperature,
+            topP: generation?.topP,
+            stopSequences: generation?.stop,
           },
     toolConfig:
       request.tools.length > 0 && request.toolChoice?.type !== "none"

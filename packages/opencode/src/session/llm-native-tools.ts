@@ -1,13 +1,12 @@
 import {
   LLM,
-  LLMClient,
   type LLMError,
   type LLMEvent,
   type LLMRequest,
   type FinishReason,
   type ContentPart,
+  type LLMClientShape,
 } from "@opencode-ai/llm"
-import type { RequestExecutor } from "@opencode-ai/llm/adapter"
 import { Cause, Deferred, Effect, FiberSet, Queue, Stream, type Scope } from "effect"
 import type { Tool, ToolExecutionOptions } from "ai"
 
@@ -129,6 +128,7 @@ const dispatchTool = (
 // `done` resolves with the accumulated state so the multi-round driver can
 // decide whether to recurse.
 const runOneRound = (
+  client: LLMClientShape,
   request: LLMRequest,
   tools: Record<string, Tool>,
   abort: AbortSignal,
@@ -138,7 +138,7 @@ const runOneRound = (
     readonly done: Deferred.Deferred<RoundState>
   },
   never,
-  Scope.Scope | RequestExecutor.Service
+  Scope.Scope
 > =>
   Effect.gen(function* () {
     const queue = yield* Queue.unbounded<LLMEvent, LLMError | Cause.Done>()
@@ -148,7 +148,7 @@ const runOneRound = (
 
     yield* Effect.forkScoped(
       Effect.gen(function* () {
-        yield* LLMClient.stream(request).pipe(
+        yield* client.stream(request).pipe(
           Stream.runForEach((event) =>
             Effect.gen(function* () {
               accumulate(state, event)
@@ -218,16 +218,17 @@ const continuationRequest = (request: LLMRequest, state: RoundState): LLMRequest
  * interrupted (e.g. via the abort signal).
  */
 export const runWithTools = (input: {
+  readonly client: LLMClientShape
   readonly request: LLMRequest
   readonly tools: Record<string, Tool>
   readonly abort: AbortSignal
   readonly maxSteps?: number
-}): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> => {
+}): Stream.Stream<LLMEvent, LLMError> => {
   const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS
-  const round = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> =>
+  const round = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError> =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const { events, done } = yield* runOneRound(request, input.tools, input.abort)
+        const { events, done } = yield* runOneRound(input.client, request, input.tools, input.abort)
         const continuation = Stream.unwrap(
           Effect.gen(function* () {
             const state = yield* Deferred.await(done)

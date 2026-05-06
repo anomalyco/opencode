@@ -8,8 +8,9 @@ import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-message
 
 describe("public exports", () => {
   test("root exposes app-facing runtime APIs", () => {
-    expect(LLM.generate).toBeFunction()
-    expect(LLMClient.generate).toBeFunction()
+    expect(LLM.request).toBeFunction()
+    expect(LLMClient.Service).toBeFunction()
+    expect(LLMClient.layer).toBeDefined()
   })
 
   test("adapter barrel exposes adapter-authoring APIs", () => {

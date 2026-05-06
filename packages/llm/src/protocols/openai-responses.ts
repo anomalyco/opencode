@@ -236,15 +236,16 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
 })
 
 const toPayload = Effect.fn("OpenAIResponses.toPayload")(function* (request: LLMRequest) {
+  const generation = request.generation
   return {
     model: request.model.id,
     input: yield* lowerMessages(request),
     tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
-    max_output_tokens: request.generation.maxTokens,
-    temperature: request.generation.temperature,
-    top_p: request.generation.topP,
+    max_output_tokens: generation?.maxTokens,
+    temperature: generation?.temperature,
+    top_p: generation?.topP,
     ...(yield* lowerOptions(request)),
   }
 })

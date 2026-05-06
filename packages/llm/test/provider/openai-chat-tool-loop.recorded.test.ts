@@ -5,6 +5,7 @@ import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { ToolRuntime } from "../../src/tool-runtime"
 import { eventSummary, weatherRuntimeTool } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
+import * as TestToolRuntime from "../lib/tool-runtime"
 
 // Multi-interaction recorded test: drives the typed `ToolRuntime` against a
 // live OpenAI Chat endpoint so the cassette captures every model round in
@@ -35,7 +36,7 @@ describe("OpenAI Chat tool-loop recorded", () => {
   recorded.effect.with("drives a tool loop end-to-end", { tags: ["tool", "tool-loop"] }, () =>
     Effect.gen(function* () {
       const events = Array.from(
-        yield* ToolRuntime.run({ request, tools: { get_weather: weatherRuntimeTool } }).pipe(Stream.runCollect),
+        yield* TestToolRuntime.runTools({ request, tools: { get_weather: weatherRuntimeTool } }).pipe(Stream.runCollect),
       )
 
       expect(LLM.outputText({ events })).toContain("Paris")
