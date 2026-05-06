@@ -49,15 +49,15 @@ describe("shell", () => {
     })
   })
 
-  test("falls back for terminal-only acceptable shells", () => {
-    expect(Shell.name(Shell.acceptable("fish"))).not.toBe("fish")
-    expect(Shell.name(Shell.acceptable("nu"))).not.toBe("nu")
+  test("accepts fish and nu shells", () => {
+    expect(Shell.name(Shell.acceptable("fish"))).toBe("fish")
+    expect(Shell.name(Shell.acceptable("nu"))).toBe("nu")
   })
 
   if (process.platform === "win32") {
-    test("rejects blacklisted shells case-insensitively", async () => {
+    test("accepts nu shell case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
-        expect(Shell.name(Shell.acceptable())).not.toBe("nu")
+        expect(Shell.name(Shell.acceptable())).toBe("nu")
       })
     })
 

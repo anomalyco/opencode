@@ -244,23 +244,21 @@ describe("tool.shell", () => {
           expect(bashKsh.description).toContain("ksh command")
           expect(bashKsh.description).toContain("ksh commands")
 
-          // Mock fish shell environment (fish is denied, falls back to platform default)
-          process.env.SHELL = "/usr/bin/fish"
+          // Mock fish shell environment
+          process.env.SHELL = "fish"
           Shell.acceptable.reset()
           Shell.preferred.reset()
           const bashFish = await initBash()
-          const fishFallback = Shell.name(Shell.acceptable("fish"))
-          expect(bashFish.description).toContain(`${fishFallback} command`)
-          expect(bashFish.description).toContain(`${fishFallback} commands`)
+          expect(bashFish.description).toContain("fish command")
+          expect(bashFish.description).toContain("fish commands")
 
-          // Mock nu shell environment (nu is denied, falls back to platform default)
-          process.env.SHELL = "/usr/bin/nu"
+          // Mock nu shell environment
+          process.env.SHELL = "nu"
           Shell.acceptable.reset()
           Shell.preferred.reset()
           const bashNu = await initBash()
-          const nuFallback = Shell.name(Shell.acceptable("nu"))
-          expect(bashNu.description).toContain(`${nuFallback} command`)
-          expect(bashNu.description).toContain(`${nuFallback} commands`)
+          expect(bashNu.description).toContain("nu command")
+          expect(bashNu.description).toContain("nu commands")
         } finally {
           // Restore original shell
           if (originalShell) {
@@ -273,7 +271,7 @@ describe("tool.shell", () => {
     })
   })
 
-  test("falls back from terminal-only configured shell", async () => {
+  test("uses configured fish shell", async () => {
     await using tmp = await tmpdir({
       config: { shell: "fish" },
     })
@@ -281,21 +279,20 @@ describe("tool.shell", () => {
       directory: tmp.path,
       fn: async () => {
         const bash = await initBash()
-        const fallback = Shell.name(Shell.acceptable("fish"))
-        expect(fallback).not.toBe("fish")
-        expect(bash.description).toContain(fallback)
+        expect(Shell.name(Shell.acceptable("fish"))).toBe("fish")
+        expect(bash.description).toContain("fish")
 
         const result = await Effect.runPromise(
           bash.execute(
             {
-              command: "echo fallback",
-              description: "Echo fallback text",
+              command: "echo fish",
+              description: "Echo fish text",
             },
             ctx,
           ),
         )
         expect(result.metadata.exit).toBe(0)
-        expect(result.output).toContain("fallback")
+        expect(result.output).toContain("fish")
       },
     })
   })
