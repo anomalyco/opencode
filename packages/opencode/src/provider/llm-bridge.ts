@@ -216,7 +216,7 @@ const PROVIDERS: Record<string, ProviderModel> = {
     }),
   "@ai-sdk/togetherai": openAICompatibleModel,
   "@ai-sdk/xai": (input, options) =>
-    XAI.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "openai-responses" })),
+    XAI.responses(String(input.model.api.id), sharedOptions(input, options, { protocol: "openai-responses" })),
 }
 
 export const toModelRef = (input: Input): ModelRef | undefined => {
