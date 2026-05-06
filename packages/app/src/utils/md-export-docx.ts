@@ -161,10 +161,60 @@ function splitRunsForEmoji(docXml: string): string {
 // viewer 选择器:.markdown-mermaid-rendered(packages/ui/src/components/markdown.tsx:292)
 // 2026-05-06
 
-/** 把 SVG 元素转 PNG dataURL(2x scale,白底) */
-async function svgToPngDataUrl(svgEl: SVGElement, scale = 2): Promise<string> {
+/** clone SVG 后把 foreignObject 替换成 SVG text — viewer 显示用 HTML labels(美观),
+ *  导出用 SVG text(WKWebView 转 image 时 foreignObject 会触发 tainted canvas / "operation is insecure")。
+ *  保留 viewer 显示效果不变,只对导出 clone 做替换。
+ */
+function patchForeignObjects(svgEl: SVGElement): void {
+  const fos = Array.from(svgEl.querySelectorAll("foreignObject"))
+  for (const fo of fos) {
+    const x = parseFloat(fo.getAttribute("x") || "0")
+    const y = parseFloat(fo.getAttribute("y") || "0")
+    const width = parseFloat(fo.getAttribute("width") || "0")
+    const height = parseFloat(fo.getAttribute("height") || "0")
+    // 多行文字按 div / span / br 拆;最简取 textContent split by \n,每行一个 <tspan>
+    const raw = (fo.textContent || "").replace(/ /g, " ").trim()
+    if (!raw) {
+      fo.remove()
+      continue
+    }
+    const lines = raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+    const NS = "http://www.w3.org/2000/svg"
+    const textEl = document.createElementNS(NS, "text")
+    const cx = x + width / 2
+    const cy = y + height / 2
+    textEl.setAttribute("x", String(cx))
+    textEl.setAttribute("y", String(cy))
+    textEl.setAttribute("text-anchor", "middle")
+    textEl.setAttribute("dominant-baseline", "middle")
+    textEl.setAttribute("font-family", "sans-serif")
+    textEl.setAttribute("font-size", "14")
+    textEl.setAttribute("fill", "#333")
+    if (lines.length === 1) {
+      textEl.textContent = lines[0]
+    } else {
+      // 多行:首行偏移到 (lines.length-1)/2 * 行高之上,各 tspan 用 dy 推进
+      const lineHeight = 16
+      const totalH = (lines.length - 1) * lineHeight
+      lines.forEach((line, i) => {
+        const tspan = document.createElementNS(NS, "tspan")
+        tspan.setAttribute("x", String(cx))
+        tspan.setAttribute("dy", i === 0 ? String(-totalH / 2) : String(lineHeight))
+        tspan.textContent = line
+        textEl.appendChild(tspan)
+      })
+    }
+    fo.parentNode?.replaceChild(textEl, fo)
+  }
+}
+
+/** 把 SVG 元素转 PNG dataURL(3x scale,白底) — 3x 在 retina + 200% Word 缩放下仍清晰,文件 ~2.25x */
+async function svgToPngDataUrl(svgEl: SVGElement, scale = 3): Promise<string> {
+  // clone 一份避免破坏 viewer 显示
+  const cloned = svgEl.cloneNode(true) as SVGElement
+  patchForeignObjects(cloned)
   // 序列化 svg,确保 xmlns(防 Image 加载失败)
-  let svgString = new XMLSerializer().serializeToString(svgEl)
+  let svgString = new XMLSerializer().serializeToString(cloned)
   if (!svgString.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
     svgString = svgString.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
   }
@@ -275,32 +325,49 @@ async function inlineLocalImages(md: string, mdFileDir?: string): Promise<string
 
 /** 把 markdown 里的 ```mermaid 块替换成 viewer 已渲染的 SVG → PNG dataURL ![](...)
  * 顺序:按 viewer 内 .markdown-mermaid-rendered 顺序对应 markdown 内 mermaid 块顺序
+ *
+ * FORK: 等待 + 重试逻辑(2026-05-06)— 若 user 在 viewer 还没把所有 mermaid 渲染完时就点导出,
+ *       原版直接抓 DOM 会少图(典型现象:第 1 个 mermaid 大,渲染慢,被错过 → 源码留为代码块)。
+ *       现在轮询直到节点数匹配 markdown 中 ```mermaid 块数 + 每个都有 svg,最多等 5 秒。
  */
 async function inlineMermaidPngs(md: string, viewerEl?: HTMLElement): Promise<string> {
   if (!viewerEl) return md
-  const renderedNodes = Array.from(
-    viewerEl.querySelectorAll<HTMLElement>(".markdown-mermaid-rendered"),
-  )
-  if (renderedNodes.length === 0) return md // viewer 里没渲染过 mermaid,markdown 里也无 ```mermaid
+  const expectedCount = (md.match(/```mermaid\n[\s\S]*?\n```/g) ?? []).length
+  if (expectedCount === 0) return md // markdown 里没 mermaid
 
-  // 提前转所有 SVG → PNG(并发)
-  const pngs = await Promise.all(
-    renderedNodes.map(async (node) => {
-      const svg = node.querySelector("svg")
-      if (!svg) return null
-      try {
-        return await svgToPngDataUrl(svg)
-      } catch {
-        return null
-      }
-    }),
-  )
+  // 轮询等所有 mermaid 渲染完成
+  const deadline = Date.now() + 5000
+  let renderedNodes: HTMLElement[] = []
+  while (true) {
+    renderedNodes = Array.from(viewerEl.querySelectorAll<HTMLElement>(".markdown-mermaid-rendered"))
+    const allReady =
+      renderedNodes.length === expectedCount && renderedNodes.every((n) => n.querySelector("svg"))
+    if (allReady || Date.now() >= deadline) break
+    await new Promise((r) => setTimeout(r, 150))
+  }
 
-  // 按顺序替换 ```mermaid ... ``` 块
+  // 提前转所有 SVG → PNG(顺序遍历,FAIL → null,后续保留源码)
+  const pngs: Array<string | null> = []
+  for (let i = 0; i < renderedNodes.length; i++) {
+    const node = renderedNodes[i]
+    const svg = node.querySelector("svg")
+    if (!svg) {
+      pngs.push(null)
+      continue
+    }
+    try {
+      const png = await svgToPngDataUrl(svg as SVGElement)
+      pngs.push(png)
+    } catch {
+      pngs.push(null)
+    }
+  }
+
+  // 按顺序替换 ```mermaid ... ``` 块。pngs 不足时(比如某个永远没渲染),后续块保留源码。
   let idx = 0
   return md.replace(/```mermaid\n[\s\S]*?\n```/g, (matched) => {
     const png = pngs[idx++]
-    if (!png) return matched // 转换失败保留源码
+    if (!png) return matched
     return `![Mermaid Diagram](${png})`
   })
 }
