@@ -573,6 +573,7 @@ export type UserMessage = {
     modelID: string
     variant?: string
   }
+  runtime?: "codex" | "opencode"
   system?: string
   tools?: {
     [key: string]: boolean
@@ -3982,6 +3983,7 @@ export type SessionPromptData = {
     }
     format?: OutputFormat
     system?: string
+    runtime?: "codex" | "opencode"
     variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
@@ -4182,6 +4184,7 @@ export type SessionPromptAsyncData = {
     }
     format?: OutputFormat
     system?: string
+    runtime?: "codex" | "opencode"
     variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
@@ -4224,6 +4227,7 @@ export type SessionCommandData = {
     model?: string
     arguments: string
     command: string
+    runtime?: "codex" | "opencode"
     variant?: string
     parts?: Array<{
       id?: string

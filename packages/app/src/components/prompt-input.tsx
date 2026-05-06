@@ -1051,6 +1051,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const runtimeLabel = (value: string) => (value === "codex" ? "Codex" : "opencode")
   const accepting = createMemo(() => {
     const id = params.id
     if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
@@ -1559,6 +1560,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </ModelSelectorPopover>
                         </TooltipKeybind>
                       </Show>
+                    </div>
+                    <div
+                      data-component="prompt-runtime-control"
+                      style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                    >
+                      <Tooltip placement="top" gutter={4} value="Choose runtime">
+                        <Select
+                          size="normal"
+                          options={local.runtime.list()}
+                          current={local.runtime.current()}
+                          label={runtimeLabel}
+                          onSelect={(value) => {
+                            if (!value) return
+                            local.runtime.set(value)
+                            restoreFocus()
+                          }}
+                          class="max-w-[120px] text-text-base"
+                          valueClass="truncate text-13-regular text-text-base"
+                          triggerStyle={control()}
+                          triggerProps={{ "data-action": "prompt-runtime" }}
+                          variant="ghost"
+                        />
+                      </Tooltip>
                     </div>
                     <div
                       data-component="prompt-variant-control"

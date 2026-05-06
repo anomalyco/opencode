@@ -391,6 +391,7 @@ export const User = Schema.Struct({
     modelID: ModelID,
     variant: Schema.optional(Schema.String),
   }),
+  runtime: Schema.optional(Schema.Literals(["codex", "opencode"])),
   system: Schema.optional(Schema.String),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
 })

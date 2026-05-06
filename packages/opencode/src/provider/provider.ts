@@ -173,6 +173,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: ok ? {} : { apiKey: "public" },
       }
     }),
+    "codex-cli": () =>
+      Effect.succeed({
+        autoload: true,
+      }),
     openai: () =>
       Effect.succeed({
         autoload: false,
@@ -1053,6 +1057,53 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+function codexCliModel(input: { id: string; name: string; release_date: string; context?: number; output?: number }): Model {
+  const model: Model = {
+    id: ModelID.make(input.id),
+    providerID: ProviderID.make("codex-cli"),
+    name: input.name,
+    family: input.id,
+    api: {
+      id: input.id,
+      url: "",
+      npm: "@ai-sdk/openai",
+    },
+    capabilities: {
+      temperature: false,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: input.context ?? 272_000, output: input.output ?? 100_000 },
+    status: "active",
+    options: { modelProvider: "openai" },
+    headers: {},
+    release_date: input.release_date,
+    variants: {},
+  }
+  model.variants = mapValues(mergeDeep({ fast: { reasoningEffort: "low" } }, ProviderTransform.variants(model)), (v) => v)
+  return model
+}
+
+function codexCliProvider(): Info {
+  const models = [
+    codexCliModel({ id: "gpt-5-codex", name: "GPT-5 Codex", release_date: "2026-05-06" }),
+    codexCliModel({ id: "gpt-5.5", name: "GPT-5.5", release_date: "2026-05-06" }),
+  ]
+  return {
+    id: ProviderID.make("codex-cli"),
+    name: "Codex",
+    source: "custom",
+    env: [],
+    options: {},
+    models: Object.fromEntries(models.map((model) => [model.id, model])),
+  }
+}
+
 const layer: Layer.Layer<
   Service,
   never,
@@ -1073,6 +1124,7 @@ const layer: Layer.Layer<
         const cfg = yield* config.get()
         const modelsDev = yield* Effect.promise(() => ModelsDev.get())
         const database = mapValues(modelsDev, fromModelsDevProvider)
+        database[ProviderID.make("codex-cli")] = codexCliProvider()
 
         const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
         const languages = new Map<string, LanguageModelV3>()
