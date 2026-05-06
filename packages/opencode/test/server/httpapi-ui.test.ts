@@ -256,7 +256,6 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("allows embedded UI terminal wasm and theme preload CSP", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     const script = 'document.documentElement.dataset.theme = "dark"'
 
     const response = await Effect.runPromise(
