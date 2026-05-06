@@ -522,7 +522,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
 
               const output = {
-                title: "",
+                title: (item as { title?: string }).title ?? "",
                 metadata,
                 output: truncated.content,
                 attachments: attachments.map((attachment) => ({

@@ -131,7 +131,7 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
     additionalProperties: false,
   }
 
-  return dynamicTool({
+  const converted = dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(schema),
     execute: async (args: unknown) => {
@@ -147,6 +147,9 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
         },
       )
     },
+  })
+  return Object.assign(converted, {
+    title: mcpTool.title ?? mcpTool.annotations?.title ?? mcpTool.name,
   })
 }
 
