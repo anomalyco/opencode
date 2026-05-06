@@ -261,13 +261,21 @@ export const GithubInstallCommand = effectCmd({
             throw new UI.CancelledError()
           }
 
-          // Get repo info
-          const info = await Effect.runPromise(gitSvc.run(["remote", "get-url", "origin"], { cwd: ctx.worktree })).then(
+          // Get repo info - parse all remotes to find a GitHub one
+          const info = await Effect.runPromise(gitSvc.run(["remote", "-v"], { cwd: ctx.worktree })).then(
             (x) => x.text().trim(),
           )
-          const parsed = parseGitHubRemote(info)
+          // get the second column of the output of `git remote -v` to get all remote URL's
+          const urls = info
+            .split("\n")
+            .map((line) => line.split(/\s+/)[1])
+            .filter(Boolean)
+          // Find the first valid GitHub remote URL
+          const parsed = urls.map(parseGitHubRemote).find((p): p is { owner: string; repo: string } => p !== null)
           if (!parsed) {
-            prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
+            prompts.log.error(
+              `Could not find GitHub remote. Please run this command from a repository with a valid GitHub remote configured.`,
+            )
             throw new UI.CancelledError()
           }
           return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree }
