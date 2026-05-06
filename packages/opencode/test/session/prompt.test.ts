@@ -2059,3 +2059,107 @@ it.live(
     ),
   30_000,
 )
+
+// clientMessageID tests — verifying that server always generates the canonical message ID
+// and stores any caller-provided messageID as clientMessageID only.
+
+it.live("prompt stores caller-provided messageID as clientMessageID, not as the message id", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "clientMessageID test",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      const clientID = MessageID.ascending()
+
+      yield* llm.text("response")
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        messageID: clientID,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const msgs = yield* sessions.messages({ sessionID: session.id })
+      const userMsg = msgs.find((m) => m.info.role === "user")
+
+      expect(userMsg).toBeDefined()
+      if (userMsg && userMsg.info.role === "user") {
+        // The stored id must be a fresh server-generated ID, not the caller-provided one
+        expect(userMsg.info.id).not.toBe(clientID)
+        // The caller-provided ID is preserved in clientMessageID
+        expect(userMsg.info.clientMessageID).toBe(clientID)
+      }
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("assistant parentID points to server-generated user message id when messageID is provided", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "parentID test",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      const clientID = MessageID.ascending()
+
+      yield* llm.text("response")
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        messageID: clientID,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const msgs = yield* sessions.messages({ sessionID: session.id })
+      const userMsg = msgs.find((m) => m.info.role === "user")
+      const assistantMsg = msgs.find((m) => m.info.role === "assistant")
+
+      expect(userMsg).toBeDefined()
+      expect(assistantMsg).toBeDefined()
+      if (userMsg && assistantMsg && assistantMsg.info.role === "assistant") {
+        // Assistant must reference the server-generated user message id
+        expect(assistantMsg.info.parentID).toBe(userMsg.info.id)
+        // And that id is NOT the client-provided one
+        expect(assistantMsg.info.parentID).not.toBe(clientID)
+      }
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("prompt without messageID still creates user message with no clientMessageID", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "no clientMessageID test",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* llm.text("response")
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const msgs = yield* sessions.messages({ sessionID: session.id })
+      const userMsg = msgs.find((m) => m.info.role === "user")
+
+      expect(userMsg).toBeDefined()
+      if (userMsg && userMsg.info.role === "user") {
+        expect(userMsg.info.clientMessageID).toBeUndefined()
+      }
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
