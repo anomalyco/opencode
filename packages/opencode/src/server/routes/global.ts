@@ -155,7 +155,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal())))
+        return c.json(await Config.getGlobal())
       },
     )
     .patch(
@@ -179,7 +179,7 @@ export const GlobalRoutes = lazy(() =>
       validator("json", Config.Info.zod),
       async (c) => {
         const config = c.req.valid("json")
-        const result = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.updateGlobal(config)))
+        const result = await Config.updateGlobal(config)
         if (result.changed) {
           void AppRuntime.runPromise(disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true })).catch(
             () => undefined,

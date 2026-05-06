@@ -41,6 +41,7 @@ import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
+import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "config" })
 
@@ -784,5 +785,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Account.defaultLayer),
   Layer.provide(Npm.defaultLayer),
 )
+
+export const runtime = makeRuntime(Service, defaultLayer)
+
+export const getGlobal = () => runtime.runPromise((cfg) => cfg.getGlobal())
+export const updateGlobal = (...args: Parameters<Interface["updateGlobal"]>) =>
+  runtime.runPromise((cfg) => cfg.updateGlobal(...args))
 
 export * as Config from "./config"
