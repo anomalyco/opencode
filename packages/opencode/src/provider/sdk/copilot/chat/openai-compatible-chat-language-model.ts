@@ -337,6 +337,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
       }
       hasFinished: boolean
     }> = []
+    const pendingToolCallIds: Record<number, string> = {}
 
     let finishReason: {
       unified: ReturnType<typeof mapOpenAICompatibleFinishReason>
@@ -538,14 +539,14 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                 const index = toolCallDelta.index
 
                 if (toolCalls[index] == null) {
-                  const toolCallId = toolCallDelta.id ?? generateId()
+                  const toolCallId = toolCallDelta.id ?? pendingToolCallIds[index] ?? generateId()
 
                   if (toolCallDelta.function?.name == null) {
-                    throw new InvalidResponseDataError({
-                      data: toolCallDelta,
-                      message: `Expected 'function.name' to be a string.`,
-                    })
+                    pendingToolCallIds[index] = toolCallId
+                    continue
                   }
+
+                  delete pendingToolCallIds[index]
 
                   controller.enqueue({
                     type: "tool-input-start",

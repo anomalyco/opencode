@@ -1,8 +1,16 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..c3cc4cfc431b6f3df93a9329d6dbeb0781191841 100644
+index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..1f8e7373ce03910cd5bfe7540ec189e63e182898 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -753,12 +753,7 @@
+@@ -653,6 +653,7 @@
+       fetch: this.config.fetch
+     });
+     const toolCalls = [];
++    const pendingToolCallIds = {};
+     let finishReason = {
+       unified: "other",
+       raw: void 0
+@@ -753,25 +754,19 @@
                for (const toolCallDelta of delta.tool_calls) {
                  const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
                  if (toolCalls[index] == null) {
@@ -12,12 +20,16 @@ index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..c3cc4cfc431b6f3df93a9329d6dbeb07
 -                      message: `Expected 'id' to be a string.`
 -                    });
 -                  }
-+                  const toolCallId = toolCallDelta.id ?? generateId();
++                  const toolCallId = toolCallDelta.id ?? pendingToolCallIds[index] ?? generateId();
                    if (((_d = toolCallDelta.function) == null ? void 0 : _d.name) == null) {
-                     throw new InvalidResponseDataError({
-                       data: toolCallDelta,
-@@ -767,11 +762,11 @@
+-                    throw new InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'function.name' to be a string.`
+-                    });
++                    pendingToolCallIds[index] = toolCallId;
++                    continue;
                    }
++                  delete pendingToolCallIds[index];
                    controller.enqueue({
                      type: "tool-input-start",
 -                    id: toolCallDelta.id,
@@ -31,10 +43,18 @@ index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..c3cc4cfc431b6f3df93a9329d6dbeb07
                      function: {
                        name: toolCallDelta.function.name,
 diff --git a/dist/index.js b/dist/index.js
-index dca128d3a790378c51a24a16d92585178343b278..f5f7b29d7fa9a249e5e1d0108a8de0d0ffa84f32 100644
+index dca128d3a790378c51a24a16d92585178343b278..7388637b492b0ea3c376be8d1253add8ae7f4d5f 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -766,12 +766,7 @@
+@@ -666,6 +666,7 @@
+       fetch: this.config.fetch
+     });
+     const toolCalls = [];
++    const pendingToolCallIds = {};
+     let finishReason = {
+       unified: "other",
+       raw: void 0
+@@ -766,25 +767,19 @@
                for (const toolCallDelta of delta.tool_calls) {
                  const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
                  if (toolCalls[index] == null) {
@@ -44,12 +64,16 @@ index dca128d3a790378c51a24a16d92585178343b278..f5f7b29d7fa9a249e5e1d0108a8de0d0
 -                      message: `Expected 'id' to be a string.`
 -                    });
 -                  }
-+                  const toolCallId = toolCallDelta.id ?? (0, import_provider_utils2.generateId)();
++                  const toolCallId = toolCallDelta.id ?? pendingToolCallIds[index] ?? (0, import_provider_utils2.generateId)();
                    if (((_d = toolCallDelta.function) == null ? void 0 : _d.name) == null) {
-                     throw new import_provider3.InvalidResponseDataError({
-                       data: toolCallDelta,
-@@ -780,11 +775,11 @@
+-                    throw new import_provider3.InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'function.name' to be a string.`
+-                    });
++                    pendingToolCallIds[index] = toolCallId;
++                    continue;
                    }
++                  delete pendingToolCallIds[index];
                    controller.enqueue({
                      type: "tool-input-start",
 -                    id: toolCallDelta.id,
