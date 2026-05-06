@@ -5,7 +5,7 @@ import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
 
-const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
+const MAX_RESPONSE_SIZE = 20 * 1024 * 1024 // 20MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 
@@ -93,12 +93,12 @@ export const WebFetchTool = Tool.define(
           // Check content length
           const contentLength = response.headers["content-length"]
           if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
-            throw new Error("Response too large (exceeds 5MB limit)")
+            throw new Error("Response too large (exceeds 20MB limit)")
           }
 
           const arrayBuffer = yield* response.arrayBuffer
           if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
-            throw new Error("Response too large (exceeds 5MB limit)")
+            throw new Error("Response too large (exceeds 20MB limit)")
           }
 
           const contentType = response.headers["content-type"] || ""
