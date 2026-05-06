@@ -16,6 +16,7 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -102,6 +103,7 @@ const NON_EMPTY_TEXT = /[^\s\u200B]/
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const globalSDK = useGlobalSDK()
 
   const sync = useSync()
   const local = useLocal()
@@ -1253,7 +1255,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const [agentsQuery, globalProvidersQuery, providersQuery] = useQueries(() => ({
-    queries: [loadAgentsQuery(sdk.directory), loadProvidersQuery(null), loadProvidersQuery(sdk.directory)],
+    queries: [
+      loadAgentsQuery(sdk.directory, sdk.client),
+      loadProvidersQuery(null, globalSDK.client),
+      loadProvidersQuery(sdk.directory, sdk.client),
+    ],
   }))
 
   const agentsLoading = () => agentsQuery.isLoading
