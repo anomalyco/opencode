@@ -3,6 +3,7 @@ import { attach } from "./run-service"
 import * as Observability from "@opencode-ai/core/effect/observability"
 
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Backup } from "@/backup"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
@@ -57,6 +58,7 @@ import { memoMap } from "@opencode-ai/core/effect/memo-map"
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
   AppFileSystem.defaultLayer,
+  Backup.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,

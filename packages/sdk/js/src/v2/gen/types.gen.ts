@@ -6,8 +6,6 @@ export type ClientOptions = {
 
 export type Event =
   | EventServerInstanceDisposed
-  | EventFileEdited
-  | EventFileWatcherUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
@@ -15,12 +13,14 @@ export type Event =
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
+  | EventTodoUpdated
+  | EventFileEdited
+  | EventFileWatcherUpdated
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventTodoUpdated
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
@@ -187,6 +187,21 @@ export type ApiError = {
   }
 }
 
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+}
+
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -241,21 +256,6 @@ export type QuestionReplied = {
 export type QuestionRejected = {
   sessionID: string
   requestID: string
-}
-
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
 }
 
 export type SessionStatus =
@@ -771,8 +771,6 @@ export type GlobalEvent = {
   workspace?: string
   payload:
     | EventServerInstanceDisposed
-    | EventFileEdited
-    | EventFileWatcherUpdated
     | EventLspClientDiagnostics
     | EventLspUpdated
     | EventMessagePartDelta
@@ -780,12 +778,14 @@ export type GlobalEvent = {
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
+    | EventTodoUpdated
+    | EventFileEdited
+    | EventFileWatcherUpdated
     | EventInstallationUpdated
     | EventInstallationUpdateAvailable
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
-    | EventTodoUpdated
     | EventSessionStatus
     | EventSessionIdle
     | EventSessionCompacted
@@ -2266,23 +2266,6 @@ export type EventServerInstanceDisposed = {
   }
 }
 
-export type EventFileEdited = {
-  id: string
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type EventFileWatcherUpdated = {
-  id: string
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type EventLspClientDiagnostics = {
   id: string
   type: "lsp.client.diagnostics"
@@ -2353,6 +2336,32 @@ export type EventSessionError = {
   }
 }
 
+export type EventTodoUpdated = {
+  id: string
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
+export type EventFileEdited = {
+  id: string
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  id: string
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
 export type EventInstallationUpdated = {
   id: string
   type: "installation.updated"
@@ -2385,15 +2394,6 @@ export type EventQuestionRejected = {
   id: string
   type: "question.rejected"
   properties: QuestionRejected
-}
-
-export type EventTodoUpdated = {
-  id: string
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
-  }
 }
 
 export type EventSessionStatus = {
@@ -3474,6 +3474,105 @@ export type EventSubscribeResponses = {
 }
 
 export type EventSubscribeResponse = EventSubscribeResponses[keyof EventSubscribeResponses]
+
+export type BackupListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/backup/list"
+}
+
+export type BackupListResponses = {
+  /**
+   * Sessions
+   */
+  200: Array<Session>
+}
+
+export type BackupListResponse = BackupListResponses[keyof BackupListResponses]
+
+export type BackupExportData = {
+  body?: {
+    sessionID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/backup/export"
+}
+
+export type BackupExportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type BackupExportError = BackupExportErrors[keyof BackupExportErrors]
+
+export type BackupExportResponses = {
+  /**
+   * Backup payload
+   */
+  200: {
+    info: Session
+    messages: Array<{
+      info: Message
+      parts: Array<Part>
+    }>
+    todos: Array<Todo>
+  }
+}
+
+export type BackupExportResponse = BackupExportResponses[keyof BackupExportResponses]
+
+export type BackupImportData = {
+  body?: {
+    payload: {
+      info: Session
+      messages: Array<{
+        info: Message
+        parts: Array<Part>
+      }>
+      todos: Array<Todo>
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/backup/import"
+}
+
+export type BackupImportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type BackupImportError = BackupImportErrors[keyof BackupImportErrors]
+
+export type BackupImportResponses = {
+  /**
+   * Imported session
+   */
+  200: {
+    sessionID: string
+  }
+}
+
+export type BackupImportResponse = BackupImportResponses[keyof BackupImportResponses]
 
 export type ConfigGetData = {
   body?: never
