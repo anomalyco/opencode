@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { Script } from "@opencode-ai/script"
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -9,6 +10,8 @@ const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
 
 process.chdir(dir)
+
+await import("./generate.ts")
 
 // Load migrations from migration directories
 const migrationDirs = (
@@ -43,11 +46,16 @@ console.log(`Loaded ${migrations.length} migrations`)
 await Bun.build({
   target: "node",
   entrypoints: ["./src/node.ts"],
-  outdir: "./dist",
+  outdir: "./dist/node",
   format: "esm",
-  external: ["jsonc-parser"],
+  sourcemap: "linked",
+  external: ["jsonc-parser", "@lydell/node-pty"],
   define: {
     OPENCODE_MIGRATIONS: JSON.stringify(migrations),
+    OPENCODE_CHANNEL: `'${Script.channel}'`,
+  },
+  files: {
+    "opencode-web-ui.gen.ts": "",
   },
 })
 

@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/solid-query"
+import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { Component, createMemo, Show } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
@@ -6,6 +6,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/context/language"
+import { mcpQueryKey } from "@/context/global-sync"
 
 const statusLabels = {
   connected: "mcp.status.connected",
@@ -18,6 +19,7 @@ export const DialogSelectMcp: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+  const queryClient = useQueryClient()
 
   const items = createMemo(() =>
     Object.entries(sync.data.mcp ?? {})
@@ -27,16 +29,10 @@ export const DialogSelectMcp: Component = () => {
 
   const toggle = useMutation(() => ({
     mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
-      if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-      } else {
-        await sdk.client.mcp.connect({ name })
-      }
-
-      const result = await sdk.client.mcp.status()
-      if (result.data) sync.set("mcp", result.data)
+      if (sync.data.mcp[name]?.status === "connected") await sdk.client.mcp.disconnect({ name })
+      else await sdk.client.mcp.connect({ name })
     },
+    onSuccess: () => queryClient.refetchQueries({ queryKey: mcpQueryKey(sync.directory) }),
   }))
 
   const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)

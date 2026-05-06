@@ -1,6 +1,6 @@
 import { OpenAICompatibleChatLanguageModel } from "@/provider/sdk/copilot/chat/openai-compatible-chat-language-model"
 import { describe, test, expect, mock } from "bun:test"
-import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 
 async function convertReadableStreamToArray<T>(stream: ReadableStream<T>): Promise<T[]> {
   const reader = stream.getReader()
@@ -13,7 +13,7 @@ async function convertReadableStreamToArray<T>(stream: ReadableStream<T>): Promi
   return result
 }
 
-const TEST_PROMPT: LanguageModelV2Prompt = [{ role: "user", content: [{ type: "text", text: "Hello" }] }]
+const TEST_PROMPT: LanguageModelV3Prompt = [{ role: "user", content: [{ type: "text", text: "Hello" }] }]
 
 // Fixtures from copilot_test.exs
 const FIXTURES = {
@@ -123,7 +123,7 @@ describe("doStream", () => {
       { type: "text-delta", id: "txt-0", delta: " world" },
       { type: "text-delta", id: "txt-0", delta: "!" },
       { type: "text-end", id: "txt-0" },
-      { type: "finish", finishReason: "stop" },
+      { type: "finish", finishReason: { unified: "stop" } },
     ])
   })
 
@@ -201,10 +201,10 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "tool-calls",
+      finishReason: { unified: "tool-calls" },
       usage: {
-        inputTokens: 19581,
-        outputTokens: 53,
+        inputTokens: { total: 19581 },
+        outputTokens: { total: 53 },
       },
     })
   })
@@ -256,10 +256,10 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "stop",
+      finishReason: { unified: "stop" },
       usage: {
-        inputTokens: 5778,
-        outputTokens: 59,
+        inputTokens: { total: 5778 },
+        outputTokens: { total: 59 },
       },
       providerMetadata: {
         copilot: {
@@ -315,7 +315,7 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "stop",
+      finishReason: { unified: "stop" },
     })
   })
 
@@ -388,10 +388,10 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "tool-calls",
+      finishReason: { unified: "tool-calls" },
       usage: {
-        inputTokens: 3767,
-        outputTokens: 19,
+        inputTokens: { total: 3767 },
+        outputTokens: { total: 19 },
       },
     })
   })
@@ -449,7 +449,7 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "tool-calls",
+      finishReason: { unified: "tool-calls" },
     })
   })
 

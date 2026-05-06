@@ -1,8 +1,9 @@
 :root {
-  --font-family-sans: "Inter", "Inter Fallback";
-  --font-family-sans--font-feature-settings: "ss03" 1;
-  --font-family-mono: "IBM Plex Mono", "IBM Plex Mono Fallback";
-  --font-family-mono--font-feature-settings: "ss01" 1;
+  --font-family-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family-sans--font-feature-settings: normal;
+  --font-family-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-family-mono--font-feature-settings: normal;
 
   --font-size-small: 13px;
   --font-size-base: 14px;

@@ -100,6 +100,30 @@ describe("buildRequestParts", () => {
     expect(synthetic).toHaveLength(1)
   })
 
+  test("adds file parts for @mentions inside comment text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:comment-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Compare with @src/shared.ts and @src/review.ts.",
+        },
+      ],
+      images: [],
+      text: "look",
+      messageID: "msg_comment_mentions",
+      sessionID: "ses_comment_mentions",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file")
+    expect(files).toHaveLength(2)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/review.ts")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/shared.ts")).toBe(true)
+  })
+
   test("handles Windows paths correctly (simulated on macOS)", () => {
     const prompt: Prompt = [{ type: "file", path: "src\\foo.ts", content: "@src\\foo.ts", start: 0, end: 11 }]
 

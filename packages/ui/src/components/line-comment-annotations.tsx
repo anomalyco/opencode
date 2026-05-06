@@ -5,7 +5,7 @@ import { render as renderSolid } from "solid-js/web"
 import { useI18n } from "../context/i18n"
 import { createHoverCommentUtility } from "../pierre/comment-hover"
 import { cloneSelectedLineRange, formatSelectedLineLabel, lineInSelectedRange } from "../pierre/selection-bridge"
-import { LineComment, LineCommentEditor } from "./line-comment"
+import { LineComment, LineCommentEditor, type LineCommentEditorProps } from "./line-comment"
 
 export type LineCommentAnnotationMeta<T> =
   | { kind: "comment"; key: string; comment: T }
@@ -55,6 +55,7 @@ type LineCommentControllerProps<T extends LineCommentShape> = {
   comments: Accessor<T[]>
   draftKey: Accessor<string>
   label: string
+  mention?: LineCommentEditorProps["mention"]
   state: LineCommentStateProps<string>
   onSubmit: (input: { comment: string; selection: SelectedLineRange }) => void
   onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange }) => void
@@ -85,6 +86,7 @@ type CommentProps = {
 type DraftProps = {
   value: string
   selection: JSX.Element
+  mention?: LineCommentEditorProps["mention"]
   onInput: (value: string) => void
   onCancel: VoidFunction
   onSubmit: (value: string) => void
@@ -148,6 +150,7 @@ export function createLineCommentAnnotationRenderer<T>(props: {
               onPopoverFocusOut={view().editor!.onPopoverFocusOut}
               cancelLabel={view().editor!.cancelLabel}
               submitLabel={view().editor!.submitLabel}
+              mention={view().editor!.mention}
             />
           </Show>
         )
@@ -167,6 +170,7 @@ export function createLineCommentAnnotationRenderer<T>(props: {
           onCancel={view().onCancel}
           onSubmit={view().onSubmit}
           onPopoverFocusOut={view().onPopoverFocusOut}
+          mention={view().mention}
         />
       )
     }, host)
@@ -290,11 +294,6 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
     cancelDraft()
   }
 
-  createEffect(() => {
-    props.commenting()
-    setDraft("")
-  })
-
   return {
     draft,
     setDraft,
@@ -389,6 +388,7 @@ export function createLineCommentController<T extends LineCommentShape>(
                   return note.draft()
                 },
                 selection: formatSelectedLineLabel(comment.selection, i18n.t),
+                mention: props.mention,
                 onInput: note.setDraft,
                 onCancel: note.cancelDraft,
                 onSubmit: (value: string) => {
@@ -415,6 +415,7 @@ export function createLineCommentController<T extends LineCommentShape>(
         return note.draft()
       },
       selection: formatSelectedLineLabel(range, i18n.t),
+      mention: props.mention,
       onInput: note.setDraft,
       onCancel: note.cancelDraft,
       onSubmit: (comment) => {

@@ -12,6 +12,7 @@ import {
   type JSX,
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
+import { makeEventListener } from "@solid-primitives/event-listener"
 
 type DialogElement = () => JSX.Element
 
@@ -68,8 +69,7 @@ function init() {
       event.stopPropagation()
     }
 
-    window.addEventListener("keydown", onKeyDown, true)
-    onCleanup(() => window.removeEventListener("keydown", onKeyDown, true))
+    makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
   const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {

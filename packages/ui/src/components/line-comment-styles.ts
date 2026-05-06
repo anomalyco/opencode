@@ -178,6 +178,58 @@ export const lineCommentStyles = `
   box-shadow: var(--shadow-xs-border-select);
 }
 
+[data-component="line-comment"] [data-slot="line-comment-mention-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-mention-item"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-strong);
+  text-align: left;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-mention-item"][data-active] {
+  background: var(--surface-raised-base-hover);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-mention-path"] {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-large);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-mention-dir"] {
+  min-width: 0;
+  color: var(--text-weak);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-mention-file"] {
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
 [data-component="line-comment"] [data-slot="line-comment-actions"] {
   display: flex;
   align-items: center;

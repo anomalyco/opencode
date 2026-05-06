@@ -15,44 +15,46 @@ import {
 import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
+import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
+import { useEvent } from "@tui/context/event"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  MacOSScrollAccel,
-  type ScrollAcceleration,
-  TextAttributes,
-  RGBA,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
+import type {
+  AssistantMessage,
+  Part,
+  Provider,
+  ToolPart,
+  UserMessage,
+  TextPart,
+  ReasoningPart,
+} from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
-import { BashTool } from "@/tool/bash"
+import { ShellTool } from "@/tool/shell"
+import { ShellID } from "@/tool/shell/id"
 import type { GlobTool } from "@/tool/glob"
 import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
-import type { ListTool } from "@/tool/ls"
 import type { EditTool } from "@/tool/edit"
 import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
+import type { WebSearchTool } from "@/tool/websearch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
+import { useEditorContext } from "@tui/context/editor"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
-import { Header } from "./header"
-import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
@@ -62,37 +64,38 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
-import { Flag } from "@/flag/flag"
+import { SubagentFooter } from "./subagent-footer.tsx"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
-import { Clipboard } from "../../util/clipboard"
+import * as Clipboard from "../../util/clipboard"
+import { errorMessage } from "@/util/error"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
-import { Editor } from "../../util/editor"
+import * as Editor from "../../util/editor"
 import stripAnsi from "strip-ansi"
-import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
-import { Global } from "@/global"
+import { Global } from "@opencode-ai/core/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { getScrollAcceleration } from "../../util/scroll"
+import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import { DialogGoUpsell } from "../../component/dialog-go-upsell"
+import { SessionRetry } from "@/session/retry"
+import { getRevertDiffFiles } from "../../util/revert-diff"
 
 addDefaultParsers(parsers.parsers)
 
-class CustomSpeedScroll implements ScrollAcceleration {
-  constructor(private speed: number) {}
-
-  tick(_now?: number): number {
-    return this.speed
-  }
-
-  reset(): void {}
-}
+const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
+const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
+const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 
 const context = createContext<{
   width: number
@@ -103,6 +106,7 @@ const context = createContext<{
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
   diffWrapMode: () => "word" | "none"
+  providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
   tui: ReturnType<typeof useTuiConfig>
 }>()
@@ -117,6 +121,8 @@ export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const sync = useSync()
+  const event = useEvent()
+  const project = useProject()
   const tuiConfig = useTuiConfig()
   const kv = useKV()
   const { theme } = useTheme()
@@ -137,6 +143,8 @@ export function Session() {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
+  const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
+  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
@@ -153,11 +161,10 @@ export function Session() {
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
-  const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
-  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", true)
-  const [showHeader, setShowHeader] = kv.signal("header_visible", true)
+  const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
+  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
-  const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
+  const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -169,53 +176,55 @@ export function Session() {
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const providers = createMemo(() => Model.index(sync.data.provider))
 
-  const scrollAcceleration = createMemo(() => {
-    const tui = tuiConfig
-    if (tui?.scroll_acceleration?.enabled) {
-      return new MacOSScrollAccel()
-    }
-    if (tui?.scroll_speed) {
-      return new CustomSpeedScroll(tui.scroll_speed)
-    }
-
-    return new CustomSpeedScroll(3)
-  })
-
-  createEffect(() => {
-    if (session()?.workspaceID) {
-      sdk.setWorkspace(session()?.workspaceID)
-    }
-  })
-
-  createEffect(async () => {
-    await sync.session
-      .sync(route.sessionID)
-      .then(() => {
-        if (scroll) scroll.scrollBy(100_000)
-      })
-      .catch((e) => {
-        console.error(e)
-        toast.show({
-          message: `Session not found: ${route.sessionID}`,
-          variant: "error",
-        })
-        return navigate({ type: "home" })
-      })
-  })
-
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
   const toast = useToast()
   const sdk = useSDK()
+  const editor = useEditorContext()
 
-  // Handle initial prompt from fork
   createEffect(() => {
-    if (route.initialPrompt && prompt) {
-      prompt.set(route.initialPrompt)
-    }
+    const sessionID = route.sessionID
+    void (async () => {
+      const previousWorkspace = project.workspace.current()
+      const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
+      if (!result.data) {
+        toast.show({
+          message: `Session not found: ${sessionID}`,
+          variant: "error",
+          duration: 5000,
+        })
+        navigate({ type: "home" })
+        return
+      }
+
+      if (result.data.workspaceID !== previousWorkspace) {
+        project.workspace.set(result.data.workspaceID)
+
+        // Sync all the data for this workspace. Note that this
+        // workspace may not exist anymore which is why this is not
+        // fatal. If it doesn't we still want to show the session
+        // (which will be non-interactive)
+        try {
+          await sync.bootstrap({ fatal: false })
+        } catch {}
+      }
+      editor.reconnect(result.data.directory)
+      await sync.session.sync(sessionID)
+      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+    })().catch((error) => {
+      if (route.sessionID !== sessionID) return
+      toast.show({
+        message: errorMessage(error),
+        variant: "error",
+        duration: 5000,
+      })
+      navigate({ type: "home" })
+    })
   })
 
   let lastSwitch: string | undefined = undefined
-  sdk.event.on("message.part.updated", (evt) => {
+  event.on("message.part.updated", (evt) => {
     const part = evt.properties.part
     if (part.type !== "tool") return
     if (part.sessionID !== route.sessionID) return
@@ -231,11 +240,36 @@ export function Session() {
     }
   })
 
+  let seeded = false
   let scroll: ScrollBoxRenderable
-  let prompt: PromptRef
+  let prompt: PromptRef | undefined
+  const bind = (r: PromptRef | undefined) => {
+    prompt = r
+    promptRef.set(r)
+    if (seeded || !route.prompt || !r) return
+    seeded = true
+    r.set(route.prompt)
+  }
   const keybind = useKeybind()
   const dialog = useDialog()
   const renderer = useRenderer()
+
+  event.on("session.status", (evt) => {
+    if (evt.properties.sessionID !== route.sessionID) return
+    if (evt.properties.status.type !== "retry") return
+    if (evt.properties.status.message !== SessionRetry.GO_UPSELL_MESSAGE) return
+    if (dialog.stack.length > 0) return
+
+    const seen = kv.get(GO_UPSELL_LAST_SEEN_AT)
+    if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
+
+    if (kv.get(GO_UPSELL_DONT_SHOW)) return
+
+    void DialogGoUpsell.show(dialog).then((dontShowAgain) => {
+      if (dontShowAgain) kv.set(GO_UPSELL_DONT_SHOW, true)
+      kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
+    })
+  })
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
@@ -262,7 +296,7 @@ export function Session() {
   useKeyboard((evt) => {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
-      exit()
+      void exit()
     }
   })
 
@@ -336,7 +370,7 @@ export function Session() {
     if (children().length === 1) return
 
     const sessions = children().filter((x) => !!x.parentID)
-    let next = sessions.findIndex((x) => x.id === session()?.id) + direction
+    let next = sessions.findIndex((x) => x.id === session()?.id) - direction
 
     if (next >= sessions.length) next = 0
     if (next < 0) next = sessions.length - 1
@@ -377,6 +411,11 @@ export function Session() {
           await copy(url)
           dialog.clear()
           return
+        }
+        if (!kv.get("share_consent", false)) {
+          const ok = await DialogConfirm.show(dialog, "Share Session", "Are you sure you want to share it?")
+          if (ok !== true) return
+          kv.set("share_consent", true)
         }
         await sdk.client.session
           .share({
@@ -422,13 +461,13 @@ export function Session() {
               if (child) scroll.scrollBy(child.y - scroll.y - 1)
             }}
             sessionID={route.sessionID}
-            setPrompt={(promptInfo) => prompt.set(promptInfo)}
+            setPrompt={(promptInfo) => prompt?.set(promptInfo)}
           />
         ))
       },
     },
     {
-      title: "Fork from message",
+      title: "Fork session",
       value: "session.fork",
       keybind: "session_fork",
       category: "Session",
@@ -439,6 +478,7 @@ export function Session() {
         dialog.replace(() => (
           <DialogForkFromTimeline
             onMove={(messageID) => {
+              if (!messageID) return
               const child = scroll.getChildren().find((child) => {
                 return child.id === messageID
               })
@@ -468,7 +508,7 @@ export function Session() {
           })
           return
         }
-        sdk.client.session.summarize({
+        void sdk.client.session.summarize({
           sessionID: route.sessionID,
           modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
@@ -514,7 +554,7 @@ export function Session() {
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        sdk.client.session
+        void sdk.client.session
           .revert({
             sessionID: route.sessionID,
             messageID: message.id,
@@ -523,7 +563,7 @@ export function Session() {
             toBottom()
           })
         const parts = sync.data.part[message.id]
-        prompt.set(
+        prompt?.set(
           parts.reduce(
             (agg, part) => {
               if (part.type === "text") {
@@ -553,13 +593,13 @@ export function Session() {
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
-          sdk.client.session.unrevert({
+          void sdk.client.session.unrevert({
             sessionID: route.sessionID,
           })
-          prompt.set({ input: "", parts: [] })
+          prompt?.set({ input: "", parts: [] })
           return
         }
-        sdk.client.session.revert({
+        void sdk.client.session.revert({
           sessionID: route.sessionID,
           messageID: message.id,
         })
@@ -582,7 +622,7 @@ export function Session() {
     {
       title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
-      keybind: "messages_toggle_conceal" as any,
+      keybind: "messages_toggle_conceal",
       category: "Session",
       onSelect: (dialog) => {
         setConceal((prev) => !prev)
@@ -633,15 +673,6 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setShowScrollbar((prev) => !prev)
-        dialog.clear()
-      },
-    },
-    {
-      title: showHeader() ? "Hide header" : "Show header",
-      value: "session.toggle.header",
-      category: "Session",
-      onSelect: (dialog) => {
-        setShowHeader((prev) => !prev)
         dialog.clear()
       },
     },
@@ -852,11 +883,12 @@ export function Session() {
               thinking: showThinking(),
               toolDetails: showDetails(),
               assistantMetadata: showAssistantMetadata(),
+              providers: sync.data.provider,
             },
           )
           await Clipboard.copy(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
-        } catch (error) {
+        } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
         }
         dialog.clear()
@@ -896,6 +928,7 @@ export function Session() {
               thinking: options.thinking,
               toolDetails: options.toolDetails,
               assistantMetadata: options.assistantMetadata,
+              providers: sync.data.provider,
             },
           )
 
@@ -917,7 +950,7 @@ export function Session() {
 
             toast.show({ message: `Session exported to ${filename}`, variant: "success" })
           }
-        } catch (error) {
+        } catch {
           toast.show({ message: "Failed to export session", variant: "error" })
         }
         dialog.clear()
@@ -981,31 +1014,7 @@ export function Session() {
   const revertInfo = createMemo(() => session()?.revert)
   const revertMessageID = createMemo(() => revertInfo()?.messageID)
 
-  const revertDiffFiles = createMemo(() => {
-    const diffText = revertInfo()?.diff ?? ""
-    if (!diffText) return []
-
-    try {
-      const patches = parsePatch(diffText)
-      return patches.map((patch) => {
-        const filename = patch.newFileName || patch.oldFileName || "unknown"
-        const cleanFilename = filename.replace(/^[ab]\//, "")
-        return {
-          filename: cleanFilename,
-          additions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("+")).length,
-            0,
-          ),
-          deletions: patch.hunks.reduce(
-            (sum, hunk) => sum + hunk.lines.filter((line) => line.startsWith("-")).length,
-            0,
-          ),
-        }
-      })
-    } catch (error) {
-      return []
-    }
-  })
+  const revertDiffFiles = createMemo(() => getRevertDiffFiles(revertInfo()?.diff ?? ""))
 
   const revertRevertedMessages = createMemo(() => {
     const messageID = revertMessageID()
@@ -1041,16 +1050,14 @@ export function Session() {
         showDetails,
         showGenericToolOutput,
         diffWrapMode,
+        providers,
         sync,
         tui: tuiConfig,
       }}
     >
       <box flexDirection="row">
-        <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
+        <box flexGrow={1} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={showHeader() && (!sidebarVisible() || !wide())}>
-              <Header />
-            </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
               viewportOptions={{
@@ -1069,6 +1076,7 @@ export function Session() {
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
             >
+              <box height={1} />
               <For each={messages()}>
                 {(message, index) => (
                   <Switch>
@@ -1145,7 +1153,7 @@ export function Session() {
                             <DialogMessage
                               messageID={message.id}
                               sessionID={route.sessionID}
-                              setPrompt={(promptInfo) => prompt.set(promptInfo)}
+                              setPrompt={(promptInfo) => prompt?.set(promptInfo)}
                             />
                           ))
                         }}
@@ -1172,22 +1180,31 @@ export function Session() {
               <Show when={permissions().length === 0 && questions().length > 0}>
                 <QuestionPrompt request={questions()[0]} />
               </Show>
-              <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
-                ref={(r) => {
-                  prompt = r
-                  promptRef.set(r)
-                  // Apply initial prompt when prompt component mounts (e.g., from fork)
-                  if (route.initialPrompt) {
-                    r.set(route.initialPrompt)
-                  }
-                }}
-                disabled={permissions().length > 0 || questions().length > 0}
-                onSubmit={() => {
-                  toBottom()
-                }}
-                sessionID={route.sessionID}
-              />
+              <Show when={session()?.parentID}>
+                <SubagentFooter />
+              </Show>
+              <Show when={visible()}>
+                <TuiPluginRuntime.Slot
+                  name="session_prompt"
+                  mode="replace"
+                  session_id={route.sessionID}
+                  visible={visible()}
+                  disabled={disabled()}
+                  on_submit={toBottom}
+                  ref={bind}
+                >
+                  <Prompt
+                    visible={visible()}
+                    ref={bind}
+                    disabled={disabled()}
+                    onSubmit={() => {
+                      toBottom()
+                    }}
+                    sessionID={route.sessionID}
+                    right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                  />
+                </TuiPluginRuntime.Slot>
+              </Show>
             </box>
           </Show>
           <Toast />
@@ -1236,9 +1253,18 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
-  const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
+  const text = createMemo(() => {
+    const texts = props.parts
+      .map((x) => {
+        if (x.type === "text" && !x.synthetic) {
+          return x.text
+        }
+        return null
+      })
+      .filter(Boolean)
+    return texts.join("\n\n")
+  })
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
-  const sync = useSync()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
@@ -1272,7 +1298,7 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()?.text}</text>
+            <text fg={theme.text}>{text()}</text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1325,10 +1351,12 @@ function UserMessage(props: {
 }
 
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
+  const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
+  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1398,7 +1426,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
+              <span style={{ fg: theme.textMuted }}> · {model()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
@@ -1525,8 +1553,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   return (
     <Show when={!shouldHide()}>
       <Switch>
-        <Match when={props.part.tool === "bash"}>
-          <Bash {...toolprops} />
+        <Match when={props.part.tool === ShellID.ToolID}>
+          <Shell {...toolprops} />
         </Match>
         <Match when={props.part.tool === "glob"}>
           <Glob {...toolprops} />
@@ -1537,14 +1565,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "grep"}>
           <Grep {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "list"}>
-          <List {...toolprops} />
-        </Match>
         <Match when={props.part.tool === "webfetch"}>
           <WebFetch {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "codesearch"}>
-          <CodeSearch {...toolprops} />
         </Match>
         <Match when={props.part.tool === "websearch"}>
           <WebSearch {...toolprops} />
@@ -1578,7 +1600,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   )
 }
 
-type ToolProps<T extends Tool.Info> = {
+type ToolProps<T> = {
   input: Partial<Tool.InferParameters<T>>
   metadata: Partial<Tool.InferMetadata<T>>
   permission: Record<string, any>
@@ -1621,17 +1643,6 @@ function GenericTool(props: ToolProps<any>) {
         </box>
       </BlockTool>
     </Show>
-  )
-}
-
-function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
-  const { theme } = useTheme()
-  return (
-    <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text}>
-      <Show fallback={<>~ {props.fallback}</>} when={props.when}>
-        <span style={{ bold: true }}>{props.icon}</span> {props.children}
-      </Show>
-    </text>
   )
 }
 
@@ -1774,7 +1785,7 @@ function BlockTool(props: {
   )
 }
 
-function Bash(props: ToolProps<typeof BashTool>) {
+function Shell(props: ToolProps<typeof ShellTool>) {
   const { theme } = useTheme()
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
@@ -1791,7 +1802,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
     const workdir = props.input.workdir
     if (!workdir || workdir === ".") return undefined
 
-    const base = sync.data.path.directory
+    const base = sync.path.directory
     if (!base) return undefined
 
     const absolute = path.resolve(base, workdir)
@@ -1929,58 +1940,30 @@ function Grep(props: ToolProps<typeof GrepTool>) {
   )
 }
 
-function List(props: ToolProps<typeof ListTool>) {
-  const dir = createMemo(() => {
-    if (props.input.path) {
-      return normalizePath(props.input.path)
-    }
-    return ""
-  })
-  return (
-    <InlineTool icon="→" pending="Listing directory..." complete={props.input.path !== undefined} part={props.part}>
-      List {dir()}
-    </InlineTool>
-  )
-}
-
 function WebFetch(props: ToolProps<typeof WebFetchTool>) {
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={(props.input as any).url} part={props.part}>
-      WebFetch {(props.input as any).url}
+    <InlineTool icon="%" pending="Fetching from the web..." complete={props.input.url} part={props.part}>
+      WebFetch {props.input.url}
     </InlineTool>
   )
 }
 
-function CodeSearch(props: ToolProps<any>) {
-  const input = props.input as any
-  const metadata = props.metadata as any
+function WebSearch(props: ToolProps<typeof WebSearchTool>) {
+  const metadata = props.metadata as { numResults?: number }
   return (
-    <InlineTool icon="◇" pending="Searching code..." complete={input.query} part={props.part}>
-      Exa Code Search "{input.query}" <Show when={metadata.results}>({metadata.results} results)</Show>
-    </InlineTool>
-  )
-}
-
-function WebSearch(props: ToolProps<any>) {
-  const input = props.input as any
-  const metadata = props.metadata as any
-  return (
-    <InlineTool icon="◈" pending="Searching web..." complete={input.query} part={props.part}>
-      Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+    <InlineTool icon="◈" pending="Searching web..." complete={props.input.query} part={props.part}>
+      Exa Web Search "{props.input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
     </InlineTool>
   )
 }
 
 function Task(props: ToolProps<typeof TaskTool>) {
-  const { theme } = useTheme()
-  const keybind = useKeybind()
   const { navigate } = useRoute()
-  const local = useLocal()
   const sync = useSync()
 
   onMount(() => {
     if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      sync.session.sync(props.metadata.sessionId)
+      void sync.session.sync(props.metadata.sessionId)
   })
 
   const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
@@ -1993,7 +1976,9 @@ function Task(props: ToolProps<typeof TaskTool>) {
     )
   })
 
-  const current = createMemo(() => tools().findLast((x) => (x.state as any).title))
+  const current = createMemo(() =>
+    tools().findLast((x) => (x.state.status === "running" || x.state.status === "completed") && x.state.title),
+  )
 
   const isRunning = createMemo(() => props.part.state.status === "running")
 
@@ -2006,12 +1991,15 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   const content = createMemo(() => {
     if (!props.input.description) return ""
-    let content = [`Task ${props.input.description}`]
+    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
 
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
-      if (current()) content.push(`↳ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
-      else content.push(`↳ ${tools().length} toolcalls`)
+      if (current()) {
+        const state = current()!.state
+        const title = state.status === "running" || state.status === "completed" ? state.title : undefined
+        content.push(`↳ ${Locale.titlecase(current()!.tool)} ${title}`)
+      } else content.push(`↳ ${tools().length} toolcalls`)
     }
 
     if (props.part.state.status === "completed") {
@@ -2150,7 +2138,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
                   </text>
                 }
               >
-                <Diff diff={file.diff} filePath={file.filePath} />
+                <Diff diff={file.patch} filePath={file.filePath} />
                 <Diagnostics diagnostics={props.metadata.diagnostics} filePath={file.movePath ?? file.filePath} />
               </Show>
             </BlockTool>
@@ -2191,7 +2179,7 @@ function Question(props: ToolProps<typeof QuestionTool>) {
   const { theme } = useTheme()
   const count = createMemo(() => props.input.questions?.length ?? 0)
 
-  function format(answer?: string[]) {
+  function format(answer?: ReadonlyArray<string>) {
     if (!answer?.length) return "(no answer)"
     return answer.join(", ")
   }
