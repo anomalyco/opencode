@@ -104,24 +104,26 @@ const tools = {
 
 const streamWithTools = Effect.gen(function* () {
   const runtime = yield* ToolRuntime.Service
-  return yield* runtime.run({
-    request: LLM.request({
-      model,
-      prompt: "Use get_weather for San Francisco, then answer in one sentence.",
-      generation: { maxTokens: 80, temperature: 0 },
-    }),
-    tools,
-    maxSteps: 3,
-  }).pipe(
-    Stream.tap((event) =>
-      Effect.sync(() => {
-        if (event.type === "tool-call") console.log("tool call", event.name, event.input)
-        if (event.type === "tool-result") console.log("tool result", event.name, event.result)
-        if (event.type === "text-delta") process.stdout.write(event.text)
+  return yield* runtime
+    .run({
+      request: LLM.request({
+        model,
+        prompt: "Use get_weather for San Francisco, then answer in one sentence.",
+        generation: { maxTokens: 80, temperature: 0 },
       }),
-    ),
-    Stream.runDrain,
-  )
+      tools,
+      maxSteps: 3,
+    })
+    .pipe(
+      Stream.tap((event) =>
+        Effect.sync(() => {
+          if (event.type === "tool-call") console.log("tool call", event.name, event.input)
+          if (event.type === "tool-result") console.log("tool result", event.name, event.result)
+          if (event.type === "text-delta") process.stdout.write(event.text)
+        }),
+      ),
+      Stream.runDrain,
+    )
 })
 
 // -----------------------------------------------------------------------------
@@ -207,11 +209,7 @@ const program = Effect.gen(function* () {
   yield* streamWithTools
 }).pipe(
   Effect.provide(
-    Layer.mergeAll(
-      requestExecutorLayer,
-      llmClientLayer,
-      ToolRuntime.layer.pipe(Layer.provide(llmClientLayer)),
-    ),
+    Layer.mergeAll(requestExecutorLayer, llmClientLayer, ToolRuntime.layer.pipe(Layer.provide(llmClientLayer))),
   ),
 )
 

@@ -1,11 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, type LLMRequest } from "../../src"
+import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as Gemini from "../../src/protocols/gemini"
 import { eventSummary, textRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
-import * as TestLLMClient from "../lib/llm-client"
 
 const model = Gemini.model({
   id: "gemini-2.5-flash",
@@ -21,15 +20,10 @@ const recorded = recordedTests({
   protocol: "gemini",
   requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
 })
-const generate = (request: LLMRequest) =>
-  Effect.gen(function* () {
-    return yield* TestLLMClient.generate(request)
-  })
-
 describe("Gemini recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
-      const response = yield* generate(request)
+      const response = yield* LLMClient.generate(request)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "text", value: expect.stringMatching(/^Hello!?$/) },
@@ -40,7 +34,7 @@ describe("Gemini recorded", () => {
 
   recorded.effect.with("streams tool call", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* generate(toolRequest)
+      const response = yield* LLMClient.generate(toolRequest)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },

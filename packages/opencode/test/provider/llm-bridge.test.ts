@@ -131,6 +131,7 @@ describe("ProviderLLMBridge", () => {
 
     expect(ref).toMatchObject({
       provider: "azure",
+      adapter: "azure-openai-responses",
       protocol: "openai-responses",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
       apiKey: "azure-key",
@@ -146,6 +147,7 @@ describe("ProviderLLMBridge", () => {
 
     expect(ref).toMatchObject({
       provider: "azure",
+      adapter: "azure-openai-chat",
       protocol: "openai-chat",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
       queryParams: { "api-version": "v1" },

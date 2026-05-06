@@ -5,7 +5,6 @@ import { LLMClient } from "../../src/adapter"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { eventSummary, textRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
-import * as TestLLMClient from "../lib/llm-client"
 
 const model = OpenAIChat.model({
   id: "gpt-4o-mini",
@@ -39,7 +38,7 @@ const recorded = recordedTests({
 })
 const generate = (request: LLMRequest) =>
   Effect.gen(function* () {
-    return yield* TestLLMClient.generate(request)
+    return yield* LLMClient.generate(request)
   })
 
 describe("OpenAI Chat recorded", () => {

@@ -4,7 +4,6 @@ import { LLM, ProviderChunkError } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as Gemini from "../../src/protocols/gemini"
 import { it } from "../lib/effect"
-import * as TestLLMClient from "../lib/llm-client"
 import { fixedResponse } from "../lib/http"
 import { sseEvents, sseRaw } from "../lib/sse"
 
@@ -25,7 +24,7 @@ const request = LLM.request({
 describe("Gemini adapter", () => {
   it.effect("prepares Gemini target", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toEqual({
         contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
@@ -37,15 +36,17 @@ describe("Gemini adapter", () => {
 
   it.effect("prepares multimodal user input and tool history", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_tool_result",
           model,
-          tools: [{
-            name: "lookup",
-            description: "Lookup data",
-            inputSchema: { type: "object", properties: { query: { type: "string" } } },
-          }],
+          tools: [
+            {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: { type: "object", properties: { query: { type: "string" } } },
+            },
+          ],
           toolChoice: { type: "tool", name: "lookup" },
           messages: [
             LLM.user([
@@ -62,10 +63,7 @@ describe("Gemini adapter", () => {
         contents: [
           {
             role: "user",
-            parts: [
-              { text: "What is in this image?" },
-              { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
-            ],
+            parts: [{ text: "What is in this image?" }, { inlineData: { mimeType: "image/png", data: "AAECAw==" } }],
           },
           {
             role: "model",
@@ -73,16 +71,22 @@ describe("Gemini adapter", () => {
           },
           {
             role: "user",
-            parts: [{ functionResponse: { name: "lookup", response: { name: "lookup", content: '{"forecast":"sunny"}' } } }],
+            parts: [
+              { functionResponse: { name: "lookup", response: { name: "lookup", content: '{"forecast":"sunny"}' } } },
+            ],
           },
         ],
-        tools: [{
-          functionDeclarations: [{
-            name: "lookup",
-            description: "Lookup data",
-            parameters: { type: "object", properties: { query: { type: "string" } } },
-          }],
-        }],
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "lookup",
+                description: "Lookup data",
+                parameters: { type: "object", properties: { query: { type: "string" } } },
+              },
+            ],
+          },
+        ],
         toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["lookup"] } },
       })
     }),
@@ -90,7 +94,7 @@ describe("Gemini adapter", () => {
 
   it.effect("omits tools when tool choice is none", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_no_tools",
           model,
@@ -108,41 +112,47 @@ describe("Gemini adapter", () => {
 
   it.effect("sanitizes integer enums, dangling required, untyped arrays, and scalar object keys", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_schema_patch",
           model,
           prompt: "Use the tool.",
-          tools: [{
-            name: "lookup",
-            description: "Lookup data",
-            inputSchema: {
-              type: "object",
-              required: ["status", "missing"],
-              properties: {
-                status: { type: "integer", enum: [1, 2] },
-                tags: { type: "array" },
-                name: { type: "string", properties: { ignored: { type: "string" } }, required: ["ignored"] },
+          tools: [
+            {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: {
+                type: "object",
+                required: ["status", "missing"],
+                properties: {
+                  status: { type: "integer", enum: [1, 2] },
+                  tags: { type: "array" },
+                  name: { type: "string", properties: { ignored: { type: "string" } }, required: ["ignored"] },
+                },
               },
             },
-          }],
+          ],
         }),
       )
 
       expect(prepared.payload).toMatchObject({
-        tools: [{
-          functionDeclarations: [{
-            parameters: {
-              type: "object",
-              required: ["status"],
-              properties: {
-                status: { type: "string", enum: ["1", "2"] },
-                tags: { type: "array", items: { type: "string" } },
-                name: { type: "string" },
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                parameters: {
+                  type: "object",
+                  required: ["status"],
+                  properties: {
+                    status: { type: "string", enum: ["1", "2"] },
+                    tags: { type: "array", items: { type: "string" } },
+                    name: { type: "string" },
+                  },
+                },
               },
-            },
-          }],
-        }],
+            ],
+          },
+        ],
       })
     }),
   )
@@ -151,20 +161,26 @@ describe("Gemini adapter", () => {
     Effect.gen(function* () {
       const body = sseEvents(
         {
-          candidates: [{
-            content: { role: "model", parts: [{ text: "thinking", thought: true }] },
-          }],
+          candidates: [
+            {
+              content: { role: "model", parts: [{ text: "thinking", thought: true }] },
+            },
+          ],
         },
         {
-          candidates: [{
-            content: { role: "model", parts: [{ text: "Hello" }] },
-          }],
+          candidates: [
+            {
+              content: { role: "model", parts: [{ text: "Hello" }] },
+            },
+          ],
         },
         {
-          candidates: [{
-            content: { role: "model", parts: [{ text: "!" }] },
-            finishReason: "STOP",
-          }],
+          candidates: [
+            {
+              content: { role: "model", parts: [{ text: "!" }] },
+              finishReason: "STOP",
+            },
+          ],
         },
         {
           usageMetadata: {
@@ -176,12 +192,11 @@ describe("Gemini adapter", () => {
           },
         },
       )
-      const response = yield* TestLLMClient.generate(request)
-        .pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
 
-      expect(LLM.outputText(response)).toBe("Hello!")
-      expect(LLM.outputReasoning(response)).toBe("thinking")
-      expect(LLM.outputUsage(response)).toMatchObject({
+      expect(response.text).toBe("Hello!")
+      expect(response.reasoning).toBe("thinking")
+      expect(response.usage).toMatchObject({
         inputTokens: 5,
         outputTokens: 2,
         reasoningTokens: 1,
@@ -216,32 +231,38 @@ describe("Gemini adapter", () => {
 
   it.effect("emits streamed tool calls and maps finish reason", () =>
     Effect.gen(function* () {
-      const body = sseEvents(
-        {
-          candidates: [{
+      const body = sseEvents({
+        candidates: [
+          {
             content: {
               role: "model",
               parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
             },
             finishReason: "STOP",
-          }],
-          usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
-        },
-      )
-      const response = yield* TestLLMClient.generate(
-          LLM.updateRequest(request, {
-            tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
-          }),
-        )
-        .pipe(Effect.provide(fixedResponse(body)))
+          },
+        ],
+        usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
+      })
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
 
-      expect(LLM.outputToolCalls(response)).toEqual([{ type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } }])
+      expect(response.toolCalls).toEqual([
+        { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
+      ])
       expect(response.events).toEqual([
         { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
         {
           type: "request-finish",
           reason: "tool-calls",
-          usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6, native: { promptTokenCount: 5, candidatesTokenCount: 1 } },
+          usage: {
+            inputTokens: 5,
+            outputTokens: 1,
+            totalTokens: 6,
+            native: { promptTokenCount: 5, candidatesTokenCount: 1 },
+          },
         },
       ])
     }),
@@ -249,9 +270,9 @@ describe("Gemini adapter", () => {
 
   it.effect("assigns unique ids to multiple streamed tool calls", () =>
     Effect.gen(function* () {
-      const body = sseEvents(
-        {
-          candidates: [{
+      const body = sseEvents({
+        candidates: [
+          {
             content: {
               role: "model",
               parts: [
@@ -260,17 +281,16 @@ describe("Gemini adapter", () => {
               ],
             },
             finishReason: "STOP",
-          }],
-        },
-      )
-      const response = yield* TestLLMClient.generate(
-          LLM.updateRequest(request, {
-            tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
-          }),
-        )
-        .pipe(Effect.provide(fixedResponse(body)))
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
 
-      expect(LLM.outputToolCalls(response)).toEqual([
+      expect(response.toolCalls).toEqual([
         { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
       ])
@@ -280,18 +300,18 @@ describe("Gemini adapter", () => {
 
   it.effect("maps length and content-filter finish reasons", () =>
     Effect.gen(function* () {
-      const length = yield* TestLLMClient.generate(request)
-        .pipe(
-          Effect.provide(
-            fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "MAX_TOKENS" }] })),
+      const length = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "MAX_TOKENS" }] }),
           ),
-        )
-      const filtered = yield* TestLLMClient.generate(request)
-        .pipe(
-          Effect.provide(
-            fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "SAFETY" }] })),
-          ),
-        )
+        ),
+      )
+      const filtered = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "SAFETY" }] })),
+        ),
+      )
 
       expect(length.events).toEqual([{ type: "request-finish", reason: "length" }])
       expect(filtered.events).toEqual([{ type: "request-finish", reason: "content-filter" }])
@@ -300,8 +320,9 @@ describe("Gemini adapter", () => {
 
   it.effect("leaves total usage undefined when component counts are missing", () =>
     Effect.gen(function* () {
-      const response = yield* TestLLMClient.generate(request)
-        .pipe(Effect.provide(fixedResponse(sseEvents({ usageMetadata: { thoughtsTokenCount: 1 } }))))
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ usageMetadata: { thoughtsTokenCount: 1 } }))),
+      )
 
       expect(response.usage).toMatchObject({ reasoningTokens: 1 })
       expect(response.usage?.totalTokens).toBeUndefined()
@@ -310,11 +331,10 @@ describe("Gemini adapter", () => {
 
   it.effect("fails invalid stream chunks", () =>
     Effect.gen(function* () {
-      const error = yield* TestLLMClient.generate(request)
-        .pipe(
-          Effect.provide(fixedResponse(sseRaw("data: {not json}"))),
-          Effect.flip,
-        )
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseRaw("data: {not json}"))),
+        Effect.flip,
+      )
 
       expect(error).toBeInstanceOf(ProviderChunkError)
       expect(error.message).toContain("Invalid google/gemini stream chunk")
@@ -323,16 +343,17 @@ describe("Gemini adapter", () => {
 
   it.effect("rejects unsupported assistant media content", () =>
     Effect.gen(function* () {
-      const error = yield* TestLLMClient.prepare(
-          LLM.request({
-            id: "req_media",
-            model,
-            messages: [LLM.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
-          }),
-        )
-        .pipe(Effect.flip)
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_media",
+          model,
+          messages: [LLM.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+        }),
+      ).pipe(Effect.flip)
 
-      expect(error.message).toContain("Gemini assistant messages only support text, reasoning, and tool-call content for now")
+      expect(error.message).toContain(
+        "Gemini assistant messages only support text, reasoning, and tool-call content for now",
+      )
     }),
   )
 })

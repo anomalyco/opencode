@@ -5,7 +5,6 @@ import { LLMClient } from "../../src/adapter"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
-import * as TestLLMClient from "../lib/llm-client"
 
 const model = AnthropicMessages.model({
   id: "claude-haiku-4-5-20251001",
@@ -34,7 +33,7 @@ const recorded = recordedTests({
 })
 const generate = (request: LLMRequest) =>
   Effect.gen(function* () {
-    return yield* TestLLMClient.generate(request)
+    return yield* LLMClient.generate(request)
   })
 
 const malformedToolOrderRequest = LLM.request({

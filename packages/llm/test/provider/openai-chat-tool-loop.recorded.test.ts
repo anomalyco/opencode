@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { LLM } from "../../src"
+import { LLM, LLMResponse } from "../../src"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { ToolRuntime } from "../../src/tool-runtime"
 import { eventSummary, weatherRuntimeTool } from "../recorded-scenarios"
@@ -39,7 +39,7 @@ describe("OpenAI Chat tool-loop recorded", () => {
         yield* TestToolRuntime.runTools({ request, tools: { get_weather: weatherRuntimeTool } }).pipe(Stream.runCollect),
       )
 
-      expect(LLM.outputText({ events })).toContain("Paris")
+      expect(LLMResponse.text({ events })).toContain("Paris")
       expect(eventSummary(events)).toEqual([
         { type: "tool-call", name: "get_weather", input: { city: "Paris" } },
         {

@@ -799,6 +799,7 @@ describe("LLMNative.request", () => {
     expect(request.model).toMatchObject({
       id: "gpt-5-deployment",
       provider: "azure",
+      adapter: "azure-openai-responses",
       protocol: "openai-responses",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
       apiKey: "azure-key",
@@ -823,6 +824,7 @@ describe("LLMNative.request", () => {
     expect(request.model).toMatchObject({
       id: "gpt-4-1-deployment",
       provider: "azure",
+      adapter: "azure-openai-chat",
       protocol: "openai-chat",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
       apiKey: "azure-key",

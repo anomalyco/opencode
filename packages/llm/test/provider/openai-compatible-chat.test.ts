@@ -6,7 +6,6 @@ import { LLMClient } from "../../src/adapter"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
-import * as TestLLMClient from "../lib/llm-client"
 import { dynamicResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
@@ -53,7 +52,7 @@ const providerFamilies = [
 describe("OpenAI-compatible Chat adapter", () => {
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.updateRequest(request, {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
           toolChoice: { type: "required" },
@@ -126,7 +125,7 @@ describe("OpenAI-compatible Chat adapter", () => {
 
   it.effect("matches AI SDK compatible basic request body fixture", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toEqual({
         model: "deepseek-chat",
@@ -144,7 +143,7 @@ describe("OpenAI-compatible Chat adapter", () => {
 
   it.effect("matches AI SDK compatible tool request body fixture", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_tool_parity",
           model,
@@ -194,7 +193,7 @@ describe("OpenAI-compatible Chat adapter", () => {
 
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
-      const response = yield* TestLLMClient.generate(request)
+      const response = yield* LLMClient.generate(request)
         .pipe(
           Effect.provide(
             dynamicResponse((input) =>
@@ -224,8 +223,8 @@ describe("OpenAI-compatible Chat adapter", () => {
           ),
         )
 
-      expect(LLM.outputText(response)).toBe("Hello!")
-      expect(LLM.outputUsage(response)).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+      expect(response.text).toBe("Hello!")
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
       expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
     }),
   )

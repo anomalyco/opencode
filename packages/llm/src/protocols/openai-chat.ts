@@ -1,7 +1,7 @@
 import { Array as Arr, Effect, Schema } from "effect"
 import { Adapter, type AdapterModelInput } from "../adapter/client"
-import { Auth } from "../adapter/auth"
-import { Endpoint } from "../adapter/endpoint"
+import type { Auth } from "../adapter/auth"
+import { Endpoint, type Endpoint as EndpointConfig } from "../adapter/endpoint"
 import { Framing } from "../adapter/framing"
 import { capabilities } from "../llm"
 import { Protocol } from "../adapter/protocol"
@@ -19,6 +19,8 @@ import { OpenAIOptions } from "./utils/openai-options"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-chat"
+const DEFAULT_BASE_URL = "https://api.openai.com/v1"
+const PATH = "/chat/completions"
 
 // =============================================================================
 // Public Model Input
@@ -373,16 +375,35 @@ export const protocol = Protocol.define({
   onHalt: finishEvents,
 })
 
-export const adapter = Adapter.make({
-  id: ADAPTER,
-  protocol,
-  // The adapter supplies deployment concerns around the protocol: URL, auth,
-  // and response framing. Other providers can reuse `protocol` with different
-  // endpoint/auth choices instead of cloning this whole file.
-  endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/chat/completions" }),
-  auth: Auth.openAI,
-  framing: Framing.sse,
-})
+export const endpoint = (input: {
+  readonly defaultBaseURL?: string | false
+  readonly required?: string
+} = {}) =>
+  Endpoint.baseURL<OpenAIChatPayload>({
+    default: input.defaultBaseURL === false ? undefined : input.defaultBaseURL ?? DEFAULT_BASE_URL,
+    path: PATH,
+    required: input.required,
+  })
+
+export const makeAdapter = (input: {
+  readonly id?: string
+  readonly auth?: Auth
+  readonly endpoint?: EndpointConfig<OpenAIChatPayload>
+  readonly defaultBaseURL?: string | false
+  readonly endpointRequired?: string
+} = {}) =>
+  Adapter.make({
+    id: input.id ?? ADAPTER,
+    protocol,
+    // The adapter supplies deployment concerns around the protocol: URL, auth,
+    // and response framing. Other providers can reuse `protocol` with different
+    // endpoint/auth choices instead of cloning this whole file.
+    endpoint: input.endpoint ?? endpoint({ defaultBaseURL: input.defaultBaseURL, required: input.endpointRequired }),
+    auth: input.auth,
+    framing: Framing.sse,
+  })
+
+export const adapter = makeAdapter()
 
 // =============================================================================
 // Model Helper

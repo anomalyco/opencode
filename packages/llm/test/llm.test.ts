@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLM } from "../src"
+import { LLM, LLMResponse } from "../src"
 import { LLMRequest, Message, ModelRef, ToolChoice, ToolDefinition } from "../src/schema"
 
 describe("llm constructors", () => {
@@ -119,7 +119,9 @@ describe("llm constructors", () => {
     ])
   })
 
-  test("extracts output text from responses", () => {
-    expect(LLM.outputText({ events: [{ type: "text-delta", text: "hi" }, { type: "request-finish", reason: "stop" }] })).toBe("hi")
+  test("extracts output text from response events", () => {
+    expect(LLMResponse.text({
+      events: [{ type: "text-delta", text: "hi" }, { type: "request-finish", reason: "stop" }],
+    })).toBe("hi")
   })
 })

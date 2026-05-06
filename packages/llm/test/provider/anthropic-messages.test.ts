@@ -4,7 +4,6 @@ import { CacheHint, LLM, ProviderRequestError } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
-import * as TestLLMClient from "../lib/llm-client"
 import { fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
@@ -25,7 +24,7 @@ const request = LLM.request({
 describe("Anthropic Messages adapter", () => {
   it.effect("prepares Anthropic Messages target", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(request)
+      const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.payload).toEqual({
         model: "claude-sonnet-4-5",
@@ -40,7 +39,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("prepares tool call and tool result messages", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -79,12 +78,12 @@ describe("Anthropic Messages adapter", () => {
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 2 } },
         { type: "message_stop" },
       )
-      const response = yield* TestLLMClient.generate(request)
+      const response = yield* LLMClient.generate(request)
         .pipe(Effect.provide(fixedResponse(body)))
 
-      expect(LLM.outputText(response)).toBe("Hello!")
-      expect(LLM.outputReasoning(response)).toBe("thinking")
-      expect(LLM.outputUsage(response)).toMatchObject({
+      expect(response.text).toBe("Hello!")
+      expect(response.reasoning).toBe("thinking")
+      expect(response.usage).toMatchObject({
         inputTokens: 5,
         outputTokens: 2,
         cacheReadInputTokens: 1,
@@ -104,14 +103,14 @@ describe("Anthropic Messages adapter", () => {
         { type: "content_block_stop", index: 0 },
         { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
       )
-      const response = yield* TestLLMClient.generate(
+      const response = yield* LLMClient.generate(
           LLM.updateRequest(request, {
             tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
           }),
         )
         .pipe(Effect.provide(fixedResponse(body)))
 
-      expect(LLM.outputToolCalls(response)).toEqual([{ type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } }])
+      expect(response.toolCalls).toEqual([{ type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } }])
       expect(response.events).toEqual([
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
@@ -127,7 +126,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("emits provider-error events for mid-stream provider errors", () =>
     Effect.gen(function* () {
-      const response = yield* TestLLMClient.generate(request)
+      const response = yield* LLMClient.generate(request)
         .pipe(
           Effect.provide(
             fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } })),
@@ -140,7 +139,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("fails HTTP provider errors before stream parsing", () =>
     Effect.gen(function* () {
-      const error = yield* TestLLMClient.generate(request)
+      const error = yield* LLMClient.generate(request)
         .pipe(
           Effect.provide(
             fixedResponse('{"type":"error","error":{"type":"invalid_request_error","message":"Bad request"}}', {
@@ -179,7 +178,7 @@ describe("Anthropic Messages adapter", () => {
         { type: "content_block_stop", index: 2 },
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
       )
-      const response = yield* TestLLMClient.generate(
+      const response = yield* LLMClient.generate(
           LLM.updateRequest(request, {
             tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
           }),
@@ -202,7 +201,7 @@ describe("Anthropic Messages adapter", () => {
         result: { type: "json", value: [{ type: "web_search_result", url: "https://example.com", title: "Example" }] },
         providerExecuted: true,
       })
-      expect(LLM.outputText(response)).toBe("Found it.")
+      expect(response.text).toBe("Found it.")
       expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
     }),
   )
@@ -226,7 +225,7 @@ describe("Anthropic Messages adapter", () => {
         { type: "content_block_stop", index: 1 },
         { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
       )
-      const response = yield* TestLLMClient.generate(
+      const response = yield* LLMClient.generate(
           LLM.updateRequest(request, {
             tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
           }),
@@ -246,7 +245,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("round-trips provider-executed assistant content into server tool blocks", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_round_trip",
           model,
@@ -297,7 +296,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("rejects round-trip for unknown server tool names", () =>
     Effect.gen(function* () {
-      const error = yield* TestLLMClient.prepare(
+      const error = yield* LLMClient.prepare(
           LLM.request({
             id: "req_unknown_server_tool",
             model,
@@ -322,7 +321,7 @@ describe("Anthropic Messages adapter", () => {
 
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
-      const error = yield* TestLLMClient.prepare(
+      const error = yield* LLMClient.prepare(
           LLM.request({
             id: "req_media",
             model,

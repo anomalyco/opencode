@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMRequest } from "../src"
+import { LLM, LLMEvent, LLMRequest, LLMResponse } from "../src"
 import { LLMClient } from "../src/adapter"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
@@ -49,7 +49,7 @@ describe("ToolRuntime", () => {
         ),
       )
 
-      expect(LLM.outputText({ events })).toBe("Done.")
+      expect(LLMResponse.text({ events })).toBe("Done.")
     }),
   )
 
@@ -123,7 +123,7 @@ describe("ToolRuntime", () => {
         result: { type: "json", value: { temperature: 22, condition: "sunny" } },
       })
       expect(events.at(-1)?.type).toBe("request-finish")
-      expect(LLM.outputText({ events })).toBe("It's sunny in Paris.")
+      expect(LLMResponse.text({ events })).toBe("It's sunny in Paris.")
     }),
   )
 
@@ -205,7 +205,7 @@ describe("ToolRuntime", () => {
       )
 
       expect(events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
-      expect(LLM.outputText({ events })).toBe("Done.")
+      expect(LLMResponse.text({ events })).toBe("Done.")
     }),
   )
 
@@ -300,7 +300,7 @@ describe("ToolRuntime", () => {
           providerExecuted: true,
         },
       ])
-      expect(LLM.outputText({ events })).toBe("Done.")
+      expect(LLMResponse.text({ events })).toBe("Done.")
     }),
   )
 

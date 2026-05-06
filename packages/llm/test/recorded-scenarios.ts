@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, type LLMRequest, type LLMResponse, type ModelRef } from "../src"
+import { LLM, LLMEvent, LLMResponse, type LLMRequest, type ModelRef } from "../src"
 import { tool } from "../src/tool"
 import { ToolRuntime } from "../src/tool-runtime"
 
@@ -90,7 +90,7 @@ export const expectFinish = (
 ) => expect(events.at(-1)).toMatchObject({ type: "request-finish", reason })
 
 export const expectWeatherToolCall = (response: LLMResponse) =>
-  expect(LLM.outputToolCalls(response)).toMatchObject([
+  expect(response.toolCalls).toMatchObject([
     { type: "tool-call", id: expect.any(String), name: weatherToolName, input: { city: "Paris" } },
   ])
 
@@ -112,7 +112,7 @@ export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
     result: { type: "json", value: { temperature: 22, condition: "sunny" } },
   })
 
-  const output = LLM.outputText({ events })
+  const output = LLMResponse.text({ events })
   expect(output).toContain("Paris")
   expect(output.trim().length).toBeGreaterThan(0)
 }

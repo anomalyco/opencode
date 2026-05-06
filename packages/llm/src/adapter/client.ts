@@ -342,7 +342,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   }
 })
 
-const prepare = Effect.fn("LLMClient.prepare")(function* (request: LLMRequest) {
+const prepareWith = Effect.fn("LLMClient.prepare")(function* (request: LLMRequest) {
   const compiled = yield* compile(request)
 
   return new PreparedRequest({
@@ -378,11 +378,24 @@ const generateWith = (stream: Interface["stream"]) => Effect.fn("LLM.generate")(
   )
 })
 
+export const prepare = <Payload = unknown>(request: LLMRequest) =>
+  prepareWith(request) as Effect.Effect<PreparedRequestOf<Payload>, LLMError>
+
+export const stream = (request: LLMRequest) =>
+  Stream.unwrap(Effect.gen(function* () {
+    return (yield* Service).stream(request)
+  }))
+
+export const generate = (request: LLMRequest) =>
+  Effect.gen(function* () {
+    return yield* (yield* Service).generate(request)
+  })
+
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const stream = streamWith(yield* RequestExecutor.Service)
-    return Service.of({ prepare: prepare as Interface["prepare"], stream, generate: generateWith(stream) })
+    return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
   }),
 )
 
@@ -391,4 +404,7 @@ export const Adapter = { make, model } as const
 export const LLMClient = {
   Service,
   layer,
+  prepare,
+  stream,
+  generate,
 } as const

@@ -162,13 +162,14 @@ const PROVIDERS: Record<string, ProviderModel> = {
     AmazonBedrock.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "bedrock-converse" })),
   "@ai-sdk/anthropic": (input, options) =>
     Anthropic.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "anthropic-messages" })),
-  "@ai-sdk/azure": (input, options) =>
-    Azure.model(String(input.model.api.id), {
+  "@ai-sdk/azure": (input, options) => {
+    const create = options.useCompletionUrls === true ? Azure.chat : Azure.responses
+    return create(String(input.model.api.id), {
       ...sharedOptions(input, options, { protocol: azureProtocol(options), providerOptions: openAIOptions(options) }),
       resourceName: stringOption(options, "resourceName"),
       apiVersion: stringOption(options, "apiVersion"),
-      useCompletionUrls: options.useCompletionUrls === true,
-    }),
+    })
+  },
   "@ai-sdk/baseten": openAICompatibleModel,
   "@ai-sdk/cerebras": openAICompatibleModel,
   "@ai-sdk/deepinfra": openAICompatibleModel,

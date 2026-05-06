@@ -83,6 +83,13 @@ export class HttpOptions extends Schema.Class<HttpOptions>("LLM.HttpOptions")({
   query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 }) {}
 
+export namespace HttpOptions {
+  export type Input = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
+
+  /** Normalize HTTP option input into the canonical `HttpOptions` class. */
+  export const make = (input: Input) => input instanceof HttpOptions ? input : new HttpOptions(input)
+}
+
 export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined>): HttpOptions | undefined => {
   const body = mergeJsonRecords(...items.map((item) => item?.body))
   const headers = mergeStringRecords(...items.map((item) => item?.headers))
@@ -101,6 +108,13 @@ export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.Gene
   seed: Schema.optional(Schema.Number),
   stop: Schema.optional(Schema.Array(Schema.String)),
 }) {}
+
+export namespace GenerationOptions {
+  export type Input = GenerationOptions | ConstructorParameters<typeof GenerationOptions>[0]
+
+  /** Normalize generation option input into the canonical `GenerationOptions` class. */
+  export const make = (input: Input = {}) => input instanceof GenerationOptions ? input : new GenerationOptions(input)
+}
 
 export type GenerationOptionsFields = {
   readonly maxTokens?: number
@@ -363,10 +377,36 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
+export namespace ToolDefinition {
+  export type Input = ToolDefinition | ConstructorParameters<typeof ToolDefinition>[0]
+
+  /** Normalize tool definition input into the canonical `ToolDefinition` class. */
+  export const make = (input: Input) => input instanceof ToolDefinition ? input : new ToolDefinition(input)
+}
+
 export class ToolChoice extends Schema.Class<ToolChoice>("LLM.ToolChoice")({
   type: Schema.Literals(["auto", "none", "required", "tool"]),
   name: Schema.optional(Schema.String),
 }) {}
+
+export namespace ToolChoice {
+  export type Mode = Exclude<ToolChoice["type"], "tool">
+  export type Input = ToolChoice | ConstructorParameters<typeof ToolChoice>[0] | ToolDefinition | string
+
+  const isMode = (value: string): value is Mode =>
+    value === "auto" || value === "none" || value === "required"
+
+  /** Select a specific named tool. */
+  export const named = (value: string) => new ToolChoice({ type: "tool", name: value })
+
+  /** Normalize ergonomic tool-choice inputs into the canonical `ToolChoice` class. */
+  export const make = (input: Input) => {
+    if (input instanceof ToolChoice) return input
+    if (input instanceof ToolDefinition) return named(input.name)
+    if (typeof input === "string") return isMode(input) ? new ToolChoice({ type: input }) : named(input)
+    return new ToolChoice(input)
+  }
+}
 
 export const ResponseFormat = Schema.Union([
   Schema.Struct({ type: Schema.Literal("text") }),
@@ -583,27 +623,58 @@ export type PreparedRequestOf<Payload> = Omit<PreparedRequest, "payload"> & {
   readonly payload: Payload
 }
 
+const responseText = (events: ReadonlyArray<LLMEvent>) =>
+  events
+    .filter(LLMEvent.is.textDelta)
+    .map((event) => event.text)
+    .join("")
+
+const responseReasoning = (events: ReadonlyArray<LLMEvent>) =>
+  events
+    .filter(LLMEvent.is.reasoningDelta)
+    .map((event) => event.text)
+    .join("")
+
+const responseUsage = (events: ReadonlyArray<LLMEvent>) =>
+  events.reduce<Usage | undefined>(
+    (usage, event) => ("usage" in event && event.usage !== undefined ? event.usage : usage),
+    undefined,
+  )
+
 export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),
 }) {
+  /** Concatenated assistant text assembled from streamed `text-delta` events. */
   get text() {
-    return this.events
-      .filter(LLMEvent.is.textDelta)
-      .map((event) => event.text)
-      .join("")
+    return responseText(this.events)
   }
 
+  /** Concatenated reasoning text assembled from streamed `reasoning-delta` events. */
   get reasoning() {
-    return this.events
-      .filter(LLMEvent.is.reasoningDelta)
-      .map((event) => event.text)
-      .join("")
+    return responseReasoning(this.events)
   }
 
+  /** Completed tool calls emitted by the provider. */
   get toolCalls() {
     return this.events.filter(LLMEvent.is.toolCall)
   }
+}
+
+export namespace LLMResponse {
+  export type Output = LLMResponse | { readonly events: ReadonlyArray<LLMEvent>; readonly usage?: Usage }
+
+  /** Concatenate assistant text from a response or collected event list. */
+  export const text = (response: Output) => responseText(response.events)
+
+  /** Return response usage, falling back to the latest usage-bearing event. */
+  export const usage = (response: Output) => response.usage ?? responseUsage(response.events)
+
+  /** Return completed tool calls from a response or collected event list. */
+  export const toolCalls = (response: Output) => response.events.filter(LLMEvent.is.toolCall)
+
+  /** Concatenate reasoning text from a response or collected event list. */
+  export const reasoning = (response: Output) => responseReasoning(response.events)
 }
 
 export class InvalidRequestError extends Schema.TaggedErrorClass<InvalidRequestError>()("LLM.InvalidRequestError", {
@@ -627,10 +698,27 @@ export class ProviderChunkError extends Schema.TaggedErrorClass<ProviderChunkErr
   raw: Schema.optional(Schema.String),
 }) {}
 
+export class HttpRequestDetails extends Schema.Class<HttpRequestDetails>("LLM.HttpRequestDetails")({
+  method: Schema.String,
+  url: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String),
+}) {}
+
+export class HttpResponseDetails extends Schema.Class<HttpResponseDetails>("LLM.HttpResponseDetails")({
+  status: Schema.Number,
+  headers: Schema.Record(Schema.String, Schema.String),
+}) {}
+
 export class ProviderRequestError extends Schema.TaggedErrorClass<ProviderRequestError>()("LLM.ProviderRequestError", {
   status: Schema.Number,
   message: Schema.String,
   body: Schema.optional(Schema.String),
+  bodyTruncated: Schema.optional(Schema.Boolean),
+  retryable: Schema.Boolean,
+  retryAfterMs: Schema.optional(Schema.Number),
+  requestId: Schema.optional(Schema.String),
+  request: Schema.optional(HttpRequestDetails),
+  response: Schema.optional(HttpResponseDetails),
 }) {}
 
 export class TransportError extends Schema.TaggedErrorClass<TransportError>()("LLM.TransportError", {
@@ -641,6 +729,8 @@ export class TransportError extends Schema.TaggedErrorClass<TransportError>()("L
   reason: Schema.optional(Schema.String),
   // Optional URL of the failing request when the transport layer surfaces it.
   url: Schema.optional(Schema.String),
+  retryable: Schema.Boolean,
+  request: Schema.optional(HttpRequestDetails),
 }) {}
 
 /**

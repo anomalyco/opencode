@@ -5,7 +5,6 @@ import { LLMClient } from "../../src/adapter"
 import * as OpenAIResponses from "../../src/protocols/openai-responses"
 import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, weatherTool, weatherToolLoopRequest, weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
-import * as TestLLMClient from "../lib/llm-client"
 
 const model = OpenAIResponses.model({
   id: "gpt-5.5",
@@ -44,7 +43,7 @@ const recorded = recordedTests({
 })
 const generate = (request: LLMRequest) =>
   Effect.gen(function* () {
-    return yield* TestLLMClient.generate(request)
+    return yield* LLMClient.generate(request)
   })
 
 describe("OpenAI Responses recorded", () => {
@@ -52,7 +51,7 @@ describe("OpenAI Responses recorded", () => {
     Effect.gen(function* () {
       const response = yield* generate(textRequest)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
+      expect(response.text).toMatch(/^Hello!?$/)
       expect(response.usage?.totalTokens).toBeGreaterThan(0)
       expectFinish(response.events, "stop")
     }),

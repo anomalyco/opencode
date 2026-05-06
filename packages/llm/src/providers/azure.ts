@@ -1,3 +1,6 @@
+import { Headers } from "effect/unstable/http"
+import { Auth } from "../adapter/auth"
+import type { Auth as AuthFn } from "../adapter/auth"
 import { Adapter } from "../adapter/client"
 import type { ModelInput } from "../llm"
 import { ProviderID } from "../schema"
@@ -6,6 +9,9 @@ import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
 
 export const id = ProviderID.make("azure")
+const MISSING_BASE_URL = "Azure OpenAI requires resourceName or baseURL"
+const apiKeyAuth = Auth.apiKeyHeader("api-key")
+const auth: AuthFn = (input) => apiKeyAuth({ ...input, headers: Headers.remove(input.headers, "authorization") })
 
 export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol"> & {
   readonly resourceName?: string
@@ -21,7 +27,21 @@ const resourceBaseURL = (resourceName: string | undefined) => {
   return `https://${resource}.openai.azure.com/openai/v1`
 }
 
-export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
+const responsesAdapter = OpenAIResponses.makeAdapter({
+  id: "azure-openai-responses",
+  auth,
+  defaultBaseURL: false,
+  endpointRequired: MISSING_BASE_URL,
+})
+
+const chatAdapter = OpenAIChat.makeAdapter({
+  id: "azure-openai-chat",
+  auth,
+  defaultBaseURL: false,
+  endpointRequired: MISSING_BASE_URL,
+})
+
+export const adapters = [responsesAdapter, chatAdapter]
 
 const mapInput = (input: AzureModelInput) => {
   const { apiVersion, resourceName, useCompletionUrls, ...rest } = input
@@ -35,10 +55,14 @@ const mapInput = (input: AzureModelInput) => {
   }
 }
 
-const chatModel = Adapter.model<AzureModelInput>(OpenAIChat.adapter, { provider: id }, { mapInput })
-const responsesModel = Adapter.model<AzureModelInput>(OpenAIResponses.adapter, { provider: id }, { mapInput })
+const chatModel = Adapter.model<AzureModelInput>(chatAdapter, { provider: id }, { mapInput })
+const responsesModel = Adapter.model<AzureModelInput>(responsesAdapter, { provider: id }, { mapInput })
+
+export const responses = (modelID: string, options: ModelOptions = {}) => responsesModel({ ...options, id: modelID })
+
+export const chat = (modelID: string, options: ModelOptions = {}) => chatModel({ ...options, id: modelID })
 
 export const model = (modelID: string, options: ModelOptions = {}) => {
-  const create = options.useCompletionUrls === true ? chatModel : responsesModel
-  return create({ ...options, id: modelID })
+  if (options.useCompletionUrls === true) return chat(modelID, options)
+  return responses(modelID, options)
 }

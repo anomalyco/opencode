@@ -6,7 +6,6 @@ import { CacheHint, LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as BedrockConverse from "../../src/protocols/bedrock-converse"
 import { it } from "../lib/effect"
-import * as TestLLMClient from "../lib/llm-client"
 import { fixedResponse } from "../lib/http"
 import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, weatherTool, weatherToolLoopRequest, weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
@@ -63,7 +62,7 @@ const baseRequest = LLM.request({
 describe("Bedrock Converse adapter", () => {
   it.effect("prepares Converse target with system, inference config, and messages", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(baseRequest)
+      const prepared = yield* LLMClient.prepare(baseRequest)
 
       expect(prepared.payload).toEqual({
         modelId: "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -76,7 +75,7 @@ describe("Bedrock Converse adapter", () => {
 
   it.effect("prepares tool config with toolSpec and toolChoice", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.updateRequest(baseRequest, {
           tools: [
             {
@@ -110,7 +109,7 @@ describe("Bedrock Converse adapter", () => {
 
   it.effect("lowers assistant tool-call + tool-result message history", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_history",
           model,
@@ -156,17 +155,17 @@ describe("Bedrock Converse adapter", () => {
         ["messageStop", { stopReason: "end_turn" }],
         ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
       )
-      const response = yield* TestLLMClient.generate(baseRequest)
+      const response = yield* LLMClient.generate(baseRequest)
         .pipe(Effect.provide(fixedBytes(body)))
 
-      expect(LLM.outputText(response)).toBe("Hello!")
+      expect(response.text).toBe("Hello!")
       const finishes = response.events.filter((event) => event.type === "request-finish")
       // Bedrock splits the finish across `messageStop` (carries reason) and
       // `metadata` (carries usage). We consolidate them into a single
       // terminal `request-finish` event with both.
       expect(finishes).toHaveLength(1)
       expect(finishes[0]).toMatchObject({ type: "request-finish", reason: "stop" })
-      expect(LLM.outputUsage(response)).toMatchObject({
+      expect(response.usage).toMatchObject({
         inputTokens: 5,
         outputTokens: 2,
         totalTokens: 7,
@@ -190,14 +189,14 @@ describe("Bedrock Converse adapter", () => {
         ["contentBlockStop", { contentBlockIndex: 0 }],
         ["messageStop", { stopReason: "tool_use" }],
       )
-      const response = yield* TestLLMClient.generate(
+      const response = yield* LLMClient.generate(
           LLM.updateRequest(baseRequest, {
             tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
           }),
         )
         .pipe(Effect.provide(fixedBytes(body)))
 
-      expect(LLM.outputToolCalls(response)).toEqual([
+      expect(response.toolCalls).toEqual([
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "weather" } },
       ])
       const events = response.events.filter((event) => event.type === "tool-input-delta")
@@ -220,10 +219,10 @@ describe("Bedrock Converse adapter", () => {
         ["contentBlockStop", { contentBlockIndex: 0 }],
         ["messageStop", { stopReason: "end_turn" }],
       )
-      const response = yield* TestLLMClient.generate(baseRequest)
+      const response = yield* LLMClient.generate(baseRequest)
         .pipe(Effect.provide(fixedBytes(body)))
 
-      expect(LLM.outputReasoning(response)).toBe("Let me think.")
+      expect(response.reasoning).toBe("Let me think.")
     }),
   )
 
@@ -233,7 +232,7 @@ describe("Bedrock Converse adapter", () => {
         ["messageStart", { role: "assistant" }],
         ["throttlingException", { message: "Slow down" }],
       )
-      const response = yield* TestLLMClient.generate(baseRequest)
+      const response = yield* LLMClient.generate(baseRequest)
         .pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.events.find((event) => event.type === "provider-error")).toEqual({
@@ -250,7 +249,7 @@ describe("Bedrock Converse adapter", () => {
         id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
         baseURL: "https://bedrock-runtime.test",
       })
-      const error = yield* TestLLMClient.generate(LLM.updateRequest(baseRequest, { model: unsignedModel }))
+      const error = yield* LLMClient.generate(LLM.updateRequest(baseRequest, { model: unsignedModel }))
         .pipe(Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))), Effect.flip)
 
       expect(error.message).toContain("Bedrock Converse requires either model.apiKey")
@@ -268,7 +267,7 @@ describe("Bedrock Converse adapter", () => {
           secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         },
       })
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.updateRequest(baseRequest, { model: signed }),
       )
 
@@ -285,7 +284,7 @@ describe("Bedrock Converse adapter", () => {
   it.effect("emits cachePoint markers after system, user-text, and assistant-text with cache hints", () =>
     Effect.gen(function* () {
       const cache = new CacheHint({ type: "ephemeral" })
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_cache",
           model,
@@ -317,7 +316,7 @@ describe("Bedrock Converse adapter", () => {
 
   it.effect("does not emit cachePoint when no cache hint is set", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(baseRequest)
+      const prepared = yield* LLMClient.prepare(baseRequest)
       expect(prepared.payload).toMatchObject({
         system: [{ text: "You are concise." }],
         messages: [{ role: "user", content: [{ text: "Say hello." }] }],
@@ -327,7 +326,7 @@ describe("Bedrock Converse adapter", () => {
 
   it.effect("lowers image media into Bedrock image blocks", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_image",
           model,
@@ -363,7 +362,7 @@ describe("Bedrock Converse adapter", () => {
 
   it.effect("base64-encodes Uint8Array image bytes", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_image_bytes",
           model,
@@ -389,7 +388,7 @@ describe("Bedrock Converse adapter", () => {
 
   it.effect("lowers document media into Bedrock document blocks with format and name", () =>
     Effect.gen(function* () {
-      const prepared = yield* TestLLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_doc",
           model,
@@ -420,7 +419,7 @@ describe("Bedrock Converse adapter", () => {
 
   it.effect("rejects unsupported image media types", () =>
     Effect.gen(function* () {
-      const error = yield* TestLLMClient.prepare(
+      const error = yield* LLMClient.prepare(
           LLM.request({
             id: "req_bad_image",
             model,
@@ -435,7 +434,7 @@ describe("Bedrock Converse adapter", () => {
 
   it.effect("rejects unsupported document media types", () =>
     Effect.gen(function* () {
-      const error = yield* TestLLMClient.prepare(
+      const error = yield* LLMClient.prepare(
           LLM.request({
             id: "req_bad_doc",
             model,

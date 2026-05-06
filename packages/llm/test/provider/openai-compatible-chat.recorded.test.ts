@@ -7,7 +7,6 @@ import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-cha
 import * as OpenRouter from "../../src/providers/openrouter"
 import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
-import * as TestLLMClient from "../lib/llm-client"
 
 const deepseekModel = OpenAICompatible.deepseek.model("deepseek-chat", {
   apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture",
@@ -58,7 +57,7 @@ const xaiToolRequest = weatherToolRequest({ id: "recorded_xai_tool_call", model:
 const recorded = recordedTests({ prefix: "openai-compatible-chat", protocol: "openai-compatible-chat" })
 const generate = (request: LLMRequest) =>
   Effect.gen(function* () {
-    return yield* TestLLMClient.generate(request)
+    return yield* LLMClient.generate(request)
   })
 
 const openrouterToolLoops = [
@@ -87,7 +86,7 @@ describe("OpenAI-compatible Chat recorded", () => {
     Effect.gen(function* () {
       const response = yield* generate(deepseekRequest)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
+      expect(response.text).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
     }),
   )
@@ -96,7 +95,7 @@ describe("OpenAI-compatible Chat recorded", () => {
     Effect.gen(function* () {
       const response = yield* generate(togetherRequest)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
+      expect(response.text).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
     }),
   )
@@ -115,7 +114,7 @@ describe("OpenAI-compatible Chat recorded", () => {
     Effect.gen(function* () {
       const response = yield* generate(groqRequest)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
+      expect(response.text).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
     }),
   )
@@ -144,7 +143,7 @@ describe("OpenAI-compatible Chat recorded", () => {
     Effect.gen(function* () {
       const response = yield* generate(openrouterRequest)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
+      expect(response.text).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
     }),
   )
@@ -175,7 +174,7 @@ describe("OpenAI-compatible Chat recorded", () => {
     Effect.gen(function* () {
       const response = yield* generate(xaiRequest)
 
-      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
+      expect(response.text).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
     }),
   )
