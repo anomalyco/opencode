@@ -396,7 +396,7 @@ const live: Layer.Layer<
               async transformParams(args) {
                 if (args.type === "stream") {
                   // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
+                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options, item.options)
                 }
                 return args.params
               },

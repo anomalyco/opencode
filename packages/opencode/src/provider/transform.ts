@@ -414,7 +414,55 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
   })
 }
 
-export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+// Injects cache_control: { type: "ephemeral" } as a content block property for
+// openai-compatible providers (e.g. Bifrost, LiteLLM) that route to Anthropic-capable
+// backends. Both proxies accept and forward this to the upstream provider.
+//
+// Key difference from applyCaching: string system/user messages are converted to
+// content block arrays so that cache_control lands on the block itself — not as a
+// top-level message field (which proxies ignore for caching purposes).
+function applyCompatCaching(msgs: ModelMessage[]): ModelMessage[] {
+  const cacheOpt = { openaiCompatible: { cache_control: { type: "ephemeral" } } }
+  const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
+  const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+  const targets = unique([...system, ...final])
+
+  return msgs.map((msg) => {
+    if (!targets.includes(msg)) return msg
+
+    if (msg.role === "system") {
+      // Convert string system message to a content block array so cache_control
+      // is on the block, matching what Bifrost/LiteLLM expect:
+      // content: [{ type: "text", text: "...", providerOptions: { openaiCompatible: { cache_control: {...} } } }]
+      const block = { type: "text" as const, text: msg.content, providerOptions: cacheOpt }
+      // Cast: @ai-sdk types content as string but openai-compatible serialises array blocks correctly
+      return { ...msg, content: [block] } as unknown as ModelMessage
+    }
+
+    if (msg.role === "user") {
+      // Normalise to array so cache_control goes on the last content block
+      const parts: any[] =
+        typeof msg.content === "string"
+          ? [{ type: "text" as const, text: msg.content }]
+          : Array.isArray(msg.content)
+            ? [...msg.content]
+            : []
+      if (parts.length === 0) return msg
+      const last = parts[parts.length - 1]
+      parts[parts.length - 1] = { ...last, providerOptions: mergeDeep(last.providerOptions ?? {}, cacheOpt) }
+      return { ...msg, content: parts } as ModelMessage
+    }
+
+    return msg
+  })
+}
+
+export function message(
+  msgs: ModelMessage[],
+  model: Provider.Model,
+  options: Record<string, unknown>,
+  providerOpts?: Record<string, unknown>,
+) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (
@@ -426,9 +474,22 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic" ||
       model.api.npm === "@ai-sdk/alibaba") &&
-    model.api.npm !== "@ai-sdk/gateway"
+    model.api.npm !== "@ai-sdk/gateway" &&
+    model.api.npm !== "@ai-sdk/openai-compatible"
   ) {
     msgs = applyCaching(msgs, model)
+  }
+  // For openai-compatible providers (e.g. Bifrost, LiteLLM routing to Bedrock/Anthropic),
+  // inject cache_control into content blocks when cacheStrategy is "bedrock" or when
+  // setCacheKey is true and the model id contains "bedrock/".
+  // This uses Anthropic-style cache_control: { type: "ephemeral" } on content blocks,
+  // which both Bifrost and LiteLLM accept and translate to the native backend format.
+  if (
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    (providerOpts?.cacheStrategy === "bedrock" ||
+      (providerOpts?.setCacheKey === true && model.id.toLowerCase().includes("bedrock/")))
+  ) {
+    msgs = applyCompatCaching(msgs)
   }
 
   // Remap providerOptions keys from stored providerID to expected SDK key

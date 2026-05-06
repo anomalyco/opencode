@@ -120,6 +120,121 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.message - openai-compatible Bedrock caching", () => {
+  const createCompatModel = (modelId: string, providerID = "my-bifrost") =>
+    ({
+      id: modelId,
+      providerID,
+      api: {
+        id: modelId,
+        url: "https://bifrost.example.com/api/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Claude via Bifrost",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+      limit: { context: 200000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  const makeMsgs = () =>
+    [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: [{ type: "text", text: "Hello" }] },
+    ] as any[]
+
+  const cacheOpt = { type: "ephemeral" }
+
+  test("string system message is converted to content block array with cache_control on last block", () => {
+    const model = createCompatModel("my-bifrost/bedrock/anthropic.claude-sonnet-4")
+    const result = ProviderTransform.message(makeMsgs(), model, {}, { cacheStrategy: "bedrock" }) as any[]
+    const sysMsg = result.find((m: any) => m.role === "system")
+    // String content must become a content block array so cache_control is on the block,
+    // not a top-level message field (which proxies like Bifrost ignore for caching)
+    expect(Array.isArray(sysMsg?.content)).toBe(true)
+    expect(sysMsg.content[0].type).toBe("text")
+    expect(sysMsg.content[0].text).toBe("You are a helpful assistant.")
+    expect(sysMsg.content[0].providerOptions?.openaiCompatible?.cache_control).toEqual(cacheOpt)
+    // must NOT be on the message object itself
+    expect(sysMsg.providerOptions?.openaiCompatible?.cache_control).toBeUndefined()
+  })
+
+  test("user message content block gets cache_control on last block", () => {
+    const model = createCompatModel("my-bifrost/bedrock/anthropic.claude-sonnet-4")
+    const result = ProviderTransform.message(makeMsgs(), model, {}, { cacheStrategy: "bedrock" }) as any[]
+    const userMsg = result.find((m: any) => m.role === "user")
+    expect(Array.isArray(userMsg?.content)).toBe(true)
+    const lastBlock = userMsg.content[userMsg.content.length - 1]
+    expect(lastBlock.providerOptions?.openaiCompatible?.cache_control).toEqual(cacheOpt)
+    // must NOT be on the message object itself
+    expect(userMsg.providerOptions?.openaiCompatible?.cache_control).toBeUndefined()
+  })
+
+  test("auto-triggers on setCacheKey: true when model id contains bedrock/", () => {
+    const model = createCompatModel("my-bifrost/bedrock/anthropic.claude-sonnet-4")
+    const result = ProviderTransform.message(makeMsgs(), model, {}, { setCacheKey: true }) as any[]
+    const sysMsg = result.find((m: any) => m.role === "system")
+    expect(Array.isArray(sysMsg?.content)).toBe(true)
+    expect(sysMsg.content[0].providerOptions?.openaiCompatible?.cache_control).toEqual(cacheOpt)
+  })
+
+  test("does not inject cache_control for openai-compatible without cacheStrategy or bedrock model id", () => {
+    const model = createCompatModel("my-provider/gpt-4o")
+    const result = ProviderTransform.message(makeMsgs(), model, {}, { setCacheKey: true }) as any[]
+    const sysMsg = result.find((m: any) => m.role === "system")
+    // system message must stay as a plain string — no content block conversion
+    expect(typeof sysMsg?.content).toBe("string")
+    expect(sysMsg?.providerOptions?.openaiCompatible?.cache_control).toBeUndefined()
+  })
+
+  test("does not inject cache_control when no providerOpts are passed", () => {
+    const model = createCompatModel("my-bifrost/bedrock/amazon.nova-pro")
+    const result = ProviderTransform.message(makeMsgs(), model, {}) as any[]
+    const sysMsg = result.find((m: any) => m.role === "system")
+    expect(typeof sysMsg?.content).toBe("string")
+    expect(sysMsg?.providerOptions?.openaiCompatible?.cache_control).toBeUndefined()
+  })
+
+  test("native anthropic provider is unaffected by cacheStrategy option", () => {
+    const anthropicModel = {
+      ...createCompatModel("anthropic/claude-sonnet-4", "anthropic"),
+      api: { id: "claude-sonnet-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+    }
+    const result = ProviderTransform.message(makeMsgs(), anthropicModel, {}, { cacheStrategy: "bedrock" }) as any[]
+    const sysMsg = result.find((m: any) => m.role === "system")
+    // Native anthropic path: cache hint is at message-level providerOptions, not converted to block
+    expect(sysMsg?.providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
+  })
+
+  test("multi-part user message: only last content block gets cache_control", () => {
+    const model = createCompatModel("my-bifrost/bedrock/anthropic.claude-sonnet-4")
+    const msgs = [
+      { role: "system", content: "System prompt." },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "First part" },
+          { type: "text", text: "Second part" },
+        ],
+      },
+    ] as any[]
+    const result = ProviderTransform.message(msgs, model, {}, { cacheStrategy: "bedrock" }) as any[]
+    const userMsg = result.find((m: any) => m.role === "user")
+    expect(userMsg.content[0].providerOptions?.openaiCompatible?.cache_control).toBeUndefined()
+    expect(userMsg.content[1].providerOptions?.openaiCompatible?.cache_control).toEqual(cacheOpt)
+  })
+})
+
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {
   const sessionID = "test-session-123"
 

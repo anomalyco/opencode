@@ -360,7 +360,7 @@ You can configure the providers and models you want to use in your OpenCode conf
 
 The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
-Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
+Provider options can include `timeout`, `chunkTimeout`, `setCacheKey`, and `cacheStrategy`:
 
 ```json title="opencode.json"
 {
@@ -380,6 +380,7 @@ Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
 - `timeout` - Request timeout in milliseconds (default: 300000). Set to `false` to disable.
 - `chunkTimeout` - Timeout in milliseconds between streamed response chunks. If no chunk arrives in time, the request is aborted.
 - `setCacheKey` - Ensure a cache key is always set for designated provider.
+- `cacheStrategy` - Cache strategy for openai-compatible providers. Set to `"bedrock"` when routing through a proxy (e.g. Bifrost, LiteLLM) to AWS Bedrock Claude models. This injects `cache_control: {type: "ephemeral"}` into message content blocks instead of `promptCacheKey`, matching how native Bedrock/Anthropic providers handle caching. See [Caching with OpenAI-Compatible Bedrock Proxies](#caching-with-openai-compatible-bedrock-proxies) below.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
 
@@ -417,6 +418,34 @@ Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over pr
 :::
 
 [Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
+
+---
+
+##### Caching with OpenAI-Compatible Bedrock Proxies
+
+When routing Claude models through an OpenAI-compatible proxy (e.g. [Bifrost](https://github.com/maximhq/bifrost), [LiteLLM](https://github.com/BerriAI/litellm)) to AWS Bedrock, standard `setCacheKey` sends a `promptCacheKey` header — which is not the correct caching mechanism for Bedrock Claude. Bedrock requires `cache_control: {type: "ephemeral"}` injected into message content blocks.
+
+Set `cacheStrategy: "bedrock"` to enable this:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "my-bifrost": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://your-bifrost-endpoint/api/v1",
+        "apiKey": "your-key",
+        "cacheStrategy": "bedrock"
+      }
+    }
+  }
+}
+```
+
+This is equivalent to how native `@ai-sdk/anthropic` and `@ai-sdk/amazon-bedrock` providers handle caching internally.
+
+You can also trigger the bedrock cache strategy automatically without `cacheStrategy` by setting `setCacheKey: true` and using a model ID that contains `bedrock/` (e.g. `my-bifrost/bedrock/anthropic.claude-sonnet-4`).
 
 ---
 
