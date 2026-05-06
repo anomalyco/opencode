@@ -75,6 +75,18 @@ describe("workspaceProxyURL", () => {
     expect(result.searchParams.get("keep")).toBe("yes")
   })
 
+  test("strips directory query so the remote uses its own working directory", () => {
+    // The SDK rewrites the client's `x-opencode-directory` header into a
+    // `?directory=` query before sending. Forwarding that local-machine
+    // path to a remote workspace makes the remote fall back to
+    // `worktree="/"` (the path doesn't exist on its filesystem) and
+    // corrupts downstream `path.relative()` callers.
+    const url = new URL("http://localhost/path?workspace=ws_123&directory=%2FUsers%2Falice%2Fproj")
+    const result = workspaceProxyURL("http://remote:8080", url)
+    expect(result.searchParams.get("workspace")).toBeNull()
+    expect(result.searchParams.get("directory")).toBeNull()
+  })
+
   test("preserves hash from request", () => {
     const url = new URL("http://localhost/page#section")
     const result = workspaceProxyURL("http://remote:8080", url)

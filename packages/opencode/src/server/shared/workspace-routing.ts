@@ -32,5 +32,14 @@ export function workspaceProxyURL(target: string | URL, requestURL: URL) {
   proxyURL.search = requestURL.search
   proxyURL.hash = requestURL.hash
   proxyURL.searchParams.delete("workspace")
+  // The SDK rewrites the client's `x-opencode-directory` header into a
+  // `?directory=` query before sending. When the request is then proxied
+  // to a remote workspace, that local-machine path leaks through and the
+  // remote falls back to `worktree="/"` because the path doesn't exist on
+  // its filesystem — which corrupts downstream `path.relative()` callers
+  // (notably `sessionListQuery`) and wipes the TUI's session list.
+  // Strip it so the workspace adapter's `target.headers["x-opencode-directory"]`
+  // (the workspace's directory on the remote) wins.
+  proxyURL.searchParams.delete("directory")
   return proxyURL
 }
