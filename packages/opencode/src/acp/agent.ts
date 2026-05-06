@@ -630,6 +630,9 @@ export class Agent implements ACPAgent {
       // Store ACP session state
       await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
 
+      const messages = await this.loadSessionMessages(directory, sessionId)
+      this.restoreSessionStateFromMessages(sessionId, messages)
+
       log.info("load_session", { sessionId, mcpServers: params.mcpServers.length })
 
       const result = await this.loadSessionMode({
@@ -637,56 +640,6 @@ export class Agent implements ACPAgent {
         mcpServers: params.mcpServers,
         sessionId,
       })
-
-      // Replay session history
-      const messages = await this.sdk.session
-        .messages(
-          {
-            sessionID: sessionId,
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((x) => x.data)
-        .catch((err) => {
-          log.error("unexpected error when fetching message", { error: err })
-          return undefined
-        })
-
-      const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
-      if (lastUser?.role === "user") {
-        const restoredModel = {
-          providerID: ProviderID.make(lastUser.model.providerID),
-          modelID: ModelID.make(lastUser.model.modelID),
-        }
-        const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
-        const availableVariants = modelVariantsFromProviders(sortProvidersByName(providers), restoredModel)
-        const restoredVariant =
-          lastUser.model.variant && availableVariants.includes(lastUser.model.variant) ? lastUser.model.variant : undefined
-
-        result.models.currentModelId = formatModelIdWithVariant(restoredModel, restoredVariant, availableVariants, false)
-        this.sessionManager.setModel(sessionId, {
-          providerID: restoredModel.providerID,
-          modelID: restoredModel.modelID,
-        })
-        this.sessionManager.setVariant(sessionId, restoredVariant)
-        if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
-          result.modes.currentModeId = lastUser.agent
-          this.sessionManager.setMode(sessionId, lastUser.agent)
-        }
-        result.configOptions = buildConfigOptions({
-          currentModelId: result.models.currentModelId,
-          availableModels: result.models.availableModels,
-          currentVariant: restoredVariant,
-          availableVariants,
-          modes: result.modes,
-        })
-        result._meta = buildVariantMeta({
-          model: restoredModel,
-          variant: restoredVariant,
-          availableVariants,
-        })
-      }
 
       for (const msg of messages ?? []) {
         log.debug("replay message", msg)
@@ -776,6 +729,9 @@ export class Agent implements ACPAgent {
       const sessionId = forked.id
       await this.sessionManager.load(sessionId, directory, mcpServers, model)
 
+      const messages = await this.loadSessionMessages(directory, sessionId)
+      this.restoreSessionStateFromMessages(sessionId, messages)
+
       log.info("fork_session", { sessionId, mcpServers: mcpServers.length })
 
       const mode = await this.loadSessionMode({
@@ -783,20 +739,6 @@ export class Agent implements ACPAgent {
         mcpServers,
         sessionId,
       })
-
-      const messages = await this.sdk.session
-        .messages(
-          {
-            sessionID: sessionId,
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((x) => x.data)
-        .catch((err) => {
-          log.error("unexpected error when fetching message", { error: err })
-          return undefined
-        })
 
       for (const msg of messages ?? []) {
         log.debug("replay message", msg)
@@ -825,6 +767,9 @@ export class Agent implements ACPAgent {
     try {
       const model = await defaultModel(this.config, directory)
       await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+      const messages = await this.loadSessionMessages(directory, sessionId, 20)
+      this.restoreSessionStateFromMessages(sessionId, messages)
 
       log.info("resume_session", { sessionId, mcpServers: mcpServers.length })
 
@@ -1200,23 +1145,26 @@ export class Agent implements ACPAgent {
     sessionId: string,
   ): Promise<{ availableModes: ModeOption[]; currentModeId?: string }> {
     const availableModes = await this.loadAvailableModes(directory)
-    const currentModeId =
-      this.sessionManager.get(sessionId).modeId ||
-      (await (async () => {
-        if (!availableModes.length) return undefined
-        const defaultAgentName = await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent()))
-        const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
-        this.sessionManager.setMode(sessionId, resolvedModeId)
-        return resolvedModeId
-      })())
+    const storedModeId = this.sessionManager.get(sessionId).modeId
+    if (storedModeId && availableModes.some((mode) => mode.id === storedModeId)) {
+      return { availableModes, currentModeId: storedModeId }
+    }
+
+    const currentModeId = await (async () => {
+      if (!availableModes.length) return undefined
+      const defaultAgentName = await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent()))
+      const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+      this.sessionManager.setMode(sessionId, resolvedModeId)
+      return resolvedModeId
+    })()
 
     return { availableModes, currentModeId }
   }
 
   private async loadSessionMode(params: LoadSessionRequest) {
     const directory = params.cwd
-    const model = await defaultModel(this.config, directory)
     const sessionId = params.sessionId
+    const model = this.sessionManager.get(sessionId).model ?? (await defaultModel(this.config, directory))
 
     const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
     const entries = sortProvidersByName(providers)
@@ -1621,6 +1569,37 @@ export class Agent implements ACPAgent {
       { throwOnError: true },
     )
   }
+
+  private async loadSessionMessages(directory: string, sessionId: string, limit?: number) {
+    return this.sdk.session
+      .messages(
+        {
+          sessionID: sessionId,
+          directory,
+          limit,
+        },
+        { throwOnError: true },
+      )
+      .then((x) => x.data)
+      .catch((error) => {
+        log.error("unexpected error when fetching message", { error })
+        return undefined
+      })
+  }
+
+  private restoreSessionStateFromMessages(sessionId: string, messages: SessionMessageResponse[] | undefined) {
+    const lastUser = messages?.findLast((message) => message.info.role === "user")?.info
+    if (lastUser?.role !== "user") return
+
+    this.sessionManager.setModel(sessionId, {
+      providerID: ProviderID.make(lastUser.model.providerID),
+      modelID: ModelID.make(lastUser.model.modelID),
+    })
+    this.sessionManager.setVariant(sessionId, lastUser.model.variant)
+    if (lastUser.agent) {
+      this.sessionManager.setMode(sessionId, lastUser.agent)
+    }
+  }
 }
 
 function toToolKind(toolName: string): ToolKind {
@@ -1883,8 +1862,8 @@ function buildVariantMeta(input: {
       variant: input.variant ?? null,
       availableVariants: input.availableVariants,
     },
+    }
   }
-}
 
 function parseModelSelection(
   modelId: string,
