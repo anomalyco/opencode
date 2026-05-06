@@ -11,6 +11,7 @@ import * as OpenAIChat from "../protocols/openai-chat"
 import { isRecord } from "../protocols/shared"
 
 export const profile = OpenAICompatibleProfiles.profiles.openrouter
+export const id = ProviderID.make(profile.provider)
 const ADAPTER = "openrouter"
 
 export interface OpenRouterOptions {
@@ -76,6 +77,6 @@ const modelRef = Adapter.model<ModelInput>(
 export const model = (id: string | ModelID, options: ModelOptions = {}) => modelRef({ ...options, id })
 
 export const provider = Provider.make({
-  id: ProviderID.make(profile.provider),
+  id,
   model,
 })

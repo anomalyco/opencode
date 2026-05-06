@@ -4,6 +4,8 @@ import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
 import type { OpenAICompatibleChatModelInput } from "../protocols/openai-compatible-chat"
 import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
 
+export const id = ProviderID.make("openai-compatible")
+
 export type ModelOptions = Omit<OpenAICompatibleChatModelInput, "id" | "provider"> & {
   readonly provider: string
 }
@@ -47,7 +49,7 @@ const define = (profile: OpenAICompatibleProfile) => Provider.make({
 })
 
 export const provider = Provider.make({
-  id: ProviderID.make("openai-compatible"),
+  id,
   model: (id: string | ModelID, options: GenericModelOptions) => model(id, { ...options, provider: options.provider ?? "openai-compatible" }),
 })
 

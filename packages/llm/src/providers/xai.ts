@@ -5,6 +5,8 @@ import { ProviderID, type ModelID } from "../schema"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIResponses from "../protocols/openai-responses"
 
+export const id = ProviderID.make("xai")
+
 export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol">
 
 export const adapters = [OpenAIResponses.adapter]
@@ -19,6 +21,6 @@ export const model = (modelID: string | ModelID, options: ModelOptions = {}) =>
   })
 
 export const provider = Provider.make({
-  id: ProviderID.make("xai"),
+  id,
   model,
 })

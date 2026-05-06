@@ -9,8 +9,13 @@ import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-opt
 
 export type { OpenAIOptionsInput } from "./openai-options"
 
+export const id = ProviderID.make("openai")
+
 export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
 
+// This provider facade wraps the lower-level Responses and Chat model factories
+// with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
+// and default option normalization.
 type OpenAIModelInput<ModelInput> = Omit<ModelInput, "apiKey" | "auth"> &
   ProviderAuthOption<"optional"> & {
     readonly providerOptions?: OpenAIProviderOptionsInput
@@ -32,7 +37,7 @@ export const chat = (id: string | ModelID, options: OpenAIModelInput<Omit<Adapte
 }
 
 export const provider = Provider.make({
-  id: ProviderID.make("openai"),
+  id,
   model: responses,
   apis: { responses, chat },
 })

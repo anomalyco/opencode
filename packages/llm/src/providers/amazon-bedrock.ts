@@ -4,6 +4,8 @@ import { ProviderID, type ModelID } from "../schema"
 import * as BedrockConverse from "../protocols/bedrock-converse"
 import type { BedrockCredentials } from "../protocols/bedrock-converse"
 
+export const id = ProviderID.make("amazon-bedrock")
+
 export type ModelOptions = Omit<AdapterModelInput, "id"> & {
   readonly apiKey?: string
   readonly headers?: Record<string, string>
@@ -33,6 +35,6 @@ const converseModel = Adapter.model<ModelInput>(
 export const model = (modelID: string | ModelID, options: ModelOptions = {}) => converseModel({ ...options, id: modelID })
 
 export const provider = Provider.make({
-  id: ProviderID.make("amazon-bedrock"),
+  id,
   model,
 })
