@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, ProviderRequestError } from "../../src"
-import { LLMClient } from "../../src/adapter"
+import { Auth, LLMClient } from "../../src/adapter"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIResponses from "../../src/protocols/openai-responses"
@@ -23,6 +23,8 @@ const request = LLM.request({
   prompt: "Say hello.",
   generation: { maxTokens: 20, temperature: 0 },
 })
+
+const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
 
 describe("OpenAI Responses adapter", () => {
   it.effect("prepares OpenAI Responses target", () =>
@@ -87,6 +89,52 @@ describe("OpenAI Responses adapter", () => {
           ),
         )
     }),
+  )
+
+  it.effect("loads OpenAI default auth from Effect Config", () =>
+    LLMClient.generate(
+        LLM.updateRequest(request, {
+          model: OpenAI.responses("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/" }),
+        }),
+      )
+      .pipe(
+        configEnv({ OPENAI_API_KEY: "env-key" }),
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(web.headers.get("authorization")).toBe("Bearer env-key")
+              return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }),
+          ),
+        ),
+      ),
+  )
+
+  it.effect("lets explicit auth override OpenAI default API key auth", () =>
+    LLMClient.generate(
+        LLM.updateRequest(request, {
+          model: OpenAI.responses("gpt-4.1-mini", {
+            baseURL: "https://api.openai.test/v1/",
+            auth: Auth.bearer("oauth-token"),
+          }),
+        }),
+      )
+      .pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(web.headers.get("authorization")).toBe("Bearer oauth-token")
+              return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }),
+          ),
+        ),
+      ),
   )
 
   it.effect("prepares function call and function output input items", () =>
@@ -165,6 +213,8 @@ describe("OpenAI Responses adapter", () => {
         {
           type: "response.completed",
           response: {
+            id: "resp_1",
+            service_tier: "default",
             usage: {
               input_tokens: 5,
               output_tokens: 2,
@@ -180,11 +230,12 @@ describe("OpenAI Responses adapter", () => {
 
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
-        { type: "text-delta", id: "msg_1", text: "Hello" },
-        { type: "text-delta", id: "msg_1", text: "!" },
+        { type: "text-delta", id: "msg_1", text: "Hello", providerMetadata: { openai: { itemId: "msg_1" } } },
+        { type: "text-delta", id: "msg_1", text: "!", providerMetadata: { openai: { itemId: "msg_1" } } },
         {
           type: "request-finish",
           reason: "stop",
+          providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
           usage: {
             inputTokens: 5,
             outputTokens: 2,
@@ -233,9 +284,9 @@ describe("OpenAI Responses adapter", () => {
         .pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.events).toEqual([
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', providerMetadata: { openai: { itemId: "item_1" } } },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}', providerMetadata: { openai: { itemId: "item_1" } } },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata: { openai: { itemId: "item_1" } } },
         {
           type: "request-finish",
           reason: "tool-calls",
@@ -269,6 +320,7 @@ describe("OpenAI Responses adapter", () => {
           name: "web_search",
           input: { type: "search", query: "effect 4" },
           providerExecuted: true,
+          providerMetadata: { openai: { itemId: "ws_1" } },
         },
         {
           type: "tool-result",
@@ -276,6 +328,7 @@ describe("OpenAI Responses adapter", () => {
           name: "web_search",
           result: { type: "json", value: item },
           providerExecuted: true,
+          providerMetadata: { openai: { itemId: "ws_1" } },
         },
       ])
     }),
@@ -305,6 +358,7 @@ describe("OpenAI Responses adapter", () => {
         name: "code_interpreter",
         input: { code: "print(1+1)", container_id: "cnt_xyz" },
         providerExecuted: true,
+        providerMetadata: { openai: { itemId: "ci_1" } },
       })
       const toolResult = response.events.find((event) => event.type === "tool-result")
       expect(toolResult).toEqual({
@@ -313,6 +367,7 @@ describe("OpenAI Responses adapter", () => {
         name: "code_interpreter",
         result: { type: "json", value: item },
         providerExecuted: true,
+        providerMetadata: { openai: { itemId: "ci_1" } },
       })
     }),
   )

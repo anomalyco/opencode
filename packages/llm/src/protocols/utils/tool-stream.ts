@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { ProviderChunkError, type ToolCall, type ToolInputDelta } from "../../schema"
+import { ProviderChunkError, type ProviderMetadata, type ToolCall, type ToolInputDelta } from "../../schema"
 import { chunkError, parseToolInput, type ToolAccumulator } from "../shared"
 
 type StreamKey = string | number
@@ -11,6 +11,7 @@ type StreamKey = string | number
  */
 export interface PendingTool extends ToolAccumulator {
   readonly providerExecuted?: boolean
+  readonly providerMetadata?: ProviderMetadata
 }
 
 /**
@@ -53,14 +54,28 @@ const inputDelta = (tool: PendingTool, text: string): ToolInputDelta => ({
   id: tool.id,
   name: tool.name,
   text,
+  ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
 })
 
 const toolCall = (adapter: string, tool: PendingTool, inputOverride?: string) =>
   parseToolInput(adapter, tool.name, inputOverride ?? tool.input).pipe(
     Effect.map((input): ToolCall =>
       tool.providerExecuted
-        ? { type: "tool-call", id: tool.id, name: tool.name, input, providerExecuted: true }
-        : { type: "tool-call", id: tool.id, name: tool.name, input },
+        ? {
+          type: "tool-call",
+          id: tool.id,
+          name: tool.name,
+          input,
+          providerExecuted: true,
+          ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
+        }
+        : {
+          type: "tool-call",
+          id: tool.id,
+          name: tool.name,
+          input,
+          ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
+        },
     ),
   )
 
@@ -104,7 +119,13 @@ export const appendOrStart = <K extends StreamKey>(
   const name = delta.name ?? current?.name
   if (!id || !name) return chunkError(adapter, missingToolMessage)
 
-  const tool = { id, name, input: `${current?.input ?? ""}${delta.text}` }
+  const tool = {
+    id,
+    name,
+    input: `${current?.input ?? ""}${delta.text}`,
+    providerExecuted: current?.providerExecuted,
+    providerMetadata: current?.providerMetadata,
+  }
   if (current && delta.text.length === 0 && current.id === id && current.name === name) return { tools, tool: current }
   return appendTool(tools, key, tool, delta.text)
 }

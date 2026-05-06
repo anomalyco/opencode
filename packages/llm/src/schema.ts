@@ -35,6 +35,9 @@ export type FinishReason = Schema.Schema.Type<typeof FinishReason>
 export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
 export type JsonSchema = Schema.Schema.Type<typeof JsonSchema>
 
+export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
+export type ProviderMetadata = Schema.Schema.Type<typeof ProviderMetadata>
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -306,6 +309,7 @@ export const TextPart = Schema.Struct({
   text: Schema.String,
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Text" })
 export type TextPart = Schema.Schema.Type<typeof TextPart>
 
@@ -337,6 +341,7 @@ export const ToolCallPart = Object.assign(Schema.Struct({
   input: Schema.Unknown,
   providerExecuted: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.ToolCall" }), {
   make: (input: Omit<ToolCallPart, "type">): ToolCallPart => ({ type: "tool-call", ...input }),
 })
@@ -349,6 +354,7 @@ export const ToolResultPart = Object.assign(Schema.Struct({
   result: ToolResultValue,
   providerExecuted: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.ToolResult" }), {
   make: (input: Omit<ToolResultPart, "type" | "result"> & {
     readonly result: unknown
@@ -360,6 +366,7 @@ export const ToolResultPart = Object.assign(Schema.Struct({
     result: ToolResultValue.make(input.result, input.resultType),
     providerExecuted: input.providerExecuted,
     metadata: input.metadata,
+    providerMetadata: input.providerMetadata,
   }),
 })
 export type ToolResultPart = Schema.Schema.Type<typeof ToolResultPart>
@@ -369,6 +376,7 @@ export const ReasoningPart = Schema.Struct({
   text: Schema.String,
   encrypted: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Reasoning" })
 export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
 
@@ -522,6 +530,7 @@ export type StepStart = Schema.Schema.Type<typeof StepStart>
 export const TextStart = Schema.Struct({
   type: Schema.Literal("text-start"),
   id: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextStart" })
 export type TextStart = Schema.Schema.Type<typeof TextStart>
 
@@ -529,12 +538,14 @@ export const TextDelta = Schema.Struct({
   type: Schema.Literal("text-delta"),
   id: Schema.optional(Schema.String),
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextDelta" })
 export type TextDelta = Schema.Schema.Type<typeof TextDelta>
 
 export const TextEnd = Schema.Struct({
   type: Schema.Literal("text-end"),
   id: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextEnd" })
 export type TextEnd = Schema.Schema.Type<typeof TextEnd>
 
@@ -542,6 +553,7 @@ export const ReasoningDelta = Schema.Struct({
   type: Schema.Literal("reasoning-delta"),
   id: Schema.optional(Schema.String),
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ReasoningDelta" })
 export type ReasoningDelta = Schema.Schema.Type<typeof ReasoningDelta>
 
@@ -550,6 +562,7 @@ export const ToolInputDelta = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolInputDelta" })
 export type ToolInputDelta = Schema.Schema.Type<typeof ToolInputDelta>
 
@@ -559,6 +572,7 @@ export const ToolCall = Schema.Struct({
   name: Schema.String,
   input: Schema.Unknown,
   providerExecuted: Schema.optional(Schema.Boolean),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolCall" })
 export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 
@@ -568,6 +582,7 @@ export const ToolResult = Schema.Struct({
   name: Schema.String,
   result: ToolResultValue,
   providerExecuted: Schema.optional(Schema.Boolean),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolResult" })
 export type ToolResult = Schema.Schema.Type<typeof ToolResult>
 
@@ -576,6 +591,7 @@ export const ToolError = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   message: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolError" })
 export type ToolError = Schema.Schema.Type<typeof ToolError>
 
@@ -584,6 +600,7 @@ export const StepFinish = Schema.Struct({
   index: Schema.Number,
   reason: FinishReason,
   usage: Schema.optional(Usage),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
@@ -591,6 +608,7 @@ export const RequestFinish = Schema.Struct({
   type: Schema.Literal("request-finish"),
   reason: FinishReason,
   usage: Schema.optional(Usage),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.RequestFinish" })
 export type RequestFinish = Schema.Schema.Type<typeof RequestFinish>
 
@@ -598,6 +616,7 @@ export const ProviderErrorEvent = Schema.Struct({
   type: Schema.Literal("provider-error"),
   message: Schema.String,
   retryable: Schema.optional(Schema.Boolean),
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ProviderError" })
 export type ProviderErrorEvent = Schema.Schema.Type<typeof ProviderErrorEvent>
 
@@ -749,6 +768,13 @@ export class HttpResponseDetails extends Schema.Class<HttpResponseDetails>("LLM.
   headers: Schema.Record(Schema.String, Schema.String),
 }) {}
 
+export class HttpRateLimitDetails extends Schema.Class<HttpRateLimitDetails>("LLM.HttpRateLimitDetails")({
+  retryAfterMs: Schema.optional(Schema.Number),
+  limit: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  remaining: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  reset: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+}) {}
+
 export class ProviderRequestError extends Schema.TaggedErrorClass<ProviderRequestError>()("LLM.ProviderRequestError", {
   status: Schema.Number,
   message: Schema.String,
@@ -756,6 +782,7 @@ export class ProviderRequestError extends Schema.TaggedErrorClass<ProviderReques
   bodyTruncated: Schema.optional(Schema.Boolean),
   retryable: Schema.Boolean,
   retryAfterMs: Schema.optional(Schema.Number),
+  rateLimit: Schema.optional(HttpRateLimitDetails),
   requestId: Schema.optional(Schema.String),
   request: Schema.optional(HttpRequestDetails),
   response: Schema.optional(HttpResponseDetails),

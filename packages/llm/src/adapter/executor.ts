@@ -8,6 +8,7 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http"
 import {
+  HttpRateLimitDetails,
   HttpRequestDetails,
   HttpResponseDetails,
   ProviderRequestError,
@@ -28,17 +29,17 @@ const MAX_RETRIES = 2
 const BASE_DELAY_MS = 500
 const MAX_DELAY_MS = 10_000
 const REDACTED = "<redacted>"
+const sensitiveHeaderPattern = /authorization|api[-_]?key|token|secret|credential|signature|x-amz-signature/i
 
-const sensitiveHeaderName = (name: string) =>
-  /authorization|api[-_]?key|token|secret|credential|signature|x-amz-signature/i.test(name)
+const sensitiveHeaderName = (name: string) => sensitiveHeaderPattern.test(name)
 
 const sensitiveQueryName = (name: string) => sensitiveHeaderName(name) || /^(key|sig)$/i.test(name)
 
-const redactHeaders = (headers: Headers.Headers) =>
+const redactHeaders = (headers: Headers.Headers, redactedNames: ReadonlyArray<string | RegExp>) =>
   Object.fromEntries(
-    Object.entries(headers).map(([name, value]) => [
+    Object.entries(Headers.redact(headers, [...redactedNames, sensitiveHeaderPattern])).map(([name, value]) => [
       name,
-      sensitiveHeaderName(name) ? REDACTED : value,
+      String(value),
     ]),
   )
 
@@ -55,12 +56,14 @@ const normalizedHeaders = (headers: Headers.Headers) =>
   Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))
 
 const requestId = (headers: Record<string, string>) => {
-  return headers["x-request-id"] ??
+  return (
+    headers["x-request-id"] ??
     headers["request-id"] ??
     headers["x-amzn-requestid"] ??
     headers["x-amz-request-id"] ??
     headers["x-goog-request-id"] ??
     headers["cf-ray"]
+  )
 }
 
 const retryableStatus = (status: number) => status === 429 || status === 503 || status === 504 || status === 529
@@ -80,57 +83,121 @@ const retryAfterMs = (headers: Record<string, string>) => {
   return undefined
 }
 
-const requestDetails = (request: HttpClientRequest.HttpClientRequest) =>
+const addRateLimitValue = (target: Record<string, string>, key: string, value: string) => {
+  if (key.length > 0) target[key] = value
+}
+
+const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | undefined) => {
+  const limit: Record<string, string> = {}
+  const remaining: Record<string, string> = {}
+  const reset: Record<string, string> = {}
+
+  Object.entries(headers).forEach(([name, value]) => {
+    const openaiLimit = /^x-ratelimit-limit-(.+)$/.exec(name)?.[1]
+    if (openaiLimit) return addRateLimitValue(limit, openaiLimit, value)
+
+    const openaiRemaining = /^x-ratelimit-remaining-(.+)$/.exec(name)?.[1]
+    if (openaiRemaining) return addRateLimitValue(remaining, openaiRemaining, value)
+
+    const openaiReset = /^x-ratelimit-reset-(.+)$/.exec(name)?.[1]
+    if (openaiReset) return addRateLimitValue(reset, openaiReset, value)
+
+    const anthropic = /^anthropic-ratelimit-(.+)-(limit|remaining|reset)$/.exec(name)
+    if (!anthropic) return
+    if (anthropic[2] === "limit") return addRateLimitValue(limit, anthropic[1], value)
+    if (anthropic[2] === "remaining") return addRateLimitValue(remaining, anthropic[1], value)
+    return addRateLimitValue(reset, anthropic[1], value)
+  })
+
+  if (retryAfter === undefined && Object.keys(limit).length === 0 && Object.keys(remaining).length === 0 && Object.keys(reset).length === 0) return undefined
+
+  return new HttpRateLimitDetails({
+    retryAfterMs: retryAfter,
+    limit: Object.keys(limit).length === 0 ? undefined : limit,
+    remaining: Object.keys(remaining).length === 0 ? undefined : remaining,
+    reset: Object.keys(reset).length === 0 ? undefined : reset,
+  })
+}
+
+const requestDetails = (request: HttpClientRequest.HttpClientRequest, redactedNames: ReadonlyArray<string | RegExp>) =>
   new HttpRequestDetails({
     method: request.method,
     url: redactUrl(request.url),
-    headers: redactHeaders(request.headers),
+    headers: redactHeaders(request.headers, redactedNames),
   })
 
-const responseDetails = (response: HttpClientResponse.HttpClientResponse) =>
+const responseDetails = (response: HttpClientResponse.HttpClientResponse, redactedNames: ReadonlyArray<string | RegExp>) =>
   new HttpResponseDetails({
     status: response.status,
-    headers: redactHeaders(response.headers),
+    headers: redactHeaders(response.headers, redactedNames),
   })
 
-const redactBody = (body: string) =>
-  body
-    .replace(
-      /("(?:api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|authorization|credential|signature|key)"\s*:\s*)"[^"]*"/gi,
-      `$1"${REDACTED}"`,
-    )
-    .replace(
-      /((?:api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|signature|key)=)[^&\s"]+/gi,
-      `$1${REDACTED}`,
-    )
+const secretValues = (request: HttpClientRequest.HttpClientRequest) => {
+  const values = new Set<string>()
+  const add = (value: string) => {
+    if (value.length < 4) return
+    values.add(value)
+    values.add(encodeURIComponent(value))
+  }
 
-const responseBody = (body: string | void) => {
+  Object.entries(request.headers).forEach(([name, value]) => {
+    if (!sensitiveHeaderName(name)) return
+    add(value)
+    const bearer = /^Bearer\s+(.+)$/i.exec(value)?.[1]
+    if (bearer) add(bearer)
+  })
+
+  if (!URL.canParse(request.url)) return values
+  new URL(request.url).searchParams.forEach((value, key) => {
+    if (sensitiveQueryName(key)) add(value)
+  })
+  return values
+}
+
+const redactBody = (body: string, request: HttpClientRequest.HttpClientRequest) =>
+  Array.from(secretValues(request)).reduce(
+    (text, secret) => text.split(secret).join(REDACTED),
+    body
+      .replace(
+        /("(?:api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|authorization|credential|signature|key)"\s*:\s*)"[^"]*"/gi,
+        `$1"${REDACTED}"`,
+      )
+      .replace(
+        /((?:api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|signature|key)=)[^&\s"]+/gi,
+        `$1${REDACTED}`,
+      ),
+  )
+
+const responseBody = (body: string | void, request: HttpClientRequest.HttpClientRequest) => {
   if (body === undefined) return {}
-  const redacted = redactBody(body)
+  const redacted = redactBody(body, request)
   if (redacted.length <= BODY_LIMIT) return { body: redacted }
   return { body: redacted.slice(0, BODY_LIMIT), bodyTruncated: true }
 }
 
-const statusError = (request: HttpClientRequest.HttpClientRequest) =>
+const statusError =
+  (request: HttpClientRequest.HttpClientRequest, redactedNames: ReadonlyArray<string | RegExp>) =>
   (response: HttpClientResponse.HttpClientResponse) =>
     Effect.gen(function* () {
       if (response.status < 400) return response
       const body = yield* response.text.pipe(Effect.catch(() => Effect.void))
       const headers = normalizedHeaders(response.headers)
       const retryable = retryableStatus(response.status)
+      const retryAfter = retryAfterMs(headers)
       return yield* new ProviderRequestError({
         status: response.status,
         message: `Provider request failed with HTTP ${response.status}`,
-        ...responseBody(body),
+        ...responseBody(body, request),
         retryable,
-        retryAfterMs: retryAfterMs(headers),
+        retryAfterMs: retryAfter,
+        rateLimit: rateLimitDetails(headers, retryAfter),
         requestId: requestId(headers),
-        request: requestDetails(request),
-        response: responseDetails(response),
+        request: requestDetails(request, redactedNames),
+        response: responseDetails(response, redactedNames),
       })
     })
 
-const toHttpError = (error: unknown) => {
+const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: unknown) => {
   if (Cause.isTimeoutError(error)) {
     return new TransportError({ message: error.message, reason: "Timeout", retryable: false })
   }
@@ -145,7 +212,7 @@ const toHttpError = (error: unknown) => {
       reason: error.reason._tag,
       url,
       retryable: false,
-      request: request ? requestDetails(request) : undefined,
+      request: request ? requestDetails(request, redactedNames) : undefined,
     })
   }
   return new TransportError({
@@ -153,7 +220,7 @@ const toHttpError = (error: unknown) => {
     reason: error.reason._tag,
     url,
     retryable: false,
-    request: request ? requestDetails(request) : undefined,
+    request: request ? requestDetails(request, redactedNames) : undefined,
   })
 }
 
@@ -170,24 +237,26 @@ const retryStatusFailures = <A, R>(
   retries = MAX_RETRIES,
   attempt = 0,
 ): Effect.Effect<A, LLMError, R> =>
-  Effect.catchTag(
-    effect,
-    "LLM.ProviderRequestError",
-    (error): Effect.Effect<A, LLMError, R> => {
-      if (!error.retryable || retries <= 0) return Effect.fail(error)
-      return retryDelay(error, attempt).pipe(
-        Effect.flatMap((delay) => Effect.sleep(delay)),
-        Effect.flatMap(() => retryStatusFailures(effect, retries - 1, attempt + 1)),
-      )
-    },
-  )
+  Effect.catchTag(effect, "LLM.ProviderRequestError", (error): Effect.Effect<A, LLMError, R> => {
+    if (!error.retryable || retries <= 0) return Effect.fail(error)
+    return retryDelay(error, attempt).pipe(
+      Effect.flatMap((delay) => Effect.sleep(delay)),
+      Effect.flatMap(() => retryStatusFailures(effect, retries - 1, attempt + 1)),
+    )
+  })
 
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
     const executeOnce = (request: HttpClientRequest.HttpClientRequest) =>
-      http.execute(request).pipe(Effect.mapError(toHttpError), Effect.flatMap(statusError(request)))
+      Effect.gen(function* () {
+        const redactedNames = yield* Headers.CurrentRedactedNames
+        return yield* http.execute(request).pipe(
+          Effect.mapError(toHttpError(redactedNames)),
+          Effect.flatMap(statusError(request, redactedNames)),
+        )
+      })
     return Service.of({
       execute: (request) => retryStatusFailures(executeOnce(request)),
     })

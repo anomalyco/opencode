@@ -14,6 +14,10 @@ const request = HttpClientRequest.post("https://provider.test/v1/chat?api_key=se
   HttpClientRequest.setHeaders(Headers.fromInput({ authorization: "Bearer secret", "x-safe": "visible" })),
 )
 
+const secretRequest = HttpClientRequest.post("https://provider.test/v1/chat?api_key=query-secret-123&debug=1").pipe(
+  HttpClientRequest.setHeaders(Headers.fromInput({ authorization: "Bearer header-secret-456" })),
+)
+
 const responsesLayer = (responses: ReadonlyArray<Response>) =>
   RequestExecutor.layer.pipe(
     Layer.provide(
@@ -72,6 +76,7 @@ describe("RequestExecutor", () => {
         status: 429,
         retryable: true,
         retryAfterMs: 0,
+        rateLimit: { retryAfterMs: 0 },
         requestId: "req_123",
         request: {
           method: "POST",
@@ -100,6 +105,87 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("honors current redacted header names in diagnostics", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ProviderRequestError)
+      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
+      expect(error.request?.headers["x-safe"]).toBe("<redacted>")
+      expect(error.response?.headers["x-safe"]).toBe("<redacted>")
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response("bad", { status: 400, headers: { "x-safe": "response-secret" } }),
+        ]),
+      ),
+      Effect.provideService(Headers.CurrentRedactedNames, ["x-safe"]),
+    ),
+  )
+
+  it.effect("extracts OpenAI-style rate-limit diagnostics", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ProviderRequestError)
+      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
+      expect(error.rateLimit).toEqual({
+        retryAfterMs: 0,
+        limit: { requests: "500", tokens: "30000" },
+        remaining: { requests: "499", tokens: "29900" },
+        reset: { requests: "1s", tokens: "10s" },
+      })
+    }).pipe(
+      Effect.provide(
+        responsesLayer(Array.from({ length: 3 }, () => new Response("rate limited", {
+          status: 429,
+          headers: {
+            "retry-after-ms": "0",
+            "x-ratelimit-limit-requests": "500",
+            "x-ratelimit-limit-tokens": "30000",
+            "x-ratelimit-remaining-requests": "499",
+            "x-ratelimit-remaining-tokens": "29900",
+            "x-ratelimit-reset-requests": "1s",
+            "x-ratelimit-reset-tokens": "10s",
+          },
+        }))),
+      ),
+    ),
+  )
+
+  it.effect("extracts Anthropic-style rate-limit diagnostics", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ProviderRequestError)
+      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
+      expect(error.rateLimit).toEqual({
+        retryAfterMs: 0,
+        limit: { requests: "100", "input-tokens": "10000" },
+        remaining: { requests: "12", "input-tokens": "9000" },
+        reset: { requests: "2026-05-06T12:00:00Z", "input-tokens": "2026-05-06T12:00:10Z" },
+      })
+    }).pipe(
+      Effect.provide(
+        responsesLayer(Array.from({ length: 3 }, () => new Response("overloaded", {
+          status: 529,
+          headers: {
+            "retry-after-ms": "0",
+            "anthropic-ratelimit-requests-limit": "100",
+            "anthropic-ratelimit-requests-remaining": "12",
+            "anthropic-ratelimit-requests-reset": "2026-05-06T12:00:00Z",
+            "anthropic-ratelimit-input-tokens-limit": "10000",
+            "anthropic-ratelimit-input-tokens-remaining": "9000",
+            "anthropic-ratelimit-input-tokens-reset": "2026-05-06T12:00:10Z",
+          },
+        }))),
+      ),
+    ),
+  )
+
   it.effect("retries retryable status responses before returning the stream", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
@@ -115,6 +201,31 @@ describe("RequestExecutor", () => {
         ]),
       ),
     ),
+  )
+
+  it.effect("marks 504 and 529 status responses retryable", () =>
+    Effect.gen(function* () {
+      const failWith = (status: number) =>
+        Effect.gen(function* () {
+          const executor = yield* RequestExecutor.Service
+          const error = yield* executor.execute(request).pipe(Effect.flip)
+
+          expect(error).toBeInstanceOf(ProviderRequestError)
+          if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
+          expect(error.status).toBe(status)
+          expect(error.retryable).toBe(true)
+        }).pipe(
+          Effect.provide(
+            responsesLayer(Array.from({ length: 3 }, () => new Response("retry", {
+              status,
+              headers: { "retry-after-ms": "0" },
+            }))),
+          ),
+        )
+
+      yield* failWith(504)
+      yield* failWith(529)
+    }),
   )
 
   it.effect("does not retry non-retryable status responses and truncates large bodies", () =>
@@ -157,6 +268,56 @@ describe("RequestExecutor", () => {
         ]),
       ),
     ),
+  )
+
+  it.effect("redacts echoed request secret values in response bodies", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(secretRequest).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ProviderRequestError)
+      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
+      expect(error.body).toContain("provider echoed <redacted>")
+      expect(error.body).toContain("authorization <redacted>")
+      expect(error.body).not.toContain("query-secret-123")
+      expect(error.body).not.toContain("header-secret-456")
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response("provider echoed query-secret-123 and authorization header-secret-456", { status: 400 }),
+        ]),
+      ),
+    ),
+  )
+
+  it.effect("honors Retry-After delta seconds before retrying", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      return yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        const fiber = yield* executor.execute(request).pipe(Effect.forkChild)
+
+        yield* Effect.yieldNow
+        expect(yield* Ref.get(attempts)).toBe(1)
+
+        yield* TestClock.adjust(1_999)
+        yield* Effect.yieldNow
+        expect(yield* Ref.get(attempts)).toBe(1)
+
+        yield* TestClock.adjust(1)
+        const response = yield* Fiber.join(fiber)
+
+        expect(response.status).toBe(200)
+        expect(yield* Ref.get(attempts)).toBe(2)
+      }).pipe(
+        Effect.provide(
+          countedResponsesLayer(attempts, [
+            new Response("busy", { status: 503, headers: { "retry-after": "2" } }),
+            new Response("ok", { status: 200 }),
+          ]),
+        ),
+      )
+    }),
   )
 
   it.effect("uses exponential jittered delay when retry-after is absent", () =>

@@ -127,6 +127,58 @@ describe("ToolRuntime", () => {
     }),
   )
 
+  it.effect("preserves provider metadata when folding streamed assistant content into follow-up history", () =>
+    Effect.gen(function* () {
+      const bodies: unknown[] = []
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() => {
+          bodies.push(decodeJson(input.text))
+          return input.respond(
+            bodies.length === 1
+              ? sseEvents(
+                { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
+                { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "thinking" } },
+                { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_1" } },
+                { type: "content_block_stop", index: 0 },
+                { type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "call_1", name: "get_weather" } },
+                { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: '{"city":"Paris"}' } },
+                { type: "content_block_stop", index: 1 },
+                { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 5 } },
+              )
+              : sseEvents(
+                { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+                { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Done." } },
+                { type: "content_block_stop", index: 0 },
+                { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+              ),
+            { headers: { "content-type": "text/event-stream" } },
+          )
+        }),
+      )
+
+      yield* TestToolRuntime.runTools({
+        request: LLM.updateRequest(baseRequest, { model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }) }),
+        tools: { get_weather },
+      }).pipe(Stream.runCollect, Effect.provide(layer))
+
+      expect(bodies[1]).toMatchObject({
+        messages: [
+          { role: "user" },
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "thinking", signature: "sig_1" },
+              { type: "tool_use", id: "call_1", name: "get_weather", input: { city: "Paris" } },
+            ],
+          },
+          { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1" }] },
+        ],
+      })
+    }),
+  )
+
   it.effect("emits tool-error for unknown tools so the model can self-correct", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([

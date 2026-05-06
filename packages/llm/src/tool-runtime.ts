@@ -8,6 +8,7 @@ import {
   type LLMEvent,
   LLMRequest,
   Message,
+  type ProviderMetadata,
   type ToolResultValue,
   ToolCallPart,
   ToolResultPart,
@@ -135,11 +136,11 @@ interface StepState {
 
 const accumulate = (state: StepState, event: LLMEvent) => {
   if (event.type === "text-delta") {
-    appendStreamingText(state, "text", event.text)
+    appendStreamingText(state, "text", event.text, event.providerMetadata)
     return
   }
   if (event.type === "reasoning-delta") {
-    appendStreamingText(state, "reasoning", event.text)
+    appendStreamingText(state, "reasoning", event.text, event.providerMetadata)
     return
   }
   if (event.type === "tool-call") {
@@ -148,6 +149,7 @@ const accumulate = (state: StepState, event: LLMEvent) => {
       name: event.name,
       input: event.input,
       providerExecuted: event.providerExecuted,
+      providerMetadata: event.providerMetadata,
     })
     state.assistantContent.push(part)
     // Provider-executed tools are dispatched by the provider; the runtime must
@@ -163,6 +165,7 @@ const accumulate = (state: StepState, event: LLMEvent) => {
       name: event.name,
       result: event.result,
       providerExecuted: true,
+      providerMetadata: event.providerMetadata,
     }))
     return
   }
@@ -171,13 +174,34 @@ const accumulate = (state: StepState, event: LLMEvent) => {
   }
 }
 
-const appendStreamingText = (state: StepState, type: "text" | "reasoning", text: string) => {
+const sameProviderMetadata = (left: ProviderMetadata | undefined, right: ProviderMetadata | undefined) =>
+  left === right || JSON.stringify(left) === JSON.stringify(right)
+
+const mergeProviderMetadata = (left: ProviderMetadata | undefined, right: ProviderMetadata | undefined) => {
+  if (!left) return right
+  if (!right) return left
+  return Object.fromEntries(
+    Array.from(new Set([...Object.keys(left), ...Object.keys(right)])).map((provider) => [
+      provider,
+      { ...left[provider], ...right[provider] },
+    ]),
+  )
+}
+
+const appendStreamingText = (state: StepState, type: "text" | "reasoning", text: string, providerMetadata: ProviderMetadata | undefined) => {
   const last = state.assistantContent.at(-1)
-  if (last?.type === type) {
+  if (last?.type === type && text.length === 0) {
+    state.assistantContent[state.assistantContent.length - 1] = {
+      ...last,
+      providerMetadata: mergeProviderMetadata(last.providerMetadata, providerMetadata),
+    }
+    return
+  }
+  if (last?.type === type && sameProviderMetadata(last.providerMetadata, providerMetadata)) {
     state.assistantContent[state.assistantContent.length - 1] = { ...last, text: `${last.text}${text}` }
     return
   }
-  state.assistantContent.push({ type, text })
+  state.assistantContent.push({ type, text, providerMetadata })
 }
 
 const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<ToolResultValue> => {
