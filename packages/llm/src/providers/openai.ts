@@ -1,6 +1,8 @@
 import { Auth } from "../adapter/auth"
 import type { ProviderAuthOption } from "../adapter/auth-options"
 import type { AdapterModelInput } from "../adapter/client"
+import { Provider } from "../provider"
+import { ProviderID, type ModelID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
@@ -9,9 +11,10 @@ export type { OpenAIOptionsInput } from "./openai-options"
 
 export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
 
-type OpenAIModelInput<ModelInput> = Omit<ModelInput, "apiKey" | "auth"> & ProviderAuthOption<"optional"> & {
-  readonly providerOptions?: OpenAIProviderOptionsInput
-}
+type OpenAIModelInput<ModelInput> = Omit<ModelInput, "apiKey" | "auth"> &
+  ProviderAuthOption<"optional"> & {
+    readonly providerOptions?: OpenAIProviderOptionsInput
+  }
 
 const auth = (options: ProviderAuthOption<"optional">) => {
   if ("auth" in options && options.auth) return options.auth
@@ -20,12 +23,19 @@ const auth = (options: ProviderAuthOption<"optional">) => {
     .bearer()
 }
 
-export const responses = (id: string, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
+export const responses = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
   return OpenAIResponses.model(withOpenAIOptions(id, { ...options, auth: auth(options) }, { textVerbosity: true }))
 }
 
-export const chat = (id: string, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
+export const chat = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
   return OpenAIChat.model(withOpenAIOptions(id, { ...options, auth: auth(options) }))
 }
 
-export const model = responses
+export const provider = Provider.make({
+  id: ProviderID.make("openai"),
+  model: responses,
+  apis: { responses, chat },
+})
+
+export const model = provider.model
+export const apis = provider.apis

@@ -8,7 +8,7 @@ import {
   type ProviderOptions,
   type ProtocolID,
 } from "@opencode-ai/llm"
-import { AmazonBedrock, Anthropic, Azure, GitHubCopilot, Google, OpenAI, OpenAICompatible, XAI } from "@opencode-ai/llm/providers"
+import { AmazonBedrock, Anthropic, Azure, GitHubCopilot, Google, OpenAI, OpenAICompatible, OpenRouter, XAI } from "@opencode-ai/llm/providers"
 import * as OpenAICompatibleProfiles from "@opencode-ai/llm/providers/openai-compatible-profile"
 import { Option, Schema } from "effect"
 import { isRecord } from "@/util/record"
@@ -57,6 +57,21 @@ const openAIOptions = (
   return mergeProviderOptions(
     configured,
     Object.keys(openai).length === 0 ? undefined : { openai },
+  )
+}
+
+const openRouterOptions = (
+  options: Record<string, unknown>,
+  configured: ProviderOptions | undefined = configuredProviderOptions(options),
+): ProviderOptions | undefined => {
+  const openrouter = Object.fromEntries(Object.entries({
+    usage: options.usage === true || isRecord(options.usage) ? options.usage : undefined,
+    reasoning: isRecord(options.reasoning) ? options.reasoning : undefined,
+    promptCacheKey: stringOption(options, "promptCacheKey") ?? stringOption(options, "prompt_cache_key"),
+  }).filter((entry) => entry[1] !== undefined))
+  return mergeProviderOptions(
+    configured,
+    Object.keys(openrouter).length === 0 ? undefined : { openrouter },
   )
 }
 
@@ -191,6 +206,14 @@ const PROVIDERS: Record<string, ProviderModel> = {
       ...sharedOptions(input, options, { protocol: "openai-responses", providerOptions: openAIOptions(options) }),
     }),
   "@ai-sdk/openai-compatible": openAICompatibleModel,
+  "@openrouter/ai-sdk-provider": (input, options) =>
+    OpenRouter.model(String(input.model.api.id), {
+      ...sharedOptions(input, options, {
+        protocol: "openrouter-chat",
+        baseURL: baseURL(input, options, OpenRouter.profile.baseURL),
+        providerOptions: openRouterOptions(options),
+      }),
+    }),
   "@ai-sdk/togetherai": openAICompatibleModel,
   "@ai-sdk/xai": (input, options) =>
     XAI.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "openai-responses" })),

@@ -1,4 +1,5 @@
-import { ProviderID } from "../schema"
+import { Provider } from "../provider"
+import { ProviderID, type ModelID } from "../schema"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
 import type { OpenAICompatibleChatModelInput } from "../protocols/openai-compatible-chat"
 import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
@@ -7,13 +8,17 @@ export type ModelOptions = Omit<OpenAICompatibleChatModelInput, "id" | "provider
   readonly provider: string
 }
 
+type GenericModelOptions = Omit<ModelOptions, "provider"> & {
+  readonly provider?: string
+}
+
 export type FamilyModelOptions = Omit<OpenAICompatibleChatModelInput, "id" | "provider" | "baseURL"> & {
   readonly baseURL?: string
 }
 
 export const adapters = [OpenAICompatibleChat.adapter]
 
-export const model = (id: string, options: ModelOptions) => {
+export const model = (id: string | ModelID, options: ModelOptions) => {
   return OpenAICompatibleChat.model({
     ...options,
     id,
@@ -27,7 +32,7 @@ const profileBaseURL = (profile: OpenAICompatibleProfile, options: FamilyModelOp
   throw new Error(`OpenAI-compatible profile ${profile.provider} requires a baseURL`)
 }
 
-export const profileModel = (profile: OpenAICompatibleProfile, id: string, options: FamilyModelOptions = {}) =>
+export const profileModel = (profile: OpenAICompatibleProfile, id: string | ModelID, options: FamilyModelOptions = {}) =>
   OpenAICompatibleChat.model({
     ...options,
     id,
@@ -36,10 +41,16 @@ export const profileModel = (profile: OpenAICompatibleProfile, id: string, optio
     capabilities: options.capabilities ?? profile.capabilities,
   })
 
-const define = (profile: OpenAICompatibleProfile) => ({
-  id: profile.provider,
+const define = (profile: OpenAICompatibleProfile) => Provider.make({
+  id: ProviderID.make(profile.provider),
   adapters,
-  model: (id: string, options: FamilyModelOptions = {}) => profileModel(profile, id, options),
+  model: (id: string | ModelID, options: FamilyModelOptions = {}) => profileModel(profile, id, options),
+})
+
+export const provider = Provider.make({
+  id: ProviderID.make("openai-compatible"),
+  adapters,
+  model: (id: string | ModelID, options: GenericModelOptions) => model(id, { ...options, provider: options.provider ?? "openai-compatible" }),
 })
 
 export const baseten = define(profiles.baseten)

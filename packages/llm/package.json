@@ -13,6 +13,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./adapter": "./src/adapter/index.ts",
+    "./provider": "./src/provider.ts",
     "./providers": "./src/providers/index.ts",
     "./providers/amazon-bedrock": "./src/providers/amazon-bedrock.ts",
     "./providers/anthropic": "./src/providers/anthropic.ts",

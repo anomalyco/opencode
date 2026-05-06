@@ -106,6 +106,39 @@ describe("ProviderLLMBridge", () => {
     })
   })
 
+  test("maps OpenRouter through its provider helper", () => {
+    const ref = ProviderLLMBridge.toModelRef({
+      provider: provider({
+        id: ProviderID.make("openrouter"),
+        key: "openrouter-key",
+        options: { usage: true, promptCacheKey: "session_123" },
+      }),
+      model: model({
+        id: "openrouter/gpt-4o-mini",
+        apiID: "openai/gpt-4o-mini",
+        providerID: "openrouter",
+        npm: "@openrouter/ai-sdk-provider",
+        options: { reasoning: { effort: "high" } },
+      }),
+    })
+
+    expect(ref).toMatchObject({
+      id: "openai/gpt-4o-mini",
+      provider: "openrouter",
+      adapter: "openrouter",
+      protocol: "openrouter-chat",
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: "openrouter-key",
+      providerOptions: {
+        openrouter: {
+          usage: true,
+          reasoning: { effort: "high" },
+          promptCacheKey: "session_123",
+        },
+      },
+    })
+  })
+
   test("maps GitHub Copilot through its provider helper", () => {
     const ref = ProviderLLMBridge.toModelRef({
       provider: provider({ id: ProviderID.make("github-copilot"), key: "copilot-key" }),

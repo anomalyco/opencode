@@ -2,7 +2,8 @@ import { Auth } from "../adapter/auth"
 import type { ProviderAuthOption } from "../adapter/auth-options"
 import { Adapter } from "../adapter/client"
 import type { ModelInput } from "../llm"
-import { ProviderID } from "../schema"
+import { Provider } from "../provider"
+import { ProviderID, type ModelID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
@@ -63,11 +64,19 @@ const mapInput = (input: AzureModelInput) => {
 const chatModel = Adapter.model<AzureModelInput>(chatAdapter, { provider: id }, { mapInput })
 const responsesModel = Adapter.model<AzureModelInput>(responsesAdapter, { provider: id }, { mapInput })
 
-export const responses = (modelID: string, options: ModelOptions = {}) => responsesModel({ ...options, id: modelID })
+export const responses = (modelID: string | ModelID, options: ModelOptions = {}) => responsesModel({ ...options, id: modelID })
 
-export const chat = (modelID: string, options: ModelOptions = {}) => chatModel({ ...options, id: modelID })
+export const chat = (modelID: string | ModelID, options: ModelOptions = {}) => chatModel({ ...options, id: modelID })
 
-export const model = (modelID: string, options: ModelOptions = {}) => {
+export const model = (modelID: string | ModelID, options: ModelOptions = {}) => {
   if (options.useCompletionUrls === true) return chat(modelID, options)
   return responses(modelID, options)
 }
+
+export const provider = Provider.make({
+  id,
+  model,
+  apis: { responses, chat },
+})
+
+export const apis = provider.apis

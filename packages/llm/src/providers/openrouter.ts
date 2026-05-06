@@ -3,8 +3,9 @@ import { Adapter, type AdapterModelInput } from "../adapter/client"
 import { Endpoint } from "../adapter/endpoint"
 import { Framing } from "../adapter/framing"
 import { capabilities } from "../llm"
+import { Provider } from "../provider"
 import { Protocol } from "../adapter/protocol"
-import type { ProviderOptions } from "../schema"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
 import { isRecord } from "../protocols/shared"
@@ -72,4 +73,9 @@ const modelRef = Adapter.model<ModelInput>(
   },
 )
 
-export const model = (id: string, options: ModelOptions = {}) => modelRef({ ...options, id })
+export const model = (id: string | ModelID, options: ModelOptions = {}) => modelRef({ ...options, id })
+
+export const provider = Provider.make({
+  id: ProviderID.make(profile.provider),
+  model,
+})
