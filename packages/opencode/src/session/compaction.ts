@@ -21,6 +21,8 @@ import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
+import { Todo } from "./todo"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -40,6 +42,8 @@ const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 8_000
+const ANCHOR_START = "<!-- opencode-compaction-anchors:start -->"
+const ANCHOR_END = "<!-- opencode-compaction-anchors:end -->"
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Goal
@@ -101,6 +105,51 @@ function summaryText(message: MessageV2.WithParts) {
     .join("\n\n")
     .trim()
   return text || undefined
+}
+
+function cleanAnchorLine(input: string) {
+  return input.replace(/\s+/g, " ").trim() || "(empty)"
+}
+
+function stripAnchors(input: string) {
+  let result = input
+  while (true) {
+    const start = result.indexOf(ANCHOR_START)
+    if (start === -1) return result.trim()
+    const end = result.indexOf(ANCHOR_END, start + ANCHOR_START.length)
+    if (end === -1) return result.slice(0, start).trim()
+    result = `${result.slice(0, start).trimEnd()}\n\n${result.slice(end + ANCHOR_END.length).trimStart()}`
+  }
+}
+
+function appendAnchors(input: { summary: string; anchors?: string }) {
+  const summary = stripAnchors(input.summary)
+  if (!input.anchors) return summary
+  return [summary, input.anchors].filter(Boolean).join("\n\n").trim()
+}
+
+function formatAnchors(input: { todos: Todo.Info[]; plan?: string }) {
+  const sections = [
+    input.todos.length
+      ? [
+          "## Current TODO State",
+          ...input.todos.map(
+            (todo) =>
+              `- ${cleanAnchorLine(todo.status)} / ${cleanAnchorLine(todo.priority)}: ${cleanAnchorLine(todo.content)}`,
+          ),
+        ].join("\n")
+      : undefined,
+    input.plan
+      ? [
+          "## Current Plan",
+          `- Path: ${input.plan}`,
+          "- Read this file before executing or updating the plan.",
+        ].join("\n")
+      : undefined,
+  ].filter((item): item is string => Boolean(item))
+
+  if (!sections.length) return undefined
+  return [ANCHOR_START, ...sections, ANCHOR_END].join("\n")
 }
 
 function completedCompactions(messages: MessageV2.WithParts[]) {
@@ -218,6 +267,8 @@ export const layer: Layer.Layer<
   | Plugin.Service
   | SessionProcessor.Service
   | Provider.Service
+  | Todo.Service
+  | AppFileSystem.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -228,6 +279,8 @@ export const layer: Layer.Layer<
     const plugin = yield* Plugin.Service
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
+    const todo = yield* Todo.Service
+    const fs = yield* AppFileSystem.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
@@ -293,6 +346,55 @@ export const layer: Layer.Layer<
         head: input.messages.slice(0, keep.start),
         tail_start_id: keep.id,
       }
+    })
+
+    const buildAnchors = Effect.fn("SessionCompaction.buildAnchors")(function* (input: { sessionID: SessionID }) {
+      const ctx = yield* InstanceState.context
+      const info = yield* session.get(input.sessionID)
+      const plan = Session.plan(info, ctx)
+      const planExists = yield* fs.existsSafe(plan).pipe(Effect.catch(() => Effect.succeed(false)))
+      return formatAnchors({
+        todos: yield* todo.get(input.sessionID),
+        plan: planExists ? plan : undefined,
+      })
+    })
+
+    const persistAnchors = Effect.fn("SessionCompaction.persistAnchors")(function* (input: {
+      sessionID: SessionID
+      messageID: MessageID
+    }) {
+      const anchors = yield* buildAnchors({ sessionID: input.sessionID })
+      const current = (yield* session.messages({ sessionID: input.sessionID })).find(
+        (item) => item.info.id === input.messageID,
+      )
+      if (!current) return ""
+
+      const textParts = current.parts.filter((part): part is MessageV2.TextPart => part.type === "text")
+      const lastTextPart = textParts.at(-1)
+      if (!lastTextPart) {
+        if (!anchors) return summaryText(current) ?? ""
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: input.messageID,
+          sessionID: input.sessionID,
+          type: "text",
+          text: anchors,
+        })
+        return anchors
+      }
+
+      const parts = current.parts.map((part) => {
+        if (part.type !== "text") return part
+        const text =
+          part.id === lastTextPart.id ? appendAnchors({ summary: part.text, anchors }) : stripAnchors(part.text)
+        return { ...part, text }
+      })
+      for (const part of parts) {
+        const original = current.parts.find((item) => item.id === part.id)
+        if (part.type !== "text" || original?.type !== "text" || part.text === original.text) continue
+        yield* session.updatePart(part)
+      }
+      return summaryText({ info: current.info, parts }) ?? ""
     })
 
     // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
@@ -390,17 +492,18 @@ export const layer: Layer.Layer<
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
-      const previousSummary = prior.at(-1)?.summary
+      const previousSummary = stripAnchors(prior.at(-1)?.summary ?? "") || undefined
       const selected = yield* select({
         messages: history.filter((_, index) => !hidden.has(index)),
         cfg,
         model,
       })
+      const anchors = yield* buildAnchors({ sessionID: input.sessionID })
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(
         "experimental.session.compacting",
         { sessionID: input.sessionID },
-        { context: [], prompt: undefined },
+        { context: anchors ? [anchors] : [], prompt: undefined },
       )
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
@@ -560,16 +663,11 @@ export const layer: Layer.Layer<
 
       if (processor.message.error) return "stop"
       if (result === "continue") {
-        const summary = summaryText(
-          (yield* session.messages({ sessionID: input.sessionID })).find((item) => item.info.id === msg.id) ?? {
-            info: msg,
-            parts: [],
-          },
-        )
+        const summary = yield* persistAnchors({ sessionID: input.sessionID, messageID: msg.id })
         EventV2.run(SessionEvent.Compaction.Ended.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
-          text: summary ?? "",
+          text: summary,
           include: selected.tail_start_id,
         })
         yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
@@ -623,6 +721,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionProcessor.defaultLayer),
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
+    Layer.provide(Todo.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
   ),

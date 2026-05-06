@@ -2,6 +2,8 @@ import { afterEach, describe, expect, mock, test } from "bun:test"
 import { APICallError } from "ai"
 import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect"
 import * as Stream from "effect/Stream"
+import path from "path"
+import { mkdir } from "fs/promises"
 import z from "zod"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
@@ -20,6 +22,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
+import { Todo } from "../../src/session/todo"
 import { SessionV2 } from "../../src/v2/session"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Provider } from "@/provider/provider"
@@ -29,6 +32,7 @@ import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestConfig } from "../fixture/config"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 void Log.init({ print: false })
 
@@ -49,6 +53,12 @@ const svc = {
   },
   updatePart<T extends MessageV2.Part>(part: T) {
     return run(SessionNs.Service.use((svc) => svc.updatePart(part)))
+  },
+}
+
+const todoSvc = {
+  update(input: { sessionID: SessionID; todos: Todo.Info[] }) {
+    return Effect.runPromise(Todo.Service.use((svc) => svc.update(input)).pipe(Effect.provide(Todo.defaultLayer)))
   },
 }
 
@@ -179,6 +189,15 @@ async function summaryAssistant(sessionID: SessionID, parentID: MessageID, root:
   return msg
 }
 
+function textOf(message: MessageV2.WithParts | undefined) {
+  return (
+    message?.parts
+      .filter((part): part is MessageV2.TextPart => part.type === "text")
+      .map((part) => part.text)
+      .join("\n\n") ?? ""
+  )
+}
+
 async function lastCompactionPart(sessionID: SessionID) {
   return (await svc.messages({ sessionID }))
     .at(-2)
@@ -230,6 +249,8 @@ function runtime(
       Layer.provide(layer(result)),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(plugin),
+      Layer.provide(Todo.defaultLayer),
+      Layer.provide(AppFileSystem.defaultLayer),
       Layer.provide(bus),
       Layer.provide(config),
     ),
@@ -243,6 +264,8 @@ const deps = Layer.mergeAll(
   Plugin.defaultLayer,
   Bus.layer,
   Config.defaultLayer,
+  Todo.defaultLayer,
+  AppFileSystem.defaultLayer,
 )
 
 const env = Layer.mergeAll(
@@ -288,6 +311,8 @@ function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fa
       Layer.provide(Permission.defaultLayer),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
+      Layer.provide(Todo.defaultLayer),
+      Layer.provide(AppFileSystem.defaultLayer),
       Layer.provide(status),
       Layer.provide(bus),
       Layer.provide(config),
@@ -1634,6 +1659,199 @@ describe("session.compaction.process", () => {
           expect(captured).not.toContain("keep this turn")
           expect(captured).not.toContain("and this one too")
           expect(captured).not.toContain("What did we do so far?")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("persists current todos in compacted summary", async () => {
+    const stub = llm()
+    let captured = ""
+    stub.push(
+      reply("summary", (input) => {
+        captured = JSON.stringify(input.messages)
+      }),
+    )
+
+    await using tmp = await tmpdir({ git: true })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await svc.create({})
+        await todoSvc.update({
+          sessionID: session.id,
+          todos: [
+            { content: "Preserve todos", status: "in_progress", priority: "high" },
+            { content: "Run verification", status: "pending", priority: "medium" },
+          ],
+        })
+        await user(session.id, "older context")
+        await SessionCompaction.create({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        const rt = liveRuntime(stub.layer, wide())
+        try {
+          const msgs = await svc.messages({ sessionID: session.id })
+          const parent = msgs.at(-1)?.info.id
+          expect(parent).toBeTruthy()
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: parent!,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          const summary = MessageV2.filterCompacted(MessageV2.stream(session.id)).find(
+            (msg) => msg.info.role === "assistant" && msg.info.summary,
+          )
+          const text = textOf(summary)
+          expect(captured).toContain("## Current TODO State")
+          expect(text).toContain("## Current TODO State")
+          expect(text).toContain("- in_progress / high: Preserve todos")
+          expect(text).toContain("- pending / medium: Run verification")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("replaces stale todo anchors across repeated compactions", async () => {
+    const stub = llm()
+    let captured = ""
+    stub.push(reply("summary one"))
+    stub.push(
+      reply("summary two", (input) => {
+        captured = JSON.stringify(input.messages)
+      }),
+    )
+
+    await using tmp = await tmpdir({ git: true })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await svc.create({})
+        await todoSvc.update({
+          sessionID: session.id,
+          todos: [{ content: "Preserve todos", status: "in_progress", priority: "high" }],
+        })
+        await user(session.id, "older context")
+        await SessionCompaction.create({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        const rt = liveRuntime(stub.layer, wide())
+        try {
+          let msgs = await svc.messages({ sessionID: session.id })
+          let parent = msgs.at(-1)?.info.id
+          expect(parent).toBeTruthy()
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: parent!,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          await todoSvc.update({
+            sessionID: session.id,
+            todos: [{ content: "Preserve todos", status: "completed", priority: "high" }],
+          })
+          await user(session.id, "latest context")
+          await SessionCompaction.create({
+            sessionID: session.id,
+            agent: "build",
+            model: ref,
+            auto: false,
+          })
+
+          msgs = MessageV2.filterCompacted(MessageV2.stream(session.id))
+          parent = msgs.at(-1)?.info.id
+          expect(parent).toBeTruthy()
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: parent!,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          const summary = MessageV2.filterCompacted(MessageV2.stream(session.id)).findLast(
+            (msg) => msg.info.role === "assistant" && msg.info.summary,
+          )
+          const text = textOf(summary)
+          expect(captured).not.toContain("in_progress / high: Preserve todos")
+          expect(text).toContain("- completed / high: Preserve todos")
+          expect(text).not.toContain("- in_progress / high: Preserve todos")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("persists plan path in compacted summary when a plan file exists", async () => {
+    const stub = llm()
+    stub.push(reply("summary"))
+
+    await using tmp = await tmpdir({ git: true })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await svc.create({})
+        const plan = path.join(tmp.path, ".opencode", "plans", `${session.time.created}-${session.slug}.md`)
+        await mkdir(path.dirname(plan), { recursive: true })
+        await Bun.write(plan, "# Plan\n")
+        await user(session.id, "older context")
+        await SessionCompaction.create({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        const rt = liveRuntime(stub.layer, wide())
+        try {
+          const msgs = await svc.messages({ sessionID: session.id })
+          const parent = msgs.at(-1)?.info.id
+          expect(parent).toBeTruthy()
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: parent!,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          const summary = MessageV2.filterCompacted(MessageV2.stream(session.id)).find(
+            (msg) => msg.info.role === "assistant" && msg.info.summary,
+          )
+          const text = textOf(summary)
+          expect(text).toContain("## Current Plan")
+          expect(text).toContain(`- Path: ${plan}`)
+          expect(text).toContain("Read this file before executing or updating the plan.")
         } finally {
           await rt.dispose()
         }
