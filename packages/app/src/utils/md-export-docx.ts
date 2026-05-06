@@ -14,6 +14,7 @@
 import markdownDocx, { Packer, styles } from "@jinzhongjia/markdown-docx"
 import { invoke } from "@tauri-apps/api/core"
 import { showToast } from "@opencode-ai/ui/toast"
+import { resolveAbsolute } from "@/utils/local-asset"
 
 // FORK: monkey-patch 关代码块段间分隔线 — 库 default 把 between 边框设成跟 top 一样,
 // 导致每段画线;改 none 让段间只是普通行距 2026-05-05
@@ -120,6 +121,81 @@ async function svgToPngDataUrl(svgEl: SVGElement, scale = 2): Promise<string> {
   }
 }
 
+// FORK: 本地图片 → base64 嵌入 (A5) — 库不解析相对路径,直接喂会 broken image
+// 扫 markdown ![](path),读本地文件 → base64 + mime → 替换为 ![](data:...) 2026-05-06
+
+const IMG_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".bmp": "image/bmp",
+  ".ico": "image/x-icon",
+  ".avif": "image/avif",
+}
+
+function mimeFromPath(p: string): string | null {
+  const lower = p.toLowerCase()
+  for (const [ext, mime] of Object.entries(IMG_MIME)) {
+    if (lower.endsWith(ext)) return mime
+  }
+  return null
+}
+
+/** 把 markdown 里 ![](path) 的本地相对/绝对图替换为 base64 dataURL。
+ * 跳过 http(s) / data / blob / 锚点等;读失败保留原 path(library 端会 broken,但不阻塞导出)
+ */
+async function inlineLocalImages(md: string, mdFileDir?: string): Promise<string> {
+  if (!mdFileDir) return md
+  // 匹配 ![alt](path "title"?) — title 可选
+  const re = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g
+  const matches: Array<{ full: string; alt: string; src: string; title?: string }> = []
+  for (const m of md.matchAll(re)) {
+    matches.push({ full: m[0], alt: m[1], src: m[2], title: m[3] })
+  }
+  if (matches.length === 0) return md
+
+  // 并发读所有本地图
+  const replacements = await Promise.all(
+    matches.map(async (m) => {
+      const src = m.src.trim()
+      // 跳过外链 / data / blob / anchor / protocol
+      if (/^(https?|data|blob|file|localasset):/i.test(src)) return null
+      if (src.startsWith("//") || src.startsWith("#")) return null
+
+      // 解 percent-encode(对齐 local-asset.ts:100 fix)
+      let decoded = src
+      try {
+        decoded = decodeURIComponent(src)
+      } catch {
+        // ignore
+      }
+      const absPath = resolveAbsolute(mdFileDir, decoded)
+      const mime = mimeFromPath(absPath)
+      if (!mime) return null // 不识别后缀,跳过
+
+      try {
+        // root="" 让 PathBuf::from("").join(absPath) 直接返回 absPath
+        const base64 = await invoke<string>("read_binary_file_base64", { root: "", path: absPath })
+        const dataUrl = `data:${mime};base64,${base64}`
+        const titlePart = m.title ? ` "${m.title}"` : ""
+        return { full: m.full, replaced: `![${m.alt}](${dataUrl}${titlePart})` }
+      } catch {
+        return null // 读失败保留原 markdown
+      }
+    }),
+  )
+
+  let out = md
+  for (const r of replacements) {
+    if (!r) continue
+    out = out.replace(r.full, r.replaced)
+  }
+  return out
+}
+
 /** 把 markdown 里的 ```mermaid 块替换成 viewer 已渲染的 SVG → PNG dataURL ![](...)
  * 顺序:按 viewer 内 .markdown-mermaid-rendered 顺序对应 markdown 内 mermaid 块顺序
  */
@@ -178,6 +254,8 @@ export const exportMdAsDocx = async (opts: {
   saveDialog: SaveFilePickerFn
   /** viewer 容器 DOM(可选)— 提供则从已渲染的 mermaid SVG 抽 PNG 嵌入,否则保留 ```mermaid 源码块 */
   viewerEl?: HTMLElement
+  /** .md 文件所在绝对目录(可选)— 提供则把 ![](./img.png) 等本地图替换为 base64 dataURL */
+  mdFileDir?: string
   i18n: ExportDocxI18n
 }) => {
   let filePath: string | null = null
@@ -189,9 +267,10 @@ export const exportMdAsDocx = async (opts: {
     })
     if (!filePath) return // user 取消,静默退出
 
-    // 2. 预处理 markdown:emoji 替换 + Mermaid SVG → PNG dataURL 嵌入
+    // 2. 预处理 markdown:emoji 替换 + Mermaid SVG → PNG + 本地图片 base64 嵌入
     let processedMd = preprocessMarkdown(opts.markdownText)
     processedMd = await inlineMermaidPngs(processedMd, opts.viewerEl)
+    processedMd = await inlineLocalImages(processedMd, opts.mdFileDir)
 
     // 3. markdown → docx(库内部 marked + docx@9.x 构造,带 syntax 高亮)
     const doc = await markdownDocx(processedMd, {

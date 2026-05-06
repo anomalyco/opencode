@@ -1030,11 +1030,17 @@ export function FileTabContent(props: {
     // 默认文件名 = 原 .md 文件名(去 .md/.markdown 后缀)
     const baseName =
       p.replace(/\\/g, "/").split("/").pop()?.replace(/\.(md|markdown)$/i, "") || "untitled"
+    // mdFileDir = .md 文件所在目录绝对路径(同 mdAssetRewriter 计算逻辑),
+    // 让 helper 把 ![](./img.png) 等本地图替换为 base64 dataURL 嵌入 docx
+    const root = sdk.directory
+    const mdFileDir = root && p ? pathDirname(`${root}/${p}`.replace(/\\/g, "/")) : undefined
+
     await exportMdAsDocx({
       markdownText: text,
       defaultFileName: baseName,
       saveDialog,
       viewerEl: mdContainerRef(),
+      mdFileDir,
       i18n: {
         title: language.t("fileViewer.dialog.exportDocxTitle"),
         success: language.t("fileViewer.toast.exportDocxSuccess"),
