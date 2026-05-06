@@ -13,19 +13,72 @@ const CLIENT_ID = "Ov23li8tweQw6odWQebz"
 // Add a small safety buffer when polling to avoid hitting the server
 // slightly too early due to clock skew / timer drift.
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
-function normalizeDomain(url: string) {
-  return url.replace(/^https?:\/\//, "").replace(/\/$/, "")
+const COPILOT_HEADERS = {
+  "User-Agent": "GitHubCopilotChat/0.35.0",
+  "Editor-Version": "vscode/1.107.0",
+  "Editor-Plugin-Version": "copilot-chat/0.35.0",
+  "Copilot-Integration-Id": "vscode-chat",
+}
+
+function normalizeDomain(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ""
+
+  try {
+    const url = trimmed.includes("://") ? new URL(trimmed) : new URL(`https://${trimmed}`)
+    return url.hostname
+  } catch {
+    return trimmed.replace(/^https?:\/\//, "").replace(/\/$/, "")
+  }
 }
 
 function getUrls(domain: string) {
   return {
     DEVICE_CODE_URL: `https://${domain}/login/device/code`,
     ACCESS_TOKEN_URL: `https://${domain}/login/oauth/access_token`,
+    COPILOT_TOKEN_URL: `https://api.${domain}/copilot_internal/v2/token`,
   }
 }
 
-function base(enterpriseUrl?: string) {
-  return enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : "https://api.githubcopilot.com"
+function baseFromToken(token?: string) {
+  if (!token) return
+  const match = token.match(/(?:^|;)proxy-ep=([^;]+)/)
+  if (!match?.[1]) return
+  const apiHost = match[1].replace(/^proxy\./, "api.")
+  return `https://${apiHost}`
+}
+
+function base(token?: string, enterpriseUrl?: string) {
+  return baseFromToken(token) ||
+    (enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : "https://api.individual.githubcopilot.com")
+}
+
+async function exchangeCopilotToken(domain: string, githubToken: string) {
+  const response = await fetch(getUrls(domain).COPILOT_TOKEN_URL, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${githubToken}`,
+      ...COPILOT_HEADERS,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to exchange GitHub token for Copilot token: ${response.status}`)
+  }
+
+  const data = (await response.json()) as {
+    token?: string
+    expires_at?: number
+  }
+
+  if (!data.token || !data.expires_at) {
+    throw new Error("Invalid Copilot token response")
+  }
+
+  return {
+    access: data.token,
+    expires: data.expires_at * 1000 - 5 * 60 * 1000,
+  }
 }
 
 // Check if a message is a synthetic user msg used to attach an image from a tool call
@@ -67,16 +120,16 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         const auth = ctx.auth
 
         return CopilotModels.get(
-          base(auth.enterpriseUrl),
+          base(auth.access, auth.enterpriseUrl),
           {
-            Authorization: `Bearer ${auth.refresh}`,
-            "User-Agent": `opencode/${InstallationVersion}`,
+            Authorization: `Bearer ${auth.access}`,
+            ...COPILOT_HEADERS,
           },
           provider.models,
         ).catch((error) => {
           log.error("failed to fetch copilot models", { error })
           return Object.fromEntries(
-            Object.entries(provider.models).map(([id, model]) => [id, fix(model, base(auth.enterpriseUrl))]),
+            Object.entries(provider.models).map(([id, model]) => [id, fix(model, base(auth.access, auth.enterpriseUrl))]),
           )
         })
       },
@@ -92,6 +145,26 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           async fetch(request: RequestInfo | URL, init?: RequestInit) {
             const info = await getAuth()
             if (info.type !== "oauth") return fetch(request, init)
+
+            const currentAuth = { ...info }
+            const domain = currentAuth.enterpriseUrl ? normalizeDomain(currentAuth.enterpriseUrl) : "github.com"
+
+            if (!currentAuth.access || currentAuth.expires < Date.now()) {
+              log.info("refreshing copilot access token")
+              const tokens = await exchangeCopilotToken(domain, currentAuth.refresh)
+              currentAuth.access = tokens.access
+              currentAuth.expires = tokens.expires
+              await input.client.auth.set({
+                path: { id: "github-copilot" },
+                body: {
+                  type: "oauth",
+                  refresh: currentAuth.refresh,
+                  access: currentAuth.access,
+                  expires: currentAuth.expires,
+                  ...(currentAuth.enterpriseUrl ? { enterpriseUrl: currentAuth.enterpriseUrl } : {}),
+                },
+              })
+            }
 
             const url = request instanceof URL ? request.href : typeof request === "string" ? request : request.url
             const { isVision, isAgent } = iife(() => {
@@ -150,8 +223,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             const headers: Record<string, string> = {
               "x-initiator": isAgent ? "agent" : "user",
               ...(init?.headers as Record<string, string>),
-              "User-Agent": `opencode/${InstallationVersion}`,
-              Authorization: `Bearer ${info.refresh}`,
+              ...COPILOT_HEADERS,
+              Authorization: `Bearer ${currentAuth.access}`,
               "Openai-Intent": "conversation-edits",
             }
 
@@ -274,6 +347,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                   }
 
                   if (data.access_token) {
+                    const tokens = await exchangeCopilotToken(domain, data.access_token)
+
                     const result: {
                       type: "success"
                       refresh: string
@@ -284,8 +359,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                     } = {
                       type: "success",
                       refresh: data.access_token,
-                      access: data.access_token,
-                      expires: 0,
+                      access: tokens.access,
+                      expires: tokens.expires,
                     }
 
                     if (deploymentType === "enterprise") {
