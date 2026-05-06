@@ -1618,6 +1618,14 @@ export function FileTabContent(props: {
                     <span>复制</span>
                     <span class="text-xs text-text-weak">Ctrl+C</span>
                   </button>
+                  {/* FORK: C1 选了文字也显导出菜单 — 加分隔 + 导出 Word [feat: md-export-pdf-word] 2026-05-06 */}
+                  <div class="my-1 border-t border-border-base" />
+                  <button
+                    class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
+                    onClick={() => void onExportDocx()}
+                  >
+                    {language.t("fileViewer.menu.exportDocx")}
+                  </button>
                 </Show>
               </div>
             </Match>
