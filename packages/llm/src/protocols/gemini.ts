@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Adapter } from "../adapter/client"
 import { Auth } from "../adapter/auth"
 import { Endpoint } from "../adapter/endpoint"
 import { Framing } from "../adapter/framing"
@@ -19,11 +19,6 @@ import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 
 const ADAPTER = "gemini"
-
-// =============================================================================
-// Public Model Input
-// =============================================================================
-export type GeminiModelInput = AdapterModelInput
 
 // =============================================================================
 // Request Payload Schema

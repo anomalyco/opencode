@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Adapter } from "../adapter/client"
 import type { Auth } from "../adapter/auth"
 import { Endpoint, type Endpoint as EndpointConfig } from "../adapter/endpoint"
 import { Framing } from "../adapter/framing"
@@ -10,6 +10,7 @@ import {
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
+  type ProviderMetadata,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
@@ -21,11 +22,6 @@ import { ToolStream } from "./utils/tool-stream"
 const ADAPTER = "openai-responses"
 const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 const PATH = "/responses"
-
-// =============================================================================
-// Public Model Input
-// =============================================================================
-export type OpenAIResponsesModelInput = AdapterModelInput
 
 // =============================================================================
 // Request Payload Schema
@@ -134,6 +130,8 @@ const OpenAIResponsesChunk = Schema.Struct({
   item: Schema.optional(OpenAIResponsesStreamItem),
   response: Schema.optional(
     Schema.Struct({
+      id: Schema.optional(Schema.String),
+      service_tier: Schema.optional(Schema.String),
       incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
       usage: optionalNull(OpenAIResponsesUsage),
     }),
@@ -275,6 +273,8 @@ const mapFinishReason = (chunk: OpenAIResponsesChunk, hasFunctionCall: boolean):
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
 
+const openaiMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ openai: metadata })
+
 // Hosted tool items (provider-executed) ship their typed input + status + result
 // fields all in one item. We expose them as a `tool-call` + `tool-result` pair
 // so consumers can treat them uniformly with client tools, only differentiated
@@ -320,16 +320,22 @@ const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
 
 const hostedToolEvents = (item: OpenAIResponsesStreamItem & { id: string }): ReadonlyArray<LLMEvent> => {
   const name = HOSTED_TOOL_NAMES[item.type]
+  const providerMetadata = openaiMetadata({ itemId: item.id })
   return [
-    { type: "tool-call", id: item.id, name, input: hostedToolInput(item), providerExecuted: true },
-    { type: "tool-result", id: item.id, name, result: hostedToolResult(item), providerExecuted: true },
+    { type: "tool-call", id: item.id, name, input: hostedToolInput(item), providerExecuted: true, providerMetadata },
+    { type: "tool-result", id: item.id, name, result: hostedToolResult(item), providerExecuted: true, providerMetadata },
   ]
 }
 
 const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
   Effect.gen(function* () {
     if (chunk.type === "response.output_text.delta" && chunk.delta) {
-      return [state, [{ type: "text-delta", id: chunk.item_id, text: chunk.delta }]] as const
+      return [state, [{
+        type: "text-delta",
+        id: chunk.item_id,
+        text: chunk.delta,
+        ...(chunk.item_id ? { providerMetadata: openaiMetadata({ itemId: chunk.item_id }) } : {}),
+      }]] as const
     }
 
     if (chunk.type === "response.output_item.added" && chunk.item?.type === "function_call" && chunk.item.id) {
@@ -339,6 +345,7 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
           id: chunk.item.call_id ?? chunk.item.id,
           name: chunk.item.name ?? "",
           input: chunk.item.arguments ?? "",
+          providerMetadata: openaiMetadata({ itemId: chunk.item.id }),
         }),
       }, []] as const
     }
@@ -376,7 +383,14 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
     if (chunk.type === "response.completed" || chunk.type === "response.incomplete")
       return [
         state,
-        [{ type: "request-finish" as const, reason: mapFinishReason(chunk, state.hasFunctionCall), usage: mapUsage(chunk.response?.usage) }],
+        [{
+          type: "request-finish" as const,
+          reason: mapFinishReason(chunk, state.hasFunctionCall),
+          usage: mapUsage(chunk.response?.usage),
+          ...(chunk.response?.id || chunk.response?.service_tier
+            ? { providerMetadata: openaiMetadata({ responseId: chunk.response.id, serviceTier: chunk.response.service_tier }) }
+            : {}),
+        }],
       ] as const
 
     if (chunk.type === "error") {

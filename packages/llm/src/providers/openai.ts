@@ -1,9 +1,8 @@
 import { Auth } from "../adapter/auth"
 import type { ProviderAuthOption } from "../adapter/auth-options"
+import type { AdapterModelInput } from "../adapter/client"
 import * as OpenAIChat from "../protocols/openai-chat"
-import type { OpenAIChatModelInput } from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
-import type { OpenAIResponsesModelInput } from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
 
 export type { OpenAIOptionsInput } from "./openai-options"
@@ -21,11 +20,11 @@ const auth = (options: ProviderAuthOption<"optional">) => {
     .bearer()
 }
 
-export const responses = (id: string, options: OpenAIModelInput<Omit<OpenAIResponsesModelInput, "id">> = {}) => {
+export const responses = (id: string, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
   return OpenAIResponses.model(withOpenAIOptions(id, { ...options, auth: auth(options) }, { textVerbosity: true }))
 }
 
-export const chat = (id: string, options: OpenAIModelInput<Omit<OpenAIChatModelInput, "id">> = {}) => {
+export const chat = (id: string, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
   return OpenAIChat.model(withOpenAIOptions(id, { ...options, auth: auth(options) }))
 }
 

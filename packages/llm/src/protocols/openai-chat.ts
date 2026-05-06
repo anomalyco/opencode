@@ -1,5 +1,5 @@
 import { Array as Arr, Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Adapter } from "../adapter/client"
 import type { Auth } from "../adapter/auth"
 import { Endpoint, type Endpoint as EndpointConfig } from "../adapter/endpoint"
 import { Framing } from "../adapter/framing"
@@ -21,11 +21,6 @@ import { ToolStream } from "./utils/tool-stream"
 const ADAPTER = "openai-chat"
 const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 const PATH = "/chat/completions"
-
-// =============================================================================
-// Public Model Input
-// =============================================================================
-export type OpenAIChatModelInput = AdapterModelInput
 
 // =============================================================================
 // Request Payload Schema

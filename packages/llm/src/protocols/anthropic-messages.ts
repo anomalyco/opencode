@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Adapter } from "../adapter/client"
 import { Auth } from "../adapter/auth"
 import { Endpoint } from "../adapter/endpoint"
 import { Framing } from "../adapter/framing"
@@ -11,6 +11,7 @@ import {
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
+  type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
@@ -19,11 +20,6 @@ import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./share
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "anthropic-messages"
-
-// =============================================================================
-// Public Model Input
-// =============================================================================
-export type AnthropicMessagesModelInput = AdapterModelInput
 
 // =============================================================================
 // Request Payload Schema
@@ -156,6 +152,7 @@ const AnthropicStreamBlock = Schema.Struct({
   name: Schema.optional(Schema.String),
   text: Schema.optional(Schema.String),
   thinking: Schema.optional(Schema.String),
+  signature: Schema.optional(Schema.String),
   input: Schema.optional(Schema.Unknown),
   // *_tool_result blocks arrive whole as content_block_start (no streaming
   // delta) with the structured payload in `content` and the originating
@@ -196,6 +193,15 @@ const invalid = ProviderShared.invalidRequest
 // Request Lowering
 // =============================================================================
 const cacheControl = (cache: CacheHint | undefined) => cache?.type === "ephemeral" ? { type: "ephemeral" as const } : undefined
+
+const anthropicMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ anthropic: metadata })
+
+const anthropicString = (metadata: ProviderMetadata | undefined, key: string) => {
+  const anthropic = metadata?.anthropic
+  if (!ProviderShared.isRecord(anthropic)) return undefined
+  const value = anthropic[key]
+  return typeof value === "string" ? value : undefined
+}
 
 const lowerTool = (tool: ToolDefinition): AnthropicTool => ({
   name: tool.name,
@@ -265,7 +271,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (re
           continue
         }
         if (part.type === "reasoning") {
-          content.push({ type: "thinking", thinking: part.text, signature: part.encrypted })
+          content.push({ type: "thinking", thinking: part.text, signature: part.encrypted ?? anthropicString(part.providerMetadata, "signature") })
           continue
         }
         if (part.type === "tool-call") {
@@ -404,6 +410,7 @@ const serverToolResultEvent = (block: NonNullable<AnthropicChunk["content_block"
       ? { type: "error", value: block.content }
       : { type: "json", value: block.content },
     providerExecuted: true,
+    providerMetadata: anthropicMetadata({ blockType: block.type }),
   }
 }
 
@@ -434,7 +441,11 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
     }
 
     if (chunk.type === "content_block_start" && chunk.content_block?.type === "thinking" && chunk.content_block.thinking) {
-      return [state, [{ type: "reasoning-delta", text: chunk.content_block.thinking }]] as const
+      return [state, [{
+        type: "reasoning-delta",
+        text: chunk.content_block.thinking,
+        ...(chunk.content_block.signature ? { providerMetadata: anthropicMetadata({ signature: chunk.content_block.signature }) } : {}),
+      }]] as const
     }
 
     if (chunk.type === "content_block_start" && chunk.content_block) {
@@ -448,6 +459,10 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
 
     if (chunk.type === "content_block_delta" && chunk.delta?.type === "thinking_delta" && chunk.delta.thinking) {
       return [state, [{ type: "reasoning-delta", text: chunk.delta.thinking }]] as const
+    }
+
+    if (chunk.type === "content_block_delta" && chunk.delta?.type === "signature_delta" && chunk.delta.signature) {
+      return [state, [{ type: "reasoning-delta", text: "", providerMetadata: anthropicMetadata({ signature: chunk.delta.signature }) }]] as const
     }
 
     if (chunk.type === "content_block_delta" && chunk.delta?.type === "input_json_delta" && chunk.index !== undefined) {
@@ -470,7 +485,12 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
 
     if (chunk.type === "message_delta") {
       const usage = mergeUsage(state.usage, mapUsage(chunk.usage))
-      return [{ ...state, usage }, [{ type: "request-finish" as const, reason: mapFinishReason(chunk.delta?.stop_reason), usage }]] as const
+      return [{ ...state, usage }, [{
+        type: "request-finish" as const,
+        reason: mapFinishReason(chunk.delta?.stop_reason),
+        usage,
+        ...(chunk.delta?.stop_sequence ? { providerMetadata: anthropicMetadata({ stopSequence: chunk.delta.stop_sequence }) } : {}),
+      }]] as const
     }
 
     if (chunk.type === "error") {
