@@ -21,6 +21,7 @@ export function DialogAlert(props: DialogAlertProps) {
       dialog.clear()
     }
   })
+
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">

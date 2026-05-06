@@ -63,6 +63,7 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogSessionDelete } from "../../component/dialog-session-delete"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -441,6 +442,18 @@ export function Session() {
       },
       onSelect: (dialog) => {
         dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
+      },
+    },
+    {
+      title: "Delete session",
+      value: "session.delete",
+      keybind: "session_delete",
+      category: "Session",
+      slash: {
+        name: "delete",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogSessionDelete session={route.sessionID} />)
       },
     },
     {
