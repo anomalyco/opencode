@@ -445,17 +445,23 @@ export function Autocomplete(props: {
       return prev
     }
 
-    const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
+    // Normalize the needle and per-key comparison values to NFC. `find.files`
+    // returns filesystem paths in their original form (often NFD on macOS),
+    // so without this an NFC needle typed via an IME would not match an NFD
+    // option `value`. The selected option still carries the original path.
+    const needle = removeLineRange(searchValue).normalize("NFC")
+    const prefix = (store.visible + searchValue).normalize("NFC")
+    const result = fuzzysort.go(needle, mixed, {
       keys: [
-        (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
-        "description",
-        (obj) => obj.aliases?.join(" ") ?? "",
+        (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()).normalize("NFC"),
+        (obj) => obj.description?.normalize("NFC") ?? "",
+        (obj) => (obj.aliases?.join(" ") ?? "").normalize("NFC"),
       ],
       limit: 10,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
         let score = objResults.score
-        if (displayResult && displayResult.target.startsWith(store.visible + searchValue)) {
+        if (displayResult && displayResult.target.startsWith(prefix)) {
           score *= 2
         }
         const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0

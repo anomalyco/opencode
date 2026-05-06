@@ -82,7 +82,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const filtered = createMemo(() => {
     if (props.skipFilter) return props.options.filter((x) => x.disabled !== true)
-    const needle = store.filter.toLowerCase()
+    const needle = store.filter.toLowerCase().normalize("NFC")
     const options = pipe(
       props.options,
       filter((x) => x.disabled !== true),
@@ -91,9 +91,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
     // prioritize title matches (weight: 2) over category matches (weight: 1).
     // users typically search by the item name, and not its category.
+    // Normalize per-key comparison values to NFC so an NFC needle matches
+    // option strings that were stored or sourced in NFD.
     const result = fuzzysort
       .go(needle, options, {
-        keys: ["title", "category"],
+        keys: [(o) => (o.title ?? "").normalize("NFC"), (o) => (o.category ?? "").normalize("NFC")],
         scoreFn: (r) => r[0].score * 2 + r[1].score,
       })
       .map((x) => x.obj)
