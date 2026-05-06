@@ -231,6 +231,8 @@ const httpErrors: Trigger = ({ model, product }) => ({
         filterCombination: "AND",
         filters: [
           { column: "model", op: "=", value: model },
+          { column: "event_type", op: "=", value: "completions" },
+          { column: "user_agent", op: "contains", value: "opencode" },
           { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
         ],
       },
@@ -240,6 +242,8 @@ const httpErrors: Trigger = ({ model, product }) => ({
         filterCombination: "AND",
         filters: [
           { column: "model", op: "=", value: model },
+          { column: "event_type", op: "=", value: "completions" },
+          { column: "user_agent", op: "contains", value: "opencode" },
           { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
           { column: "status", op: ">=", value: "400" },
           { column: "status", op: "!=", value: "401" },
