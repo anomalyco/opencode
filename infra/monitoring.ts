@@ -1,10 +1,10 @@
-import { HONEYCOMB_WEBHOOK_SECRET } from "./console"
+import { SECRET } from "./secret"
 import { domain } from "./stage"
 
 const webhookRecipient = new honeycomb.WebhookRecipient("DiscordAlerts", {
   name: $app.stage === "production" ? "Discord Alerts" : `Discord Alerts (${$app.stage})`,
   url: `https://${domain}/honeycomb/webhook`,
-  secret: HONEYCOMB_WEBHOOK_SECRET.value,
+  secret: SECRET.HoneycombWebhookSecret.value,
   templates: [
     {
       type: "trigger",

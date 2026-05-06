@@ -4,6 +4,12 @@ import { Resource } from "@opencode-ai/console-resource"
 
 const DISCORD_ALERT_ROLE_ID = "1501447160175136838"
 
+const groupName = z.union([
+  z.string(),
+  z.object({ Value: z.string() }).transform((o) => o.Value),
+  z.object({ value: z.string() }).transform((o) => o.value),
+])
+
 const HoneycombWebhookPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("model_http_errors"),
@@ -12,7 +18,7 @@ const HoneycombWebhookPayload = z.discriminatedUnion("type", [
     status: z.string().optional(),
     isTest: z.boolean().optional(),
     url: z.string().optional(),
-    groupsTriggered: z.record(z.string(), z.unknown()).array().optional(),
+    groups: z.array(z.record(z.string(), groupName)).optional(),
   }),
   z.object({
     type: z.literal("provider_http_errors"),
@@ -21,34 +27,14 @@ const HoneycombWebhookPayload = z.discriminatedUnion("type", [
     status: z.string().optional(),
     isTest: z.boolean().optional(),
     url: z.string().optional(),
-    groupsTriggered: z.record(z.string(), z.unknown()).array().optional(),
+    groups: z.array(z.record(z.string(), groupName)).optional(),
   }),
 ])
 
-const getGroupName = (value: unknown): string | undefined => {
-  if (Array.isArray(value))
-    return value
-      .map(getGroupName)
-      .filter((v) => v !== undefined)
-      .join(", ")
-  if (typeof value === "string") return value
-  if (typeof value !== "object" || value === null) return undefined
-  const record = value as Record<string, unknown>
-  const str =
-    (record.Value as string | undefined) ??
-    (record.value as string | undefined) ??
-    Object.values(record).find((v): v is string => typeof v === "string")
-  return str
-}
-
-const getGroupNames = (payload: z.infer<typeof HoneycombWebhookPayload>) =>
-  (payload.groupsTriggered ?? [])
-    .map((item) => getGroupName(item.Group ?? item.group))
-    .filter((name): name is string => name !== undefined)
 
 const postDiscordMessage = async (payload: z.infer<typeof HoneycombWebhookPayload>) => {
   const group = payload.type === "model_http_errors" ? "model" : "provider"
-  const names = getGroupNames(payload)
+  const names = (payload.groups ?? []).flatMap((row) => Object.values(row))
 
   const content = [
     `**${payload.isTest ? "[TEST] " : ""}${payload.name ?? "Honeycomb alert"}**`,
@@ -73,7 +59,7 @@ const postDiscordMessage = async (payload: z.infer<typeof HoneycombWebhookPayloa
 }
 
 export async function POST(input: APIEvent) {
-  if (input.request.headers.get("X-Honeycomb-Webhook-Token") !== Resource.HONEYCOMB_WEBHOOK_SECRET.value) {
+  if (input.request.headers.get("X-Honeycomb-Webhook-Token") !== Resource.HoneycombWebhookSecret.value) {
     return Response.json({ message: "invalid token" }, { status: 401 })
   }
 
