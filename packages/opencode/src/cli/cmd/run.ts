@@ -276,6 +276,11 @@ export const RunCommand = effectCmd({
         type: "string",
         describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
       })
+      .option("username", {
+        alias: ["u"],
+        type: "string",
+        describe: "basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')",
+      })
       .option("dir", {
         type: "string",
         describe: "directory to run in, path on remote server if attaching",
@@ -657,7 +662,7 @@ export const RunCommand = effectCmd({
       }
 
       if (args.attach) {
-        const headers = ServerAuth.headers({ password: args.password })
+        const headers = ServerAuth.headers({ password: args.password, username: args.username })
         const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
         return await execute(sdk)
       }

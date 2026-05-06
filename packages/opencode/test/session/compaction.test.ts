@@ -1218,7 +1218,9 @@ describe("session.compaction.process", () => {
           expect(captured).not.toContain("keep tail")
 
           const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
-          expect(filtered[0]?.info.id).toBe(keep.id)
+          expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
+          expect(filtered[1]?.info.role).toBe("assistant")
+          expect(filtered[1]?.info.role === "assistant" ? filtered[1].info.summary : false).toBe(true)
           expect(filtered.map((msg) => msg.info.id)).not.toContain(large.id)
         } finally {
           await rt.dispose()

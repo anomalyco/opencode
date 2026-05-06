@@ -249,8 +249,6 @@ export const dict = {
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.meta.description":
     "Go starts at $5 for your first month, then $10/month, with generous 5-hour request limits for GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, and DeepSeek V4 Flash.",
-  "go.banner.badge": "3x",
-  "go.banner.text": "Kimi K2.6 gets 3× usage limits through April 27",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",

@@ -158,11 +158,13 @@ export async function handler(
                 Object.entries(obj).flatMap(([k, v]) => {
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
-                  if (v === "$ip") return [[k, ip]]
-                  if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
-                  if (v.startsWith("$header.")) {
-                    const headerValue = input.request.headers.get(v.slice(8))
-                    return headerValue ? [[k, headerValue]] : []
+                  if (typeof v === "string") {
+                    if (v === "$ip") return [[k, ip]]
+                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v.startsWith("$header.")) {
+                      const headerValue = input.request.headers.get(v.slice(8))
+                      return headerValue ? [[k, headerValue]] : []
+                    }
                   }
                   return [[k, v]]
                 }),
@@ -917,6 +919,13 @@ export async function handler(
       "tokens.cache_read": cacheReadTokens,
       "tokens.cache_write_5m": cacheWrite5mTokens,
       "tokens.cache_write_1h": cacheWrite1hTokens,
+      "cost.input.microcents": centsToMicroCents(inputCost),
+      "cost.output.microcents": centsToMicroCents(outputCost),
+      "cost.reasoning.microcents": reasoningCost ? centsToMicroCents(reasoningCost) : undefined,
+      "cost.cache_read.microcents": cacheReadCost ? centsToMicroCents(cacheReadCost) : undefined,
+      "cost.cache_write.microcents": cacheWrite5mCost ? centsToMicroCents(cacheWrite5mCost) : undefined,
+      "cost.total.microcents": centsToMicroCents(totalCostInCent),
+      // deprecated - remove after May 20, 2026
       "cost.input": Math.round(inputCost),
       "cost.output": Math.round(outputCost),
       "cost.reasoning": reasoningCost ? Math.round(reasoningCost) : undefined,

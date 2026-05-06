@@ -22,6 +22,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
+import { Modelv2 } from "@/v2/model"
 import * as DateTime from "effect/DateTime"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -405,7 +406,7 @@ export const layer: Layer.Layer<
           case "tool-error": {
             const toolCall = yield* readToolCall(value.toolCallId)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Tool.Error.Sync, {
+            EventV2.run(SessionEvent.Tool.Failed.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
               error: {
@@ -432,9 +433,9 @@ export const layer: Layer.Layer<
                 sessionID: ctx.sessionID,
                 agent: input.assistantMessage.agent,
                 model: {
-                  id: ctx.model.id,
-                  providerID: ctx.model.providerID,
-                  variant: input.assistantMessage.variant,
+                  id: Modelv2.ID.make(ctx.model.id),
+                  providerID: Modelv2.ProviderID.make(ctx.model.providerID),
+                  variant: Modelv2.VariantID.make(input.assistantMessage.variant ?? "default"),
                 },
                 snapshot: ctx.snapshot,
                 timestamp: DateTime.makeUnsafe(Date.now()),
@@ -649,6 +650,17 @@ export const layer: Layer.Layer<
           ctx.needsCompaction = true
           yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
+        }
+        if (!ctx.assistantMessage.summary) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Step.Failed.Sync, {
+            sessionID: ctx.sessionID,
+            error: {
+              type: "unknown",
+              message: errorMessage(e),
+            },
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
         }
         ctx.assistantMessage.error = error
         yield* bus.publish(Session.Event.Error, {
