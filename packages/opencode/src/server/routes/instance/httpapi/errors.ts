@@ -1,5 +1,4 @@
-import type { NotFoundError as StorageNotFoundError } from "@/storage/storage"
-import { Effect, Schema } from "effect"
+import { Schema } from "effect"
 
 export class ApiNotFoundError extends Schema.ErrorClass<ApiNotFoundError>("NotFoundError")(
   {
@@ -16,10 +15,4 @@ export function notFound(message: string) {
     name: "NotFoundError",
     data: { message },
   })
-}
-
-export function mapStorageNotFound<A, R>(
-  self: Effect.Effect<A, InstanceType<typeof StorageNotFoundError>, R>,
-) {
-  return self.pipe(Effect.mapError((error) => notFound(error.data.message)))
 }

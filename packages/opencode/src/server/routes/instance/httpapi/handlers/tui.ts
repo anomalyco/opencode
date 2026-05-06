@@ -5,8 +5,8 @@ import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { nextTuiRequest, submitTuiResponse } from "@/server/shared/tui-control"
 import { InstanceHttpApi } from "../api"
-import * as ApiError from "../errors"
 import { CommandPayload, TuiPublishPayload } from "../groups/tui"
+import * as SessionError from "./session-errors"
 
 const commandAliases = {
   session_new: "session.new",
@@ -98,7 +98,7 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
       payload: typeof TuiEvent.SessionSelect.properties.Type
     }) {
       if (!ctx.payload.sessionID.startsWith("ses")) return yield* new HttpApiError.BadRequest({})
-      yield* ApiError.mapStorageNotFound(session.get(ctx.payload.sessionID))
+      yield* SessionError.mapStorageNotFound(session.get(ctx.payload.sessionID))
       yield* bus.publish(TuiEvent.SessionSelect, ctx.payload)
       return true
     })
