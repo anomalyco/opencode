@@ -134,6 +134,21 @@ case "$(uname -s)" in
         if [[ -d "$DMG_DIR" ]]; then
             echo "✓ .dmg dir:    $DMG_DIR"
             ls "$DMG_DIR"/*.dmg 2>/dev/null | sed 's/^/  /'
+            # FORK: 给 .dmg 文件设自定义图标(Finder 里显示狐狸,不再是通用磁盘映像图标)
+            # 需 brew install fileicon;未装则提示后跳过,不影响 build 2026-05-06
+            if command -v fileicon >/dev/null 2>&1; then
+                ICNS="$DMG_DIR/icon.icns"
+                if [[ -f "$ICNS" ]]; then
+                    for DMG in "$DMG_DIR"/*.dmg; do
+                        [[ -f "$DMG" ]] || continue
+                        if fileicon set "$DMG" "$ICNS" >/dev/null 2>&1; then
+                            echo "  ✓ icon set on $(basename "$DMG")"
+                        fi
+                    done
+                fi
+            else
+                echo "  (未装 fileicon — .dmg 用通用磁盘映像图标;装:brew install fileicon)"
+            fi
         fi
         echo ""
         echo "macOS Gatekeeper(不签名):首次打开 → 右键 .app → 打开 → 仍要打开"
