@@ -152,6 +152,21 @@ describe("ProviderLLMBridge", () => {
     })
   })
 
+  test("maps xAI through its Responses provider helper", () => {
+    const ref = ProviderLLMBridge.toModelRef({
+      provider: provider({ id: ProviderID.make("xai"), key: "xai-key" }),
+      model: model({ id: "xai/grok-4.3", apiID: "grok-4.3", providerID: "xai", npm: "@ai-sdk/xai", reasoning: true }),
+    })
+
+    expect(ref).toMatchObject({
+      id: "grok-4.3",
+      provider: "xai",
+      protocol: "openai-responses",
+      baseURL: "https://api.x.ai/v1",
+      apiKey: "xai-key",
+    })
+  })
+
   test("maps Azure to Responses with resource URL and api-version query", () => {
     const ref = ProviderLLMBridge.toModelRef({
       provider: provider({

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { LLM, LLMClient, Provider } from "@opencode-ai/llm"
 import { Adapter, Protocol } from "@opencode-ai/llm/adapter"
 import { Provider as ProviderSubpath } from "@opencode-ai/llm/provider"
-import { OpenAI, OpenAICompatible, OpenRouter } from "@opencode-ai/llm/providers"
+import { OpenAI, OpenAICompatible, OpenRouter, XAI } from "@opencode-ai/llm/providers"
 import * as GitHubCopilot from "@opencode-ai/llm/providers/github-copilot"
 import { OpenAIChat, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm/protocols"
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
@@ -28,6 +28,8 @@ describe("public exports", () => {
     expect(OpenAICompatible.deepseek.model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
     expect(OpenRouter.provider.model).toBe(OpenRouter.model)
+    expect(XAI.model).toBeFunction()
+    expect(XAI.provider.model).toBe(XAI.model)
     expect(GitHubCopilot.model).toBeFunction()
   })
 

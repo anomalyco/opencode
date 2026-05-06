@@ -43,17 +43,6 @@ const openrouterOpus47Model = OpenRouter.model("anthropic/claude-opus-4.7", {
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
 })
 
-const xaiModel = OpenAICompatible.xai.model("grok-3-mini", {
-  apiKey: process.env.XAI_API_KEY ?? "fixture",
-})
-
-const xaiFlagshipModel = OpenAICompatible.xai.model("grok-4.3", {
-  apiKey: process.env.XAI_API_KEY ?? "fixture",
-})
-
-const xaiRequest = textRequest({ id: "recorded_xai_text", model: xaiModel })
-const xaiToolRequest = weatherToolRequest({ id: "recorded_xai_tool_call", model: xaiModel })
-
 const recorded = recordedTests({ prefix: "openai-compatible-chat", protocol: "openai-compatible-chat" })
 const generate = (request: LLMRequest) =>
   Effect.gen(function* () {
@@ -168,34 +157,5 @@ describe("OpenAI-compatible Chat recorded", () => {
         })))
       }),
     ),
-  )
-
-  recorded.effect.with("xai streams text", { provider: "xai", requires: ["XAI_API_KEY"] }, () =>
-    Effect.gen(function* () {
-      const response = yield* generate(xaiRequest)
-
-      expect(response.text).toMatch(/^Hello!?$/)
-      expectFinish(response.events, "stop")
-    }),
-  )
-
-  recorded.effect.with("xai streams tool call", { provider: "xai", requires: ["XAI_API_KEY"], tags: ["tool"] }, () =>
-    Effect.gen(function* () {
-      const response = yield* generate(xaiToolRequest)
-
-      expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
-      expectWeatherToolCall(response)
-      expectFinish(response.events, "tool-calls")
-    }),
-  )
-
-  recorded.effect.with("xai grok 4.3 drives a tool loop", { provider: "xai", requires: ["XAI_API_KEY"], tags: ["tool", "tool-loop", "golden", "flagship"] }, () =>
-    Effect.gen(function* () {
-      expectWeatherToolLoop(yield* runWeatherToolLoop(weatherToolLoopRequest({
-        id: "recorded_xai_grok_4_3_tool_loop",
-        model: xaiFlagshipModel,
-      })))
-    }),
-    30_000,
   )
 })

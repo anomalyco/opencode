@@ -477,7 +477,7 @@ export const adapter = Adapter.make({
 
 That adapter reuses `OpenAIChat.protocol` end-to-end. It changes the deployment axes: adapter route id, endpoint, and provider identity.
 
-The payoff is that providers like DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, Groq, xAI, and OpenRouter can share the same Chat protocol instead of copying a 300-line adapter.
+The payoff is that providers like DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, Groq, and OpenRouter can share the same Chat protocol instead of copying a 300-line adapter.
 
 Provider family wiring lives here:
 
