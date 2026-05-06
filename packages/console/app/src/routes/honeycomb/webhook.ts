@@ -4,47 +4,38 @@ import { Resource } from "@opencode-ai/console-resource"
 
 const DISCORD_ALERT_ROLE_ID = "1501447160175136838"
 
-const groupName = z.union([
-  z.string(),
-  z.object({ Value: z.string() }).transform((o) => o.Value),
-  z.object({ value: z.string() }).transform((o) => o.value),
-])
+const basePayload = z.object({
+  name: z.string().optional(),
+  status: z.string().optional(),
+  isTest: z.boolean().optional(),
+  url: z.string(),
+})
 
-const HoneycombWebhookPayload = z.discriminatedUnion("type", [
-  z.object({
+const groups = z.object({ group: z.object({ key: z.string(), value: z.string() }).array() }).array()
+
+const honeycombWebhookPayload = z.discriminatedUnion("type", [
+  basePayload.extend({
     type: z.literal("model_http_errors"),
-    product: z.string().optional(),
-    name: z.string().optional(),
-    status: z.string().optional(),
-    isTest: z.boolean().optional(),
-    url: z.string().optional(),
-    groups: z.array(z.record(z.string(), groupName)).optional(),
+    groups,
   }),
-  z.object({
+  basePayload.extend({
     type: z.literal("provider_http_errors"),
-    product: z.string().optional(),
-    name: z.string().optional(),
-    status: z.string().optional(),
-    isTest: z.boolean().optional(),
-    url: z.string().optional(),
-    groups: z.array(z.record(z.string(), groupName)).optional(),
+    groups,
   }),
 ])
 
-
-const postDiscordMessage = async (payload: z.infer<typeof HoneycombWebhookPayload>) => {
+const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayload>) => {
   const group = payload.type === "model_http_errors" ? "model" : "provider"
-  const names = (payload.groups ?? []).flatMap((row) => Object.values(row))
+  const names = (payload.groups ?? []).flatMap((item) => item.group.map((g) => g.value))
 
   const content = [
-    `**${payload.isTest ? "[TEST] " : ""}${payload.name ?? "Honeycomb alert"}**`,
-    payload.product ? `Product: ${payload.product}` : undefined,
+    `[**${payload.isTest ? "[TEST] " : ""}${payload.name ?? "Honeycomb alert"}**](${payload.url})`,
     names.length > 0 ? `Affected ${group}s:` : undefined,
     ...names.map((name) => `- ${name}`),
+    "",
     `<@&${DISCORD_ALERT_ROLE_ID}>`,
-    payload.url,
   ]
-    .filter((line) => line !== undefined && line !== "")
+    .filter((line) => line !== undefined)
     .join("\n")
 
   return fetch(Resource.DISCORD_INCIDENT_WEBHOOK_URL.value, {
@@ -59,19 +50,31 @@ const postDiscordMessage = async (payload: z.infer<typeof HoneycombWebhookPayloa
 }
 
 export async function POST(input: APIEvent) {
-  if (input.request.headers.get("X-Honeycomb-Webhook-Token") !== Resource.HoneycombWebhookSecret.value) {
+  const token = input.request.headers.get("X-Honeycomb-Webhook-Token")
+  if (token !== Resource.HoneycombWebhookSecret.value) {
+    console.debug("Invalid Honeycomb webhook token", token)
     return Response.json({ message: "invalid token" }, { status: 401 })
   }
 
   const body = await input.request.json()
-  const parsed = HoneycombWebhookPayload.safeParse(body)
-  if (!parsed.success) return Response.json({ message: "invalid payload" }, { status: 400 })
+  console.log(body, JSON.stringify(body, null, 2))
 
-  const payload = parsed.data
-  if (payload.status !== "TRIGGERED") return Response.json({ message: "ignored" }, { status: 200 })
+  const parsed = honeycombWebhookPayload.safeParse(body)
 
-  const response = await postDiscordMessage(payload)
-  if (!response.ok) return Response.json({ message: "discord webhook failed" }, { status: 502 })
+  if (!parsed.success) {
+    console.error(parsed.error)
+    return Response.json({ message: "invalid payload" }, { status: 400 })
+  }
+
+  if (parsed.data.status !== "TRIGGERED") {
+    console.debug("Skipping resolved alert Honeycomb webhook")
+    return Response.json({ message: "ignored" }, { status: 200 })
+  }
+
+  const response = await postDiscordMessage(parsed.data)
+  if (!response.ok) {
+    return Response.json({ message: "discord webhook failed" }, { status: 502 })
+  }
 
   return Response.json({ message: "sent" }, { status: 200 })
 }
