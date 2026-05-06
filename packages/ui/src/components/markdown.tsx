@@ -778,7 +778,7 @@ export function Markdown(
           },
           {
             root: viewport,
-            rootMargin: "200px 0px",
+            rootMargin: "0px 0px",
           },
         )
         observer.observe(container)
