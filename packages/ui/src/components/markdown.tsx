@@ -690,6 +690,7 @@ export function Markdown(
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
   let live = true
+  let domMathMode: "full" | "defer" | undefined
   let info = {
     key: local.cacheKey ?? "",
     text: local.text.length,
@@ -804,8 +805,12 @@ export function Markdown(
     const prevHtml = container.dataset.html ?? ""
     const isStreaming = local.streaming
     const chunked = local.chunked
-    const pane = isStreaming ? view(container) : null
-    const before = isStreaming ? snap(pane) : undefined
+    const upgrading = !isStreaming && domMathMode === "defer" && src()?.math === "full"
+    const pane = (isStreaming || upgrading) ? view(container) : null
+    const before = (isStreaming || upgrading) ? snap(pane) : undefined
+    const upgradeHeight = upgrading && pane ? container.offsetHeight : 0
+    const upgradeBox = upgrading && pane ? container.getBoundingClientRect() : undefined
+    const paneBox = upgrading && pane ? pane.getBoundingClientRect() : undefined
     const time = performance.now()
 
     if (isStreaming && prevHtml && content.length < prevHtml.length) {
@@ -856,6 +861,14 @@ export function Markdown(
         }
       }
 
+      // Mode upgrade scroll compensation (defer → full, KaTeX rendering)
+      if (upgrading && pane && upgradeBox && paneBox && upgradeHeight) {
+        const delta = container.offsetHeight - upgradeHeight
+        if (delta > 0 && upgradeBox.bottom <= paneBox.top) {
+          pane.scrollTop += delta
+        }
+      }
+
       if (copySetupTimer) clearTimeout(copySetupTimer)
       copySetupTimer = setTimeout(() => {
         if (!live || !container.isConnected) {
@@ -869,6 +882,9 @@ export function Markdown(
         copyCleanup = setupCodeCopy(container, next)
         setLabels(container, next)
       }, 150)
+
+      const m = src()?.math
+      domMathMode = m === "full" || m === "defer" ? m : undefined
     }
 
     // Fast-append path: during streaming, if new HTML starts with the previous HTML,
