@@ -78,6 +78,80 @@ function preprocessMarkdown(md: string): string {
   return out
 }
 
+// FORK: Mermaid SVG → PNG (A2) — 库不渲染 mermaid,会出 ```mermaid 源码块
+// 改:从 viewer DOM 拿已渲染的 SVG → canvas 转 PNG dataURL → 替换 markdown 块为 ![](dataurl)
+// viewer 选择器:.markdown-mermaid-rendered(packages/ui/src/components/markdown.tsx:292)
+// 2026-05-06
+
+/** 把 SVG 元素转 PNG dataURL(2x scale,白底) */
+async function svgToPngDataUrl(svgEl: SVGElement, scale = 2): Promise<string> {
+  // 序列化 svg,确保 xmlns(防 Image 加载失败)
+  let svgString = new XMLSerializer().serializeToString(svgEl)
+  if (!svgString.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
+    svgString = svgString.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
+  }
+  const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+
+  try {
+    const img = new Image()
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = (e) => reject(new Error(`SVG load failed: ${e}`))
+      img.src = url
+    })
+
+    // 优先用 svg 的 viewBox / width-height 属性,fallback 到 boundingRect / 默认 800x600
+    const rect = svgEl.getBoundingClientRect()
+    const w = Math.ceil(rect.width || 800)
+    const h = Math.ceil(rect.height || 600)
+
+    const canvas = document.createElement("canvas")
+    canvas.width = w * scale
+    canvas.height = h * scale
+    const ctx = canvas.getContext("2d")!
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+    return canvas.toDataURL("image/png")
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+/** 把 markdown 里的 ```mermaid 块替换成 viewer 已渲染的 SVG → PNG dataURL ![](...)
+ * 顺序:按 viewer 内 .markdown-mermaid-rendered 顺序对应 markdown 内 mermaid 块顺序
+ */
+async function inlineMermaidPngs(md: string, viewerEl?: HTMLElement): Promise<string> {
+  if (!viewerEl) return md
+  const renderedNodes = Array.from(
+    viewerEl.querySelectorAll<HTMLElement>(".markdown-mermaid-rendered"),
+  )
+  if (renderedNodes.length === 0) return md // viewer 里没渲染过 mermaid,markdown 里也无 ```mermaid
+
+  // 提前转所有 SVG → PNG(并发)
+  const pngs = await Promise.all(
+    renderedNodes.map(async (node) => {
+      const svg = node.querySelector("svg")
+      if (!svg) return null
+      try {
+        return await svgToPngDataUrl(svg)
+      } catch {
+        return null
+      }
+    }),
+  )
+
+  // 按顺序替换 ```mermaid ... ``` 块
+  let idx = 0
+  return md.replace(/```mermaid\n[\s\S]*?\n```/g, (matched) => {
+    const png = pngs[idx++]
+    if (!png) return matched // 转换失败保留源码
+    return `![Mermaid Diagram](${png})`
+  })
+}
+
 export type ExportDocxI18n = {
   /** save 对话框标题 */
   title: string
@@ -102,6 +176,8 @@ export const exportMdAsDocx = async (opts: {
   defaultFileName: string
   /** Tauri save 对话框函数(调用方注入,通常是 platform.saveFilePickerDialog) */
   saveDialog: SaveFilePickerFn
+  /** viewer 容器 DOM(可选)— 提供则从已渲染的 mermaid SVG 抽 PNG 嵌入,否则保留 ```mermaid 源码块 */
+  viewerEl?: HTMLElement
   i18n: ExportDocxI18n
 }) => {
   let filePath: string | null = null
@@ -113,8 +189,9 @@ export const exportMdAsDocx = async (opts: {
     })
     if (!filePath) return // user 取消,静默退出
 
-    // 2. 预处理 markdown:emoji 替换(防 Word 字体不含 emoji)
-    const processedMd = preprocessMarkdown(opts.markdownText)
+    // 2. 预处理 markdown:emoji 替换 + Mermaid SVG → PNG dataURL 嵌入
+    let processedMd = preprocessMarkdown(opts.markdownText)
+    processedMd = await inlineMermaidPngs(processedMd, opts.viewerEl)
 
     // 3. markdown → docx(库内部 marked + docx@9.x 构造,带 syntax 高亮)
     const doc = await markdownDocx(processedMd, {

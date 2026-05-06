@@ -1034,6 +1034,7 @@ export function FileTabContent(props: {
       markdownText: text,
       defaultFileName: baseName,
       saveDialog,
+      viewerEl: mdContainerRef(),
       i18n: {
         title: language.t("fileViewer.dialog.exportDocxTitle"),
         success: language.t("fileViewer.toast.exportDocxSuccess"),
