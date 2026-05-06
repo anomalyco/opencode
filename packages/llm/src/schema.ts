@@ -253,13 +253,23 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   ttlSeconds: Schema.optional(Schema.Number),
 }) {}
 
-export const SystemPart = Schema.Struct({
+const systemPartSchema = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "LLM.SystemPart" })
-export type SystemPart = Schema.Schema.Type<typeof SystemPart>
+export type SystemPart = Schema.Schema.Type<typeof systemPartSchema>
+
+const makeSystemPart = (text: string): SystemPart => ({ type: "text", text })
+
+export const SystemPart = Object.assign(systemPartSchema, {
+  make: makeSystemPart,
+  content: (input?: string | SystemPart | ReadonlyArray<SystemPart>) => {
+    if (input === undefined) return []
+    return typeof input === "string" ? [makeSystemPart(input)] : Array.isArray(input) ? [...input] : [input]
+  },
+})
 
 export const TextPart = Schema.Struct({
   type: Schema.Literal("text"),

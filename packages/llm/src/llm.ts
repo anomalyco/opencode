@@ -10,10 +10,10 @@ import {
   HttpOptions,
   LLMRequest,
   Message,
+  SystemPart,
   ToolChoice,
   ToolDefinition,
   type ContentPart,
-  type SystemPart,
   ToolCallPart,
   ToolResultPart,
 } from "./schema"
@@ -50,12 +50,7 @@ export const limits = modelLimits
 
 export const text = Message.text
 
-export const system = (value: string): SystemPart => ({ type: "text", text: value })
-
-const systemParts = (input?: string | SystemPart | ReadonlyArray<SystemPart>) => {
-  if (input === undefined) return []
-  return typeof input === "string" ? [system(input)] : Array.isArray(input) ? [...input] : [input]
-}
+export const system = SystemPart.make
 
 export const message = Message.make
 
@@ -97,7 +92,7 @@ export const request = (input: RequestInput) => {
   } = input
   return new LLMRequest({
     ...rest,
-    system: systemParts(requestSystem),
+    system: SystemPart.content(requestSystem),
     messages: [...(messages?.map(message) ?? []), ...(prompt === undefined ? [] : [user(prompt)])],
     tools: tools?.map(toolDefinition) ?? [],
     toolChoice: requestToolChoice ? toolChoice(requestToolChoice) : undefined,
