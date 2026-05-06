@@ -70,6 +70,40 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   return copy
 }
 
+async function substituteWellKnownRemoteConfig(input: {
+  value: unknown
+  dir: string
+  source: string
+}) {
+  if (!isRecord(input.value) || typeof input.value.url !== "string") return
+
+  const url = await ConfigVariable.substitute({
+    text: input.value.url,
+    type: "virtual",
+    dir: input.dir,
+    source: input.source,
+  })
+  const headers = isRecord(input.value.headers)
+    ? Object.fromEntries(
+        await Promise.all(
+          Object.entries(input.value.headers)
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+            .map(async ([key, value]) => [
+              key,
+              await ConfigVariable.substitute({
+                text: value,
+                type: "virtual",
+                dir: input.dir,
+                source: input.source,
+              }),
+            ]),
+        ),
+      )
+    : undefined
+
+  return { url, headers }
+}
+
 async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(config: T, filepath: string) {
   if (!config.plugin) return config
   for (let i = 0; i < config.plugin.length; i++) {
@@ -494,8 +528,27 @@ export const layer = Layer.effect(
             if (!response.ok) {
               throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
             }
-            const wellknown = (yield* Effect.promise(() => response.json())) as { config?: Record<string, unknown> }
-            const remoteConfig = wellknown.config ?? {}
+            const wellknown = (yield* Effect.promise(() => response.json())) as {
+              config?: Record<string, unknown>
+              remote_config?: unknown
+            }
+            const remote = yield* Effect.promise(() =>
+              substituteWellKnownRemoteConfig({
+                value: wellknown.remote_config,
+                dir: url,
+                source: `${url}/.well-known/opencode`,
+              }),
+            )
+            const fetchedConfig = remote
+              ? ((yield* Effect.promise(async () => {
+                  log.debug("fetching remote config", { url: remote.url })
+                  const response = await fetch(remote.url, { headers: remote.headers })
+                  if (!response.ok) throw new Error(`failed to fetch remote config from ${remote.url}: ${response.status}`)
+                  const data = await response.json()
+                  return isRecord(data) && isRecord(data.config) ? data.config : data
+                })) as Record<string, unknown>)
+              : {}
+            const remoteConfig = mergeConfig(wellknown.config ?? {}, fetchedConfig as Info)
             if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
             const source = `${url}/.well-known/opencode`
             const next = yield* loadConfig(JSON.stringify(remoteConfig), {
