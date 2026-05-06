@@ -114,6 +114,11 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "gitlab-ai-provider": () => import("gitlab-ai-provider").then((m) => m.createGitLab),
   "@ai-sdk/github-copilot": () => import("./sdk/copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
+  // NeMo-Gym custom provider used by the SWE-bench RL rollout harness.
+  // Routes chat completions through the gym's vllm model server while
+  // threading prompt/generation token IDs into providerMetadata. The
+  // bench cli (`bench/cli.ts`) configures this provider per-instance.
+  "@opencode-ai/nemo-gym": () => import("./sdk/nemo-gym/index").then((m) => m.createNemoGym),
 }
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
