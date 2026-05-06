@@ -13,6 +13,7 @@ import { sseEvents } from "../lib/sse"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(TargetJson)
+const decodeJson = Schema.decodeUnknownSync(TargetJson)
 
 const model = OpenAIChat.model({
   id: "gpt-4o-mini",
@@ -46,19 +47,20 @@ describe("OpenAI Chat adapter", () => {
           { role: "user", content: "Say hello." },
         ],
         stream: true,
+        stream_options: { include_usage: true },
         max_tokens: 20,
         temperature: 0,
       })
     }),
   )
 
-  it.effect("maps reasoning intent to OpenAI Chat options", () =>
+  it.effect("maps OpenAI provider options to Chat options", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make().prepare<OpenAIChat.OpenAIChatPayload>(
         LLM.request({
           model: OpenAI.chat("gpt-4o-mini", { baseURL: "https://api.openai.test/v1/" }),
           prompt: "think",
-          reasoning: { enabled: true, effort: "low" },
+          providerOptions: { openai: { reasoningEffort: "low" } },
         }),
       )
 
@@ -113,6 +115,40 @@ describe("OpenAI Chat adapter", () => {
       ),
   )
 
+  it.effect("applies serializable HTTP overlays after payload lowering", () =>
+    LLMClient.make()
+      .generate(
+        LLM.updateRequest(request, {
+          model: OpenAIChat.model({ ...model, apiKey: "fresh-key", headers: { authorization: "Bearer stale" } }),
+          http: {
+            body: { metadata: { source: "test" } },
+            headers: { authorization: "Bearer request", "x-custom": "yes" },
+            query: { debug: "1" },
+          },
+        }),
+      )
+      .pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(web.url).toBe("https://api.openai.test/v1/chat/completions?debug=1")
+              expect(web.headers.get("authorization")).toBe("Bearer fresh-key")
+              expect(web.headers.get("x-custom")).toBe("yes")
+              expect(decodeJson(input.text)).toMatchObject({
+                stream: true,
+                stream_options: { include_usage: true },
+                metadata: { source: "test" },
+              })
+              return input.respond(sseEvents(deltaChunk({}, "stop")), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }),
+          ),
+        ),
+      ),
+  )
+
   it.effect("prepares assistant tool-call and tool-result messages", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make().prepare(
@@ -145,6 +181,7 @@ describe("OpenAI Chat adapter", () => {
           { role: "tool", tool_call_id: "call_1", content: encodeJson({ forecast: "sunny" }) },
         ],
         stream: true,
+        stream_options: { include_usage: true },
       })
     }),
   )

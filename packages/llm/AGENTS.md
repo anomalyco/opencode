@@ -17,6 +17,8 @@
 
 This package is an Effect Schema-first LLM core. The Schema classes in `src/schema.ts` are the canonical runtime data model. Convenience functions in `src/llm.ts` are thin constructors that return those same Schema class instances; they should improve callsites without creating a second model.
 
+Protocol implementation style lives in `HOUSE_STYLE.md`. Keep new protocol work self-similar with that template before adding provider-specific exceptions.
+
 ### Request Flow
 
 The intended callsite is:
@@ -41,10 +43,10 @@ Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g.
 
 An adapter is the registered, runnable composition of four orthogonal pieces:
 
-- **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, the payload schema, the chunk schema, and the streaming chunk-to-event state machine. `Adapter.make(...)` validates and JSON-encodes the payload from the payload schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
-- **`Endpoint`** (`src/endpoint.ts`) — URL construction. Receives the request and the validated payload so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any payload field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
-- **`Auth`** (`src/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Adapter.make` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
-- **`Framing`** (`src/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
+- **`Protocol`** (`src/adapter/protocol.ts`) — semantic API contract. Owns request lowering, the payload schema, the chunk schema, and the streaming chunk-to-event state machine. `Adapter.make(...)` validates and JSON-encodes the payload from the payload schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Endpoint`** (`src/adapter/endpoint.ts`) — URL construction. Receives the request and the validated payload so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any payload field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
+- **`Auth`** (`src/adapter/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Adapter.make` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
+- **`Framing`** (`src/adapter/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
 
 Compose them via `Adapter.make(...)`:
 
@@ -69,12 +71,14 @@ When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backe
 packages/llm/src/
   schema.ts             // LLMRequest, LLMEvent, errors — canonical Schema model
   llm.ts                // request constructors and convenience helpers
-  adapter.ts            // Adapter.make + LLMClient.make
-  executor.ts           // RequestExecutor service + transport error mapping
-  protocol.ts           // Protocol type + Protocol.define
-  endpoint.ts           // Endpoint type + Endpoint.baseURL
-  auth.ts               // Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
-  framing.ts            // Framing type + Framing.sse
+  adapter/
+    index.ts            // @opencode-ai/llm/adapter advanced barrel
+    client.ts           // Adapter.make + LLMClient.make
+    executor.ts         // RequestExecutor service + transport error mapping
+    protocol.ts         // Protocol type + Protocol.define
+    endpoint.ts         // Endpoint type + Endpoint.baseURL
+    auth.ts             // Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
+    framing.ts          // Framing type + Framing.sse
   protocols/
     shared.ts           // ProviderShared toolkit used inside protocol impls
     openai-chat.ts      // protocol + adapter (compose OpenAIChat.protocol)

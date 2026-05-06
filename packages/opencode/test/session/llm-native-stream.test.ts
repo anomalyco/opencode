@@ -1,14 +1,16 @@
 import { describe, expect } from "bun:test"
 import {
+  LLMClient,
+} from "@opencode-ai/llm"
+import { RequestExecutor } from "@opencode-ai/llm/adapter"
+import {
   AnthropicMessages,
   BedrockConverse,
   Gemini,
-  LLMClient,
   OpenAIChat,
   OpenAICompatibleChat,
   OpenAIResponses,
-  RequestExecutor,
-} from "@opencode-ai/llm"
+} from "@opencode-ai/llm/protocols"
 import { Effect, Layer, Ref, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { tool, jsonSchema } from "ai"

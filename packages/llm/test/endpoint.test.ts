@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Endpoint, InvalidRequestError, LLM } from "../src"
+import { InvalidRequestError, LLM } from "../src"
+import { Endpoint } from "../src/adapter"
 
 const request = (input: {
   readonly baseURL?: string

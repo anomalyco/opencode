@@ -1,13 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
-import { LLM, LLMEvent } from "../src"
-import { LLMClient } from "../src/adapter"
-import { RequestExecutor } from "../src/executor"
+import { LLM, LLMEvent, LLMRequest } from "../src"
+import { LLMClient, RequestExecutor } from "../src/adapter"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { tool, ToolFailure } from "../src/tool"
 import { ToolRuntime } from "../src/tool-runtime"
 import { testEffect } from "./lib/effect"
-import { scriptedResponses } from "./lib/http"
+import { dynamicResponse, scriptedResponses } from "./lib/http"
 import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
 
@@ -16,6 +15,8 @@ const model = OpenAIChat.model({
   baseURL: "https://api.openai.test/v1/",
   headers: { authorization: "Bearer test" },
 })
+const Json = Schema.fromJsonString(Schema.Unknown)
+const decodeJson = Schema.decodeUnknownSync(Json)
 
 const baseRequest = LLM.request({
   id: "req_1",
@@ -37,7 +38,7 @@ const get_weather = tool({
 })
 
 describe("ToolRuntime", () => {
-  it.effect("preserves bound model adapters when adding runtime tools", () =>
+  it.effect("uses the registered model adapter when adding runtime tools", () =>
     Effect.gen(function* () {
       const llm = LLMClient.make()
       const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
@@ -50,6 +51,54 @@ describe("ToolRuntime", () => {
       )
 
       expect(LLM.outputText({ events })).toBe("Done.")
+    }),
+  )
+
+  it.effect("sends tool-call history and request options on the follow-up request", () =>
+    Effect.gen(function* () {
+      const bodies: unknown[] = []
+      const responses = [
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
+        sseEvents(deltaChunk({ role: "assistant", content: "It's sunny in Paris." }), finishChunk("stop")),
+      ]
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() => {
+          bodies.push(decodeJson(input.text))
+          return input.respond(responses[bodies.length - 1] ?? responses[responses.length - 1], {
+            headers: { "content-type": "text/event-stream" },
+          })
+        }),
+      )
+
+      yield* ToolRuntime.run(LLMClient.make(), {
+        request: LLMRequest.update(baseRequest, {
+          generation: LLM.generation({ maxTokens: 50 }),
+          toolChoice: LLM.toolChoice("auto"),
+        }),
+        tools: { get_weather },
+      }).pipe(Stream.runCollect, Effect.provide(layer))
+
+      const second = bodies[1] as {
+        readonly messages?: ReadonlyArray<Record<string, unknown>>
+        readonly tools?: ReadonlyArray<unknown>
+        readonly tool_choice?: unknown
+        readonly max_tokens?: unknown
+      }
+
+      expect(second.max_tokens).toBe(50)
+      expect(second.tool_choice).toBe("auto")
+      expect(second.tools).toHaveLength(1)
+      expect(second.messages?.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+      expect(second.messages?.[1]).toMatchObject({
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "call_1", type: "function", function: { name: "get_weather" } }],
+      })
+      expect(second.messages?.[2]).toMatchObject({
+        role: "tool",
+        tool_call_id: "call_1",
+        content: '{"temperature":22,"condition":"sunny"}',
+      })
     }),
   )
 

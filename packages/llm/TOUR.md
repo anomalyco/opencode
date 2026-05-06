@@ -14,8 +14,7 @@ packages/llm/
   src/                     package implementation
     schema.ts              canonical request, response, event, and error model
     llm.ts                 public constructors and runtime helpers
-    adapter.ts             adapter composition and request lifecycle
-    protocol.ts            provider wire-protocol contract
+    adapter/               adapter composition, transport, auth, framing, protocol contracts
     protocols/             OpenAI, Anthropic, Gemini, Bedrock, and compatible protocols
     providers/             model helpers and provider-specific routing metadata
     tool*.ts               typed tool definitions and tool-loop runtime
@@ -27,8 +26,8 @@ packages/llm/
 
 - Start with `example/tutorial.ts` to see the caller-facing API.
 - Read `src/llm.ts` and `src/schema.ts` for the public runtime and canonical model.
-- Follow `src/adapter.ts` to understand request preparation, transport, parsing, and collection.
-- Read `src/protocol.ts`, `src/protocols/`, and `src/providers/` when adding or changing providers.
+- Follow `src/adapter/client.ts` to understand request preparation, transport, parsing, and collection.
+- Read `src/adapter/protocol.ts`, `src/protocols/`, and `src/providers/` when adding or changing providers.
 - Read `src/tool-runtime.ts` and the recorded tests when changing tool loops or streaming behavior.
 
 ## Tour Index
@@ -54,6 +53,7 @@ It shows the package from the caller's point of view:
 
 - Pick a provider model.
 - Build a provider-neutral request.
+- Set model defaults and call overrides with `generation`, `providerOptions`, and `http`.
 - Collect a response with `LLM.generate`.
 - Stream normalized `LLMEvent`s with `LLM.stream`.
 - Define typed tools with Effect Schema.
@@ -62,8 +62,16 @@ It shows the package from the caller's point of view:
 The public shape is intentionally boring:
 
 ```ts
-const model = OpenAI.model("gpt-4o-mini", { apiKey })
-const response = yield * LLM.generate({ model, prompt: "Say hello." })
+const model = OpenAI.model("gpt-4o-mini", {
+  apiKey,
+  providerOptions: { openai: { store: false } },
+})
+
+const response = yield * LLM.generate({
+  model,
+  prompt: "Say hello.",
+  generation: { maxTokens: 80, temperature: 0 },
+})
 ```
 
 The interesting part is that the boring use site can route through OpenAI Responses, OpenAI Chat, Anthropic Messages, Gemini, Bedrock Converse, OpenRouter, Azure, or an arbitrary OpenAI-compatible server without changing the caller's mental model.
@@ -82,7 +90,7 @@ Read these pieces first:
 
 The canonical data model is in [`src/schema.ts`](./src/schema.ts). That file defines the runtime shapes that every provider lowers from or emits back to: `ModelRef`, `LLMRequest`, `Message`, `ContentPart`, `LLMEvent`, `Usage`, and the typed error classes.
 
-The key design choice is that the public request model is provider-neutral. Provider-specific wire bodies are not represented in `LLMRequest`; they live in protocol-local payload schemas.
+The key design choice is that the public request model stays provider-neutral. Common controls live in `generation`, provider-native controls live in `providerOptions.<provider>`, and raw serializable HTTP patches live in `http`. Provider-specific wire bodies are not represented in `LLMRequest`; they live in protocol-local payload schemas.
 
 ## 3. Name The Big Pieces
 
@@ -90,6 +98,9 @@ Before following one request through the runtime, name the main concepts:
 
 - `LLMRequest`: the canonical provider-neutral request. This is what callers build and what protocols read.
 - `ModelRef`: the selected model plus routing metadata. `model.adapter` chooses the runnable adapter route; `model.protocol` records the wire protocol semantics.
+- `generation`: provider-neutral call controls. Model values are defaults; request values override them.
+- `providerOptions`: namespaced provider-native knobs. Model values are defaults; request values override by provider namespace.
+- `http`: last-resort serializable overlays for final body, headers, and query params.
 - `Protocol`: the wire-format brain. It converts `LLMRequest` into a provider-native payload and parses provider-native stream chunks back into `LLMEvent`s.
 - `Adapter`: the runnable deployment. It combines one `Protocol` with an `Endpoint`, `Auth`, `Framing`, and headers.
 - `RequestExecutor`: the transport boundary. It sends an `HttpClientRequest` and returns an `HttpClientResponse`.
@@ -108,7 +119,7 @@ Most adapters have the same value for both fields. OpenAI-compatible Chat is the
 
 ## 4. Follow One Request Through The Pipeline
 
-The runtime pipeline is concentrated in [`src/adapter.ts`](./src/adapter.ts).
+The runtime pipeline is concentrated in [`src/adapter/client.ts`](./src/adapter/client.ts).
 
 The important functions are:
 
@@ -153,9 +164,15 @@ type Payload = OpenAIChatPayload
 
 // Use-site input can be ergonomic `RequestInput`...
 const input: RequestInput = {
-  model: OpenAI.model("gpt-4o-mini", { apiKey }),
+  model: OpenAI.model("gpt-4o-mini", {
+    apiKey,
+    generation: { maxTokens: 160 },
+    providerOptions: { openai: { store: false } },
+  }),
   system: "You are concise.",
   prompt: "Say hello.",
+  generation: { maxTokens: 80, temperature: 0 },
+  providerOptions: { openai: { promptCacheKey: "tour" } },
 }
 
 // RequestInput -> LLMRequest
@@ -187,8 +204,10 @@ const generated: LLMResponse = client.generate(request)
 // -----------------------------------------------------------------------------
 
 // Internally, all three alternatives start by compiling the request. The client
-// selects the runnable adapter from the model binding or an explicit registry
-// keyed by `request.model.adapter`.
+// first resolves model defaults plus request overrides, then selects the
+// runnable adapter from the model binding or an explicit registry keyed by
+// `request.model.adapter`.
+const resolvedRequest: LLMRequest = resolveModelAndCallOptions(request)
 const adapter: Adapter<Payload> = resolveAdapter(request.model)
 
 // Adapter.toPayload is the protocol conversion boundary.
@@ -196,7 +215,7 @@ const adapter: Adapter<Payload> = resolveAdapter(request.model)
 // It builds the JSON body shape for this API family, but does not choose a URL,
 // add auth, encode JSON, or send HTTP.
 // OpenAI Chat example output:
-const draftPayload: Payload = adapter.toPayload(request)
+const draftPayload: Payload = adapter.toPayload(resolvedRequest)
 // {
 //   model: "gpt-4o-mini",
 //   messages: [
@@ -204,6 +223,11 @@ const draftPayload: Payload = adapter.toPayload(request)
 //     { role: "user", content: "Say hello." },
 //   ],
 //   stream: true,
+//   stream_options: { include_usage: true },
+//   max_tokens: 80,
+//   temperature: 0,
+//   store: false,
+//   prompt_cache_key: "tour",
 // }
 
 // The candidate payload is validated against the protocol schema before HTTP
@@ -213,7 +237,7 @@ const payload: Payload = validatePayload(draftPayload, adapter.payloadSchema)
 // Adapter.make composes Endpoint + Auth + JSON body encoding into a real request.
 // Payload + HttpContext -> HttpClientRequest
 const httpRequest: HttpClientRequest.HttpClientRequest = adapter.toHttp(payload, {
-  request,
+  request: resolvedRequest,
 })
 
 // -----------------------------------------------------------------------------
@@ -294,7 +318,7 @@ See examples in [`test/provider/openai-chat.test.ts`](./test/provider/openai-cha
 
 ## 5. Protocols Are The Provider-Native Semantics
 
-The protocol abstraction is defined in [`src/protocol.ts`](./src/protocol.ts).
+The protocol abstraction is defined in [`src/adapter/protocol.ts`](./src/adapter/protocol.ts).
 
 A protocol owns the parts that are intrinsic to an API family:
 
@@ -371,11 +395,11 @@ Adapter = Protocol + Endpoint + Auth + Framing
 
 The pieces live in these files:
 
-- Protocol contract: [`src/protocol.ts`](./src/protocol.ts)
-- Adapter constructor: [`src/adapter.ts`](./src/adapter.ts)
-- Endpoint rendering: [`src/endpoint.ts`](./src/endpoint.ts)
-- Auth strategies: [`src/auth.ts`](./src/auth.ts)
-- Stream framing: [`src/framing.ts`](./src/framing.ts)
+- Protocol contract: [`src/adapter/protocol.ts`](./src/adapter/protocol.ts)
+- Adapter constructor: [`src/adapter/client.ts`](./src/adapter/client.ts)
+- Endpoint rendering: [`src/adapter/endpoint.ts`](./src/adapter/endpoint.ts)
+- Auth strategies: [`src/adapter/auth.ts`](./src/adapter/auth.ts)
+- Stream framing: [`src/adapter/framing.ts`](./src/adapter/framing.ts)
 
 The runnable adapter erases the response internals after composition. Callers only need a payload type plus a normalized parser:
 
@@ -466,7 +490,7 @@ Provider family wiring lives here:
 
 ## 7. Provider Helpers Keep Call Sites Boring
 
-The provider modules exported from [`src/providers.ts`](./src/providers.ts) are thin use-site APIs.
+The provider modules exported from [`src/providers/index.ts`](./src/providers/index.ts) are thin use-site APIs.
 
 Examples:
 
@@ -483,11 +507,40 @@ Provider helpers should usually not contain stream parsing, JSON decoding, or pr
 
 Provider-specific knobs should live at the closest concrete owner:
 
-- Provider facades attach typed semantic policy, such as reasoning and cache hints, to `ModelRef.policy`.
-- Protocols lower portable request/model policy into provider-native payload fields.
+- Provider facades attach typed defaults to `ModelRef.providerOptions`, `ModelRef.generation`, and `ModelRef.http`.
+- Calls can pass the same option shape on `LLM.request(...)` or directly to `LLM.generate(...)` / `LLM.stream(...)`.
+- The client resolves model defaults plus request overrides before protocol lowering. Later request values win.
+- Protocols lower `generation` and their own provider namespace into provider-native payload fields.
 - Thin provider wrappers, such as OpenRouter, can extend a reused protocol payload when the provider has extra native fields.
 
-Do not grow common request schemas just to fit one provider. Prefer typed semantic policy for portable concepts and protocol/provider-local lowering for native options.
+The public split is:
+
+```ts
+LLM.request({
+  model,
+  prompt: "Think briefly.",
+  generation: {
+    maxTokens: 1024,
+    temperature: 0,
+    topP: 0.9,
+  },
+  providerOptions: {
+    openai: { reasoningEffort: "high" },
+    anthropic: { thinking: { type: "enabled", budgetTokens: 4096 } },
+    gemini: { thinkingConfig: { thinkingBudget: 4096, includeThoughts: true } },
+    openrouter: { reasoning: { effort: "high" } },
+  },
+  http: {
+    body: { raw_provider_field: true },
+    headers: { "x-provider-experiment": "1" },
+    query: { debug: "1" },
+  },
+})
+```
+
+Use `http` only as a serializable escape hatch. If a field is stable and provider-owned, promote it into `providerOptions.<provider>`.
+
+Do not grow common request schemas just to fit one provider. Prefer `generation` for genuinely common sampling/output controls, typed `providerOptions` for provider behavior, and protocol/provider-local lowering for native wire details.
 
 ## 9. Tools Are Typed End To End
 

@@ -6,7 +6,7 @@ import { type Endpoint, render as renderEndpoint } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import type { Framing } from "./framing"
 import type { Protocol } from "./protocol"
-import * as ProviderShared from "./protocols/shared"
+import * as ProviderShared from "../protocols/shared"
 import type {
   AdapterID,
   GenerationOptionsInput,
@@ -14,7 +14,7 @@ import type {
   LLMEvent,
   PreparedRequestOf,
   ProtocolID,
-} from "./schema"
+} from "../schema"
 import {
   GenerationOptions,
   HttpOptions,
@@ -31,7 +31,7 @@ import {
   mergeHttpOptions,
   mergeJsonRecords,
   mergeProviderOptions,
-} from "./schema"
+} from "../schema"
 
 export interface HttpContext {
   readonly request: LLMRequest
@@ -64,6 +64,8 @@ export type AnyAdapter = AdapterDefinition<any>
 
 const adapterRegistry = new Map<string, AnyAdapter>()
 
+// The first adapter registered for an id is the package default. Tests and
+// advanced callers can still override per-client via `LLMClient.make({ adapters })`.
 const register = <Adapter extends AnyAdapter>(adapter: Adapter): Adapter => {
   if (!adapterRegistry.has(adapter.id)) adapterRegistry.set(adapter.id, adapter)
   return adapter
@@ -207,6 +209,13 @@ export interface ClientOptions {
 const noAdapter = (model: ModelRef) =>
   new NoAdapterError({ adapter: model.adapter, protocol: model.protocol, provider: model.provider, model: model.id })
 
+const resolveRequestOptions = (request: LLMRequest) =>
+  LLMRequest.update(request, {
+    generation: mergeGenerationOptions(request.model.generation, request.generation) ?? new GenerationOptions({}),
+    providerOptions: mergeProviderOptions(request.model.providerOptions, request.providerOptions),
+    http: mergeHttpOptions(request.model.http, request.http),
+  })
+
 export interface MakeInput<Payload, Frame, Chunk, State> {
   /** Adapter id used in registry lookup and error messages. */
   readonly id: string
@@ -321,18 +330,19 @@ const makeClient = (options: ClientOptions = {}): LLMClient => {
   const adapters = new Map((options.adapters ?? []).map((adapter) => [adapter.id, adapter] as const))
 
   const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-    const adapter = adapters.get(request.model.adapter) ?? registeredAdapter(request.model.adapter)
-    if (!adapter) return yield* noAdapter(request.model)
+    const resolved = resolveRequestOptions(request)
+    const adapter = adapters.get(resolved.model.adapter) ?? registeredAdapter(resolved.model.adapter)
+    if (!adapter) return yield* noAdapter(resolved.model)
 
-    const payload = yield* adapter.toPayload(request).pipe(
+    const payload = yield* adapter.toPayload(resolved).pipe(
       Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(adapter.payloadSchema))),
     )
     const http = yield* adapter.toHttp(payload, {
-      request,
+      request: resolved,
     })
 
     return {
-      request,
+      request: resolved,
       adapter,
       payload,
       http,
@@ -382,6 +392,6 @@ const makeClient = (options: ClientOptions = {}): LLMClient => {
   return { prepare: prepare as LLMClient["prepare"], stream, generate }
 }
 
-export const Adapter = { make, model, register } as const
+export const Adapter = { make, model } as const
 
 export const LLMClient = { make: makeClient }

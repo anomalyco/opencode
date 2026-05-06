@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { AnthropicMessages, BedrockConverse, Gemini, LLMClient, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm"
+import { LLMClient } from "@opencode-ai/llm"
+import { AnthropicMessages, BedrockConverse, Gemini, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm/protocols"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { LLMNative } from "../../src/session/llm-native"

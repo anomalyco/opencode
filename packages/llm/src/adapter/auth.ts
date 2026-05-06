@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { LLMError, LLMRequest } from "./schema"
+import type { LLMError, LLMRequest } from "../schema"
 
 /**
  * Per-request transport authentication.

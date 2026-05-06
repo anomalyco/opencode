@@ -6,7 +6,7 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http"
-import { ProviderRequestError, TransportError, type LLMError } from "./schema"
+import { ProviderRequestError, TransportError, type LLMError } from "../schema"
 
 export interface Interface {
   readonly execute: (

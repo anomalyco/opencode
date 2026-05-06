@@ -1,5 +1,5 @@
 import { Schema, type Effect } from "effect"
-import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } from "./schema"
+import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } from "../schema"
 
 /**
  * The semantic API contract of one model server family.

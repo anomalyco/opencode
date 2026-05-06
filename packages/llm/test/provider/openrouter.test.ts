@@ -38,9 +38,13 @@ describe("OpenRouter", () => {
       const prepared = yield* LLMClient.make({ adapters: OpenRouter.adapters }).prepare(
         LLM.request({
           model: OpenRouter.model("anthropic/claude-3.7-sonnet:thinking", {
-            usage: true,
-            reasoning: { effort: "high" },
-            promptCacheKey: "session_123",
+            providerOptions: {
+              openrouter: {
+                usage: true,
+                reasoning: { effort: "high" },
+                promptCacheKey: "session_123",
+              },
+            },
           }),
           prompt: "Think briefly.",
         }),

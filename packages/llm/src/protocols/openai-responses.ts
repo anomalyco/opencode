@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter"
-import { Auth } from "../auth"
-import { Endpoint } from "../endpoint"
-import { Framing } from "../framing"
+import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Auth } from "../adapter/auth"
+import { Endpoint } from "../adapter/endpoint"
+import { Framing } from "../adapter/framing"
 import { capabilities } from "../llm"
-import { Protocol } from "../protocol"
+import { Protocol } from "../adapter/protocol"
 import {
   Usage,
   type FinishReason,

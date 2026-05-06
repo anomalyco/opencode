@@ -1,6 +1,6 @@
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { RequestExecutor } from "../../src/executor"
+import { RequestExecutor } from "../../src/adapter"
 
 export type HandlerInput = {
   readonly request: HttpClientRequest.HttpClientRequest

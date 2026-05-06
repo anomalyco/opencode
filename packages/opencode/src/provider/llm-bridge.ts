@@ -1,21 +1,15 @@
 import {
-  AmazonBedrock,
-  Anthropic,
-  Azure,
-  GitHubCopilot,
-  Google,
   LLM,
-  OpenAI,
-  OpenAICompatible,
-  OpenAICompatibleProfiles,
   ReasoningEffort as ReasoningEffortSchema,
   TextVerbosity as TextVerbositySchema,
-  XAI,
+  mergeProviderOptions,
   type CapabilitiesInput,
   type ModelRef,
+  type ProviderOptions,
   type ProtocolID,
-  type ReasoningEffort,
 } from "@opencode-ai/llm"
+import { AmazonBedrock, Anthropic, Azure, GitHubCopilot, Google, OpenAI, OpenAICompatible, XAI } from "@opencode-ai/llm/providers"
+import * as OpenAICompatibleProfiles from "@opencode-ai/llm/providers/openai-compatible-profile"
 import { Option, Schema } from "effect"
 import { isRecord } from "@/util/record"
 import type * as Provider from "./provider"
@@ -25,7 +19,6 @@ type Input = {
   readonly model: Provider.Model
 }
 
-type OpenAIOptionsInput = NonNullable<NonNullable<Parameters<typeof OpenAI.model>[1]>["openai"]>
 const decodeReasoningEffort = Schema.decodeUnknownOption(ReasoningEffortSchema)
 const decodeTextVerbosity = Schema.decodeUnknownOption(TextVerbositySchema)
 
@@ -41,16 +34,30 @@ const recordOption = (options: Record<string, unknown>, key: string): Record<str
   return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
 }
 
-const openAIOptions = (options: Record<string, unknown>): OpenAIOptionsInput | undefined => {
-  const result: OpenAIOptionsInput = {
+const configuredProviderOptions = (options: Record<string, unknown>): ProviderOptions | undefined => {
+  if (!isRecord(options.providerOptions)) return undefined
+  const result = Object.fromEntries(
+    Object.entries(options.providerOptions).filter((entry): entry is [string, Record<string, unknown>] => isRecord(entry[1])),
+  )
+  return Object.keys(result).length === 0 ? undefined : result
+}
+
+const openAIOptions = (
+  options: Record<string, unknown>,
+  configured: ProviderOptions | undefined = configuredProviderOptions(options),
+): ProviderOptions | undefined => {
+  const openai = Object.fromEntries(Object.entries({
     store: typeof options.store === "boolean" ? options.store : undefined,
     promptCacheKey: stringOption(options, "promptCacheKey"),
     reasoningEffort: Option.getOrUndefined(decodeReasoningEffort(options.reasoningEffort)),
     reasoningSummary: options.reasoningSummary === "auto" ? "auto" : undefined,
     includeEncryptedReasoning: Array.isArray(options.include) && options.include.includes("reasoning.encrypted_content") ? true : undefined,
     textVerbosity: Option.getOrUndefined(decodeTextVerbosity(options.textVerbosity)),
-  }
-  return Object.values(result).some((value) => value !== undefined) ? result : undefined
+  }).filter((entry) => entry[1] !== undefined))
+  return mergeProviderOptions(
+    configured,
+    Object.keys(openai).length === 0 ? undefined : { openai },
+  )
 }
 
 const baseURL = (input: Input, options: Record<string, unknown>, fallback?: string) => {
@@ -121,10 +128,12 @@ const sharedOptions = (input: Input, options: Record<string, unknown>, extra: {
   readonly protocol: ProtocolID
   readonly baseURL?: string
   readonly capabilities?: CapabilitiesInput
+  readonly providerOptions?: ProviderOptions
 }) => ({
   baseURL: extra.baseURL ?? baseURL(input, options),
   apiKey: apiKey(input, options),
   headers: headers(input, options),
+  providerOptions: extra.providerOptions ?? configuredProviderOptions(options),
   capabilities: capabilities(input, extra.protocol, extra.capabilities),
   limits: LLM.limits({ context: input.model.limit.context, output: input.model.limit.output }),
 })
@@ -155,11 +164,10 @@ const PROVIDERS: Record<string, ProviderModel> = {
     Anthropic.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "anthropic-messages" })),
   "@ai-sdk/azure": (input, options) =>
     Azure.model(String(input.model.api.id), {
-      ...sharedOptions(input, options, { protocol: azureProtocol(options) }),
+      ...sharedOptions(input, options, { protocol: azureProtocol(options), providerOptions: openAIOptions(options) }),
       resourceName: stringOption(options, "resourceName"),
       apiVersion: stringOption(options, "apiVersion"),
       useCompletionUrls: options.useCompletionUrls === true,
-      openai: openAIOptions(options),
     }),
   "@ai-sdk/baseten": openAICompatibleModel,
   "@ai-sdk/cerebras": openAICompatibleModel,
@@ -171,16 +179,15 @@ const PROVIDERS: Record<string, ProviderModel> = {
       {
         ...sharedOptions(input, options, {
           protocol: GitHubCopilot.shouldUseResponsesApi(String(input.model.api.id)) ? "openai-responses" : "openai-chat",
+          providerOptions: openAIOptions(options),
         }),
-        openai: openAIOptions(options),
       },
     ),
   "@ai-sdk/google": (input, options) =>
     Google.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "gemini" })),
   "@ai-sdk/openai": (input, options) =>
     OpenAI.model(String(input.model.api.id), {
-      ...sharedOptions(input, options, { protocol: "openai-responses" }),
-      openai: openAIOptions(options),
+      ...sharedOptions(input, options, { protocol: "openai-responses", providerOptions: openAIOptions(options) }),
     }),
   "@ai-sdk/openai-compatible": openAICompatibleModel,
   "@ai-sdk/togetherai": openAICompatibleModel,

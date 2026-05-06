@@ -4,7 +4,7 @@ import { Effect, Layer } from "effect"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
-import { RequestExecutor } from "../src/executor"
+import { RequestExecutor } from "../src/adapter"
 import { testEffect } from "./lib/effect"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import * as ProviderShared from "./protocols/shared"
-import type { LLMError, LLMRequest } from "./schema"
+import * as ProviderShared from "../protocols/shared"
+import type { LLMError, LLMRequest } from "../schema"
 
 export interface EndpointInput<Payload> {
   readonly request: LLMRequest

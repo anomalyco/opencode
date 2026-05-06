@@ -66,7 +66,11 @@ describe("OpenAI Chat recorded", () => {
 
       expect(eventSummary(response.events)).toEqual([
         { type: "tool-call", name: weatherToolName, input: { city: "Paris" } },
-        { type: "finish", reason: "tool-calls" },
+        {
+          type: "finish",
+          reason: "tool-calls",
+          usage: { inputTokens: 67, outputTokens: 5, reasoningTokens: 0, cacheReadInputTokens: 0, totalTokens: 72 },
+        },
       ])
     }),
   )

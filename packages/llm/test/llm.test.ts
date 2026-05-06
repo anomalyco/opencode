@@ -78,6 +78,17 @@ describe("llm constructors", () => {
     expect(LLMRequest.update(updated, {})).toBe(updated)
   })
 
+  test("updates canonical models from the model datatype", () => {
+    const base = LLM.model({ id: "fake-model", provider: "fake", protocol: "openai-chat" })
+    const updated = ModelRef.update(base, { adapter: "openai-responses" })
+
+    expect(updated).toBeInstanceOf(ModelRef)
+    expect(String(updated.id)).toBe("fake-model")
+    expect(updated.adapter).toBe("openai-responses")
+    expect(String(ModelRef.input(updated).provider)).toBe("fake")
+    expect(ModelRef.update(updated, {})).toBe(updated)
+  })
+
   test("builds tool choices from names and tools", () => {
     const tool = LLM.toolDefinition({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })
 

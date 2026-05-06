@@ -39,22 +39,25 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
 export const mergeJsonRecords = (...items: ReadonlyArray<Record<string, unknown> | undefined>): Record<string, unknown> | undefined => {
-  const result: Record<string, unknown> = items.reduce<Record<string, unknown>>((acc, item) => {
-    if (!item) return acc
-    return Object.entries(item).reduce<Record<string, unknown>>((next, [key, value]) => {
-      if (value === undefined) return next
-      return {
-        ...next,
-        [key]: isRecord(next[key]) && isRecord(value) ? mergeJsonRecords(next[key], value) : value,
-      }
-    }, acc)
-  }, {})
+  const defined = items.filter((item): item is Record<string, unknown> => item !== undefined)
+  if (defined.length === 0) return undefined
+  if (defined.length === 1 && Object.values(defined[0]).every((value) => value !== undefined)) return defined[0]
+  const result: Record<string, unknown> = {}
+  for (const item of defined) {
+    for (const [key, value] of Object.entries(item)) {
+      if (value === undefined) continue
+      result[key] = isRecord(result[key]) && isRecord(value) ? mergeJsonRecords(result[key], value) : value
+    }
+  }
   return Object.keys(result).length === 0 ? undefined : result
 }
 
 const mergeStringRecords = (...items: ReadonlyArray<Record<string, string> | undefined>): Record<string, string> | undefined => {
+  const defined = items.filter((item): item is Record<string, string> => item !== undefined)
+  if (defined.length === 0) return undefined
+  if (defined.length === 1) return defined[0]
   const result = Object.fromEntries(
-    items.flatMap((item) => Object.entries(item ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    defined.flatMap((item) => Object.entries(item).filter((entry): entry is [string, string] => entry[1] !== undefined)),
   )
   return Object.keys(result).length === 0 ? undefined : result
 }
@@ -63,17 +66,14 @@ export const ProviderOptions = Schema.Record(Schema.String, Schema.Record(Schema
 export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
 
 export const mergeProviderOptions = (...items: ReadonlyArray<ProviderOptions | undefined>): ProviderOptions | undefined => {
-  const result = Object.fromEntries(
-    Object.entries(
-      items.reduce<Record<string, Record<string, unknown>>>((acc, item) => {
-        if (!item) return acc
-        return Object.entries(item).reduce<Record<string, Record<string, unknown>>>((next, [provider, options]) => ({
-          ...next,
-          [provider]: mergeJsonRecords(next[provider], options) ?? {},
-        }), acc)
-      }, {}),
-    ).filter((entry) => Object.keys(entry[1]).length > 0),
-  )
+  const result: Record<string, Record<string, unknown>> = {}
+  for (const item of items) {
+    if (!item) continue
+    for (const [provider, options] of Object.entries(item)) {
+      const merged = mergeJsonRecords(result[provider], options)
+      if (merged) result[provider] = merged
+    }
+  }
   return Object.keys(result).length === 0 ? undefined : result
 }
 
@@ -204,6 +204,35 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
    */
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
+
+export namespace ModelRef {
+  export type Input = ConstructorParameters<typeof ModelRef>[0]
+
+  export const input = (model: ModelRef): Input => ({
+    id: model.id,
+    provider: model.provider,
+    adapter: model.adapter,
+    protocol: model.protocol,
+    baseURL: model.baseURL,
+    apiKey: model.apiKey,
+    headers: model.headers,
+    queryParams: model.queryParams,
+    capabilities: model.capabilities,
+    limits: model.limits,
+    generation: model.generation,
+    providerOptions: model.providerOptions,
+    http: model.http,
+    native: model.native,
+  })
+
+  export const update = (model: ModelRef, patch: Partial<Input>) => {
+    if (Object.keys(patch).length === 0) return model
+    return new ModelRef({
+      ...input(model),
+      ...patch,
+    })
+  }
+}
 
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),

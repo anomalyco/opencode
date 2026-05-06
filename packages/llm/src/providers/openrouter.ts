@@ -1,9 +1,10 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter"
-import { Endpoint } from "../endpoint"
-import { Framing } from "../framing"
+import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Endpoint } from "../adapter/endpoint"
+import { Framing } from "../adapter/framing"
 import { capabilities } from "../llm"
-import { Protocol } from "../protocol"
+import { Protocol } from "../adapter/protocol"
+import type { ProviderOptions } from "../schema"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
 import { isRecord } from "../protocols/shared"
@@ -12,12 +13,19 @@ export const profile = OpenAICompatibleProfiles.profiles.openrouter
 const ADAPTER = "openrouter"
 
 export interface OpenRouterOptions {
+  readonly [key: string]: unknown
   readonly usage?: boolean | Record<string, unknown>
   readonly reasoning?: Record<string, unknown>
   readonly promptCacheKey?: string
 }
 
-export type ModelOptions = Omit<AdapterModelInput, "id"> & OpenRouterOptions
+export type OpenRouterProviderOptionsInput = ProviderOptions & {
+  readonly openrouter?: OpenRouterOptions
+}
+
+export type ModelOptions = Omit<AdapterModelInput, "id" | "providerOptions"> & {
+  readonly providerOptions?: OpenRouterProviderOptionsInput
+}
 type ModelInput = ModelOptions & Pick<AdapterModelInput, "id">
 
 const OpenRouterPayload = Schema.StructWithRest(Schema.Struct(OpenAIChat.payloadFields), [
@@ -30,7 +38,10 @@ export const protocol = Protocol.define({
   id: "openrouter-chat",
   payload: OpenRouterPayload,
   toPayload: (request) => OpenAIChat.protocol.toPayload(request).pipe(
-    Effect.map((payload) => ({ ...payload, ...payloadOptions(request.model.native?.openrouter) }) as OpenRouterPayload),
+    Effect.map((payload) => ({
+      ...payload,
+      ...payloadOptions(request.providerOptions?.openrouter),
+    }) as OpenRouterPayload),
   ),
 })
 
@@ -40,19 +51,7 @@ const payloadOptions = (input: unknown) => {
     ...(openrouter.usage === true ? { usage: { include: true } } : isRecord(openrouter.usage) ? { usage: openrouter.usage } : {}),
     ...(isRecord(openrouter.reasoning) ? { reasoning: openrouter.reasoning } : {}),
     ...(typeof openrouter.promptCacheKey === "string" ? { prompt_cache_key: openrouter.promptCacheKey } : {}),
-    ...(typeof openrouter.prompt_cache_key === "string" ? { prompt_cache_key: openrouter.prompt_cache_key } : {}),
   }
-}
-
-const nativeOptions = (options: ModelOptions) => {
-  const openrouter = payloadOptions({
-    ...(isRecord(options.native?.openrouter) ? options.native.openrouter : {}),
-    usage: options.usage,
-    reasoning: options.reasoning,
-    promptCacheKey: options.promptCacheKey,
-  })
-  if (Object.keys(openrouter).length === 0) return options.native
-  return { ...options.native, openrouter }
 }
 
 export const adapter = Adapter.make({
@@ -70,12 +69,6 @@ const modelRef = Adapter.model<ModelInput>(
     provider: profile.provider,
     baseURL: profile.baseURL,
     capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-  },
-  {
-    mapInput: (input) => {
-      const { usage, reasoning, promptCacheKey, ...rest } = input
-      return { ...rest, native: nativeOptions(input) }
-    },
   },
 )
 

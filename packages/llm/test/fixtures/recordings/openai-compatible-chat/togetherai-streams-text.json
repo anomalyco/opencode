@@ -17,7 +17,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply with exactly: Hello!\"}],\"stream\":true,\"max_tokens\":20,\"temperature\":0}"
+        "body": "{\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply with exactly: Hello!\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":20,\"temperature\":0}"
       },
       "response": {
         "status": 200,

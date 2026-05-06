@@ -1,7 +1,7 @@
 import { Effect, Stream } from "effect"
 import type { Concurrency } from "effect/Types"
-import type { LLMClient } from "./adapter"
-import type { RequestExecutor } from "./executor"
+import type { LLMClient } from "./adapter/client"
+import type { RequestExecutor } from "./adapter/executor"
 import {
   type ContentPart,
   type FinishReason,

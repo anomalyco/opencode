@@ -1,5 +1,6 @@
 import { Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { Adapter, Auth, Endpoint, Framing, LLM, LLMClient, Protocol, RequestExecutor, Tool } from "@opencode-ai/llm"
+import { LLM, LLMClient, Tool } from "@opencode-ai/llm"
+import { Adapter, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode-ai/llm/adapter"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
 /**
@@ -17,18 +18,50 @@ const apiKey = Bun.env.OPENAI_API_KEY
 if (!apiKey) throw new Error("Set OPENAI_API_KEY to run packages/llm/example/tutorial.ts")
 
 // 1. Pick a model. The provider helper records provider identity, protocol
-// choice, capabilities, deployment options, and authentication.
+// choice, capabilities, deployment options, authentication, and defaults.
 const model = OpenAI.model("gpt-4o-mini", {
   apiKey,
+  generation: { maxTokens: 160 },
+  providerOptions: {
+    openai: { store: false },
+  },
 })
 
 // 2. Build a provider-neutral request. This is optional for one-off calls — the
 // same fields can be passed directly to `LLM.generate` / `LLM.stream` — but it
 // is useful when reusing one request across generate and stream examples.
+//
+// Options can live on both the model and the request:
+//
+//   - `generation`: common controls such as max tokens, temperature, topP/topK,
+//     penalties, seed, and stop sequences.
+//   - `providerOptions`: namespaced provider-native behavior. For example,
+//     OpenAI cache keys and store behavior, Anthropic thinking, Gemini thinking
+//     config, or OpenRouter routing/reasoning.
+//   - `http`: last-resort serializable overlays for final request body, headers,
+//     and query params. Prefer typed `providerOptions` when a field is stable.
+//
+// Model options are defaults. Request options override them for this call.
 const request = LLM.request({
   model,
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
+  generation: { maxTokens: 80, temperature: 0.7 },
+  providerOptions: {
+    openai: { promptCacheKey: "tutorial-joke" },
+  },
+})
+
+// `http` is intentionally not needed for normal calls. This shows the shape for
+// newly released provider fields before they deserve a typed provider option.
+const rawOverlayExample = LLM.request({
+  model,
+  prompt: "Show the final HTTP overlay shape.",
+  http: {
+    body: { metadata: { example: "tutorial" } },
+    headers: { "x-opencode-tutorial": "1" },
+    query: { debug: "1" },
+  },
 })
 
 // 3. `generate` sends the request and collects the event stream into one
@@ -69,6 +102,7 @@ const tools = {
 const streamWithTools = LLM.streamWithTools({
   model,
   prompt: "Use get_weather for San Francisco, then answer in one sentence.",
+  generation: { maxTokens: 80, temperature: 0 },
   tools,
   maxSteps: 3,
 }).pipe(
@@ -156,6 +190,7 @@ const inspectFakeProvider = Effect.gen(function* () {
 const program = Effect.gen(function* () {
   // yield* generateOnce
   // yield* inspectFakeProvider
+  // yield* LLMClient.make().prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.payload))))
   // yield* streamText
   yield* streamWithTools
 }).pipe(Effect.provide(Layer.mergeAll(LLM.layer(), RequestExecutor.defaultLayer)))

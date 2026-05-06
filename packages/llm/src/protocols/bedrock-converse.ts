@@ -1,43 +1,32 @@
-import { AwsV4Signer } from "aws4fetch"
-import { Effect, Option, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter"
-import { Auth } from "../auth"
-import { Endpoint } from "../endpoint"
+import { Effect, Schema } from "effect"
+import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Endpoint } from "../adapter/endpoint"
 import { capabilities } from "../llm"
-import { Protocol } from "../protocol"
+import { Protocol } from "../adapter/protocol"
 import {
   Usage,
   type CacheHint,
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
-  type MediaPart,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
+import { BedrockAuth, type Credentials as BedrockCredentials } from "./utils/bedrock-auth"
+import { BedrockCache } from "./utils/bedrock-cache"
+import { BedrockMedia } from "./utils/bedrock-media"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "bedrock-converse"
 
+export type { Credentials as BedrockCredentials } from "./utils/bedrock-auth"
+
 // =============================================================================
 // Public Model Input
 // =============================================================================
-/**
- * AWS credentials for SigV4 signing. Bedrock also supports Bearer API key auth
- * via `model.apiKey`, which bypasses SigV4 signing. STS-vended credentials
- * should be refreshed by the consumer (rebuild the model) before they expire;
- * the adapter does not refresh.
- */
-export interface BedrockCredentials {
-  readonly region: string
-  readonly accessKeyId: string
-  readonly secretAccessKey: string
-  readonly sessionToken?: string
-}
-
 export type BedrockConverseModelInput = AdapterModelInput & {
   /**
    * Bearer API key (Bedrock's newer API key auth). Sets the `Authorization`
@@ -94,57 +83,12 @@ const BedrockReasoningBlock = Schema.Struct({
   }),
 })
 
-// Image block. Bedrock Converse accepts `format` as the file extension and
-// `source.bytes` as a base64 string (binary upload via base64 in the JSON
-// wire format). Supported formats per the Converse docs: png, jpeg, gif, webp.
-const BedrockImageFormat = Schema.Literals(["png", "jpeg", "gif", "webp"])
-type BedrockImageFormat = Schema.Schema.Type<typeof BedrockImageFormat>
-const BedrockImageBlock = Schema.Struct({
-  image: Schema.Struct({
-    format: BedrockImageFormat,
-    source: Schema.Struct({ bytes: Schema.String }),
-  }),
-})
-type BedrockImageBlock = Schema.Schema.Type<typeof BedrockImageBlock>
-
-// Document block. Required `name` is the user-facing filename so the model
-// can reference it. Supported formats per the Converse docs: pdf, csv, doc,
-// docx, xls, xlsx, html, txt, md.
-const BedrockDocumentFormat = Schema.Literals([
-  "pdf",
-  "csv",
-  "doc",
-  "docx",
-  "xls",
-  "xlsx",
-  "html",
-  "txt",
-  "md",
-])
-type BedrockDocumentFormat = Schema.Schema.Type<typeof BedrockDocumentFormat>
-const BedrockDocumentBlock = Schema.Struct({
-  document: Schema.Struct({
-    format: BedrockDocumentFormat,
-    name: Schema.String,
-    source: Schema.Struct({ bytes: Schema.String }),
-  }),
-})
-type BedrockDocumentBlock = Schema.Schema.Type<typeof BedrockDocumentBlock>
-
-// Cache breakpoint marker. Inserted positionally between content blocks (or
-// after a system text / tool spec) to mark the prefix as cacheable. Bedrock
-// Converse currently exposes `default` as the only cache-point type.
-const BedrockCachePointBlock = Schema.Struct({
-  cachePoint: Schema.Struct({ type: Schema.Literal("default") }),
-})
-type BedrockCachePointBlock = Schema.Schema.Type<typeof BedrockCachePointBlock>
-
 const BedrockUserBlock = Schema.Union([
   BedrockTextBlock,
-  BedrockImageBlock,
-  BedrockDocumentBlock,
+  BedrockMedia.ImageBlock,
+  BedrockMedia.DocumentBlock,
   BedrockToolResultBlock,
-  BedrockCachePointBlock,
+  BedrockCache.CachePointBlock,
 ])
 type BedrockUserBlock = Schema.Schema.Type<typeof BedrockUserBlock>
 
@@ -152,7 +96,7 @@ const BedrockAssistantBlock = Schema.Union([
   BedrockTextBlock,
   BedrockReasoningBlock,
   BedrockToolUseBlock,
-  BedrockCachePointBlock,
+  BedrockCache.CachePointBlock,
 ])
 type BedrockAssistantBlock = Schema.Schema.Type<typeof BedrockAssistantBlock>
 
@@ -162,7 +106,7 @@ const BedrockMessage = Schema.Union([
 ])
 type BedrockMessage = Schema.Schema.Type<typeof BedrockMessage>
 
-const BedrockSystemBlock = Schema.Union([BedrockTextBlock, BedrockCachePointBlock])
+const BedrockSystemBlock = Schema.Union([BedrockTextBlock, BedrockCache.CachePointBlock])
 type BedrockSystemBlock = Schema.Schema.Type<typeof BedrockSystemBlock>
 
 const BedrockTool = Schema.Struct({
@@ -275,12 +219,6 @@ const invalid = ProviderShared.invalidRequest
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const region = (request: LLMRequest) => {
-  const fromNative = request.model.native?.aws_region
-  if (typeof fromNative === "string" && fromNative !== "") return fromNative
-  return "us-east-1"
-}
-
 const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   toolSpec: {
     name: tool.name,
@@ -289,85 +227,9 @@ const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   },
 })
 
-// Bedrock cache markers are positional — emit a `cachePoint` block right after
-// the content the caller wants treated as a cacheable prefix. Bedrock currently
-// exposes one cache-point type (`default`); both `ephemeral` and `persistent`
-// hints from the common `CacheHint` shape map onto it. Other cache-hint types
-// (none today) would need explicit handling.
-//
-// TODO: Bedrock recently added optional `ttl: "5m" | "1h"` on cachePoint —
-// once we have a recorded cassette to validate the wire shape, map
-// `CacheHint.ttlSeconds` here.
-const CACHE_POINT_DEFAULT: BedrockCachePointBlock = { cachePoint: { type: "default" } }
-
-const cachePointBlock = (cache: CacheHint | undefined): BedrockCachePointBlock | undefined => {
-  if (cache?.type !== "ephemeral" && cache?.type !== "persistent") return undefined
-  return CACHE_POINT_DEFAULT
-}
-
-// Emit a text block followed by an optional positional cache marker. Used by
-// system, user-text, and assistant-text lowering — all three share the same
-// "push text, push cachePoint if cache hint is present" shape. The return type
-// is the lowest common denominator (text | cachePoint) so callers can spread
-// it into any of the three block-union arrays.
-const textWithCache = (
-  text: string,
-  cache: CacheHint | undefined,
-): Array<BedrockTextBlock | BedrockCachePointBlock> => {
-  const cachePoint = cachePointBlock(cache)
+const textWithCache = (text: string, cache: CacheHint | undefined): Array<BedrockTextBlock | BedrockCache.CachePointBlock> => {
+  const cachePoint = BedrockCache.block(cache)
   return cachePoint ? [{ text }, cachePoint] : [{ text }]
-}
-
-// MIME type → Bedrock format mapping. Bedrock distinguishes image vs document
-// by the top-level block type, not the mediaType, so `lowerMedia` routes by
-// the `image/` prefix and the leaf functions look up the format. `image/jpg`
-// is included as a non-standard alias commonly seen in user-supplied data.
-const IMAGE_FORMATS = {
-  "image/png": "png",
-  "image/jpeg": "jpeg",
-  "image/jpg": "jpeg",
-  "image/gif": "gif",
-  "image/webp": "webp",
-} as const satisfies Record<string, BedrockImageFormat>
-
-const DOCUMENT_FORMATS = {
-  "application/pdf": "pdf",
-  "text/csv": "csv",
-  "application/msword": "doc",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-  "application/vnd.ms-excel": "xls",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-  "text/html": "html",
-  "text/plain": "txt",
-  "text/markdown": "md",
-} as const satisfies Record<string, BedrockDocumentFormat>
-
-// Bedrock document blocks require a name; default to the filename if the
-// caller supplied one, otherwise generate a stable placeholder so the model
-// still sees a valid block.
-const lowerImage = (part: MediaPart, mime: string) => {
-  const format = IMAGE_FORMATS[mime as keyof typeof IMAGE_FORMATS]
-  if (!format) return invalid(`Bedrock Converse does not support image media type ${part.mediaType}`)
-  return Effect.succeed<BedrockImageBlock>({
-    image: { format, source: { bytes: ProviderShared.mediaBytes(part) } },
-  })
-}
-
-const lowerDocument = (part: MediaPart, mime: string) => {
-  const format = DOCUMENT_FORMATS[mime as keyof typeof DOCUMENT_FORMATS]
-  if (!format) return invalid(`Bedrock Converse does not support document media type ${part.mediaType}`)
-  return Effect.succeed<BedrockDocumentBlock>({
-    document: {
-      format,
-      name: part.filename ?? `document.${format}`,
-      source: { bytes: ProviderShared.mediaBytes(part) },
-    },
-  })
-}
-
-const lowerMedia = (part: MediaPart) => {
-  const mime = part.mediaType.toLowerCase()
-  return mime.startsWith("image/") ? lowerImage(part, mime) : lowerDocument(part, mime)
 }
 
 const lowerToolChoice = Effect.fn("BedrockConverse.lowerToolChoice")(function* (
@@ -393,7 +255,7 @@ const lowerToolResult = (part: ToolResultPart): BedrockToolResultBlock => ({
     toolUseId: part.id,
     content:
       part.result.type === "text" || part.result.type === "error"
-        ? [{ text: String(part.result.value) }]
+        ? [{ text: ProviderShared.toolResultText(part) }]
         : [{ json: part.result.value }],
     status: part.result.type === "error" ? "error" : "success",
   },
@@ -411,7 +273,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
           continue
         }
         if (part.type === "media") {
-          content.push(yield* lowerMedia(part))
+          content.push(yield* BedrockMedia.lower(part))
           continue
         }
         return yield* invalid("Bedrock Converse user messages only support text and media content for now")
@@ -488,76 +350,6 @@ const toPayload = Effect.fn("BedrockConverse.toPayload")(function* (request: LLM
 })
 
 // =============================================================================
-// Auth
-// =============================================================================
-// Credentials live on `model.native.aws_credentials` so the OpenCode bridge
-// can resolve them via `@aws-sdk/credential-providers` and stuff them in
-// without exposing the auth machinery to the rest of the LLM core. Schema
-// decode keeps this boundary honest — anything that doesn't match the shape
-// is treated as "no credentials".
-const NativeCredentials = Schema.Struct({
-  accessKeyId: Schema.String,
-  secretAccessKey: Schema.String,
-  region: Schema.optional(Schema.String),
-  sessionToken: Schema.optional(Schema.String),
-})
-const decodeNativeCredentials = Schema.decodeUnknownOption(NativeCredentials)
-
-const credentialsFromInput = (request: LLMRequest): BedrockCredentials | undefined =>
-  decodeNativeCredentials(request.model.native?.aws_credentials).pipe(
-    Option.map((creds) => ({ ...creds, region: creds.region ?? region(request) })),
-    Option.getOrUndefined,
-  )
-
-const signRequest = (input: {
-  readonly url: string
-  readonly body: string
-  readonly headers: Record<string, string>
-  readonly credentials: BedrockCredentials
-}) =>
-  Effect.tryPromise({
-    try: async () => {
-      const signed = await new AwsV4Signer({
-        url: input.url,
-        method: "POST",
-        headers: Object.entries(input.headers),
-        body: input.body,
-        region: input.credentials.region,
-        accessKeyId: input.credentials.accessKeyId,
-        secretAccessKey: input.credentials.secretAccessKey,
-        sessionToken: input.credentials.sessionToken,
-        service: "bedrock",
-      }).sign()
-      return Object.fromEntries(signed.headers.entries())
-    },
-    catch: (error) =>
-      invalid(`Bedrock Converse SigV4 signing failed: ${error instanceof Error ? error.message : String(error)}`),
-  })
-
-/**
- * Bedrock auth. `model.apiKey` (Bedrock's newer Bearer API key auth) wins if
- * set; otherwise we sign the request with SigV4 using AWS credentials from
- * `model.native.aws_credentials`. SigV4 must sign the exact bytes that get
- * sent, so the `content-type: application/json` header is included in the
- * signing input — `jsonPost` then sets the same value below and the signature
- * stays valid.
- */
-const auth: Auth = (input) => {
-  if (input.request.model.apiKey) return Auth.bearer(input)
-  return Effect.gen(function* () {
-    const credentials = credentialsFromInput(input.request)
-    if (!credentials) {
-      return yield* invalid(
-        "Bedrock Converse requires either model.apiKey or AWS credentials in model.native.aws_credentials",
-      )
-    }
-    const headersForSigning = { ...input.headers, "content-type": "application/json" }
-    const signed = yield* signRequest({ url: input.url, body: input.body, headers: headersForSigning, credentials })
-    return { ...headersForSigning, ...signed }
-  })
-}
-
-// =============================================================================
 // Stream Parsing
 // =============================================================================
 const mapFinishReason = (reason: string): FinishReason => {
@@ -583,10 +375,9 @@ const mapUsage = (usage: BedrockUsageSchema | undefined): Usage | undefined => {
 interface ParserState {
   readonly tools: ToolStream.State<number>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
-  // `metadata` (carries usage). The raw stop reason is held here until
-  // `metadata` arrives, then mapped + emitted together as a single terminal
-  // `request-finish` event so consumers see one event with both.
-  readonly pendingStopReason: string | undefined
+  // `metadata` (carries usage). Hold the terminal event in state so `onHalt`
+  // can emit exactly one finish after both chunks have had a chance to arrive.
+  readonly pendingFinish: { readonly reason: FinishReason; readonly usage?: Usage } | undefined
 }
 
 const processChunk = (state: ParserState, chunk: BedrockChunk) =>
@@ -638,18 +429,20 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
     }
 
     if (chunk.messageStop) {
-      // Stash the reason — emit `request-finish` once `metadata` arrives with
-      // usage, so consumers see one terminal event carrying both. If metadata
-      // never arrives the `onHalt` fallback emits a usage-less finish.
-      return [{ ...state, pendingStopReason: chunk.messageStop.stopReason }, []] as const
+      return [
+        {
+          ...state,
+          pendingFinish: { reason: mapFinishReason(chunk.messageStop.stopReason), usage: state.pendingFinish?.usage },
+        },
+        [],
+      ] as const
     }
 
     if (chunk.metadata) {
-      const reason = state.pendingStopReason ? mapFinishReason(state.pendingStopReason) : "stop"
       const usage = mapUsage(chunk.metadata.usage)
       return [
-        { ...state, pendingStopReason: undefined },
-        [{ type: "request-finish" as const, reason, usage }],
+        { ...state, pendingFinish: { reason: state.pendingFinish?.reason ?? "stop", usage } },
+        [],
       ] as const
     }
 
@@ -676,11 +469,9 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
 
 const framing = BedrockEventStream.framing(ADAPTER)
 
-// If a stream ends after `messageStop` but before `metadata` (rare but
-// possible on truncated transports), still surface a terminal finish.
 const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
-  state.pendingStopReason
-    ? [{ type: "request-finish", reason: mapFinishReason(state.pendingStopReason) }]
+  state.pendingFinish
+    ? [{ type: "request-finish", reason: state.pendingFinish.reason, usage: state.pendingFinish.usage }]
     : []
 
 // =============================================================================
@@ -695,7 +486,7 @@ export const protocol = Protocol.define({
   payload: BedrockConversePayload,
   toPayload,
   chunk: BedrockChunk,
-  initial: () => ({ tools: ToolStream.empty<number>(), pendingStopReason: undefined }),
+  initial: () => ({ tools: ToolStream.empty<number>(), pendingFinish: undefined }),
   process: processChunk,
   onHalt,
 })
@@ -707,10 +498,10 @@ export const adapter = Adapter.make({
     // Bedrock's URL embeds the region in the host and the validated modelId
     // in the path. We reach into the validated payload so the URL
     // matches the body that gets signed.
-    default: ({ request }) => `https://bedrock-runtime.${region(request)}.amazonaws.com`,
+    default: ({ request }) => `https://bedrock-runtime.${BedrockAuth.region(request)}.amazonaws.com`,
     path: ({ payload }) => `/model/${encodeURIComponent(payload.modelId)}/converse-stream`,
   }),
-  auth,
+  auth: BedrockAuth.auth,
   framing,
 })
 
@@ -723,17 +514,7 @@ export const defaultCapabilities = capabilities({
   cache: { prompt: true, contentBlocks: true },
 })
 
-export const nativeCredentials = (
-  native: BedrockConverseModelInput["native"],
-  credentials: BedrockCredentials | undefined,
-) =>
-  credentials
-    ? {
-        ...native,
-        aws_credentials: credentials,
-        aws_region: credentials.region,
-      }
-    : native
+export const nativeCredentials = BedrockAuth.nativeCredentials
 
 const bedrockModel = Adapter.model<BedrockConverseModelInput>(
   adapter,

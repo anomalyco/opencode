@@ -1,10 +1,10 @@
 import { Array as Arr, Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter"
-import { Auth } from "../auth"
-import { Endpoint } from "../endpoint"
-import { Framing } from "../framing"
+import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Auth } from "../adapter/auth"
+import { Endpoint } from "../adapter/endpoint"
+import { Framing } from "../adapter/framing"
 import { capabilities } from "../llm"
-import { Protocol } from "../protocol"
+import { Protocol } from "../adapter/protocol"
 import {
   Usage,
   type FinishReason,
@@ -86,6 +86,9 @@ export const payloadFields = {
   max_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
+  frequency_penalty: Schema.optional(Schema.Number),
+  presence_penalty: Schema.optional(Schema.Number),
+  seed: Schema.optional(Schema.Number),
   stop: optionalArray(Schema.String),
 }
 const OpenAIChatPayload = Schema.Struct(payloadFields)
@@ -260,9 +263,13 @@ const toPayload = Effect.fn("OpenAIChat.toPayload")(function* (request: LLMReque
     tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
+    stream_options: { include_usage: true },
     max_tokens: request.generation.maxTokens,
     temperature: request.generation.temperature,
     top_p: request.generation.topP,
+    frequency_penalty: request.generation.frequencyPenalty,
+    presence_penalty: request.generation.presencePenalty,
+    seed: request.generation.seed,
     stop: request.generation.stop,
     ...(yield* lowerOptions(request)),
   }

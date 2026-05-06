@@ -1,4 +1,4 @@
-import { Adapter, type AdapterModelInput } from "../adapter"
+import { Adapter, type AdapterModelInput } from "../adapter/client"
 import * as BedrockConverse from "../protocols/bedrock-converse"
 import type { BedrockCredentials } from "../protocols/bedrock-converse"
 

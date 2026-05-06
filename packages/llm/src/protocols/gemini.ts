@@ -1,22 +1,22 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter"
-import { Auth } from "../auth"
-import { Endpoint } from "../endpoint"
-import { Framing } from "../framing"
+import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Auth } from "../adapter/auth"
+import { Endpoint } from "../adapter/endpoint"
+import { Framing } from "../adapter/framing"
 import { capabilities } from "../llm"
-import { Protocol } from "../protocol"
+import { Protocol } from "../adapter/protocol"
 import {
   Usage,
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
   type MediaPart,
-  type ReasoningEffort,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
+import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 
 const ADAPTER = "gemini"
 
@@ -99,6 +99,7 @@ const GeminiGenerationConfig = Schema.Struct({
   maxOutputTokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
+  topK: Schema.optional(Schema.Number),
   stopSequences: optionalArray(Schema.String),
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
@@ -144,8 +145,6 @@ const invalid = ProviderShared.invalidRequest
 
 const mediaData = ProviderShared.mediaBytes
 
-const isRecord = ProviderShared.isRecord
-
 // =============================================================================
 // Tool Schema Conversion
 // =============================================================================
@@ -163,103 +162,9 @@ const isRecord = ProviderShared.isRecord
 //    properties, items, allOf, anyOf, oneOf, minLength). Anything outside the
 //    allowlist (e.g. `additionalProperties`, `$ref`) is silently dropped.
 //
-// Sanitize runs first, then project. Both passes live here so the adapter
-// owns the full projection; consumers don't need to register extra hooks.
-
-const SCHEMA_INTENT_KEYS = [
-  "type",
-  "properties",
-  "items",
-  "prefixItems",
-  "enum",
-  "const",
-  "$ref",
-  "additionalProperties",
-  "patternProperties",
-  "required",
-  "not",
-  "if",
-  "then",
-  "else",
-]
-
-const hasCombiner = (schema: unknown) =>
-  isRecord(schema) && (Array.isArray(schema.anyOf) || Array.isArray(schema.oneOf) || Array.isArray(schema.allOf))
-
-const hasSchemaIntent = (schema: unknown) =>
-  isRecord(schema) && (hasCombiner(schema) || SCHEMA_INTENT_KEYS.some((key) => key in schema))
-
-const sanitizeToolSchemaNode = (schema: unknown): unknown => {
-  if (!isRecord(schema)) return Array.isArray(schema) ? schema.map(sanitizeToolSchemaNode) : schema
-
-  const result: Record<string, unknown> = Object.fromEntries(
-    Object.entries(schema).map(([key, value]) =>
-      [key, key === "enum" && Array.isArray(value) ? value.map(String) : sanitizeToolSchemaNode(value)],
-    ),
-  )
-
-  // Integer/number enums become string enums on the wire — Gemini rejects
-  // numeric enum values. The `enum` map above already coerced the values;
-  // this rewrites the type to match.
-  if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) result.type = "string"
-
-  // Filter `required` entries that don't appear in `properties` — Gemini
-  // rejects dangling required field references.
-  const properties = result.properties
-  if (result.type === "object" && isRecord(properties) && Array.isArray(result.required)) {
-    result.required = result.required.filter((field) => typeof field === "string" && field in properties)
-  }
-
-  // Default untyped arrays to string-typed items so Gemini has a concrete
-  // schema to validate against.
-  if (result.type === "array" && !hasCombiner(result)) {
-    result.items = result.items ?? {}
-    if (isRecord(result.items) && !hasSchemaIntent(result.items)) result.items = { ...result.items, type: "string" }
-  }
-
-  // Scalar schemas can't carry object-shaped keys.
-  if (typeof result.type === "string" && result.type !== "object" && !hasCombiner(result)) {
-    delete result.properties
-    delete result.required
-  }
-
-  return result
-}
-
-const emptyObjectSchema = (schema: Record<string, unknown>) =>
-  schema.type === "object" && (!isRecord(schema.properties) || Object.keys(schema.properties).length === 0) &&
-  !schema.additionalProperties
-
-const projectToolSchemaNode = (schema: unknown): Record<string, unknown> | undefined => {
-  if (!isRecord(schema)) return undefined
-  if (emptyObjectSchema(schema)) return undefined
-  return Object.fromEntries(
-    [
-      ["description", schema.description],
-      ["required", schema.required],
-      ["format", schema.format],
-      ["type", Array.isArray(schema.type) ? schema.type.filter((type) => type !== "null")[0] : schema.type],
-      ["nullable", Array.isArray(schema.type) && schema.type.includes("null") ? true : undefined],
-      ["enum", schema.const !== undefined ? [schema.const] : schema.enum],
-      ["properties", isRecord(schema.properties)
-        ? Object.fromEntries(
-            Object.entries(schema.properties).map(([key, value]) => [key, projectToolSchemaNode(value)]),
-          )
-        : undefined],
-      ["items", Array.isArray(schema.items)
-        ? schema.items.map(projectToolSchemaNode)
-        : schema.items === undefined
-        ? undefined
-        : projectToolSchemaNode(schema.items)],
-      ["allOf", Array.isArray(schema.allOf) ? schema.allOf.map(projectToolSchemaNode) : undefined],
-      ["anyOf", Array.isArray(schema.anyOf) ? schema.anyOf.map(projectToolSchemaNode) : undefined],
-      ["oneOf", Array.isArray(schema.oneOf) ? schema.oneOf.map(projectToolSchemaNode) : undefined],
-      ["minLength", schema.minLength],
-    ].filter((entry) => entry[1] !== undefined),
-  )
-}
-
-const convertToolSchema = (schema: unknown) => projectToolSchemaNode(sanitizeToolSchemaNode(schema))
+// Sanitize runs first, then project. The implementation lives in
+// `utils/gemini-tool-schema` so this protocol keeps the same shape as the other
+// provider protocols.
 
 // =============================================================================
 // Request Lowering
@@ -267,7 +172,7 @@ const convertToolSchema = (schema: unknown) => projectToolSchemaNode(sanitizeToo
 const lowerTool = (tool: ToolDefinition) => ({
   name: tool.name,
   description: tool.description,
-  parameters: convertToolSchema(tool.inputSchema),
+  parameters: GeminiToolSchema.convert(tool.inputSchema),
 })
 
 const lowerToolConfig = Effect.fn("Gemini.lowerToolConfig")(function* (
@@ -346,12 +251,16 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
   return contents
 })
 
-const thinkingBudget = (effort: ReasoningEffort | undefined) => {
-  if (effort === "minimal" || effort === "low") return 1024
-  if (effort === "high") return 16000
-  if (effort === "xhigh") return 24576
-  if (effort === "max") return 32768
-  return 8192
+const geminiOptions = (request: LLMRequest) => request.providerOptions?.gemini
+
+const thinkingConfig = (request: LLMRequest) => {
+  const value = geminiOptions(request)?.thinkingConfig
+  if (!ProviderShared.isRecord(value)) return undefined
+  const result = {
+    thinkingBudget: typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
+    includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : undefined,
+  }
+  return Object.values(result).some((item) => item !== undefined) ? result : undefined
 }
 
 const toPayload = Effect.fn("Gemini.toPayload")(function* (request: LLMRequest) {
@@ -360,13 +269,9 @@ const toPayload = Effect.fn("Gemini.toPayload")(function* (request: LLMRequest) 
     maxOutputTokens: request.generation.maxTokens,
     temperature: request.generation.temperature,
     topP: request.generation.topP,
+    topK: request.generation.topK,
     stopSequences: request.generation.stop,
-    thinkingConfig: request.reasoning?.enabled
-      ? {
-          includeThoughts: true,
-          thinkingBudget: thinkingBudget(request.reasoning.effort),
-        }
-      : undefined,
+    thinkingConfig: thinkingConfig(request),
   }
 
   return {
@@ -420,9 +325,7 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
     usage: chunk.usageMetadata ? mapUsage(chunk.usageMetadata) ?? state.usage : state.usage,
   }
   const candidate = chunk.candidates?.[0]
-  if (!candidate?.content) {
-    return Effect.succeed([{ ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason }, []] as const)
-  }
+  if (!candidate?.content) return Effect.succeed([{ ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason }, []] as const)
 
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls

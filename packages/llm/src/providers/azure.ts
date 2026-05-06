@@ -1,9 +1,9 @@
-import { Adapter } from "../adapter"
+import { Adapter } from "../adapter/client"
 import type { ModelInput } from "../llm"
 import { ProviderID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
-import { withOpenAIPolicy, type OpenAIOptionsInput } from "./openai-policy"
+import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
 
 export const id = ProviderID.make("azure")
 
@@ -11,7 +11,7 @@ export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol"> & {
   readonly resourceName?: string
   readonly apiVersion?: string
   readonly useCompletionUrls?: boolean
-  readonly openai?: OpenAIOptionsInput
+  readonly providerOptions?: OpenAIProviderOptionsInput
 }
 type AzureModelInput = ModelOptions & Pick<ModelInput, "id">
 
@@ -26,7 +26,7 @@ export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
 const mapInput = (input: AzureModelInput) => {
   const { apiVersion, resourceName, useCompletionUrls, ...rest } = input
   return {
-    ...withOpenAIPolicy(input.id, rest),
+    ...withOpenAIOptions(input.id, rest),
     baseURL: rest.baseURL ?? resourceBaseURL(resourceName),
     queryParams: {
       ...rest.queryParams,

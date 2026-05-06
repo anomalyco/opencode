@@ -1,6 +1,6 @@
-import { Adapter, type AdapterRoutedModelInput } from "../adapter"
-import { Endpoint } from "../endpoint"
-import { Framing } from "../framing"
+import { Adapter, type AdapterRoutedModelInput } from "../adapter/client"
+import { Endpoint } from "../adapter/endpoint"
+import { Framing } from "../adapter/framing"
 import { capabilities } from "../llm"
 import * as OpenAIChat from "./openai-chat"
 

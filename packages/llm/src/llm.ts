@@ -6,8 +6,8 @@ import {
   modelRef,
   type ModelCapabilitiesInput,
   type ModelRefInput,
-} from "./adapter"
-import type { RequestExecutor } from "./executor"
+} from "./adapter/client"
+import type { RequestExecutor } from "./adapter/executor"
 import { type Tools } from "./tool"
 import { ToolRuntime, type RunOptions } from "./tool-runtime"
 import {

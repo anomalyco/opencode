@@ -80,6 +80,7 @@ describe("OpenAI-compatible Chat adapter", () => {
         tools: [{ type: "function", function: { name: "lookup", description: "Lookup data", parameters: { type: "object" } } }],
         tool_choice: "required",
         stream: true,
+        stream_options: { include_usage: true },
         max_tokens: 20,
         temperature: 0,
       })
@@ -135,6 +136,7 @@ describe("OpenAI-compatible Chat adapter", () => {
           { role: "user", content: "Say hello." },
         ],
         stream: true,
+        stream_options: { include_usage: true },
         max_tokens: 20,
         temperature: 0,
       })
@@ -186,6 +188,7 @@ describe("OpenAI-compatible Chat adapter", () => {
         }],
         tool_choice: { type: "function", function: { name: "lookup" } },
         stream: true,
+        stream_options: { include_usage: true },
       })
     }),
   )

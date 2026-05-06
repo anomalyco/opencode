@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter"
-import { Auth } from "../auth"
-import { Endpoint } from "../endpoint"
-import { Framing } from "../framing"
+import { Adapter, type AdapterModelInput } from "../adapter/client"
+import { Auth } from "../adapter/auth"
+import { Endpoint } from "../adapter/endpoint"
+import { Framing } from "../adapter/framing"
 import { capabilities } from "../llm"
-import { Protocol } from "../protocol"
+import { Protocol } from "../adapter/protocol"
 import {
   Usage,
   type CacheHint,
@@ -135,6 +135,7 @@ const AnthropicPayloadFields = {
   max_tokens: Schema.Number,
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
+  top_k: Schema.optional(Schema.Number),
   stop_sequences: optionalArray(Schema.String),
   thinking: Schema.optional(AnthropicThinking),
 }
@@ -297,18 +298,22 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (re
   return messages
 })
 
-const thinkingBudget = (request: LLMRequest) => {
-  if (!request.reasoning?.enabled) return undefined
-  if (request.reasoning.effort === "minimal" || request.reasoning.effort === "low") return 1024
-  if (request.reasoning.effort === "high") return 16000
-  if (request.reasoning.effort === "xhigh") return 24576
-  if (request.reasoning.effort === "max") return 32000
-  return 8000
-}
+const anthropicOptions = (request: LLMRequest) => request.providerOptions?.anthropic
+
+const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (request: LLMRequest) {
+  const thinking = anthropicOptions(request)?.thinking
+  if (!ProviderShared.isRecord(thinking) || thinking.type !== "enabled") return undefined
+  const budget = typeof thinking.budgetTokens === "number"
+    ? thinking.budgetTokens
+    : typeof thinking.budget_tokens === "number"
+    ? thinking.budget_tokens
+    : undefined
+  if (budget === undefined) return yield* invalid("Anthropic thinking provider option requires budgetTokens")
+  return { type: "enabled" as const, budget_tokens: budget }
+})
 
 const toPayload = Effect.fn("AnthropicMessages.toPayload")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
-  const budget = thinkingBudget(request)
   return {
     model: request.model.id,
     system: request.system.length === 0
@@ -321,8 +326,9 @@ const toPayload = Effect.fn("AnthropicMessages.toPayload")(function* (request: L
     max_tokens: request.generation.maxTokens ?? request.model.limits.output ?? 4096,
     temperature: request.generation.temperature,
     top_p: request.generation.topP,
+    top_k: request.generation.topK,
     stop_sequences: request.generation.stop,
-    thinking: budget ? { type: "enabled" as const, budget_tokens: budget } : undefined,
+    thinking: yield* lowerThinking(request),
   }
 })
 

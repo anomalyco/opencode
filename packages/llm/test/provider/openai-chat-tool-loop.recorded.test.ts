@@ -44,10 +44,18 @@ describe("OpenAI Chat tool-loop recorded", () => {
       expect(LLM.outputText({ events })).toContain("Paris")
       expect(eventSummary(events)).toEqual([
         { type: "tool-call", name: "get_weather", input: { city: "Paris" } },
-        { type: "finish", reason: "tool-calls" },
+        {
+          type: "finish",
+          reason: "tool-calls",
+          usage: { inputTokens: 64, outputTokens: 14, reasoningTokens: 0, cacheReadInputTokens: 0, totalTokens: 78 },
+        },
         { type: "tool-result", name: "get_weather", result: { type: "json", value: { temperature: 22, condition: "sunny" } } },
         { type: "text", value: expect.stringContaining("Paris") },
-        { type: "finish", reason: "stop" },
+        {
+          type: "finish",
+          reason: "stop",
+          usage: { inputTokens: 96, outputTokens: 15, reasoningTokens: 0, cacheReadInputTokens: 0, totalTokens: 111 },
+        },
       ])
     }),
   )

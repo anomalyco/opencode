@@ -6,8 +6,8 @@ import {
   type LLMRequest,
   type FinishReason,
   type ContentPart,
-  type RequestExecutor,
 } from "@opencode-ai/llm"
+import type { RequestExecutor } from "@opencode-ai/llm/adapter"
 import { Cause, Deferred, Effect, FiberSet, Queue, Stream, type Scope } from "effect"
 import type { Tool, ToolExecutionOptions } from "ai"
 

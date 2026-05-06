@@ -1,4 +1,4 @@
-import { Adapter } from "../adapter"
+import { Adapter } from "../adapter/client"
 import type { ModelInput } from "../llm"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIResponses from "../protocols/openai-responses"

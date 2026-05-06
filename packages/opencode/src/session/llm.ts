@@ -7,16 +7,18 @@ import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { mergeDeep } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import {
+  LLMClient,
+  type ProtocolID,
+} from "@opencode-ai/llm"
+import { RequestExecutor } from "@opencode-ai/llm/adapter"
+import {
   AnthropicMessages,
   BedrockConverse,
   Gemini,
-  LLMClient,
   OpenAIChat,
   OpenAICompatibleChat,
   OpenAIResponses,
-  RequestExecutor,
-  type ProtocolID,
-} from "@opencode-ai/llm"
+} from "@opencode-ai/llm/protocols"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"

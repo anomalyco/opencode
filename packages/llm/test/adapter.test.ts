@@ -1,25 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { Endpoint, LLM, Protocol } from "../src"
-import { Adapter, LLMClient, type AdapterModelInput } from "../src/adapter"
-import type { FramingDef } from "../src"
-import type { ModelRef } from "../src/schema"
+import { LLM } from "../src"
+import { Adapter, Endpoint, LLMClient, Protocol, type AdapterModelInput, type FramingDef } from "../src/adapter"
+import { ModelRef } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
 
-const updateModel = (model: ModelRef, patch: Partial<LLM.ModelInput>) =>
-  LLM.model({
-    id: model.id,
-    provider: model.provider,
-    adapter: model.adapter,
-    protocol: model.protocol,
-    baseURL: model.baseURL,
-    headers: model.headers,
-    capabilities: model.capabilities,
-    limits: model.limits,
-    native: model.native,
-    ...patch,
-  })
+const updateModel = (model: ModelRef, patch: Partial<ModelRef.Input>) => ModelRef.update(model, patch)
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -175,6 +162,24 @@ describe("llm adapter", () => {
       const response = yield* LLMClient.make({ adapters: [override] }).generate(request)
 
       expect(response.text).toBe('echo:{"body":"override"}')
+    }),
+  )
+
+  it.effect("keeps the first registered adapter as the default", () =>
+    Effect.gen(function* () {
+      Adapter.make({
+        id: "fake",
+        protocol: Protocol.define({
+          ...fakeProtocol,
+          toPayload: () => Effect.succeed({ body: "late-default" }),
+        }),
+        endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
+        framing: fakeFraming,
+      })
+
+      const response = yield* LLMClient.make().generate(request)
+
+      expect(response.text).toBe('echo:{"body":"hello"}')
     }),
   )
 

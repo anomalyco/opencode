@@ -1,6 +1,6 @@
 import type { Stream } from "effect"
-import * as ProviderShared from "./protocols/shared"
-import type { ProviderChunkError } from "./schema"
+import * as ProviderShared from "../protocols/shared"
+import type { ProviderChunkError } from "../schema"
 
 /**
  * Decode a streaming HTTP response body into provider-protocol frames.

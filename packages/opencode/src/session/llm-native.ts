@@ -43,7 +43,6 @@ export type RequestInput = {
   readonly generation?: LLM.RequestInput["generation"]
   readonly headers?: Record<string, string>
   readonly metadata?: Record<string, unknown>
-  readonly native?: Record<string, unknown>
 }
 
 const isDefined = <T>(value: T | undefined): value is T => value !== undefined
@@ -279,7 +278,6 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
     toolChoice: input.toolChoice,
     generation: input.generation,
     metadata: input.metadata,
-    native: input.native,
   })
 })
 

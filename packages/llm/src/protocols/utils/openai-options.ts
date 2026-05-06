@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import type { LLMRequest, ReasoningEffort, TextVerbosity as TextVerbosityValue } from "../../schema"
-import { ReasoningEfforts, TextVerbosity, mergeProviderOptions } from "../../schema"
+import { ReasoningEfforts, TextVerbosity } from "../../schema"
 
 export const OpenAIReasoningEfforts = ReasoningEfforts.filter(
   (effort): effort is Exclude<ReasoningEffort, "max"> => effort !== "max",
@@ -23,7 +23,7 @@ export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEff
 const isTextVerbosity = (value: unknown): value is TextVerbosityValue =>
   typeof value === "string" && TEXT_VERBOSITY.has(value)
 
-const options = (request: LLMRequest) => mergeProviderOptions(request.model.providerOptions, request.providerOptions)?.openai
+const options = (request: LLMRequest) => request.providerOptions?.openai
 
 export const store = (request: LLMRequest): boolean | undefined => {
   const value = options(request)?.store

@@ -1,15 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import { Adapter, LLM, LLMClient, Protocol } from "@opencode-ai/llm"
+import { LLM, LLMClient } from "@opencode-ai/llm"
+import { Adapter, Protocol } from "@opencode-ai/llm/adapter"
 import { OpenAI, OpenAICompatible, OpenRouter } from "@opencode-ai/llm/providers"
 import * as GitHubCopilot from "@opencode-ai/llm/providers/github-copilot"
 import { OpenAIChat, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm/protocols"
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
 
 describe("public exports", () => {
-  test("root exposes core runtime APIs", () => {
-    expect(Adapter.make).toBeFunction()
+  test("root exposes app-facing runtime APIs", () => {
     expect(LLM.generate).toBeFunction()
     expect(LLMClient.make).toBeFunction()
+  })
+
+  test("adapter barrel exposes adapter-authoring APIs", () => {
+    expect(Adapter.make).toBeFunction()
     expect(Protocol.define).toBeFunction()
   })
 

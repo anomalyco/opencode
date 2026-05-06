@@ -1,6 +1,0 @@
-export * as AnthropicMessages from "./protocols/anthropic-messages"
-export * as BedrockConverse from "./protocols/bedrock-converse"
-export * as Gemini from "./protocols/gemini"
-export * as OpenAIChat from "./protocols/openai-chat"
-export * as OpenAICompatibleChat from "./protocols/openai-compatible-chat"
-export * as OpenAIResponses from "./protocols/openai-responses"

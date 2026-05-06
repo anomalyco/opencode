@@ -119,14 +119,20 @@ describe("OpenAI Responses adapter", () => {
     }),
   )
 
-  it.effect("maps cache and reasoning intent to OpenAI Responses options", () =>
+  it.effect("maps OpenAI provider options to Responses options", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make().prepare<OpenAIResponses.OpenAIResponsesPayload>(
         LLM.request({
           model: OpenAI.model("gpt-5.2", { baseURL: "https://api.openai.test/v1/" }),
           prompt: "think",
-          cache: { enabled: true, key: "session_123" },
-          reasoning: { enabled: true, effort: "high", summary: true, encryptedContent: true },
+          providerOptions: {
+            openai: {
+              promptCacheKey: "session_123",
+              reasoningEffort: "high",
+              reasoningSummary: "auto",
+              includeEncryptedReasoning: true,
+            },
+          },
         }),
       )
 
@@ -138,20 +144,20 @@ describe("OpenAI Responses adapter", () => {
     }),
   )
 
-  it.effect("does not emit prompt cache keys when request cache is disabled", () =>
+  it.effect("request OpenAI provider options override model defaults", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make().prepare<OpenAIResponses.OpenAIResponsesPayload>(
         LLM.request({
           model: OpenAI.model("gpt-4.1-mini", {
             baseURL: "https://api.openai.test/v1/",
-            policy: { cache: { promptKey: "model_cache" } },
+            providerOptions: { openai: { promptCacheKey: "model_cache" } },
           }),
           prompt: "no cache",
-          cache: { enabled: false, key: "request_cache" },
+          providerOptions: { openai: { promptCacheKey: "request_cache" } },
         }),
       )
 
-      expect(prepared.payload.prompt_cache_key).toBeUndefined()
+      expect(prepared.payload.prompt_cache_key).toBe("request_cache")
     }),
   )
 

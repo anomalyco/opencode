@@ -1,7 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { Effect, Stream } from "effect"
-import type { Framing } from "../framing"
+import type { Framing } from "../adapter/framing"
 import { ProviderShared } from "./shared"
 
 // Bedrock streams responses using the AWS event stream binary protocol — each
