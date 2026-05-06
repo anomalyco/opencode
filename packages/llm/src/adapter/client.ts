@@ -9,7 +9,6 @@ import type { Protocol } from "./protocol"
 import * as ProviderShared from "../protocols/shared"
 import type {
   AdapterID,
-  GenerationOptionsInput,
   LLMError,
   LLMEvent,
   PreparedRequestOf,
@@ -70,17 +69,9 @@ const register = <Adapter extends AnyAdapter>(adapter: Adapter): Adapter => {
 
 const registeredAdapter = (id: string) => adapterRegistry.get(id)
 
-export type ModelCapabilitiesInput = {
-  readonly input?: Partial<ModelCapabilities["input"]>
-  readonly output?: Partial<ModelCapabilities["output"]>
-  readonly tools?: Partial<ModelCapabilities["tools"]>
-  readonly cache?: Partial<ModelCapabilities["cache"]>
-  readonly reasoning?: Partial<Omit<ModelCapabilities["reasoning"], "efforts">> & {
-    readonly efforts?: ReadonlyArray<ModelCapabilities["reasoning"]["efforts"][number]>
-  }
-}
+export type ModelCapabilitiesInput = Exclude<ModelCapabilities.Input, ModelCapabilities>
 
-export type HttpOptionsInput = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
+export type HttpOptionsInput = HttpOptions.Input
 
 export type ModelRefInput = Omit<
   ConstructorParameters<typeof ModelRef>[0],
@@ -89,9 +80,9 @@ export type ModelRefInput = Omit<
   readonly id: string | ModelID
   readonly provider: string | ProviderID
   readonly adapter?: string | AdapterID
-  readonly capabilities?: ModelCapabilities | ModelCapabilitiesInput
-  readonly limits?: ModelLimits | ConstructorParameters<typeof ModelLimits>[0]
-  readonly generation?: GenerationOptionsInput
+  readonly capabilities?: ModelCapabilities.Input
+  readonly limits?: ModelLimits.Input
+  readonly generation?: GenerationOptions.Input
   readonly http?: HttpOptionsInput
 }
 
@@ -109,30 +100,16 @@ export interface AdapterModelOptions<Input, Output extends AdapterMappedModelInp
   readonly mapInput?: (input: Input) => Output
 }
 
-export const modelCapabilities = (input: ModelCapabilities | ModelCapabilitiesInput | undefined) => {
-  if (input instanceof ModelCapabilities) return input
-  return new ModelCapabilities({
-    input: { text: true, image: false, audio: false, video: false, pdf: false, ...input?.input },
-    output: { text: true, reasoning: false, ...input?.output },
-    tools: { calls: false, streamingInput: false, providerExecuted: false, ...input?.tools },
-    cache: { prompt: false, messageBlocks: false, contentBlocks: false, ...input?.cache },
-    reasoning: { efforts: [], summaries: false, encryptedContent: false, ...input?.reasoning },
-  })
-}
+export const modelCapabilities = ModelCapabilities.make
 
-export const modelLimits = (input: ModelLimits | ConstructorParameters<typeof ModelLimits>[0] | undefined) => {
-  if (input instanceof ModelLimits) return input
-  return new ModelLimits(input ?? {})
-}
+export const modelLimits = ModelLimits.make
 
-export const generationOptions = (input: GenerationOptionsInput | undefined) => {
-  if (input === undefined || input instanceof GenerationOptions) return input
-  return new GenerationOptions(input)
-}
+export const generationOptions = (input: GenerationOptions.Input | undefined) =>
+  input === undefined ? undefined : GenerationOptions.make(input)
 
 export const httpOptions = (input: HttpOptionsInput | undefined) => {
-  if (input === undefined || input instanceof HttpOptions) return input
-  return new HttpOptions(input)
+  if (input === undefined) return input
+  return HttpOptions.make(input)
 }
 
 export const modelRef = (input: ModelRefInput) =>

@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Layer, Random } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -25,17 +25,20 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 
 const BODY_LIMIT = 16_384
 const MAX_RETRIES = 2
+const BASE_DELAY_MS = 500
 const MAX_DELAY_MS = 10_000
 const REDACTED = "<redacted>"
 
-const sensitiveName = (name: string) =>
+const sensitiveHeaderName = (name: string) =>
   /authorization|api[-_]?key|token|secret|credential|signature|x-amz-signature/i.test(name)
+
+const sensitiveQueryName = (name: string) => sensitiveHeaderName(name) || /^(key|sig)$/i.test(name)
 
 const redactHeaders = (headers: Headers.Headers) =>
   Object.fromEntries(
     Object.entries(headers).map(([name, value]) => [
       name,
-      sensitiveName(name) ? REDACTED : value,
+      sensitiveHeaderName(name) ? REDACTED : value,
     ]),
   )
 
@@ -43,7 +46,7 @@ const redactUrl = (value: string) => {
   if (!URL.canParse(value)) return REDACTED
   const url = new URL(value)
   url.searchParams.forEach((_, key) => {
-    if (sensitiveName(key)) url.searchParams.set(key, REDACTED)
+    if (sensitiveQueryName(key)) url.searchParams.set(key, REDACTED)
   })
   return url.toString()
 }
@@ -90,10 +93,22 @@ const responseDetails = (response: HttpClientResponse.HttpClientResponse) =>
     headers: redactHeaders(response.headers),
   })
 
+const redactBody = (body: string) =>
+  body
+    .replace(
+      /("(?:api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|authorization|credential|signature|key)"\s*:\s*)"[^"]*"/gi,
+      `$1"${REDACTED}"`,
+    )
+    .replace(
+      /((?:api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|signature|key)=)[^&\s"]+/gi,
+      `$1${REDACTED}`,
+    )
+
 const responseBody = (body: string | void) => {
   if (body === undefined) return {}
-  if (body.length <= BODY_LIMIT) return { body }
-  return { body: body.slice(0, BODY_LIMIT), bodyTruncated: true }
+  const redacted = redactBody(body)
+  if (redacted.length <= BODY_LIMIT) return { body: redacted }
+  return { body: redacted.slice(0, BODY_LIMIT), bodyTruncated: true }
 }
 
 const statusError = (request: HttpClientRequest.HttpClientRequest) =>
@@ -142,18 +157,28 @@ const toHttpError = (error: unknown) => {
   })
 }
 
-const retryDelay = (error: ProviderRequestError) => Math.min(error.retryAfterMs ?? 500, MAX_DELAY_MS)
+const retryDelay = (error: ProviderRequestError, attempt: number) => {
+  if (error.retryAfterMs !== undefined) return Effect.succeed(Math.min(error.retryAfterMs, MAX_DELAY_MS))
+  return Random.nextBetween(
+    Math.min(BASE_DELAY_MS * 2 ** attempt * 0.8, MAX_DELAY_MS),
+    Math.min(BASE_DELAY_MS * 2 ** attempt * 1.2, MAX_DELAY_MS),
+  ).pipe(Effect.map((delay) => Math.round(delay)))
+}
 
 const retryStatusFailures = <A, R>(
   effect: Effect.Effect<A, LLMError, R>,
   retries = MAX_RETRIES,
+  attempt = 0,
 ): Effect.Effect<A, LLMError, R> =>
   Effect.catchTag(
     effect,
     "LLM.ProviderRequestError",
     (error): Effect.Effect<A, LLMError, R> => {
       if (!error.retryable || retries <= 0) return Effect.fail(error)
-      return Effect.sleep(retryDelay(error)).pipe(Effect.flatMap(() => retryStatusFailures(effect, retries - 1)))
+      return retryDelay(error, attempt).pipe(
+        Effect.flatMap((delay) => Effect.sleep(delay)),
+        Effect.flatMap(() => retryStatusFailures(effect, retries - 1, attempt + 1)),
+      )
     },
   )
 

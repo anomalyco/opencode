@@ -177,10 +177,41 @@ export class ModelCapabilities extends Schema.Class<ModelCapabilities>("LLM.Mode
   }),
 }) {}
 
+export namespace ModelCapabilities {
+  export type Input = ModelCapabilities | {
+    readonly input?: Partial<ModelCapabilities["input"]>
+    readonly output?: Partial<ModelCapabilities["output"]>
+    readonly tools?: Partial<ModelCapabilities["tools"]>
+    readonly cache?: Partial<ModelCapabilities["cache"]>
+    readonly reasoning?: Partial<Omit<ModelCapabilities["reasoning"], "efforts">> & {
+      readonly efforts?: ReadonlyArray<ModelCapabilities["reasoning"]["efforts"][number]>
+    }
+  }
+
+  /** Normalize partial capability input into the canonical capability set. */
+  export const make = (input: Input | undefined) => {
+    if (input instanceof ModelCapabilities) return input
+    return new ModelCapabilities({
+      input: { text: true, image: false, audio: false, video: false, pdf: false, ...input?.input },
+      output: { text: true, reasoning: false, ...input?.output },
+      tools: { calls: false, streamingInput: false, providerExecuted: false, ...input?.tools },
+      cache: { prompt: false, messageBlocks: false, contentBlocks: false, ...input?.cache },
+      reasoning: { efforts: [], summaries: false, encryptedContent: false, ...input?.reasoning },
+    })
+  }
+}
+
 export class ModelLimits extends Schema.Class<ModelLimits>("LLM.ModelLimits")({
   context: Schema.optional(Schema.Number),
   output: Schema.optional(Schema.Number),
 }) {}
+
+export namespace ModelLimits {
+  export type Input = ModelLimits | ConstructorParameters<typeof ModelLimits>[0]
+
+  /** Normalize model limit input into the canonical `ModelLimits` class. */
+  export const make = (input: Input | undefined) => input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
+}
 
 export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   id: ModelID,

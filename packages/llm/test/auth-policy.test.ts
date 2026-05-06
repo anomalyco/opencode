@@ -1,0 +1,82 @@
+import { describe, expect } from "bun:test"
+import { ConfigProvider, Effect } from "effect"
+import { Headers } from "effect/unstable/http"
+import { LLM } from "../src"
+import { AuthPolicy } from "../src/adapter/auth-policy"
+import { it } from "./lib/effect"
+
+const request = LLM.request({
+  id: "req_auth_policy",
+  model: LLM.model({ id: "fake-model", provider: "fake", protocol: "fake" }),
+  prompt: "hello",
+})
+
+const input = {
+  request,
+  method: "POST" as const,
+  url: "https://example.test/v1/chat",
+  body: "{}",
+  headers: Headers.fromInput({ "x-existing": "yes" }),
+}
+
+const withEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
+
+describe("AuthPolicy", () => {
+  it.effect("renders a config credential as bearer auth", () =>
+    Effect.gen(function* () {
+      const headers = yield* AuthPolicy.config("OPENAI_API_KEY").bearer().apply(input).pipe(
+        withEnv({ OPENAI_API_KEY: "sk-test" }),
+      )
+
+      expect(headers.authorization).toBe("Bearer sk-test")
+      expect(headers["x-existing"]).toBe("yes")
+    }),
+  )
+
+  it.effect("falls back between credential sources before rendering", () =>
+    Effect.gen(function* () {
+      const headers = yield* AuthPolicy.config("PRIMARY_KEY")
+        .orElse(AuthPolicy.value("fallback-key"))
+        .pipe(AuthPolicy.header("x-api-key"))
+        .apply(input)
+        .pipe(withEnv({}))
+
+      expect(headers["x-api-key"]).toBe("fallback-key")
+      expect(headers["x-existing"]).toBe("yes")
+    }),
+  )
+
+  it.effect("composes header policies in sequence", () =>
+    Effect.gen(function* () {
+      const headers = yield* AuthPolicy.headers({ "x-tenant-id": "tenant-1" })
+        .andThen(AuthPolicy.value("gateway-token").bearer())
+        .apply(input)
+
+      expect(headers["x-tenant-id"]).toBe("tenant-1")
+      expect(headers.authorization).toBe("Bearer gateway-token")
+      expect(headers["x-existing"]).toBe("yes")
+    }),
+  )
+
+  it.effect("falls back between full auth policies", () =>
+    Effect.gen(function* () {
+      const headers = yield* AuthPolicy.config("OPENAI_API_KEY")
+        .bearer()
+        .orElse(AuthPolicy.headers({ authorization: "Bearer supplied" }))
+        .apply(input)
+        .pipe(withEnv({}))
+
+      expect(headers.authorization).toBe("Bearer supplied")
+      expect(headers["x-existing"]).toBe("yes")
+    }),
+  )
+
+  it.effect("can intentionally leave auth untouched", () =>
+    Effect.gen(function* () {
+      const headers = yield* AuthPolicy.none.apply(input)
+
+      expect(headers.authorization).toBeUndefined()
+      expect(headers["x-existing"]).toBe("yes")
+    }),
+  )
+})
