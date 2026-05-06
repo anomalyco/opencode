@@ -1,24 +1,21 @@
 import fs from "node:fs/promises"
 import { createHash } from "node:crypto"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import { ProxyUtil } from "../proxy-util"
-import { DEFAULT_CSP, UI_UPSTREAM, csp, embeddedUI, themePreloadHash, upstreamURL } from "../shared/ui"
+import { UI_UPSTREAM, csp, embeddedUI, embeddedUIFile, embeddedUIHeaders, themePreloadHash, upstreamURL } from "../shared/ui"
 
 export async function serveUI(request: Request) {
   const embeddedWebUI = await embeddedUI()
   const path = new URL(request.url).pathname
 
   if (embeddedWebUI) {
-    const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
+    const match = embeddedUIFile(path, embeddedWebUI)
     if (!match) return Response.json({ error: "Not Found" }, { status: 404 })
 
     if (await fs.exists(match)) {
-      const mime = AppFileSystem.mimeType(match)
-      const headers = new Headers({ "content-type": mime })
-      if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-      return new Response(new Uint8Array(await fs.readFile(match)), { headers })
+      const body = new Uint8Array(await fs.readFile(match))
+      return new Response(body, { headers: embeddedUIHeaders(match, body) })
     }
 
     return Response.json({ error: "Not Found" }, { status: 404 })

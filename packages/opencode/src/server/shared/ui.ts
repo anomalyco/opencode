@@ -10,15 +10,36 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
-export const DEFAULT_CSP =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src *"
 export const UI_UPSTREAM = new URL("https://app.opencode.ai")
 
 export const csp = (hash = "") =>
-  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src *`
+  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src * data:`
 
 export function themePreloadHash(body: string) {
   return body.match(/<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i)
+}
+
+function assetLikePath(requestPath: string) {
+  const path = requestPath.startsWith("/") ? requestPath : `/${requestPath}`
+  const name = path.split("/").at(-1) ?? ""
+  return path === "/assets" || path.startsWith("/assets/") || name.includes(".")
+}
+
+export function embeddedUIFile(requestPath: string, embeddedWebUI: Record<string, string>) {
+  const exact = embeddedWebUI[requestPath.replace(/^\//, "")]
+  if (exact) return exact
+  if (assetLikePath(requestPath)) return null
+  return embeddedWebUI["index.html"] ?? null
+}
+
+export function embeddedUIHeaders(file: string, body: Uint8Array) {
+  const mime = AppFileSystem.mimeType(file)
+  const headers = new Headers({ "content-type": mime })
+  if (!mime.startsWith("text/html")) return headers
+
+  const match = themePreloadHash(new TextDecoder().decode(body))
+  headers.set("content-security-policy", csp(match ? createHash("sha256").update(match[2]).digest("base64") : ""))
+  return headers
 }
 
 function requestBody(request: HttpServerRequest.HttpServerRequest) {
@@ -51,10 +72,7 @@ function notFound() {
 }
 
 function embeddedUIResponse(file: string, body: Uint8Array) {
-  const mime = AppFileSystem.mimeType(file)
-  const headers = new Headers({ "content-type": mime })
-  if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-  return HttpServerResponse.raw(body, { headers })
+  return HttpServerResponse.raw(body, { headers: embeddedUIHeaders(file, body) })
 }
 
 export function serveEmbeddedUIEffect(
@@ -62,7 +80,7 @@ export function serveEmbeddedUIEffect(
   fs: AppFileSystem.Interface,
   embeddedWebUI: Record<string, string>,
 ) {
-  const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
+  const file = embeddedUIFile(requestPath, embeddedWebUI)
   if (!file) return Effect.succeed(notFound())
 
   return fs.readFile(file).pipe(

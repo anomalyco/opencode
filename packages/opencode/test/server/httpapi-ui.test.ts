@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigProvider, Effect, Layer } from "effect"
@@ -258,6 +259,93 @@ describe("HttpApi UI fallback", () => {
     expect(readPath).toBe("/$bunfs/root/assets/app.js")
     expect(response.headers.get("content-type")).toContain("text/javascript")
     expect(await response.text()).toBe("console.log('embedded')")
+  })
+
+  test("sets embedded HTML CSP with the inline theme preload hash", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    const preload = "document.documentElement.dataset.theme = 'dark'"
+    const body = new TextEncoder().encode(
+      `<html><script id="oc-theme-preload-script">${preload}</script><main>opencode</main></html>`,
+    )
+
+    const response = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        return yield* serveEmbeddedUIEffect(
+          "/session/example",
+          {
+            ...fs,
+            readFile: (path) =>
+              path === "/$bunfs/root/index.html" ? Effect.succeed(body) : Effect.die(`unexpected embedded UI path: ${path}`),
+          },
+          { "index.html": "/$bunfs/root/index.html" },
+        )
+      }).pipe(Effect.provide(AppFileSystem.defaultLayer), Effect.map(HttpServerResponse.toWeb)),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-security-policy")).toContain("connect-src * data:")
+    expect(response.headers.get("content-security-policy")).toContain(
+      `sha256-${createHash("sha256").update(preload).digest("base64")}`,
+    )
+  })
+
+  test("allows data URLs in proxied HTML CSP for Ghostty WASM fallback", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
+
+    const response = await uiApp({
+      client: httpClient(new Response("<html>opencode</html>", { headers: { "content-type": "text/html" } })),
+    }).request("/")
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-security-policy")).toContain("connect-src * data:")
+  })
+
+  test("does not serve index HTML for missing embedded WASM assets", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+
+    const response = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        return yield* serveEmbeddedUIEffect(
+          "/ghostty-vt.wasm",
+          {
+            ...fs,
+            readFile: () => Effect.die("missing asset should not fall back to index.html"),
+          },
+          { "index.html": "/$bunfs/root/index.html" },
+        )
+      }).pipe(Effect.provide(AppFileSystem.defaultLayer), Effect.map(HttpServerResponse.toWeb)),
+    )
+
+    expect(response.status).toBe(404)
+  })
+
+  test("serves embedded WASM assets with the original bytes", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    const body = new Uint8Array([0x00, 0x61, 0x73, 0x6d])
+
+    const response = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        return yield* serveEmbeddedUIEffect(
+          "/assets/ghostty-vt.wasm",
+          {
+            ...fs,
+            readFile: (path) =>
+              path === "/$bunfs/root/assets/ghostty-vt.wasm"
+                ? Effect.succeed(body)
+                : Effect.die(`unexpected embedded UI path: ${path}`),
+          },
+          { "assets/ghostty-vt.wasm": "/$bunfs/root/assets/ghostty-vt.wasm" },
+        )
+      }).pipe(Effect.provide(AppFileSystem.defaultLayer), Effect.map(HttpServerResponse.toWeb)),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("application/wasm")
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(body)
   })
 
   test("keeps matched API routes ahead of the UI fallback", async () => {
