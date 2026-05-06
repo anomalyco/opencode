@@ -43,13 +43,11 @@ export const profileModel = (profile: OpenAICompatibleProfile, id: string | Mode
 
 const define = (profile: OpenAICompatibleProfile) => Provider.make({
   id: ProviderID.make(profile.provider),
-  adapters,
   model: (id: string | ModelID, options: FamilyModelOptions = {}) => profileModel(profile, id, options),
 })
 
 export const provider = Provider.make({
   id: ProviderID.make("openai-compatible"),
-  adapters,
   model: (id: string | ModelID, options: GenericModelOptions) => model(id, { ...options, provider: options.provider ?? "openai-compatible" }),
 })
 
