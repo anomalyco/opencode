@@ -12,6 +12,8 @@
 # Side effects:
 #   1. Update packages/branding/installer/DeskFox.iss line `#define AppVersion "..."` (Windows only)
 #   2. Prepend a placeholder entry to top of /docs/installer-versions.md (you fill summary after build)
+#   3. Update packages/branding/installer-versions.json (the platform's key) — front-end reads it
+#      to render "DeskFox <Platform>" + version in the settings dialog footer.
 #
 # Output: prints new version to stdout (used by pack-installer.ps1)
 
@@ -26,9 +28,11 @@ $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $repoRoot = Split-Path -Parent $root
 $issFile = Join-Path $root "branding/installer/DeskFox.iss"
 $logFile = Join-Path $repoRoot "docs/installer-versions.md"
+$jsonFile = Join-Path $root "branding/installer-versions.json"
 
 if (-not (Test-Path $issFile)) { throw "iss not found: $issFile" }
 if (-not (Test-Path $logFile)) { throw "version log not found: $logFile" }
+if (-not (Test-Path $jsonFile)) { throw "installer-versions.json not found: $jsonFile" }
 
 # Compute today's version (per-platform counter)
 $today = Get-Date -Format "yyyy.M.d"
@@ -78,5 +82,17 @@ if ($firstHeaderIdx -lt 0) {
 }
 Write-Output "[bump] prepended placeholder to $logFile"
 
-# 3. Output new version (used by caller)
+# 3. Update installer-versions.json (front-end reads this to render settings dialog footer)
+#    Surgical regex update on the platform's line — preserves formatting/indent/key order.
+$jsonKey = if ($Platform -eq "Windows") { "windows" } else { "macos" }
+$jsonContent = Get-Content $jsonFile -Raw -Encoding UTF8
+$pattern = "(`"$jsonKey`"\s*:\s*`")[^`"]*(`")"
+$replaced = [regex]::Replace($jsonContent, $pattern, "`${1}$newVersion`${2}")
+if ($replaced -eq $jsonContent) {
+    throw "installer-versions.json: key '$jsonKey' not found, file may be malformed: $jsonFile"
+}
+Set-Content -Path $jsonFile -Value $replaced -Encoding UTF8 -NoNewline
+Write-Output "[bump] updated $jsonFile -> $jsonKey=$newVersion"
+
+# 4. Output new version (used by caller)
 Write-Output "VERSION=$newVersion"

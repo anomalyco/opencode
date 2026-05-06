@@ -8,10 +8,24 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+// FORK: 设置页脚显示 DeskFox <Platform> + installer 版本号(YYYY.M.D.N), 2026-05-06
+// installer-versions.json 由 bump-installer-version.{ps1,sh} 在每次 bump 时同步更新对应平台 key
+import installerVersions from "@opencode-ai/branding/installer-versions.json"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
+
+  // FORK: 设置页脚 — DeskFox <Platform> + installer 版本号
+  const platformLabel =
+    platform.os === "macos" ? "macOS"
+    : platform.os === "windows" ? "Windows"
+    : platform.os === "linux" ? "Linux"
+    : ""
+  const installerVer =
+    platform.os === "macos" ? installerVersions.macos
+    : platform.os === "windows" ? installerVersions.windows
+    : platform.version
 
   return (
     <Dialog size="x-large" transition>
@@ -50,8 +64,8 @@ export const DialogSettings: Component = () => {
               </div>
             </div>
             <div class="flex flex-col gap-1 pl-1 py-1 text-12-medium text-text-weak">
-              <span>{language.t("app.name.desktop")}</span>
-              <span class="text-11-regular">v{platform.version}</span>
+              <span>{platformLabel ? `DeskFox for ${platformLabel}` : "DeskFox"}</span>
+              <span class="text-11-regular">v{installerVer}</span>
             </div>
           </div>
         </Tabs.List>

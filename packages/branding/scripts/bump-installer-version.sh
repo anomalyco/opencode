@@ -39,9 +39,14 @@ BRANDING_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$BRANDING_ROOT/../.." && pwd)"
 ISS_FILE="$BRANDING_ROOT/installer/DeskFox.iss"
 LOG_FILE="$REPO_ROOT/docs/installer-versions.md"
+JSON_FILE="$BRANDING_ROOT/installer-versions.json"
 
 if [[ ! -f "$LOG_FILE" ]]; then
     echo "version log not found: $LOG_FILE" >&2
+    exit 1
+fi
+if [[ ! -f "$JSON_FILE" ]]; then
+    echo "installer-versions.json not found: $JSON_FILE" >&2
     exit 1
 fi
 
@@ -102,5 +107,24 @@ else
 fi
 echo "[bump] prepended placeholder to $LOG_FILE"
 
-# 3. Output new version (used by caller)
+# 3. Update installer-versions.json (front-end reads this to render settings dialog footer)
+#    Surgical sed update on the platform's key — preserves formatting/indent/key order.
+#    BSD-compatible: -i with empty backup arg, then rm the backup.
+if [[ "$PLATFORM" == "Windows" ]]; then
+    JSON_KEY="windows"
+else
+    JSON_KEY="macos"
+fi
+# Match: "windows": "anything"  ->  "windows": "$NEW_VERSION"
+# Use a delimiter that won't appear in version string (|).
+sed -i.bak "s|\"$JSON_KEY\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"$JSON_KEY\": \"$NEW_VERSION\"|" "$JSON_FILE"
+rm -f "$JSON_FILE.bak"
+# Verify the key was actually replaced (grep returns 0 if found)
+if ! grep -q "\"$JSON_KEY\"[[:space:]]*:[[:space:]]*\"$NEW_VERSION\"" "$JSON_FILE"; then
+    echo "[bump] ERROR: failed to update $JSON_FILE for key=$JSON_KEY" >&2
+    exit 1
+fi
+echo "[bump] updated $JSON_FILE -> $JSON_KEY=$NEW_VERSION"
+
+# 4. Output new version (used by caller)
 echo "VERSION=$NEW_VERSION"

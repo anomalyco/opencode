@@ -8,7 +8,8 @@
   "exports": {
     "./package.json": "./package.json",
     "./logo": "./src/logo.tsx",
-    "./theme.css": "./src/theme.css"
+    "./theme.css": "./src/theme.css",
+    "./installer-versions.json": "./installer-versions.json"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit"
