@@ -107,10 +107,24 @@ export const createOpenReviewFile = (input: {
   openTab: (tab: string) => void
   setActive: (tab: string) => void
   loadFile: (path: string) => any | Promise<void>
+  setSelectedLines?: (path: string, range: { start: number; end: number }) => void
 }) => {
+  const lines = (path: string) => {
+    const query = path.split("?")[1]
+    if (!query) return
+    const params = new URLSearchParams(query)
+    const start = Number(params.get("start"))
+    const end = Number(params.get("end") ?? params.get("start"))
+    if (!Number.isInteger(start) || start < 1) return
+    if (!Number.isInteger(end) || end < 1) return
+    return start <= end ? { start, end } : { start: end, end: start }
+  }
+
   return (path: string) => {
     batch(() => {
       input.showAllFiles()
+      const range = lines(path)
+      if (range) input.setSelectedLines?.(path, range)
       const maybePromise = input.loadFile(path)
       const open = () => {
         const tab = input.tabForPath(path)

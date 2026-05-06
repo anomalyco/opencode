@@ -5,6 +5,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -344,22 +345,24 @@ export function SessionSidePanel(props: {
             style={{ width: treeWidth() }}
           >
             <div
-              class="h-full flex flex-col overflow-hidden group/filetree"
+              class="h-full min-h-0 flex flex-col overflow-hidden group/filetree"
               classList={{ "border-l border-border-weaker-base": reviewOpen() }}
             >
-              <div class="h-full bg-background-stronger px-3 py-0 overflow-hidden" data-scope="filetree">
-                <Switch>
-                  <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
-                  <Match when={true}>
-                    <FileTree
-                      path=""
-                      class="pt-3"
-                      modified={diffFiles()}
-                      kinds={kinds()}
-                      onFileClick={(node) => openTab(file.tab(node.path))}
-                    />
-                  </Match>
-                </Switch>
+              <div class="flex-1 min-h-0 bg-background-stronger px-3 py-0 overflow-hidden" data-scope="filetree">
+                <ScrollView class="h-full">
+                  <Switch>
+                    <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                    <Match when={true}>
+                      <FileTree
+                        path=""
+                        class="pt-3 pb-3"
+                        modified={diffFiles()}
+                        kinds={kinds()}
+                        onFileClick={(node) => openTab(file.tab(node.path))}
+                      />
+                    </Match>
+                  </Switch>
+                </ScrollView>
               </div>
             </div>
             <Show when={fileOpen()}>

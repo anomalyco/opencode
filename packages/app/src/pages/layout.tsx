@@ -58,6 +58,7 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
+import { WORKSPACES_HIDDEN } from "@/constants/feature-flags"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
@@ -1186,7 +1187,9 @@ export default function Layout(props: ParentProps) {
       })
     }
 
-    return commands
+    return WORKSPACES_HIDDEN
+      ? commands.filter((command) => command.id !== "workspace.new" && command.id !== "workspace.toggle")
+      : commands
   })
 
   function connectProvider() {
@@ -2230,7 +2233,7 @@ export default function Layout(props: ParentProps) {
                 }
               >
               <Show
-                when={workspacesEnabled()}
+                when={!WORKSPACES_HIDDEN && workspacesEnabled()}
                 fallback={
                   <>
                     <div class="shrink-0 pt-4 pb-1 px-2 text-12-medium text-text-weak uppercase tracking-wide">

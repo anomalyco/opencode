@@ -40,6 +40,7 @@ import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
+import { OpenLocalFileProvider } from "@opencode-ai/ui/context/file"
 import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
@@ -766,26 +767,6 @@ export default function Page() {
     globalSync.set("project", [...list, next])
   }
 
-  const gitMutation = useMutation(() => ({
-    mutationFn: () => sdk.client.project.initGit(),
-    onSuccess: (x) => {
-      if (!x.data) return
-      upsert(x.data)
-    },
-    onError: (err) => {
-      showToast({
-        variant: "error",
-        title: language.t("common.requestFailed"),
-        description: formatServerError(err, language.t),
-      })
-    },
-  }))
-
-  function initGit() {
-    if (gitMutation.isPending) return
-    gitMutation.mutate()
-  }
-
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
   let dockHeight = 0
@@ -1137,6 +1118,7 @@ export default function Page() {
     openTab: tabs().open,
     setActive: tabs().setActive,
     loadFile: file.load,
+    setSelectedLines: file.setSelectedLines,
   })
 
   const changesTitle = () => {
@@ -1169,22 +1151,6 @@ export default function Page() {
     </div>
   )
 
-  const createGit = (input: { emptyClass: string }) => (
-    <div class={input.emptyClass}>
-      <div class="flex flex-col gap-3">
-        <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
-        <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
-          {language.t("session.review.noVcs.createGit.description")}
-        </div>
-      </div>
-      <Button size="large" disabled={gitMutation.isPending} onClick={initGit}>
-        {gitMutation.isPending
-          ? language.t("session.review.noVcs.createGit.actionLoading")
-          : language.t("session.review.noVcs.createGit.action")}
-      </Button>
-    </div>
-  )
-
   const reviewEmptyText = createMemo(() => {
     if (store.changes === "git") return language.t("session.review.noUncommittedChanges")
     if (store.changes === "branch") return language.t("session.review.noBranchChanges")
@@ -1198,7 +1164,6 @@ export default function Page() {
     }
 
     if (store.changes === "turn") {
-      if (nogit()) return createGit(input)
       return empty(reviewEmptyText())
     }
 
@@ -1885,6 +1850,7 @@ export default function Page() {
   })
 
   return (
+    <OpenLocalFileProvider value={openReviewFile}>
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
@@ -2063,5 +2029,6 @@ export default function Page() {
 
       <TerminalPanel />
     </div>
+    </OpenLocalFileProvider>
   )
 }
