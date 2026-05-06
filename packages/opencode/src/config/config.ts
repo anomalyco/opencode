@@ -203,6 +203,12 @@ export const Info = Schema.Struct({
   instructions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Additional instruction files or patterns to include",
   }),
+  configBoundary: Schema.optional(Schema.Literals(["current", "home", "root", "none"])).annotate({
+    description:
+      "Controls how far up the filesystem OpenCode searches for parent configs and instruction files. " +
+      "'current' (default) stops at the git worktree root. 'home' walks up to $HOME (useful for client-level MCP/AGENTS.md inheritance). " +
+      "'root' walks to /. 'none' disables parent config search entirely.",
+  }),
   layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermission.Info),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
@@ -279,6 +285,21 @@ export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
   plugin_origins?: ConfigPlugin.Origin[]
+}
+
+export function getConfigStop(boundary?: Info["configBoundary"], worktree?: string): string {
+  const effective = Flag.OPENCODE_CONFIG_BOUNDARY ?? boundary ?? "current"
+  switch (effective) {
+    case "none":
+      return worktree ?? "/"
+    case "home":
+      return Global.Path.home
+    case "root":
+      return "/"
+    case "current":
+    default:
+      return worktree ?? "/"
+  }
 }
 
 type State = {
@@ -372,6 +393,13 @@ export const layer = Layer.effect(
       if (!("path" in options)) return data
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
+      if (data.instructions) {
+        const configDir = path.dirname(options.path)
+        data.instructions = data.instructions.map((instruction) => {
+          if (!instruction.startsWith("./") && !instruction.startsWith("../")) return instruction
+          return path.resolve(configDir, instruction)
+        })
+      }
       if (!data.$schema) {
         data.$schema = "https://opencode.ai/config.json"
         const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
@@ -515,8 +543,10 @@ export const layer = Layer.effect(
           log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
+        const stop = getConfigStop(result.configBoundary, ctx.worktree)
+
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, stop).pipe(Effect.orDie)) {
             yield* merge(file, yield* loadFile(file), "local")
           }
         }
@@ -525,7 +555,7 @@ export const layer = Layer.effect(
         result.mode = result.mode || {}
         result.plugin = result.plugin || []
 
-        const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
+        const directories = yield* ConfigPaths.directories(ctx.directory, stop)
 
         if (Flag.OPENCODE_CONFIG_DIR) {
           log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
