@@ -15,6 +15,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
+import * as ApiError from "../errors"
 import { CursorQuery, Params, PtyPaths } from "../groups/pty"
 import { WebSocketTracker } from "../websocket-tracker"
 
@@ -46,7 +47,7 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
 
     const get = Effect.fn("PtyHttpApi.get")(function* (ctx: { params: { ptyID: PtyID } }) {
       const info = yield* pty.get(ctx.params.ptyID)
-      if (!info) return yield* new HttpApiError.NotFound({})
+      if (!info) return yield* ApiError.notFound("Session not found")
       return info
     })
 
@@ -58,7 +59,7 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
         ...ctx.payload,
         size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
       })
-      if (!info) return yield* new HttpApiError.NotFound({})
+      if (!info) return yield* ApiError.notFound("Session not found")
       return info
     })
 
@@ -71,7 +72,7 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
       const request = yield* HttpServerRequest.HttpServerRequest
       if (request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE || !validOrigin(request, cors))
         return yield* new HttpApiError.Forbidden({})
-      if (!(yield* pty.get(ctx.params.ptyID))) return yield* new HttpApiError.NotFound({})
+      if (!(yield* pty.get(ctx.params.ptyID))) return yield* ApiError.notFound("Session not found")
       return yield* tickets.issue({ ptyID: ctx.params.ptyID, ...(yield* PtyTicket.scope) })
     })
 
