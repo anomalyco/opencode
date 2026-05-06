@@ -227,6 +227,12 @@ function reasoningEffort(model: Provider.Model) {
   return string(reasoning?.effort)
 }
 
+function serviceTier(model: Provider.Model) {
+  const tier = string(model.options.serviceTier)
+  if (tier === "fast" || tier === "flex") return tier
+  if (tier === "priority") return "fast"
+}
+
 export async function run(input: Input) {
   if (input.abort?.aborted) throw new Error("Codex app-server run aborted")
   const command = resolveCommand(string(input.model.options.command))
@@ -550,7 +556,7 @@ export async function run(input: Input) {
         modelProvider: modelProvider(input.model),
         approvalPolicy: string(input.model.options.approvalPolicy) ?? "never",
         sandbox: string(input.model.options.sandbox) ?? "workspace-write",
-        serviceTier: string(input.model.options.serviceTier) ?? null,
+        serviceTier: serviceTier(input.model) ?? null,
         developerInstructions: input.system.join("\n\n") || null,
         sessionStartSource: "startup",
         threadSource: "user",
@@ -566,7 +572,7 @@ export async function run(input: Input) {
         input: [{ type: "text", text: input.prompt }],
         model: input.model.api.id,
         effort: reasoningEffort(input.model) ?? null,
-        serviceTier: string(input.model.options.serviceTier) ?? null,
+        serviceTier: serviceTier(input.model) ?? null,
         outputSchema: input.outputSchema ?? null,
       }),
       closed,

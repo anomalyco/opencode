@@ -1085,7 +1085,16 @@ function codexCliModel(input: { id: string; name: string; release_date: string; 
     release_date: input.release_date,
     variants: {},
   }
-  model.variants = mapValues(mergeDeep({ fast: { reasoningEffort: "low" } }, ProviderTransform.variants(model)), (v) => v)
+  model.variants = mapValues(
+    mergeDeep(
+      {
+        fast: { reasoningEffort: "low", serviceTier: "fast" },
+        flex: { serviceTier: "flex" },
+      },
+      ProviderTransform.variants(model),
+    ),
+    (v) => v,
+  )
   return model
 }
 
