@@ -705,8 +705,17 @@ export function MessageTimeline(props: {
       mutationFrame = requestAnimationFrame(flush)
     }
 
+    const activeID = activeMessageID()
+    let target: Element = body
+    if (activeID) {
+      const key = typeof CSS === "undefined" ? activeID : CSS.escape(activeID)
+      const el = body.querySelector(`[data-message-id="${key}"]`)
+      if (el) target = el
+      else if (body.lastElementChild) target = body.lastElementChild
+    }
+
     const observer = new MutationObserver(schedule)
-    observer.observe(body, {
+    observer.observe(target, {
       childList: true,
       subtree: true,
       characterData: true,
@@ -1614,6 +1623,7 @@ export function MessageTimeline(props: {
       if (mathMode() !== "turn") return "full"
       return eager() ? "full" : "defer"
     })
+    const skipRender = createMemo(() => isWorking() && !eager())
     const messages = createMemo<MessageType[]>((prev?: MessageType[]) => {
       if (active()) return turnMessages(sessionMessages(), item.messageID)
       const next = turnMessages(sessionMessages(), item.messageID)
@@ -1709,6 +1719,7 @@ export function MessageTimeline(props: {
         data-message-id={item.messageID}
         classList={{
           "min-w-0 w-full max-w-full": true,
+          "turn-content-skip": skipRender(),
         }}
         style={itemStyle(props.centered)}
       >

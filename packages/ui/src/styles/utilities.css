@@ -138,3 +138,10 @@
   -webkit-backdrop-filter: blur(40px);
   backdrop-filter: blur(40px);
 }
+
+/* Streaming optimization: skip rendering for off-screen inactive turns
+   while preserving box model so scrollHeight / sticky positioning unchanged */
+.turn-content-skip {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 680px;
+}
