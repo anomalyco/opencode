@@ -259,3 +259,122 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
   expect(models.claude.api.url).toBe("https://copilot-api.ghe.example.com")
   expect(models.claude.api.npm).toBe("@ai-sdk/github-copilot")
 })
+
+test("remaps fallback oauth model urls using proxy-ep from the copilot token", async () => {
+  globalThis.fetch = mock(() => Promise.reject(new Error("timeout"))) as unknown as typeof fetch
+
+  const hooks = await CopilotAuthPlugin({
+    client: {} as never,
+    project: {} as never,
+    directory: "",
+    worktree: "",
+    experimental_workspace: {
+      register() {},
+    },
+    serverUrl: new URL("https://example.com"),
+    $: {} as never,
+  })
+
+  const models = await hooks.provider!.models!(
+    {
+      id: "github-copilot",
+      models: {
+        claude: {
+          id: "claude",
+          providerID: "github-copilot",
+          api: {
+            id: "claude-sonnet-4.5",
+            url: "https://api.githubcopilot.com/v1",
+            npm: "@ai-sdk/anthropic",
+          },
+        },
+      },
+    } as never,
+    {
+      auth: {
+        type: "oauth",
+        refresh: "github-token",
+        access: "tid=123;exp=456;proxy-ep=proxy.individual.githubcopilot.com;foo=bar",
+        expires: Date.now() + 60_000,
+      } as never,
+    },
+  )
+
+  expect(models.claude.api.url).toBe("https://api.individual.githubcopilot.com")
+  expect(models.claude.api.npm).toBe("@ai-sdk/github-copilot")
+})
+
+test("oauth loader refreshes the copilot token and uses the refreshed base headers", async () => {
+  const setAuth = mock(async () => undefined)
+  const requests: Array<{ url: string; headers: Headers }> = []
+
+  globalThis.fetch = mock(async (request: RequestInfo | URL, init?: RequestInit) => {
+    const url = request instanceof URL ? request.href : typeof request === "string" ? request : request.url
+    const headers = new Headers(init?.headers)
+    requests.push({ url, headers })
+
+    if (url === "https://api.github.com/copilot_internal/v2/token") {
+      return new Response(
+        JSON.stringify({
+          token: "tid=123;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;foo=bar",
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        { status: 200 },
+      )
+    }
+
+    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+  }) as unknown as typeof fetch
+
+  const hooks = await CopilotAuthPlugin({
+    client: {
+      auth: {
+        set: setAuth,
+      },
+    } as never,
+    project: {} as never,
+    directory: "",
+    worktree: "",
+    experimental_workspace: {
+      register() {},
+    },
+    serverUrl: new URL("https://example.com"),
+    $: {} as never,
+  })
+
+  const loader = await hooks.auth!.loader!(
+    async () => ({
+      type: "oauth",
+      refresh: "github-token",
+      access: "",
+      expires: 0,
+    }),
+    {
+      id: "github-copilot",
+      models: {},
+    } as never,
+  )
+
+  await loader.fetch!("https://api.individual.githubcopilot.com/chat/completions", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer dummy",
+      "x-api-key": "dummy",
+    },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: "hello" }],
+    }),
+  })
+
+  expect(requests[0]?.url).toBe("https://api.github.com/copilot_internal/v2/token")
+  expect(requests[0]?.headers.get("authorization")).toBe("Bearer github-token")
+
+  expect(requests[1]?.url).toBe("https://api.individual.githubcopilot.com/chat/completions")
+  expect(requests[1]?.headers.get("authorization")).toBe(
+    "Bearer tid=123;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;foo=bar",
+  )
+  expect(requests[1]?.headers.get("openai-intent")).toBe("conversation-edits")
+  expect(requests[1]?.headers.get("x-initiator")).toBe("user")
+
+  expect(setAuth).toHaveBeenCalledTimes(1)
+})
