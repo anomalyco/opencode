@@ -16,10 +16,6 @@ export default $config({
           version: "0.49.0",
           apiKey: process.env.HONEYCOMB_API_KEY!,
         },
-        incident: {
-          version: "5.35.0",
-          apiKey: process.env.INCIDENT_API_KEY!,
-        },
       },
     }
   },

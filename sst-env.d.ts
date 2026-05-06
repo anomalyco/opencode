@@ -50,7 +50,7 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
-    "DISCORD_INCIDENT_WEBHOOK_URL": {
+    "DISCORD_ALERT_WEBHOOK_URL": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -114,7 +114,7 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "INCIDENT_WEBHOOK_SIGNING_SECRET": {
+    "HONEYCOMB_WEBHOOK_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }
