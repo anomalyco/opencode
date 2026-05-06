@@ -1,6 +1,7 @@
 import { BoxRenderable, RGBA, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
+import { statSync, readdirSync } from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Filesystem } from "@/util/filesystem"
@@ -24,7 +25,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions, useKeyboard, type JSX } from "@opentui/solid"
 import * as Editor from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import * as Clipboard from "../../util/clipboard"
@@ -598,6 +599,103 @@ export function Prompt(props: PromptProps) {
         },
       },
     ]
+  })
+
+  const [shellCompletions, setShellCompletions] = createSignal<string[]>([])
+  const [shellCompletionBase, setShellCompletionBase] = createSignal("")
+
+  useKeyboard((evt) => {
+    if (store.mode !== "shell" || evt.name !== "tab" || evt.ctrl || evt.meta) return
+    evt.preventDefault()
+    evt.stopPropagation()
+    if (!input) return
+
+    const text = input.plainText
+    const words = text.split(/\s+/)
+    const partial = words[words.length - 1] || ""
+    const partialIndex = text.lastIndexOf(partial)
+    if (partial.length === 0 || partialIndex < 0) return
+
+    const apply = (c: string) => {
+      const newText = text.substring(0, partialIndex) + c
+      input.setText(newText)
+      setStore("prompt", "input", newText)
+      input.cursorOffset = Bun.stringWidth(newText)
+    }
+    const isDir = (p: string) => { try { return statSync(p).isDirectory() } catch { return false } }
+
+    if (partial === shellCompletionBase() && shellCompletions().length > 0) {
+      const base = partial.substring(0, partial.lastIndexOf("/") + 1)
+      const display = shellCompletions().slice(0, 8).map((s) => base ? s.slice(base.length) : s).join("  ")
+      toast.show({ message: display + (shellCompletions().length > 8 ? `  ...(${shellCompletions().length} total)` : ""), variant: "info", duration: 3000 })
+      return
+    }
+
+    try {
+      const isFirstWord = words.length === 1
+      let completions: string[] = []
+
+      let dir: string
+      let searchPrefix: string
+      if (partial.endsWith("/")) {
+        dir = partial.slice(0, -1) || "/"
+        searchPrefix = ""
+      } else {
+        dir = path.dirname(partial) || "."
+        searchPrefix = path.basename(partial)
+      }
+      try {
+        const entries = readdirSync(dir)
+        completions = entries
+          .filter((e) => !searchPrefix || e.startsWith(searchPrefix))
+          .map((e) => partial.endsWith("/") ? partial + e : path.join(dir, e))
+      } catch (e) {
+        toast.show({ message: `readdir failed: ${e}`, variant: "error", duration: 3000 })
+      }
+
+      if (isFirstWord && completions.length === 0) {
+        try {
+          const proc = Bun.spawnSync({ cmd: ["bash", "-c", `compgen -c -- ${JSON.stringify(partial)}`], stdout: "pipe", stderr: "pipe" })
+          const output = new TextDecoder().decode(proc.stdout)
+          completions = [...new Set(output.split("\n").filter((s) => s.trim().length > 0))]
+        } catch {}
+      }
+
+      completions = [...new Set(completions)]
+      if (completions.length === 0) {
+        toast.show({ message: `no matches for "${partial}"`, variant: "info", duration: 2000 })
+        return
+      }
+
+      if (completions.length === 1) {
+        const suffix = isDir(completions[0]) && !completions[0].endsWith("/") ? "/" : ""
+        const applied = completions[0] + suffix
+        apply(applied)
+        setShellCompletionBase(applied)
+        setShellCompletions([])
+        return
+      }
+
+      let prefix = completions[0]
+      for (let i = 1; i < completions.length; i++) {
+        while (!completions[i].startsWith(prefix)) prefix = prefix.slice(0, -1)
+        if (prefix.length <= partial.length) break
+      }
+
+      if (prefix.length > partial.length) {
+        apply(prefix)
+        setShellCompletionBase(prefix)
+      } else {
+        setShellCompletionBase(partial)
+      }
+
+      setShellCompletions(completions)
+      const base = partial.substring(0, partial.lastIndexOf("/") + 1)
+      const display = completions.slice(0, 8).map((s) => base ? s.slice(base.length) : s).join("  ")
+      toast.show({ message: display + (completions.length > 8 ? `  ...(${completions.length} total)` : ""), variant: "info", duration: 3000 })
+    } catch (e) {
+      toast.show({ message: `tab complete error: ${e}`, variant: "error", duration: 5000 })
+    }
   })
 
   const ref: PromptRef = {
