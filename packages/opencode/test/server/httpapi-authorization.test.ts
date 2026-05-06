@@ -1,9 +1,9 @@
 import { NodeHttpServer } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi"
+import { ServerAuth } from "../../src/server/auth"
 import { Authorization, authorizationLayer } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { testEffect } from "../lib/effect"
 
@@ -13,58 +13,36 @@ const Api = HttpApi.make("test-authorization").add(
       HttpApiEndpoint.get("probe", "/probe", {
         success: Schema.String,
       }),
+      HttpApiEndpoint.get("missing", "/missing", {
+        success: Schema.String,
+        error: HttpApiError.NotFound,
+      }),
     )
     .middleware(Authorization),
 )
 
-const handlers = HttpApiBuilder.group(Api, "test", (handlers) => handlers.handle("probe", () => Effect.succeed("ok")))
+const handlers = HttpApiBuilder.group(Api, "test", (handlers) =>
+  handlers
+    .handle("probe", () => Effect.succeed("ok"))
+    .handle("missing", () => Effect.fail(new HttpApiError.NotFound({}))),
+)
 
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(Api).pipe(Layer.provide(handlers), Layer.provide(authorizationLayer)),
   { disableListenLog: true, disableLogger: true },
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
-const testStateLayer = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const original = {
-      OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-      OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
-    }
-    Flag.OPENCODE_SERVER_PASSWORD = undefined
-    Flag.OPENCODE_SERVER_USERNAME = undefined
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-        Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-      }),
-    )
-  }),
-)
+const noAuthLayer = ServerAuth.Config.layer({ password: Option.none(), username: "opencode" })
+const secretLayer = ServerAuth.Config.layer({ password: Option.some("secret"), username: "opencode" })
+const kitSecretLayer = ServerAuth.Config.layer({ password: Option.some("secret"), username: "kit" })
 
-const it = testEffect(apiLayer.pipe(Layer.provideMerge(testStateLayer)))
+const it = testEffect(apiLayer.pipe(Layer.provide(noAuthLayer)))
+const itSecret = testEffect(apiLayer.pipe(Layer.provide(secretLayer)))
+const itKitSecret = testEffect(apiLayer.pipe(Layer.provide(kitSecretLayer)))
 
-const basic = (username: string, password: string) =>
-  `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+const basic = (username: string, password: string) => ServerAuth.header({ username, password }) ?? ""
 
 const token = (username: string, password: string) => Buffer.from(`${username}:${password}`).toString("base64")
-
-const useAuth = (input: { password: string; username?: string }) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const original = {
-        OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-        OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
-      }
-      Flag.OPENCODE_SERVER_PASSWORD = input.password
-      Flag.OPENCODE_SERVER_USERNAME = input.username
-      return original
-    }),
-    (original) =>
-      Effect.sync(() => {
-        Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-        Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-      }),
-  )
 
 const getProbe = (headers?: Record<string, string>) =>
   HttpClientRequest.get("/probe").pipe(
@@ -82,10 +60,8 @@ describe("HttpApi authorization middleware", () => {
     }),
   )
 
-  it.live("requires configured password for basic auth", () =>
+  itSecret.live("requires configured password for basic auth", () =>
     Effect.gen(function* () {
-      yield* useAuth({ password: "secret" })
-
       const [missing, badPassword, good] = yield* Effect.all(
         [
           getProbe(),
@@ -101,10 +77,8 @@ describe("HttpApi authorization middleware", () => {
     }),
   )
 
-  it.live("respects configured basic auth username", () =>
+  itKitSecret.live("respects configured basic auth username", () =>
     Effect.gen(function* () {
-      yield* useAuth({ username: "kit", password: "secret" })
-
       const [defaultUser, configuredUser] = yield* Effect.all(
         [getProbe({ authorization: basic("opencode", "secret") }), getProbe({ authorization: basic("kit", "secret") })],
         { concurrency: "unbounded" },
@@ -115,20 +89,45 @@ describe("HttpApi authorization middleware", () => {
     }),
   )
 
-  it.live("accepts auth token query credentials", () =>
+  itSecret.live("accepts auth token query credentials", () =>
     Effect.gen(function* () {
-      yield* useAuth({ password: "secret" })
-
       const response = yield* HttpClient.get(`/probe?auth_token=${encodeURIComponent(token("opencode", "secret"))}`)
 
       expect(response.status).toBe(200)
     }),
   )
 
-  it.live("rejects malformed auth token query credentials", () =>
+  itSecret.live("prefers auth token query credentials over basic auth", () =>
     Effect.gen(function* () {
-      yield* useAuth({ password: "secret" })
+      const response = yield* HttpClientRequest.get(
+        `/probe?auth_token=${encodeURIComponent(token("opencode", "secret"))}`,
+      ).pipe(HttpClientRequest.setHeader("authorization", basic("opencode", "wrong")), HttpClient.execute)
 
+      expect(response.status).toBe(200)
+    }),
+  )
+
+  itSecret.live("preserves handler errors when basic auth succeeds", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.get("/missing").pipe(
+        HttpClientRequest.setHeader("authorization", basic("opencode", "secret")),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(404)
+    }),
+  )
+
+  itSecret.live("preserves handler errors when auth token query succeeds", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.get(`/missing?auth_token=${encodeURIComponent(token("opencode", "secret"))}`)
+
+      expect(response.status).toBe(404)
+    }),
+  )
+
+  itSecret.live("rejects malformed auth token query credentials", () =>
+    Effect.gen(function* () {
       const response = yield* HttpClient.get("/probe?auth_token=not-base64")
 
       expect(response.status).toBe(401)

@@ -5,6 +5,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 
@@ -41,7 +42,7 @@ describe("tool.webfetch", () => {
     await withFetch(
       () => new Response(bytes, { status: 200, headers: { "content-type": "IMAGE/PNG; charset=binary" } }),
       async (url) => {
-        await Instance.provide({
+        await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
             const result = await exec({ url: new URL("/image.png", url).toString(), format: "markdown" })
@@ -69,7 +70,7 @@ describe("tool.webfetch", () => {
           headers: { "content-type": "image/svg+xml; charset=UTF-8" },
         }),
       async (url) => {
-        await Instance.provide({
+        await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
             const result = await exec({ url: new URL("/image.svg", url).toString(), format: "html" })
@@ -89,7 +90,7 @@ describe("tool.webfetch", () => {
           headers: { "content-type": "text/plain; charset=utf-8" },
         }),
       async (url) => {
-        await Instance.provide({
+        await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
             const result = await exec({ url: new URL("/file.txt", url).toString(), format: "text" })

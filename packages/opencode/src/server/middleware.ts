@@ -11,6 +11,9 @@ import { basicAuth } from "hono/basic-auth"
 import { cors } from "hono/cors"
 import { compress } from "hono/compress"
 import * as ServerBackend from "./backend"
+import { isAllowedCorsOrigin, type CorsOptions } from "./cors"
+import { isPtyConnectPath, PTY_CONNECT_TICKET_QUERY } from "./shared/pty-ticket"
+import { isPublicUIPath } from "./shared/public-ui"
 
 const log = Log.create({ service: "server" })
 
@@ -43,6 +46,8 @@ export const AuthMiddleware: MiddlewareHandler = (c, next) => {
   if (c.req.method === "OPTIONS") return next()
   const password = Flag.OPENCODE_SERVER_PASSWORD
   if (!password) return next()
+  if (isPublicUIPath(c.req.method, c.req.path)) return next()
+  if (isPtyConnectPath(c.req.path) && c.req.query(PTY_CONNECT_TICKET_QUERY)) return next()
   const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
 
   if (c.req.query("auth_token")) c.req.raw.headers.set("authorization", `Basic ${c.req.query("auth_token")}`)
@@ -57,6 +62,7 @@ export function LoggerMiddleware(backendAttributes: ServerBackend.Attributes): M
     const attributes = {
       method: c.req.method,
       path: c.req.path,
+      // If this logger grows full-URL fields, redact auth_token and ticket query params.
       ...backendAttributes,
     }
     log.info("request", attributes)
@@ -66,19 +72,11 @@ export function LoggerMiddleware(backendAttributes: ServerBackend.Attributes): M
   }
 }
 
-export function CorsMiddleware(opts?: { cors?: string[] }): MiddlewareHandler {
+export function CorsMiddleware(opts?: CorsOptions): MiddlewareHandler {
   return cors({
     maxAge: 86_400,
     origin(input) {
-      if (!input) return
-
-      if (input.startsWith("http://localhost:")) return input
-      if (input.startsWith("http://127.0.0.1:")) return input
-      if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
-        return input
-
-      if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
-      if (opts?.cors?.includes(input)) return input
+      if (isAllowedCorsOrigin(input, opts)) return input
     },
   })
 }

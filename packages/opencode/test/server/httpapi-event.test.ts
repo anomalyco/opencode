@@ -5,15 +5,15 @@ import { Server } from "../../src/server/server"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return Server.Default().app
+function app(experimental = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 
 async function readFirstChunk(response: Response) {
@@ -27,9 +27,17 @@ async function readFirstChunk(response: Response) {
   return new TextDecoder().decode(result.value)
 }
 
+async function readFirstEvent(response: Response) {
+  return JSON.parse((await readFirstChunk(response)).replace(/^data: /, "")) as {
+    id?: string
+    type: string
+    properties: Record<string, unknown>
+  }
+}
+
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
@@ -43,6 +51,18 @@ describe("event HttpApi bridge", () => {
     expect(response.headers.get("cache-control")).toBe("no-cache, no-transform")
     expect(response.headers.get("x-accel-buffering")).toBe("no")
     expect(response.headers.get("x-content-type-options")).toBe("nosniff")
-    expect(await readFirstChunk(response)).toContain('data: {"type":"server.connected","properties":{}}\n\n')
+    expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
+  })
+
+  test("matches legacy first event frame", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
+    const legacy = await app(false).request(EventPaths.event, { headers })
+    const effect = await app(true).request(EventPaths.event, { headers })
+
+    const legacyEvent = await readFirstEvent(legacy)
+    const effectEvent = await readFirstEvent(effect)
+    expect(effectEvent.type).toBe(legacyEvent.type)
+    expect(effectEvent.properties).toEqual(legacyEvent.properties)
   })
 })

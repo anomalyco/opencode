@@ -10,13 +10,16 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
+import { Bus } from "@/bus"
+import { Command } from "@/command"
+import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer, Path, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
 import { serviceUse } from "@/effect/service-use"
 
 const log = Log.create({ service: "project" })
@@ -24,13 +27,13 @@ const log = Log.create({ service: "project" })
 const ProjectVcs = Schema.Literal("git")
 
 const ProjectIcon = Schema.Struct({
-  url: Schema.optional(Schema.String),
-  override: Schema.optional(Schema.String),
-  color: Schema.optional(Schema.String),
+  url: optionalOmitUndefined(Schema.String),
+  override: optionalOmitUndefined(Schema.String),
+  color: optionalOmitUndefined(Schema.String),
 })
 
 const ProjectCommands = Schema.Struct({
-  start: Schema.optional(
+  start: optionalOmitUndefined(
     Schema.String.annotate({ description: "Startup script to run when creating a new workspace (worktree)" }),
   ),
 })
@@ -38,16 +41,16 @@ const ProjectCommands = Schema.Struct({
 const ProjectTime = Schema.Struct({
   created: NonNegativeInt,
   updated: NonNegativeInt,
-  initialized: Schema.optional(NonNegativeInt),
+  initialized: optionalOmitUndefined(NonNegativeInt),
 })
 
 export const Info = Schema.Struct({
   id: ProjectID,
   worktree: Schema.String,
-  vcs: Schema.optional(ProjectVcs),
-  name: Schema.optional(Schema.String),
-  icon: Schema.optional(ProjectIcon),
-  commands: Schema.optional(ProjectCommands),
+  vcs: optionalOmitUndefined(ProjectVcs),
+  name: optionalOmitUndefined(Schema.String),
+  icon: optionalOmitUndefined(ProjectIcon),
+  commands: optionalOmitUndefined(ProjectCommands),
   time: ProjectTime,
   sandboxes: Schema.Array(Schema.String),
 })
@@ -108,6 +111,12 @@ export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePa
 // ---------------------------------------------------------------------------
 
 export interface Interface {
+  /**
+   * Per-instance setup. Subscribes to the `/init` slash command for the
+   * current instance and stamps the project's initialized timestamp when it
+   * fires. Subscription lifetime is tied to the per-instance state scope.
+   */
+  readonly init: () => Effect.Effect<void>
   readonly fromDirectory: (directory: string) => Effect.Effect<{ project: Info; sandbox: string }>
   readonly discover: (input: Info) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
@@ -127,13 +136,14 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Bus.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const pathSvc = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const bus = yield* Bus.Service
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -417,6 +427,21 @@ export const layer: Layer.Layer<
       )
     })
 
+    const initState = yield* InstanceState.make(
+      Effect.fn("Project.initState")(function* (ctx) {
+        yield* bus.subscribe(Command.Event.Executed).pipe(
+          Stream.runForEach((payload) =>
+            payload.properties.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void,
+          ),
+          Effect.forkScoped,
+        )
+      }),
+    )
+
+    const init = Effect.fn("Project.init")(function* () {
+      yield* InstanceState.get(initState)
+    })
+
     const sandboxes = Effect.fn("Project.sandboxes")(function* (id: ProjectID) {
       const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
       if (!row) return []
@@ -466,6 +491,7 @@ export const layer: Layer.Layer<
     })
 
     return Service.of({
+      init,
       fromDirectory,
       discover,
       list,
@@ -481,6 +507,7 @@ export const layer: Layer.Layer<
 )
 
 export const defaultLayer = layer.pipe(
+  Layer.provide(Bus.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
