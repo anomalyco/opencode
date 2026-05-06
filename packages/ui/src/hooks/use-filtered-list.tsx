@@ -44,7 +44,24 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
               )
               .map((x) => x.obj.target) as T[]
           }
-          return fuzzysort.go(needle, x, { keys: props.filterKeys! }).map((x) => x.obj)
+          // Normalize the values referenced by `filterKeys` to NFC so the comparison
+          // sees the same Unicode form as the (already NFC) needle. Without this,
+          // fuzzysort reads raw item strings and an NFD path returned by file search
+          // never matches an NFC query typed via an IME.
+          const keys = props.filterKeys!.map((path) => {
+            const segments = path.includes(".") ? path.split(".") : undefined
+            return (item: T) => {
+              const raw = segments
+                ? segments.reduce<unknown>(
+                    (acc, seg) => (acc == null ? acc : (acc as Record<string, unknown>)[seg]),
+                    item,
+                  )
+                : (item as Record<string, unknown>)[path]
+              if (typeof raw === "string") return raw.normalize("NFC")
+              return raw == null ? "" : String(raw)
+            }
+          })
+          return fuzzysort.go(needle, x, { keys }).map((x) => x.obj)
         },
         groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
         entries(),
