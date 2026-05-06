@@ -35,7 +35,7 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
-    "DISCORD_ALERT_WEBHOOK_URL": {
+    "DISCORD_INCIDENT_WEBHOOK_URL": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -91,8 +91,8 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "HONEYCOMB_WEBHOOK_SECRET": {
-      "type": "sst.sst.Secret"
+    "HoneycombWebhookSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
       "value": string
     }
     "R2AccessKey": {

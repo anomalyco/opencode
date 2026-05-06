@@ -47,7 +47,7 @@ const postDiscordMessage = async (payload: z.infer<typeof HoneycombWebhookPayloa
     .filter((line) => line !== undefined && line !== "")
     .join("\n")
 
-  return fetch(Resource.DISCORD_ALERT_WEBHOOK_URL.value, {
+  return fetch(Resource.DISCORD_INCIDENT_WEBHOOK_URL.value, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

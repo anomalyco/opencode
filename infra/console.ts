@@ -232,7 +232,7 @@ const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 const bucket = new sst.cloudflare.Bucket("ZenData")
 const bucketNew = new sst.cloudflare.Bucket("ZenDataNew")
 
-const DISCORD_ALERT_WEBHOOK_URL = new sst.Secret("DISCORD_ALERT_WEBHOOK_URL")
+const DISCORD_INCIDENT_WEBHOOK_URL = new sst.Secret("DISCORD_INCIDENT_WEBHOOK_URL")
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
 
@@ -254,7 +254,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     database,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
-    DISCORD_ALERT_WEBHOOK_URL,
+    DISCORD_INCIDENT_WEBHOOK_URL,
     SECRET.HoneycombWebhookSecret,
     STRIPE_SECRET_KEY,
     EMAILOCTOPUS_API_KEY,
