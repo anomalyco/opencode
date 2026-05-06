@@ -1,61 +1,87 @@
-diff --git a/dist/index.mjs b/dist/index.mjs
-index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..1f8e7373ce03910cd5bfe7540ec189e63e182898 100644
---- a/dist/index.mjs
-+++ b/dist/index.mjs
-@@ -653,6 +653,7 @@
-       fetch: this.config.fetch
-     });
-     const toolCalls = [];
-+    const pendingToolCallIds = {};
-     let finishReason = {
-       unified: "other",
-       raw: void 0
-@@ -753,25 +754,19 @@
-               for (const toolCallDelta of delta.tool_calls) {
-                 const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
-                 if (toolCalls[index] == null) {
--                  if (toolCallDelta.id == null) {
--                    throw new InvalidResponseDataError({
--                      data: toolCallDelta,
--                      message: `Expected 'id' to be a string.`
--                    });
--                  }
-+                  const toolCallId = toolCallDelta.id ?? pendingToolCallIds[index] ?? generateId();
-                   if (((_d = toolCallDelta.function) == null ? void 0 : _d.name) == null) {
--                    throw new InvalidResponseDataError({
--                      data: toolCallDelta,
--                      message: `Expected 'function.name' to be a string.`
--                    });
-+                    pendingToolCallIds[index] = toolCallId;
-+                    continue;
-                   }
-+                  delete pendingToolCallIds[index];
-                   controller.enqueue({
-                     type: "tool-input-start",
--                    id: toolCallDelta.id,
-+                    id: toolCallId,
-                     toolName: toolCallDelta.function.name
-                   });
-                   toolCalls[index] = {
--                    id: toolCallDelta.id,
-+                    id: toolCallId,
-                     type: "function",
-                     function: {
-                       name: toolCallDelta.function.name,
 diff --git a/dist/index.js b/dist/index.js
-index dca128d3a790378c51a24a16d92585178343b278..7388637b492b0ea3c376be8d1253add8ae7f4d5f 100644
+index 168bec7..19170c6 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -666,6 +666,7 @@
-       fetch: this.config.fetch
+@@ -611,6 +611,14 @@ var OpenAICompatibleChatLanguageModel = class {
+         });
+       }
+     }
++    if (choice.message.function_call != null && choice.message.tool_calls == null) {
++      content.push({
++        type: "tool-call",
++        toolCallId: (0, import_provider_utils2.generateId)(),
++        toolName: choice.message.function_call.name,
++        input: choice.message.function_call.arguments
++      });
++    }
+     const providerMetadata = {
+       [metadataKey]: {},
+       ...await ((_f = (_e = this.config.metadataExtractor) == null ? void 0 : _e.extractMetadata) == null ? void 0 : _f.call(_e, {
+@@ -644,6 +652,14 @@ var OpenAICompatibleChatLanguageModel = class {
+   async doStream(options) {
+     var _a;
+     const { args, warnings, metadataKey } = await this.getArgs({ ...options });
++    const requestUrl = this.config.url({
++      path: "/chat/completions",
++      modelId: this.modelId
++    });
++    const requestHeaders = (0, import_provider_utils2.combineHeaders)(this.config.headers(), options.headers);
++    const fallbackBody = this.transformRequestBody({
++      ...args
++    });
+     const body = this.transformRequestBody({
+       ...args,
+       stream: true,
+@@ -651,21 +667,22 @@ var OpenAICompatibleChatLanguageModel = class {
+       stream_options: this.config.includeUsage ? { include_usage: true } : void 0
+     });
+     const metadataExtractor = (_a = this.config.metadataExtractor) == null ? void 0 : _a.createStreamExtractor();
++    const failedResponseHandler = this.failedResponseHandler;
++    const fetch = this.config.fetch;
+     const { responseHeaders, value: response } = await (0, import_provider_utils2.postJsonToApi)({
+-      url: this.config.url({
+-        path: "/chat/completions",
+-        modelId: this.modelId
+-      }),
+-      headers: (0, import_provider_utils2.combineHeaders)(this.config.headers(), options.headers),
++      url: requestUrl,
++      headers: requestHeaders,
+       body,
+-      failedResponseHandler: this.failedResponseHandler,
++      failedResponseHandler,
+       successfulResponseHandler: (0, import_provider_utils2.createEventSourceResponseHandler)(
+         this.chunkSchema
+       ),
+       abortSignal: options.abortSignal,
+-      fetch: this.config.fetch
++      fetch
      });
      const toolCalls = [];
 +    const pendingToolCallIds = {};
++    let sawToolCallStart = false;
      let finishReason = {
        unified: "other",
        raw: void 0
-@@ -766,25 +767,19 @@
-               for (const toolCallDelta of delta.tool_calls) {
+@@ -755,7 +772,12 @@ var OpenAICompatibleChatLanguageModel = class {
+                 delta: delta.content
+               });
+             }
+-            if (delta.tool_calls != null) {
++            const toolCallDeltas = delta.tool_calls ?? (delta.function_call ? [{
++              index: 0,
++              id: void 0,
++              function: delta.function_call
++            }] : void 0);
++            if (toolCallDeltas != null) {
+               if (isActiveReasoning) {
+                 controller.enqueue({
+                   type: "reasoning-end",
+@@ -763,28 +785,23 @@ var OpenAICompatibleChatLanguageModel = class {
+                 });
+                 isActiveReasoning = false;
+               }
+-              for (const toolCallDelta of delta.tool_calls) {
++              for (const toolCallDelta of toolCallDeltas) {
                  const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
                  if (toolCalls[index] == null) {
 -                  if (toolCallDelta.id == null) {
@@ -80,9 +106,293 @@ index dca128d3a790378c51a24a16d92585178343b278..7388637b492b0ea3c376be8d1253add8
 +                    id: toolCallId,
                      toolName: toolCallDelta.function.name
                    });
++                  sawToolCallStart = true;
                    toolCalls[index] = {
 -                    id: toolCallDelta.id,
 +                    id: toolCallId,
                      type: "function",
                      function: {
                        name: toolCallDelta.function.name,
+@@ -860,8 +877,82 @@ var OpenAICompatibleChatLanguageModel = class {
+               }
+             }
+           },
+-          flush(controller) {
++          async flush(controller) {
+             var _a2, _b, _c, _d, _e;
++            if (finishReason.unified === "tool-calls" && !sawToolCallStart) {
++              try {
++                const { value: fallbackResponse } = await (0, import_provider_utils2.postJsonToApi)({
++                  url: requestUrl,
++                  headers: requestHeaders,
++                  body: fallbackBody,
++                  failedResponseHandler,
++                  successfulResponseHandler: (0, import_provider_utils2.createJsonResponseHandler)(
++                    OpenAICompatibleChatResponseSchema
++                  ),
++                  abortSignal: options.abortSignal,
++                  fetch
++                });
++                const fallbackChoice = fallbackResponse.choices[0];
++                const fallbackToolCalls = fallbackChoice.message.tool_calls ?? (fallbackChoice.message.function_call ? [{
++                  id: void 0,
++                  function: fallbackChoice.message.function_call
++                }] : []);
++                if (usage == null && fallbackResponse.usage != null) {
++                  usage = fallbackResponse.usage;
++                }
++                for (const fallbackToolCall of fallbackToolCalls) {
++                  var _f, _g;
++                  const toolName = (_f = fallbackToolCall.function) == null ? void 0 : _f.name;
++                  if (toolName == null) {
++                    continue;
++                  }
++                  const toolCallId = fallbackToolCall.id ?? (0, import_provider_utils2.generateId)();
++                  const input = (_g = fallbackToolCall.function.arguments) != null ? _g : "";
++                  controller.enqueue({
++                    type: "tool-input-start",
++                    id: toolCallId,
++                    toolName
++                  });
++                  if (input.length > 0) {
++                    controller.enqueue({
++                      type: "tool-input-delta",
++                      id: toolCallId,
++                      delta: input
++                    });
++                  }
++                  controller.enqueue({
++                    type: "tool-input-end",
++                    id: toolCallId
++                  });
++                  controller.enqueue({
++                    type: "tool-call",
++                    toolCallId,
++                    toolName,
++                    input
++                  });
++                  sawToolCallStart = true;
++                }
++              } catch (error) {
++                finishReason = {
++                  unified: "error",
++                  raw: "tool_calls_missing_name"
++                };
++                controller.enqueue({
++                  type: "error",
++                  error: error instanceof Error ? error.message : String(error)
++                });
++              }
++              if (!sawToolCallStart) {
++                finishReason = {
++                  unified: "error",
++                  raw: "tool_calls_missing_name"
++                };
++                controller.enqueue({
++                  type: "error",
++                  error: "Provider returned tool_calls without a tool name in streaming or non-stream responses."
++                });
++              }
++            }
+             if (isActiveReasoning) {
+               controller.enqueue({ type: "reasoning-end", id: "reasoning-0" });
+             }
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 1c24da7..e64bf48 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -598,6 +598,14 @@ var OpenAICompatibleChatLanguageModel = class {
+         });
+       }
+     }
++    if (choice.message.function_call != null && choice.message.tool_calls == null) {
++      content.push({
++        type: "tool-call",
++        toolCallId: generateId(),
++        toolName: choice.message.function_call.name,
++        input: choice.message.function_call.arguments
++      });
++    }
+     const providerMetadata = {
+       [metadataKey]: {},
+       ...await ((_f = (_e = this.config.metadataExtractor) == null ? void 0 : _e.extractMetadata) == null ? void 0 : _f.call(_e, {
+@@ -631,6 +639,14 @@ var OpenAICompatibleChatLanguageModel = class {
+   async doStream(options) {
+     var _a;
+     const { args, warnings, metadataKey } = await this.getArgs({ ...options });
++    const requestUrl = this.config.url({
++      path: "/chat/completions",
++      modelId: this.modelId
++    });
++    const requestHeaders = combineHeaders(this.config.headers(), options.headers);
++    const fallbackBody = this.transformRequestBody({
++      ...args
++    });
+     const body = this.transformRequestBody({
+       ...args,
+       stream: true,
+@@ -638,21 +654,22 @@ var OpenAICompatibleChatLanguageModel = class {
+       stream_options: this.config.includeUsage ? { include_usage: true } : void 0
+     });
+     const metadataExtractor = (_a = this.config.metadataExtractor) == null ? void 0 : _a.createStreamExtractor();
++    const failedResponseHandler = this.failedResponseHandler;
++    const fetch = this.config.fetch;
+     const { responseHeaders, value: response } = await postJsonToApi({
+-      url: this.config.url({
+-        path: "/chat/completions",
+-        modelId: this.modelId
+-      }),
+-      headers: combineHeaders(this.config.headers(), options.headers),
++      url: requestUrl,
++      headers: requestHeaders,
+       body,
+-      failedResponseHandler: this.failedResponseHandler,
++      failedResponseHandler,
+       successfulResponseHandler: createEventSourceResponseHandler(
+         this.chunkSchema
+       ),
+       abortSignal: options.abortSignal,
+-      fetch: this.config.fetch
++      fetch
+     });
+     const toolCalls = [];
++    const pendingToolCallIds = {};
++    let sawToolCallStart = false;
+     let finishReason = {
+       unified: "other",
+       raw: void 0
+@@ -742,7 +759,12 @@ var OpenAICompatibleChatLanguageModel = class {
+                 delta: delta.content
+               });
+             }
+-            if (delta.tool_calls != null) {
++            const toolCallDeltas = delta.tool_calls ?? (delta.function_call ? [{
++              index: 0,
++              id: void 0,
++              function: delta.function_call
++            }] : void 0);
++            if (toolCallDeltas != null) {
+               if (isActiveReasoning) {
+                 controller.enqueue({
+                   type: "reasoning-end",
+@@ -750,28 +772,23 @@ var OpenAICompatibleChatLanguageModel = class {
+                 });
+                 isActiveReasoning = false;
+               }
+-              for (const toolCallDelta of delta.tool_calls) {
++              for (const toolCallDelta of toolCallDeltas) {
+                 const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
+                 if (toolCalls[index] == null) {
+-                  if (toolCallDelta.id == null) {
+-                    throw new InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'id' to be a string.`
+-                    });
+-                  }
++                  const toolCallId = toolCallDelta.id ?? pendingToolCallIds[index] ?? generateId();
+                   if (((_d = toolCallDelta.function) == null ? void 0 : _d.name) == null) {
+-                    throw new InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'function.name' to be a string.`
+-                    });
++                    pendingToolCallIds[index] = toolCallId;
++                    continue;
+                   }
++                  delete pendingToolCallIds[index];
+                   controller.enqueue({
+                     type: "tool-input-start",
+-                    id: toolCallDelta.id,
++                    id: toolCallId,
+                     toolName: toolCallDelta.function.name
+                   });
++                  sawToolCallStart = true;
+                   toolCalls[index] = {
+-                    id: toolCallDelta.id,
++                    id: toolCallId,
+                     type: "function",
+                     function: {
+                       name: toolCallDelta.function.name,
+@@ -847,8 +864,82 @@ var OpenAICompatibleChatLanguageModel = class {
+               }
+             }
+           },
+-          flush(controller) {
++          async flush(controller) {
+             var _a2, _b, _c, _d, _e;
++            if (finishReason.unified === "tool-calls" && !sawToolCallStart) {
++              try {
++                const { value: fallbackResponse } = await postJsonToApi({
++                  url: requestUrl,
++                  headers: requestHeaders,
++                  body: fallbackBody,
++                  failedResponseHandler,
++                  successfulResponseHandler: createJsonResponseHandler(
++                    OpenAICompatibleChatResponseSchema
++                  ),
++                  abortSignal: options.abortSignal,
++                  fetch
++                });
++                const fallbackChoice = fallbackResponse.choices[0];
++                const fallbackToolCalls = fallbackChoice.message.tool_calls ?? (fallbackChoice.message.function_call ? [{
++                  id: void 0,
++                  function: fallbackChoice.message.function_call
++                }] : []);
++                if (usage == null && fallbackResponse.usage != null) {
++                  usage = fallbackResponse.usage;
++                }
++                for (const fallbackToolCall of fallbackToolCalls) {
++                  var _f, _g;
++                  const toolName = (_f = fallbackToolCall.function) == null ? void 0 : _f.name;
++                  if (toolName == null) {
++                    continue;
++                  }
++                  const toolCallId = fallbackToolCall.id ?? generateId();
++                  const input = (_g = fallbackToolCall.function.arguments) != null ? _g : "";
++                  controller.enqueue({
++                    type: "tool-input-start",
++                    id: toolCallId,
++                    toolName
++                  });
++                  if (input.length > 0) {
++                    controller.enqueue({
++                      type: "tool-input-delta",
++                      id: toolCallId,
++                      delta: input
++                    });
++                  }
++                  controller.enqueue({
++                    type: "tool-input-end",
++                    id: toolCallId
++                  });
++                  controller.enqueue({
++                    type: "tool-call",
++                    toolCallId,
++                    toolName,
++                    input
++                  });
++                  sawToolCallStart = true;
++                }
++              } catch (error) {
++                finishReason = {
++                  unified: "error",
++                  raw: "tool_calls_missing_name"
++                };
++                controller.enqueue({
++                  type: "error",
++                  error: error instanceof Error ? error.message : String(error)
++                });
++              }
++              if (!sawToolCallStart) {
++                finishReason = {
++                  unified: "error",
++                  raw: "tool_calls_missing_name"
++                };
++                controller.enqueue({
++                  type: "error",
++                  error: "Provider returned tool_calls without a tool name in streaming or non-stream responses."
++                });
++              }
++            }
+             if (isActiveReasoning) {
+               controller.enqueue({ type: "reasoning-end", id: "reasoning-0" });
+             }
