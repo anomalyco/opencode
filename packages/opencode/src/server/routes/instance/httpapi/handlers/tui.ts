@@ -98,7 +98,7 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
       payload: typeof TuiEvent.SessionSelect.properties.Type
     }) {
       if (!ctx.payload.sessionID.startsWith("ses")) return yield* new HttpApiError.BadRequest({})
-      yield* session.get(ctx.payload.sessionID).pipe(Effect.mapError((error) => ApiError.notFound(error.data.message)))
+      yield* ApiError.mapStorageNotFound(session.get(ctx.payload.sessionID))
       yield* bus.publish(TuiEvent.SessionSelect, ctx.payload)
       return true
     })
