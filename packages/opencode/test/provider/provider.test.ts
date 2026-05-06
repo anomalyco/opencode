@@ -2347,6 +2347,73 @@ test("plugin config providers persist after instance dispose", async () => {
   expect(second[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
 })
 
+test("provider hook runs for config-only providers and preserves config model overrides", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const root = path.join(dir, ".opencode", "plugin")
+      await mkdir(root, { recursive: true })
+      await Bun.write(
+        path.join(root, "demo-provider-hook.ts"),
+        [
+          "export default {",
+          '  id: "demo.provider-hook",',
+          "  server: async () => ({",
+          "    provider: {",
+          '      id: "demo",',
+          "      async models(provider) {",
+          "        return {",
+          "          ...provider.models,",
+          "          chat: {",
+          '            ...provider.models.chat,',
+          '            name: "Hook Chat",',
+          "          },",
+          "          live: {",
+          '            ...provider.models.chat,',
+          '            api: { ...provider.models.chat.api, id: "live" },',
+          '            name: "Hook Live",',
+          "          },",
+          "        }",
+          "      },",
+          "    },",
+          "  }),",
+          "}",
+          "",
+        ].join("\n"),
+      )
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            demo: {
+              name: "Demo Provider",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://example.com/v1",
+              models: {
+                chat: {
+                  name: "Config Chat",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers[ProviderID.make("demo")]).toBeDefined()
+      expect(providers[ProviderID.make("demo")].models[ModelID.make("live")]).toBeDefined()
+      expect(providers[ProviderID.make("demo")].models[ModelID.make("chat")].name).toBe("Config Chat")
+    },
+  })
+})
+
 test("plugin config enabled and disabled providers are honored", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
