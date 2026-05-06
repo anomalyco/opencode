@@ -105,23 +105,22 @@ describe("404 mapping for missing session", () => {
 })
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Reproducer 3: 404 response body shape should match Hono's NamedError
-// envelope `{ name, data: { message } }`. HttpApi returns the typed-error
-// shape `{ _tag }` instead. SDK consumers reading `error.data.message`
-// see undefined.
-//
-// FIXME: unskip when error JSON shape policy is decided + applied (separate PR).
+// Reproducer 3: 404 response body shape should match Hono's public NamedError
+// envelope `{ name, data: { message } }`. SDK consumers read
+// `error.data.message`, so returning an Effect built-in `{ _tag }` body is a
+// compatibility break.
 // ──────────────────────────────────────────────────────────────────────────────
 describe("Error JSON shape parity", () => {
-  test.todo("HttpApi 404 body matches NamedError shape", async () => {
+  test("HttpApi 404 body matches Hono shape", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
 
-    const response = await app(true).request("/session/ses_does_not_exist", {
-      headers: { "x-opencode-directory": tmp.path },
-    })
+    const hono = await app(false).request("/session/ses_does_not_exist", { headers })
+    const httpapi = await app(true).request("/session/ses_does_not_exist", { headers })
 
-    expect(response.status).toBe(404)
-    const body = (await response.json()) as { name?: string; data?: { message?: string } }
+    expect(httpapi.status).toBe(hono.status)
+    const body = (await httpapi.json()) as { name?: string; data?: { message?: string } }
+    expect(body).toEqual(await hono.json())
     expect(body.name).toBe("NotFoundError")
     expect(typeof body.data?.message).toBe("string")
   })
