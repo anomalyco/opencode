@@ -2,6 +2,8 @@ import type { APIEvent } from "@solidjs/start/server"
 import { Resource } from "@opencode-ai/console-resource"
 import { Webhook } from "svix"
 
+const DISCORD_INCIDENT_ROLE_ID = "1501447160175136838"
+
 type Incident = {
   mode?: "test" | "standard"
   name?: string
@@ -37,14 +39,14 @@ const postDiscordMessage = async (incident: Incident) => {
         `**${incident.mode === "test" ? "[TEST] " : ""}${incident.name ?? "Incident has been created"}**`,
         incident.summary,
         "",
-        "@inference",
+        `<@&${DISCORD_INCIDENT_ROLE_ID}>`,
         "",
         incident.permalink,
       ]
         .filter((line) => line !== undefined)
         .join("\n"),
       allowed_mentions: {
-        parse: ["everyone"],
+        roles: [DISCORD_INCIDENT_ROLE_ID],
       },
       flags: 4,
     }),

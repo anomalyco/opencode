@@ -116,7 +116,7 @@ export async function handler(
     const trialProviders = await trialLimiter?.check()
     const rateLimiter = modelInfo.allowAnonymous
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
-      : createKeyRateLimiter(modelInfo.id, zenApiKey, input.request)
+      : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
