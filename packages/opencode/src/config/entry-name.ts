@@ -2,11 +2,16 @@ import path from "path"
 
 function sliceAfterMatch(filePath: string, searchRoots: string[]) {
   const normalizedPath = filePath.replaceAll("\\", "/")
-  for (const searchRoot of searchRoots) {
-    const index = normalizedPath.indexOf(searchRoot)
-    if (index === -1) continue
-    return normalizedPath.slice(index + searchRoot.length)
-  }
+  const anchor = Math.max(normalizedPath.lastIndexOf("/.opencode/"), normalizedPath.lastIndexOf("/opencode/"))
+  const match = searchRoots
+    .map((searchRoot) => ({
+      searchRoot: searchRoot.replaceAll("\\", "/"),
+      index: normalizedPath.indexOf(searchRoot.replaceAll("\\", "/"), anchor === -1 ? 0 : anchor),
+    }))
+    .filter((item) => item.index !== -1)
+    .toSorted((a, b) => a.index - b.index || b.searchRoot.length - a.searchRoot.length)[0]
+  if (!match) return
+  return normalizedPath.slice(match.index + match.searchRoot.length)
 }
 
 export function configEntryNameFromPath(filePath: string, searchRoots: string[]) {

@@ -1,6 +1,7 @@
 export * as ConfigAgent from "./agent"
 
 import { Exit, Schema, SchemaGetter } from "effect"
+import path from "path"
 import { Bus } from "@/bus"
 import { zod } from "@/util/effect-zod"
 import { PositiveInt, withStatics } from "@/util/schema"
@@ -126,8 +127,7 @@ export async function load(dir: string) {
     })
     if (!md) continue
 
-    const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-    const name = configEntryNameFromPath(item, patterns)
+    const name = configEntryNameFromPath(path.relative(dir, item), ["agents/", "agent/"])
 
     const config = {
       name,
