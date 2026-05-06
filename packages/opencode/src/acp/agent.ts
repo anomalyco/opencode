@@ -1862,7 +1862,6 @@ function buildVariantMeta(input: {
       variant: input.variant ?? null,
       availableVariants: input.availableVariants,
     },
-    }
   }
 
 function parseModelSelection(
