@@ -1,0 +1,64 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 3b1e1b6bdec5032e3b4fa5ffbcc8cdf3dfe1cc40..c3cc4cfc431b6f3df93a9329d6dbeb0781191841 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -753,12 +753,7 @@
+               for (const toolCallDelta of delta.tool_calls) {
+                 const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
+                 if (toolCalls[index] == null) {
+-                  if (toolCallDelta.id == null) {
+-                    throw new InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'id' to be a string.`
+-                    });
+-                  }
++                  const toolCallId = toolCallDelta.id ?? generateId();
+                   if (((_d = toolCallDelta.function) == null ? void 0 : _d.name) == null) {
+                     throw new InvalidResponseDataError({
+                       data: toolCallDelta,
+@@ -767,11 +762,11 @@
+                   }
+                   controller.enqueue({
+                     type: "tool-input-start",
+-                    id: toolCallDelta.id,
++                    id: toolCallId,
+                     toolName: toolCallDelta.function.name
+                   });
+                   toolCalls[index] = {
+-                    id: toolCallDelta.id,
++                    id: toolCallId,
+                     type: "function",
+                     function: {
+                       name: toolCallDelta.function.name,
+diff --git a/dist/index.js b/dist/index.js
+index dca128d3a790378c51a24a16d92585178343b278..f5f7b29d7fa9a249e5e1d0108a8de0d0ffa84f32 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -766,12 +766,7 @@
+               for (const toolCallDelta of delta.tool_calls) {
+                 const index = (_c = toolCallDelta.index) != null ? _c : toolCalls.length;
+                 if (toolCalls[index] == null) {
+-                  if (toolCallDelta.id == null) {
+-                    throw new import_provider3.InvalidResponseDataError({
+-                      data: toolCallDelta,
+-                      message: `Expected 'id' to be a string.`
+-                    });
+-                  }
++                  const toolCallId = toolCallDelta.id ?? (0, import_provider_utils2.generateId)();
+                   if (((_d = toolCallDelta.function) == null ? void 0 : _d.name) == null) {
+                     throw new import_provider3.InvalidResponseDataError({
+                       data: toolCallDelta,
+@@ -780,11 +775,11 @@
+                   }
+                   controller.enqueue({
+                     type: "tool-input-start",
+-                    id: toolCallDelta.id,
++                    id: toolCallId,
+                     toolName: toolCallDelta.function.name
+                   });
+                   toolCalls[index] = {
+-                    id: toolCallDelta.id,
++                    id: toolCallId,
+                     type: "function",
+                     function: {
+                       name: toolCallDelta.function.name,
