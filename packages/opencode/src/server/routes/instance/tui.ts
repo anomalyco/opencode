@@ -26,13 +26,17 @@ export function nextTuiRequest() {
   return request.next()
 }
 
+export function submitTuiRequest(body: TuiRequest) {
+  request.push(body)
+}
+
 export function submitTuiResponse(body: unknown) {
   response.push(body)
 }
 
 export async function callTui(ctx: Context) {
   const body = await ctx.req.json()
-  request.push({
+  submitTuiRequest({
     path: ctx.req.path,
     body,
   })

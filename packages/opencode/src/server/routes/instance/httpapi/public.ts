@@ -39,6 +39,7 @@ type OpenApiSchema = {
   maximum?: number
   minimum?: number
   oneOf?: OpenApiSchema[]
+  pattern?: string
   prefixItems?: OpenApiSchema[]
   properties?: Record<string, OpenApiSchema>
   required?: string[]
@@ -74,7 +75,16 @@ const QueryNumberParameters = new Set(["start", "cursor", "limit", "method"])
 const QueryBooleanParameters = new Set(["roots", "archived"])
 const QueryParameterSchemas = {
   "GET /find/file limit": { type: "integer", minimum: 1, maximum: 200 },
+  "GET /session/{sessionID}/diff messageID": { type: "string", pattern: "^msg.*" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+} satisfies Record<string, OpenApiSchema>
+
+const PathParameterSchemas = {
+  sessionID: { type: "string", pattern: "^ses.*" },
+  messageID: { type: "string", pattern: "^msg.*" },
+  partID: { type: "string", pattern: "^prt.*" },
+  permissionID: { type: "string", pattern: "^per.*" },
+  ptyID: { type: "string", pattern: "^pty.*" },
 } satisfies Record<string, OpenApiSchema>
 
 const LegacyComponentDescriptions = {
@@ -428,6 +438,11 @@ function fixSelfReferencingComponents(spec: OpenApiSpec) {
 
 /** Strip `{type:"null"}` arms that Effect's `Schema.optional` adds to OpenAPI unions. */
 function stripOptionalNull(schema: OpenApiSchema): OpenApiSchema {
+  if (schema.allOf?.length === 1) {
+    const [constraint] = schema.allOf
+    delete schema.allOf
+    return stripOptionalNull({ ...schema, ...constraint })
+  }
   if (isEmptyObjectUnion(schema)) return { type: "object", properties: {} }
   const options = flattenOptions(schema.anyOf ?? schema.oneOf)
   if (options) {
@@ -476,23 +491,38 @@ function flattenOptions(options: OpenApiSchema[] | undefined): OpenApiSchema[] |
 }
 
 function normalizeParameter(param: OpenApiParameter, route: string) {
-  if (param.in !== "query" || !param.schema || typeof param.schema !== "object") return
-  const override = QueryParameterSchemas[`${route} ${param.name}` as keyof typeof QueryParameterSchemas]
-  if (override) {
-    param.schema = override
+  if (!param.schema || typeof param.schema !== "object") return
+  if (param.in === "path") {
+    param.schema = pathParameterSchema(route, param.name) ?? stripOptionalNull(param.schema)
     return
   }
-  if (QueryNumberParameters.has(param.name)) {
-    param.schema = { type: "number" }
-    return
-  }
-  if (QueryBooleanParameters.has(param.name)) {
-    param.schema = {
-      anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
+  if (param.in === "query") {
+    const override = QueryParameterSchemas[`${route} ${param.name}` as keyof typeof QueryParameterSchemas]
+    if (override) {
+      param.schema = override
+      return
     }
-    return
+    if (QueryNumberParameters.has(param.name)) {
+      param.schema = { type: "number" }
+      return
+    }
+    if (QueryBooleanParameters.has(param.name)) {
+      param.schema = {
+        anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
+      }
+      return
+    }
   }
   param.schema = stripOptionalNull(param.schema)
+}
+
+function pathParameterSchema(route: string, name: string) {
+  if (name in PathParameterSchemas) return PathParameterSchemas[name as keyof typeof PathParameterSchemas]
+  if (name === "id" && route.startsWith("DELETE /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
+  if (name === "id" && route.startsWith("POST /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
+  if (name === "requestID" && route.startsWith("POST /permission/")) return { type: "string", pattern: "^per.*" }
+  if (name === "requestID" && route.startsWith("POST /question/")) return { type: "string", pattern: "^que.*" }
+  return undefined
 }
 
 export const PublicApi = OpenCodeHttpApi.annotateMerge(

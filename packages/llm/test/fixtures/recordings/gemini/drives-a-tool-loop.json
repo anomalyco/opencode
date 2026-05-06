@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "gemini/drives-a-tool-loop",
+    "recordedAt": "2026-05-03T20:54:36.522Z",
+    "tags": ["prefix:gemini", "provider:google", "protocol:gemini", "tool", "tool-loop", "golden"]
+  },
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"What is the weather in Paris?\"}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"Use the get_weather tool, then answer in one short sentence.\"}]},\"tools\":[{\"functionDeclarations\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}],\"generationConfig\":{\"maxOutputTokens\":80,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\",\"args\": {\"city\": \"Paris\"}},\"thoughtSignature\": \"CiQBDDnWx8TWfKCucRzvraqsJnPun/3Lm8wkXNPPuFeSTvJ1V0EKYQEMOdbHXcFW1fMNgsfhz+dzS2VKNo6gon1M+ofVbZMoBivYVi5d4iW3mqFKWrAr+kk3/hvr6k6Xt6n28bSAyxzzxHqsaAhNIundnnJp9G9v2JuhdzfskoDgck1GBvoZEGUKgAEBDDnWx2COL08fzTPH++8yXoVqYu+pZ4FnssgGnQdX5qLaBPjRnXF2S+Av3PAO9USe7PBXAwdBPOt/Zx28g9CD5tmWReLyPSTVv027qSqNcccdzIc+oquXYpggZUg/Q3pkEEdinfgzKebYnuR4GkEL44szYYrIfbV3wnxLwUkmCw==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 61,\"candidatesTokenCount\": 15,\"totalTokenCount\": 116,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 61}],\"thoughtsTokenCount\": 40},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"C7b3aaTcEabxjrEPl4-1oAU\"}\r\n\r\n"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"id\":\"tool_0\",\"name\":\"get_weather\",\"args\":{\"city\":\"Paris\"}},\"thoughtSignature\":\"CiQBDDnWx8TWfKCucRzvraqsJnPun/3Lm8wkXNPPuFeSTvJ1V0EKYQEMOdbHXcFW1fMNgsfhz+dzS2VKNo6gon1M+ofVbZMoBivYVi5d4iW3mqFKWrAr+kk3/hvr6k6Xt6n28bSAyxzzxHqsaAhNIundnnJp9G9v2JuhdzfskoDgck1GBvoZEGUKgAEBDDnWx2COL08fzTPH++8yXoVqYu+pZ4FnssgGnQdX5qLaBPjRnXF2S+Av3PAO9USe7PBXAwdBPOt/Zx28g9CD5tmWReLyPSTVv027qSqNcccdzIc+oquXYpggZUg/Q3pkEEdinfgzKebYnuR4GkEL44szYYrIfbV3wnxLwUkmCw==\"}]},{\"role\":\"user\",\"parts\":[{\"functionResponse\":{\"id\":\"tool_0\",\"name\":\"get_weather\",\"response\":{\"name\":\"get_weather\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}}}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"Use the get_weather tool, then answer in one short sentence.\"}]},\"tools\":[{\"functionDeclarations\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}],\"generationConfig\":{\"maxOutputTokens\":80,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"The weather in Paris\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 148,\"candidatesTokenCount\": 4,\"totalTokenCount\": 152,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 148}]},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"DLb3acvOCMm4sOIP_4qTgQQ\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" is sunny with a temperature of 22 degrees.\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 148,\"candidatesTokenCount\": 15,\"totalTokenCount\": 163,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 148}]},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"DLb3acvOCMm4sOIP_4qTgQQ\"}\r\n\r\n"
+      }
+    }
+  ]
+}

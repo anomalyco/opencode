@@ -34,6 +34,7 @@ describe("Anthropic Messages adapter", () => {
         max_tokens: 20,
         temperature: 0,
       })
+      expect(prepared.model.capabilities.tools.providerExecuted).toBe(true)
     }),
   )
 
@@ -90,6 +91,35 @@ describe("Anthropic Messages adapter", () => {
         totalTokens: 7,
       })
       expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+    }),
+  )
+
+  it.effect("round-trips streamed thinking signatures", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
+        { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "thinking" } },
+        { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_123" } },
+        { type: "content_block_stop", index: 0 },
+        { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+      )
+      const response = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toContainEqual({ type: "reasoning-delta", text: "", encrypted: "sig_123" })
+
+      const prepared = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] }).prepare(
+        LLM.request({
+          id: "req_signed_thinking",
+          model,
+          messages: [LLM.assistant({ type: "reasoning", text: "thinking", encrypted: "sig_123" })],
+        }),
+      )
+      expect(prepared.target).toMatchObject({
+        messages: [{ role: "assistant", content: [{ type: "thinking", thinking: "thinking", signature: "sig_123" }] }],
+      })
     }),
   )
 
@@ -240,6 +270,37 @@ describe("Anthropic Messages adapter", () => {
         result: { type: "error" },
         providerExecuted: true,
       })
+    }),
+  )
+
+  it.effect("rejects server tool results without tool_use_id", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+        .generate(
+          LLM.updateRequest(request, {
+            tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
+          }),
+        )
+        .pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                {
+                  type: "content_block_start",
+                  index: 0,
+                  content_block: {
+                    type: "web_search_tool_result",
+                    content: [{ type: "web_search_result", url: "https://example.com", title: "Example" }],
+                  },
+                },
+              ),
+            ),
+          ),
+          Effect.flip,
+        )
+
+      expect(error.message).toContain("missing tool_use_id")
     }),
   )
 

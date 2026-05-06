@@ -1,8 +1,8 @@
-import { HttpClientRequest } from "effect/unstable/http"
+import { Option } from "effect"
+import { Headers, HttpBody, HttpClientRequest, UrlParams } from "effect/unstable/http"
 import { decodeJson } from "./matching"
 import { REDACTED, redactUrl, secretFindings } from "./redaction"
 import type { Cassette, RequestSnapshot } from "./schema"
-import { Option } from "effect"
 
 const safeText = (value: unknown) => {
   if (value === undefined) return "undefined"
@@ -87,4 +87,4 @@ export const mismatchDetail = (cassette: Cassette, incoming: RequestSnapshot) =>
 }
 
 export const redactedErrorRequest = (request: HttpClientRequest.HttpClientRequest) =>
-  HttpClientRequest.modify(request, { url: redactUrl(request.url) })
+  HttpClientRequest.makeWith(request.method, redactUrl(request.url), UrlParams.empty, Option.none(), Headers.empty, HttpBody.empty)

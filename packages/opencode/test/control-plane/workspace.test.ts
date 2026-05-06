@@ -14,6 +14,7 @@ import { Database } from "@/storage/db"
 import { ProjectID } from "@/project/schema"
 import { ProjectTable } from "@/project/project.sql"
 import { Instance } from "@/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID, MessageID, PartID } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
@@ -21,7 +22,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { SyncEvent } from "@/sync"
 import { EventSequenceTable, EventTable } from "@/sync/event.sql"
 import { resetDatabase } from "../fixture/db"
-import { provideTmpdirInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
@@ -93,7 +94,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   mock.restore()
-  await Instance.disposeAll()
+  await disposeAllInstances()
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspacesFlag
   restoreEnv()
   await resetDatabase()
@@ -101,7 +102,7 @@ afterEach(async () => {
 
 async function withInstance<T>(fn: (dir: string) => T | Promise<T>) {
   await using tmp = await tmpdir({ git: true })
-  return Instance.provide({
+  return WithInstance.provide({
     directory: tmp.path,
     fn: () => fn(tmp.path),
   })

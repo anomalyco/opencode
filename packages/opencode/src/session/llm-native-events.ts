@@ -1,5 +1,6 @@
 import type { LLMEvent, ToolResultValue, Usage } from "@opencode-ai/llm"
 import type { Event as SessionEvent } from "./llm"
+import type { MessageV2 } from "./message-v2"
 
 type MapperState = {
   readonly text: Set<string>
@@ -46,6 +47,7 @@ type ExecuteShape = {
   readonly title?: unknown
   readonly metadata?: unknown
   readonly output?: unknown
+  readonly attachments?: unknown
 }
 
 const isExecuteResult = (value: unknown): value is ExecuteShape => {
@@ -54,15 +56,23 @@ const isExecuteResult = (value: unknown): value is ExecuteShape => {
   return typeof v.output === "string"
 }
 
+const isFilePart = (value: unknown): value is MessageV2.FilePart => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const part = value as Record<string, unknown>
+  return part.type === "file" && typeof part.id === "string" && typeof part.sessionID === "string" && typeof part.messageID === "string" && typeof part.mime === "string" && typeof part.url === "string"
+}
+
 const toolResultOutput = (result: ToolResultValue) => {
   if (result.type !== "json" || !isExecuteResult(result.value)) {
     return { title: "", metadata: {}, output: stringifyResult(result) }
   }
   const value = result.value
+  const attachments = Array.isArray(value.attachments) ? value.attachments.filter(isFilePart) : undefined
   return {
     title: typeof value.title === "string" ? value.title : "",
     metadata: typeof value.metadata === "object" && value.metadata !== null ? (value.metadata as Record<string, unknown>) : {},
     output: typeof value.output === "string" ? value.output : "",
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   }
 }
 
@@ -112,24 +122,36 @@ export const mapper = () => {
 
   const finish = (event: Extract<LLMEvent, { type: "request-finish" | "step-finish" }>, includeFinal: boolean) => {
     const reason = finishReason(event.reason)
+    const eventUsage = usage(event.usage)
+    const eventResponse = response()
+    const payload = {
+      finishReason: reason,
+      rawFinishReason: event.reason,
+      usage: eventUsage,
+      response: eventResponse,
+      providerMetadata: undefined,
+    }
     const events = [
       ...closeOpenParts(state),
       {
         type: "finish-step" as const,
-        finishReason: reason,
-        rawFinishReason: event.reason,
-        usage: usage(event.usage),
-        response: response(),
-        providerMetadata: undefined,
+        ...payload,
       },
       ...(includeFinal
-        ? [{ type: "finish" as const, finishReason: reason, rawFinishReason: event.reason, usage: usage(event.usage), totalUsage: usage(event.usage), response: response(), providerMetadata: undefined }]
+        ? [{ type: "finish" as const, ...payload, totalUsage: eventUsage }]
         : []),
     ]
     state.text.clear()
     state.reasoning.clear()
     state.toolInput.clear()
+    state.toolInputs.clear()
     return events
+  }
+
+  const consumeToolInput = (id: string) => {
+    const input = state.toolInputs.get(id) ?? {}
+    state.toolInputs.delete(id)
+    return input
   }
 
   const map = (event: LLMEvent): ReadonlyArray<SessionEvent> => {
@@ -170,19 +192,19 @@ export const mapper = () => {
         ]
       case "tool-result":
         if (event.result.type === "error") {
-          return [{ type: "tool-error", toolCallId: event.id, toolName: event.name, input: state.toolInputs.get(event.id) ?? {}, error: stringifyResult(event.result) }]
+          return [{ type: "tool-error", toolCallId: event.id, toolName: event.name, input: consumeToolInput(event.id), error: stringifyResult(event.result) }]
         }
         return [
           {
             type: "tool-result",
             toolCallId: event.id,
             toolName: event.name,
-            input: state.toolInputs.get(event.id) ?? {},
+            input: consumeToolInput(event.id),
             output: toolResultOutput(event.result),
           },
         ]
       case "tool-error":
-        return [{ type: "tool-error", toolCallId: event.id, toolName: event.name, input: state.toolInputs.get(event.id) ?? {}, error: event.message }]
+        return [{ type: "tool-error", toolCallId: event.id, toolName: event.name, input: consumeToolInput(event.id), error: event.message }]
       case "step-finish":
         return finish(event, false)
       case "request-finish":
@@ -193,7 +215,14 @@ export const mapper = () => {
     return []
   }
 
-  const flush = (): ReadonlyArray<SessionEvent> => closeOpenParts(state)
+  const flush = (): ReadonlyArray<SessionEvent> => {
+    const events = closeOpenParts(state)
+    state.text.clear()
+    state.reasoning.clear()
+    state.toolInput.clear()
+    state.toolInputs.clear()
+    return events
+  }
 
   return { map, flush }
 }

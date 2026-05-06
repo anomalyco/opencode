@@ -23,7 +23,7 @@ type Usage = {
   }
 }
 
-export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentifier }) => ({
+export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
   format: "oa-compat",
   modifyUrl: (providerApi: string) => providerApi + "/chat/completions",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
@@ -34,7 +34,6 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentif
     return {
       ...body,
       ...(body.stream ? { stream_options: { include_usage: true } } : {}),
-      ...(safetyIdentifier ? { safety_identifier: safetyIdentifier } : {}),
     }
   },
   createBinaryStreamDecoder: () => undefined,

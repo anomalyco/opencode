@@ -304,6 +304,45 @@ describe("ToolRuntime", () => {
     }),
   )
 
+  it.effect("does not merge signed provider parts in continuation history", () =>
+    Effect.gen(function* () {
+      let captured = baseRequest
+      let streams = 0
+      const stub: LLMClient = {
+        prepare: () => Effect.die("not used"),
+        generate: () => Effect.die("not used"),
+        stream: (request) => {
+          streams++
+          captured = request
+          if (streams > 1) return Stream.fromIterable<LLMEvent>([{ type: "request-finish", reason: "stop" }])
+          return Stream.fromIterable<LLMEvent>([
+            { type: "text-delta", text: "A", metadata: { google: { thoughtSignature: "sig_text_1" } } },
+            { type: "text-delta", text: "B", metadata: { google: { thoughtSignature: "sig_text_2" } } },
+            { type: "reasoning-delta", text: "thinking" },
+            { type: "reasoning-delta", text: "", encrypted: "sig_reasoning" },
+            { type: "tool-call", id: "call_1", name: "get_weather", input: { city: "Paris" } },
+            { type: "request-finish", reason: "tool-calls" },
+          ])
+        },
+      }
+      const noopExecutor = Layer.succeed(RequestExecutor.Service, {
+        execute: () => Effect.die("stub client never executes HTTP"),
+      })
+
+      yield* ToolRuntime.run(stub, { request: baseRequest, tools: { get_weather } }).pipe(
+        Stream.runCollect,
+        Effect.provide(noopExecutor),
+      )
+
+      expect(captured.messages.find((message) => message.role === "assistant")?.content).toEqual([
+        { type: "text", text: "A", metadata: { google: { thoughtSignature: "sig_text_1" } } },
+        { type: "text", text: "B", metadata: { google: { thoughtSignature: "sig_text_2" } } },
+        { type: "reasoning", text: "thinking", encrypted: "sig_reasoning" },
+        { type: "tool-call", id: "call_1", name: "get_weather", input: { city: "Paris" }, providerExecuted: undefined, metadata: undefined },
+      ])
+    }),
+  )
+
   it.effect("dispatches multiple tool calls in one step concurrently", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([

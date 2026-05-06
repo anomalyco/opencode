@@ -13,6 +13,10 @@
       "outputs": [],
       "passThroughEnv": ["*"]
     },
+    "test:ci": {
+      "outputs": [".artifacts/unit/junit.xml"],
+      "passThroughEnv": ["*"]
+    },
     "opencode#test:ci": {
       "dependsOn": ["^build"],
       "outputs": [".artifacts/unit/junit.xml"],
