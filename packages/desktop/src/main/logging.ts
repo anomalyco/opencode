@@ -7,6 +7,7 @@ const TAIL_LINES = 1000
 
 export function initLogging() {
   log.transports.file.maxSize = 5 * 1024 * 1024
+  initConsoleTransport()
   cleanup()
   return log
 }
@@ -37,4 +38,20 @@ function cleanup() {
       continue
     }
   }
+}
+
+function initConsoleTransport() {
+  const write = log.transports.console.writeFn.bind(log.transports.console)
+  log.transports.console.writeFn = (options) => {
+    try {
+      write(options)
+    } catch (err) {
+      if (!isBrokenPipe(err)) throw err
+      log.transports.console.level = false
+    }
+  }
+}
+
+function isBrokenPipe(err: unknown) {
+  return typeof err === "object" && err !== null && "code" in err && err.code === "EPIPE"
 }
