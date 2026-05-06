@@ -24,14 +24,14 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { ResponseCache } from "./cache/response-cache"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 type Result = Awaited<ReturnType<typeof streamText>>
 
-// Avoid re-instantiating remeda's deep merge types in this hot LLM path; the runtime behavior is still mergeDeep.
-const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
-  mergeDeep(target, source ?? {}) as Record<string, any>
+const mergeOptions = (target: Record<string, unknown>, source: Record<string, unknown> | undefined): Record<string, unknown> =>
+  mergeDeep(target, source ?? {}) as Record<string, unknown>
 
 export type StreamInput = {
   user: MessageV2.User
@@ -60,10 +60,41 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
+const cacheLog = Log.create({ service: "llm-cache" })
+
+const replayStream = (entry: import("./cache/schema").CacheEntry, strategy: string) => {
+  const value = entry.value
+  const events: Event[] = [
+    { type: "start" },
+    { type: "start-step" },
+    { type: "reasoning-start", id: "cached" },
+    { type: "reasoning-delta", id: "cached", text: "" },
+    { type: "reasoning-end", id: "cached", providerMetadata: { source: "response-cache", strategy } },
+    { type: "text-start", text: "" },
+    { type: "text-delta", text: value.text },
+    { type: "text-end", text: value.text },
+    ...value.toolCalls.map((tc) => ({
+      type: "tool-call",
+      toolCallId: tc.id,
+      toolName: tc.name,
+      input: tc.input,
+      providerMetadata: { source: "response-cache", strategy },
+    })),
+    {
+      type: "finish-step",
+      finishReason: value.finishReason,
+      usage: { prompt: value.tokenUsage.prompt, completion: value.tokenUsage.completion, total: value.tokenUsage.total },
+      providerMetadata: { source: "response-cache", strategy },
+    },
+    { type: "finish" },
+  ]
+  return Stream.fromIterable(events, (e) => (e instanceof Error ? e : new Error(String(e))))
+}
+
 const live: Layer.Layer<
   Service,
   never,
-  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service
+  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service | ResponseCache.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -72,6 +103,7 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
+    const cache = yield* ResponseCache.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log
@@ -97,17 +129,13 @@ const live: Layer.Layer<
         { concurrency: "unbounded" },
       )
 
-      // TODO: move this to a proper hook
       const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
 
       const system: string[] = []
       system.push(
         [
-          // use agent prompt otherwise provider prompt
           ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-          // any custom prompt passed into this call
           ...input.system,
-          // any custom prompt from last user message
           ...(input.user.system ? [input.user.system] : []),
         ]
           .filter((x) => x)
@@ -120,7 +148,6 @@ const live: Layer.Layer<
         { sessionID: input.sessionID, model: input.model },
         { system },
       )
-      // rejoin to maintain 2-part structure for caching if header unchanged
       if (system.length > 2 && system[0] === header) {
         const rest = system.slice(1)
         system.length = 0
@@ -194,21 +221,11 @@ const live: Layer.Layer<
 
       const tools = resolveTools(input)
 
-      // LiteLLM and some Anthropic proxies require the tools parameter to be present
-      // when message history contains tool calls, even if no tools are being used.
-      // Add a dummy tool that is never called to satisfy this validation.
-      // This is enabled for:
-      // 1. Providers with "litellm" in their ID or API ID (auto-detected)
-      // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
       const isLiteLLMProxy =
         item.options?.["litellmProxy"] === true ||
         input.model.providerID.toLowerCase().includes("litellm") ||
         input.model.api.id.toLowerCase().includes("litellm")
 
-      // LiteLLM/Bedrock rejects requests where the message history contains tool
-      // calls but no tools param is present. When there are no active tools (e.g.
-      // during compaction), inject a stub tool to satisfy the validation requirement.
-      // The stub description explicitly tells the model not to call it.
       if (
         (isLiteLLMProxy || input.model.providerID.includes("github-copilot")) &&
         Object.keys(tools).length === 0 &&
@@ -226,9 +243,6 @@ const live: Layer.Layer<
         })
       }
 
-      // Wire up toolExecutor for DWS workflow models so that tool calls
-      // from the workflow service are executed via opencode's tool system
-      // and results sent back over the WebSocket.
       if (language instanceof GitLabWorkflowLanguageModel) {
         const workflowModel = language as GitLabWorkflowLanguageModel & {
           sessionID?: string
@@ -269,8 +283,6 @@ const live: Layer.Layer<
         const approvedToolsForSession = new Set<string>()
         workflowModel.approvalHandler = InstanceState.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
-          // Auto-approve tools that were already approved in this session
-          // (prevents infinite approval loops for server-side MCP tools)
           if (uniqueNames.every((name) => approvedToolsForSession.has(name))) {
             return { approved: true }
           }
@@ -424,9 +436,74 @@ const live: Layer.Layer<
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
 
-            const result = yield* run({ ...input, abort: ctrl.signal })
+            const req = { ...input, abort: ctrl.signal }
+            const modelKey = `${input.model.providerID}/${input.model.id}`
 
-            return Stream.fromAsyncIterable(result.fullStream, (e) => (e instanceof Error ? e : new Error(String(e))))
+            const hit = yield* cache.check({
+              sessionID: input.sessionID,
+              model: modelKey,
+              messages: input.messages.map((m) => normalizeMessage(m)),
+              temperature: input.agent.temperature,
+              toolCount: Object.keys(input.tools).length,
+            })
+
+            if (hit) {
+              cacheLog.info("cache hit", {
+                strategy: hit.strategy,
+                sessionID: input.sessionID,
+                model: modelKey,
+              })
+              return replayStream(hit.entry, hit.strategy)
+            }
+
+            const result = yield* run(req)
+
+            // Collect cache data inline as events flow through the stream.
+            // Stream.tap accumulates synchronously without blocking, then Stream.ensuring
+            // stores the cached entry when the stream completes or is aborted.
+            const toolCalls: import("./cache/schema").ToolCallItem[] = []
+            let text = ""
+            let finishReason = "unknown"
+            const tokenUsage: import("./cache/schema").UsageItem = { prompt: 0, completion: 0, total: 0 }
+
+            const baseStream = Stream.fromAsyncIterable(result.fullStream, (e) => (e instanceof Error ? e : new Error(String(e))))
+
+            return baseStream.pipe(
+              Stream.tap((event: Event) =>
+                Effect.sync(() => {
+                  switch ((event as any).type) {
+                    case "text-delta":
+                      text += (event as any).text
+                      break
+                    case "tool-call":
+                      toolCalls.push({
+                        id: (event as any).toolCallId,
+                        name: (event as any).toolName,
+                        input: JSON.stringify((event as any).input),
+                      })
+                      break
+                    case "finish-step":
+                      finishReason = (event as any).finishReason ?? "unknown"
+                      tokenUsage.prompt = (event as any).usage?.prompt ?? tokenUsage.prompt
+                      tokenUsage.completion = (event as any).usage?.completion ?? tokenUsage.completion
+                      tokenUsage.total = (event as any).usage?.total ?? tokenUsage.total
+                      break
+                  }
+                }),
+              ),
+              Stream.ensuring(
+                Effect.ignore(cache.store(
+                  {
+                    sessionID: input.sessionID,
+                    model: modelKey,
+                    messages: input.messages.map((m) => normalizeMessage(m)),
+                    temperature: input.agent.temperature,
+                    toolCount: Object.keys(input.tools).length,
+                  },
+                  { text, toolCalls, finishReason, tokenUsage, responseTime: 0 },
+                )),
+              ),
+            )
           }),
         ),
       )
@@ -435,7 +512,30 @@ const live: Layer.Layer<
   }),
 )
 
-export const layer = live.pipe(Layer.provide(Permission.defaultLayer))
+function normalizeMessage(msg: ModelMessage): string {
+  const content = msg.content
+  if (typeof content === "string") return content.replace(/\s+/g, " ").trim()
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        switch (part.type) {
+          case "text":
+            return (part as any).text
+          case "tool-result":
+            return typeof (part as any).output === "string"
+              ? (part as any).output
+              : JSON.stringify((part as any).output)
+          default:
+            return ""
+        }
+      })
+      .filter(Boolean)
+      .join("\n")
+  }
+  return String(content ?? "")
+}
+
+export const layer = live.pipe(Layer.provide(ResponseCache.layer), Layer.provide(Permission.defaultLayer))
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
@@ -454,8 +554,6 @@ function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" 
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
 }
 
-// Check if messages contain any tool-call content
-// Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
 export function hasToolCalls(messages: ModelMessage[]): boolean {
   for (const msg of messages) {
     if (!Array.isArray(msg.content)) continue

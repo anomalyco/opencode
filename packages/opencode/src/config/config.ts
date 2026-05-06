@@ -260,6 +260,26 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      responseCache: Schema.optional(
+        Schema.Struct({
+          enabled: Schema.Boolean,
+          maxSize: Schema.optional(PositiveInt),
+          maxBytes: Schema.optional(PositiveInt),
+          ttlSeconds: Schema.optional(PositiveInt),
+          trieBreakevenPrefixLen: Schema.optional(PositiveInt),
+          trieMaxEntries: Schema.optional(PositiveInt),
+          semanticDims: Schema.optional(PositiveInt),
+          semanticMinSimilarity: Schema.optional(Schema.Finite),
+          semanticMaxEntries: Schema.optional(PositiveInt),
+          utilMinMs: Schema.optional(Schema.Finite),
+          minPrefixLen: Schema.optional(PositiveInt),
+          minConfidence: Schema.optional(Schema.Finite),
+          maxDivergence: Schema.optional(Schema.Finite),
+        }),
+      ).annotate({
+        description:
+          "Enable experimental client-side response caching with trie-based prefix matching and semantic similarity detection. Reduces token usage by caching responses to repeated or similar prompts.",
+      }),
     }),
   ),
 })
