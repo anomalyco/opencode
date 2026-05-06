@@ -14,7 +14,6 @@ import {
   OpenAIChat,
   OpenAICompatibleChat,
   OpenAIResponses,
-  ProviderTransform as LLMProviderTransform,
   RequestExecutor,
   type ProtocolID,
 } from "@opencode-ai/llm"
@@ -509,7 +508,6 @@ const live: Layer.Layer<
 
     const nativeClient = LLMClient.make({
       adapters: NATIVE_ADAPTERS,
-      transforms: LLMProviderTransform.defaults,
     })
 
     const runNative = Effect.fn("LLM.runNative")(function* (input: StreamRequest, prepared: PreparedStream) {

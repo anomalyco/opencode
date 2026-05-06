@@ -16,6 +16,7 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "anthropic-messages"
 
@@ -183,12 +184,8 @@ const AnthropicChunk = Schema.Struct({
 })
 type AnthropicChunk = Schema.Schema.Type<typeof AnthropicChunk>
 
-interface ToolAccumulator extends ProviderShared.ToolAccumulator {
-  readonly providerExecuted: boolean
-}
-
 interface ParserState {
-  readonly tools: Record<number, ToolAccumulator>
+  readonly tools: ToolStream.State<number>
   readonly usage?: Usage
 }
 
@@ -371,12 +368,6 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
   })
 }
 
-const finishToolCall = (tool: ToolAccumulator | undefined) =>
-  Effect.gen(function* () {
-    if (!tool) return [] as ReadonlyArray<LLMEvent>
-    return [yield* ProviderShared.toolCallEvent(ADAPTER, tool, { providerExecuted: tool.providerExecuted })]
-  })
-
 // Server tool result blocks come whole in `content_block_start` (no streaming
 // delta sequence). We convert the payload to a `tool-result` event with
 // `providerExecuted: true`. The runtime appends it to the assistant message
@@ -423,15 +414,11 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
     ) {
       return [{
         ...state,
-        tools: {
-          ...state.tools,
-          [chunk.index]: {
-            id: chunk.content_block.id ?? String(chunk.index),
-            name: chunk.content_block.name ?? "",
-            input: "",
-            providerExecuted: chunk.content_block.type === "server_tool_use",
-          },
-        },
+        tools: ToolStream.start(state.tools, chunk.index, {
+          id: chunk.content_block.id ?? String(chunk.index),
+          name: chunk.content_block.name ?? "",
+          providerExecuted: chunk.content_block.type === "server_tool_use",
+        }),
       }, []] as const
     }
 
@@ -458,20 +445,20 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
 
     if (chunk.type === "content_block_delta" && chunk.delta?.type === "input_json_delta" && chunk.index !== undefined) {
       if (!chunk.delta.partial_json) return [state, []] as const
-      const current = state.tools[chunk.index]
-      if (!current) {
-        return yield* ProviderShared.chunkError(ADAPTER, "Anthropic Messages tool argument delta is missing its tool call")
-      }
-      const next = { ...current, input: `${current.input}${chunk.delta.partial_json}` }
-      return [{ ...state, tools: { ...state.tools, [chunk.index]: next } }, [
-        { type: "tool-input-delta" as const, id: next.id, name: next.name, text: chunk.delta.partial_json },
-      ]] as const
+      const result = ToolStream.appendExisting(
+        ADAPTER,
+        state.tools,
+        chunk.index,
+        chunk.delta.partial_json,
+        "Anthropic Messages tool argument delta is missing its tool call",
+      )
+      if (ToolStream.isError(result)) return yield* result
+      return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
     }
 
     if (chunk.type === "content_block_stop" && chunk.index !== undefined) {
-      const events = yield* finishToolCall(state.tools[chunk.index])
-      const { [chunk.index]: _, ...tools } = state.tools
-      return [{ ...state, tools }, events] as const
+      const result = yield* ToolStream.finish(ADAPTER, state.tools, chunk.index)
+      return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
     }
 
     if (chunk.type === "message_delta") {
@@ -500,7 +487,7 @@ export const protocol = Protocol.define({
   payload: AnthropicMessagesPayload,
   toPayload,
   chunk: Protocol.jsonChunk(AnthropicChunk),
-  initial: () => ({ tools: {} }),
+  initial: () => ({ tools: ToolStream.empty<number>() }),
   process: processChunk,
 })
 

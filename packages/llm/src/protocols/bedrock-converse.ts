@@ -18,6 +18,7 @@ import {
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
+import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "bedrock-converse"
 
@@ -580,19 +581,13 @@ const mapUsage = (usage: BedrockUsageSchema | undefined): Usage | undefined => {
 }
 
 interface ParserState {
-  readonly tools: Record<number, ProviderShared.ToolAccumulator>
+  readonly tools: ToolStream.State<number>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). The raw stop reason is held here until
   // `metadata` arrives, then mapped + emitted together as a single terminal
   // `request-finish` event so consumers see one event with both.
   readonly pendingStopReason: string | undefined
 }
-
-const finishToolCall = (tool: ProviderShared.ToolAccumulator | undefined) =>
-  Effect.gen(function* () {
-    if (!tool) return [] as ReadonlyArray<LLMEvent>
-    return [yield* ProviderShared.toolCallEvent(ADAPTER, tool)]
-  })
 
 const processChunk = (state: ParserState, chunk: BedrockChunk) =>
   Effect.gen(function* () {
@@ -601,14 +596,10 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
       return [
         {
           ...state,
-          tools: {
-            ...state.tools,
-            [index]: {
-              id: chunk.contentBlockStart.start.toolUse.toolUseId,
-              name: chunk.contentBlockStart.start.toolUse.name,
-              input: "",
-            },
-          },
+          tools: ToolStream.start(state.tools, index, {
+            id: chunk.contentBlockStart.start.toolUse.toolUseId,
+            name: chunk.contentBlockStart.start.toolUse.name,
+          }),
         },
         [],
       ] as const
@@ -627,28 +618,23 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
 
     if (chunk.contentBlockDelta?.delta?.toolUse) {
       const index = chunk.contentBlockDelta.contentBlockIndex
-      const current = state.tools[index]
-      if (!current) {
-        return yield* ProviderShared.chunkError(ADAPTER, "Bedrock Converse tool delta is missing its tool call")
-      }
-      const next = { ...current, input: `${current.input}${chunk.contentBlockDelta.delta.toolUse.input}` }
+      const result = ToolStream.appendExisting(
+        ADAPTER,
+        state.tools,
+        index,
+        chunk.contentBlockDelta.delta.toolUse.input,
+        "Bedrock Converse tool delta is missing its tool call",
+      )
+      if (ToolStream.isError(result)) return yield* result
       return [
-        { ...state, tools: { ...state.tools, [index]: next } },
-        [
-          {
-            type: "tool-input-delta" as const,
-            id: next.id,
-            name: next.name,
-            text: chunk.contentBlockDelta.delta.toolUse.input,
-          },
-        ],
+        { ...state, tools: result.tools },
+        result.event ? [result.event] : [],
       ] as const
     }
 
     if (chunk.contentBlockStop) {
-      const events = yield* finishToolCall(state.tools[chunk.contentBlockStop.contentBlockIndex])
-      const { [chunk.contentBlockStop.contentBlockIndex]: _, ...tools } = state.tools
-      return [{ ...state, tools }, events] as const
+      const result = yield* ToolStream.finish(ADAPTER, state.tools, chunk.contentBlockStop.contentBlockIndex)
+      return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
     }
 
     if (chunk.messageStop) {
@@ -709,7 +695,7 @@ export const protocol = Protocol.define({
   payload: BedrockConversePayload,
   toPayload,
   chunk: BedrockChunk,
-  initial: () => ({ tools: {}, pendingStopReason: undefined }),
+  initial: () => ({ tools: ToolStream.empty<number>(), pendingStopReason: undefined }),
   process: processChunk,
   onHalt,
 })
@@ -719,7 +705,7 @@ export const adapter = Adapter.make({
   protocol,
   endpoint: Endpoint.baseURL<BedrockConversePayload>({
     // Bedrock's URL embeds the region in the host and the validated modelId
-    // in the path. We reach into the payload after payload transforms so the URL
+    // in the path. We reach into the validated payload so the URL
     // matches the body that gets signed.
     default: ({ request }) => `https://bedrock-runtime.${region(request)}.amazonaws.com`,
     path: ({ payload }) => `/model/${encodeURIComponent(payload.modelId)}/converse-stream`,
@@ -749,17 +735,23 @@ export const nativeCredentials = (
       }
     : native
 
-const bedrockModel = Adapter.model(adapter, {
-  provider: "bedrock",
-  capabilities: defaultCapabilities,
-})
+const bedrockModel = Adapter.model<BedrockConverseModelInput>(
+  adapter,
+  {
+    provider: "bedrock",
+    capabilities: defaultCapabilities,
+  },
+  {
+    mapInput: (input) => {
+      const { credentials, ...rest } = input
+      return {
+        ...rest,
+        native: nativeCredentials(input.native, credentials),
+      }
+    },
+  },
+)
 
-export const model = (input: BedrockConverseModelInput) => {
-  const { credentials, ...rest } = input
-  return bedrockModel({
-    ...rest,
-    native: nativeCredentials(input.native, credentials),
-  })
-}
+export const model = bedrockModel
 
 export * as BedrockConverse from "./bedrock-converse"

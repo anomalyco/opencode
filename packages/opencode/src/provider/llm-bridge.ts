@@ -8,13 +8,15 @@ import {
   OpenAI,
   OpenAICompatible,
   OpenAICompatibleProfiles,
-  ReasoningEfforts,
+  ReasoningEffort as ReasoningEffortSchema,
+  TextVerbosity as TextVerbositySchema,
   XAI,
   type CapabilitiesInput,
   type ModelRef,
   type ProtocolID,
   type ReasoningEffort,
 } from "@opencode-ai/llm"
+import { Option, Schema } from "effect"
 import { isRecord } from "@/util/record"
 import type * as Provider from "./provider"
 
@@ -23,7 +25,9 @@ type Input = {
   readonly model: Provider.Model
 }
 
-const REASONING_EFFORTS = new Set<ReasoningEffort>(ReasoningEfforts)
+type OpenAIOptionsInput = NonNullable<NonNullable<Parameters<typeof OpenAI.model>[1]>["openai"]>
+const decodeReasoningEffort = Schema.decodeUnknownOption(ReasoningEffortSchema)
+const decodeTextVerbosity = Schema.decodeUnknownOption(TextVerbositySchema)
 
 const stringOption = (options: Record<string, unknown>, key: string) => {
   const value = options[key]
@@ -35,6 +39,18 @@ const recordOption = (options: Record<string, unknown>, key: string): Record<str
   const value = options[key]
   if (!isRecord(value)) return {}
   return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+}
+
+const openAIOptions = (options: Record<string, unknown>): OpenAIOptionsInput | undefined => {
+  const result: OpenAIOptionsInput = {
+    store: typeof options.store === "boolean" ? options.store : undefined,
+    promptCacheKey: stringOption(options, "promptCacheKey"),
+    reasoningEffort: Option.getOrUndefined(decodeReasoningEffort(options.reasoningEffort)),
+    reasoningSummary: options.reasoningSummary === "auto" ? "auto" : undefined,
+    includeEncryptedReasoning: Array.isArray(options.include) && options.include.includes("reasoning.encrypted_content") ? true : undefined,
+    textVerbosity: Option.getOrUndefined(decodeTextVerbosity(options.textVerbosity)),
+  }
+  return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
 const baseURL = (input: Input, options: Record<string, unknown>, fallback?: string) => {
@@ -55,9 +71,10 @@ const headers = (input: Input, options: Record<string, unknown>) => {
 }
 
 const reasoningEfforts = (input: Input) =>
-  Object.keys(input.model.variants ?? {}).filter((effort): effort is ReasoningEffort =>
-    REASONING_EFFORTS.has(effort as ReasoningEffort),
-  )
+  Object.keys(input.model.variants ?? {}).flatMap((effort) => {
+    const decoded = Option.getOrUndefined(decodeReasoningEffort(effort))
+    return decoded ? [decoded] : []
+  })
 
 const mergeCapabilities = (base: CapabilitiesInput, override: CapabilitiesInput): CapabilitiesInput => ({
   input: { ...base.input, ...override?.input },
@@ -142,6 +159,7 @@ const PROVIDERS: Record<string, ProviderModel> = {
       resourceName: stringOption(options, "resourceName"),
       apiVersion: stringOption(options, "apiVersion"),
       useCompletionUrls: options.useCompletionUrls === true,
+      openai: openAIOptions(options),
     }),
   "@ai-sdk/baseten": openAICompatibleModel,
   "@ai-sdk/cerebras": openAICompatibleModel,
@@ -150,14 +168,20 @@ const PROVIDERS: Record<string, ProviderModel> = {
   "@ai-sdk/github-copilot": (input, options) =>
     GitHubCopilot.model(
       String(input.model.api.id),
-      sharedOptions(input, options, {
-        protocol: GitHubCopilot.shouldUseResponsesApi(String(input.model.api.id)) ? "openai-responses" : "openai-chat",
-      }),
+      {
+        ...sharedOptions(input, options, {
+          protocol: GitHubCopilot.shouldUseResponsesApi(String(input.model.api.id)) ? "openai-responses" : "openai-chat",
+        }),
+        openai: openAIOptions(options),
+      },
     ),
   "@ai-sdk/google": (input, options) =>
     Google.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "gemini" })),
   "@ai-sdk/openai": (input, options) =>
-    OpenAI.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "openai-responses" })),
+    OpenAI.model(String(input.model.api.id), {
+      ...sharedOptions(input, options, { protocol: "openai-responses" }),
+      openai: openAIOptions(options),
+    }),
   "@ai-sdk/openai-compatible": openAICompatibleModel,
   "@ai-sdk/togetherai": openAICompatibleModel,
   "@ai-sdk/xai": (input, options) =>

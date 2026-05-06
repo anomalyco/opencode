@@ -1,8 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { Endpoint, LLM, Protocol } from "../src"
-import { Adapter, LLMClient } from "../src/adapter"
-import { Transform } from "../src/transform"
+import { Adapter, LLMClient, type AdapterModelInput } from "../src/adapter"
 import type { FramingDef } from "../src"
 import type { ModelRef } from "../src/schema"
 import { testEffect } from "./lib/effect"
@@ -27,7 +26,6 @@ const encodeJson = Schema.encodeSync(Json)
 
 type FakePayload = {
   readonly body: string
-  readonly includeUsage?: boolean
 }
 
 const FakeChunk = Schema.Union([
@@ -70,7 +68,6 @@ const fakeProtocol = Protocol.define<FakePayload, FakeChunk, FakeChunk, void>({
   id: "fake",
   payload: Schema.Struct({
     body: Schema.String,
-    includeUsage: Schema.optional(Schema.Boolean),
   }),
   chunk: FakeChunk,
   toPayload: (request) =>
@@ -115,23 +112,6 @@ const echoLayer = dynamicResponse(({ text, respond }) =>
 const it = testEffect(echoLayer)
 
 describe("llm adapter", () => {
-  it.effect("prepare applies payload transforms", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({
-        adapters: [
-          fake.withTransforms([
-            fake.transform("include-usage", {
-              reason: "fake payload transform",
-              apply: (payload) => ({ ...payload, includeUsage: true }),
-            }),
-          ]),
-        ],
-      }).prepare(request)
-
-      expect(prepared.payload).toEqual({ body: "hello", includeUsage: true })
-    }),
-  )
-
   it.effect("stream and generate use the adapter pipeline", () =>
     Effect.gen(function* () {
       const llm = LLMClient.make({ adapters: [fake] })
@@ -165,6 +145,23 @@ describe("llm adapter", () => {
     }),
   )
 
+  it.effect("maps model input before building refs", () =>
+    Effect.gen(function* () {
+      const mapped = Adapter.model<AdapterModelInput & { readonly region?: string }>(
+        fake,
+        { provider: "fake-provider" },
+        {
+          mapInput: (input) => {
+            const { region, ...rest } = input
+            return { ...rest, native: { region } }
+          },
+        },
+      )
+
+      expect(mapped({ id: "fake-model", region: "us-east-1" }).native).toEqual({ region: "us-east-1" })
+    }),
+  )
+
   it.effect("explicit adapters override provider adapters", () =>
     Effect.gen(function* () {
       const override = Adapter.make({
@@ -177,27 +174,11 @@ describe("llm adapter", () => {
         framing: fakeFraming,
       })
 
-      const response = yield* LLM.make({ providers: [{ adapters: [fake] }], adapters: [override] }).generate(request)
+      const response = yield* LLMClient.make({ adapters: [override] }).generate(
+        LLM.updateRequest(request, { model: Adapter.bindModel(updateModel(request.model, { adapter: "fake" }), fake) }),
+      )
 
       expect(response.text).toBe('echo:{"body":"override"}')
-    }),
-  )
-
-  it.effect("stream transforms rewrite raised events", () =>
-    Effect.gen(function* () {
-      const llm = LLMClient.make({
-        adapters: [fake],
-        transforms: [
-          Transform.stream("test.uppercase", {
-            reason: "uppercase text deltas",
-            apply: (event) => (event.type === "text-delta" ? { ...event, text: event.text.toUpperCase() } : event),
-          }),
-        ],
-      })
-
-      const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
-
-      expect(events[0]).toEqual({ type: "text-delta", text: 'ECHO:{"BODY":"HELLO"}' })
     }),
   )
 

@@ -1,4 +1,4 @@
-export { Adapter, LLMClient, modelCapabilities, modelLimits, modelRef } from "./adapter"
+export { Adapter, LLMClient, modelCapabilities, modelLimits, modelRef, updateLLMRequest } from "./adapter"
 export type {
   Adapter as AdapterShape,
   AdapterDefinition,
@@ -15,7 +15,6 @@ export type {
   ModelRefInput,
 } from "./adapter"
 export * from "./executor"
-export * from "./transform"
 export * from "./schema"
 export * from "./tool-runtime"
 export { Tool, ToolFailure, toDefinitions, tool } from "./tool"
@@ -31,7 +30,6 @@ export type { Framing as FramingDef } from "./framing"
 export type { Protocol as ProtocolDef } from "./protocol"
 
 export * as LLM from "./llm"
-export * as ProviderTransform from "./provider-transform"
 export * as Providers from "./providers"
 export * as Protocols from "./protocols"
 export type { CapabilitiesInput } from "./llm"

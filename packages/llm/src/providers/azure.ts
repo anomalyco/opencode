@@ -3,6 +3,7 @@ import type { ModelInput } from "../llm"
 import { ProviderID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
+import { withOpenAIPolicy, type OpenAIOptionsInput } from "./openai-policy"
 
 export const id = ProviderID.make("azure")
 
@@ -10,7 +11,9 @@ export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol"> & {
   readonly resourceName?: string
   readonly apiVersion?: string
   readonly useCompletionUrls?: boolean
+  readonly openai?: OpenAIOptionsInput
 }
+type AzureModelInput = ModelOptions & Pick<ModelInput, "id">
 
 const resourceBaseURL = (resourceName: string | undefined) => {
   const resource = resourceName?.trim()
@@ -20,19 +23,22 @@ const resourceBaseURL = (resourceName: string | undefined) => {
 
 export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
 
-const chatModel = Adapter.model(OpenAIChat.adapter, { provider: id })
-const responsesModel = Adapter.model(OpenAIResponses.adapter, { provider: id })
-
-export const model = (modelID: string, options: ModelOptions = {}) => {
-  const { apiVersion, resourceName, useCompletionUrls, ...rest } = options
-  const create = useCompletionUrls === true ? chatModel : responsesModel
-  return create({
-    ...rest,
-    id: modelID,
+const mapInput = (input: AzureModelInput) => {
+  const { apiVersion, resourceName, useCompletionUrls, ...rest } = input
+  return {
+    ...withOpenAIPolicy(input.id, rest),
     baseURL: rest.baseURL ?? resourceBaseURL(resourceName),
     queryParams: {
       ...rest.queryParams,
       "api-version": apiVersion ?? rest.queryParams?.["api-version"] ?? "v1",
     },
-  })
+  }
+}
+
+const chatModel = Adapter.model<AzureModelInput>(OpenAIChat.adapter, { provider: id }, { mapInput })
+const responsesModel = Adapter.model<AzureModelInput>(OpenAIResponses.adapter, { provider: id }, { mapInput })
+
+export const model = (modelID: string, options: ModelOptions = {}) => {
+  const create = options.useCompletionUrls === true ? chatModel : responsesModel
+  return create({ ...options, id: modelID })
 }

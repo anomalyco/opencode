@@ -6,14 +6,45 @@ The short version: the public API is small, providers are built from composable 
 
 Use this as a code-reading path. Open the linked files in order and skim the referenced sections.
 
+## Folder Structure
+
+```text
+packages/llm/
+  example/                 runnable tutorial and package use-site examples
+  src/                     package implementation
+    schema.ts              canonical request, response, event, and error model
+    llm.ts                 public constructors and runtime helpers
+    adapter.ts             adapter composition and request lifecycle
+    protocol.ts            provider wire-protocol contract
+    protocols/             OpenAI, Anthropic, Gemini, Bedrock, and compatible protocols
+    providers/             model helpers and provider-specific routing metadata
+    tool*.ts               typed tool definitions and tool-loop runtime
+  test/                    deterministic fixtures, recorded cassettes, and unit coverage
+  script/                  package scripts
+```
+
+## Outline
+
+- Start with `example/tutorial.ts` to see the caller-facing API.
+- Read `src/llm.ts` and `src/schema.ts` for the public runtime and canonical model.
+- Follow `src/adapter.ts` to understand request preparation, transport, parsing, and collection.
+- Read `src/protocol.ts`, `src/protocols/`, and `src/providers/` when adding or changing providers.
+- Read `src/tool-runtime.ts` and the recorded tests when changing tool loops or streaming behavior.
+
 ## Tour Index
 
 - **Use-site shape**: Sections 1-2 show the public API and canonical request model.
 - **Request lifecycle**: Sections 3-4 name the main runtime pieces and follow one request through compile, HTTP, parse, and collect.
-- **Provider internals**: Sections 5-8 explain protocols, adapter composition, provider helpers, and transforms.
+- **Provider internals**: Sections 5-8 explain protocols, adapter composition, provider helpers, and provider option lowering.
 - **Tools and streams**: Sections 9-10 show tool-loop behavior and provider-specific parser examples.
 - **Testing story**: Sections 11-13 cover deterministic fixtures, recorded cassettes, and recording commands.
 - **Wrap-up paths**: Sections 14-15 summarize the design payoff and suggest shorter reading paths for demos.
+
+Use the tour this way:
+
+- Read Section 4 for the core request lifecycle.
+- Read Sections 5-8 when adding a provider.
+- Read Sections 10-13 when changing parser behavior.
 
 ## 1. Start With The Use Site
 
@@ -43,7 +74,7 @@ The public `LLM` namespace lives in [`src/llm.ts`](./src/llm.ts).
 
 Read these pieces first:
 
-- `LLM.make` builds a runtime from providers, adapters, and transforms.
+- `LLM.make` builds the default model-bound runtime.
 - `LLM.layer` provides that runtime as an Effect service.
 - `LLM.generate` and `LLM.stream` are thin service calls.
 - `LLM.request` turns ergonomic input into canonical schema classes.
@@ -57,11 +88,10 @@ The key design choice is that the public request model is provider-neutral. Prov
 
 Before following one request through the runtime, name the main concepts:
 
-- `LLMRequest`: the canonical provider-neutral request. This is what callers build and what transforms/protocols read.
+- `LLMRequest`: the canonical provider-neutral request. This is what callers build and what protocols read.
 - `ModelRef`: the selected model plus routing metadata. `model.adapter` chooses the runnable adapter route; `model.protocol` records the wire protocol semantics.
 - `Protocol`: the wire-format brain. It converts `LLMRequest` into a provider-native payload and parses provider-native stream chunks back into `LLMEvent`s.
-- `Adapter`: the runnable deployment. It combines one `Protocol` with an `Endpoint`, `Auth`, `Framing`, headers, and adapter-local payload transforms.
-- `TransformPipeline`: the rewrite layer. Runtime transforms touch only common IR; adapter-local transforms touch native payloads.
+- `Adapter`: the runnable deployment. It combines one `Protocol` with an `Endpoint`, `Auth`, `Framing`, and headers.
 - `RequestExecutor`: the transport boundary. It sends an `HttpClientRequest` and returns an `HttpClientResponse`.
 - `LLMEvent`: the normalized stream output. Every provider eventually emits the same event vocabulary.
 
@@ -70,7 +100,7 @@ The most important distinction is adapter route versus protocol implementation:
 ```ts
 const model: ModelRef = OpenAICompatible.deepseek.model("deepseek-chat")
 
-model.adapter  // "openai-compatible-chat" — which runnable adapter to use
+model.adapter // "openai-compatible-chat" — which runnable adapter to use
 model.protocol // "openai-chat"            — which wire protocol it speaks
 ```
 
@@ -83,10 +113,10 @@ The runtime pipeline is concentrated in [`src/adapter.ts`](./src/adapter.ts).
 The important functions are:
 
 - `Adapter.model`, which binds a user-facing model helper to the adapter that can run it.
-- `LLMClient.make`, which selects an adapter, applies transforms, builds the payload, sends HTTP, and parses the response.
+- `LLMClient.make`, which selects an adapter, builds the payload, sends HTTP, and parses the response.
 - `Adapter.make`, which composes protocol semantics with endpoint, auth, and framing.
 
-At runtime, the flow is easier to read as a sequence of value transformations. There are two levels to keep separate:
+At runtime, the flow is easier to read as a sequence of values. There are two levels to keep separate:
 
 - The main request path: caller input becomes a provider HTTP request, then normalized events.
 - The parser zoom-in: `adapter.parse(...)` hides response framing, chunk decoding, and stream state.
@@ -94,7 +124,6 @@ At runtime, the flow is easier to read as a sequence of value transformations. T
 ```text
 RequestInput
   -> LLMRequest
-  -> TransformedRequest
   -> provider Payload
   -> HttpClientRequest
   -> HttpClientResponse
@@ -139,7 +168,7 @@ const request: LLMRequest = LLM.request(input)
 
 // The caller hands that request to the client and chooses one exit path:
 // inspect the compiled request, stream events, or collect a final response.
-const client: LLMClient = LLMClient.make({ adapters: [OpenAIChat.adapter] })
+const client: LLMClient = LLMClient.make()
 
 // Alternative A: compile without sending HTTP. Useful for request-shape tests.
 // LLMRequest -> PreparedRequestOf<Payload>
@@ -157,27 +186,17 @@ const generated: LLMResponse = client.generate(request)
 // Stage 3: Client Compiles The Request
 // -----------------------------------------------------------------------------
 
-// Internally, all three alternatives start by compiling the request.
-// TransformPipeline is the named rewrite layer. Runtime transforms only touch
-// canonical/common IR: request, prompt, tool-schema, and stream events.
-const transformPipeline: TransformPipeline = TransformPipeline.make(ProviderTransform.defaults)
-
-// The client selects the runnable adapter from the explicit registry keyed by
-// `request.model.adapter`. The model-bound adapter is a fallback for models
-// created directly with `Adapter.model`.
+// Internally, all three alternatives start by compiling the request. The client
+// selects the runnable adapter from the model binding or an explicit registry
+// keyed by `request.model.adapter`.
 const adapter: Adapter<Payload> = resolveAdapter(request.model)
 
-// This first pipeline call only handles pre-lowering rewrites: whole-request
-// policy, prompt/message cleanup, and tool schema cleanup.
-// LLMRequest -> TransformedRequest
-const transformedRequest: TransformedRequest = transformPipeline.transformRequest(request)
-
 // Adapter.toPayload is the protocol conversion boundary.
-// TransformedRequest.request -> provider-native Payload
+// LLMRequest -> provider-native Payload
 // It builds the JSON body shape for this API family, but does not choose a URL,
 // add auth, encode JSON, or send HTTP.
 // OpenAI Chat example output:
-const draftPayload: Payload = adapter.toPayload(transformedRequest.request)
+const draftPayload: Payload = adapter.toPayload(request)
 // {
 //   model: "gpt-4o-mini",
 //   messages: [
@@ -187,23 +206,14 @@ const draftPayload: Payload = adapter.toPayload(transformedRequest.request)
 //   stream: true,
 // }
 
-// Adapter-local payload transforms run after protocol lowering. They are the
-// only transforms allowed to touch provider-native payloads, because the adapter
-// owns the `Payload` type. The same step validates the final payload schema.
-// TransformedRequest + Payload -> TransformedPayload<Payload>
-const payloadStep: TransformedPayload<Payload> = transformPipeline.transformPayload({
-  state: transformedRequest,
-  payload: draftPayload,
-  adapterTransforms: adapter.transforms,
-  schema: adapter.payloadSchema,
-})
-
-const payload: Payload = payloadStep.payload
+// The candidate payload is validated against the protocol schema before HTTP
+// construction.
+const payload: Payload = validatePayload(draftPayload, adapter.payloadSchema)
 
 // Adapter.make composes Endpoint + Auth + JSON body encoding into a real request.
 // Payload + HttpContext -> HttpClientRequest
 const httpRequest: HttpClientRequest.HttpClientRequest = adapter.toHttp(payload, {
-  request: payloadStep.request,
+  request,
 })
 
 // -----------------------------------------------------------------------------
@@ -227,9 +237,9 @@ const events: Stream.Stream<LLMEvent, LLMError> = adapter.parse(httpResponse, {
 // ◆ Zoom in: what Adapter.parse hides ◆
 // Adapter.make builds `parse` from Framing + protocol chunk decoding +
 // Protocol.process. Those pieces have their own concrete types:
-type Frame = string                // One transport-framed item, before provider Schema decoding.
-type Chunk = OpenAIChatChunk        // One provider-native stream object, after Schema decoding.
-type State = OpenAIChatStreamState  // Parser memory needed across streamed chunks.
+type Frame = string // One transport-framed item, before provider Schema decoding.
+type Chunk = OpenAIChatChunk // One provider-native stream object, after Schema decoding.
+type State = OpenAIChatStreamState // Parser memory needed across streamed chunks.
 
 const protocol: Protocol<Payload, Frame, Chunk, State> = OpenAIChat.protocol
 const framing: Framing<Frame> = Framing.sse
@@ -314,7 +324,7 @@ interface Protocol<Payload, Frame, Chunk, State> {
 
 Read those generics as the same parser zoom-in from Section 4:
 
-- `Payload`: the provider-native JSON body after request conversion and adapter-local payload transforms.
+- `Payload`: the provider-native JSON body after request conversion and validation.
 - `Frame`: one response unit after byte framing, such as an SSE `data:` string or a Bedrock event-stream object.
 - `Chunk`: the provider-native stream chunk after Schema decoding one frame.
 - `State`: the accumulator needed to turn a sequence of chunks into common events.
@@ -374,7 +384,6 @@ interface Adapter<Payload> {
   readonly id: string
   readonly protocol: ProtocolID
   readonly payloadSchema: Schema.Codec<Payload, unknown>
-  readonly transforms: ReadonlyArray<Transform<Payload, "payload">>
   readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
   readonly toHttp: (
     payload: Payload,
@@ -468,69 +477,17 @@ Examples:
 - `OpenAICompatible.deepseek.model` constructs a named OpenAI-compatible deployment model in [`src/providers/openai-compatible.ts`](./src/providers/openai-compatible.ts).
 - `OpenRouter.model` constructs an OpenAI-compatible Chat model with OpenRouter options in [`src/providers/openrouter.ts`](./src/providers/openrouter.ts).
 
-Provider helpers should usually not contain stream parsing, JSON decoding, or protocol details. They set provider identity, defaults, capabilities, deployment options, and adapter registrations.
+Provider helpers should usually not contain stream parsing, JSON decoding, or protocol details. They set provider identity, defaults, capabilities, deployment options, and model-bound adapters.
 
-## 8. Transforms Keep Provider Quirks Out Of Common Schemas
+## 8. Provider Options Lower In Providers Or Protocols
 
-The transform system keeps one-off provider/model quirks from leaking into `LLMRequest`.
+Provider-specific knobs should live at the closest concrete owner:
 
-This is not a substitute for putting the right behavior in a protocol. If Anthropic Messages always lowers a common feature the same way, that belongs in `anthropic-messages.ts`. A transform is for behavior that is conditional on provider, model, deployment, or caller policy: the same protocol shape is mostly right, but one route needs a small, inspectable rewrite.
+- Provider facades attach typed semantic policy, such as reasoning and cache hints, to `ModelRef.policy`.
+- Protocols lower portable request/model policy into provider-native payload fields.
+- Thin provider wrappers, such as OpenRouter, can extend a reused protocol payload when the provider has extra native fields.
 
-That is why the pipeline exists. OpenCode already had a provider-transform layer because real providers reject or require little differences that are not worth baking into the common request model. The package keeps that idea, but makes each tweak named, phase-scoped, typed, ordered, and predicate-gated.
-
-Start here:
-
-- Transform types and constructors: [`src/transform.ts`](./src/transform.ts)
-- Transform execution pipeline: [`src/transform-pipeline.ts`](./src/transform-pipeline.ts)
-- Default provider transform registry: [`src/provider-transform.ts`](./src/provider-transform.ts)
-- Adapter-local transform example, OpenAI Chat include usage: [`src/protocols/openai-chat.ts`](./src/protocols/openai-chat.ts)
-- Provider-specific wrapper transform, OpenRouter options: [`src/providers/openrouter.ts`](./src/providers/openrouter.ts)
-
-The pipeline has five phases:
-
-```ts
-type TransformPhase = "request" | "prompt" | "tool-schema" | "payload" | "stream"
-```
-
-The phases used today are:
-
-- `prompt`: rewrite message history before protocol lowering.
-- `tool-schema`: rewrite tool JSON Schema before protocol lowering.
-- `payload`: adapter-local only; rewrite the provider-native payload after lowering and before HTTP encoding.
-
-The phases available but not heavily used today are:
-
-- `request`: reserved for whole-request policy before prompt/tool-schema transforms.
-- `stream`: reserved for normalized event rewrites after provider parsing.
-
-There are two transform sources because they solve different problems:
-
-- Adapter-local transforms belong to one adapter's wire format. They are payload-only today, because the adapter owns `Payload`. Use them for things like `includeUsage` or OpenRouter payload options.
-- Runtime/default transforms are cross-adapter policy. They never touch provider-native payloads; they only clean the canonical request, prompt history, tool schemas, or normalized events.
-
-If every tweak lived on adapters, cross-cutting behavior would either be duplicated across many adapters or hidden inside protocols where callers cannot turn it off. If payload tweaks were global, runtime code could mutate native payloads it does not own. The split keeps protocol semantics stable, adapter payload quirks close to adapters, and runtime policy configurable at `LLM.make(...)` / `LLMClient.make(...)`.
-
-Default transforms are enabled by `LLM.make(...)` through `ProviderTransform.defaults`. Direct `LLMClient.make(...)` callers opt in by passing `transforms`, or by using adapters that include adapter-local payload transforms.
-
-Today the default provider transforms do concrete work:
-
-- Anthropic and Bedrock: remove empty text/reasoning content that those APIs reject.
-- Claude: scrub tool call IDs to Claude's accepted character set.
-- Mistral/Devstral: shorten and scrub tool call IDs, and repair tool-result/user-message ordering.
-- Anthropic/Claude: split malformed assistant turns so `tool_use` blocks are not followed by non-tool content.
-- DeepSeek/OpenAI-compatible reasoning models: move common reasoning content into provider-native replay fields.
-- Unsupported media: turn unsupported user attachments into model-visible error text instead of sending a provider-invalid request.
-- Moonshot/Kimi: sanitize tool JSON Schema shapes the provider rejects.
-- Prompt caching: mark cache-capable providers' first system parts and last message text blocks with ephemeral cache hints.
-
-Adapter-local payload transforms are used where the quirk is specific to one adapter deployment:
-
-- OpenAI Chat and OpenAI-compatible Chat: `includeUsage` adds `stream_options.include_usage` so streaming responses include the final usage chunk.
-- OpenRouter: `applyOptions` lifts `usage`, `reasoning`, and `prompt_cache_key` model options into the OpenRouter Chat payload.
-
-The important idea is that payload transforms operate after protocol lowering but before payload validation and HTTP encoding. They are adapter-local only, which gives providers a typed place to add `stream_options`, OpenRouter routing options, or other native fields without giving runtime/global policy access to private payload shapes.
-
-The tests to read are [`test/transform.test.ts`](./test/transform.test.ts), [`test/transform-pipeline.test.ts`](./test/transform-pipeline.test.ts), and [`test/adapter.test.ts`](./test/adapter.test.ts).
+Do not grow common request schemas just to fit one provider. Prefer typed semantic policy for portable concepts and protocol/provider-local lowering for native options.
 
 ## 9. Tools Are Typed End To End
 
@@ -544,6 +501,8 @@ What is worth showing:
 - Provider-executed tools pass through without client dispatch: [`src/tool-runtime.ts`](./src/tool-runtime.ts)
 
 The common event model is what makes this work across providers. Providers emit `tool-input-delta`, `tool-call`, `tool-result`, and `request-finish` events; the runtime consumes those events and decides whether another model round is needed.
+
+Streamed tool-call assembly is shared by [`src/protocols/utils/tool-stream.ts`](./src/protocols/utils/tool-stream.ts). Protocols still own provider-native chunk interpretation, finish reason mapping, and usage mapping; the helper only starts pending tool calls, appends argument JSON deltas, emits `tool-input-delta`, and finalizes parsed `tool-call` events.
 
 ## 10. Stream Parser Examples
 
@@ -640,7 +599,7 @@ The package gets several useful properties from this shape:
 - Simple use site from `LLM.generate`, provider model helpers, and `LLM.request` constructors.
 - Provider code reuse from separating `Protocol`, `Endpoint`, `Auth`, and `Framing`.
 - Native wire visibility because payload and chunk schemas stay close to lowering/parsing code.
-- Safe provider quirks because adapter-local transforms rewrite provider payloads after lowering but before validation.
+- Safe provider quirks because provider-specific payload fields stay in provider/protocol code instead of the common request schema.
 - Common UI/runtime events because every provider parser emits `LLMEvent`s.
 - Tool-loop portability because `ToolRuntime` consumes common tool events instead of provider-specific streams.
 - Fast parser tests from `fixedResponse`, `dynamicResponse`, and `scriptedResponses`.
@@ -661,7 +620,7 @@ For a provider-composition demo:
 1. Open [`src/protocols/openai-chat.ts`](./src/protocols/openai-chat.ts).
 2. Open [`src/protocols/openai-compatible-chat.ts`](./src/protocols/openai-compatible-chat.ts).
 3. Compare `OpenAIChat.protocol` reuse with a different adapter id and endpoint.
-4. Open [`src/providers/openrouter.ts`](./src/providers/openrouter.ts) to show provider-specific options layered as an adapter-local transform.
+4. Open [`src/providers/openrouter.ts`](./src/providers/openrouter.ts) to show provider-specific options layered into a reused Chat payload.
 5. Open [`src/providers/openai-compatible-profile.ts`](./src/providers/openai-compatible-profile.ts) to show family metadata and defaults.
 
 For a testing demo:

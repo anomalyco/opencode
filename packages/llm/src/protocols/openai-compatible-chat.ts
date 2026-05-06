@@ -33,12 +33,4 @@ export const model = Adapter.model<OpenAICompatibleChatModelInput>(adapter, {
   capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
 })
 
-export const includeUsage = adapter.transform("include-usage", {
-  reason: "request final usage chunk from OpenAI-compatible Chat streaming responses",
-  apply: (payload) => ({
-    ...payload,
-    stream_options: { ...payload.stream_options, include_usage: true },
-  }),
-})
-
 export * as OpenAICompatibleChat from "./openai-compatible-chat"

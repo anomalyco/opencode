@@ -37,12 +37,11 @@ const recorded = recordedTests({
   requires: ["OPENAI_API_KEY"],
 })
 const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
-const openaiWithUsage = LLMClient.make({ adapters: [OpenAIChat.adapter.withTransforms([OpenAIChat.includeUsage])] })
 
 describe("OpenAI Chat recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
-      const response = yield* openaiWithUsage.generate(request)
+      const response = yield* openai.generate(request)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "text", value: "Hello!" },
@@ -74,7 +73,7 @@ describe("OpenAI Chat recorded", () => {
 
   recorded.effect.with("continues after tool result", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
-      const response = yield* openaiWithUsage.generate(toolResultRequest)
+      const response = yield* openai.generate(toolResultRequest)
 
       expect(eventSummary(response.events)).toEqual([
         { type: "text", value: "The weather in Paris is sunny with a temperature of 22°C." },

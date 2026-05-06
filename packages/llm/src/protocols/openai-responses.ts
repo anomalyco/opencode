@@ -15,6 +15,8 @@ import {
   type ToolDefinition,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
+import { OpenAIOptions } from "./utils/openai-options"
+import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-responses"
 
@@ -74,6 +76,16 @@ const OpenAIResponsesPayloadFields = {
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   stream: Schema.Literal(true),
+  store: Schema.optional(Schema.Boolean),
+  prompt_cache_key: Schema.optional(Schema.String),
+  include: optionalArray(Schema.Literal("reasoning.encrypted_content")),
+  reasoning: Schema.optional(Schema.Struct({
+    effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
+    summary: Schema.optional(Schema.Literal("auto")),
+  })),
+  text: Schema.optional(Schema.Struct({
+    verbosity: Schema.optional(OpenAIOptions.OpenAITextVerbosity),
+  })),
   max_output_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
@@ -130,7 +142,7 @@ const OpenAIResponsesChunk = Schema.Struct({
 type OpenAIResponsesChunk = Schema.Schema.Type<typeof OpenAIResponsesChunk>
 
 interface ParserState {
-  readonly tools: Record<string, ProviderShared.ToolAccumulator>
+  readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
 }
 
@@ -205,6 +217,24 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
   return input
 })
 
+const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (request: LLMRequest) {
+  const store = OpenAIOptions.store(request)
+  const promptCacheKey = OpenAIOptions.promptCacheKey(request)
+  const effort = OpenAIOptions.reasoningEffort(request)
+  if (effort && !OpenAIOptions.isReasoningEffort(effort))
+    return yield* invalid(`OpenAI Responses does not support reasoning effort ${effort}`)
+  const summary = OpenAIOptions.reasoningSummary(request)
+  const encryptedState = OpenAIOptions.encryptedReasoning(request)
+  const verbosity = OpenAIOptions.textVerbosity(request)
+  return {
+    ...(store !== undefined ? { store } : {}),
+    ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
+    ...(encryptedState ? { include: ["reasoning.encrypted_content"] as const } : {}),
+    ...(effort || summary ? { reasoning: { effort, summary } } : {}),
+    ...(verbosity ? { text: { verbosity } } : {}),
+  }
+})
+
 const toPayload = Effect.fn("OpenAIResponses.toPayload")(function* (request: LLMRequest) {
   return {
     model: request.model.id,
@@ -215,6 +245,7 @@ const toPayload = Effect.fn("OpenAIResponses.toPayload")(function* (request: LLM
     max_output_tokens: request.generation.maxTokens,
     temperature: request.generation.temperature,
     top_p: request.generation.topP,
+    ...(yield* lowerOptions(request)),
   }
 })
 
@@ -240,26 +271,6 @@ const mapFinishReason = (chunk: OpenAIResponsesChunk, hasFunctionCall: boolean):
   if (reason === "content_filter") return "content-filter"
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
-
-const pushToolDelta = (tools: Record<string, ProviderShared.ToolAccumulator>, itemId: string, delta: string) =>
-  Effect.gen(function* () {
-    const current = tools[itemId]
-    if (!current) {
-      return yield* ProviderShared.chunkError(ADAPTER, "OpenAI Responses tool argument delta is missing its tool call")
-    }
-    return { ...current, input: `${current.input}${delta}` }
-  })
-
-const finishToolCall = (tools: Record<string, ProviderShared.ToolAccumulator>, item: NonNullable<OpenAIResponsesChunk["item"]>) =>
-  Effect.gen(function* () {
-    if (item.type !== "function_call" || !item.id || !item.call_id || !item.name) return [] as ReadonlyArray<LLMEvent>
-    const raw = item.arguments ?? tools[item.id]?.input ?? ""
-    const input = yield* ProviderShared.parseToolInput(ADAPTER, item.name, raw)
-    return [{ type: "tool-call" as const, id: item.call_id, name: item.name, input }]
-  })
-
-const withoutTool = (tools: Record<string, ProviderShared.ToolAccumulator>, id: string | undefined) =>
-  id === undefined ? tools : Object.fromEntries(Object.entries(tools).filter(([key]) => key !== id))
 
 // Hosted tool items (provider-executed) ship their typed input + status + result
 // fields all in one item. We expose them as a `tool-call` + `tool-result` pair
@@ -321,39 +332,49 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
     if (chunk.type === "response.output_item.added" && chunk.item?.type === "function_call" && chunk.item.id) {
       return [{
         hasFunctionCall: state.hasFunctionCall,
-        tools: {
-          ...state.tools,
-          [chunk.item.id]: {
-            id: chunk.item.call_id ?? chunk.item.id,
-            name: chunk.item.name ?? "",
-            input: chunk.item.arguments ?? "",
-          },
-        },
+        tools: ToolStream.start(state.tools, chunk.item.id, {
+          id: chunk.item.call_id ?? chunk.item.id,
+          name: chunk.item.name ?? "",
+          input: chunk.item.arguments ?? "",
+        }),
       }, []] as const
     }
 
     if (chunk.type === "response.function_call_arguments.delta" && chunk.item_id && chunk.delta) {
-      const current = yield* pushToolDelta(state.tools, chunk.item_id, chunk.delta)
-      return [{ hasFunctionCall: state.hasFunctionCall, tools: { ...state.tools, [chunk.item_id]: current } }, [
-        { type: "tool-input-delta" as const, id: current.id, name: current.name, text: chunk.delta },
-      ]] as const
+      const result = ToolStream.appendExisting(
+        ADAPTER,
+        state.tools,
+        chunk.item_id,
+        chunk.delta,
+        "OpenAI Responses tool argument delta is missing its tool call",
+      )
+      if (ToolStream.isError(result)) return yield* result
+      return [{ hasFunctionCall: state.hasFunctionCall, tools: result.tools }, result.event ? [result.event] : []] as const
     }
 
     if (chunk.type === "response.output_item.done" && chunk.item?.type === "function_call") {
-      const events = yield* finishToolCall(state.tools, chunk.item)
+      if (!chunk.item.id || !chunk.item.call_id || !chunk.item.name) return [state, []] as const
+      const tools = state.tools[chunk.item.id]
+        ? state.tools
+        : ToolStream.start(state.tools, chunk.item.id, { id: chunk.item.call_id, name: chunk.item.name })
+      const result = chunk.item.arguments === undefined
+        ? yield* ToolStream.finish(ADAPTER, tools, chunk.item.id)
+        : yield* ToolStream.finishWithInput(ADAPTER, tools, chunk.item.id, chunk.item.arguments)
       return [{
-        hasFunctionCall: events.length > 0 ? true : state.hasFunctionCall,
-        tools: withoutTool(state.tools, chunk.item.id),
-      }, events] as const
+        hasFunctionCall: result.event ? true : state.hasFunctionCall,
+        tools: result.tools,
+      }, result.event ? [result.event] : []] as const
     }
 
     if (chunk.type === "response.output_item.done" && chunk.item && isHostedToolItem(chunk.item)) {
       return [state, hostedToolEvents(chunk.item)] as const
     }
 
-    if (chunk.type === "response.completed" || chunk.type === "response.incomplete") {
-      return [state, [{ type: "request-finish" as const, reason: mapFinishReason(chunk, state.hasFunctionCall), usage: mapUsage(chunk.response?.usage) }]] as const
-    }
+    if (chunk.type === "response.completed" || chunk.type === "response.incomplete")
+      return [
+        state,
+        [{ type: "request-finish" as const, reason: mapFinishReason(chunk, state.hasFunctionCall), usage: mapUsage(chunk.response?.usage) }],
+      ] as const
 
     if (chunk.type === "error") {
       return [state, [{ type: "provider-error" as const, message: chunk.message ?? chunk.code ?? "OpenAI Responses stream error" }]] as const
@@ -375,7 +396,7 @@ export const protocol = Protocol.define({
   payload: OpenAIResponsesPayload,
   toPayload,
   chunk: Protocol.jsonChunk(OpenAIResponsesChunk),
-  initial: () => ({ hasFunctionCall: false, tools: {} }),
+  initial: () => ({ hasFunctionCall: false, tools: ToolStream.empty<string>() }),
   process: processChunk,
 })
 

@@ -37,6 +37,22 @@ const get_weather = tool({
 })
 
 describe("ToolRuntime", () => {
+  it.effect("preserves bound model adapters when adding runtime tools", () =>
+    Effect.gen(function* () {
+      const llm = LLMClient.make()
+      const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
+
+      const events = Array.from(
+        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
+      )
+
+      expect(LLM.outputText({ events })).toBe("Done.")
+    }),
+  )
+
   it.effect("dispatches a tool call, appends results, and resumes streaming", () =>
     Effect.gen(function* () {
       const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })

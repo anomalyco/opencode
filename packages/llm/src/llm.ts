@@ -5,21 +5,20 @@ import {
   modelLimits,
   modelRef,
   preserveModelBinding,
-  type AnyAdapter,
-  type ClientOptions,
   type ModelCapabilitiesInput,
   type ModelRefInput,
 } from "./adapter"
 import type { RequestExecutor } from "./executor"
-import { ProviderTransform } from "./provider-transform"
 import { type Tools } from "./tool"
 import { ToolRuntime, type RunOptions } from "./tool-runtime"
 import {
   GenerationOptions,
+  CacheIntent,
   LLMEvent,
   LLMRequest,
   LLMResponse,
   Message,
+  ReasoningIntent,
   ToolChoice,
   ToolDefinition,
   type ContentPart,
@@ -30,35 +29,22 @@ import {
 } from "./schema"
 import type { LLMError } from "./schema"
 
-export interface Provider {
-  readonly adapters: ReadonlyArray<AnyAdapter>
-}
-
-export interface MakeOptions {
-  readonly providers?: ReadonlyArray<Provider>
-  readonly adapters?: ClientOptions["adapters"]
-  readonly transforms?: ClientOptions["transforms"]
-}
-
 export type StreamWithToolsInput<T extends Tools> = Omit<RequestInput, "tools"> & Omit<RunOptions<T>, "request">
 
 export interface Runtime {
   readonly stream: (input: LLMRequest | RequestInput) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
   readonly generate: (input: LLMRequest | RequestInput) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
-  readonly streamWithTools: <T extends Tools>(input: StreamWithToolsInput<T>) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
+  readonly streamWithTools: <T extends Tools>(
+    input: StreamWithToolsInput<T>,
+  ) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
 }
 
 export class Service extends Context.Service<Service, Runtime>()("@opencode/LLM") {}
 
-const clientOptions = (options: MakeOptions): ClientOptions => ({
-  adapters: [...(options.providers ?? []).flatMap((provider) => provider.adapters), ...(options.adapters ?? [])],
-  transforms: options.transforms ?? ProviderTransform.defaults,
-})
+const requestOf = (input: LLMRequest | RequestInput) => (input instanceof LLMRequest ? input : request(input))
 
-const requestOf = (input: LLMRequest | RequestInput) => input instanceof LLMRequest ? input : request(input)
-
-export const make = (options: MakeOptions = {}): Runtime => {
-  const client = LLMClient.make(clientOptions(options))
+export const make = (): Runtime => {
+  const client = LLMClient.make()
   return {
     stream: (input) => client.stream(requestOf(input)),
     generate: (input) => client.generate(requestOf(input)),
@@ -69,8 +55,7 @@ export const make = (options: MakeOptions = {}): Runtime => {
   }
 }
 
-export const layer = (options: MakeOptions = {}): Layer.Layer<Service> =>
-  Layer.succeed(Service, Service.of(make(options)))
+export const layer = (): Layer.Layer<Service> => Layer.succeed(Service, Service.of(make()))
 
 export const stream = (input: LLMRequest | RequestInput) =>
   Stream.unwrap(
@@ -99,11 +84,7 @@ export type MessageInput = Omit<ConstructorParameters<typeof Message>[0], "conte
   readonly content: string | ContentPart | ReadonlyArray<ContentPart>
 }
 
-export type ToolChoiceInput =
-  | ToolChoice
-  | ConstructorParameters<typeof ToolChoice>[0]
-  | ToolDefinition
-  | string
+export type ToolChoiceInput = ToolChoice | ConstructorParameters<typeof ToolChoice>[0] | ToolDefinition | string
 export type ToolChoiceMode = Exclude<ToolChoice["type"], "tool">
 
 export type ToolResultInput = Omit<ToolResultPart, "type" | "result"> & {
@@ -144,8 +125,7 @@ export const message = (input: Message | MessageInput) => {
   return new Message({ ...input, content: contentParts(input.content) })
 }
 
-export const user = (content: string | ContentPart | ReadonlyArray<ContentPart>) =>
-  message({ role: "user", content })
+export const user = (content: string | ContentPart | ReadonlyArray<ContentPart>) => message({ role: "user", content })
 
 export const assistant = (content: string | ContentPart | ReadonlyArray<ContentPart>) =>
   message({ role: "assistant", content })
@@ -190,13 +170,24 @@ const isToolChoiceMode = (value: string): value is ToolChoiceMode =>
 export const toolChoice = (input: ToolChoiceInput) => {
   if (input instanceof ToolChoice) return input
   if (input instanceof ToolDefinition) return new ToolChoice({ type: "tool", name: input.name })
-  if (typeof input === "string") return isToolChoiceMode(input) ? new ToolChoice({ type: input }) : toolChoiceName(input)
+  if (typeof input === "string")
+    return isToolChoiceMode(input) ? new ToolChoice({ type: input }) : toolChoiceName(input)
   return new ToolChoice(input)
 }
 
 export const generation = (input: GenerationOptions | ConstructorParameters<typeof GenerationOptions>[0] = {}) => {
   if (input instanceof GenerationOptions) return input
   return new GenerationOptions(input)
+}
+
+const reasoning = (input: ReasoningIntent | ConstructorParameters<typeof ReasoningIntent>[0] | undefined) => {
+  if (input === undefined || input instanceof ReasoningIntent) return input
+  return new ReasoningIntent(input)
+}
+
+const cache = (input: CacheIntent | ConstructorParameters<typeof CacheIntent>[0] | undefined) => {
+  if (input === undefined || input instanceof CacheIntent) return input
+  return new CacheIntent(input)
 }
 
 export const requestInput = (input: LLMRequest): RequestInput => ({
@@ -215,7 +206,15 @@ export const requestInput = (input: LLMRequest): RequestInput => ({
 })
 
 export const request = (input: RequestInput) => {
-  const { system: requestSystem, prompt, messages, tools, toolChoice: requestToolChoice, generation: requestGeneration, ...rest } = input
+  const {
+    system: requestSystem,
+    prompt,
+    messages,
+    tools,
+    toolChoice: requestToolChoice,
+    generation: requestGeneration,
+    ...rest
+  } = input
   const result = new LLMRequest({
     ...rest,
     system: systemParts(requestSystem),
@@ -223,6 +222,8 @@ export const request = (input: RequestInput) => {
     tools: tools?.map(toolDefinition) ?? [],
     toolChoice: requestToolChoice ? toolChoice(requestToolChoice) : undefined,
     generation: generation(requestGeneration),
+    reasoning: reasoning(rest.reasoning),
+    cache: cache(rest.cache),
   })
   preserveModelBinding(input.model, result.model)
   return result

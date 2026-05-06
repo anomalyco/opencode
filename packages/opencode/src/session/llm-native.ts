@@ -1,4 +1,4 @@
-import { LLM, type ContentPart, type MediaPart } from "@opencode-ai/llm"
+import { CacheHint, LLM, type ContentPart, type MediaPart, type Message, type ModelRef, type SystemPart } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { ProviderLLMBridge } from "@/provider/llm-bridge"
 import * as EffectZod from "@/util/effect-zod"
@@ -101,6 +101,8 @@ const encryptedReasoning = (metadata: Record<string, unknown> | undefined) => {
 
 const isToolPart = (part: MessageV2.Part): part is MessageV2.ToolPart => part.type === "tool"
 
+const EPHEMERAL_CACHE = new CacheHint({ type: "ephemeral" })
+
 const supportsPart = (message: MessageV2.WithParts, part: MessageV2.Part) => {
   if (part.type === "text") return true
   if (part.type === "file") return message.info.role === "user"
@@ -180,6 +182,27 @@ const assistantMessages = (input: MessageV2.WithParts) => {
   ].filter(isDefined)
 }
 
+const cacheLastText = (content: ReadonlyArray<ContentPart>): ReadonlyArray<ContentPart> => {
+  const last = content.findLastIndex((part) => part.type === "text")
+  if (last === -1) return content
+  return content.map((part, index) => index === last && part.type === "text" ? { ...part, cache: EPHEMERAL_CACHE } : part)
+}
+
+const cacheHints = (input: {
+  readonly model: ModelRef
+  readonly system: ReadonlyArray<SystemPart>
+  readonly messages: ReadonlyArray<Message>
+}) => {
+  if (!input.model.capabilities.cache.prompt) return input
+  return {
+    model: input.model,
+    system: input.system.map((part, index) => index < 2 ? { ...part, cache: EPHEMERAL_CACHE } : part),
+    messages: input.messages.map((message, index) =>
+      index < input.messages.length - 2 ? message : LLM.message({ ...message, content: cacheLastText(message.content) }),
+    ),
+  }
+}
+
 // User-role parts that pass the static gate: text and file. Text becomes a
 // `LLM.text(...)` ContentPart; file becomes a `MediaPart` via `lowerFilePart`,
 // which can yield `UnsupportedContentError` for non-data URLs.
@@ -239,15 +262,19 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
   }
   const headers = { ...model.headers, ...input.headers }
   const requestModel = Object.keys(headers).length === 0 ? model : LLM.model({ ...model, headers })
-  // Cache hints, tool-id scrubbing, and other adapter-aware transforms live in
-  // `@opencode-ai/llm`'s `ProviderTransform` registry. Callers wire them in at
-  // `client({ adapters, transforms: ProviderTransform.defaults })` time so the
-  // bridge stays focused on shape conversion.
-  return LLM.request({
-    id: input.id,
+  const cached = cacheHints({
     model: requestModel,
     system: input.system?.filter((part) => part.trim() !== "").map(LLM.system) ?? [],
     messages: (yield* Effect.forEach(input.messages, lowerMessage)).flat(),
+  })
+
+  // Keep this bridge focused on shape conversion. Provider-specific policy and
+  // quirks should live on model policy, provider facades, or protocol lowering.
+  return LLM.request({
+    id: input.id,
+    model: cached.model,
+    system: cached.system,
+    messages: cached.messages,
     tools: input.tools?.map((tool) => toolDefinition({ model: input.model, tool })) ?? [],
     toolChoice: input.toolChoice,
     generation: input.generation,

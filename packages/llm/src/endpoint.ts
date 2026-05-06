@@ -13,8 +13,8 @@ export type EndpointPart<Payload> = string | ((input: EndpointInput<Payload>) =>
  * Declarative URL construction for one adapter.
  *
  * `Endpoint` is the deployment-side answer to "where does this request go?".
- * `render(...)` interprets this data after request/payload transforms, so dynamic
- * pieces can read the final `LLMRequest` and validated provider payload.
+ * `render(...)` interprets this data after protocol lowering, so dynamic pieces
+ * can read the final `LLMRequest` and validated provider payload.
  */
 export interface Endpoint<Payload> {
   readonly baseURL?: EndpointPart<Payload>

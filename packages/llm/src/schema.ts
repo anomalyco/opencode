@@ -23,6 +23,9 @@ export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xh
 export const ReasoningEffort = Schema.Literals(ReasoningEfforts)
 export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 
+export const TextVerbosity = Schema.Literals(["low", "medium", "high"])
+export type TextVerbosity = Schema.Schema.Type<typeof TextVerbosity>
+
 export const TransformPhase = Schema.Literals(["request", "prompt", "tool-schema", "payload", "stream"])
 export type TransformPhase = Schema.Schema.Type<typeof TransformPhase>
 
@@ -69,6 +72,30 @@ export class ModelLimits extends Schema.Class<ModelLimits>("LLM.ModelLimits")({
   output: Schema.optional(Schema.Number),
 }) {}
 
+export class ModelPolicy extends Schema.Class<ModelPolicy>("LLM.ModelPolicy")({
+  retention: Schema.optional(Schema.Struct({
+    store: Schema.optional(Schema.Boolean),
+    dataCollection: Schema.optional(Schema.Literals(["allow", "deny"])),
+  })),
+  reasoning: Schema.optional(Schema.Struct({
+    effort: Schema.optional(ReasoningEffort),
+    summary: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("auto")])),
+    encryptedState: Schema.optional(Schema.Boolean),
+    display: Schema.optional(Schema.Literals(["summarized", "omitted"])),
+  })),
+  text: Schema.optional(Schema.Struct({
+    verbosity: Schema.optional(TextVerbosity),
+  })),
+  cache: Schema.optional(Schema.Struct({
+    promptKey: Schema.optional(Schema.String),
+    ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
+  })),
+  usage: Schema.optional(Schema.Struct({
+    include: Schema.optional(Schema.Boolean),
+    includeCost: Schema.optional(Schema.Boolean),
+  })),
+}) {}
+
 export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   id: ModelID,
   provider: ProviderID,
@@ -91,6 +118,13 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   queryParams: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   capabilities: ModelCapabilities,
   limits: ModelLimits,
+  /**
+   * Provider-agnostic defaults and policy that protocols can lower into their
+   * native fields. Request-level options override these defaults.
+   */
+  policy: Schema.optional(ModelPolicy),
+  /** Provider-owned typed-at-the-facade options for non-portable knobs. */
+  providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   /**
    * Provider-specific opaque options. Reach for this only when the value is
    * genuinely provider-private and does not fit a typed axis (e.g. Bedrock's

@@ -3,7 +3,6 @@ import { Adapter, type AdapterModelInput } from "../adapter"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities } from "../llm"
-import { payload as payloadTransform } from "../transform"
 import { Protocol } from "../protocol"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
@@ -19,6 +18,7 @@ export interface OpenRouterOptions {
 }
 
 export type ModelOptions = Omit<AdapterModelInput, "id"> & OpenRouterOptions
+type ModelInput = ModelOptions & Pick<AdapterModelInput, "id">
 
 const OpenRouterPayload = Schema.StructWithRest(Schema.Struct(OpenAIChat.payloadFields), [
   Schema.Record(Schema.String, Schema.Any),
@@ -30,7 +30,7 @@ export const protocol = Protocol.define({
   id: "openrouter-chat",
   payload: OpenRouterPayload,
   toPayload: (request) => OpenAIChat.protocol.toPayload(request).pipe(
-    Effect.map((payload) => payload as OpenRouterPayload),
+    Effect.map((payload) => ({ ...payload, ...payloadOptions(request.model.native?.openrouter) }) as OpenRouterPayload),
   ),
 })
 
@@ -55,31 +55,28 @@ const nativeOptions = (options: ModelOptions) => {
   return { ...options.native, openrouter }
 }
 
-export const applyOptions = payloadTransform<OpenRouterPayload>("openrouter.options", {
-  reason: "apply OpenRouter provider options to the Chat payload",
-  when: (context) => context.model.provider === profile.provider && Object.keys(payloadOptions(context.model.native?.openrouter)).length > 0,
-  apply: (payload, context) => {
-    const options = payloadOptions(context.model.native?.openrouter)
-    if (Object.keys(options).length === 0) return payload
-    return { ...payload, ...options }
-  },
-})
-
 export const adapter = Adapter.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({ default: profile.baseURL, path: "/chat/completions" }),
   framing: Framing.sse,
-  transforms: [applyOptions],
 })
 
 export const adapters = [adapter]
 
-const modelRef = Adapter.model<AdapterModelInput>(adapter, {
-  provider: profile.provider,
-  baseURL: profile.baseURL,
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-})
+const modelRef = Adapter.model<ModelInput>(
+  adapter,
+  {
+    provider: profile.provider,
+    baseURL: profile.baseURL,
+    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  },
+  {
+    mapInput: (input) => {
+      const { usage, reasoning, promptCacheKey, ...rest } = input
+      return { ...rest, native: nativeOptions(input) }
+    },
+  },
+)
 
-export const model = (id: string, options: ModelOptions = {}) =>
-  modelRef({ ...options, id, native: nativeOptions(options) })
+export const model = (id: string, options: ModelOptions = {}) => modelRef({ ...options, id })

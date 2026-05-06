@@ -5,7 +5,7 @@ import { ToolDefinition, ToolFailure } from "./schema"
 /**
  * Schema constraint for tool parameters / success values: no decoding or
  * encoding services are allowed. Tools should be self-contained — anything
- * beyond pure data transformation belongs in the handler closure.
+ * beyond pure data conversion belongs in the handler closure.
  */
 export type ToolSchema<T> = Schema.Codec<T, any, never, never>
 

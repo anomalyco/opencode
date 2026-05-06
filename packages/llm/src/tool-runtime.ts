@@ -1,6 +1,6 @@
 import { Effect, Stream } from "effect"
 import type { Concurrency } from "effect/Types"
-import type { LLMClient } from "./adapter"
+import { updateLLMRequest, type LLMClient } from "./adapter"
 import type { RequestExecutor } from "./executor"
 import {
   type ContentPart,
@@ -64,8 +64,7 @@ export const run = <T extends Tools>(
   const tools = options.tools as Tools
   const runtimeTools = toDefinitions(tools)
   const runtimeToolNames = new Set(runtimeTools.map((tool) => tool.name))
-  const initialRequest = new LLMRequest({
-    ...options.request,
+  const initialRequest = updateLLMRequest(options.request, {
     tools: [
       ...options.request.tools.filter((tool) => !runtimeToolNames.has(tool.name)),
       ...runtimeTools,
@@ -92,8 +91,7 @@ export const run = <T extends Tools>(
               (call) => dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
               { concurrency },
             )
-            const followUp = new LLMRequest({
-              ...request,
+            const followUp = updateLLMRequest(request, {
               messages: [
                 ...request.messages,
                 assistant(state.assistantContent),

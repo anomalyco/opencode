@@ -192,9 +192,7 @@ describe("OpenAI-compatible Chat adapter", () => {
 
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.make({
-        adapters: [OpenAICompatibleChat.adapter.withTransforms([OpenAICompatibleChat.includeUsage])],
-      })
+      const response = yield* LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] })
         .generate(request)
         .pipe(
           Effect.provide(
@@ -206,7 +204,6 @@ describe("OpenAI-compatible Chat adapter", () => {
                 expect(decodeJson(input.text)).toMatchObject({
                   model: "deepseek-chat",
                   stream: true,
-                  stream_options: { include_usage: true },
                   messages: [
                     { role: "system", content: "You are concise." },
                     { role: "user", content: "Say hello." },

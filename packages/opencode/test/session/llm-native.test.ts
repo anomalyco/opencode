@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AnthropicMessages, BedrockConverse, Gemini, LLMClient, OpenAICompatibleChat, OpenAIResponses, ProviderTransform } from "@opencode-ai/llm"
+import { AnthropicMessages, BedrockConverse, Gemini, LLMClient, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { LLMNative } from "../../src/session/llm-native"
@@ -729,7 +729,8 @@ describe("LLMNative.request", () => {
 
     expect(request.model).toMatchObject({
       provider: "togetherai",
-      protocol: "openai-compatible-chat",
+      adapter: "openai-compatible-chat",
+      protocol: "openai-chat",
       baseURL: "https://api.together.xyz/v1",
       apiKey: "together-key",
     })
@@ -893,13 +894,11 @@ describe("LLMNative.request", () => {
     })
   }))
 
-  // Cache hint policy. The bridge produces a hint-free `LLMRequest`; the
-  // `ProviderTransform.cachePromptHints` transform (loaded in `ProviderTransform.defaults`)
-  // marks first-2 system parts and last-2 messages with ephemeral cache
-  // hints when the model advertises `capabilities.cache.prompt`. Adapters
-  // then lower the hints to the provider-specific marker — `cache_control`
-  // on Anthropic, `cachePoint` on Bedrock. Non-cache adapters never see a
-  // hint thanks to the predicate gate.
+  // Cache hint policy. The native bridge marks first-2 system parts and last-2
+  // messages with ephemeral cache hints when the model advertises
+  // `capabilities.cache.prompt`. Adapters then lower the hints to the
+  // provider-specific marker: `cache_control` on Anthropic, `cachePoint` on
+  // Bedrock. Non-cache adapters never receive hints.
 
   const anthropicModel = () =>
     model({
@@ -931,7 +930,6 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [AnthropicMessages.adapter],
-        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       expect(prepared.payload).toMatchObject({
@@ -956,7 +954,6 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [AnthropicMessages.adapter],
-        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       expect(prepared.payload).toMatchObject({
@@ -983,7 +980,6 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [BedrockConverse.adapter],
-        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       expect(prepared.payload).toMatchObject({
@@ -1000,7 +996,7 @@ describe("LLMNative.request", () => {
   it.effect("does not apply cache hints when the model does not support prompt caching", () =>
     Effect.gen(function* () {
       // gpt-5 / openai resolves to openai-responses with cache.prompt: false.
-      // The patch's `when` predicate must skip, leaving the payload hint-free.
+      // The bridge must skip cache hints, leaving the payload hint-free.
       const mdl = model()
       const ids = [MessageID.ascending(), MessageID.ascending()]
       const request = yield* LLMNative.request({
@@ -1011,7 +1007,6 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [OpenAIResponses.adapter],
-        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       // The serialized OpenAI Responses payload has no cache concept; the
@@ -1090,7 +1085,6 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* LLMClient.make({
         adapters: [AnthropicMessages.adapter],
-        transforms: ProviderTransform.defaults,
       }).prepare(request)
 
       expect(prepared.payload).toMatchObject({

@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer"
 import { Cause, Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import { InvalidRequestError, ProviderChunkError, type LLMEvent, type MediaPart, type ToolResultPart } from "../schema"
+import { InvalidRequestError, ProviderChunkError, type MediaPart, type ToolResultPart } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -21,20 +21,12 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across
  * multiple `tool-input-delta` chunks store the partial JSON input string here
- * and finalize it with `parseToolInput` once the call completes. Anthropic
- * extends this with a `providerExecuted` flag for hosted (server-side) tools;
- * it should be the only adapter to do so.
+ * and finalize it with `parseToolInput` once the call completes.
  */
 export interface ToolAccumulator {
   readonly id: string
   readonly name: string
   readonly input: string
-}
-
-export interface ParsedToolCall {
-  readonly id: string
-  readonly name: string
-  readonly input: unknown
 }
 
 /**
@@ -79,22 +71,6 @@ export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) =>
  */
 export const parseToolInput = (adapter: string, name: string, raw: string) =>
   parseJson(adapter, raw || "{}", `Invalid JSON input for ${adapter} tool call ${name}`)
-
-export const parsedToolCall = (adapter: string, tool: ToolAccumulator) =>
-  parseToolInput(adapter, tool.name, tool.input).pipe(
-    Effect.map((input) => ({ id: tool.id, name: tool.name, input }) satisfies ParsedToolCall),
-  )
-
-export const toolCallEvent = (
-  adapter: string,
-  tool: ToolAccumulator,
-  options: { readonly providerExecuted?: boolean } = {},
-) =>
-  parsedToolCall(adapter, tool).pipe(
-    Effect.map((call): LLMEvent =>
-      options.providerExecuted ? { type: "tool-call", ...call, providerExecuted: true } : { type: "tool-call", ...call },
-    ),
-  )
 
 /**
  * Encode a `MediaPart`'s raw bytes for inclusion in a JSON request body.

@@ -28,7 +28,7 @@ const model = OpenAI.model("gpt-4o-mini", {
 const request = LLM.request({
   model,
   system: "You are concise and practical.",
-  prompt: "Say hello in one short sentence.",
+  prompt: "Tell me a joke",
 })
 
 // 3. `generate` sends the request and collects the event stream into one
@@ -46,7 +46,7 @@ const generateOnce = Effect.gen(function* () {
 const streamText = LLM.stream(request).pipe(
   Stream.tap((event) =>
     Effect.sync(() => {
-      if (event.type === "text-delta") process.stdout.write(event.text)
+      if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
       if (event.type === "request-finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
     }),
   ),
@@ -129,8 +129,8 @@ const FakeAdapter = Adapter.make({
 })
 
 // A provider module exports a model helper. The model helper sets provider
-// identity, protocol id, and the adapter that can run this in-memory model
-// handle. Serialized / revived models can still use explicit provider adapters.
+// identity, protocol id, and the adapter that can run this model handle.
+// Serialized / revived models can still use explicit provider adapters.
 const FakeEcho = {
   model: (id: string) =>
     Adapter.bindModel(
@@ -144,10 +144,10 @@ const FakeEcho = {
 }
 
 // `LLMClient.prepare` is the lower-level inspection hook: it compiles through
-// patches, payload conversion, validation, endpoint, auth, and HTTP construction
-// without sending anything over the network.
+// payload conversion, validation, endpoint, auth, and HTTP construction without
+// sending anything over the network.
 const inspectFakeProvider = Effect.gen(function* () {
-  const prepared = yield* LLMClient.make({ adapters: [FakeAdapter] }).prepare(
+  const prepared = yield* LLMClient.make().prepare(
     LLM.request({
       model: FakeEcho.model("tiny-echo"),
       prompt: "Show me the provider pipeline.",
@@ -159,15 +159,14 @@ const inspectFakeProvider = Effect.gen(function* () {
   console.log("payload:", Formatter.formatJson(prepared.payload, { space: 2 }))
 })
 
-// Provide the LLM runtime and the HTTP request executor once. The default path
-// sends one live generate call and one local fake-provider prepare call.
-// Uncomment the alternatives when you want to inspect streaming or tool behavior
-// without spending tokens on all paths.
+// Provide the LLM runtime and the HTTP request executor once. Keep one path
+// enabled at a time so the tutorial can demonstrate generate, prepare, stream,
+// or tool-loop behavior without spending tokens on every example.
 const program = Effect.gen(function* () {
-  yield* generateOnce
-  yield* inspectFakeProvider
+  // yield* generateOnce
+  // yield* inspectFakeProvider
   // yield* streamText
-  // yield* streamWithTools
+  yield* streamWithTools
 }).pipe(Effect.provide(Layer.mergeAll(LLM.layer(), RequestExecutor.defaultLayer)))
 
 Effect.runPromise(program)

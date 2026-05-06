@@ -3,7 +3,7 @@
 ## Effect
 
 - Prefer `HttpClient.HttpClient` / `HttpClientResponse.HttpClientResponse` over web `fetch` / `Response` at package boundaries.
-- Use `Stream.Stream` for streaming transformations. Avoid ad hoc async generators or manual web reader loops unless an Effect `Stream` API cannot model the behavior.
+- Use `Stream.Stream` for streaming data flow. Avoid ad hoc async generators or manual web reader loops unless an Effect `Stream` API cannot model the behavior.
 - Use Effect Schema codecs for JSON encode/decode (`Schema.fromJsonString(...)`) instead of direct `JSON.parse` / `JSON.stringify` in implementation code.
 - In `Effect.gen`, yield yieldable errors directly (`return yield* new MyError(...)`) instead of `Effect.fail(new MyError(...))`.
 - Use `Effect.void` instead of `Effect.succeed(undefined)` when the successful value is intentionally void.
@@ -28,10 +28,10 @@ const request = LLM.request({
   prompt: "Say hello.",
 })
 
-const response = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] }).generate(request)
+const response = yield* LLMClient.make().generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `LLMClient.make(...)` selects an adapter by `request.model.adapter`, applies runtime transforms, prepares a typed provider payload, applies adapter-local payload transforms, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `LLMClient.make(...)` selects an adapter from the model binding or explicit registry by `request.model.adapter`, prepares a typed provider payload, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
 Use `LLMClient.make(...).stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.make(...).generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.make(...).prepare<Payload>(request)` to compile a request through the adapter pipeline without sending it — the optional `Payload` type argument narrows `.payload` to the adapter's native shape (e.g. `prepare<OpenAIChatPayload>(...)` returns a `PreparedRequestOf<OpenAIChatPayload>`). The runtime payload is identical; the generic is a type-level assertion.
 
@@ -71,14 +71,10 @@ packages/llm/src/
   llm.ts                // request constructors and convenience helpers
   adapter.ts            // Adapter.make + LLMClient.make
   executor.ts           // RequestExecutor service + transport error mapping
-  transform.ts          // Transform system (request/prompt/tool-schema/payload/stream)
-
   protocol.ts           // Protocol type + Protocol.define
   endpoint.ts           // Endpoint type + Endpoint.baseURL
   auth.ts               // Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
   framing.ts            // Framing type + Framing.sse
-  provider-transform.ts // ProviderTransform helpers (defaults, capability gates)
-
   protocols/
     shared.ts           // ProviderShared toolkit used inside protocol impls
     openai-chat.ts      // protocol + adapter (compose OpenAIChat.protocol)
@@ -112,28 +108,6 @@ The dependency arrow points down: `providers/*.ts` files import `protocols`, `en
 - `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Adapter.make(...)` uses this for payload validation; lower-level adapters can reuse it.
 
 If you find yourself copying a 3-to-5-line snippet between two protocols, lift it into `ProviderShared` next to these helpers rather than duplicating.
-
-### Transforms
-
-Transforms are the forcing function for provider/model quirks, similar to OpenCode's `ProviderTransform`: prompt cleanup, provider option shaping, schema sanitization, and payload-level body tweaks. If a behavior is not universal enough for common IR, keep it as a named transform at the right pipeline boundary. Good examples:
-
-- OpenAI Chat streaming usage: `payload.openai-chat.include-usage` adds `stream_options.include_usage`.
-- Anthropic prompt caching: map common cache hints onto selected content/message blocks.
-- Mistral/OpenAI-compatible prompt cleanup: normalize empty text content or tool-call IDs only for affected models.
-- Reasoning models: map common reasoning intent to provider-specific effort, summary, or encrypted-content fields.
-
-Do not grow common request schemas just to fit one provider. Prefer runtime transforms for common IR and adapter-local payload transforms for provider-native payload fields. Runtime transforms cannot touch provider-native payloads, and transforms must not reroute a request: `model.provider`, `model.id`, `model.adapter`, and `model.protocol` are fixed before transforms run.
-
-Current OpenCode parity map:
-
-| Native location | OpenCode source | Status |
-| --- | --- | --- |
-| `ProviderTransform.removeEmptyAnthropicContent` | `ProviderTransform.normalizeMessages(...)` empty-content filtering for Anthropic/Bedrock. | Ported default transform. |
-| `ProviderTransform.scrubClaudeToolIds` | `ProviderTransform.normalizeMessages(...)` Claude tool id scrub. | Ported default transform. |
-| `ProviderTransform.scrubMistralToolIds` | `ProviderTransform.normalizeMessages(...)` Mistral/Devstral tool id scrub. | Partially ported; sequence repair still TODO. |
-| `ProviderTransform.cachePromptHints` | `ProviderTransform.applyCaching(...)`. | Ported default transform. |
-| `Gemini` schema sanitizer/projector | `ProviderTransform.schema(...)` Gemini branch. | Ported inside the adapter protocol. |
-| Provider option namespacing and model-specific reasoning defaults | `ProviderTransform.providerOptions(...)`, `options(...)`, `variants(...)`. | TODO/native bridge fallback today. |
 
 ### Tools
 
@@ -258,11 +232,10 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
 - [x] Add OpenAI Chat recorded tests for tool-result follow-up and usage chunks.
 - [x] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
-- [x] Add provider transform examples from real opencode quirks, starting with prompt normalization and adapter-local payload options.
 - [x] Add an OpenAI Responses adapter once the Chat adapter shape feels stable.
 - [x] Add Anthropic Messages adapter coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
 - [x] Add Gemini adapter coverage for text, media input, tool calls, reasoning deltas, finish reasons, usage, and recorded cassettes.
-- [x] Extract or port OpenCode's `ProviderTransform.schema` Gemini sanitizer into a tested `packages/llm` tool-schema transform; do not keep a divergent adapter-local copy long term.
+- [x] Port Gemini schema sanitizer behavior into the Gemini protocol; do not keep a divergent generic helper long term.
 
 ### Provider Coverage
 
@@ -271,19 +244,19 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Cover OpenAI-compatible provider families that can share the generic adapter first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
 - [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, Perplexity, and Cohere. xAI already has a thin model helper that routes to OpenAI Responses.
 - [x] Add Bedrock Converse support: wire format (messages / system / inferenceConfig / toolConfig), AWS event stream binary framing via `@smithy/eventstream-codec`, SigV4 signing via `aws4fetch` (or Bearer API key path), text/reasoning/tool/usage/finish decoding, cache hints, image/document content, deterministic tests, and recorded basic text/tool cassettes. Additional model-specific fields are still TODO.
-- [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini as Gemini payload/http transform vs adapter, and Vertex Anthropic as Anthropic payload/http transform vs adapter.
-- [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible adapter and provider option transform model are stable.
+- [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini vs Vertex Anthropic protocol/provider wrappers.
+- [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible adapter and provider option model are stable.
 
 ### OpenCode Parity Patches
 
-- [ ] Port Anthropic tool-use ordering into a prompt transform.
-- [ ] Finish Mistral/OpenAI-compatible cleanup transforms, including message sequence repair after tool messages.
+- [ ] Port Anthropic tool-use ordering into Anthropic request lowering.
+- [ ] Finish Mistral/OpenAI-compatible cleanup, including message sequence repair after tool messages.
 - [ ] Port DeepSeek reasoning handling and interleaved reasoning field mapping.
-- [ ] Add unsupported attachment fallback transforms keyed by model capabilities.
-- [ ] Add cache hint transforms for Anthropic, OpenRouter, Bedrock, OpenAI-compatible, Copilot, and Alibaba-style providers.
-- [ ] Add provider option namespacing transforms for Gateway, OpenRouter, OpenAI-compatible wrappers, and other provider-specific option bags. Azure already has model-helper support for base URL, `api-version`, and Chat-vs-Responses routing; future Azure work should cover any remaining provider-specific option mapping.
-- [ ] Add model-specific reasoning option transforms for providers that need effort, summary, or native reasoning fields.
-- [ ] Add provider-specific metadata extraction transforms only where OpenCode needs returned reasoning, citations, usage details, or provider-native fields.
+- [ ] Add unsupported attachment fallback keyed by model capabilities.
+- [ ] Add cache hint lowering for Anthropic, OpenRouter, Bedrock, OpenAI-compatible, Copilot, and Alibaba-style providers.
+- [ ] Add provider option namespacing for Gateway, OpenRouter, OpenAI-compatible wrappers, and other provider-specific option bags. Azure already has model-helper support for base URL, `api-version`, and Chat-vs-Responses routing; future Azure work should cover any remaining provider-specific option mapping.
+- [ ] Add model-specific reasoning option lowering for providers that need effort, summary, or native reasoning fields.
+- [ ] Add provider-specific metadata extraction only where OpenCode needs returned reasoning, citations, usage details, or provider-native fields.
 
 ### OpenCode Bridge
 
@@ -333,5 +306,5 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] Mistral, Groq, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
 - [ ] xAI basic/tool cassettes for its OpenAI Responses model helper path.
 - [x] Bedrock Converse basic text and tool-call cassettes (recorded against `us.amazon.nova-micro-v1:0` in us-east-1). Cache-hint cassettes still TODO.
-- [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex adapter/transform shape is decided.
+- [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex adapter shape is decided.
 - [ ] Gateway/OpenRouter routing-header cassettes after routing support lands.
