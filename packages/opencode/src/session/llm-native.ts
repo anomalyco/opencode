@@ -1,7 +1,6 @@
 import { CacheHint, LLM, type ContentPart, type MediaPart, type Message, type ModelRef, type SystemPart } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { ProviderLLMBridge } from "@/provider/llm-bridge"
-import { ProviderTransform } from "@/provider/transform"
 import * as EffectZod from "@/util/effect-zod"
 import type { Provider } from "@/provider/provider"
 import type { Tool } from "@/tool/tool"
@@ -238,7 +237,7 @@ export const toolDefinition = (input: { readonly model: Provider.Model; readonly
   LLM.toolDefinition({
     name: input.tool.id,
     description: input.tool.description,
-    inputSchema: { ...ProviderTransform.schema(input.model, EffectZod.toJsonSchema(input.tool.parameters)) },
+    inputSchema: EffectZod.toJsonSchema(input.tool.parameters),
     native: {
       opencodeToolID: input.tool.id,
     },

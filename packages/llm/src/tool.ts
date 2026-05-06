@@ -75,8 +75,6 @@ export const make = <Parameters extends ToolSchema<any>, Success extends ToolSch
 
 export const tool = make
 
-export const defineTool = tool
-
 /**
  * A record of named tools. The record key becomes the tool name on the wire.
  */

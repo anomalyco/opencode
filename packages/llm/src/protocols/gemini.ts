@@ -43,7 +43,6 @@ const GeminiInlineDataPart = Schema.Struct({
 
 const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
-    id: Schema.optional(Schema.String),
     name: Schema.String,
     args: Schema.Unknown,
   }),
@@ -52,7 +51,6 @@ const GeminiFunctionCallPart = Schema.Struct({
 
 const GeminiFunctionResponsePart = Schema.Struct({
   functionResponse: Schema.Struct({
-    id: Schema.optional(Schema.String),
     name: Schema.String,
     response: Schema.Unknown,
   }),
@@ -194,16 +192,8 @@ const lowerUserPart = (part: TextPart | MediaPart) =>
     ? { text: part.text }
     : { inlineData: { mimeType: part.mediaType, data: mediaData(part) } }
 
-const thoughtSignature = (metadata: Record<string, unknown> | undefined) =>
-  isRecord(metadata?.google) && typeof metadata.google.thoughtSignature === "string"
-    ? metadata.google.thoughtSignature
-    : undefined
-
-const withThoughtSignature = (signature: string | undefined) => signature ? { thoughtSignature: signature } : {}
-
 const lowerToolCall = (part: ToolCallPart) => ({
-  functionCall: { id: part.id, name: part.name, args: part.input },
-  ...withThoughtSignature(thoughtSignature(part.metadata)),
+  functionCall: { name: part.name, args: part.input },
 })
 
 const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
@@ -225,11 +215,11 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {
         if (part.type === "text") {
-          parts.push({ text: part.text, ...withThoughtSignature(thoughtSignature(part.metadata)) })
+          parts.push({ text: part.text })
           continue
         }
         if (part.type === "reasoning") {
-          parts.push({ text: part.text, thought: true, ...withThoughtSignature(thoughtSignature(part.metadata)) })
+          parts.push({ text: part.text, thought: true })
           continue
         }
         if (part.type === "tool-call") {
@@ -247,7 +237,6 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       if (part.type !== "tool-result") return yield* invalid("Gemini tool messages only support tool-result content")
       parts.push({
         functionResponse: {
-          id: part.id,
           name: part.name,
           response: {
             name: part.name,
@@ -345,27 +334,14 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
 
   for (const part of candidate.content.parts) {
     if ("text" in part && part.text.length > 0) {
-      events.push({
-        type: part.thought ? "reasoning-delta" : "text-delta",
-        text: part.text,
-        ...(part.thoughtSignature ? { metadata: { google: { thoughtSignature: part.thoughtSignature } } } : {}),
-      })
+      events.push({ type: part.thought ? "reasoning-delta" : "text-delta", text: part.text })
       continue
     }
 
     if ("functionCall" in part) {
       const input = part.functionCall.args
-      const id = part.functionCall.id ?? `tool_${nextToolCallId}`
-      events.push({
-        type: "tool-call",
-        id,
-        name: part.functionCall.name,
-        input,
-        ...(part.thoughtSignature || part.functionCall.id
-          ? { metadata: { google: { ...(part.thoughtSignature ? { thoughtSignature: part.thoughtSignature } : {}), ...(part.functionCall.id ? { functionCallId: part.functionCall.id } : {}) } } }
-          : {}),
-      })
-      if (!part.functionCall.id) nextToolCallId++
+      const id = `tool_${nextToolCallId++}`
+      events.push({ type: "tool-call", id, name: part.functionCall.name, input })
       hasToolCalls = true
     }
   }
