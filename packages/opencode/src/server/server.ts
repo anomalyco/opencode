@@ -37,7 +37,7 @@ type ListenOptions = CorsOptions & {
   mdnsDomain?: string
 }
 
-export const Default = () => {
+const defaultHttpApi = (() => {
   const handler = ExperimentalHttpApiServer.webHandler().handler
   const app: ServerApp = {
     fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
@@ -46,7 +46,9 @@ export const Default = () => {
     },
   }
   return { app }
-}
+})()
+
+export const Default = () => defaultHttpApi
 
 export async function openapi() {
   return OpenApi.fromApi(PublicApi)

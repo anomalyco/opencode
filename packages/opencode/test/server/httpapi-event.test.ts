@@ -8,9 +8,8 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
-
-function app(experimental = true) {
-  return experimental ? Server.Default().app : Server.Default().app
+function app() {
+  return Server.Default().app
 }
 
 async function readFirstChunk(response: Response) {
@@ -37,8 +36,8 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-describe("event HttpApi bridge", () => {
-  test("serves event stream through experimental Effect route", async () => {
+describe("event HttpApi", () => {
+  test("serves event stream", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const response = await app().request(EventPaths.event, { headers: { "x-opencode-directory": tmp.path } })
 
@@ -50,15 +49,11 @@ describe("event HttpApi bridge", () => {
     expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
   })
 
-  test("matches legacy first event frame", async () => {
+  test("serves the initial server connected event", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const headers = { "x-opencode-directory": tmp.path }
-    const legacy = await app(false).request(EventPaths.event, { headers })
-    const effect = await app(true).request(EventPaths.event, { headers })
+    const response = await app().request(EventPaths.event, { headers })
 
-    const legacyEvent = await readFirstEvent(legacy)
-    const effectEvent = await readFirstEvent(effect)
-    expect(effectEvent.type).toBe(legacyEvent.type)
-    expect(effectEvent.properties).toEqual(legacyEvent.properties)
+    expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
   })
 })

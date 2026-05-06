@@ -1,5 +1,10 @@
 # HttpApi migration
 
+> Historical migration notes. PR #25667 deletes the Hono backend and removes the
+> `OPENCODE_EXPERIMENTAL_HTTPAPI` backend selection path, so sections below that
+> describe Hono as the default, SDK generation from `hono-openapi`, bridge parity,
+> or dual-backend rollout are pre-deletion context rather than current guidance.
+
 Plan for replacing instance Hono route implementations with Effect `HttpApi` while preserving behavior, OpenAPI, and SDK output during the transition.
 
 ## End State
