@@ -379,6 +379,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       } else {
         route.navigate({ type: "session", sessionID: match })
       }
+    } else {
+      // No sessions to continue - fall back to home instead of stuck "dummy" route
+      continued = true
+      route.navigate({ type: "home" })
     }
   })
 
