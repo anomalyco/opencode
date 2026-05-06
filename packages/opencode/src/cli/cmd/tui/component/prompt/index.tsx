@@ -181,6 +181,7 @@ export function Prompt(props: PromptProps) {
   const [warpNotice, setWarpNotice] = createSignal<string>()
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
+  const defaultWorkspaceID = createMemo(() => props.workspaceID ?? project.workspace.current())
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {
     setWorkspaceSelection(selection)
@@ -860,14 +861,14 @@ export function Prompt(props: PromptProps) {
     if (sessionID == null) {
       const workspace = workspaceSelection()
       const workspaceID = iife(() => {
-        if (!workspace) return undefined
+        if (!workspace) return defaultWorkspaceID()
         if (workspace.type === "none") return undefined
         if (workspace.type === "existing") return workspace.workspaceID
         return undefined
       })
 
       const res = await sdk.client.session.create({
-        workspace: props.workspaceID,
+        workspace: workspaceID,
         agent: agent.name,
         model: {
           providerID: selectedModel.providerID,
@@ -1145,7 +1146,17 @@ export function Prompt(props: PromptProps) {
     | undefined
   >(() => {
     const selected = workspaceSelection()
-    if (!selected) return
+    if (!selected) {
+      const workspaceID = defaultWorkspaceID()
+      if (props.sessionID || !workspaceID) return
+      const workspace = project.workspace.get(workspaceID)
+      return {
+        type: "existing",
+        workspaceType: workspace?.type ?? "unknown",
+        workspaceName: workspace?.name ?? workspaceID,
+        status: project.workspace.status(workspaceID) ?? "error",
+      }
+    }
     if (selected.type === "none") return
     if (props.sessionID && !workspaceCreating()) return
     if (selected.type === "new") {

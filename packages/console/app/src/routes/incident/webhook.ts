@@ -37,7 +37,7 @@ const postDiscordMessage = async (incident: Incident) => {
         `**${incident.mode === "test" ? "[TEST] " : ""}${incident.name ?? "Incident has been created"}**`,
         incident.summary,
         "",
-        "@everyone",
+        "@inference",
         "",
         incident.permalink,
       ]

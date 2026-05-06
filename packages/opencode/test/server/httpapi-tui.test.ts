@@ -72,12 +72,25 @@ describe("tui HttpApi bridge", () => {
       properties: { text: "from publish" },
     })
 
+    const missingSessionID = SessionID.descending()
     const missing = await app().request(TuiPaths.selectSession, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ sessionID: SessionID.descending() }),
+      body: JSON.stringify({ sessionID: missingSessionID }),
     })
     expect(missing.status).toBe(404)
+  })
+
+  test("matches Hono missing selected session error body", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const body = JSON.stringify({ sessionID: SessionID.descending() })
+
+    const hono = await app(false).request(TuiPaths.selectSession, { method: "POST", headers, body })
+    const httpapi = await app().request(TuiPaths.selectSession, { method: "POST", headers, body })
+
+    expect(httpapi.status).toBe(hono.status)
+    expect(await httpapi.json()).toEqual(await hono.json())
   })
 
   test("matches legacy unknown execute command behavior", async () => {
