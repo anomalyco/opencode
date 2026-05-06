@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { existsSync, mkdirSync, mkdtempSync } from "node:fs"
+import { existsSync, mkdirSync, rmSync } from "node:fs"
 import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
@@ -39,6 +39,7 @@ app.setPath(
   "userData",
   onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
 )
+if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
 const logger = initLogging()
 const { autoUpdater } = pkg
 
@@ -77,8 +78,11 @@ useSystemCertificates()
 function setupOnboardingTestEnv() {
   if (!TEST_ONBOARDING) return
 
-  const root = mkdtempSync(join(tmpdir(), "opencode-onboarding-"))
-  ;["data", "config", "cache", "state", "desktop"].forEach((dir) => mkdirSync(join(root, dir), { recursive: true }))
+  const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+  rmSync(root, { recursive: true, force: true })
+  ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
+    mkdirSync(join(root, dir), { recursive: true }),
+  )
   process.env.OPENCODE_DB = ":memory:"
   process.env.XDG_DATA_HOME = join(root, "data")
   process.env.XDG_CONFIG_HOME = join(root, "config")
