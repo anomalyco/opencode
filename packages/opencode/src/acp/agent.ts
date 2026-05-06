@@ -1441,8 +1441,18 @@ export class Agent implements ACPAgent {
 
     log.info("parts", { parts })
 
+    // Extract system prompt from synthetic parts (marked with audience: ["assistant"])
+    let system: string | undefined
+    const regularParts = parts.filter((p) => {
+      if (p.type === "text" && p.synthetic) {
+        system = (system || "") + p.text + "\n"
+        return false
+      }
+      return true
+    })
+
     const cmd = (() => {
-      const text = parts
+      const text = regularParts
         .filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
         .join("")
@@ -1476,7 +1486,8 @@ export class Agent implements ACPAgent {
           modelID: model.modelID,
         },
         variant: this.sessionManager.getVariant(sessionID),
-        parts,
+        parts: regularParts,
+        system,
         agent,
         directory,
       })
