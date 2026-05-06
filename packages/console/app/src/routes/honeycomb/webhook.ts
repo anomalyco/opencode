@@ -1,6 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { z } from "zod"
 import { Resource } from "@opencode-ai/console-resource"
+import { safeEqual } from "@opencode-ai/console-core/util/crypto.js"
 
 const DISCORD_ALERT_ROLE_ID = "1501447160175136838"
 
@@ -51,8 +52,8 @@ const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayloa
 
 export async function POST(input: APIEvent) {
   const token = input.request.headers.get("X-Honeycomb-Webhook-Token")
-  if (token !== Resource.HoneycombWebhookSecret.value) {
-    console.debug("Invalid Honeycomb webhook token", token)
+  if (!safeEqual(token ?? "", Resource.HoneycombWebhookSecret.value)) {
+    console.debug("Invalid Honeycomb webhook token")
     return Response.json({ message: "invalid token" }, { status: 401 })
   }
 
