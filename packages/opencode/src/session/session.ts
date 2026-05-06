@@ -3,7 +3,6 @@ import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
-import z from "zod"
 import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -422,6 +421,8 @@ export class BusyError extends Error {
   }
 }
 
+export type NotFound = InstanceType<typeof NotFoundError>
+
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly create: (input?: {
@@ -432,9 +433,9 @@ export interface Interface {
     permission?: Permission.Ruleset
     workspaceID?: WorkspaceID
   }) => Effect.Effect<Info>
-  readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info>
+  readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
-  readonly get: (id: SessionID) => Effect.Effect<Info>
+  readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
@@ -448,7 +449,7 @@ export interface Interface {
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
-  readonly remove: (sessionID: SessionID) => Effect.Effect<void>
+  readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
   readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
@@ -534,13 +535,13 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
 
     const get = Effect.fn("Session.get")(function* (id: SessionID) {
       const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
-      if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+      if (!row) return yield* Effect.fail(new NotFoundError({ message: `Session not found: ${id}` }))
       return fromRow(row)
     })
 
     const list = Effect.fn("Session.list")(function* (input?: ListInput) {
       const ctx = yield* InstanceState.context
-      return Array.from(listByProject({ projectID: ctx.project.id, ...(input ?? {}) }))
+      return Array.from(listByProject({ projectID: ctx.project.id, ...input }))
     })
 
     const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
@@ -555,8 +556,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     })
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const session = yield* get(sessionID)
       try {
-        const session = yield* get(sessionID)
         const kids = yield* children(sessionID)
         for (const child of kids) {
           yield* remove(child.id)
