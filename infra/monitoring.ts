@@ -178,7 +178,7 @@ new incident.AlertRoute("HoneycombAlertRoute", {
         reference: $interpolate`alert.attributes.${fields.product.id}`,
       },
     ],
-    groupingWindowSeconds: 900,
+    groupingWindowSeconds: 3600,
   },
   incidentTemplate: {
     name: {

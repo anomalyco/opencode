@@ -30,20 +30,20 @@ export const api = new sst.cloudflare.Worker("Api", {
   transform: {
     worker: (args) => {
       args.logpush = true
-      args.bindings = $resolve(args.bindings).apply((bindings) => [
-        ...bindings,
-        {
-          name: "SYNC_SERVER",
-          type: "durable_object_namespace",
-          className: "SyncServer",
-        },
-      ])
-      args.migrations = {
-        // Note: when releasing the next tag, make sure all stages use tag v2
-        oldTag: $app.stage === "production" || $app.stage === "thdxr" ? "" : "v1",
-        newTag: $app.stage === "production" || $app.stage === "thdxr" ? "" : "v1",
-        //newSqliteClasses: ["SyncServer"],
-      }
+      // args.bindings = $resolve(args.bindings).apply((bindings) => [
+      //   ...bindings,
+      //   {
+      //     name: "SYNC_SERVER",
+      //     type: "durable_object_namespace",
+      //     className: "SyncServer",
+      //   },
+      // ])
+      // args.migrations = {
+      //   // Note: when releasing the next tag, make sure all stages use tag v2
+      //   oldTag: $app.stage === "production" || $app.stage === "thdxr" ? "" : "v1",
+      //   newTag: $app.stage === "production" || $app.stage === "thdxr" ? "" : "v1",
+      //   //newSqliteClasses: ["SyncServer"],
+      // }
     },
   },
 })
