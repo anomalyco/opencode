@@ -28,15 +28,45 @@ const PositionSchema = z.object({
   character: z.number(),
 })
 
-const EditorSelectionSchema = z.object({
+const EditorSelectionRangeSchema = z.object({
   text: z.string(),
-  filePath: z.string(),
-  source: z.enum(["websocket", "zed"]).optional(),
   selection: z.object({
     start: PositionSchema,
     end: PositionSchema,
   }),
 })
+
+const EditorSelectionSchema = z
+  .union([
+    z.object({
+      filePath: z.string(),
+      source: z.enum(["websocket", "zed"]).optional(),
+      ranges: z.array(EditorSelectionRangeSchema).min(1),
+    }),
+    z.object({
+      text: z.string(),
+      filePath: z.string(),
+      source: z.enum(["websocket", "zed"]).optional(),
+      selection: z.object({
+        start: PositionSchema,
+        end: PositionSchema,
+      }),
+    }),
+  ])
+  .transform((value) =>
+    "ranges" in value
+      ? value
+      : {
+          filePath: value.filePath,
+          source: value.source,
+          ranges: [
+            {
+              text: value.text,
+              selection: value.selection,
+            },
+          ],
+        },
+  )
 
 const EditorMentionSchema = z.object({
   filePath: z.string(),
@@ -57,6 +87,7 @@ const EditorServerInfoSchema = z.object({
 type JsonRpcMessage = z.infer<typeof JsonRpcMessageSchema>
 export type EditorSelection = z.infer<typeof EditorSelectionSchema>
 export type EditorMention = z.infer<typeof EditorMentionSchema>
+export type EditorLabelState = "pending" | "sent" | "none"
 type EditorServerInfo = z.infer<typeof EditorServerInfoSchema>
 
 type EditorConnection = {
@@ -81,10 +112,12 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     const [store, setStore] = createStore<{
       status: "disabled" | "connecting" | "connected"
       selection: EditorSelection | undefined
+      selectionSent: boolean
       server: EditorServerInfo | undefined
     }>({
       status: "disabled",
       selection: undefined,
+      selectionSent: false,
       server: undefined,
     })
 
@@ -96,7 +129,23 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     let zedSelection: Promise<void> | undefined
     let lastZedSelectionKey: string | undefined
     let directory = process.cwd()
+    let preserveSelectionOnReconnect = false
     const pending = new Map<number, string>()
+
+    const setSelection = (selection: EditorSelection | undefined) => {
+      const changed = editorSelectionKey(selection) !== editorSelectionKey(store.selection)
+      setStore("selection", selection)
+      if (changed) setStore("selectionSent", false)
+    }
+
+    const clearSelectionForReconnect = (options?: { resetZedSelectionKey?: boolean }) => {
+      if (preserveSelectionOnReconnect) {
+        preserveSelectionOnReconnect = false
+        return
+      }
+      if (options?.resetZedSelectionKey) lastZedSelectionKey = undefined
+      setSelection(undefined)
+    }
 
     const send = (payload: JsonRpcMessage) => {
       if (!socket || socket.readyState !== 1) return
@@ -128,7 +177,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
             const key = editorSelectionKey(selection)
             if (key !== lastZedSelectionKey) {
               lastZedSelectionKey = key
-              setStore("selection", selection)
+              setSelection(selection)
               setStore("status", selection ? "connected" : "disabled")
             }
           })
@@ -168,7 +217,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         const selection =
           message.method === "selection_changed" ? EditorSelectionSchema.safeParse(message.params) : undefined
         if (selection?.success) {
-          setStore("selection", { ...selection.data, source: "websocket" })
+          setSelection({ ...selection.data, source: "websocket" })
           return
         }
 
@@ -222,12 +271,13 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     const reconnectWithDirectory = (nextDirectory?: string) => {
       const resolved = nextDirectory || process.cwd()
-      if (directory === resolved) return
+      const sameDirectory = directory === resolved
+      clearSelectionForReconnect({ resetZedSelectionKey: !sameDirectory })
+      if (sameDirectory) return
 
       directory = resolved
       attempt = 0
       pending.clear()
-      lastZedSelectionKey = undefined
       if (reconnect) clearTimeout(reconnect)
       reconnect = undefined
       if (socket) {
@@ -236,7 +286,6 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         current.close()
       }
       setStore("status", "disabled")
-      setStore("selection", undefined)
       setStore("server", undefined)
       connect()
     }
@@ -262,7 +311,20 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         return store.selection
       },
       clearSelection() {
-        setStore("selection", undefined)
+        lastZedSelectionKey = undefined
+        zedSelection = undefined
+        setSelection(undefined)
+      },
+      preserveSelectionFromNewSession() {
+        preserveSelectionOnReconnect = true
+      },
+      markSelectionSent() {
+        if (!store.selection) return
+        setStore("selectionSent", true)
+      },
+      labelState(): EditorLabelState {
+        if (!store.selection) return "none"
+        return store.selectionSent ? "sent" : "pending"
       },
       onMention(listener: (mention: EditorMention) => void) {
         mentionListeners.add(listener)
@@ -272,7 +334,6 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         return store.server
       },
       reconnect(directory?: string) {
-        setStore("selection", undefined)
         reconnectWithDirectory(directory)
       },
     }
@@ -352,15 +413,17 @@ function readEditorLockFile(filePath: string): EditorLockFile | undefined {
   }
 }
 
-function editorSelectionKey(selection: EditorSelection | undefined) {
+export function editorSelectionKey(selection: EditorSelection | undefined) {
   if (!selection) return ""
   return [
     selection.filePath,
-    selection.selection.start.line,
-    selection.selection.start.character,
-    selection.selection.end.line,
-    selection.selection.end.character,
-    selection.text,
+    ...selection.ranges.flatMap((range) => [
+      range.selection.start.line,
+      range.selection.start.character,
+      range.selection.end.line,
+      range.selection.end.character,
+      range.text,
+    ]),
   ].join("\0")
 }
 

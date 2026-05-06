@@ -27,26 +27,49 @@ const cache = new Map<string, FileDiffMetadata>()
 
 function patch(diff: ReviewDiff) {
   if (typeof diff.patch === "string") {
-    const [patch] = parsePatch(diff.patch)
+    try {
+      const [patch] = parsePatch(diff.patch)
+      const beforeLines: Array<{ text: string; newline: boolean }> = []
+      const afterLines: Array<{ text: string; newline: boolean }> = []
+      let previous: "-" | "+" | " " | undefined
 
-    const beforeLines = []
-    const afterLines = []
+      for (const hunk of patch.hunks) {
+        for (const line of hunk.lines) {
+          if (line.startsWith("\\")) {
+            if (previous === "-" || previous === " ") {
+              const before = beforeLines.at(-1)
+              if (before) before.newline = false
+            }
+            if (previous === "+" || previous === " ") {
+              const after = afterLines.at(-1)
+              if (after) after.newline = false
+            }
+            continue
+          }
 
-    for (const hunk of patch.hunks) {
-      for (const line of hunk.lines) {
-        if (line.startsWith("-")) {
-          beforeLines.push(line.slice(1))
-        } else if (line.startsWith("+")) {
-          afterLines.push(line.slice(1))
-        } else {
-          // context line (starts with ' ')
-          beforeLines.push(line.slice(1))
-          afterLines.push(line.slice(1))
+          if (line.startsWith("-")) {
+            beforeLines.push({ text: line.slice(1), newline: true })
+            previous = "-"
+          } else if (line.startsWith("+")) {
+            afterLines.push({ text: line.slice(1), newline: true })
+            previous = "+"
+          } else {
+            // context line (starts with ' ')
+            beforeLines.push({ text: line.slice(1), newline: true })
+            afterLines.push({ text: line.slice(1), newline: true })
+            previous = " "
+          }
         }
       }
-    }
 
-    return { before: beforeLines.join("\n"), after: afterLines.join("\n"), patch: diff.patch }
+      return {
+        before: beforeLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
+        after: afterLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
+        patch: diff.patch,
+      }
+    } catch {
+      return { before: "", after: "", patch: diff.patch }
+    }
   }
   return {
     before: "before" in diff && typeof diff.before === "string" ? diff.before : "",
