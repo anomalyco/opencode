@@ -1,6 +1,8 @@
 import type { Argv, InferredOptionTypes } from "yargs"
 import { Config } from "@/config/config"
-import { AppRuntime } from "@/effect/app-runtime"
+import { ManagedRuntime } from "effect"
+
+const configRuntime = ManagedRuntime.make(Config.defaultLayer)
 
 const options = {
   port: {
@@ -37,7 +39,7 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
   return yargs.options(options)
 }
 export async function resolveNetworkOptions(args: NetworkOptions) {
-  const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
+  const config = await configRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
   return resolveNetworkOptionsNoConfig(args, config)
 }
 
