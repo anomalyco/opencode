@@ -16,10 +16,14 @@ export interface Definition<Factory extends AnyModelFactory = ModelFactory> {
   readonly apis?: Record<string, AnyModelFactory>
 }
 
-export const make = <DefinitionType extends {
+type DefinitionShape = {
   readonly id: ProviderID
   readonly model: (...args: never[]) => ModelRef
   readonly apis?: Record<string, (...args: never[]) => ModelRef>
-}>(definition: DefinitionType) => definition
+}
+
+type NoExtraFields<Input, Shape> = Input & Record<Exclude<keyof Input, keyof Shape>, never>
+
+export const make = <DefinitionType extends DefinitionShape>(definition: NoExtraFields<DefinitionType, DefinitionShape>) => definition
 
 export * as Provider from "./provider"
