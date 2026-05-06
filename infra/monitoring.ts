@@ -4,7 +4,7 @@ import { domain } from "./stage"
 const webhookRecipient = new honeycomb.WebhookRecipient("DiscordAlerts", {
   name: $app.stage === "production" ? "Discord Alerts" : `Discord Alerts (${$app.stage})`,
   url: `https://${domain}/honeycomb/webhook`,
-  secret: SECRET.HoneycombWebhookSecret.value,
+  secret: SECRET.HoneycombWebhookSecret.result,
   templates: [
     {
       type: "trigger",
@@ -14,8 +14,7 @@ const webhookRecipient = new honeycomb.WebhookRecipient("DiscordAlerts", {
         "name": {{ .Name | quote }},
         "status": {{ .Alert.Status | quote }},
         "isTest": {{ .Alert.IsTest }},
-        "groups": {{ .Result.GroupsTriggered | toJson }},
-        "product": {{ .Vars.product | quote }}
+        "groups": {{ .Result.GroupsTriggered | toJson }}
       }`,
     },
   ],
@@ -23,14 +22,18 @@ const webhookRecipient = new honeycomb.WebhookRecipient("DiscordAlerts", {
     {
       name: "type",
     },
-    {
-      name: "product",
-    },
   ],
 })
 
-const modelHttpErrorsQuery = (product: "go" | "zen") =>
-  honeycomb.getQuerySpecificationOutput({
+const modelHttpErrorsQuery = (product: "go" | "zen") => {
+  const filters = [
+    { column: "model", op: "exists" },
+    { column: "event_type", op: "=", value: "completions" },
+    { column: "user_agent", op: "contains", value: "opencode" },
+    { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
+  ]
+
+  return honeycomb.getQuerySpecificationOutput({
     breakdowns: ["model"],
     calculatedFields: [
       {
@@ -39,25 +42,19 @@ const modelHttpErrorsQuery = (product: "go" | "zen") =>
       },
     ],
     calculations: [
-      { op: "COUNT", name: "TOTAL", column: "model" },
-      { op: "SUM", name: "FAILED", column: "is_failed_http_status" },
+      { op: "COUNT", name: "TOTAL", filterCombination: "AND", filters },
+      { op: "SUM", name: "FAILED", column: "is_failed_http_status", filterCombination: "AND", filters },
     ],
-    formulas: [{ name: "ERROR", expression: "$FAILED / $TOTAL" }],
-    filters: [
-      { column: "model", op: "exists" },
-      { column: "event_type", op: "=", value: "completions" },
-      { column: "user_agent", op: "contains", value: "opencode" },
-      { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
-    ],
-    filterCombination: "AND",
-    havings: [{ calculateOp: "COUNT", column: "model", op: ">=", value: 10000 }],
-    limit: 1000,
+    formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 2500), DIV($FAILED, $TOTAL), 0)" }],
     timeRange: 900,
   }).json
+}
 
-new honeycomb.Trigger("IncreasedHttpErrorsGo", {
-  name: "Increased HTTP Errors [Go]",
-  description: "Managed by SST. Don't edit in Honeycomb UI",
+const description = "Managed by SST (Don't edit in Honeycomb UI)"
+
+new honeycomb.Trigger("IncreasedModelHttpErrorsGo", {
+  name: "Increased Model HTTP Errors [Go]",
+  description,
   queryJson: modelHttpErrorsQuery("go"),
   alertType: "on_change",
   frequency: 300,
@@ -67,19 +64,16 @@ new honeycomb.Trigger("IncreasedHttpErrorsGo", {
       id: webhookRecipient.id,
       notificationDetails: [
         {
-          variables: [
-            { name: "type", value: "model_http_errors" },
-            { name: "product", value: "go" },
-          ],
+          variables: [{ name: "type", value: "model_http_errors" }],
         },
       ],
     },
   ],
 })
 
-new honeycomb.Trigger("IncreasedHttpErrorsZen", {
-  name: "Increased HTTP Errors [Zen]",
-  description: "Managed by SST. Don't edit in Honeycomb UI",
+new honeycomb.Trigger("IncreasedModelHttpErrorsZen", {
+  name: "Increased Model HTTP Errors [Zen]",
+  description,
   queryJson: modelHttpErrorsQuery("zen"),
   alertType: "on_change",
   frequency: 300,
@@ -89,10 +83,7 @@ new honeycomb.Trigger("IncreasedHttpErrorsZen", {
       id: webhookRecipient.id,
       notificationDetails: [
         {
-          variables: [
-            { name: "type", value: "model_http_errors" },
-            { name: "product", value: "zen" },
-          ],
+          variables: [{ name: "type", value: "model_http_errors" }],
         },
       ],
     },
