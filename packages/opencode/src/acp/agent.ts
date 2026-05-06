@@ -1863,6 +1863,7 @@ function buildVariantMeta(input: {
       availableVariants: input.availableVariants,
     },
   }
+}
 
 function parseModelSelection(
   modelId: string,
