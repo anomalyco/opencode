@@ -433,7 +433,12 @@ export const exportMdAsDocx = async (opts: {
     docXml = splitRunsForEmoji(docXml)
     zipObj["word/document.xml"] = strToU8(docXml)
     const base64 = bytesToBase64(zipSync(zipObj))
-    await invoke("write_binary_file_absolute_base64", { path: filePath, base64Content: base64 })
+    // allowOverwrite=true:save dialog 已让用户确认替换,后端不再拦截 already_exists
+    await invoke("write_binary_file_absolute_base64", {
+      path: filePath,
+      base64Content: base64,
+      allowOverwrite: true,
+    })
 
     showToast({ variant: "success", title: opts.i18n.success })
   } catch (e) {

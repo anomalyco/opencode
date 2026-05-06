@@ -76,10 +76,16 @@ pub fn read_binary_file_base64(root: String, path: String) -> Result<String, Str
 }
 
 // FORK: 文件树外部 OS 文件拖入(commit #4 of file-tree-dnd)— webview File 无 path,
-// 前端走 FileReader → base64 → 此命令写盘(absolute path,会先校验不存在)2026-04-28
+// 前端走 FileReader → base64 → 此命令写盘(absolute path,默认校验不存在)2026-04-28
+// FORK: 加 allow_overwrite(2026-05-06)— 导出 Word 场景 save dialog 已让用户确认替换,
+//       后端不再拦截;default false 保留拖入场景的"不覆盖" 语义不变
 #[tauri::command]
 #[specta::specta]
-pub fn write_binary_file_absolute_base64(path: String, base64_content: String) -> Result<(), String> {
+pub fn write_binary_file_absolute_base64(
+    path: String,
+    base64_content: String,
+    allow_overwrite: Option<bool>,
+) -> Result<(), String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&base64_content)
@@ -88,7 +94,7 @@ pub fn write_binary_file_absolute_base64(path: String, base64_content: String) -
         return Err(format!("file too large: {} bytes", bytes.len()));
     }
     let p = std::path::Path::new(&path);
-    if p.exists() {
+    if !allow_overwrite.unwrap_or(false) && p.exists() {
         return Err(format!("already_exists: {}", path));
     }
     // FORK: 父目录不存在则递归建 — 支持 .md 拖图到 <root>/Attachments/ 自动建目录 2026-05-05
