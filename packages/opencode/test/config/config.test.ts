@@ -2320,6 +2320,46 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   })
 })
 
+describe("OPENCODE_CONFIG_DIR isolation", () => {
+  test("does not scan home .opencode when custom config dir is set", async () => {
+    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+    const originalTestHome = process.env["OPENCODE_TEST_HOME"]
+
+    try {
+      await using homeTmp = await tmpdir({
+        init: async (dir) => {
+          await fs.mkdir(path.join(dir, ".opencode"), { recursive: true })
+        },
+      })
+      await using configDirTmp = await tmpdir()
+      await using projectTmp = await tmpdir()
+
+      process.env["OPENCODE_TEST_HOME"] = homeTmp.path
+      process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
+
+      await WithInstance.provide({
+        directory: projectTmp.path,
+        fn: async () => {
+          const directories = await listDirs()
+          expect(directories).toContain(configDirTmp.path)
+          expect(directories).not.toContain(path.join(homeTmp.path, ".opencode"))
+        },
+      })
+    } finally {
+      if (originalConfigDir === undefined) {
+        delete process.env["OPENCODE_CONFIG_DIR"]
+      } else {
+        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+      if (originalTestHome === undefined) {
+        delete process.env["OPENCODE_TEST_HOME"]
+      } else {
+        process.env["OPENCODE_TEST_HOME"] = originalTestHome
+      }
+    }
+  })
+})
+
 describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
   test("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
     const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
