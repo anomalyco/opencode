@@ -41,13 +41,17 @@ html[data-theme="arc"] {
   --card-elevation:
     0 0 0 0.5px rgba(167, 139, 250, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.25);
 
-  /* Per-project rail hues — used by commit 4 to give each project a soft tint */
-  --rail-hue-1: linear-gradient(180deg, #3d4860 0%, #333d50 100%); /* indigo */
-  --rail-hue-2: linear-gradient(180deg, #404d44 0%, #374039 100%); /* moss */
-  --rail-hue-3: linear-gradient(180deg, #4e404b 0%, #44373d 100%); /* rose */
-  --rail-hue-4: linear-gradient(180deg, #4b493d 0%, #413f34 100%); /* sand */
-  --rail-hue-5: linear-gradient(180deg, #404d50 0%, #374043 100%); /* sea */
-  --rail-hue-6: linear-gradient(180deg, #3e3e4d 0%, #353543 100%); /* cloud */
+  /* Per-project rail hues — flat mid-saturated tones (no gradient).
+     A flat fill reads cleaner: the tile becomes a single confident
+     color block, and the white letter on top has the best possible
+     contrast across the whole face — same reasoning as the light-mode
+     rail hues below. */
+  --rail-hue-1: #384358; /* indigo */
+  --rail-hue-2: #3c473f; /* moss */
+  --rail-hue-3: #493c44; /* rose */
+  --rail-hue-4: #464439; /* sand */
+  --rail-hue-5: #3c474a; /* sea */
+  --rail-hue-6: #3a3a48; /* cloud */
 }
 
 /* ─── Light mode ─── */
