@@ -69,6 +69,8 @@ const windowOverscan = 1600
 const windowThreshold = 24
 const SCROLL_WARN_MS = 16
 const MEASURE_WARN_MS = 24
+const HEIGHT_SHIFT_WARN = 120
+const SPACER_SHIFT_WARN = 400
 
 type MathMode = "turn" | "markdown"
 
@@ -278,13 +280,7 @@ export function MessageTimeline(props: {
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
-  const averageTurnHeight = () => {
-    if (turnHeights.size === 0) return estimatedTurnHeight
-    let total = 0
-    for (const value of turnHeights.values()) total += value
-    return Math.max(estimatedTurnHeight / 2, total / turnHeights.size)
-  }
-  const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? averageTurnHeight()
+  const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? estimatedTurnHeight
   const slot = (id: string, index: number, size: number) => estimateTurnHeight(id) + (index < size - 1 ? gap : 0)
   const offset = (ids: string[], end: number) => {
     let sum = 0
@@ -472,15 +468,11 @@ export function MessageTimeline(props: {
     }
 
     if (start >= ids.length) {
+      const next = tailWindow(ids, root)
       console.warn(
-        `[buildWindow] scrollTop exceeded estimated range: scrollTop=${scrollTop.toFixed(2)} totalEstimate=${offset.toFixed(2)} actualHeight=${scrollHeight.toFixed(2)} - preserving current window`,
+        `[buildWindow] scrollTop exceeded estimated range: scrollTop=${scrollTop.toFixed(2)} totalEstimate=${offset.toFixed(2)} actualHeight=${scrollHeight.toFixed(2)} - using tail window=[${next.start},${next.end}] spacerTop=${Math.round(next.top)} spacerBottom=${Math.round(next.bottom)}`,
       )
-      return {
-        start: windowed.start,
-        end: windowed.end,
-        top: windowed.top,
-        bottom: windowed.bottom,
-      }
+      return next
     }
 
     const clampedStart = Math.max(0, Math.min(start, ids.length - 1))
@@ -592,29 +584,39 @@ export function MessageTimeline(props: {
   }
 
   const applyWindow = () => {
-    const viewportAnchor = captureWindowAnchor()
+    const root = viewport
+    const before = root ? snap(root) : undefined
+    const pinned = !props.seekingMessageId && !!before && before.gap <= 16
+    const viewportAnchor = pinned ? undefined : captureWindowAnchor()
     const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
     const targetAnchor = captureMessageAnchor(targetId)
     const scrollAnchor = props.currentMessageId ? targetAnchor : viewportAnchor
 
-    console.debug(
-      `[applyWindow] entry: currentMessageId=${props.currentMessageId || "none"} seekingMessageId=${props.seekingMessageId || "none"} targetId=${targetId || "none"} hasTargetAnchor=${!!targetAnchor} hasViewportAnchor=${!!viewportAnchor} scrollAnchorId=${scrollAnchor?.id || "none"} scrollAnchorTop=${scrollAnchor?.top ?? "none"}`,
-    )
-
     const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
-    const next = syncWindow(base, targetId)
+    const next = syncWindow(base, pinned ? undefined : targetId)
     const same = sameWindow(next)
-    if (same) return
+    if (same) {
+      if (pinned && root) {
+        root.scrollTop = root.scrollHeight
+        props.onScheduleScrollState(root)
+      }
+      return
+    }
 
-    const root = viewport
-    const before = root ? snap(root) : undefined
     const prev = { start: windowed.start, end: windowed.end, top: windowed.top, bottom: windowed.bottom }
+    const top = Math.round(next.top - prev.top)
+    const bottom = Math.round(next.bottom - prev.bottom)
+    const shift = Math.max(Math.abs(top), Math.abs(bottom))
+    if (shift > SPACER_SHIFT_WARN) {
+      console.debug(
+        `[timeline] window spacer shift: prev=[${prev.start},${prev.end}] next=[${next.start},${next.end}] deltaTop=${top} deltaBottom=${bottom} pinned=${pinned} scrollTop=${before?.top ?? "none"} scrollHeight=${before?.height ?? "none"} target=${targetId || "none"} measured=${turnHeights.size} rendered=${rendered().length}`,
+      )
+    }
 
     setWindowed(next)
     audit(props.seekingMessageId ? "seek-window" : "apply-window")
     const adjustVersion = ++windowAdjustVersion
-    if (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId) {
-      console.debug("[applyWindow] bottom-anchored scroll path")
+    if (pinned || (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId)) {
       requestAnimationFrame(() => {
         if (adjustVersion !== windowAdjustVersion) return
         const root = viewport
@@ -626,11 +628,8 @@ export function MessageTimeline(props: {
       return
     }
     if (!scrollAnchor) {
-      console.debug("[applyWindow] skipping anchor scroll: scrollAnchor is undefined")
       return
     }
-
-    console.debug(`[applyWindow] scheduling anchor scroll: anchorId=${scrollAnchor.id} anchorTop=${scrollAnchor.top}`)
 
     requestAnimationFrame(() => {
       if (adjustVersion !== windowAdjustVersion) return
@@ -648,16 +647,10 @@ export function MessageTimeline(props: {
       const top = node.getBoundingClientRect().top - box.top
       const delta = top - scrollAnchor.top
 
-      console.debug(
-        `[applyWindow] anchor scroll adjustment: anchorId=${scrollAnchor.id} prevTop=${scrollAnchor.top} currentTop=${top} delta=${delta} scrollTopBefore=${root.scrollTop}`,
-      )
-
       if (Math.abs(delta) <= 1) return
       const prevTop = root.scrollTop
       root.scrollTop += delta
       const after = snap(root)
-
-      console.debug(`[applyWindow] anchor scroll applied: scrollTopAfter=${root.scrollTop} deltaApplied=${delta}`)
 
       if (Math.abs(delta) > 24 || after.top < prevTop - 24) {
         console.warn(
@@ -717,38 +710,6 @@ export function MessageTimeline(props: {
     })
   }
 
-  createEffect(
-    on(
-      () =>
-        [
-          visibleRendered().at(0),
-          visibleRendered().at(-1),
-          visibleRendered().length,
-          windowed.top,
-          windowed.bottom,
-          activeMessageID(),
-          isWorking(),
-        ] as const,
-      ([first, last, size, top, bottom, activeID, busy], prev) => {
-        if (!prev) return
-        if (
-          prev[0] === first &&
-          prev[1] === last &&
-          prev[2] === size &&
-          prev[3] === top &&
-          prev[4] === bottom &&
-          prev[5] === activeID &&
-          prev[6] === busy
-        ) {
-          return
-        }
-        console.debug(
-          `[timeline] rendered slice: first=${first} last=${last} size=${size} top=${Math.round(top)} bottom=${Math.round(bottom)} active=${activeID || "none"} working=${busy} activeVisible=${!!activeID && visibleRendered().includes(activeID)} prevFirst=${prev[0]} prevLast=${prev[1]} prevSize=${prev[2]} prevTop=${Math.round(prev[3])} prevBottom=${Math.round(prev[4])}`,
-        )
-      },
-      { defer: true },
-    ),
-  )
   createEffect(
     on(rendered, () => {
       const ids = new Set(rendered())
@@ -936,20 +897,6 @@ export function MessageTimeline(props: {
     const messages = props.renderedUserMessages
     return messages.find((item) => item.id === id)
   })
-
-  createEffect(
-    on(
-      () => [canWindow(), windowed.start, windowed.end, props.renderedUserMessages.length] as const,
-      ([can, start, end, size], prev) => {
-        if (prev && prev[0] === can && prev[1] === start && prev[2] === end && prev[3] === size) return
-        if (!prev) return
-        console.debug(
-          `[timeline] window state changed: can=${can} start=${start} end=${end} size=${size} prevCan=${prev[0]} prevStart=${prev[1]} prevEnd=${prev[2]} prevSize=${prev[3]}`,
-        )
-      },
-      { defer: true },
-    ),
-  )
 
   // UI-specific memo: reuses the sync computation for the message list
   const currentMessage = _virtualizationSync
@@ -2226,6 +2173,13 @@ export function MessageTimeline(props: {
       const prev = turnHeights.get(item.messageID)
       if (prev !== undefined && Math.abs(prev - next) <= 1) return
       turnHeights.set(item.messageID, next)
+      const delta = prev === undefined ? 0 : Math.round(next - prev)
+      if (prev !== undefined && Math.abs(delta) > HEIGHT_SHIFT_WARN) {
+        const root = viewport
+        console.debug(
+          `[timeline] turn height shift: msg=${item.messageID} index=${item.index} prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta} window=[${windowed.start},${windowed.end}] spacerTop=${Math.round(windowed.top)} spacerBottom=${Math.round(windowed.bottom)} scrollTop=${root ? Math.round(root.scrollTop) : "none"} scrollHeight=${root ? Math.round(root.scrollHeight) : "none"}`,
+        )
+      }
       scheduleWindow()
       const took = performance.now() - time
       if (took > MEASURE_WARN_MS) {
