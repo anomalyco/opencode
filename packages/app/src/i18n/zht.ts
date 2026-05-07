@@ -989,4 +989,30 @@ export const dict = {
   "fileViewer.menu.input.shortcutHint": "{{shortcut}} 提交 · Esc 取消",
   "fileViewer.menu.input.submit": "加入對話",
   // FORK-END
+
+  // upstream-sync drift backfill — 上游 sync 累積漏補的翻譯,2026-05-07 一次性補齊(23 key)
+  // 由 i18n-completeness.test.ts 守門,以後此段應保持為空(每次 sync 後立刻補)
+  "command.project.next": "下一個專案",
+  "command.project.previous": "上一個專案",
+  "session.child.backToParent": "返回主工作階段。",
+  "session.child.promptDisabled": "子代理工作階段無法傳送訊息。",
+  "session.review.noBranchChanges": "暫無分支變更",
+  "session.review.noUncommittedChanges": "暫無未提交的變更",
+  "settings.general.section.advanced": "進階",
+  "settings.general.row.shell.title": "終端機 Shell",
+  "settings.general.row.shell.description": "選擇終端機使用的 shell。相容的 shell 也用於智慧體的工具呼叫。",
+  "settings.general.row.shell.autoDefault": "自動（預設）",
+  "settings.general.row.shell.terminalOnly": "僅終端機",
+  "settings.general.row.showFileTree.title": "檔案樹",
+  "settings.general.row.showFileTree.description": "在桌面工作階段中顯示檔案樹切換按鈕和面板",
+  "settings.general.row.showNavigation.title": "導覽控制",
+  "settings.general.row.showNavigation.description": "在桌面標題列顯示前進和後退按鈕",
+  "settings.general.row.showSearch.title": "命令面板",
+  "settings.general.row.showSearch.description": "在桌面標題列顯示搜尋和命令面板按鈕",
+  "settings.general.row.showStatus.title": "伺服器狀態",
+  "settings.general.row.showStatus.description": "在桌面標題列顯示伺服器狀態按鈕",
+  "settings.general.row.showTerminal.title": "終端機",
+  "settings.general.row.showTerminal.description": "在桌面標題列顯示終端機按鈕",
+  "sidebar.empty.title": "尚未開啟專案",
+  "sidebar.empty.description": "開啟專案以開始",
 } satisfies Partial<Record<Keys, string>>

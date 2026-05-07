@@ -993,4 +993,30 @@ export const dict = {
   "fileViewer.menu.input.shortcutHint": "{{shortcut}} 提交 · Esc 取消",
   "fileViewer.menu.input.submit": "加入聊天",
   // FORK-END
+
+  // upstream-sync drift backfill — 上游 sync 累积漏补的翻译,2026-05-07 一次性补齐(23 key)
+  // 由 i18n-completeness.test.ts 守门,以后此段应保持为空(每次 sync 后立刻补)
+  "command.project.next": "下一个项目",
+  "command.project.previous": "上一个项目",
+  "session.child.backToParent": "返回主会话。",
+  "session.child.promptDisabled": "子代理会话无法发送消息。",
+  "session.review.noBranchChanges": "暂无分支更改",
+  "session.review.noUncommittedChanges": "暂无未提交的更改",
+  "settings.general.section.advanced": "高级",
+  "settings.general.row.shell.title": "终端 Shell",
+  "settings.general.row.shell.description": "选择终端使用的 shell。兼容的 shell 也用于智能体的工具调用。",
+  "settings.general.row.shell.autoDefault": "自动（默认）",
+  "settings.general.row.shell.terminalOnly": "仅终端",
+  "settings.general.row.showFileTree.title": "文件树",
+  "settings.general.row.showFileTree.description": "在桌面会话中显示文件树切换按钮和面板",
+  "settings.general.row.showNavigation.title": "导航控件",
+  "settings.general.row.showNavigation.description": "在桌面标题栏显示前进和后退按钮",
+  "settings.general.row.showSearch.title": "命令面板",
+  "settings.general.row.showSearch.description": "在桌面标题栏显示搜索和命令面板按钮",
+  "settings.general.row.showStatus.title": "服务器状态",
+  "settings.general.row.showStatus.description": "在桌面标题栏显示服务器状态按钮",
+  "settings.general.row.showTerminal.title": "终端",
+  "settings.general.row.showTerminal.description": "在桌面标题栏显示终端按钮",
+  "sidebar.empty.title": "暂无打开的项目",
+  "sidebar.empty.description": "打开一个项目以开始",
 } satisfies Partial<Record<Keys, string>>

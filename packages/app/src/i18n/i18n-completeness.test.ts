@@ -2,14 +2,11 @@
 //
 // 背景:zh.ts / zht.ts 用 `satisfies Partial<Record<Keys, string>>`,允许缺 key 不报编译错。
 // 其他 14 种语言(ja/ko/ar/...)是上游 sync 来的,fallback en,这里不测。
-// fork-only 自家维护的核心是 zh / zht 两本。
+// fork-only 自家维护的核心是 zh / zht 两本,**全字典 100% 覆盖**(2026-05-07 历史漂移补全后升级)。
 //
-// 关键 namespace 100% 覆盖(强守门):
-//   - fileViewer.*  — 文件查看器,fork 重灾区
-//   - common.*      — 公共词,改动频繁
-// 其他 namespace 不强制 — 历史 sync 残留漂移属于另一个 feat 范围,不在本测试守门范围。
+// 当 fork 后续 feat 加新 key,或上游 sync 引入新 key,zh / zht 必须同步补 — 否则本测试 fail。
 //
-// 当 fork 后续 feat 加新 key 到这两个 namespace 时,zh / zht 必须同步补 — 否则本测试 fail。
+// **每次 sync 上游后必跑**:if 失败 → 立刻补译,不要积累漂移到下次 sync。
 
 import { describe, expect, test } from "bun:test"
 import { dict as en } from "./en"
@@ -18,46 +15,46 @@ import { dict as zht } from "./zht"
 
 const enKeys = Object.keys(en) as Array<keyof typeof en>
 
-// 关键 namespace 前缀(必须 100% 覆盖 zh / zht)
-const CRITICAL_NAMESPACES = ["fileViewer.", "common."] as const
-const isCritical = (key: string) => CRITICAL_NAMESPACES.some((ns) => key.startsWith(ns))
-
-const enCriticalKeys = enKeys.filter((k) => isCritical(k as string)) as string[]
-
-describe("i18n completeness — 关键 namespace 守门", () => {
-  test("CRITICAL_NAMESPACES 实际命中 en key(防止 namespace 列表过期)", () => {
-    expect(enCriticalKeys.length).toBeGreaterThan(0)
-  })
-
+describe("i18n completeness — 全字典守门", () => {
   describe("zh.ts(简体中文)", () => {
-    test("关键 namespace 全覆盖", () => {
+    test("覆盖 en 所有 key(无缺失)", () => {
       const zhKeys = new Set(Object.keys(zh))
-      const missing = enCriticalKeys.filter((k) => !zhKeys.has(k))
+      const missing = enKeys.filter((k) => !zhKeys.has(k))
       expect(missing).toEqual([])
     })
 
-    test("关键 namespace 下所有 value 非空", () => {
+    test("不含 en 没有的 key(无遗留 dead key)", () => {
+      const enKeySet = new Set<string>(enKeys)
+      const extra = Object.keys(zh).filter((k) => !enKeySet.has(k))
+      expect(extra).toEqual([])
+    })
+
+    test("所有 value 非空字符串", () => {
       const empties: string[] = []
-      for (const k of enCriticalKeys) {
-        const v = (zh as Record<string, string>)[k]
-        if (v !== undefined && (typeof v !== "string" || v.trim() === "")) empties.push(k)
+      for (const [k, v] of Object.entries(zh)) {
+        if (typeof v !== "string" || v.trim() === "") empties.push(k)
       }
       expect(empties).toEqual([])
     })
   })
 
   describe("zht.ts(繁体中文)", () => {
-    test("关键 namespace 全覆盖", () => {
+    test("覆盖 en 所有 key(无缺失)", () => {
       const zhtKeys = new Set(Object.keys(zht))
-      const missing = enCriticalKeys.filter((k) => !zhtKeys.has(k))
+      const missing = enKeys.filter((k) => !zhtKeys.has(k))
       expect(missing).toEqual([])
     })
 
-    test("关键 namespace 下所有 value 非空", () => {
+    test("不含 en 没有的 key(无遗留 dead key)", () => {
+      const enKeySet = new Set<string>(enKeys)
+      const extra = Object.keys(zht).filter((k) => !enKeySet.has(k))
+      expect(extra).toEqual([])
+    })
+
+    test("所有 value 非空字符串", () => {
       const empties: string[] = []
-      for (const k of enCriticalKeys) {
-        const v = (zht as Record<string, string>)[k]
-        if (v !== undefined && (typeof v !== "string" || v.trim() === "")) empties.push(k)
+      for (const [k, v] of Object.entries(zht)) {
+        if (typeof v !== "string" || v.trim() === "") empties.push(k)
       }
       expect(empties).toEqual([])
     })
