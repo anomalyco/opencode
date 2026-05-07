@@ -263,7 +263,8 @@ const IMG_MIME: Record<string, string> = {
   ".avif": "image/avif",
 }
 
-function mimeFromPath(p: string): string | null {
+// FORK: export for unit tests(R5 测试纪律 / 关键模块清单)2026-05-07
+export function mimeFromPath(p: string): string | null {
   const lower = p.toLowerCase()
   for (const [ext, mime] of Object.entries(IMG_MIME)) {
     if (lower.endsWith(ext)) return mime
@@ -453,7 +454,8 @@ export const exportMdAsDocx = async (opts: {
 }
 
 /** 错误友好化:常见 Tauri / 库错误关键字 → 中文 */
-function friendlyError(raw: string): string {
+// FORK: export for unit tests(R5 测试纪律 / 关键模块清单)2026-05-07
+export function friendlyError(raw: string): string {
   const lower = raw.toLowerCase()
   // 文件系统错误
   if (lower.includes("permission denied") || lower.includes("eacces") || lower.includes("eperm")) {
