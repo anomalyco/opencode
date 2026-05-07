@@ -1606,7 +1606,7 @@ export default function Page() {
       // Deferred markdown/math expansion can increase content height after the
       // stream is already idle. If the viewport was still at the bottom before
       // that resize, keep it pinned instead of letting the tail drift upward.
-      if (live() || ui.scroll.bottom) {
+      if (live()) {
         lockBottom(root, "content:resize:lock-bottom")
       }
       scheduleScrollState(root)
@@ -1723,6 +1723,7 @@ export default function Page() {
       (bottom, prev) => {
         if (!bottom) return
         if (prev === undefined || prev === bottom) return
+        if (ui.seekingMessageId) return
         if (ui.mode !== "live") {
           enterLive()
           setStore("messageId", undefined)
