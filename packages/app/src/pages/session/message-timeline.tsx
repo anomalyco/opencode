@@ -906,7 +906,13 @@ export function MessageTimeline(props: {
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  // Keep previous header state while session data is loading between
+  // route changes, to prevent --session-title-inset from 64px→0px flash.
+  const showHeader = createMemo((prev?: boolean) => {
+    if (!info() && sessionID()) return prev ?? false
+    return !!(titleValue() || parentID())
+  })
+  
   const [title, setTitle] = createStore({
     draft: "",
     editing: false,
@@ -1333,6 +1339,7 @@ export function MessageTimeline(props: {
           onClick={props.onAutoScrollInteraction}
           class="relative min-w-0 w-full h-full"
           style={{
+            "--session-title-inset": showHeader() ? "64px" : "0px",
             "--session-title-height": showHeader() ? "40px" : "0px",
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
@@ -1648,10 +1655,11 @@ export function MessageTimeline(props: {
               classList={{
                 "w-full": true,
                 "flex flex-col gap-12": true,
-                "mt-0.5": props.centered,
-                "mt-0": !props.centered,
               }}
-              style={itemStyle(props.centered)}
+              style={{
+                ...itemStyle(props.centered),
+                "margin-top": showHeader() ? (props.centered ? "calc(64px + 0.125rem)" : "64px") : (props.centered ? "0.125rem" : "0px"),
+              }}
             >
               <Show when={props.historyMore}>
                 <div class="w-full flex justify-center">
