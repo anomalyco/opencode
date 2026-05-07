@@ -2,9 +2,11 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import path from "path"
 
-export function detectShell(shellEnv: string | undefined): "bash" | "fish" {
+export function detectShell(shellEnv: string | undefined): "bash" | "fish" | "zsh" {
   if (!shellEnv) return "bash"
-  if (path.basename(shellEnv) === "fish") return "fish"
+  const name = path.basename(shellEnv)
+  if (name === "fish") return "fish"
+  if (name === "zsh") return "zsh"
   return "bash"
 }
 
@@ -91,9 +93,44 @@ complete -c opencode -f -a '(__opencode_yargs_completions)'
 `
 }
 
-export function completionScript(shell: "bash" | "fish") {
+function zshScript() {
+  // Matches the official yargs v18 zsh completion template.
+  // Uses _describe for completions with descriptions (yargs emits "name:description"
+  // format natively when invoked from a zsh context) and falls back to _default
+  // (file completion) when no matches are found.
+  return `#compdef opencode
+###-begin-opencode-completions-###
+#
+# yargs command completion script
+#
+# Installation: opencode completion --shell zsh >> ~/.zshrc
+#    or opencode completion --shell zsh >> ~/.zprofile on OSX.
+#
+_opencode_yargs_completions()
+{
+  local reply
+  local si=$IFS
+  IFS=$'\\n' reply=($(COMP_CWORD="$((CURRENT-1))" COMP_LINE="$BUFFER" COMP_POINT="$CURSOR" opencode --get-yargs-completions "\${words[@]}"))
+  IFS=$si
+  if [[ \${#reply} -gt 0 ]]; then
+    _describe 'values' reply
+  else
+    _default
+  fi
+}
+if [[ "'\${zsh_eval_context[-1]}" == "loadautofunc" ]]; then
+  _opencode_yargs_completions "$@"
+else
+  compdef _opencode_yargs_completions opencode
+fi
+###-end-opencode-completions-###
+`
+}
+
+export function completionScript(shell: "bash" | "fish" | "zsh") {
   if (shell === "bash") return bashScript()
   if (shell === "fish") return fishScript()
+  if (shell === "zsh") return zshScript()
   const _exhaustive: never = shell
   throw new Error(`Unsupported shell: ${_exhaustive}`)
 }
@@ -105,7 +142,7 @@ export const CompletionCommand = cmd({
     yargs.option("shell", {
       type: "string",
       describe: "shell type (auto-detected from $SHELL if omitted)",
-      choices: ["bash", "fish"] as const,
+      choices: ["bash", "fish", "zsh"] as const,
     }),
   handler: async (args) => {
     const shell = args.shell ?? detectShell(process.env.SHELL)
