@@ -193,15 +193,26 @@ describe("session.list", () => {
 
   test("descendants returns nested children", async () => {
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
-        const root = await Session.create({ title: "root-session" })
-        const child = await Session.create({ title: "child-session", parentID: root.id })
-        const grand = await Session.create({ title: "grand-session", parentID: child.id })
-        const other = await Session.create({ title: "other-session" })
+        const root = await svc.create({ title: "root-session" })
+        const child = await svc.create({ title: "child-session", parentID: root.id })
+        const grand = await svc.create({ title: "grand-session", parentID: child.id })
+        const other = await svc.create({ title: "other-session" })
 
-        const list = await Session.descendants(root.id)
+        const list = await run(
+          SessionNs.Service.use((svc) =>
+            svc.children(root.id).pipe(
+              Effect.flatMap((kids) =>
+                Effect.forEach(kids, (kid) =>
+                  svc.children(kid.id).pipe(Effect.map((items) => [kid, ...items])),
+                ),
+              ),
+              Effect.map((items) => items.flat()),
+            ),
+          ),
+        )
         const ids = list.map((item) => item.id)
 
         expect(ids).toContain(child.id)

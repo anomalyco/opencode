@@ -257,7 +257,7 @@ export type RetryPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof RetryPa
 export const SessionEventPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("session-event"),
-  event: Schema.Literal("suspended", "resumed"),
+  event: Schema.Union([Schema.Literal("suspended"), Schema.Literal("resumed")]),
   reason: Schema.Literal("browser_takeover"),
 })
   .annotate({ identifier: "SessionEventPart" })

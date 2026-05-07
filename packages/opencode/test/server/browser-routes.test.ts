@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { Browser } from "../../src/browser"
 import { BrowserRoutes } from "../../src/server/routes/browser"
-import { Session } from "../../src/session"
 import { SessionID } from "../../src/session/schema"
-import { Log } from "../../src/util/log"
+import * as Log from "@opencode-ai/core/util/log"
+import { WithInstance } from "../../src/project/with-instance"
+import { Session as SessionNs } from "@/session/session"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { AppRuntime } from "@/effect/app-runtime"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
-afterEach(() => {
+afterEach(async () => {
   mock.restore()
+  await disposeAllInstances()
 })
 
 const id = SessionID.make("ses_12345678901234567890123456")
@@ -21,16 +25,25 @@ const info = {
 
 describe("browser routes", () => {
   test("tabs all route checks each session", async () => {
-    const child = SessionID.make("ses_22345678901234567890123456")
+    await using dir = await tmpdir({ git: true })
     const tabs = spyOn(Browser, "tabs").mockImplementation(async (sessionID) => ({ sessionID, tabs: [] }))
-    spyOn(Session, "descendants").mockResolvedValue([{ id: child }] as Awaited<ReturnType<typeof Session.descendants>>)
     const app = BrowserRoutes()
 
-    const res = await app.request(`/${id}/tabs/all`)
+    const result = await WithInstance.provide({
+      directory: dir.path,
+      fn: async () => {
+        const root = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({ title: "root" })))
+        const child = await AppRuntime.runPromise(
+          SessionNs.Service.use((svc) => svc.create({ title: "child", parentID: root.id })),
+        )
+        const res = await app.request(`/${root.id}/tabs/all`)
+        return { child, res, root }
+      },
+    })
 
-    expect(res.status).toBe(200)
-    expect(tabs).toHaveBeenCalledWith(id)
-    expect(tabs).toHaveBeenCalledWith(child)
+    expect(result.res.status).toBe(200)
+    expect(tabs).toHaveBeenCalledWith(result.root.id)
+    expect(tabs).toHaveBeenCalledWith(result.child.id)
   })
 
   test("open route calls Browser.open", async () => {

@@ -13,6 +13,7 @@ export type Event =
   | EventMessagePartDelta
   | EventPermissionAsked
   | EventPermissionReplied
+  | EventBrowserUpdated
   | EventSessionDiff
   | EventSessionError
   | EventInstallationUpdated
@@ -276,6 +277,16 @@ export type SessionStatus =
     }
   | {
       type: "busy"
+    }
+  | {
+      type: "suspending"
+      reason: "browser_takeover"
+      note?: string
+    }
+  | {
+      type: "paused"
+      reason: "browser_takeover"
+      note?: string
     }
 
 export type EventTuiPromptAppend = {
@@ -691,6 +702,15 @@ export type RetryPart = {
   }
 }
 
+export type SessionEventPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "session-event"
+  event: "suspended" | "resumed"
+  reason: "browser_takeover"
+}
+
 export type CompactionPart = {
   id: string
   sessionID: string
@@ -713,6 +733,7 @@ export type Part =
   | PatchPart
   | AgentPart
   | RetryPart
+  | SessionEventPart
   | CompactionPart
 
 export type PermissionAction = "allow" | "deny" | "ask"
@@ -784,6 +805,7 @@ export type GlobalEvent = {
     | EventMessagePartDelta
     | EventPermissionAsked
     | EventPermissionReplied
+    | EventBrowserUpdated
     | EventSessionDiff
     | EventSessionError
     | EventInstallationUpdated
@@ -2353,6 +2375,16 @@ export type EventPermissionReplied = {
     sessionID: string
     requestID: string
     reply: "once" | "always" | "reject"
+  }
+}
+
+export type EventBrowserUpdated = {
+  id: string
+  type: "browser.updated"
+  properties: {
+    sessionID: string
+    info?: unknown
+    tabs?: unknown
   }
 }
 

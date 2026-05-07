@@ -168,7 +168,7 @@ export const layer = Layer.effect(
       const prev = yield* status.get(sessionID)
       const next = { type: "idle" as const }
       if (prev.type === "paused" || prev.type === "suspending") {
-        yield* event({ sessionID, event: "resumed", reason: prev.reason })
+        yield* event({ sessionID, event: "resumed" as const, reason: prev.reason })
       }
       yield* status.set(sessionID, next)
       return { applied: prev.type === "paused" || prev.type === "suspending", status: next }

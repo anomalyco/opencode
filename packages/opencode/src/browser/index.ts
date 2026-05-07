@@ -13,10 +13,10 @@ import { type SessionID, SessionID as Session } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
 import { Database, and, eq, inArray } from "@/storage/db"
 import * as Log from "@opencode-ai/core/util/log"
-import { Flock } from "@/util/flock"
+import { Flock } from "@opencode-ai/core/util/flock"
 import { Process } from "@/util/process"
 import { Instance } from "@/project/instance"
-import { Cause, Effect, Layer, ServiceMap } from "effect"
+import { Cause, Context, Effect, Layer, Schema } from "effect"
 
 export namespace Browser {
   const log = Log.create({ service: "browser" })
@@ -107,7 +107,14 @@ export namespace Browser {
   export type Update = z.infer<typeof Update>
 
   export const Event = {
-    Updated: BusEvent.define("browser.updated", Update),
+    Updated: BusEvent.define(
+      "browser.updated",
+      Schema.Struct({
+        sessionID: Session,
+        info: Schema.optional(Schema.Any),
+        tabs: Schema.optional(Schema.Any),
+      }),
+    ),
   }
 
   type Cell = {
@@ -158,7 +165,7 @@ export namespace Browser {
     ) => Effect.Effect<{ onMessage: (message: string | ArrayBuffer) => void; onClose: () => void }>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Browser") {}
+  export class Service extends Context.Service<Service, Interface>()("@opencode/Browser") {}
 
   const ParseError = new Error("Failed to parse agent-browser JSON response")
   const Min = "0.25.3"

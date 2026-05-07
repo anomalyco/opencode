@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { Browser } from "../../src/browser"
-import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { SessionID } from "../../src/session/schema"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const id = SessionID.make("ses_12345678901234567890123456")
@@ -24,7 +24,7 @@ const passive = async <T>(fn: () => Promise<T>) => {
   process.env.OPENCODE_AGENT_BROWSER_BIN = path.join(dir.path, "missing-agent-browser")
   process.env.AGENT_BROWSER_SOCKET_DIR = run.path
   try {
-    return await Instance.provide({
+    return await WithInstance.provide({
       directory: dir.path,
       fn,
     })
@@ -95,7 +95,7 @@ describe("browser passive lookup", () => {
     await Bun.write(path.join(run.path, `${id}.pid`), String(process.pid))
 
     try {
-      const conn = await Instance.provide({
+      const conn = await WithInstance.provide({
         directory: dir.path,
         fn: () =>
           Browser.connect(id, {

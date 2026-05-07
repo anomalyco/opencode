@@ -265,6 +265,17 @@ export function BrowserPanel(props: { size: Sizing }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
     }).then((res) => json(res) as Promise<Status>)
+  const suspend = (sessionID: string) =>
+    request(`/session/${sessionID}/suspend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "browser_takeover" }),
+    }).then((res) => json(res) as Promise<{ status: { type: "paused" | "suspending" | "idle" | "busy" } }>)
+  const resumeSession = (sessionID: string) =>
+    request(`/session/${sessionID}/resume`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).then((res) => json(res) as Promise<{ status: { type: "idle" | "paused" | "suspending" | "busy" } }>)
   const act = (sessionID: string, cmd: "back" | "forward" | "reload") =>
     request(`/browser/${sessionID}/action`, {
       method: "POST",
@@ -482,9 +493,7 @@ export function BrowserPanel(props: { size: Sizing }) {
     setStore("take", id)
     aim()
     setStore("view", { sessionID: tab.sessionID, index: tab.index })
-    void sdk.client.session
-      .suspend({ sessionID: tab.sessionID, reason: "browser_takeover" })
-      .then((result) => result.data)
+    void suspend(tab.sessionID)
       .then((result) => {
         if (result?.status.type !== "paused") return
         layout.takeover.enter(id)
@@ -506,8 +515,7 @@ export function BrowserPanel(props: { size: Sizing }) {
     const id = tabid(tab)
     if (store.take === id) return
     setStore("take", id)
-    void sdk.client.session
-      .resume({ sessionID: tab.sessionID })
+    void resumeSession(tab.sessionID)
       .then(() => {
         layout.takeover.clear(id)
       })
@@ -630,7 +638,7 @@ export function BrowserPanel(props: { size: Sizing }) {
     if (!root || !opened()) return
     const stop = sdk.event.on("browser.updated", (evt) => {
       const sessionID = evt.properties.sessionID
-      const tabs = evt.properties.tabs
+      const tabs = evt.properties.tabs as Group | undefined
       if (!tabs) return
       if (sessionID === root || store.tabs.some((tab) => tab.sessionID === sessionID)) {
         patch(root, tabs)
