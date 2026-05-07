@@ -1,5 +1,5 @@
 import { Schema, type Effect } from "effect"
-import type { LLMError, LLMEvent, LLMRequest, ProtocolID, ProviderChunkError } from "../schema"
+import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
 
 /**
  * The semantic API contract of one model server family.
@@ -48,7 +48,7 @@ export interface Protocol<Payload, Frame, Chunk, State> {
   readonly process: (
     state: State,
     chunk: Chunk,
-  ) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], ProviderChunkError>
+  ) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], LLMError>
   /** Optional flush emitted when the framed stream ends. */
   readonly onHalt?: (state: State) => ReadonlyArray<LLMEvent>
 }

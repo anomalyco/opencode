@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Random, Ref } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLM, ProviderChunkError, ProviderRequestError } from "../src"
+import { LLM, LLMError } from "../src"
 import { LLMClient, RequestExecutor } from "../src/adapter"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { dynamicResponse } from "./lib/http"
@@ -64,35 +64,46 @@ const randomMidpoint = {
   nextIntUnsafe: () => 0,
 }
 
+const expectLLMError = (error: unknown) => {
+  expect(error).toBeInstanceOf(LLMError)
+  if (!(error instanceof LLMError)) throw new Error("expected LLMError")
+  return error
+}
+
+const errorHttp = (error: LLMError) => "http" in error.reason ? error.reason.http : undefined
+
 describe("RequestExecutor", () => {
   it.effect("returns redacted diagnostics for retryable rate limits", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
+      expectLLMError(error)
       expect(error).toMatchObject({
-        status: 429,
         retryable: true,
         retryAfterMs: 0,
-        rateLimit: { retryAfterMs: 0 },
-        requestId: "req_123",
-        request: {
-          method: "POST",
-          url: "https://provider.test/v1/chat?api_key=%3Credacted%3E&key=%3Credacted%3E&debug=1",
-          headers: { authorization: "<redacted>", "x-safe": "visible" },
-        },
-        response: {
-          status: 429,
-          headers: {
-            "retry-after-ms": "0",
-            "x-request-id": "req_123",
-            "x-api-key": "<redacted>",
+        reason: {
+          _tag: "RateLimit",
+          rateLimit: { retryAfterMs: 0 },
+          http: {
+            requestId: "req_123",
+            request: {
+              method: "POST",
+              url: "https://provider.test/v1/chat?api_key=%3Credacted%3E&key=%3Credacted%3E&debug=1",
+              headers: { authorization: "<redacted>", "x-safe": "visible" },
+            },
+            response: {
+              status: 429,
+              headers: {
+                "retry-after-ms": "0",
+                "x-request-id": "req_123",
+                "x-api-key": "<redacted>",
+              },
+            },
           },
         },
       })
-      expect(error.body).toBe("rate limited")
+      expect(errorHttp(error)?.body).toBe("rate limited")
     }).pipe(
       Effect.provide(
         responsesLayer([
@@ -110,10 +121,9 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
-      expect(error.request?.headers["x-safe"]).toBe("<redacted>")
-      expect(error.response?.headers["x-safe"]).toBe("<redacted>")
+      expectLLMError(error)
+      expect(errorHttp(error)?.request.headers["x-safe"]).toBe("<redacted>")
+      expect(errorHttp(error)?.response?.headers["x-safe"]).toBe("<redacted>")
     }).pipe(
       Effect.provide(
         responsesLayer([
@@ -129,9 +139,9 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
-      expect(error.rateLimit).toEqual({
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "RateLimit" })
+      expect(error.reason._tag === "RateLimit" ? error.reason.rateLimit : undefined).toEqual({
         retryAfterMs: 0,
         limit: { requests: "500", tokens: "30000" },
         remaining: { requests: "499", tokens: "29900" },
@@ -160,9 +170,9 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
-      expect(error.rateLimit).toEqual({
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+      expect(errorHttp(error)?.rateLimit).toEqual({
         retryAfterMs: 0,
         limit: { requests: "100", "input-tokens": "10000" },
         remaining: { requests: "12", "input-tokens": "9000" },
@@ -210,9 +220,8 @@ describe("RequestExecutor", () => {
           const executor = yield* RequestExecutor.Service
           const error = yield* executor.execute(request).pipe(Effect.flip)
 
-          expect(error).toBeInstanceOf(ProviderRequestError)
-          if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
-          expect(error.status).toBe(status)
+          expectLLMError(error)
+          expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status })
           expect(error.retryable).toBe(true)
         }).pipe(
           Effect.provide(
@@ -233,11 +242,11 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "Authentication" })
       expect(error.retryable).toBe(false)
-      expect(error.bodyTruncated).toBe(true)
-      expect(error.body).toHaveLength(16_384)
+      expect(errorHttp(error)?.bodyTruncated).toBe(true)
+      expect(errorHttp(error)?.body).toHaveLength(16_384)
     }).pipe(
       Effect.provide(
         responsesLayer([
@@ -253,12 +262,11 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
-      expect(error.body).toContain('"key":"<redacted>"')
-      expect(error.body).toContain('api_key=<redacted>')
-      expect(error.body).not.toContain("body-secret")
-      expect(error.body).not.toContain("query-secret")
+      expectLLMError(error)
+      expect(errorHttp(error)?.body).toContain('"key":"<redacted>"')
+      expect(errorHttp(error)?.body).toContain('api_key=<redacted>')
+      expect(errorHttp(error)?.body).not.toContain("body-secret")
+      expect(errorHttp(error)?.body).not.toContain("query-secret")
     }).pipe(
       Effect.provide(
         responsesLayer([
@@ -275,12 +283,11 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(secretRequest).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      if (!(error instanceof ProviderRequestError)) throw new Error("expected ProviderRequestError")
-      expect(error.body).toContain("provider echoed <redacted>")
-      expect(error.body).toContain("authorization <redacted>")
-      expect(error.body).not.toContain("query-secret-123")
-      expect(error.body).not.toContain("header-secret-456")
+      expectLLMError(error)
+      expect(errorHttp(error)?.body).toContain("provider echoed <redacted>")
+      expect(errorHttp(error)?.body).toContain("authorization <redacted>")
+      expect(errorHttp(error)?.body).not.toContain("query-secret-123")
+      expect(errorHttp(error)?.body).not.toContain("header-secret-456")
     }).pipe(
       Effect.provide(
         responsesLayer([
@@ -345,7 +352,8 @@ describe("RequestExecutor", () => {
         yield* TestClock.adjust(1)
         const error = yield* Fiber.join(fiber)
 
-        expect(error).toBeInstanceOf(ProviderRequestError)
+        expectLLMError(error)
+        expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
         expect(yield* Ref.get(attempts)).toBe(3)
       }).pipe(
         Effect.provide(
@@ -382,7 +390,8 @@ describe("RequestExecutor", () => {
         Effect.flip,
       )
 
-      expect(error).toBeInstanceOf(ProviderChunkError)
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
       expect(yield* Ref.get(attempts)).toBe(1)
     }),
   )

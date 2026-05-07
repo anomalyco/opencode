@@ -9,11 +9,15 @@ import { ToolDefinition, ToolFailure } from "./schema"
  */
 export type ToolSchema<T> = Schema.Codec<T, any, never, never>
 
+export type ToolExecute<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = (
+  params: Schema.Schema.Type<Parameters>,
+) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
+
 /**
  * A type-safe LLM tool. Each tool bundles its own description, parameter
- * Schema, success Schema, and execute handler. The handler closes over any
- * services it needs at construction time, so the runtime never sees per-tool
- * dependencies.
+ * Schema and success Schema. The execute handler is optional: omit it when you
+ * only want to expose a tool schema to the model and handle tool calls outside
+ * this package.
  *
  * Errors must be expressed as `ToolFailure`. Unmapped errors and defects fail
  * the stream.
@@ -25,9 +29,7 @@ export interface Tool<Parameters extends ToolSchema<any>, Success extends ToolSc
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
-  readonly execute: (
-    params: Schema.Schema.Type<Parameters>,
-  ) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
+  readonly execute?: ToolExecute<Parameters, Success>
   /** @internal */
   readonly _decode: (input: unknown) => Effect.Effect<Schema.Schema.Type<Parameters>, Schema.SchemaError>
   /** @internal */
@@ -37,6 +39,14 @@ export interface Tool<Parameters extends ToolSchema<any>, Success extends ToolSc
 }
 
 export type AnyTool = Tool<ToolSchema<any>, ToolSchema<any>>
+
+export type ExecutableTool<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = Tool<Parameters, Success> & {
+  readonly execute: ToolExecute<Parameters, Success>
+}
+
+export type AnyExecutableTool = ExecutableTool<ToolSchema<any>, ToolSchema<any>>
+
+export type ExecutableTools = Record<string, AnyExecutableTool>
 
 /**
  * Constructs a typed tool. The Schema codecs and JSON-schema-shaped
@@ -52,14 +62,25 @@ export type AnyTool = Tool<ToolSchema<any>, ToolSchema<any>>
  * })
  * ```
  */
-export const make = <Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
+export function make<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
-  readonly execute: (
-    params: Schema.Schema.Type<Parameters>,
-  ) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
-}): Tool<Parameters, Success> => ({
+  readonly execute: ToolExecute<Parameters, Success>
+}): ExecutableTool<Parameters, Success>
+export function make<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
+  readonly description: string
+  readonly parameters: Parameters
+  readonly success: Success
+  readonly execute?: undefined
+}): Tool<Parameters, Success>
+export function make<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
+  readonly description: string
+  readonly parameters: Parameters
+  readonly success: Success
+  readonly execute?: ToolExecute<Parameters, Success>
+}): Tool<Parameters, Success> {
+  return {
   description: config.description,
   parameters: config.parameters,
   success: config.success,
@@ -71,7 +92,8 @@ export const make = <Parameters extends ToolSchema<any>, Success extends ToolSch
     description: config.description,
     inputSchema: toJsonSchema(config.parameters),
   }),
-})
+  }
+}
 
 export const tool = make
 

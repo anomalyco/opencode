@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, ProviderRequestError, type LLMRequest } from "../../src"
+import { LLM, LLMError, type LLMRequest } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolName, weatherToolRequest } from "../recorded-scenarios"
@@ -83,8 +83,8 @@ describe("Anthropic Messages recorded", () => {
     Effect.gen(function* () {
       const error = yield* generate(malformedToolOrderRequest).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      expect(error).toMatchObject({ status: 400 })
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
     }),
   )

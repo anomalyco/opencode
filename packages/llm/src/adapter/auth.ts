@@ -1,8 +1,9 @@
 import { Config, Effect, Redacted } from "effect"
 import { Headers } from "effect/unstable/http"
-import { InvalidRequestError, type LLMError, type LLMRequest } from "../schema"
+import { AuthenticationReason, InvalidRequestReason, LLMError, type LLMRequest } from "../schema"
 
-type Secret = Redacted.Redacted<string>
+export type Secret = Redacted.Redacted<string>
+export type SecretInput = string | Secret | Config.Config<string | Secret>
 
 export class MissingCredentialError extends Error {
   readonly _tag = "MissingCredentialError"
@@ -69,21 +70,28 @@ const fromCredential = (source: Credential, render: (secret: string) => Headers.
     ),
   )
 
-export const value = (secret: string, source = "value") => optional(secret, source)
+const secretEffect = (secret: string | Secret, source: string) => {
+  const redacted = typeof secret === "string" ? Redacted.make(secret) : secret
+  if (Redacted.value(redacted) === "") return Effect.fail(new MissingCredentialError(source))
+  return Effect.succeed(redacted)
+}
 
-export const optional = (secret: string | undefined, source = "optional value") =>
-  credential(
-    secret === undefined || secret === ""
-      ? Effect.fail(new MissingCredentialError(source))
-      : Effect.succeed(Redacted.make(secret)),
-  )
-
-export const config = (name: string) =>
-  credential(
+const credentialFromSecret = (secret: SecretInput, source: string) => {
+  if (typeof secret === "string" || Redacted.isRedacted(secret)) return credential(secretEffect(secret, source))
+  return credential(
     Effect.gen(function* () {
-      return yield* Config.redacted(name)
+      return yield* secretEffect(yield* secret, source)
     }),
   )
+}
+
+export const value = (secret: string, source = "value") => credentialFromSecret(secret, source)
+
+export const optional = (secret: SecretInput | undefined, source = "optional value") =>
+  secret === undefined ? credential(Effect.fail(new MissingCredentialError(source))) : credentialFromSecret(secret, source)
+
+export const config = (name: string) =>
+  credentialFromSecret(Config.redacted(name), name)
 
 export const effect = (load: Effect.Effect<Secret, CredentialError>) => credential(load)
 
@@ -104,11 +112,12 @@ const fromModelApiKey = (from: (apiKey: string) => Headers.Input) =>
     return Effect.succeed(Headers.setAll(headers, from(key)))
   })
 
-const credentialInput = (source: string | Credential) => typeof source === "string" ? value(source) : source
+const credentialInput = (source: SecretInput | Credential) =>
+  typeof source === "string" || Redacted.isRedacted(source) || Config.isConfig(source) ? credentialFromSecret(source, "value") : source
 
 export function bearer(): Auth
-export function bearer(source: string | Credential): Auth
-export function bearer(source?: string | Credential) {
+export function bearer(source: SecretInput | Credential): Auth
+export function bearer(source?: SecretInput | Credential) {
   if (source === undefined) return fromModelApiKey((key) => ({ authorization: `Bearer ${key}` }))
   return credentialInput(source).bearer()
 }
@@ -117,17 +126,21 @@ export const apiKey = bearer
 
 export const apiKeyHeader = (name: string) => fromModelApiKey((key) => ({ [name]: key }))
 
-export function header(name: string): (source: string | Credential) => Auth
-export function header(name: string, source: string | Credential): Auth
-export function header(name: string, source?: string | Credential) {
-  if (source === undefined) return (next: string | Credential) => credentialInput(next).header(name)
+export function header(name: string): (source: SecretInput | Credential) => Auth
+export function header(name: string, source: SecretInput | Credential): Auth
+export function header(name: string, source?: SecretInput | Credential) {
+  if (source === undefined) return (next: SecretInput | Credential) => credentialInput(next).header(name)
   return credentialInput(source).header(name)
 }
 
 const toLLMError = (error: AuthError): LLMError => {
   if (error instanceof MissingCredentialError || error instanceof Config.ConfigError) {
-    return new InvalidRequestError({
-      message: error instanceof MissingCredentialError ? error.message : `Failed to resolve auth config: ${error.message}`,
+    return new LLMError({
+      module: "Auth",
+      method: "apply",
+      reason: error instanceof MissingCredentialError
+        ? new AuthenticationReason({ message: error.message, kind: "missing" })
+        : new InvalidRequestReason({ message: `Failed to resolve auth config: ${error.message}` }),
     })
   }
   return error

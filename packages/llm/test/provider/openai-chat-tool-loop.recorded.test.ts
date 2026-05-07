@@ -2,12 +2,11 @@ import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { LLM, LLMResponse } from "../../src"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
-import { ToolRuntime } from "../../src/tool-runtime"
 import { eventSummary, weatherRuntimeTool } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 import * as TestToolRuntime from "../lib/tool-runtime"
 
-// Multi-interaction recorded test: drives the typed `ToolRuntime` against a
+// Multi-interaction recorded test: drives typed tool execution against a
 // live OpenAI Chat endpoint so the cassette captures every model round in
 // order (model -> tool dispatch -> model). The cassette is only created with
 // `RECORD=true OPENAI_API_KEY=...`. In replay mode the test is skipped if the

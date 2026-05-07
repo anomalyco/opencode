@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer"
 import { Cause, Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import { InvalidRequestError, ProviderChunkError, type LLMRequest, type MediaPart, type ToolResultPart } from "../schema"
+import { InvalidProviderOutputReason, InvalidRequestReason, LLMError, type LLMRequest, type MediaPart, type ToolResultPart } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -46,7 +46,11 @@ export const totalTokens = (
 }
 
 export const chunkError = (adapter: string, message: string, raw?: string) =>
-  new ProviderChunkError({ adapter, message, raw })
+  new LLMError({
+    module: "ProviderShared",
+    method: "stream",
+    reason: new InvalidProviderOutputReason({ adapter, message, raw }),
+  })
 
 export const parseJson = (adapter: string, input: string, message: string) =>
   Effect.try({
@@ -99,7 +103,7 @@ const errorText = (error: unknown) => {
 
 const streamError = (adapter: string, message: string, cause: Cause.Cause<unknown>) => {
   const failed = cause.reasons.find(Cause.isFailReason)?.error
-  if (failed instanceof ProviderChunkError) return failed
+  if (failed instanceof LLMError) return failed
   return chunkError(adapter, message, Cause.pretty(cause))
 }
 
@@ -120,16 +124,16 @@ export const framed = <Frame, Chunk, State, Event>(input: {
   readonly response: HttpClientResponse.HttpClientResponse
   readonly readError: string
   readonly framing: (
-    bytes: Stream.Stream<Uint8Array, ProviderChunkError>,
-  ) => Stream.Stream<Frame, ProviderChunkError>
-  readonly decodeChunk: (frame: Frame) => Effect.Effect<Chunk, ProviderChunkError>
+    bytes: Stream.Stream<Uint8Array, LLMError>,
+  ) => Stream.Stream<Frame, LLMError>
+  readonly decodeChunk: (frame: Frame) => Effect.Effect<Chunk, LLMError>
   readonly initial: () => State
   readonly process: (
     state: State,
     chunk: Chunk,
-  ) => Effect.Effect<readonly [State, ReadonlyArray<Event>], ProviderChunkError>
+  ) => Effect.Effect<readonly [State, ReadonlyArray<Event>], LLMError>
   readonly onHalt?: (state: State) => ReadonlyArray<Event>
-}): Stream.Stream<Event, ProviderChunkError> => {
+}): Stream.Stream<Event, LLMError> => {
   const bytes = input.response.stream.pipe(
     Stream.mapError((error) => chunkError(input.adapter, input.readError, errorText(error))),
   )
@@ -146,11 +150,11 @@ export const framed = <Frame, Chunk, State, Event>(input: {
  * `decodeChunk` sees one JSON string per element. The SSE channel emits a
  * `Retry` control event on its error channel; we drop it here (we don't
  * implement client-driven retries) so the public error channel stays
- * `ProviderChunkError`.
+ * `LLMError`.
  */
 export const sseFraming = (
-  bytes: Stream.Stream<Uint8Array, ProviderChunkError>,
-): Stream.Stream<string, ProviderChunkError> =>
+  bytes: Stream.Stream<Uint8Array, LLMError>,
+): Stream.Stream<string, LLMError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
@@ -160,13 +164,18 @@ export const sseFraming = (
   )
 
 /**
- * Canonical `InvalidRequestError` constructor. Lift one-line `const invalid =
- * (message) => new InvalidRequestError({ message })` aliases out of every
+ * Canonical invalid-request constructor. Lift one-line `const invalid =
+ * (message) => invalidRequest(message)` aliases out of every
  * adapter so the error constructor lives in one place. If we ever extend
- * `InvalidRequestError` with adapter context or trace metadata, the change
+ * `InvalidRequestReason` with adapter context or trace metadata, the change
  * lands here.
  */
-export const invalidRequest = (message: string) => new InvalidRequestError({ message })
+export const invalidRequest = (message: string) =>
+  new LLMError({
+    module: "ProviderShared",
+    method: "request",
+    reason: new InvalidRequestReason({ message }),
+  })
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   adapter: string,
@@ -190,7 +199,7 @@ export const matchToolChoice = <Auto, None, Required, Tool>(
  * Build a `validate` step from a Schema decoder. Replaces the per-adapter
  * lambda body `(payload) => decode(payload).pipe(Effect.mapError((e) =>
  * invalid(e.message)))`. Any decode error is translated into
- * `InvalidRequestError` carrying the original parse-error message.
+ * `LLMError` carrying the original parse-error message.
  */
 export const validateWith =
   <A, I, E extends { readonly message: string }>(decode: (input: I) => Effect.Effect<A, E>) =>

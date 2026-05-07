@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, ProviderChunkError } from "../../src"
+import { LLM, LLMError } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as Gemini from "../../src/protocols/gemini"
 import { it } from "../lib/effect"
@@ -336,7 +336,8 @@ describe("Gemini adapter", () => {
         Effect.flip,
       )
 
-      expect(error).toBeInstanceOf(ProviderChunkError)
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
       expect(error.message).toContain("Invalid google/gemini stream chunk")
     }),
   )

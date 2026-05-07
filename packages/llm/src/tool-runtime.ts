@@ -1,6 +1,5 @@
-import { Context, Effect, Layer, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import type { Concurrency } from "effect/Types"
-import { LLMClient, type Service as LLMClientService } from "./adapter/client"
 import {
   type ContentPart,
   type FinishReason,
@@ -9,124 +8,103 @@ import {
   LLMRequest,
   Message,
   type ProviderMetadata,
-  type ToolResultValue,
   ToolCallPart,
+  ToolFailure,
   ToolResultPart,
+  type ToolResultValue,
 } from "./schema"
-import { ToolFailure } from "./schema"
-import { type AnyTool, type Tools, toDefinitions } from "./tool"
+import { type AnyTool, type ExecutableTools, type Tools, toDefinitions } from "./tool"
 
 export interface RuntimeState {
   readonly step: number
   readonly request: LLMRequest
 }
 
-export interface RunOptions<T extends Tools> {
+export type StopCondition = (state: RuntimeState) => boolean
+
+export type ToolExecution = "auto" | "none"
+
+interface RunOptionsBase {
+  readonly request: LLMRequest
+  readonly concurrency?: Concurrency
+  readonly stopWhen?: StopCondition
+}
+
+export type RunOptions<T extends Tools> = RunOptionsAuto<T & ExecutableTools> | RunOptionsNone<T>
+
+export interface RunOptionsAuto<T extends ExecutableTools> extends RunOptionsBase {
   readonly request: LLMRequest
   readonly tools: T
-  /**
-   * Maximum number of model round-trips before the runtime stops emitting new
-   * requests. Defaults to 10. Reaching this limit is not an error — the loop
-   * simply stops and the last `request-finish` event is the terminal signal.
-   */
-  readonly maxSteps?: number
-  /**
-   * How many tool handlers to dispatch in parallel within a single step.
-   * Defaults to 10. Use `"unbounded"` only when handlers do not share an
-   * external dependency that can be saturated (rate-limited APIs, single
-   * connections, etc).
-   */
-  readonly concurrency?: Concurrency
-  /**
-   * Optional predicate evaluated after each step's `request-finish` event. If
-   * it returns `true`, the loop stops even if the model wanted to continue.
-   */
-  readonly stopWhen?: (state: RuntimeState) => boolean
+  readonly toolExecution?: "auto"
 }
 
-export interface Interface {
-  readonly run: <T extends Tools>(options: RunOptions<T>) => Stream.Stream<LLMEvent, LLMError>
+export interface RunOptionsNone<T extends Tools> extends RunOptionsBase {
+  readonly request: LLMRequest
+  readonly tools: T
+  /** Advertise tool schemas but leave model-emitted tool calls for the caller. */
+  readonly toolExecution: "none"
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLM/ToolRuntime") {}
+export type StreamOptions<T extends Tools> = RunOptions<T> & {
+  readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
+}
+
+export const stepCountIs = (count: number): StopCondition => (state) => state.step + 1 >= count
 
 /**
- * Run a model with a typed tool record. The runtime streams the model, on
- * each `tool-call` event decodes the input against the tool's `parameters`
- * Schema, dispatches to the matching handler, encodes the handler's result
- * against the tool's `success` Schema, and emits a `tool-result` event. When
- * the model finishes with `tool-calls`, the runtime appends the assistant +
- * tool messages and re-streams. Stops on a non-`tool-calls` finish, when
- * `maxSteps` is reached, or when `stopWhen` returns `true`.
- *
- * Tool handler dependencies are closed over at tool definition time, so the
- * runtime's only environment requirement is the `LLMClient.Service`.
+ * Run a model with typed tools. This helper owns tool orchestration, while the
+ * caller supplies the actual model stream function. It can advertise schemas
+ * only (`toolExecution: "none"`), execute one step, or continue model rounds
+ * when `stopWhen` is provided.
  */
-export const layer: Layer.Layer<Service, never, LLMClientService> = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const client = yield* LLMClient.Service
-    return Service.of({
-      run: <T extends Tools>(options: RunOptions<T>): Stream.Stream<LLMEvent, LLMError> => {
-        const maxSteps = options.maxSteps ?? 10
-        const concurrency = options.concurrency ?? 10
-        const tools = options.tools as Tools
-        const runtimeTools = toDefinitions(tools)
-        const runtimeToolNames = new Set(runtimeTools.map((tool) => tool.name))
-        const initialRequest = runtimeTools.length === 0
-          ? options.request
-          : LLMRequest.update(options.request, {
-              tools: [
-                ...options.request.tools.filter((tool) => !runtimeToolNames.has(tool.name)),
-                ...runtimeTools,
-              ],
-            })
+export const stream = <T extends Tools>(options: StreamOptions<T>): Stream.Stream<LLMEvent, LLMError> => {
+  const concurrency = options.concurrency ?? 10
+  const tools = options.tools as Tools
+  const runtimeTools = toDefinitions(tools)
+  const runtimeToolNames = new Set(runtimeTools.map((tool) => tool.name))
+  const initialRequest = runtimeTools.length === 0
+    ? options.request
+    : LLMRequest.update(options.request, {
+        tools: [
+          ...options.request.tools.filter((tool) => !runtimeToolNames.has(tool.name)),
+          ...runtimeTools,
+        ],
+      })
 
-        const loop = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError> =>
-          Stream.unwrap(
-            Effect.gen(function* () {
-              const state: StepState = { assistantContent: [], toolCalls: [], finishReason: undefined }
+  const loop = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError> =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const state: StepState = { assistantContent: [], toolCalls: [], finishReason: undefined }
 
-              const modelStream = client.stream(request).pipe(
-                Stream.tap((event) => Effect.sync(() => accumulate(state, event))),
-              )
+        const modelStream = options.stream(request).pipe(
+          Stream.tap((event) => Effect.sync(() => accumulate(state, event))),
+        )
 
-              const continuation = Stream.unwrap(
-                Effect.gen(function* () {
-                  if (state.finishReason !== "tool-calls" || state.toolCalls.length === 0) return Stream.empty
-                  if (options.stopWhen?.({ step, request })) return Stream.empty
-                  if (step + 1 >= maxSteps) return Stream.empty
+        const continuation = Stream.unwrap(
+          Effect.gen(function* () {
+            if (state.finishReason !== "tool-calls" || state.toolCalls.length === 0) return Stream.empty
+            if (options.toolExecution === "none") return Stream.empty
 
-                  const dispatched = yield* Effect.forEach(
-                    state.toolCalls,
-                    (call) => dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
-                    { concurrency },
-                  )
-                  const followUp = LLMRequest.update(request, {
-                    messages: [
-                      ...request.messages,
-                      Message.assistant(state.assistantContent),
-                      ...dispatched.map(([call, result]) =>
-                        Message.tool({ id: call.id, name: call.name, result }),
-                      ),
-                    ],
-                  })
+            const dispatched = yield* Effect.forEach(
+              state.toolCalls,
+              (call) => dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
+              { concurrency },
+            )
+            const resultStream = Stream.fromIterable(dispatched.flatMap(([call, result]) => emitEvents(call, result)))
 
-                  return Stream.fromIterable(dispatched.flatMap(([call, result]) => emitEvents(call, result))).pipe(
-                    Stream.concat(loop(followUp, step + 1)),
-                  )
-                }),
-              )
+            if (!options.stopWhen) return resultStream
+            if (options.stopWhen({ step, request })) return resultStream
 
-              return modelStream.pipe(Stream.concat(continuation))
-            }),
-          )
+            return resultStream.pipe(Stream.concat(loop(followUpRequest(request, state, dispatched), step + 1)))
+          }),
+        )
 
-        return loop(initialRequest, 0)
-      },
-    })
-  }),
-)
+        return modelStream.pipe(Stream.concat(continuation))
+      }),
+    )
+
+  return loop(initialRequest, 0)
+}
 
 interface StepState {
   assistantContent: ContentPart[]
@@ -152,10 +130,6 @@ const accumulate = (state: StepState, event: LLMEvent) => {
       providerMetadata: event.providerMetadata,
     })
     state.assistantContent.push(part)
-    // Provider-executed tools are dispatched by the provider; the runtime must
-    // not invoke a client handler. The matching `tool-result` event arrives
-    // later in the same stream and is folded into `assistantContent` so the
-    // next round's message history carries it.
     if (!event.providerExecuted) state.toolCalls.push(part)
     return
   }
@@ -207,6 +181,7 @@ const appendStreamingText = (state: StepState, type: "text" | "reasoning", text:
 const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<ToolResultValue> => {
   const tool = tools[call.name]
   if (!tool) return Effect.succeed({ type: "error" as const, value: `Unknown tool: ${call.name}` })
+  if (!tool.execute) return Effect.succeed({ type: "error" as const, value: `Tool has no execute handler: ${call.name}` })
 
   return decodeAndExecute(tool, call.input).pipe(
     Effect.catchTag("LLM.ToolFailure", (failure) =>
@@ -218,7 +193,7 @@ const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<ToolResultVal
 const decodeAndExecute = (tool: AnyTool, input: unknown): Effect.Effect<ToolResultValue, ToolFailure> =>
   tool._decode(input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
-    Effect.flatMap((decoded) => tool.execute(decoded)),
+    Effect.flatMap((decoded) => tool.execute!(decoded)),
     Effect.flatMap((value) =>
       tool._encode(value).pipe(
         Effect.mapError(
@@ -240,4 +215,17 @@ const emitEvents = (call: ToolCallPart, result: ToolResultValue): ReadonlyArray<
       ]
     : [{ type: "tool-result", id: call.id, name: call.name, result }]
 
-export const ToolRuntime = { Service, layer } as const
+const followUpRequest = (
+  request: LLMRequest,
+  state: StepState,
+  dispatched: ReadonlyArray<readonly [ToolCallPart, ToolResultValue]>,
+) =>
+  LLMRequest.update(request, {
+    messages: [
+      ...request.messages,
+      Message.assistant(state.assistantContent),
+      ...dispatched.map(([call, result]) => Message.tool({ id: call.id, name: call.name, result })),
+    ],
+  })
+
+export const ToolRuntime = { stream, stepCountIs } as const

@@ -1,5 +1,5 @@
-import { Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { LLM, LLMClient, Provider, ProviderID, Tool, ToolRuntime, type ProviderModelOptions } from "@opencode-ai/llm"
+import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
+import { LLM, LLMClient, Provider, ProviderID, Tool, type ProviderModelOptions } from "@opencode-ai/llm"
 import { Adapter, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode-ai/llm/adapter"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
@@ -14,8 +14,7 @@ import { OpenAI } from "@opencode-ai/llm/providers"
  * hover imports and local values to see how the public API is typed.
  */
 
-const apiKey = Bun.env.OPENAI_API_KEY
-if (!apiKey) throw new Error("Set OPENAI_API_KEY to run packages/llm/example/tutorial.ts")
+const apiKey = Config.redacted("OPENAI_API_KEY")
 
 // 1. Pick a model. The provider helper records provider identity, protocol
 // choice, capabilities, deployment options, authentication, and defaults.
@@ -66,8 +65,7 @@ const rawOverlayExample = LLM.request({
 // 3. `generate` sends the request and collects the event stream into one
 // response object. `response.text` is the collected text output.
 const generateOnce = Effect.gen(function* () {
-  const client = yield* LLMClient.Service
-  const response = yield* client.generate(request)
+  const response = yield* LLM.generate(request)
 
   console.log("\n== generate ==")
   console.log("generated text:", response.text)
@@ -76,23 +74,19 @@ const generateOnce = Effect.gen(function* () {
 
 // 4. `stream` exposes provider output as common `LLMEvent`s for UIs that want
 // incremental text, reasoning, tool input, usage, or finish events.
-const streamText = Effect.gen(function* () {
-  const client = yield* LLMClient.Service
-  return yield* client.stream(request).pipe(
-    Stream.tap((event) =>
-      Effect.sync(() => {
-        if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
-        if (event.type === "request-finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
-      }),
-    ),
-    Stream.runDrain,
-  )
-})
+const streamText = LLM.stream(request).pipe(
+  Stream.tap((event) =>
+    Effect.sync(() => {
+      if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
+      if (event.type === "request-finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
+    }),
+  ),
+  Stream.runDrain,
+)
 
-// 5. Tools are typed with Effect Schema. `ToolRuntime.Service` adds tool
-// definitions to the request, dispatches matching tool calls, validates handler
-// output, appends tool results to the next model round, and stops on a final
-// non-tool response.
+// 5. Tools are typed with Effect Schema. Passing tools to `LLMClient.stream`
+// adds their definitions to the request and dispatches matching tool calls.
+// Add `stopWhen` to opt into follow-up model rounds after tool results.
 const tools = {
   get_weather: Tool.make({
     description: "Get current weather for a city.",
@@ -102,29 +96,24 @@ const tools = {
   }),
 }
 
-const streamWithTools = Effect.gen(function* () {
-  const runtime = yield* ToolRuntime.Service
-  return yield* runtime
-    .run({
-      request: LLM.request({
-        model,
-        prompt: "Use get_weather for San Francisco, then answer in one sentence.",
-        generation: { maxTokens: 80, temperature: 0 },
-      }),
-      tools,
-      maxSteps: 3,
-    })
-    .pipe(
-      Stream.tap((event) =>
-        Effect.sync(() => {
-          if (event.type === "tool-call") console.log("tool call", event.name, event.input)
-          if (event.type === "tool-result") console.log("tool result", event.name, event.result)
-          if (event.type === "text-delta") process.stdout.write(event.text)
-        }),
-      ),
-      Stream.runDrain,
-    )
-})
+const streamWithTools = LLM.stream({
+  request: LLM.request({
+    model,
+    prompt: "Use get_weather for San Francisco, then answer in one sentence.",
+    generation: { maxTokens: 80, temperature: 0 },
+  }),
+  tools,
+  stopWhen: LLM.stepCountIs(3),
+}).pipe(
+  Stream.tap((event) =>
+    Effect.sync(() => {
+      if (event.type === "tool-call") console.log("tool call", event.name, event.input)
+      if (event.type === "tool-result") console.log("tool result", event.name, event.result)
+      if (event.type === "text-delta") process.stdout.write(event.text)
+    }),
+  ),
+  Stream.runDrain,
+)
 
 // -----------------------------------------------------------------------------
 // Part 2: provider composition with a fake provider
@@ -184,8 +173,7 @@ const FakeEcho = Provider.make({
 // payload conversion, validation, endpoint, auth, and HTTP construction without
 // sending anything over the network.
 const inspectFakeProvider = Effect.gen(function* () {
-  const client = yield* LLMClient.Service
-  const prepared = yield* client.prepare(
+  const prepared = yield* LLMClient.prepare(
     LLM.request({
       model: FakeEcho.model("tiny-echo"),
       prompt: "Show me the provider pipeline.",
@@ -206,13 +194,9 @@ const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
 const program = Effect.gen(function* () {
   // yield* generateOnce
   // yield* inspectFakeProvider
-  // yield* (yield* LLMClient.Service).prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.payload))))
+  // yield* LLMClient.prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.payload))))
   // yield* streamText
   yield* streamWithTools
-}).pipe(
-  Effect.provide(
-    Layer.mergeAll(requestExecutorLayer, llmClientLayer, ToolRuntime.layer.pipe(Layer.provide(llmClientLayer))),
-  ),
-)
+}).pipe(Effect.provide(Layer.mergeAll(requestExecutorLayer, llmClientLayer)))
 
 Effect.runPromise(program)

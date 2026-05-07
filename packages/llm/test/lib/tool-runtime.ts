@@ -1,8 +1,9 @@
-import { Effect, Stream } from "effect"
+import { Stream } from "effect"
+import { LLMClient } from "../../src/adapter"
 import type { Tools } from "../../src/tool"
-import { ToolRuntime, type RunOptions } from "../../src/tool-runtime"
+import type { RunOptions } from "../../src/tool-runtime"
 
-export const runTools = <T extends Tools>(options: RunOptions<T>) =>
-  Stream.unwrap(Effect.gen(function* () {
-    return (yield* ToolRuntime.Service).run(options)
-  }))
+type CompatRunOptions<T extends Tools> = RunOptions<T> & { readonly maxSteps?: number }
+
+export const runTools = <T extends Tools>(options: CompatRunOptions<T>) =>
+  LLMClient.stream({ ...options, stopWhen: options.stopWhen ?? LLMClient.stepCountIs(options.maxSteps ?? 10) })

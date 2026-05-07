@@ -43,7 +43,7 @@ const chatAdapter = OpenAIChat.makeAdapter({
 export const adapters = [responsesAdapter, chatAdapter]
 
 const mapInput = (input: AzureModelInput) => {
-  const { apiVersion, resourceName, useCompletionUrls, ...rest } = input
+  const { apiKey: _, apiVersion, resourceName, useCompletionUrls, ...rest } = input
   return {
     ...withOpenAIOptions(input.id, rest),
     auth: "auth" in input && input.auth

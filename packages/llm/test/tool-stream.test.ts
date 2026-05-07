@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ProviderChunkError } from "../src/schema"
+import { LLMError } from "../src/schema"
 import { ToolStream } from "../src/protocols/utils/tool-stream"
 import { it } from "./lib/effect"
 
@@ -40,8 +40,8 @@ describe("ToolStream", () => {
     Effect.gen(function* () {
       const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<number>(), 0, "{}", "missing tool")
 
-      expect(error).toBeInstanceOf(ProviderChunkError)
-      if (ToolStream.isError(error)) expect(error.message).toBe("missing tool")
+      expect(error).toBeInstanceOf(LLMError)
+      if (ToolStream.isError(error)) expect(error.reason.message).toBe("missing tool")
     }),
   )
 

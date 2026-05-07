@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { InvalidRequestError, LLM } from "../src"
+import { LLM, LLMError } from "../src"
 import { Endpoint } from "../src/adapter"
 
 const request = (input: {
@@ -69,7 +69,7 @@ describe("Endpoint", () => {
       }).pipe(Effect.flip),
     )
 
-    expect(error).toBeInstanceOf(InvalidRequestError)
-    expect(error.message).toBe("test endpoint requires a baseURL")
+    expect(error).toBeInstanceOf(LLMError)
+    expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "test endpoint requires a baseURL" })
   })
 })

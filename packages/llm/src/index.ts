@@ -10,9 +10,9 @@ export type {
   ModelRefInput,
 } from "./adapter/client"
 export * from "./schema"
-export * from "./tool-runtime"
 export { Tool, ToolFailure, toDefinitions, tool } from "./tool"
-export type { AnyTool, Tool as ToolShape, Tools, ToolSchema } from "./tool"
+export type { AnyExecutableTool, AnyTool, ExecutableTool, ExecutableTools, Tool as ToolShape, ToolExecute, Tools, ToolSchema } from "./tool"
+export type { RunOptions as ToolRunOptions, RuntimeState as ToolRuntimeState, StopCondition as ToolStopCondition, ToolExecution } from "./tool-runtime"
 
 export * as LLM from "./llm"
 export type { CapabilitiesInput } from "./llm"

@@ -120,7 +120,7 @@ packages/llm/src/
     azure.ts / amazon-bedrock.ts / github-copilot.ts / google.ts / xai.ts / ...  // provider model helpers
 
   tool.ts               // typed tool() helper
-  tool-runtime.ts       // ToolRuntime.run with full tool-loop type safety
+  tool-runtime.ts       // implementation helpers for LLMClient tool execution
 ```
 
 The dependency arrow points down: `providers/*.ts` files import `protocols`, `endpoint`, `auth`, and `framing`; protocols do not import provider metadata. Lower-level modules know nothing about specific providers.
@@ -157,7 +157,7 @@ Adapters lower this into provider-native assistant tool-call messages and tool-r
 
 ### Tool runtime
 
-`ToolRuntime.run(options)` orchestrates the tool loop with full type safety:
+`LLM.stream({ request, tools })` executes model-requested tools with full type safety. Plain `LLM.stream(request)` only streams the model; if `request.tools` contains schemas, tool calls are returned for the caller to handle. Use `toolExecution: "none"` to pass executable tool definitions as schemas without invoking handlers. Add `stopWhen` to opt into follow-up model rounds after tool results.
 
 ```ts
 const get_weather = tool({
@@ -173,11 +173,10 @@ const get_weather = tool({
     }),
 })
 
-const events = yield* ToolRuntime.run({
+const events = yield* LLM.stream({
   request,
   tools: { get_weather, get_time, ... },
-  maxSteps: 10,
-  stopWhen: (state) => false,
+  stopWhen: LLM.stepCountIs(10),
 }).pipe(Stream.runCollect)
 ```
 
@@ -186,8 +185,8 @@ The runtime:
 - Adds tool definitions (derived from each tool's `parameters` Schema via `Schema.toJsonSchemaDocument`) onto `request.tools`.
 - Streams the model.
 - On `tool-call`: looks up the named tool, decodes input against `parameters` Schema, dispatches to the typed `execute`, encodes the result against `success` Schema, emits `tool-result`.
-- Loops when the step finishes with `tool-calls`, appending the assistant + tool messages.
-- Stops on a non-`tool-calls` finish, when `maxSteps` is reached, or when `stopWhen` returns `true`.
+- Emits local `tool-result` events in the same step by default.
+- Loops only when `stopWhen` is provided and the step finishes with `tool-calls`, appending the assistant + tool messages.
 
 Handler dependencies (services, permissions, plugin hooks, abort handling) are closed over by the consumer at tool-construction time. The runtime's only environment requirement is `RequestExecutor.Service`. Build the tools record inside an `Effect.gen` once and reuse it across many runs:
 
@@ -292,7 +291,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 - [x] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, native provider metadata, and OpenAI-compatible provider family detection.
 - [x] Build a pure `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tool definitions, tool choice, generation options, reasoning variants, cache hints, and attachments.
-- [x] Add a typed `ToolRuntime` that drives the tool loop with Schema-typed parameters/success per tool, single-`ToolFailure` error channel, and `maxSteps`/`stopWhen` controls.
+- [x] Add typed tool execution through `LLM.stream({ request, tools })` with Schema-typed parameters/success, single-`ToolFailure` error channel, `toolExecution: "none"`, and opt-in looping via `stopWhen`.
 - [x] Provider-defined tool pass-through: `providerExecuted` flag on `tool-call`/`tool-result` events; Anthropic `server_tool_use` / `web_search_tool_result` / `code_execution_tool_result` / `web_fetch_tool_result` round-trip; OpenAI Responses hosted-tool items decoded as `tool-call` + `tool-result` pairs; runtime skips client dispatch when `providerExecuted: true`.
 - [ ] Keep auth and deployment concerns in the OpenCode bridge where possible: Bedrock credentials/region/profile, Vertex project/location/token, remaining Azure deployment concerns, and Gateway/OpenRouter routing headers. Azure model helper support already derives the resource base URL and `api-version` from provider options.
 - [ ] Keep initial OpenCode integration behind a local flag/path until request payload parity and stream event parity are proven against the existing `session/llm.test.ts` cases.

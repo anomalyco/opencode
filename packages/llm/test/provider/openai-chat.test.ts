@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, ProviderRequestError } from "../../src"
+import { LLM, LLMError } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
@@ -338,8 +338,8 @@ describe("OpenAI Chat adapter", () => {
           Effect.flip,
         )
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      expect(error).toMatchObject({ status: 400 })
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
     }),
   )

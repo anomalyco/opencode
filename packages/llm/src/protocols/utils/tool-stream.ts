@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { ProviderChunkError, type ProviderMetadata, type ToolCall, type ToolInputDelta } from "../../schema"
+import { LLMError, type ProviderMetadata, type ToolCall, type ToolInputDelta } from "../../schema"
 import { chunkError, parseToolInput, type ToolAccumulator } from "../shared"
 
 type StreamKey = string | number
@@ -86,8 +86,8 @@ const appendTool = <K extends StreamKey>(tools: State<K>, key: K, tool: PendingT
   event: text.length === 0 ? undefined : inputDelta(tool, text),
 })
 
-export const isError = <K extends StreamKey>(result: AppendOutcome<K> | ProviderChunkError): result is ProviderChunkError =>
-  result instanceof ProviderChunkError
+export const isError = <K extends StreamKey>(result: AppendOutcome<K> | LLMError): result is LLMError =>
+  result instanceof LLMError
 
 /**
  * Register a tool call whose start event arrived before any argument deltas.
@@ -113,7 +113,7 @@ export const appendOrStart = <K extends StreamKey>(
   key: K,
   delta: { readonly id?: string; readonly name?: string; readonly text: string },
   missingToolMessage: string,
-): AppendOutcome<K> | ProviderChunkError => {
+): AppendOutcome<K> | LLMError => {
   const current = tools[key]
   const id = delta.id ?? current?.id
   const name = delta.name ?? current?.name
@@ -141,7 +141,7 @@ export const appendExisting = <K extends StreamKey>(
   key: K,
   text: string,
   missingToolMessage: string,
-): AppendOutcome<K> | ProviderChunkError => {
+): AppendOutcome<K> | LLMError => {
   const current = tools[key]
   if (!current) return chunkError(adapter, missingToolMessage)
   if (text.length === 0) return { tools, tool: current }

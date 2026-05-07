@@ -1,4 +1,5 @@
 import {
+  LLMClient,
   modelCapabilities,
   modelLimits,
   modelRef,
@@ -73,6 +74,12 @@ export const toolChoiceName = ToolChoice.named
 export const toolChoice = ToolChoice.make
 
 export const generation = GenerationOptions.make
+
+export const generate = LLMClient.generate
+
+export const stream = LLMClient.stream
+
+export const stepCountIs = LLMClient.stepCountIs
 
 export const requestInput = (input: LLMRequest): RequestInput => ({
   ...LLMRequest.input(input),

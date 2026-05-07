@@ -1,6 +1,7 @@
-import type { Auth } from "./auth"
+import type { Auth, SecretInput } from "./auth"
 
 export type ApiKeyMode = "optional" | "required"
+export type ApiKeyInput = SecretInput
 
 export type AuthOverride = {
   readonly auth: Auth
@@ -8,12 +9,12 @@ export type AuthOverride = {
 }
 
 export type OptionalApiKeyAuth = {
-  readonly apiKey?: string
+  readonly apiKey?: ApiKeyInput
   readonly auth?: never
 }
 
 export type RequiredApiKeyAuth = {
-  readonly apiKey: string
+  readonly apiKey: ApiKeyInput
   readonly auth?: never
 }
 

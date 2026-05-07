@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, ProviderRequestError } from "../../src"
+import { CacheHint, LLM, LLMError } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
@@ -175,8 +175,8 @@ describe("Anthropic Messages adapter", () => {
           Effect.flip,
         )
 
-      expect(error).toBeInstanceOf(ProviderRequestError)
-      expect(error).toMatchObject({ status: 400 })
+      expect(error).toBeInstanceOf(LLMError)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
     }),
   )

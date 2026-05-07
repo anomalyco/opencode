@@ -8,12 +8,19 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http"
 import {
+  AuthenticationReason,
+  ContentPolicyReason,
+  HttpContext,
   HttpRateLimitDetails,
   HttpRequestDetails,
   HttpResponseDetails,
-  ProviderRequestError,
-  TransportError,
-  type LLMError,
+  InvalidRequestReason,
+  LLMError,
+  ProviderInternalReason,
+  QuotaExceededReason,
+  RateLimitReason,
+  TransportReason,
+  UnknownProviderReason,
 } from "../schema"
 
 export interface Interface {
@@ -175,6 +182,69 @@ const responseBody = (body: string | void, request: HttpClientRequest.HttpClient
   return { body: redacted.slice(0, BODY_LIMIT), bodyTruncated: true }
 }
 
+const providerMessage = (status: number, body: { readonly body?: string }) => {
+  if (body.body && body.body.length <= 500) return `Provider request failed with HTTP ${status}: ${body.body}`
+  return `Provider request failed with HTTP ${status}`
+}
+
+const responseHttp = (input: {
+  readonly request: HttpClientRequest.HttpClientRequest
+  readonly response: HttpClientResponse.HttpClientResponse
+  readonly redactedNames: ReadonlyArray<string | RegExp>
+  readonly body: ReturnType<typeof responseBody>
+  readonly requestId?: string | undefined
+  readonly rateLimit?: HttpRateLimitDetails | undefined
+}) =>
+  new HttpContext({
+    request: requestDetails(input.request, input.redactedNames),
+    response: responseDetails(input.response, input.redactedNames),
+    ...input.body,
+    requestId: input.requestId,
+    rateLimit: input.rateLimit,
+  })
+
+const statusReason = (input: {
+  readonly status: number
+  readonly message: string
+  readonly retryAfterMs?: number | undefined
+  readonly rateLimit?: HttpRateLimitDetails | undefined
+  readonly http: HttpContext
+}) => {
+  const body = input.http.body ?? ""
+  if (/content[-_\s]?policy|content_filter|safety/i.test(body)) {
+    return new ContentPolicyReason({ message: input.message, http: input.http })
+  }
+  if (input.status === 401) {
+    return new AuthenticationReason({ message: input.message, kind: "invalid", http: input.http })
+  }
+  if (input.status === 403) {
+    return new AuthenticationReason({ message: input.message, kind: "insufficient-permissions", http: input.http })
+  }
+  if (input.status === 429) {
+    if (/insufficient[-_\s]?quota|quota[-_\s]?exceeded/i.test(body)) {
+      return new QuotaExceededReason({ message: input.message, http: input.http })
+    }
+    return new RateLimitReason({
+      message: input.message,
+      retryAfterMs: input.retryAfterMs,
+      rateLimit: input.rateLimit,
+      http: input.http,
+    })
+  }
+  if (input.status === 400 || input.status === 404 || input.status === 409 || input.status === 422) {
+    return new InvalidRequestReason({ message: input.message, http: input.http })
+  }
+  if (input.status >= 500 || retryableStatus(input.status)) {
+    return new ProviderInternalReason({
+      message: input.message,
+      status: input.status,
+      retryAfterMs: input.retryAfterMs,
+      http: input.http,
+    })
+  }
+  return new UnknownProviderReason({ message: input.message, status: input.status, http: input.http })
+}
+
 const statusError =
   (request: HttpClientRequest.HttpClientRequest, redactedNames: ReadonlyArray<string | RegExp>) =>
   (response: HttpClientResponse.HttpClientResponse) =>
@@ -182,49 +252,70 @@ const statusError =
       if (response.status < 400) return response
       const body = yield* response.text.pipe(Effect.catch(() => Effect.void))
       const headers = normalizedHeaders(response.headers)
-      const retryable = retryableStatus(response.status)
       const retryAfter = retryAfterMs(headers)
-      return yield* new ProviderRequestError({
-        status: response.status,
-        message: `Provider request failed with HTTP ${response.status}`,
-        ...responseBody(body, request),
-        retryable,
-        retryAfterMs: retryAfter,
-        rateLimit: rateLimitDetails(headers, retryAfter),
-        requestId: requestId(headers),
-        request: requestDetails(request, redactedNames),
-        response: responseDetails(response, redactedNames),
+      const rateLimit = rateLimitDetails(headers, retryAfter)
+      const details = responseBody(body, request)
+      return yield* new LLMError({
+        module: "RequestExecutor",
+        method: "execute",
+        reason: statusReason({
+          status: response.status,
+          message: providerMessage(response.status, details),
+          retryAfterMs: retryAfter,
+          rateLimit,
+          http: responseHttp({
+            request,
+            response,
+            redactedNames,
+            body: details,
+            requestId: requestId(headers),
+            rateLimit,
+          }),
+        }),
       })
     })
 
 const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: unknown) => {
+  const transportError = (input: {
+    readonly message: string
+    readonly kind?: string | undefined
+    readonly request?: HttpClientRequest.HttpClientRequest | undefined
+  }) =>
+    new LLMError({
+      module: "RequestExecutor",
+      method: "execute",
+      reason: new TransportReason({
+        message: input.message,
+        kind: input.kind,
+        url: input.request ? redactUrl(input.request.url) : undefined,
+        http: input.request
+          ? new HttpContext({ request: requestDetails(input.request, redactedNames) })
+          : undefined,
+      }),
+    })
+
   if (Cause.isTimeoutError(error)) {
-    return new TransportError({ message: error.message, reason: "Timeout", retryable: false })
+    return transportError({ message: error.message, kind: "Timeout" })
   }
   if (!HttpClientError.isHttpClientError(error)) {
-    return new TransportError({ message: "HTTP transport failed", retryable: false })
+    return transportError({ message: "HTTP transport failed" })
   }
   const request = "request" in error ? error.request : undefined
-  const url = request ? redactUrl(request.url) : undefined
   if (error.reason._tag === "TransportError") {
-    return new TransportError({
+    return transportError({
       message: error.reason.description ?? "HTTP transport failed",
-      reason: error.reason._tag,
-      url,
-      retryable: false,
-      request: request ? requestDetails(request, redactedNames) : undefined,
+      kind: error.reason._tag,
+      request,
     })
   }
-  return new TransportError({
+  return transportError({
     message: `HTTP transport failed: ${error.reason._tag}`,
-    reason: error.reason._tag,
-    url,
-    retryable: false,
-    request: request ? requestDetails(request, redactedNames) : undefined,
+    kind: error.reason._tag,
+    request,
   })
 }
 
-const retryDelay = (error: ProviderRequestError, attempt: number) => {
+const retryDelay = (error: LLMError, attempt: number) => {
   if (error.retryAfterMs !== undefined) return Effect.succeed(Math.min(error.retryAfterMs, MAX_DELAY_MS))
   return Random.nextBetween(
     Math.min(BASE_DELAY_MS * 2 ** attempt * 0.8, MAX_DELAY_MS),
@@ -237,7 +328,7 @@ const retryStatusFailures = <A, R>(
   retries = MAX_RETRIES,
   attempt = 0,
 ): Effect.Effect<A, LLMError, R> =>
-  Effect.catchTag(effect, "LLM.ProviderRequestError", (error): Effect.Effect<A, LLMError, R> => {
+  Effect.catchTag(effect, "LLM.Error", (error): Effect.Effect<A, LLMError, R> => {
     if (!error.retryable || retries <= 0) return Effect.fail(error)
     return retryDelay(error, attempt).pipe(
       Effect.flatMap((delay) => Effect.sleep(delay)),

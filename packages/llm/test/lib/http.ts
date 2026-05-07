@@ -3,8 +3,6 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 import { LLMClient, RequestExecutor } from "../../src/adapter"
 import type { Service as LLMClientService } from "../../src/adapter/client"
 import type { Service as RequestExecutorService } from "../../src/adapter/executor"
-import { ToolRuntime } from "../../src/tool-runtime"
-import type { Service as ToolRuntimeService } from "../../src/tool-runtime"
 
 export type HandlerInput = {
   readonly request: HttpClientRequest.HttpClientRequest
@@ -30,12 +28,12 @@ const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
     ),
   )
 
-export type RuntimeEnv = RequestExecutorService | LLMClientService | ToolRuntimeService
+export type RuntimeEnv = RequestExecutorService | LLMClientService
 
 export const runtimeLayer = (layer: Layer.Layer<HttpClient.HttpClient>): Layer.Layer<RuntimeEnv> => {
   const requestExecutorLayer = RequestExecutor.layer.pipe(Layer.provide(layer))
   const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
-  return Layer.mergeAll(requestExecutorLayer, llmClientLayer, ToolRuntime.layer.pipe(Layer.provide(llmClientLayer)))
+  return Layer.mergeAll(requestExecutorLayer, llmClientLayer)
 }
 
 const SSE_HEADERS = { "content-type": "text/event-stream" } as const

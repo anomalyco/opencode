@@ -6,6 +6,8 @@ import { RequestExecutor } from "./executor"
 import type { Framing } from "./framing"
 import type { Protocol } from "./protocol"
 import * as ProviderShared from "../protocols/shared"
+import * as ToolRuntime from "../tool-runtime"
+import type { Tools } from "../tool"
 import type {
   AdapterID,
   LLMError,
@@ -22,7 +24,8 @@ import {
   ModelID,
   ModelLimits,
   ModelRef,
-  NoAdapterError,
+  LLMError as LLMErrorClass,
+  NoAdapterReason,
   PreparedRequest,
   ProviderID,
   mergeGenerationOptions,
@@ -96,8 +99,12 @@ export type AdapterRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "pro
 
 type AdapterMappedModelInput = AdapterModelInput | AdapterRoutedModelInput
 
-export interface AdapterModelOptions<Input, Output extends AdapterMappedModelInput = AdapterMappedModelInput> {
+export interface AdapterModelOptions<Input extends AdapterMappedModelInput, Output extends AdapterMappedModelInput = AdapterMappedModelInput> {
   readonly mapInput?: (input: Input) => Output
+}
+
+export interface AdapterMappedModelOptions<Input, Output extends AdapterMappedModelInput = AdapterMappedModelInput> {
+  readonly mapInput: (input: Input) => Output
 }
 
 export const modelCapabilities = ModelCapabilities.make
@@ -135,13 +142,18 @@ function model<Input extends AdapterRoutedModelInput = AdapterRoutedModelInput>(
   defaults?: AdapterRoutedModelDefaults,
   options?: AdapterModelOptions<Input, AdapterRoutedModelInput>,
 ): (input: Input) => ModelRef
-function model<Input extends AdapterMappedModelInput>(
+function model<Input, Output extends AdapterMappedModelInput = AdapterMappedModelInput>(
+  adapter: AnyAdapter,
+  defaults: Partial<Omit<ModelRefInput, "id" | "adapter" | "protocol">>,
+  options: AdapterMappedModelOptions<Input, Output>,
+): (input: Input) => ModelRef
+function model<Input>(
   adapter: AnyAdapter,
   defaults: Partial<Omit<ModelRefInput, "id" | "adapter" | "protocol">> = {},
-  options: AdapterModelOptions<Input> = {},
+  options: { readonly mapInput?: (input: Input) => AdapterMappedModelInput } = {},
 ) {
   return (input: Input) => {
-    const mapped = options.mapInput?.(input) ?? input
+    const mapped = options.mapInput === undefined ? input as AdapterMappedModelInput : options.mapInput(input)
     const provider = defaults.provider ?? ("provider" in mapped ? mapped.provider : undefined)
     if (!provider) throw new Error(`Adapter.model(${adapter.id}) requires a provider`)
     register(adapter)
@@ -172,14 +184,28 @@ export interface Interface {
    * adapter the request will resolve to.
    */
   readonly prepare: <Payload = unknown>(request: LLMRequest) => Effect.Effect<PreparedRequestOf<Payload>, LLMError>
-  readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
-  readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError>
+  readonly stream: StreamMethod
+  readonly generate: GenerateMethod
+}
+
+export interface StreamMethod {
+  (request: LLMRequest): Stream.Stream<LLMEvent, LLMError>
+  <T extends Tools>(options: ToolRuntime.RunOptions<T>): Stream.Stream<LLMEvent, LLMError>
+}
+
+export interface GenerateMethod {
+  (request: LLMRequest): Effect.Effect<LLMResponse, LLMError>
+  <T extends Tools>(options: ToolRuntime.RunOptions<T>): Effect.Effect<LLMResponse, LLMError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
 const noAdapter = (model: ModelRef) =>
-  new NoAdapterError({ adapter: model.adapter, protocol: model.protocol, provider: model.provider, model: model.id })
+  new LLMErrorClass({
+    module: "LLMClient",
+    method: "resolveAdapter",
+    reason: new NoAdapterReason({ adapter: model.adapter, protocol: model.protocol, provider: model.provider, model: model.id }),
+  })
 
 const resolveRequestOptions = (request: LLMRequest) =>
   LLMRequest.update(request, {
@@ -324,7 +350,7 @@ const prepareWith = Effect.fn("LLMClient.prepare")(function* (request: LLMReques
   })
 })
 
-const streamWith = (executor: RequestExecutor.Interface) => (request: LLMRequest) =>
+const streamRequestWith = (executor: RequestExecutor.Interface) => (request: LLMRequest) =>
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request)
@@ -334,9 +360,18 @@ const streamWith = (executor: RequestExecutor.Interface) => (request: LLMRequest
     }),
   )
 
-const generateWith = (stream: Interface["stream"]) => Effect.fn("LLM.generate")(function* (request: LLMRequest) {
+const isToolRunOptions = (input: LLMRequest | ToolRuntime.RunOptions<Tools>): input is ToolRuntime.RunOptions<Tools> =>
+  "request" in input && "tools" in input
+
+const streamWith = (streamRequest: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>): StreamMethod =>
+  ((input: LLMRequest | ToolRuntime.RunOptions<Tools>) => {
+    if (isToolRunOptions(input)) return ToolRuntime.stream({ ...input, stream: streamRequest })
+    return streamRequest(input)
+  }) as StreamMethod
+
+const generateWith = (stream: Interface["stream"]) => Effect.fn("LLM.generate")(function* (input: LLMRequest | ToolRuntime.RunOptions<Tools>) {
   return new LLMResponse(
-    yield* stream(request).pipe(
+    yield* stream(input as never).pipe(
       Stream.runFold(
         () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
         (acc, event) => {
@@ -352,20 +387,31 @@ const generateWith = (stream: Interface["stream"]) => Effect.fn("LLM.generate")(
 export const prepare = <Payload = unknown>(request: LLMRequest) =>
   prepareWith(request) as Effect.Effect<PreparedRequestOf<Payload>, LLMError>
 
-export const stream = (request: LLMRequest) =>
+export function stream(request: LLMRequest): Stream.Stream<LLMEvent, LLMError>
+export function stream<T extends Tools>(options: ToolRuntime.RunOptions<T>): Stream.Stream<LLMEvent, LLMError>
+export function stream(input: LLMRequest | ToolRuntime.RunOptions<Tools>) {
+  return Stream.unwrap(Effect.gen(function* () {
+    return (yield* Service).stream(input as never)
+  }))
+}
+
+export function generate(request: LLMRequest): Effect.Effect<LLMResponse, LLMError>
+export function generate<T extends Tools>(options: ToolRuntime.RunOptions<T>): Effect.Effect<LLMResponse, LLMError>
+export function generate(input: LLMRequest | ToolRuntime.RunOptions<Tools>) {
+  return Effect.gen(function* () {
+    return yield* (yield* Service).generate(input as never)
+  })
+}
+
+export const streamRequest = (request: LLMRequest) =>
   Stream.unwrap(Effect.gen(function* () {
     return (yield* Service).stream(request)
   }))
 
-export const generate = (request: LLMRequest) =>
-  Effect.gen(function* () {
-    return yield* (yield* Service).generate(request)
-  })
-
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const stream = streamWith(yield* RequestExecutor.Service)
+    const stream = streamWith(streamRequestWith(yield* RequestExecutor.Service))
     return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
   }),
 )
@@ -378,4 +424,5 @@ export const LLMClient = {
   prepare,
   stream,
   generate,
+  stepCountIs: ToolRuntime.stepCountIs,
 } as const

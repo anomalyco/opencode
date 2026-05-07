@@ -29,11 +29,13 @@ const auth = (options: ProviderAuthOption<"optional">) => {
 }
 
 export const responses = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
-  return OpenAIResponses.model(withOpenAIOptions(id, { ...options, auth: auth(options) }, { textVerbosity: true }))
+  const { apiKey: _, ...rest } = options
+  return OpenAIResponses.model(withOpenAIOptions(id, { ...rest, auth: auth(options) }, { textVerbosity: true }))
 }
 
 export const chat = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
-  return OpenAIChat.model(withOpenAIOptions(id, { ...options, auth: auth(options) }))
+  const { apiKey: _, ...rest } = options
+  return OpenAIChat.model(withOpenAIOptions(id, { ...rest, auth: auth(options) }))
 }
 
 export const provider = Provider.make({

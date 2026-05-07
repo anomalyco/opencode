@@ -24,22 +24,26 @@ const auth = (options: ProviderAuthOption<"optional">) => {
     .bearer()
 }
 
-export const responses = (modelID: string | ModelID, options: ModelOptions = {}) =>
-  responsesModel({
-    ...options,
+export const responses = (modelID: string | ModelID, options: ModelOptions = {}) => {
+  const { apiKey: _, ...rest } = options
+  return responsesModel({
+    ...rest,
     auth: auth(options),
     id: modelID,
     baseURL: options.baseURL ?? OpenAICompatibleProfiles.profiles.xai.baseURL,
   })
+}
 
-export const chat = (modelID: string | ModelID, options: ModelOptions = {}) =>
-  chatModel({
-    ...options,
+export const chat = (modelID: string | ModelID, options: ModelOptions = {}) => {
+  const { apiKey: _, ...rest } = options
+  return chatModel({
+    ...rest,
     auth: auth(options),
     id: modelID,
     provider: id,
     baseURL: options.baseURL ?? OpenAICompatibleProfiles.profiles.xai.baseURL,
   })
+}
 
 export const provider = Provider.make({
   id,

@@ -86,7 +86,7 @@ Read these pieces first:
 - `LLM.layer` provides that runtime as an Effect service.
 - `LLM.generate` and `LLM.stream` are thin service calls.
 - `LLM.request` turns ergonomic input into canonical schema classes.
-- `LLM.streamWithTools` delegates to `ToolRuntime`.
+- `LLM.stream({ request, tools })` can expose and execute typed tools.
 
 The canonical data model is in [`src/schema.ts`](./src/schema.ts). That file defines the runtime shapes that every provider lowers from or emits back to: `ModelRef`, `LLMRequest`, `Message`, `ContentPart`, `LLMEvent`, `Usage`, and the typed error classes.
 
@@ -672,7 +672,7 @@ The package gets several useful properties from this shape:
 - Native wire visibility because payload and chunk schemas stay close to lowering/parsing code.
 - Safe provider quirks because provider-specific payload fields stay in provider/protocol code instead of the common request schema.
 - Common UI/runtime events because every provider parser emits `LLMEvent`s.
-- Tool-loop portability because `ToolRuntime` consumes common tool events instead of provider-specific streams.
+- Tool-loop portability because tool orchestration consumes common tool events instead of provider-specific streams.
 - Fast parser tests from `fixedResponse`, `dynamicResponse`, and `scriptedResponses`.
 - Real integration confidence because HTTP cassettes replay actual provider wire data.
 

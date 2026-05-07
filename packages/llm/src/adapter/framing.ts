@@ -1,6 +1,6 @@
 import type { Stream } from "effect"
 import * as ProviderShared from "../protocols/shared"
-import type { ProviderChunkError } from "../schema"
+import type { LLMError } from "../schema"
 
 /**
  * Decode a streaming HTTP response body into provider-protocol frames.
@@ -19,8 +19,8 @@ import type { ProviderChunkError } from "../schema"
 export interface Framing<Frame> {
   readonly id: string
   readonly frame: (
-    bytes: Stream.Stream<Uint8Array, ProviderChunkError>,
-  ) => Stream.Stream<Frame, ProviderChunkError>
+    bytes: Stream.Stream<Uint8Array, LLMError>,
+  ) => Stream.Stream<Frame, LLMError>
 }
 
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */

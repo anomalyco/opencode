@@ -5,7 +5,6 @@ import { LLMClient } from "../src/adapter"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { tool, ToolFailure } from "../src/tool"
-import { ToolRuntime } from "../src/tool-runtime"
 import { it } from "./lib/effect"
 import * as TestToolRuntime from "./lib/tool-runtime"
 import { dynamicResponse, scriptedResponses } from "./lib/http"
@@ -37,7 +36,13 @@ const get_weather = tool({
     }),
 })
 
-describe("ToolRuntime", () => {
+const schema_only_weather = tool({
+  description: "Get current weather for a city.",
+  parameters: Schema.Struct({ city: Schema.String }),
+  success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
+})
+
+describe("LLMClient tools", () => {
   it.effect("uses the registered model adapter when adding runtime tools", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
@@ -124,6 +129,43 @@ describe("ToolRuntime", () => {
       })
       expect(events.at(-1)?.type).toBe("request-finish")
       expect(LLMResponse.text({ events })).toBe("It's sunny in Paris.")
+    }),
+  )
+
+  it.effect("executes tool calls for one step without looping by default", () =>
+    Effect.gen(function* () {
+      const layer = scriptedResponses([
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
+        sseEvents(deltaChunk({ role: "assistant", content: "Should not run." }), finishChunk("stop")),
+      ])
+
+      const events = Array.from(
+        yield* LLMClient.stream({ request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
+      )
+
+      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
+      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
+    }),
+  )
+
+  it.effect("can expose tool schemas without executing tool calls", () =>
+    Effect.gen(function* () {
+      const layer = scriptedResponses([
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
+      ])
+
+      const events = Array.from(
+        yield* LLMClient.stream({ request: baseRequest, tools: { get_weather: schema_only_weather }, toolExecution: "none" }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
+      )
+
+      expect(events.find(LLMEvent.is.toolCall)).toMatchObject({ type: "tool-call", id: "call_1" })
+      expect(events.find(LLMEvent.is.toolResult)).toBeUndefined()
     }),
   )
 
@@ -280,7 +322,7 @@ describe("ToolRuntime", () => {
     }),
   )
 
-  it.effect("stops when stopWhen returns true after the first step", () =>
+  it.effect("stops follow-up when stopWhen returns true after the first step", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
@@ -296,7 +338,7 @@ describe("ToolRuntime", () => {
       )
 
       expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
-      expect(events.find(LLMEvent.is.toolResult)).toBeUndefined()
+      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
     }),
   )
 
