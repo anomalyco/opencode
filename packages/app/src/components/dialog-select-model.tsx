@@ -45,13 +45,24 @@ const ModelList: Component<{
       current={model.current()}
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={(x) => x.provider.name}
+      groupBy={(x) => {
+        const isDigitalOceanRouter = x.provider.id === "digitalocean" && x.id.startsWith("router:")
+        return isDigitalOceanRouter ? `${x.provider.name} | Inference Routers` : x.provider.name
+      }}
       sortGroupsBy={(a, b) => {
-        const aProvider = a.items[0].provider.id
-        const bProvider = b.items[0].provider.id
+        const aItem = a.items[0]
+        const bItem = b.items[0]
+        const aProvider = aItem.provider.id
+        const bProvider = bItem.provider.id
         if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
         if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
-        return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
+        const popularDelta = popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
+        if (popularDelta !== 0) return popularDelta
+        const aIsRouterGroup = aProvider === "digitalocean" && aItem.id.startsWith("router:")
+        const bIsRouterGroup = bProvider === "digitalocean" && bItem.id.startsWith("router:")
+        if (aIsRouterGroup && !bIsRouterGroup) return -1
+        if (!aIsRouterGroup && bIsRouterGroup) return 1
+        return 0
       }}
       itemWrapper={(item, node) => (
         <Tooltip

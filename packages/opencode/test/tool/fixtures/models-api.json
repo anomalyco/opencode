@@ -1,4 +1,28 @@
 {
+  "digitalocean": {
+    "id": "digitalocean",
+    "env": ["DIGITALOCEAN_ACCESS_TOKEN"],
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://inference.do-ai.run/v1",
+    "name": "DigitalOcean",
+    "doc": "https://docs.digitalocean.com/products/genai-platform/",
+    "models": {
+      "openai-gpt-oss-120b": {
+        "id": "openai-gpt-oss-120b",
+        "name": "GPT OSS 120B",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": true,
+        "temperature": true,
+        "release_date": "2025-08-05",
+        "last_updated": "2025-08-05",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": false,
+        "cost": { "input": 0.35, "output": 0.75 },
+        "limit": { "context": 128000, "output": 16384 }
+      }
+    }
+  },
   "ollama-cloud": {
     "id": "ollama-cloud",
     "env": ["OLLAMA_API_KEY"],
