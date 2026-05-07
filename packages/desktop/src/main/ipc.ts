@@ -19,7 +19,7 @@ const pickerFilters = (ext?: string[]) => {
 }
 
 type Deps = {
-  killSidecar: () => void
+  killSidecar: () => Promise<void> | void
   awaitInitialization: (sendStep: (step: InitStep) => void) => Promise<ServerReadyData>
   getWindowConfig: () => Promise<WindowConfig> | WindowConfig
   consumeInitialDeepLinks: () => Promise<string[]> | string[]

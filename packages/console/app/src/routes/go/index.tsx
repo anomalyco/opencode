@@ -27,8 +27,6 @@ const models = [
   { name: "GLM-5", provider: "DeepInfra, Fireworks AI, Z.ai" },
   { name: "Kimi K2.5", provider: "Moonshot AI" },
   { name: "Kimi K2.6", provider: "Moonshot AI" },
-  { name: "MiMo-V2-Pro", provider: "Xiaomi MiMo" },
-  { name: "MiMo-V2-Omni", provider: "Xiaomi MiMo" },
   { name: "MiMo-V2.5-Pro", provider: "Xiaomi MiMo" },
   { name: "MiMo-V2.5", provider: "Xiaomi MiMo" },
   { name: "Qwen3.5 Plus", provider: "Alibaba Cloud Model Studio" },
