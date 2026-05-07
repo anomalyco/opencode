@@ -1,34 +1,32 @@
-### Issue for this PR
+### このPRに関連するIssue
 
 Closes #
 
-### Type of change
+### 編集した内容
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Refactor / code improvement
-- [ ] Documentation
+- [ ] バグ修正
+- [ ] 新機能実装
+- [ ] リファクタ / コード改善
+- [ ] ドキュメント作成
 
-### What does this PR do?
+### このPRでしていること
 
-Please provide a description of the issue, the changes you made to fix it, and why they work. It is expected that you understand why your changes work and if you do not understand why at least say as much so a maintainer knows how much to value the PR.
+修正した Issue の説明、変更内容、なぜその変更が機能するのかの説明を記載してください。変更がなぜ正しく動作するを理解していることを期待します。もし理由が理解できない場合は、その旨を記載してください。そうすればレビュワーがPRをどう評価すべきか判断できます。
 
-**If you paste a large clearly AI generated description here your PR may be IGNORED or CLOSED!**
+### 検証方法
 
-### How did you verify your code works?
+### スクリーンショット / 録画
 
-### Screenshots / recordings
+_UI変更の場合は、スクリーンショットまたは録画を含めてください_
 
-_If this is a UI change, please include a screenshot or recording._
+### チェックリスト
 
-### Checklist
+- [ ] 変更をローカルでテストしました
+- [ ] 関係ない変更は含めていません
 
-- [ ] I have tested my changes locally
-- [ ] I have not included unrelated changes in this PR
+_このテンプレートに従わない場合、PR は自動的にRejectされます_
 
-_If you do not follow this template your PR will be automatically rejected._
+### マージ方法
 
-### Merge method
-
-- Default: use `Squash and merge`
-- Exception: if the head branch is `sync/upstream-v*`, use `Create a merge commit`
+- 既定: `Squash and merge` を使用
+- 例外: headブランチが `sync/upstream-v*` の場合、`Create a merge commit` を使用

@@ -1,37 +1,37 @@
-name: Bug report
-description: Report an issue that should be fixed
+name: バグ報告
+description: 修正すべき問題を報告する
 labels: ["bug"]
 body:
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: Describe the bug you encountered
-      placeholder: What happened?
+      label: 説明
+      description: 遭遇したバグを説明してください
+      placeholder: 何が起きましたか？
     validations:
       required: true
 
   - type: input
     id: plugins
     attributes:
-      label: Plugins
-      description: What plugins are you using?
+      label: プラグイン
+      description: 使用しているプラグインは何ですか？
     validations:
       required: false
 
   - type: input
     id: opencode-version
     attributes:
-      label: OpenCode version
-      description: What version of OpenCode are you using?
+      label: OpenCode バージョン
+      description: どのバージョンの OpenCode を使用していますか？
     validations:
       required: false
 
   - type: textarea
     id: reproduce
     attributes:
-      label: Steps to reproduce
-      description: How can we reproduce this issue?
+      label: 再現手順
+      description: この問題をどのように再現できますか？
       placeholder: |
         1.
         2.
@@ -42,26 +42,26 @@ body:
   - type: textarea
     id: screenshot-or-link
     attributes:
-      label: Screenshot and/or share link
-      description: Run `/share` to get a share link, or attach a screenshot
-      placeholder: Paste link or drag and drop screenshot here
+      label: スクリーンショット / シェアリンク
+      description: "`/share` を実行してシェアリンクを取得するか、スクリーンショットを貼り付けてください"
+      placeholder: リンストを貼り付けか、スクリーンショットをドラッグ＆ドロップ
     validations:
       required: false
 
   - type: input
     id: os
     attributes:
-      label: Operating System
-      description: what OS are you using?
-      placeholder: e.g., macOS 26.0.1, Ubuntu 22.04, Windows 11
+      label: オペレーティングシステム
+      description: どのOSを使用していますか？
+      placeholder: 例：macOS 26.0.1, Ubuntu 22.04, Windows 11
     validations:
       required: false
 
   - type: input
     id: terminal
     attributes:
-      label: Terminal
-      description: what terminal are you using?
-      placeholder: e.g., iTerm2, Ghostty, Alacritty, Windows Terminal
+      label: ターミナル
+      description: どのターミナルを使用していますか？
+      placeholder: 例：iTerm2, Ghostty, Alacritty, Windows Terminal
     validations:
       required: false
