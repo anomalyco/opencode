@@ -60,7 +60,8 @@ export const LIST_PATTERNS = [
 ]
 
 /** Enter 智能续行:识别上一行 list/quote prefix 自动续;空 item 再 Enter 退出 */
-const continueListCommand: Command = (view) => {
+// FORK: export for unit tests(D3) 2026-05-07
+export const continueListCommand: Command = (view) => {
   const sel = view.state.selection.main
   if (!sel.empty) return false // 有选区时不拦截
   const line = view.state.doc.lineAt(sel.from)
@@ -144,11 +145,13 @@ function makeWrapCommand(left: string, right: string): Command {
   }
 }
 
-const toggleBoldCommand = makeWrapCommand("**", "**")
-const toggleItalicCommand = makeWrapCommand("_", "_")
+// FORK: export for unit tests(D3) 2026-05-07
+export const toggleBoldCommand = makeWrapCommand("**", "**")
+export const toggleItalicCommand = makeWrapCommand("_", "_")
 
 /** Ctrl+K:[选中](|) 光标进 url 区 */
-const insertLinkCommand: Command = (view) => {
+// FORK: export for unit tests(D3) 2026-05-07
+export const insertLinkCommand: Command = (view) => {
   const sel = view.state.selection.main
   const text = view.state.sliceDoc(sel.from, sel.to)
   const wrapped = `[${text}]()`
@@ -168,7 +171,8 @@ const insertLinkCommand: Command = (view) => {
 // FORK: export for unit tests 2026-05-07
 export const TASK_PATTERN = /^(\s*[-*+]\s+\[)( |x|X)?(\]\s*.*)$/
 
-const toggleTaskCheckCommand: Command = (view) => {
+// FORK: export for unit tests(D3) 2026-05-07
+export const toggleTaskCheckCommand: Command = (view) => {
   const sel = view.state.selection.main
   const line = view.state.doc.lineAt(sel.from)
   const m = TASK_PATTERN.exec(line.text)
@@ -189,7 +193,8 @@ const toggleTaskCheckCommand: Command = (view) => {
 // 表格 Tab 跳格 — 简化版:跳到下个 `|`;末尾让 Tab 默认走
 // ============================================================
 
-const tableTabCommand: Command = (view) => {
+// FORK: export for unit tests(D3) 2026-05-07
+export const tableTabCommand: Command = (view) => {
   const sel = view.state.selection.main
   if (!sel.empty) return false
   const line = view.state.doc.lineAt(sel.from)
@@ -246,7 +251,8 @@ const tableTabCommand: Command = (view) => {
 // FORK: export for unit tests 2026-05-07
 export const URL_PATTERN = /^https?:\/\/\S+$/
 
-function handlePasteHook(view: EditorView, event: ClipboardEvent): boolean {
+// FORK: export for unit tests(D3) 2026-05-07
+export function handlePasteHook(view: EditorView, event: ClipboardEvent): boolean {
   const sel = view.state.selection.main
   if (sel.empty) return false // 没选区,默认粘贴
   // 优先 text/plain,没有再试 text/uri-list(浏览器地址栏 / Office 链接 fallback)
