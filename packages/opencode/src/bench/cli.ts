@@ -33,7 +33,10 @@ interface CliArgs {
   dataset: string
   split: string
   selectedId: string
-  userPromptPath?: string
+  /** Resolved repo path inside the SIF — gym side decided based on dataset_name. */
+  workspaceRoot: string
+  /** Pre-rendered user message file (workspace_path baked in by gym). */
+  userMessageFile: string
   systemPromptPath?: string
 }
 
@@ -67,8 +70,11 @@ function parseArgs(argv: string[]): CliArgs {
       case "--selected-id":
         out.selectedId = next()
         break
-      case "--user-prompt":
-        out.userPromptPath = next()
+      case "--workspace-root":
+        out.workspaceRoot = next()
+        break
+      case "--user-message-file":
+        out.userMessageFile = next()
         break
       case "--system-prompt":
         out.systemPromptPath = next()
@@ -77,7 +83,14 @@ function parseArgs(argv: string[]): CliArgs {
         if (a.startsWith("--")) throw new Error(`Unknown flag: ${a}`)
     }
   }
-  for (const required of ["instanceDictPath", "outputDir", "config", "selectedId"] as const) {
+  for (const required of [
+    "instanceDictPath",
+    "outputDir",
+    "config",
+    "selectedId",
+    "workspaceRoot",
+    "userMessageFile",
+  ] as const) {
     if (!out[required])
       throw new Error(`Missing required arg --${required.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())}`)
   }
@@ -105,12 +118,6 @@ async function readInstance(instanceDictPath: string, selectedId: string): Promi
   return match
 }
 
-function detectWorkspaceRoot(instance: InstanceDict): string {
-  if (instance.workspace) return instance.workspace
-  // SWE-bench SIFs check the repo out at /testbed by convention.
-  return "/testbed"
-}
-
 function loadGymConfig(configPath: string): Record<string, unknown> {
   return JSON.parse(readFileSync(configPath, "utf8"))
 }
@@ -129,25 +136,18 @@ Use the available tools (bash, edit, read, glob, grep) to investigate and act. D
 
 async function buildConfigDir(args: {
   instanceId: string
-  workspaceRoot: string
   modelName: string
   baseURL: string
   completionsDir: string
   maxTurns: number
-  problemStatement: string
   systemPromptPath?: string
-  userPromptPath?: string
-}): Promise<{ tmpRoot: string; configFile: string; userPrompt: string }> {
+}): Promise<{ tmpRoot: string; configFile: string }> {
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), `bench-${args.instanceId}-`))
   await fs.mkdir(tmpRoot, { recursive: true })
 
   const systemPrompt = args.systemPromptPath
     ? await fs.readFile(args.systemPromptPath, "utf8")
     : DEFAULT_SYSTEM_PROMPT
-
-  const userPromptTemplate = args.userPromptPath
-    ? await fs.readFile(args.userPromptPath, "utf8")
-    : `<problem_statement>\n{{problem_statement}}\n</problem_statement>\n\nThe workspace is at ${args.workspaceRoot}. Investigate, fix, run tests, and stop when the issue is resolved.`
 
   const cfg: Record<string, unknown> = {
     $schema: "https://opencode.ai/config.json",
@@ -208,11 +208,7 @@ async function buildConfigDir(args: {
   const configFile = path.join(tmpRoot, "opencode.jsonc")
   await fs.writeFile(configFile, JSON.stringify(cfg, null, 2))
 
-  return {
-    tmpRoot,
-    configFile,
-    userPrompt: userPromptTemplate.replace(/\{\{problem_statement\}\}/g, args.problemStatement),
-  }
+  return { tmpRoot, configFile }
 }
 
 function runOpencode(args: {
@@ -313,7 +309,8 @@ function detectOpencodeBin(): string {
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   const instance = await readInstance(args.instanceDictPath, args.selectedId)
-  const workspaceRoot = detectWorkspaceRoot(instance)
+  // workspaceRoot is decided gym-side based on dataset_name; we use it verbatim.
+  const workspaceRoot = args.workspaceRoot
   const gymConfig = loadGymConfig(args.config)
   const llmModelCfg = ((gymConfig as Record<string, Record<string, unknown>>).llm?.model ?? {}) as Record<
     string,
@@ -326,20 +323,17 @@ async function main() {
   const completionsDir = completionsDirFor(args.outputDir, instance.instance_id)
   await fs.mkdir(completionsDir, { recursive: true })
 
-  // We pre-render the user message so opencode's prompt machinery doesn't
-  // need to know about SWE-bench-specific templating.
-  const problemStatement = (instance.problem_statement ?? "").toString()
+  // The user message is fully rendered by gym (workspace_path baked in based
+  // on dataset_name); we just read it as-is and pass it to opencode.
+  const userPrompt = await fs.readFile(args.userMessageFile, "utf8")
 
-  const { tmpRoot, configFile, userPrompt } = await buildConfigDir({
+  const { tmpRoot, configFile } = await buildConfigDir({
     instanceId: instance.instance_id,
-    workspaceRoot,
     modelName,
     baseURL,
     completionsDir,
     maxTurns: args.maxTurns,
-    problemStatement,
     systemPromptPath: args.systemPromptPath,
-    userPromptPath: args.userPromptPath,
   })
 
   const startedAt = Date.now()
