@@ -1,7 +1,13 @@
-import { describe, expect, test, spyOn, beforeEach, afterEach } from "bun:test"
-import { normalizeQuestionsInput, QuestionTool } from "../../src/tool/question"
-import * as QuestionModule from "../../src/question"
+import { describe, expect } from "bun:test"
+import { Effect, Fiber, Layer } from "effect"
+import { QuestionTool } from "../../src/tool/question"
+import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Agent } from "../../src/agent/agent"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Truncate } from "@/tool/truncate"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-session"),
@@ -10,165 +16,75 @@ const ctx = {
   agent: "test-agent",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
+const it = testEffect(
+  Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
+)
+
+const pending = Effect.fn("QuestionToolTest.pending")(function* (question: Question.Interface) {
+  for (;;) {
+    const items = yield* question.list()
+    const item = items[0]
+    if (item) return item
+    yield* Effect.sleep("10 millis")
+  }
+})
+
 describe("tool.question", () => {
-  let askSpy: any
+  it.live("should successfully execute with valid question parameters", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const question = yield* Question.Service
+        const toolInfo = yield* QuestionTool
+        const tool = yield* toolInfo.init()
+        const questions = [
+          {
+            question: "What is your favorite color?",
+            header: "Color",
+            options: [
+              { label: "Red", description: "The color of passion" },
+              { label: "Blue", description: "The color of sky" },
+            ],
+            multiple: false,
+          },
+        ]
 
-  beforeEach(() => {
-    askSpy = spyOn(QuestionModule.Question, "ask").mockImplementation(async () => {
-      return []
-    })
-  })
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+        const item = yield* pending(question)
+        yield* question.reply({ requestID: item.id, answers: [["Red"]] })
 
-  afterEach(() => {
-    askSpy.mockRestore()
-  })
-
-  test("should successfully execute with valid question parameters", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What is your favorite color?",
-        header: "Color",
-        options: [
-          { label: "Red", description: "The color of passion" },
-          { label: "Blue", description: "The color of sky" },
-        ],
-        multiple: false,
-      },
-    ]
-
-    askSpy.mockResolvedValueOnce([["Red"]])
-
-    const result = await tool.execute({ questions }, ctx)
-    expect(askSpy).toHaveBeenCalledTimes(1)
-    expect(result.title).toBe("Asked 1 question")
-  })
-
-  test("should now pass with a header longer than 12 but less than 30 chars", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What is your favorite animal?",
-        header: "This Header is Over 12",
-        options: [{ label: "Dog", description: "Man's best friend" }],
-      },
-    ]
-
-    askSpy.mockResolvedValueOnce([["Dog"]])
-
-    const result = await tool.execute({ questions }, ctx)
-    expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
-  })
-
-  test("should parse a stringified questions array", async () => {
-    const tool = await QuestionTool.init()
-
-    askSpy.mockResolvedValueOnce([["TypeScript"]])
-
-    const input = {
-      questions: `[
-        {
-          "question": "Which language should we use?",
-          "header": "Stack",
-          "options": [
-            { "label": "TypeScript", "description": "Use TypeScript" }
-          ]
-        }
-      ]`,
-    } as unknown as Parameters<typeof tool.execute>[0]
-
-    const result = await tool.execute(input, ctx)
-
-    expect(askSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        questions: [
-          expect.objectContaining({
-            question: "Which language should we use?",
-            header: "Stack",
-          }),
-        ],
+        const result = yield* Fiber.join(fiber)
+        expect(result.title).toBe("Asked 1 question")
       }),
-    )
-    expect(result.output).toContain(`"Which language should we use?"="TypeScript"`)
-  })
+    ),
+  )
 
-  test("should wrap a single question object into an array", async () => {
-    const tool = await QuestionTool.init()
+  it.live("should now pass with a header longer than 12 but less than 30 chars", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const question = yield* Question.Service
+        const toolInfo = yield* QuestionTool
+        const tool = yield* toolInfo.init()
+        const questions = [
+          {
+            question: "What is your favorite animal?",
+            header: "This Header is Over 12",
+            options: [{ label: "Dog", description: "Man's best friend" }],
+          },
+        ]
 
-    askSpy.mockResolvedValueOnce([["Python"]])
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+        const item = yield* pending(question)
+        yield* question.reply({ requestID: item.id, answers: [["Dog"]] })
 
-    const input = {
-      questions: {
-        question: "Which language should we use?",
-        header: "Stack",
-        options: [{ label: "Python", description: "Use Python" }],
-      },
-    } as unknown as Parameters<typeof tool.execute>[0]
-
-    await tool.execute(input, ctx)
-
-    expect(askSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        questions: [
-          expect.objectContaining({
-            question: "Which language should we use?",
-          }),
-        ],
+        const result = yield* Fiber.join(fiber)
+        expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
       }),
-    )
-  })
-
-  test("should convert a plain string into a free-form question", async () => {
-    const tool = await QuestionTool.init()
-
-    askSpy.mockResolvedValueOnce([["Rust"]])
-
-    const input = {
-      questions: "Which language should we use?",
-    } as unknown as Parameters<typeof tool.execute>[0]
-
-    await tool.execute(input, ctx)
-
-    expect(askSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        questions: [
-          expect.objectContaining({
-            question: "Which language should we use?",
-            options: [],
-          }),
-        ],
-      }),
-    )
-  })
-
-  test("should normalize a multiline free-form question into a single question", () => {
-    const normalized = normalizeQuestionsInput(`次の作業を進める前に確認したいです。
-どの言語で実装したいですか？`)
-
-    expect(normalized).toEqual([
-      {
-        question:
-          "次の作業を進める前に確認したいです。\nどの言語で実装したいですか？",
-        header: "次の作業を進める前に確認したいです。",
-        options: [],
-      },
-    ])
-  })
-
-  test("[issue #67] Qwen's truncated-JSON input collapses to a single question", () => {
-    // Qwen occasionally emits `questions` as an unterminated JSON string; the
-    // state.input used by the TUI used to receive this raw string and render
-    // "Asked N questions" where N was the string length.
-    const qwenInput =
-      '\n\n[{"header": "具体的内容", "question": "TypeScript/JavaScriptに関する具体的な質問は何ですか？\n\n'
-    const normalized = normalizeQuestionsInput(qwenInput)
-    expect(Array.isArray(normalized)).toBe(true)
-    expect((normalized as unknown[]).length).toBe(1)
-  })
+    ),
+  )
 
   // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
   //   test("should throw an Error for header exceeding 30 characters", async () => {

@@ -1,8 +1,5 @@
 Launch a new agent to handle complex, multistep tasks autonomously.
 
-Available agent types and the tools they have access to:
-{agents}
-
 When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
 
 When to use the Task tool:

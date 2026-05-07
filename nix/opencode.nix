@@ -3,6 +3,7 @@
   stdenvNoCC,
   callPackage,
   bun,
+  nodejs,
   sysctl,
   makeBinaryWrapper,
   models-dev,
@@ -19,6 +20,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   nativeBuildInputs = [
     bun
+    nodejs # for patchShebangs node_modules
     installShellFiles
     makeBinaryWrapper
     models-dev
@@ -29,6 +31,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook preConfigure
 
     cp -R ${finalAttrs.node_modules}/. .
+    patchShebangs node_modules
+    patchShebangs packages/*/node_modules
 
     runHook postConfigure
   '';
@@ -60,7 +64,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
           [
             ripgrep
           ]
-          # bun runs sysctl to detect if dunning on rosetta2
+          # bun runs sysctl to detect if running on rosetta2
           ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
         )
       }

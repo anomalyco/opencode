@@ -179,7 +179,8 @@ async function guard(cfg: Cfg) {
   const repo = slug(url)
 
   if (!repo) return
-  if (!(await ok(["which", "gh"]))) return
+  if (!Bun.which("gh")) return
+
 
   await cmd(["gh", "repo", "set-default", repo])
 }

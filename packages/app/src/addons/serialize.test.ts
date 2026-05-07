@@ -180,8 +180,8 @@ describe("SerializeAddon", () => {
       await writeAndWait(term, input)
 
       const origLine = term.buffer.active.getLine(0)
-      const origFg = origLine!.getCell(0)!.getFgColor()
-      const origBg = origLine!.getCell(0)!.getBgColor()
+      const _origFg = origLine!.getCell(0)!.getFgColor()
+      const _origBg = origLine!.getCell(0)!.getBgColor()
       expect(origLine!.getCell(0)!.isBold()).toBe(1)
 
       const serialized = addon.serialize({ range: { start: 0, end: 0 } })

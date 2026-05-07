@@ -1,4 +1,5 @@
-import { onCleanup, onMount } from "solid-js"
+import { onMount } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
@@ -71,6 +72,18 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   const addAttachment = (file: File) => add(file)
 
+  const addAttachments = async (files: File[], toast = true) => {
+    let found = false
+
+    for (const file of files) {
+      const ok = await add(file, false)
+      if (ok) found = true
+    }
+
+    if (!found && files.length > 0 && toast) warn()
+    return found
+  }
+
   const removeAttachment = (id: string) => {
     const current = prompt.current()
     const next = current.filter((part) => part.type !== "image" || part.id !== id)
@@ -84,18 +97,14 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     event.preventDefault()
     event.stopPropagation()
 
-    const items = Array.from(clipboardData.items)
-    const fileItems = items.filter((item) => item.kind === "file")
+    const files = Array.from(clipboardData.items).flatMap((item) => {
+      if (item.kind !== "file") return []
+      const file = item.getAsFile()
+      return file ? [file] : []
+    })
 
-    if (fileItems.length > 0) {
-      let found = false
-      for (const item of fileItems) {
-        const file = item.getAsFile()
-        if (!file) continue
-        const ok = await add(file, false)
-        if (ok) found = true
-      }
-      if (!found) warn()
+    if (files.length > 0) {
+      await addAttachments(files)
       return
     }
 
@@ -169,28 +178,18 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     const dropped = event.dataTransfer?.files
     if (!dropped) return
 
-    let found = false
-    for (const file of Array.from(dropped)) {
-      const ok = await add(file, false)
-      if (ok) found = true
-    }
-    if (!found && dropped.length > 0) warn()
+    await addAttachments(Array.from(dropped))
   }
 
   onMount(() => {
-    document.addEventListener("dragover", handleGlobalDragOver)
-    document.addEventListener("dragleave", handleGlobalDragLeave)
-    document.addEventListener("drop", handleGlobalDrop)
-  })
-
-  onCleanup(() => {
-    document.removeEventListener("dragover", handleGlobalDragOver)
-    document.removeEventListener("dragleave", handleGlobalDragLeave)
-    document.removeEventListener("drop", handleGlobalDrop)
+    makeEventListener(document, "dragover", handleGlobalDragOver)
+    makeEventListener(document, "dragleave", handleGlobalDragLeave)
+    makeEventListener(document, "drop", handleGlobalDrop)
   })
 
   return {
     addAttachment,
+    addAttachments,
     removeAttachment,
     handlePaste,
   }

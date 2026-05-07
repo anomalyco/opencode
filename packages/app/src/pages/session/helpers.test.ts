@@ -7,6 +7,7 @@ import {
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  shouldFocusTerminalOnKeyDown,
 } from "./helpers"
 
 describe("createOpenReviewFile", () => {
@@ -83,6 +84,26 @@ describe("focusTerminalById", () => {
     expect(focused).toBe(true)
     expect(document.activeElement).toBe(terminal)
     expect(pointerDown).toBe(true)
+  })
+})
+
+describe("shouldFocusTerminalOnKeyDown", () => {
+  test("skips pure modifier keys", () => {
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "Meta", metaKey: true }))).toBe(false)
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "Control", ctrlKey: true }))).toBe(false)
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "Alt", altKey: true }))).toBe(false)
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "Shift", shiftKey: true }))).toBe(false)
+  })
+
+  test("skips shortcut key combos", () => {
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "c", metaKey: true }))).toBe(false)
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "c", ctrlKey: true }))).toBe(false)
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "ArrowLeft", altKey: true }))).toBe(false)
+  })
+
+  test("keeps plain typing focused on terminal", () => {
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "a" }))).toBe(true)
+    expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "A", shiftKey: true }))).toBe(true)
   })
 })
 

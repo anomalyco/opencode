@@ -1,12 +1,13 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
+import { AppRuntime } from "@/effect/app-runtime"
 import { UI } from "../ui"
-import { Global } from "../../global"
+import { Global } from "@opencode-ai/core/global"
 import { Agent } from "../../agent/agent"
-import { Provider } from "../../provider/provider"
+import { Provider } from "@/provider/provider"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../util/filesystem"
+import { Filesystem } from "@/util/filesystem"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
@@ -14,18 +15,21 @@ import type { Argv } from "yargs"
 
 type AgentMode = "all" | "primary" | "subagent"
 
-const AVAILABLE_TOOLS = [
+// Permission keys (not raw tool names). Multiple tools can map to a single
+// permission — e.g. write/edit/apply_patch all gate on `edit` — so we configure
+// agents at the permission level to match how the runtime actually enforces it.
+const AVAILABLE_PERMISSIONS = [
   "bash",
   "read",
-  "write",
   "edit",
-  "list",
   "glob",
   "grep",
   "webfetch",
   "task",
   "todowrite",
-  "todoread",
+  "websearch",
+  "lsp",
+  "skill",
 ]
 
 const AgentCreateCommand = cmd({
@@ -46,9 +50,10 @@ const AgentCreateCommand = cmd({
         describe: "agent mode",
         choices: ["all", "primary", "subagent"] as const,
       })
-      .option("tools", {
+      .option("permissions", {
         type: "string",
-        describe: `comma-separated list of tools to enable (default: all). Available: "${AVAILABLE_TOOLS.join(", ")}"`,
+        alias: ["tools"],
+        describe: `comma-separated list of permissions to allow (default: all). Available: "${AVAILABLE_PERMISSIONS.join(", ")}"`,
       })
       .option("model", {
         type: "string",
@@ -62,9 +67,9 @@ const AgentCreateCommand = cmd({
         const cliPath = args.path
         const cliDescription = args.description
         const cliMode = args.mode as AgentMode | undefined
-        const cliTools = args.tools
+        const perms = args.permissions
 
-        const isFullyNonInteractive = cliPath && cliDescription && cliMode && cliTools !== undefined
+        const isFullyNonInteractive = cliPath && cliDescription && cliMode && perms !== undefined
 
         if (!isFullyNonInteractive) {
           UI.empty()
@@ -122,28 +127,30 @@ const AgentCreateCommand = cmd({
         const spinner = prompts.spinner()
         spinner.start("Generating agent configuration...")
         const model = args.model ? Provider.parseModel(args.model) : undefined
-        const generated = await Agent.generate({ description, model }).catch((error) => {
+        const generated = await AppRuntime.runPromise(
+          Agent.Service.use((svc) => svc.generate({ description, model })),
+        ).catch((error) => {
           spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
           if (isFullyNonInteractive) process.exit(1)
           throw new UI.CancelledError()
         })
         spinner.stop(`Agent ${generated.identifier} generated`)
 
-        // Select tools
-        let selectedTools: string[]
-        if (cliTools !== undefined) {
-          selectedTools = cliTools ? cliTools.split(",").map((t) => t.trim()) : AVAILABLE_TOOLS
+        // Select permissions to allow
+        let selected: string[]
+        if (perms !== undefined) {
+          selected = perms ? perms.split(",").map((t) => t.trim()) : AVAILABLE_PERMISSIONS
         } else {
           const result = await prompts.multiselect({
-            message: "Select tools to enable (Space to toggle)",
-            options: AVAILABLE_TOOLS.map((tool) => ({
-              label: tool,
-              value: tool,
+            message: "Select permissions to allow (Space to toggle)",
+            options: AVAILABLE_PERMISSIONS.map((permission) => ({
+              label: permission,
+              value: permission,
             })),
-            initialValues: AVAILABLE_TOOLS,
+            initialValues: AVAILABLE_PERMISSIONS,
           })
           if (prompts.isCancel(result)) throw new UI.CancelledError()
-          selectedTools = result
+          selected = result
         }
 
         // Get mode
@@ -176,11 +183,11 @@ const AgentCreateCommand = cmd({
           mode = modeResult
         }
 
-        // Build tools config
-        const tools: Record<string, boolean> = {}
-        for (const tool of AVAILABLE_TOOLS) {
-          if (!selectedTools.includes(tool)) {
-            tools[tool] = false
+        // Build permissions config — deny anything not explicitly selected.
+        const permissions: Record<string, "deny"> = {}
+        for (const permission of AVAILABLE_PERMISSIONS) {
+          if (!selected.includes(permission)) {
+            permissions[permission] = "deny"
           }
         }
 
@@ -188,13 +195,13 @@ const AgentCreateCommand = cmd({
         const frontmatter: {
           description: string
           mode: AgentMode
-          tools?: Record<string, boolean>
+          permission?: Record<string, "deny">
         } = {
           description: generated.whenToUse,
           mode,
         }
-        if (Object.keys(tools).length > 0) {
-          frontmatter.tools = tools
+        if (Object.keys(permissions).length > 0) {
+          frontmatter.permission = permissions
         }
 
         // Write file
@@ -232,7 +239,7 @@ const AgentListCommand = cmd({
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
-        const agents = await Agent.list()
+        const agents = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))
         const sortedAgents = agents.sort((a, b) => {
           if (a.native !== b.native) {
             return a.native ? -1 : 1
