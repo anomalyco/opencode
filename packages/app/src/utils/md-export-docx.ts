@@ -280,7 +280,8 @@ export function mimeFromPath(p: string): string | null {
 /** 把 markdown 里 ![](path) 的本地相对/绝对图替换为 base64 dataURL。
  * 跳过 http(s) / data / blob / 锚点等;读失败保留原 path(library 端会 broken,但不阻塞导出)
  */
-async function inlineLocalImages(md: string, mdFileDir?: string): Promise<string> {
+// FORK: export for unit tests(R5 决策 2 / D4 — Tauri invoke mock)2026-05-07
+export async function inlineLocalImages(md: string, mdFileDir?: string): Promise<string> {
   if (!mdFileDir) return md
   // 匹配 ![alt](path "title"?) — title 可选
   const re = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g
