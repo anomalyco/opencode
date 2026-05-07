@@ -1,3 +1,4 @@
+import { $ } from "bun"
 import { afterEach, describe, expect, mock } from "bun:test"
 import { NodeServices } from "@effect/platform-node"
 import { mkdir } from "node:fs/promises"
@@ -228,6 +229,40 @@ describe("workspace HttpApi", () => {
       expect({ status: created.status, body }).toMatchObject({ status: 200 })
       const workspace = JSON.parse(body) as Workspace.Info
       expect(workspace).toMatchObject({ type: "worktree" })
+    }),
+  )
+
+  it.live("creates a real git worktree workspace from a git subdirectory", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+      const subdir = path.join(dir, "apps", "web")
+      yield* Effect.promise(() => mkdir(subdir, { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(subdir, "package.json"), "{}\n"))
+      yield* Effect.promise(() => $`git add apps/web/package.json`.cwd(dir).quiet())
+      yield* Effect.promise(() => $`git commit -m "add web app"`.cwd(dir).quiet())
+
+      const created = yield* request(WorkspacePaths.list, subdir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "worktree", branch: null }),
+      })
+
+      const body = yield* Effect.promise(() => created.text())
+      expect({ status: created.status, body }).toMatchObject({ status: 200 })
+      const workspace = JSON.parse(body) as Workspace.Info
+
+      try {
+        expect(workspace.directory?.endsWith(path.join("apps", "web"))).toBe(true)
+        const url = new URL(`http://localhost${InstancePaths.path}`)
+        url.searchParams.set("workspace", workspace.id)
+        const response = yield* request(url.toString(), subdir)
+
+        expect(response.status).toBe(200)
+        expect(yield* Effect.promise(() => response.json())).toMatchObject({ directory: workspace.directory })
+      } finally {
+        yield* request(WorkspacePaths.remove.replace(":id", workspace.id), subdir, { method: "DELETE" })
+      }
     }),
   )
 

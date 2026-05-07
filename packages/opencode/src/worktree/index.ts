@@ -46,6 +46,7 @@ export const Info = Schema.Struct({
   name: Schema.String,
   branch: Schema.String,
   directory: Schema.String,
+  target: Schema.optional(Schema.String),
 })
   .annotate({ identifier: "Worktree" })
   .pipe(withStatics((s) => ({ zod: effectZod(s) })))
@@ -244,6 +245,7 @@ export const layer: Layer.Layer<
       const workspaceID = yield* InstanceState.workspaceID
       const projectID = ctx.project.id
       const extra = startCommand?.trim()
+      const target = info.target ?? info.directory
 
       const populated = yield* git(["reset", "--hard"], { cwd: info.directory })
       if (populated.code !== 0) {
@@ -258,14 +260,14 @@ export const layer: Layer.Layer<
         return
       }
 
-      const booted = yield* store.load({ directory: info.directory }).pipe(
+      const booted = yield* store.load({ directory: target }).pipe(
         Effect.as(true),
         Effect.catch((error) =>
           Effect.sync(() => {
             const message = errorMessage(error)
-            log.error("worktree bootstrap failed", { directory: info.directory, message })
+            log.error("worktree bootstrap failed", { directory: target, message })
             GlobalBus.emit("event", {
-              directory: info.directory,
+              directory: target,
               project: ctx.project.id,
               workspace: workspaceID,
               payload: { type: Event.Failed.type, properties: { message } },
@@ -277,7 +279,7 @@ export const layer: Layer.Layer<
       if (!booted) return
 
       GlobalBus.emit("event", {
-        directory: info.directory,
+        directory: target,
         project: ctx.project.id,
         workspace: workspaceID,
         payload: {
@@ -286,7 +288,7 @@ export const layer: Layer.Layer<
         },
       })
 
-      yield* runStartScripts(info.directory, { projectID, extra })
+      yield* runStartScripts(target, { projectID, extra })
     })
 
     const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (info: Info, startCommand?: string) {
