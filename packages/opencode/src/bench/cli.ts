@@ -19,7 +19,7 @@
  * exit we capture `git diff` and write `output.jsonl`.
  */
 
-import { promises as fs, readFileSync } from "node:fs"
+import { existsSync, promises as fs, readFileSync } from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { spawn } from "node:child_process"
@@ -299,10 +299,18 @@ function completionsDirFor(evalOutputDir: string, instanceId: string): string {
 }
 
 function detectOpencodeBin(): string {
-  // bench/cli.ts runs from packages/opencode/src/bench/. The opencode index
-  // entry sits at packages/opencode/src/index.ts. From this script's url we
-  // resolve up two levels.
+  // Prefer the pre-bundled artifact at <opencode_root>/.bench-build/opencode.js.
+  // Running un-bundled `src/index.ts` triggers cascading runtime resolution
+  // failures (TUI JSX runtime not honored, @anthropic-ai/sdk relative .mjs
+  // paths failing across the isolated install layout). The bundle inlines
+  // every transitive dep and is opencode's intended deployment shape.
+  // Falls back to src/index.ts only for dev / when setup_scripts/opencode.sh
+  // hasn't run.
   const here = path.dirname(new URL(import.meta.url).pathname)
+  // bench/cli.ts → packages/opencode/src/bench → packages/opencode/src → packages/opencode → packages → <root>
+  const opencodeRoot = path.resolve(here, "..", "..", "..", "..")
+  const bundled = path.resolve(opencodeRoot, ".bench-build", "opencode.js")
+  if (existsSync(bundled)) return bundled
   return path.resolve(here, "..", "index.ts")
 }
 
