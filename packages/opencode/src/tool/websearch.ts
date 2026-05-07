@@ -49,11 +49,13 @@ export function webSearchToolLabel(provider: unknown, sessionID: string) {
   return webSearchProviderLabel(selectWebSearchProvider(sessionID))
 }
 
-function parallelModelName(extra: Tool.Context["extra"]) {
+export function webSearchModelName(extra: Tool.Context["extra"]) {
   const model = extra?.model
   if (!model || typeof model !== "object") return undefined
+  const api = "api" in model && model.api && typeof model.api === "object" ? model.api : undefined
+  const apiID = api && "id" in api && typeof api.id === "string" ? api.id : undefined
   const id = "id" in model && typeof model.id === "string" ? model.id : undefined
-  return id?.slice(0, 100)
+  return (apiID ?? id)?.slice(0, 100)
 }
 
 function parallelAuthHeaders() {
@@ -77,7 +79,7 @@ function callProvider(
         objective: params.query,
         search_queries: [params.query],
         session_id: ctx.sessionID,
-        model_name: parallelModelName(ctx.extra),
+        model_name: webSearchModelName(ctx.extra),
       },
       "25 seconds",
       parallelAuthHeaders(),

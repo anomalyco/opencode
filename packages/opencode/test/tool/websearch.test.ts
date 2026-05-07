@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { parseResponse } from "../../src/tool/mcp-websearch"
-import { selectWebSearchProvider, webSearchProviderLabel, webSearchToolLabel } from "../../src/tool/websearch"
+import {
+  selectWebSearchProvider,
+  webSearchModelName,
+  webSearchProviderLabel,
+  webSearchToolLabel,
+} from "../../src/tool/websearch"
 import { ProviderID } from "../../src/provider/schema"
 import { webSearchEnabled } from "../../src/tool/registry"
 
@@ -48,6 +53,17 @@ describe("websearch provider", () => {
     expect(webSearchProviderLabel(undefined)).toBe("Web Search")
     expect(webSearchToolLabel("parallel", SESSION_ID)).toBe("Parallel Web Search")
     expect(webSearchToolLabel(undefined, SESSION_ID)).toBe(webSearchProviderLabel(selectWebSearchProvider(SESSION_ID)))
+  })
+
+  test("uses the provider API model id for Parallel analytics", () => {
+    expect(
+      webSearchModelName({
+        model: {
+          id: "claude-opus-4-7",
+          api: { id: "claude-opus-4.7" },
+        },
+      }),
+    ).toBe("claude-opus-4.7")
   })
 })
 
