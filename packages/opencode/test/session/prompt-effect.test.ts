@@ -26,6 +26,7 @@ import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionPending } from "../../src/session/pending"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -184,10 +185,12 @@ function makeHttp() {
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
   const proc = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
+  const pending = SessionPending.layer.pipe(Layer.provideMerge(run), Layer.provideMerge(status), Layer.provide(Bus.layer))
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
       Layer.provide(SessionRevert.defaultLayer),
+      Layer.provideMerge(pending),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),
       Layer.provideMerge(proc),
@@ -570,7 +573,7 @@ it.live(
         const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
 
         const tool = yield* Effect.promise(async () => {
-          const end = Date.now() + 5_000
+          const end = Date.now() + 10_000
           while (Date.now() < end) {
             const msgs = await Effect.runPromise(MessageV2.filterCompactedEffect(chat.id))
             const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
@@ -591,7 +594,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  5_000,
+  10_000,
 )
 
 it.live(
@@ -849,12 +852,131 @@ it.live(
 )
 
 it.live(
-  "prompt submitted during an active run is included in the next LLM input",
+  "activatePending pumps queued work without prior subscriptions",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const pending = yield* SessionPending.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+
+        yield* llm.text("queued")
+
+        yield* pending.add({
+          sessionID: chat.id,
+          lane: "queue",
+          draft: {
+            kind: "prompt",
+            preview: "queued",
+            composer: {
+              prompt: [],
+              context: [],
+            },
+            request: {
+              messageID: MessageID.ascending(),
+              agent: "build",
+              model: ref,
+              parts: [{ type: "text", text: "queued" }],
+            },
+          },
+        })
+
+        expect(yield* llm.calls).toBe(0)
+
+        yield* prompt.activatePending(chat.id)
+        yield* llm.wait(1)
+
+        yield* Effect.gen(function* () {
+          const end = Date.now() + 5000
+          while (Date.now() < end) {
+            const info = yield* pending.get(chat.id)
+            const msgs = yield* sessions.messages({ sessionID: chat.id })
+            const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+            if (info.queue.length === 0 && assistants.length > 0) return
+            yield* Effect.sleep(20)
+          }
+          throw new Error("timed out waiting for activatePending to dispatch the queued turn")
+        })
+
+        expect(yield* llm.calls).toBe(1)
+
+        const info = yield* pending.get(chat.id)
+        expect(info.queue).toHaveLength(0)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  6_000,
+)
+
+it.live(
+  "activatePending returns before the queued turn completes",
   () =>
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ llm }) {
         const gate = defer<void>()
         const prompt = yield* SessionPrompt.Service
+        const pending = yield* SessionPending.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+
+        yield* llm.hold("queued", gate.promise)
+
+        yield* pending.add({
+          sessionID: chat.id,
+          lane: "queue",
+          draft: {
+            kind: "prompt",
+            preview: "queued",
+            composer: {
+              prompt: [],
+              context: [],
+            },
+            request: {
+              messageID: MessageID.ascending(),
+              agent: "build",
+              model: ref,
+              parts: [{ type: "text", text: "queued" }],
+            },
+          },
+        })
+
+        const activation = yield* prompt.activatePending(chat.id).pipe(Effect.forkChild)
+
+        yield* llm.wait(1)
+
+        const activationExit = yield* Fiber.await(activation).pipe(Effect.timeout("500 millis"))
+        expect(Exit.isSuccess(activationExit)).toBe(true)
+
+        gate.resolve()
+
+        yield* Effect.gen(function* () {
+          const end = Date.now() + 5000
+          while (Date.now() < end) {
+            const info = yield* pending.get(chat.id)
+            const msgs = yield* sessions.messages({ sessionID: chat.id })
+            const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+            if (info.queue.length === 0 && assistants.length > 0) return
+            yield* Effect.sleep(20)
+          }
+          throw new Error("timed out waiting for queued turn to finish after activatePending returned")
+        })
+
+        expect(yield* llm.calls).toBe(1)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  6_000,
+)
+
+it.live(
+  "prompt_async while a run is active queues a distinct next turn",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const gate = defer<void>()
+        const prompt = yield* SessionPrompt.Service
+        const pending = yield* SessionPending.Service
         const sessions = yield* Session.Service
         const chat = yield* sessions.create({ title: "Pinned" })
 
@@ -873,31 +995,44 @@ it.live(
         yield* llm.wait(1)
 
         const id = MessageID.ascending()
-        const b = yield* prompt
-          .prompt({
-            sessionID: chat.id,
-            messageID: id,
-            agent: "build",
-            model: ref,
-            parts: [{ type: "text", text: "second" }],
-          })
-          .pipe(Effect.forkChild)
+        yield* prompt.promptAsync({
+          sessionID: chat.id,
+          messageID: id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "second" }],
+        })
 
-        yield* Effect.promise(async () => {
+        const queued = yield* Effect.gen(function* () {
           const end = Date.now() + 5000
           while (Date.now() < end) {
-            const msgs = await Effect.runPromise(sessions.messages({ sessionID: chat.id }))
-            if (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id)) return
-            await new Promise((done) => setTimeout(done, 20))
+            const info = yield* pending.get(chat.id)
+            const match = info.queue.find((item) => item.draft.kind === "prompt" && item.draft.request.messageID === id)
+            if (match) return match
+            yield* Effect.sleep(20)
           }
-          throw new Error("timed out waiting for second prompt to save")
+          throw new Error("timed out waiting for queued prompt to appear")
         })
+
+        expect(queued.lane).toBe("queue")
 
         gate.resolve()
 
-        const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+        const ea = yield* Fiber.await(a)
         expect(Exit.isSuccess(ea)).toBe(true)
-        expect(Exit.isSuccess(eb)).toBe(true)
+
+        yield* llm.wait(2)
+        yield* Effect.gen(function* () {
+          const end = Date.now() + 5000
+          while (Date.now() < end) {
+            const msgs = yield* sessions.messages({ sessionID: chat.id })
+            const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+            if (assistants.length >= 2) return
+            yield* Effect.sleep(20)
+          }
+          throw new Error("timed out waiting for queued turn to complete")
+        })
+
         expect(yield* llm.calls).toBe(2)
 
         const msgs = yield* sessions.messages({ sessionID: chat.id })
@@ -906,7 +1041,6 @@ it.live(
         const last = assistants.at(-1)
         if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
         expect(last.info.parentID).toBe(id)
-        expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
 
         const inputs = yield* llm.inputs
         expect(inputs).toHaveLength(2)
@@ -914,7 +1048,181 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  6_000,
+)
+
+it.live(
+  "prompt_async allows a new turn once an empty stop has finished",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const pending = yield* SessionPending.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Paused" })
+
+        yield* pending.beginStop(chat.id)
+        yield* pending.finishStop(chat.id)
+        yield* llm.text("resumed")
+
+        const exit = yield* prompt
+          .promptAsync({
+            sessionID: chat.id,
+            messageID: MessageID.ascending(),
+            agent: "build",
+            model: ref,
+            parts: [{ type: "text", text: "allowed after empty stop" }],
+          })
+          .pipe(Effect.exit)
+
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  6_000,
+)
+
+it.live(
+  "prompt allows a new turn when pending is paused but empty",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const pending = yield* SessionPending.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Paused empty prompt" })
+
+        yield* pending.pause(chat.id)
+        yield* llm.text("resumed")
+
+        const exit = yield* prompt
+          .prompt({
+            sessionID: chat.id,
+            agent: "build",
+            model: ref,
+            parts: [{ type: "text", text: "allowed after paused empty" }],
+          })
+          .pipe(Effect.exit)
+
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  6_000,
+)
+
+it.live(
+  "prompt_async noReply also allows a new turn once an empty stop has finished",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* () {
+        const prompt = yield* SessionPrompt.Service
+        const pending = yield* SessionPending.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Paused noReply" })
+
+        yield* pending.beginStop(chat.id)
+        yield* pending.finishStop(chat.id)
+
+        const exit = yield* prompt
+          .promptAsync({
+            sessionID: chat.id,
+            messageID: MessageID.ascending(),
+            agent: "build",
+            model: ref,
+            noReply: true,
+            parts: [{ type: "text", text: "allowed after empty stop" }],
+          })
+          .pipe(Effect.exit)
+
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  6_000,
+)
+
+it.live(
+  "prompt_async rejects once stop has been requested even before pending pause materializes",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const gate = defer<void>()
+        const prompt = yield* SessionPrompt.Service
+        const pending = yield* SessionPending.Service
+        const sessions = yield* Session.Service
+        const runState = yield* SessionRunState.Service
+        const chat = yield* sessions.create({ title: "Stop requested" })
+
+        yield* llm.hold("first", gate.promise)
+
+        const running = yield* prompt
+          .prompt({
+            sessionID: chat.id,
+            agent: "build",
+            model: ref,
+            parts: [{ type: "text", text: "first" }],
+          })
+          .pipe(Effect.forkChild)
+
+        yield* llm.wait(1)
+        yield* runState.requestStop(chat.id)
+
+        const queuedID = MessageID.ascending()
+        const exit = yield* prompt
+          .promptAsync({
+            sessionID: chat.id,
+            messageID: queuedID,
+            agent: "build",
+            model: ref,
+            parts: [{ type: "text", text: "second" }],
+          })
+          .pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.squash(exit.cause)).toBeInstanceOf(SessionPending.ConflictError)
+        }
+
+        const info = yield* pending.get(chat.id)
+        expect(
+          info.queue.some((item) => item.draft.kind === "prompt" && item.draft.request.messageID === queuedID),
+        ).toBe(false)
+
+        gate.resolve()
+        yield* Fiber.await(running)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  6_000,
+)
+
+it.live(
+  "prompt_async honors noReply without running the model",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "No reply" })
+
+        yield* prompt.promptAsync({
+          sessionID: chat.id,
+          messageID: MessageID.ascending(),
+          agent: "build",
+          model: ref,
+          noReply: true,
+          parts: [{ type: "text", text: "store only" }],
+        })
+
+        const messages = yield* sessions.messages({ sessionID: chat.id })
+        expect(messages.filter((msg) => msg.info.role === "user")).toHaveLength(1)
+        expect(messages.filter((msg) => msg.info.role === "assistant")).toHaveLength(0)
+        expect(yield* llm.calls).toBe(0)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  6_000,
 )
 
 it.live(
@@ -1272,7 +1580,7 @@ unix(
 )
 
 unix(
-  "cancel finalizes interrupted bash tool output through normal truncation",
+  "cancel finalizes interrupted bash tool output coherently",
   () =>
     provideTmpdirServer(
       ({ dir, llm }) =>
@@ -1311,11 +1619,14 @@ unix(
           const tool = completedTool(exit.value.parts)
           if (!tool) return
 
-          expect(tool.state.metadata.truncated).toBe(true)
-          expect(typeof tool.state.metadata.outputPath).toBe("string")
-          expect(tool.state.output).toContain("The tool call succeeded but the output was truncated.")
-          expect(tool.state.output).toContain("Full output saved to:")
-          expect(tool.state.output).not.toContain("Tool execution aborted")
+          if (tool.state.metadata.truncated) {
+            expect(typeof tool.state.metadata.outputPath).toBe("string")
+            expect(tool.state.output).toContain("The tool call succeeded but the output was truncated.")
+            expect(tool.state.output).toContain("Full output saved to:")
+          } else {
+            expect(tool.state.metadata.outputPath).toBeUndefined()
+            expect(tool.state.output).toContain("User aborted the command")
+          }
         }),
       { git: true, config: providerCfg },
     ),

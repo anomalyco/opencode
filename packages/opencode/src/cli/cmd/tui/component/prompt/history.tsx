@@ -5,7 +5,7 @@ import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
-import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
+import type { AgentPart, FilePart, Part, TextPart } from "@opencode-ai/sdk/v2"
 
 export type PromptInfo = {
   input: string
@@ -23,6 +23,24 @@ export type PromptInfo = {
         }
       })
   )[]
+}
+
+export function promptInfoFromMessageParts(parts?: readonly Part[]): PromptInfo {
+  return (parts ?? []).reduce<PromptInfo>(
+    (agg, part) => {
+      if (part.type === "text") {
+        if (!part.synthetic) agg.input += part.text
+        const { id: _id, messageID: _messageID, sessionID: _sessionID, ...rest } = part
+        agg.parts.push(rest)
+      }
+      if (part.type === "file" || part.type === "agent") {
+        const { id: _id, messageID: _messageID, sessionID: _sessionID, ...rest } = part
+        agg.parts.push(rest)
+      }
+      return agg
+    },
+    { input: "", parts: [] },
+  )
 }
 
 const MAX_HISTORY_ENTRIES = 50

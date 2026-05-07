@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session, SessionPending } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
@@ -71,6 +71,7 @@ const baseState = (input: Partial<State> = {}) =>
     session: [],
     sessionTotal: 0,
     session_status: {},
+    session_pending: {},
     session_diff: {},
     todo: {},
     permission: {},
@@ -82,7 +83,13 @@ const baseState = (input: Partial<State> = {}) =>
     message: {},
     part: {},
     ...input,
-  }) as State
+    }) as State
+
+const pendingState = (): SessionPending => ({
+  paused: false,
+  steer: [],
+  queue: [],
+})
 
 describe("applyGlobalEvent", () => {
   test("upserts project.updated in sorted position", () => {
@@ -178,6 +185,7 @@ describe("applyDirectoryEvent", () => {
         permission: { ses_1: [] },
         question: { ses_1: [] },
         session_status: { ses_1: { type: "busy" } },
+        session_pending: { ses_1: pendingState() },
       }),
     )
 
@@ -199,6 +207,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.permission.ses_1).toBeUndefined()
     expect(store.question.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
+    expect(store.session_pending.ses_1).toBeUndefined()
   })
 
   test("cleans session caches when deleted and decrements only root totals", () => {
@@ -224,6 +233,7 @@ describe("applyDirectoryEvent", () => {
           permission: { [item.info.id]: [] },
           question: { [item.info.id]: [] },
           session_status: { [item.info.id]: { type: "busy" } },
+          session_pending: { [item.info.id]: pendingState() },
         }),
       )
 
@@ -245,6 +255,7 @@ describe("applyDirectoryEvent", () => {
       expect(store.permission[item.info.id]).toBeUndefined()
       expect(store.question[item.info.id]).toBeUndefined()
       expect(store.session_status[item.info.id]).toBeUndefined()
+      expect(store.session_pending[item.info.id]).toBeUndefined()
     }
   })
 
@@ -264,6 +275,7 @@ describe("applyDirectoryEvent", () => {
         permission: { [dropped.id]: [] },
         question: { [dropped.id]: [] },
         session_status: { [dropped.id]: { type: "busy" } },
+        session_pending: { [dropped.id]: pendingState() },
       }),
     )
 
@@ -288,6 +300,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.permission[dropped.id]).toBeUndefined()
     expect(store.question[dropped.id]).toBeUndefined()
     expect(store.session_status[dropped.id]).toBeUndefined()
+    expect(store.session_pending[dropped.id]).toBeUndefined()
     expect(todos).toEqual([dropped.id])
   })
 
@@ -421,6 +434,29 @@ describe("applyDirectoryEvent", () => {
     })
 
     expect(store.part[messageID]).toBeUndefined()
+  })
+
+  test("applies session.pending.updated events so pending docks do not stay stale", () => {
+    const [store, setStore] = createStore(baseState())
+    const nextPending: SessionPending = {
+      paused: true,
+      steer: [],
+      queue: [],
+    }
+
+    applyDirectoryEvent({
+      event: {
+        type: "session.pending.updated",
+        properties: { sessionID: "ses_1", pending: nextPending },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session_pending.ses_1).toEqual(nextPending)
   })
 
   test("tracks permission and question request lifecycles", () => {

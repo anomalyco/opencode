@@ -28,6 +28,7 @@ function dataUrl(file: File, mime: string) {
 type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
   isDialogActive: () => boolean
+  blocked?: () => boolean
   setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
   addPart: (part: ContentPart) => boolean
@@ -46,6 +47,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const add = async (file: File, toast = true) => {
+    if (input.blocked?.()) return false
     const mime = await attachmentMime(file)
     if (!mime) {
       if (toast) warn()
@@ -57,6 +59,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     const url = await dataUrl(file, mime)
     if (!url) return false
+    if (input.blocked?.()) return false
 
     const attachment: ImageAttachmentPart = {
       type: "image",
@@ -91,6 +94,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
+    if (input.blocked?.()) return
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
@@ -141,6 +145,11 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {
+    if (input.blocked?.()) {
+      event.preventDefault()
+      input.setDraggingType(null)
+      return
+    }
     if (input.isDialogActive()) return
 
     event.preventDefault()
@@ -154,13 +163,18 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handleGlobalDragLeave = (event: DragEvent) => {
-    if (input.isDialogActive()) return
+    if (input.isDialogActive() || input.blocked?.()) return
     if (!event.relatedTarget) {
       input.setDraggingType(null)
     }
   }
 
   const handleGlobalDrop = async (event: DragEvent) => {
+    if (input.blocked?.()) {
+      event.preventDefault()
+      input.setDraggingType(null)
+      return
+    }
     if (input.isDialogActive()) return
 
     event.preventDefault()

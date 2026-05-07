@@ -31,6 +31,7 @@ import type {
   UserMessage,
   TextPart,
   ReasoningPart,
+  SessionPending,
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
@@ -57,7 +58,7 @@ import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
-import type { PromptInfo } from "../../component/prompt/history"
+import { promptInfoFromMessageParts } from "../../component/prompt/history"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
@@ -114,6 +115,14 @@ function use() {
   return ctx
 }
 
+function blocksForegroundSubmit(pending: SessionPending) {
+  return (
+    !!pending.stopRequested ||
+    pending.steer.length > 0 ||
+    (!pending.paused && pending.queue.length > 0)
+  )
+}
+
 export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
@@ -132,16 +141,44 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const busy = createMemo(() => {
+    const status = sync.data.session_status?.[route.sessionID]
+    if (status?.type !== "idle") return true
+    return messages().some((item) => item.role === "assistant" && typeof item.time.completed !== "number")
+  })
+  const pendingKnown = createMemo(() => sync.session.pendingKnown(route.sessionID))
+  const prepareHistoryMutation = async () => {
+    if (!busy()) return
+    await sdk.client.session.stop({ sessionID: route.sessionID })
+    const pending = await sdk.client.session.pending({ sessionID: route.sessionID })
+    if (
+      pending.data?.paused &&
+      pending.data.steer.length === 0 &&
+      pending.data.queue.length === 0
+    ) {
+      await sdk.client.session.pendingResume({ sessionID: route.sessionID })
+    }
+  }
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+  })
+  const pendingState = createMemo(() => sync.session.pending(route.sessionID))
+  const historyMutationBlocked = createMemo(() => {
+    if (!pendingKnown()) return true
+    const pending = pendingState()
+    return !!pending.stopRequested || pending.steer.length > 0 || pending.queue.length > 0
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
-  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
+  const foregroundSubmitBlocked = createMemo(() => {
+    if (!pendingKnown()) return true
+    return blocksForegroundSubmit(pendingState())
+  })
+  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0 || foregroundSubmitBlocked())
 
   const pending = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
@@ -524,34 +561,30 @@ export function Session() {
       slash: {
         name: "undo",
       },
+      enabled: !historyMutationBlocked(),
       onSelect: async (dialog) => {
-        const status = sync.data.session_status?.[route.sessionID]
-        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
-        const revert = session()?.revert?.messageID
-        const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
-        if (!message) return
-        sdk.client.session
-          .revert({
+        try {
+          await prepareHistoryMutation()
+          const revert = session()?.revert?.messageID
+          const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
+          if (!message) return
+          const parts = sync.data.part[message.id]
+          const result = await sdk.client.session.revert({
             sessionID: route.sessionID,
             messageID: message.id,
           })
-          .then(() => {
-            toBottom()
+          if (result.error) throw result.error
+          if (parts) {
+            prompt?.set(promptInfoFromMessageParts(parts))
+          }
+          toBottom()
+          dialog.clear()
+        } catch (error) {
+          toast.show({
+            message: error instanceof Error ? error.message : "Failed to undo message",
+            variant: "error",
           })
-        const parts = sync.data.part[message.id]
-        prompt?.set(
-          parts.reduce(
-            (agg, part) => {
-              if (part.type === "text") {
-                if (!part.synthetic) agg.input += part.text
-              }
-              if (part.type === "file") agg.parts.push(part)
-              return agg
-            },
-            { input: "", parts: [] as PromptInfo["parts"] },
-          ),
-        )
-        dialog.clear()
+        }
       },
     },
     {
@@ -559,26 +592,41 @@ export function Session() {
       value: "session.redo",
       keybind: "messages_redo",
       category: "Session",
-      enabled: !!session()?.revert?.messageID,
       slash: {
         name: "redo",
       },
-      onSelect: (dialog) => {
-        dialog.clear()
+      enabled: !!session()?.revert?.messageID && !historyMutationBlocked(),
+      onSelect: async (dialog) => {
         const messageID = session()?.revert?.messageID
         if (!messageID) return
-        const message = messages().find((x) => x.role === "user" && x.id > messageID)
-        if (!message) {
-          sdk.client.session.unrevert({
+        try {
+          await prepareHistoryMutation()
+          const message = messages().find((x) => x.role === "user" && x.id > messageID)
+          if (!message) {
+            const result = await sdk.client.session.unrevert({
+              sessionID: route.sessionID,
+            })
+            if (result.error) throw result.error
+            prompt?.set({ input: "", parts: [] })
+            dialog.clear()
+            return
+          }
+          const result = await sdk.client.session.revert({
             sessionID: route.sessionID,
+            messageID: message.id,
           })
-          prompt?.set({ input: "", parts: [] })
-          return
+          if (result.error) throw result.error
+          const parts = sync.data.part[message.id]
+          if (parts) {
+            prompt?.set(promptInfoFromMessageParts(parts))
+          }
+          dialog.clear()
+        } catch (error) {
+          toast.show({
+            message: error instanceof Error ? error.message : "Failed to redo message",
+            variant: "error",
+          })
         }
-        sdk.client.session.revert({
-          sessionID: route.sessionID,
-          messageID: message.id,
-        })
       },
     },
     {

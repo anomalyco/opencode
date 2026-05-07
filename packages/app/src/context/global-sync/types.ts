@@ -11,6 +11,7 @@ import type {
   Project,
   ProviderListResponse,
   QuestionRequest,
+  SessionPending,
   Session,
   SessionStatus,
   SnapshotFileDiff,
@@ -46,6 +47,9 @@ export type State = {
   sessionTotal: number
   session_status: {
     [sessionID: string]: SessionStatus
+  }
+  session_pending: {
+    [sessionID: string]: SessionPending
   }
   session_diff: {
     [sessionID: string]: SnapshotFileDiff[]

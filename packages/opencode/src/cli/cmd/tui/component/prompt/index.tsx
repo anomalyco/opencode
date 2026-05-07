@@ -37,6 +37,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { FormatError, FormatUnknownError } from "@/cli/error"
 
 export type PromptProps = {
   sessionID?: string
@@ -62,6 +63,23 @@ export type PromptRef = {
   blur(): void
   focus(): void
   submit(): void
+}
+
+function submitErrorMessage(error: unknown) {
+  const formatted = FormatError(error)
+  if (formatted !== undefined) return formatted
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "data" in error &&
+    typeof error.data === "object" &&
+    error.data !== null &&
+    "message" in error.data &&
+    typeof error.data.message === "string"
+  ) {
+    return error.data.message
+  }
+  return error instanceof Error ? error.message : FormatUnknownError(error)
 }
 
 const money = new Intl.NumberFormat("en-US", {
@@ -648,9 +666,10 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
+    let submitError: unknown
 
     if (store.mode === "shell") {
-      sdk.client.session.shell({
+      const result = await sdk.client.session.shell({
         sessionID,
         agent: local.agent.current().name,
         model: {
@@ -659,7 +678,11 @@ export function Prompt(props: PromptProps) {
         },
         command: inputText,
       })
-      setStore("mode", "normal")
+      if (result.error) {
+        submitError = result.error
+      } else {
+        setStore("mode", "normal")
+      }
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
@@ -675,7 +698,7 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      sdk.client.session.command({
+      const result = await sdk.client.session.command({
         sessionID,
         command: command.slice(1),
         arguments: args,
@@ -690,8 +713,11 @@ export function Prompt(props: PromptProps) {
             ...x,
           })),
       })
+      if (result.error) {
+        submitError = result.error
+      }
     } else {
-      sdk.client.session
+      const result = await sdk.client.session
         .prompt({
           sessionID,
           ...selectedModel,
@@ -708,8 +734,19 @@ export function Prompt(props: PromptProps) {
             ...nonTextParts.map(assign),
           ],
         })
-        .catch(() => {})
+      if (result.error) {
+        submitError = result.error
+      }
     }
+
+    if (submitError) {
+      toast.show({
+        message: submitErrorMessage(submitError),
+        variant: "error",
+      })
+      return
+    }
+
     history.append({
       ...store.prompt,
       mode: currentMode,

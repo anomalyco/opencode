@@ -469,6 +469,251 @@ export type EventTodoUpdated = {
   }
 }
 
+export type SessionPendingLane = "steer" | "queue"
+
+export type SessionPendingSelection = {
+  startLine: number
+  startChar: number
+  endLine: number
+  endChar: number
+}
+
+export type SessionPendingComposer = {
+  prompt: Array<
+    | {
+        type: "text"
+        content: string
+        start: number
+        end: number
+      }
+    | {
+        type: "file"
+        content: string
+        start: number
+        end: number
+        path: string
+        selection?: SessionPendingSelection
+      }
+    | {
+        type: "agent"
+        content: string
+        start: number
+        end: number
+        name: string
+      }
+    | {
+        type: "image"
+        id: string
+        filename: string
+        mime: string
+        dataUrl: string
+      }
+  >
+  context: Array<{
+    key: string
+    type: "file"
+    path: string
+    selection?: SessionPendingSelection
+    comment?: string
+    commentID?: string
+    commentOrigin?: "review" | "file"
+    preview?: string
+  }>
+}
+
+export type OutputFormatText = {
+  type: "text"
+}
+
+export type JsonSchema = {
+  [key: string]: unknown
+}
+
+export type OutputFormatJsonSchema = {
+  type: "json_schema"
+  schema: JsonSchema
+  retryCount?: number
+}
+
+export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
+
+export type SessionPendingTextPartInput = {
+  id?: string
+  type: "text"
+  text: string
+  synthetic?: boolean
+  ignored?: boolean
+  time?: {
+    start: number
+    end?: number
+  }
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type FilePartSourceText = {
+  value: string
+  start: number
+  end: number
+}
+
+export type FileSource = {
+  text: FilePartSourceText
+  type: "file"
+  path: string
+}
+
+export type Range = {
+  start: {
+    line: number
+    character: number
+  }
+  end: {
+    line: number
+    character: number
+  }
+}
+
+export type SymbolSource = {
+  text: FilePartSourceText
+  type: "symbol"
+  path: string
+  range: Range
+  name: string
+  kind: number
+}
+
+export type ResourceSource = {
+  text: FilePartSourceText
+  type: "resource"
+  clientName: string
+  uri: string
+}
+
+export type FilePartSource = FileSource | SymbolSource | ResourceSource
+
+export type SessionPendingFilePartInput = {
+  id?: string
+  type: "file"
+  mime: string
+  filename?: string
+  url: string
+  source?: FilePartSource
+}
+
+export type SessionPendingAgentPartInput = {
+  id?: string
+  type: "agent"
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
+export type SessionPendingSubtaskPartInput = {
+  id?: string
+  type: "subtask"
+  prompt: string
+  description: string
+  agent: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  command?: string
+}
+
+export type SessionPendingCommandFilePartInput = {
+  id?: string
+  type: "file"
+  mime: string
+  filename?: string
+  url: string
+  source?: FilePartSource
+}
+
+export type SessionPendingDraft =
+  | {
+      kind: "prompt"
+      preview: string
+      composer: SessionPendingComposer
+      request: {
+        messageID?: string
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        tools?: {
+          [key: string]: boolean
+        }
+        format?: OutputFormat
+        system?: string
+        variant?: string
+        parts: Array<
+          | SessionPendingTextPartInput
+          | SessionPendingFilePartInput
+          | SessionPendingAgentPartInput
+          | SessionPendingSubtaskPartInput
+        >
+      }
+    }
+  | {
+      kind: "command"
+      preview: string
+      composer: SessionPendingComposer
+      request: {
+        agent?: string
+        model?: string
+        arguments: string
+        command: string
+        variant?: string
+        parts?: Array<SessionPendingCommandFilePartInput>
+        resolved?: {
+          model?: {
+            providerID: string
+            modelID: string
+          }
+          agent?: string
+          variant?: string
+          parts: Array<
+            | SessionPendingTextPartInput
+            | SessionPendingFilePartInput
+            | SessionPendingAgentPartInput
+            | SessionPendingSubtaskPartInput
+          >
+        }
+      }
+    }
+
+export type SessionPendingItem = {
+  id: string
+  lane: SessionPendingLane
+  draft: SessionPendingDraft
+  time: {
+    created: number
+    updated: number
+  }
+}
+
+export type SessionPending = {
+  paused: boolean
+  stopRequested?: boolean
+  steer: Array<SessionPendingItem>
+  queue: Array<SessionPendingItem>
+}
+
+export type EventSessionPendingUpdated = {
+  type: "session.pending.updated"
+  properties: {
+    sessionID: string
+    pending: SessionPending
+  }
+}
+
 export type EventWorktreeReady = {
   type: "worktree.ready"
   properties: {
@@ -522,22 +767,6 @@ export type EventPtyDeleted = {
     id: string
   }
 }
-
-export type OutputFormatText = {
-  type: "text"
-}
-
-export type JsonSchema = {
-  [key: string]: unknown
-}
-
-export type OutputFormatJsonSchema = {
-  type: "json_schema"
-  schema: JsonSchema
-  retryCount?: number
-}
-
-export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
 
 export type UserMessage = {
   id: string
@@ -670,47 +899,6 @@ export type ReasoningPart = {
     end?: number
   }
 }
-
-export type FilePartSourceText = {
-  value: string
-  start: number
-  end: number
-}
-
-export type FileSource = {
-  text: FilePartSourceText
-  type: "file"
-  path: string
-}
-
-export type Range = {
-  start: {
-    line: number
-    character: number
-  }
-  end: {
-    line: number
-    character: number
-  }
-}
-
-export type SymbolSource = {
-  text: FilePartSourceText
-  type: "symbol"
-  path: string
-  range: Range
-  name: string
-  kind: number
-}
-
-export type ResourceSource = {
-  text: FilePartSourceText
-  type: "resource"
-  clientName: string
-  uri: string
-}
-
-export type FilePartSource = FileSource | SymbolSource | ResourceSource
 
 export type FilePart = {
   id: string
@@ -1005,6 +1193,7 @@ export type Event =
   | EventSessionIdle
   | EventSessionCompacted
   | EventTodoUpdated
+  | EventSessionPendingUpdated
   | EventWorktreeReady
   | EventWorktreeFailed
   | EventPtyCreated
@@ -1847,6 +2036,22 @@ export type McpResource = {
   description?: string
   mimeType?: string
   client: string
+}
+
+export type SteerUnavailableError = {
+  name: "SessionSteerUnavailableError"
+  data: {
+    message: string
+    sessionID: string
+  }
+}
+
+export type ConflictError = {
+  name: "SessionPendingConflictError"
+  data: {
+    message: string
+    sessionID: string
+  }
 }
 
 export type TextPartInput = {
@@ -3370,6 +3575,319 @@ export type SessionTodoResponses = {
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
 
+export type SessionPendingData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/pending"
+}
+
+export type SessionPendingErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPendingError = SessionPendingErrors[keyof SessionPendingErrors]
+
+export type SessionPendingResponses = {
+  /**
+   * Pending follow-up state
+   */
+  200: SessionPending
+}
+
+export type SessionPendingResponse = SessionPendingResponses[keyof SessionPendingResponses]
+
+export type SessionPendingAddData = {
+  body: {
+    lane: SessionPendingLane
+    draft: SessionPendingDraft
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/pending"
+}
+
+export type SessionPendingAddErrors = {
+  /**
+   * Steer unavailable
+   */
+  400: SteerUnavailableError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
+}
+
+export type SessionPendingAddError = SessionPendingAddErrors[keyof SessionPendingAddErrors]
+
+export type SessionPendingAddResponses = {
+  /**
+   * Updated pending follow-up state
+   */
+  200: SessionPending
+}
+
+export type SessionPendingAddResponse = SessionPendingAddResponses[keyof SessionPendingAddResponses]
+
+export type SessionPendingDeleteData = {
+  body?: never
+  path: {
+    sessionID: string
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/pending/{itemID}"
+}
+
+export type SessionPendingDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
+}
+
+export type SessionPendingDeleteError = SessionPendingDeleteErrors[keyof SessionPendingDeleteErrors]
+
+export type SessionPendingDeleteResponses = {
+  /**
+   * Updated pending follow-up state
+   */
+  200: SessionPending
+}
+
+export type SessionPendingDeleteResponse = SessionPendingDeleteResponses[keyof SessionPendingDeleteResponses]
+
+export type SessionPendingMoveUpData = {
+  body?: never
+  path: {
+    sessionID: string
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/pending/{itemID}/move_up"
+}
+
+export type SessionPendingMoveUpErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
+}
+
+export type SessionPendingMoveUpError = SessionPendingMoveUpErrors[keyof SessionPendingMoveUpErrors]
+
+export type SessionPendingMoveUpResponses = {
+  /**
+   * Updated pending follow-up state
+   */
+  200: SessionPending
+}
+
+export type SessionPendingMoveUpResponse = SessionPendingMoveUpResponses[keyof SessionPendingMoveUpResponses]
+
+export type SessionPendingMoveDownData = {
+  body?: never
+  path: {
+    sessionID: string
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/pending/{itemID}/move_down"
+}
+
+export type SessionPendingMoveDownErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
+}
+
+export type SessionPendingMoveDownError = SessionPendingMoveDownErrors[keyof SessionPendingMoveDownErrors]
+
+export type SessionPendingMoveDownResponses = {
+  /**
+   * Updated pending follow-up state
+   */
+  200: SessionPending
+}
+
+export type SessionPendingMoveDownResponse = SessionPendingMoveDownResponses[keyof SessionPendingMoveDownResponses]
+
+export type SessionPendingMoveLaneData = {
+  body: {
+    lane: SessionPendingLane
+  }
+  path: {
+    sessionID: string
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/pending/{itemID}/move_lane"
+}
+
+export type SessionPendingMoveLaneErrors = {
+  /**
+   * Steer unavailable
+   */
+  400: SteerUnavailableError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
+}
+
+export type SessionPendingMoveLaneError = SessionPendingMoveLaneErrors[keyof SessionPendingMoveLaneErrors]
+
+export type SessionPendingMoveLaneResponses = {
+  /**
+   * Updated pending follow-up state
+   */
+  200: SessionPending
+}
+
+export type SessionPendingMoveLaneResponse = SessionPendingMoveLaneResponses[keyof SessionPendingMoveLaneResponses]
+
+export type SessionPendingEditCommitData = {
+  body: {
+    draft: SessionPendingDraft
+  }
+  path: {
+    sessionID: string
+    itemID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/pending/{itemID}/edit_commit"
+}
+
+export type SessionPendingEditCommitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
+}
+
+export type SessionPendingEditCommitError = SessionPendingEditCommitErrors[keyof SessionPendingEditCommitErrors]
+
+export type SessionPendingEditCommitResponses = {
+  /**
+   * Updated pending follow-up state
+   */
+  200: SessionPending
+}
+
+export type SessionPendingEditCommitResponse =
+  SessionPendingEditCommitResponses[keyof SessionPendingEditCommitResponses]
+
+export type SessionPendingResumeData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/pending/resume"
+}
+
+export type SessionPendingResumeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
+}
+
+export type SessionPendingResumeError = SessionPendingResumeErrors[keyof SessionPendingResumeErrors]
+
+export type SessionPendingResumeResponses = {
+  /**
+   * Updated pending follow-up state
+   */
+  200: SessionPending
+}
+
+export type SessionPendingResumeResponse = SessionPendingResumeResponses[keyof SessionPendingResumeResponses]
+
 export type SessionInitData = {
   body?: {
     modelID: string
@@ -3464,6 +3982,40 @@ export type SessionAbortResponses = {
 }
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+
+export type SessionStopData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/stop"
+}
+
+export type SessionStopErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionStopError = SessionStopErrors[keyof SessionStopErrors]
+
+export type SessionStopResponses = {
+  /**
+   * Stopped session
+   */
+  200: boolean
+}
+
+export type SessionStopResponse = SessionStopResponses[keyof SessionStopResponses]
 
 export type SessionUnshareData = {
   body?: never
@@ -3636,7 +4188,7 @@ export type SessionMessagesResponses = {
 export type SessionMessagesResponse = SessionMessagesResponses[keyof SessionMessagesResponses]
 
 export type SessionPromptData = {
-  body?: {
+  body: {
     messageID?: string
     model?: {
       providerID: string
@@ -3674,6 +4226,10 @@ export type SessionPromptErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
 }
 
 export type SessionPromptError = SessionPromptErrors[keyof SessionPromptErrors]
@@ -3836,7 +4392,7 @@ export type PartUpdateResponses = {
 export type PartUpdateResponse = PartUpdateResponses[keyof PartUpdateResponses]
 
 export type SessionPromptAsyncData = {
-  body?: {
+  body: {
     messageID?: string
     model?: {
       providerID: string
@@ -3874,6 +4430,10 @@ export type SessionPromptAsyncErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
 }
 
 export type SessionPromptAsyncError = SessionPromptAsyncErrors[keyof SessionPromptAsyncErrors]
@@ -3888,7 +4448,7 @@ export type SessionPromptAsyncResponses = {
 export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof SessionPromptAsyncResponses]
 
 export type SessionCommandData = {
-  body?: {
+  body: {
     messageID?: string
     agent?: string
     model?: string
@@ -3923,6 +4483,10 @@ export type SessionCommandErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
 }
 
 export type SessionCommandError = SessionCommandErrors[keyof SessionCommandErrors]
@@ -3985,7 +4549,7 @@ export type SessionShellResponses = {
 export type SessionShellResponse = SessionShellResponses[keyof SessionShellResponses]
 
 export type SessionRevertData = {
-  body?: {
+  body: {
     messageID: string
     partID?: string
   }
@@ -4008,6 +4572,10 @@ export type SessionRevertErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
 }
 
 export type SessionRevertError = SessionRevertErrors[keyof SessionRevertErrors]
@@ -4042,6 +4610,10 @@ export type SessionUnrevertErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: ConflictError
 }
 
 export type SessionUnrevertError = SessionUnrevertErrors[keyof SessionUnrevertErrors]

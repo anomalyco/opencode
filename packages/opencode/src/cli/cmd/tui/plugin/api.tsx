@@ -162,6 +162,12 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       status(sessionID) {
         return sync.data.session_status[sessionID]
       },
+      pendingKnown(sessionID) {
+        return sync.session.pendingKnown(sessionID)
+      },
+      pending(sessionID) {
+        return sync.data.session_pending[sessionID]
+      },
       permission(sessionID) {
         return sync.data.permission[sessionID] ?? []
       },

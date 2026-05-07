@@ -134,6 +134,24 @@ import type {
   SessionMessageResponses,
   SessionMessagesErrors,
   SessionMessagesResponses,
+  SessionPendingAddErrors,
+  SessionPendingAddResponses,
+  SessionPendingDeleteErrors,
+  SessionPendingDeleteResponses,
+  SessionPendingDraft,
+  SessionPendingEditCommitErrors,
+  SessionPendingEditCommitResponses,
+  SessionPendingErrors,
+  SessionPendingLane,
+  SessionPendingMoveDownErrors,
+  SessionPendingMoveDownResponses,
+  SessionPendingMoveLaneErrors,
+  SessionPendingMoveLaneResponses,
+  SessionPendingMoveUpErrors,
+  SessionPendingMoveUpResponses,
+  SessionPendingResponses,
+  SessionPendingResumeErrors,
+  SessionPendingResumeResponses,
   SessionPromptAsyncErrors,
   SessionPromptAsyncResponses,
   SessionPromptErrors,
@@ -146,6 +164,8 @@ import type {
   SessionShellResponses,
   SessionStatusErrors,
   SessionStatusResponses,
+  SessionStopErrors,
+  SessionStopResponses,
   SessionSummarizeErrors,
   SessionSummarizeResponses,
   SessionTodoErrors,
@@ -1822,6 +1842,319 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * Get pending follow-ups
+   *
+   * Retrieve the server-owned pending steer and queue lanes for a session.
+   */
+  public pending<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionPendingResponses, SessionPendingErrors, ThrowOnError>({
+      url: "/session/{sessionID}/pending",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add pending follow-up
+   *
+   * Create a new pending follow-up in the steer or queue lane for a session.
+   */
+  public pendingAdd<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      lane?: SessionPendingLane
+      draft?: SessionPendingDraft
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "lane" },
+            { in: "body", key: "draft" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionPendingAddResponses, SessionPendingAddErrors, ThrowOnError>({
+      url: "/session/{sessionID}/pending",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete pending follow-up
+   *
+   * Delete a pending follow-up item from either lane.
+   */
+  public pendingDelete<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      itemID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      SessionPendingDeleteResponses,
+      SessionPendingDeleteErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/pending/{itemID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Move pending item up
+   *
+   * Move a pending follow-up one slot earlier inside its current lane.
+   */
+  public pendingMoveUp<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      itemID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPendingMoveUpResponses,
+      SessionPendingMoveUpErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/pending/{itemID}/move_up",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Move pending item down
+   *
+   * Move a pending follow-up one slot later inside its current lane.
+   */
+  public pendingMoveDown<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      itemID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPendingMoveDownResponses,
+      SessionPendingMoveDownErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/pending/{itemID}/move_down",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Move pending item between lanes
+   *
+   * Move a pending follow-up between the queue and steer lanes.
+   */
+  public pendingMoveLane<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      itemID: string
+      directory?: string
+      workspace?: string
+      lane?: SessionPendingLane
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "lane" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPendingMoveLaneResponses,
+      SessionPendingMoveLaneErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/pending/{itemID}/move_lane",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Save edits to a pending follow-up
+   *
+   * Replace a pending follow-up draft.
+   */
+  public pendingEditCommit<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      itemID: string
+      directory?: string
+      workspace?: string
+      draft?: SessionPendingDraft
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "itemID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "draft" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPendingEditCommitResponses,
+      SessionPendingEditCommitErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/pending/{itemID}/edit_commit",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Resume pending follow-ups
+   *
+   * Explicitly resume paused pending follow-ups.
+   */
+  public pendingResume<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPendingResumeResponses,
+      SessionPendingResumeErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/pending/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Initialize session
    *
    * Analyze the current application and create an AGENTS.md file with project-specific agent configurations.
@@ -1930,6 +2263,38 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionAbortResponses, SessionAbortErrors, ThrowOnError>({
       url: "/session/{sessionID}/abort",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Stop session
+   *
+   * Stop an active session, promote steer follow-ups to queued work, and pause pending follow-ups until resumed.
+   */
+  public stop<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionStopResponses, SessionStopErrors, ThrowOnError>({
+      url: "/session/{sessionID}/stop",
       ...options,
       ...params,
     })

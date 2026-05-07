@@ -14,7 +14,7 @@ import { SessionFollowupDock } from "@/pages/session/composer/session-followup-d
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
-import type { FollowupDraft } from "@/components/prompt-input/submit"
+import type { FollowupActionResult, FollowupDraft } from "@/components/prompt-input/submit"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 export function SessionComposerRegion(props: {
@@ -27,15 +27,62 @@ export function SessionComposerRegion(props: {
   onSubmit: () => void
   onResponseSubmit: () => void
   followup?: {
-    queue: () => boolean
-    items: { id: string; text: string }[]
-    sending?: string
-    edit?: { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] }
-    onQueue: (draft: FollowupDraft) => void
-    onAbort: () => void
-    onSend: (id: string) => void
-    onEdit: (id: string) => void
-    onEditLoaded: () => void
+    lane: (event: Event) => "queue" | "steer" | undefined
+    pending: {
+      ready: boolean
+      paused: boolean
+      stopProjected?: boolean
+      editing: boolean
+      canResume: boolean
+      loading: boolean
+      steer: {
+        id: string
+        text: string
+        editing?: boolean
+        disableUp: boolean
+        disableDown: boolean
+        disableMoveLane: boolean
+        disableEdit: boolean
+        editHint?: string
+        disableDelete: boolean
+      }[]
+      queue: {
+        id: string
+        text: string
+        editing?: boolean
+        disableUp: boolean
+        disableDown: boolean
+        disableMoveLane: boolean
+        disableEdit: boolean
+        editHint?: string
+        disableDelete: boolean
+      }[]
+      onResume: () => void
+      onMoveUp: (id: string) => void
+      onMoveDown: (id: string) => void
+      onMoveLane: (id: string, lane: "steer" | "queue") => void
+      onEdit: (id: string) => void
+      onDelete: (id: string) => void
+    }
+    editingID?: string
+    edit?: {
+      id: string
+      prompt: FollowupDraft["prompt"]
+      context: FollowupDraft["context"]
+      agent?: string
+      model?: FollowupDraft["model"]
+      variant?: string
+      baseDraft?: FollowupDraft["pendingBaseDraft"]
+    }
+    submitBlockedReason?: string
+    editSubmitBlockedReason?: string
+    editCancelBlockedReason?: string
+    followupEnabled?: boolean
+    onQueue: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
+    onSteer: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
+    onAbort: () => void | (() => void)
+    onEditCancel: () => Promise<FollowupActionResult> | FollowupActionResult
+    onEditSubmit: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
   }
   revert?: {
     items: { id: string; text: string }[]
@@ -55,7 +102,8 @@ export function SessionComposerRegion(props: {
   const info = createMemo(() => (route.params.id ? sync.session.get(route.params.id) : undefined))
   const parentID = createMemo(() => info()?.parentID)
   const child = createMemo(() => !!parentID())
-  const showComposer = createMemo(() => !props.state.blocked() || child())
+  const editingPending = createMemo(() => !!props.followup?.editingID)
+  const showComposer = createMemo(() => !props.state.blocked() || child() || editingPending())
 
   const previewPrompt = () =>
     prompt
@@ -238,26 +286,52 @@ export function SessionComposerRegion(props: {
                 "margin-top": `${-lift()}px`,
               }}
             >
-              <Show when={props.followup?.items.length}>
+              <Show
+                when={
+                  props.followup &&
+                  (!props.followup.pending.ready ||
+                    props.followup.pending.paused ||
+                    props.followup.pending.steer.length ||
+                    props.followup.pending.queue.length ||
+                    props.followup.pending.loading)
+                }
+              >
                 <SessionFollowupDock
-                  items={props.followup!.items}
-                  sending={props.followup!.sending}
-                  onSend={props.followup!.onSend}
-                  onEdit={props.followup!.onEdit}
+                  ready={props.followup!.pending.ready}
+                  paused={props.followup!.pending.paused}
+                  stopProjected={props.followup!.pending.stopProjected}
+                  editing={props.followup!.pending.editing}
+                  canResume={props.followup!.pending.canResume}
+                  loading={props.followup!.pending.loading}
+                  steer={props.followup!.pending.steer}
+                  queue={props.followup!.pending.queue}
+                  onResume={props.followup!.pending.onResume}
+                  onMoveUp={props.followup!.pending.onMoveUp}
+                  onMoveDown={props.followup!.pending.onMoveDown}
+                  onMoveLane={props.followup!.pending.onMoveLane}
+                  onEdit={props.followup!.pending.onEdit}
+                  onDelete={props.followup!.pending.onDelete}
                 />
               </Show>
               <Show
                 when={child()}
                 fallback={
-                  <Show when={!props.state.blocked()}>
+                  <Show when={!props.state.blocked() || editingPending()}>
                     <PromptInput
                       ref={props.inputRef}
                       newSessionWorktree={props.newSessionWorktree}
                       onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                      editingID={props.followup?.editingID}
                       edit={props.followup?.edit}
-                      onEditLoaded={props.followup?.onEditLoaded}
-                      shouldQueue={props.followup?.queue}
+                      submitBlockedReason={props.followup?.submitBlockedReason}
+                      editSubmitBlockedReason={props.followup?.editSubmitBlockedReason}
+                      editCancelBlockedReason={props.followup?.editCancelBlockedReason}
+                      followupEnabled={props.followup?.followupEnabled}
+                      onEditCancel={props.followup?.onEditCancel}
+                      onEditSubmit={props.followup?.onEditSubmit}
+                      followupLane={props.followup?.lane}
                       onQueue={props.followup?.onQueue}
+                      onSteer={props.followup?.onSteer}
                       onAbort={props.followup?.onAbort}
                       onSubmit={props.onSubmit}
                     />

@@ -369,6 +369,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     }
 
     return {
+      child(directory?: string) {
+        return target(directory)
+      },
       get data() {
         return current()[0]
       },

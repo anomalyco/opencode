@@ -3,10 +3,23 @@ import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
 
+export const getHashTargetHistoryAction = (
+  targetId: string,
+  loadedMessageIds: readonly string[],
+  visibleMessageIds: readonly string[],
+) => {
+  if (visibleMessageIds.includes(targetId)) return "present" as const
+  if (loadedMessageIds.includes(targetId)) return "clear" as const
+  const oldestLoaded = loadedMessageIds[0]
+  if (!oldestLoaded) return "load-more" as const
+  return targetId < oldestLoaded ? ("load-more" as const) : ("clear" as const)
+}
+
 export const useSessionHashScroll = (input: {
   sessionKey: () => string
   sessionID: () => string | undefined
   messagesReady: () => boolean
+  loadedUserMessages: () => UserMessage[]
   visibleUserMessages: () => UserMessage[]
   historyMore: () => boolean
   historyLoading: () => boolean
@@ -23,7 +36,10 @@ export const useSessionHashScroll = (input: {
   scheduleScrollState: (el: HTMLDivElement) => void
   consumePendingMessage: (key: string) => string | undefined
 }) => {
+  const loadedUserMessages = createMemo(() => input.loadedUserMessages())
   const visibleUserMessages = createMemo(() => input.visibleUserMessages())
+  const loadedMessageIds = createMemo(() => loadedUserMessages().map((message) => message.id))
+  const visibleMessageIds = createMemo(() => visibleUserMessages().map((message) => message.id))
   const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))
   const messageIndex = createMemo(() => new Map(visibleUserMessages().map((m, i) => [m.id, i])))
   let pendingKey = ""
@@ -52,6 +68,13 @@ export const useSessionHashScroll = (input: {
     if (!location.hash) return
     clearing = true
     navigate(location.pathname + location.search, { replace: true })
+  }
+
+  const clearTarget = (targetId: string) => {
+    if (input.pendingMessage() === targetId) input.setPendingMessage(undefined)
+    if (!clearing && messageIdFromHash(location.hash) === targetId) {
+      clearMessageHash()
+    }
   }
 
   const updateHash = (id: string) => {
@@ -188,13 +211,24 @@ export const useSessionHashScroll = (input: {
     const sessionID = input.sessionID()
     if (!sessionID || !input.messagesReady()) return
 
+    loadedUserMessages()
     visibleUserMessages()
 
     let targetId = input.pendingMessage()
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
     if (!targetId) return
-    if (messageById().has(targetId)) return
-    if (!input.historyMore() || input.historyLoading()) return
+
+    const action = getHashTargetHistoryAction(targetId, loadedMessageIds(), visibleMessageIds())
+    if (action === "present") return
+    if (action === "clear") {
+      clearTarget(targetId)
+      return
+    }
+    if (input.historyLoading()) return
+    if (!input.historyMore()) {
+      clearTarget(targetId)
+      return
+    }
 
     void input.loadMore(sessionID)
   })

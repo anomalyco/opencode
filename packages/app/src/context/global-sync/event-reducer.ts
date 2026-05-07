@@ -7,6 +7,7 @@ import type {
   Project,
   QuestionRequest,
   Session,
+  SessionPending,
   SessionStatus,
   SnapshotFileDiff,
   Todo,
@@ -67,6 +68,7 @@ export function cleanupDroppedSessionCaches(
   const stale = [
     ...Object.keys(store.message),
     ...Object.keys(store.session_diff),
+    ...Object.keys(store.session_pending),
     ...Object.keys(store.todo),
     ...Object.keys(store.permission),
     ...Object.keys(store.question),
@@ -175,6 +177,11 @@ export function applyDirectoryEvent(input: {
     case "session.status": {
       const props = event.properties as { sessionID: string; status: SessionStatus }
       input.setStore("session_status", props.sessionID, reconcile(props.status))
+      break
+    }
+    case "session.pending.updated": {
+      const props = event.properties as { sessionID: string; pending: SessionPending }
+      input.setStore("session_pending", props.sessionID, reconcile(props.pending))
       break
     }
     case "message.updated": {

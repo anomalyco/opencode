@@ -12,6 +12,7 @@ import type {
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
+  SessionPending,
   TextPart,
   Workspace,
   Config as SdkConfig,
@@ -278,6 +279,15 @@ export type TuiState = {
     todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
     messages: (sessionID: string) => ReadonlyArray<Message>
     status: (sessionID: string) => SessionStatus | undefined
+    pendingKnown: (sessionID: string) => boolean
+    pending: (sessionID: string) =>
+      | {
+          paused: boolean
+          stopRequested?: SessionPending["stopRequested"]
+          steer: ReadonlyArray<SessionPending["steer"][number]>
+          queue: ReadonlyArray<SessionPending["queue"][number]>
+        }
+      | undefined
     permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
   }

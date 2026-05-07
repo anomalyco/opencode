@@ -4,6 +4,7 @@ export type PromptComment = {
   path: string
   selection?: FileSelection
   comment: string
+  commentID?: string
   preview?: string
   origin?: "review" | "file"
 }
@@ -29,6 +30,7 @@ export function createCommentMetadata(input: PromptComment) {
       path: input.path,
       selection: input.selection,
       comment: input.comment,
+      commentID: input.commentID,
       preview: input.preview,
       origin: input.origin,
     },
@@ -42,12 +44,14 @@ export function readCommentMetadata(value: unknown) {
   const path = (meta as { path?: unknown }).path
   const comment = (meta as { comment?: unknown }).comment
   if (typeof path !== "string" || typeof comment !== "string") return
+  const commentID = (meta as { commentID?: unknown }).commentID
   const preview = (meta as { preview?: unknown }).preview
   const origin = (meta as { origin?: unknown }).origin
   return {
     path,
     selection: selection((meta as { selection?: unknown }).selection),
     comment,
+    commentID: typeof commentID === "string" ? commentID : undefined,
     preview: typeof preview === "string" ? preview : undefined,
     origin: origin === "review" || origin === "file" ? origin : undefined,
   } satisfies PromptComment

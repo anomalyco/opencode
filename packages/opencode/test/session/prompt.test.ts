@@ -6,9 +6,12 @@ import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionPending } from "../../src/session/pending"
 import { SessionPrompt } from "../../src/session/prompt"
+import { MessageID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
+import { AppRuntime } from "../../src/effect/app-runtime"
 
 Log.init({ print: false })
 
@@ -90,6 +93,127 @@ function hanging(ready: () => void) {
 }
 
 describe("session.prompt missing file", () => {
+  test("foreground prompt_async can bypass a paused pending queue and resume it afterward", async () => {
+    let foregroundCalls = 0
+    let queuedCalls = 0
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url)
+        if (!url.pathname.endsWith("/chat/completions")) {
+          return new Response("not found", { status: 404 })
+        }
+        const body = (await req.json().catch(() => undefined)) as { messages?: Array<{ role?: string; content?: unknown }> }
+        const lastUser = body.messages?.findLast((message) => message.role === "user")
+        const lastUserText = JSON.stringify(lastUser?.content ?? "")
+        const responseText = lastUserText.includes("queued")
+          ? "queued reply"
+          : lastUserText.includes("foreground")
+            ? "foreground reply"
+            : "auxiliary reply"
+        if (responseText === "foreground reply") foregroundCalls++
+        if (responseText === "queued reply") queuedCalls++
+        return new Response(chat(responseText), {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      },
+    })
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          enabled_providers: ["alibaba"],
+          provider: {
+            alibaba: {
+              options: {
+                apiKey: "test-key",
+                baseURL: `${server.url.origin}/v1`,
+              },
+            },
+          },
+          agent: {
+            build: {
+              model: "alibaba/qwen-plus",
+            },
+          },
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({})
+          await AppRuntime.runPromise(
+            SessionPending.Service.use((svc) =>
+              svc.add({
+                sessionID: session.id,
+                lane: "queue",
+                draft: {
+                  kind: "prompt",
+                  preview: "queued",
+                  composer: {
+                    prompt: [{ type: "text", content: "queued", start: 0, end: 6 }],
+                    context: [],
+                  },
+                  request: {
+                    messageID: MessageID.ascending(),
+                    agent: "build",
+                    parts: [{ type: "text", text: "queued" }],
+                  },
+                },
+              }),
+            ),
+          )
+          await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.pause(session.id)))
+
+          await expect(
+            SessionPrompt.promptAsync({
+              sessionID: session.id,
+              messageID: MessageID.ascending(),
+              agent: "build",
+              parts: [{ type: "text", text: "foreground" }],
+            }),
+          ).resolves.toBeUndefined()
+
+          let pending = await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.get(session.id)))
+          let assistantText = ""
+          for (let attempt = 0; attempt < 100; attempt++) {
+            pending = await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.get(session.id)))
+            const messages = await Session.messages({ sessionID: session.id })
+            assistantText = messages
+              .flatMap((message) => message.parts)
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("\n")
+
+            if (
+              !pending.paused &&
+              pending.queue.length === 0 &&
+              assistantText.includes("foreground reply") &&
+              assistantText.includes("queued reply")
+            ) {
+              break
+            }
+            await Bun.sleep(50)
+          }
+
+          expect(pending.paused).toBe(false)
+          expect(pending.queue).toHaveLength(0)
+          expect(assistantText).toContain("foreground reply")
+          expect(assistantText).toContain("queued reply")
+          expect(foregroundCalls).toBeGreaterThanOrEqual(1)
+          expect(queuedCalls).toBeGreaterThanOrEqual(1)
+
+          await Session.remove(session.id)
+        },
+      })
+    } finally {
+      server.stop(true)
+    }
+  }, 10000)
+
   test("does not fail the prompt when a file part is missing", async () => {
     await using tmp = await tmpdir({
       git: true,

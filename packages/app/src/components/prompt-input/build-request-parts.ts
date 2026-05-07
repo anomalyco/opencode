@@ -7,6 +7,7 @@ import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
+type CommandRequestPart = Extract<PromptRequestPart, { type: "file" }>
 
 type ContextFile = {
   key: string
@@ -23,7 +24,7 @@ type BuildRequestPartsInput = {
   prompt: Prompt
   context: ContextFile[]
   images: ImageAttachmentPart[]
-  text: string
+  text?: string
   messageID: string
   sessionID: string
   sessionDirectory: string
@@ -88,15 +89,8 @@ const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID:
   }
 }
 
-export function buildRequestParts(input: BuildRequestPartsInput) {
-  const requestParts: PromptRequestPart[] = [
-    {
-      id: Identifier.ascending("part"),
-      type: "text",
-      text: input.text,
-    },
-  ]
-
+const buildSharedRequestParts = (input: BuildRequestPartsInput) => {
+  const requestParts: PromptRequestPart[] = []
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)
     return {
@@ -173,6 +167,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
           path: item.path,
           selection: item.selection,
           comment,
+          commentID: item.commentID,
           preview: item.preview,
           origin: item.commentOrigin,
         }),
@@ -194,6 +189,27 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
 
   requestParts.push(...files, ...context, ...agents, ...images)
 
+  return requestParts
+}
+
+export function buildRequestParts(input: BuildRequestPartsInput) {
+  const requestParts: PromptRequestPart[] = [
+    {
+      id: Identifier.ascending("part"),
+      type: "text",
+      text: input.text ?? "",
+    },
+    ...buildSharedRequestParts(input),
+  ]
+
+  return {
+    requestParts,
+    optimisticParts: requestParts.map((part) => toOptimisticPart(part, input.sessionID, input.messageID)),
+  }
+}
+
+export function buildCommandRequestParts(input: Omit<BuildRequestPartsInput, "text">) {
+  const requestParts = buildSharedRequestParts(input).filter((part): part is CommandRequestPart => part.type === "file")
   return {
     requestParts,
     optimisticParts: requestParts.map((part) => toOptimisticPart(part, input.sessionID, input.messageID)),

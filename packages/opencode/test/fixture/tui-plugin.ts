@@ -287,6 +287,8 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         todo: opts.state?.session?.todo ?? (() => []),
         messages: opts.state?.session?.messages ?? (() => []),
         status: opts.state?.session?.status ?? (() => undefined),
+        pendingKnown: opts.state?.session?.pendingKnown ?? (() => false),
+        pending: opts.state?.session?.pending ?? (() => undefined),
         permission: opts.state?.session?.permission ?? (() => []),
         question: opts.state?.session?.question ?? (() => []),
       },

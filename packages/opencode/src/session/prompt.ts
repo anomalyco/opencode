@@ -43,12 +43,13 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, Option, Scope, Context } from "effect"
 import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { SessionPending } from "./pending"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -63,16 +64,24 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
-export namespace SessionPrompt {
+  export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   const elog = EffectLogger.create({ service: "session.prompt" })
 
   export interface Interface {
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-    readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
-    readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
-    readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
-    readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
+    readonly isForegroundStarting: (sessionID: SessionID) => Effect.Effect<boolean>
+    readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, unknown>
+    readonly promptAsync: (input: PromptInput) => Effect.Effect<void, unknown>
+    readonly enqueuePrompt: (input: PromptInput) => Effect.Effect<void, unknown>
+    readonly activatePending: (sessionID: SessionID) => Effect.Effect<void>
+    readonly snapshotPendingDraft: (
+      sessionID: SessionID,
+      draft: SessionPending.Draft,
+    ) => Effect.Effect<SessionPending.Draft>
+    readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts, unknown>
+    readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, unknown>
+    readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts, unknown>
     readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
   }
 
@@ -104,16 +113,56 @@ export namespace SessionPrompt {
       const revert = yield* SessionRevert.Service
       const sys = yield* SystemPrompt.Service
       const llm = yield* LLM.Service
+      const pending = yield* SessionPending.Service
 
       const run = {
         promise: <A, E>(effect: Effect.Effect<A, E>) =>
           Effect.runPromise(effect.pipe(Effect.provide(EffectLogger.layer))),
         fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runFork(effect.pipe(Effect.provide(EffectLogger.layer))),
       }
+      type AssistantWithParts = MessageV2.WithParts & { info: MessageV2.Assistant }
+      type PromptResultEffect = Effect.Effect<MessageV2.WithParts, unknown, never>
+      type AssistantResultEffect = Effect.Effect<AssistantWithParts, unknown, never>
+      type ForegroundStart = {
+        accepted: Deferred.Deferred<void, unknown>
+        result: Deferred.Deferred<MessageV2.WithParts, unknown>
+      }
+      type ForegroundStartupReservation = symbol
+      const queuePumpRunning = new Set<SessionID>()
+      const foregroundStarting = new Map<SessionID, ForegroundStartupReservation>()
+      const foregroundStartupCancelled = new Set<ForegroundStartupReservation>()
+      type NoReplyPendingState = "pending" | "running-queue" | "running-steer"
+      const noReplyPendingItems = new Map<
+        string,
+        {
+          sessionID: SessionID
+          state: NoReplyPendingState
+        }
+      >()
+
+      const clearNoReplyPendingItem = Effect.fn("SessionPrompt.clearNoReplyPendingItem")(function* (itemID: string) {
+        noReplyPendingItems.delete(itemID)
+      })
+
+      const clearRunningNoReplySteers = Effect.fn("SessionPrompt.clearRunningNoReplySteers")(function* (
+        sessionID: SessionID,
+      ) {
+        for (const [itemID, item] of noReplyPendingItems.entries()) {
+          if (item.sessionID !== sessionID || item.state !== "running-steer") continue
+          yield* clearNoReplyPendingItem(itemID)
+        }
+      })
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         yield* elog.info("cancel", { sessionID })
+        const reservation = foregroundStarting.get(sessionID)
+        if (reservation) foregroundStartupCancelled.add(reservation)
         yield* state.cancel(sessionID)
+        yield* pending.refresh(sessionID)
+      })
+
+      const isForegroundStarting = Effect.fn("SessionPrompt.isForegroundStarting")(function* (sessionID: SessionID) {
+        return foregroundStarting.has(sessionID)
       })
 
       const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -614,6 +663,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           })
           .pipe(
             Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause)) {
+                return Effect.failCause(cause)
+              }
               const defect = Cause.squash(cause)
               error = defect instanceof Error ? defect : new Error(String(defect))
               log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
@@ -711,68 +763,73 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput) {
-        const ctx = yield* InstanceState.context
-        const session = yield* sessions.get(input.sessionID)
-        if (session.revert) {
-          yield* revert.cleanup(session)
-        }
-        const agent = yield* agents.get(input.agent)
-        if (!agent) {
-          const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
-          const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-          const error = new NamedError.Unknown({ message: `Agent not found: "${input.agent}".${hint}` })
-          yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
-          throw error
-        }
-        const model = input.model ?? agent.model ?? (yield* lastModel(input.sessionID))
-        const userMsg: MessageV2.User = {
-          id: input.messageID ?? MessageID.ascending(),
-          sessionID: input.sessionID,
-          time: { created: Date.now() },
-          role: "user",
-          agent: input.agent,
-          model: { providerID: model.providerID, modelID: model.modelID },
-        }
-        yield* sessions.updateMessage(userMsg)
-        const userPart: MessageV2.Part = {
-          type: "text",
-          id: PartID.ascending(),
-          messageID: userMsg.id,
-          sessionID: input.sessionID,
-          text: "The following tool was executed by the user",
-          synthetic: true,
-        }
-        yield* sessions.updatePart(userPart)
+        const { ctx, msg, part } = yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            const ctx = yield* InstanceState.context
+            const session = yield* sessions.get(input.sessionID)
+            if (session.revert) {
+              yield* revert.cleanup(session)
+            }
+            const agent = yield* agents.get(input.agent)
+            if (!agent) {
+              const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+              const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+              const error = new NamedError.Unknown({ message: `Agent not found: "${input.agent}".${hint}` })
+              yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+              throw error
+            }
+            const model = input.model ?? agent.model ?? (yield* lastModel(input.sessionID))
+            const userMsg: MessageV2.User = {
+              id: input.messageID ?? MessageID.ascending(),
+              sessionID: input.sessionID,
+              time: { created: Date.now() },
+              role: "user",
+              agent: input.agent,
+              model: { providerID: model.providerID, modelID: model.modelID },
+            }
+            yield* sessions.updateMessage(userMsg)
+            const userPart: MessageV2.Part = {
+              type: "text",
+              id: PartID.ascending(),
+              messageID: userMsg.id,
+              sessionID: input.sessionID,
+              text: "The following tool was executed by the user",
+              synthetic: true,
+            }
+            yield* sessions.updatePart(userPart)
 
-        const msg: MessageV2.Assistant = {
-          id: MessageID.ascending(),
-          sessionID: input.sessionID,
-          parentID: userMsg.id,
-          mode: input.agent,
-          agent: input.agent,
-          cost: 0,
-          path: { cwd: ctx.directory, root: ctx.worktree },
-          time: { created: Date.now() },
-          role: "assistant",
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          modelID: model.modelID,
-          providerID: model.providerID,
-        }
-        yield* sessions.updateMessage(msg)
-        const part: MessageV2.ToolPart = {
-          type: "tool",
-          id: PartID.ascending(),
-          messageID: msg.id,
-          sessionID: input.sessionID,
-          tool: "bash",
-          callID: ulid(),
-          state: {
-            status: "running",
-            time: { start: Date.now() },
-            input: { command: input.command },
-          },
-        }
-        yield* sessions.updatePart(part)
+            const msg: MessageV2.Assistant = {
+              id: MessageID.ascending(),
+              sessionID: input.sessionID,
+              parentID: userMsg.id,
+              mode: input.agent,
+              agent: input.agent,
+              cost: 0,
+              path: { cwd: ctx.directory, root: ctx.worktree },
+              time: { created: Date.now() },
+              role: "assistant",
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: model.modelID,
+              providerID: model.providerID,
+            }
+            yield* sessions.updateMessage(msg)
+            const part: MessageV2.ToolPart = {
+              type: "tool",
+              id: PartID.ascending(),
+              messageID: msg.id,
+              sessionID: input.sessionID,
+              tool: "bash",
+              callID: ulid(),
+              state: {
+                status: "running",
+                time: { start: Date.now() },
+                input: { command: input.command },
+              },
+            }
+            yield* sessions.updatePart(part)
+            return { ctx, msg, part }
+          }),
+        )
 
         const sh = Shell.preferred()
         const shellName = (
@@ -879,7 +936,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           Effect.exit,
         )
 
-        if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
+        if (Exit.isFailure(exit)) {
+          if (aborted || Cause.hasInterruptsOnly(exit.cause)) {
+            return { info: msg, parts: [part] }
+          }
           return yield* Effect.failCause(exit.cause)
         }
 
@@ -912,7 +972,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return yield* provider.defaultModel()
       })
 
-      const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
+      const resolvePromptIdentity = Effect.fn("SessionPrompt.resolvePromptIdentity")(function* (input: PromptInput) {
         const agentName = input.agent || (yield* agents.defaultAgent())
         const ag = yield* agents.get(agentName)
         if (!ag) {
@@ -930,6 +990,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             ? yield* provider.getModel(model.providerID, model.modelID).pipe(Effect.catchDefect(() => Effect.void))
             : undefined
         const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+        return { agentName: ag.name, model, variant }
+      })
+
+      const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
+        const { agentName, model, variant } = yield* resolvePromptIdentity(input)
 
         const info: MessageV2.User = {
           id: input.messageID ?? MessageID.ascending(),
@@ -937,7 +1002,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID: input.sessionID,
           time: { created: Date.now() },
           tools: input.tools,
-          agent: ag.name,
+          agent: agentName,
           model: {
             providerID: model.providerID,
             modelID: model.modelID,
@@ -945,6 +1010,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           },
           system: input.system,
           format: input.format,
+        }
+        const currentAgent = yield* agents.get(info.agent)
+        if (!currentAgent) {
+          throw new Error(`Agent not found while creating message: "${info.agent}"`)
         }
 
         yield* Effect.addFinalizer(() => instruction.clear(info.id))
@@ -1204,7 +1273,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           if (part.type === "agent") {
-            const perm = Permission.evaluate("task", part.name, ag.permission)
+            const perm = Permission.evaluate("task", part.name, currentAgent.permission)
             const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
             return [
               { ...part, messageID: info.id, sessionID: input.sessionID },
@@ -1270,278 +1339,1126 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return { info, parts }
       }, Effect.scoped)
 
-      const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
-        function* (input: PromptInput) {
-          const session = yield* sessions.get(input.sessionID)
-          yield* revert.cleanup(session)
-          const message = yield* createUserMessage(input)
-          yield* sessions.touch(input.sessionID)
+      const submitPromptInput = Effect.fn("SessionPrompt.submitPromptInput")(function* (input: PromptInput) {
+        const session = yield* sessions.get(input.sessionID)
+        yield* revert.cleanup(session)
+        yield* sessions.touch(input.sessionID)
 
-          const permissions: Permission.Ruleset = []
-          for (const [t, enabled] of Object.entries(input.tools ?? {})) {
-            permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
-          }
-          if (permissions.length > 0) {
-            session.permission = permissions
-            yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
-          }
+        const permissions: Permission.Ruleset = []
+        for (const [t, enabled] of Object.entries(input.tools ?? {})) {
+          permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
+        }
+        if (permissions.length > 0) {
+          session.permission = permissions
+          yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
+        }
 
-          if (input.noReply === true) return message
-          return yield* loop({ sessionID: input.sessionID })
-        },
-      )
-
-      const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
-        const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
-        if (Option.isSome(match)) return match.value
-        const msgs = yield* sessions.messages({ sessionID, limit: 1 })
-        if (msgs.length > 0) return msgs[0]
-        throw new Error("Impossible")
+        return yield* createUserMessage(input)
       })
 
-      const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
-        function* (sessionID: SessionID) {
-          const ctx = yield* InstanceState.context
-          const slog = elog.with({ sessionID })
-          let structured: unknown | undefined
-          let step = 0
-          const session = yield* sessions.get(sessionID)
+      const foregroundBlockedByPending = (pendingInfo: SessionPending.Info) =>
+        pendingInfo.steer.length > 0 || (pendingInfo.queue.length > 0 && !pendingInfo.paused)
 
-          while (true) {
-            yield* status.set(sessionID, { type: "busy" })
-            yield* slog.info("loop", { step })
+      const foregroundShouldResumePausedQueue = (pendingInfo: SessionPending.Info) =>
+        pendingInfo.paused && pendingInfo.steer.length === 0 && pendingInfo.queue.length > 0
 
-            let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
+      const ensureForegroundStartupOpen = Effect.fn("SessionPrompt.ensureForegroundStartupOpen")(function* (
+        sessionID: SessionID,
+      ) {
+        if (yield* state.isStopRequested(sessionID)) {
+          throw new SessionPending.ConflictError({
+            sessionID,
+            message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+          })
+        }
+        const pendingInfo = yield* pending.get(sessionID)
+        if (foregroundBlockedByPending(pendingInfo)) {
+          throw new SessionPending.ConflictError({
+            sessionID,
+            message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+          })
+        }
+      })
 
-            let lastUser: MessageV2.User | undefined
-            let lastAssistant: MessageV2.Assistant | undefined
-            let lastFinished: MessageV2.Assistant | undefined
-            let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
-            for (let i = msgs.length - 1; i >= 0; i--) {
-              const msg = msgs[i]
-              if (!lastUser && msg.info.role === "user") lastUser = msg.info
-              if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
-              if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
-              if (lastUser && lastFinished) break
-              const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
-              if (task && !lastFinished) tasks.push(...task)
-            }
+      const promptComposerFromParts = (parts: PromptInput["parts"]): SessionPending.Composer["prompt"] => {
+        const result: SessionPending.Composer["prompt"] = []
+        let cursor = 0
+        const nextRange = (content: string) => {
+          const start = cursor
+          const end = start + content.length
+          cursor = end
+          return { start, end }
+        }
 
-            if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-
-            const lastAssistantMsg = msgs.findLast(
-              (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
-            )
-            // Some providers return "stop" even when the assistant message contains tool calls.
-            // Keep the loop running so tool results can be sent back to the model.
-            // Skip provider-executed tool parts — those were fully handled within the
-            // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
-            const hasToolCalls =
-              lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
-
-            if (
-              lastAssistant?.finish &&
-              !["tool-calls"].includes(lastAssistant.finish) &&
-              !hasToolCalls &&
-              lastUser.id < lastAssistant.id
-            ) {
-              yield* slog.info("exiting loop")
+        for (const part of parts) {
+          switch (part.type) {
+            case "text": {
+              const range = nextRange(part.text)
+              result.push({ type: "text", content: part.text, ...range })
               break
             }
-
-            step++
-            if (step === 1)
-              yield* title({
-                session,
-                modelID: lastUser.model.modelID,
-                providerID: lastUser.model.providerID,
-                history: msgs,
-              }).pipe(Effect.ignore, Effect.forkIn(scope))
-
-            const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
-            const task = tasks.pop()
-
-            if (task?.type === "subtask") {
-              yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
-              continue
+            case "agent": {
+              const content = `@${part.name}`
+              const range = nextRange(content)
+              result.push({ type: "agent", content, name: part.name, ...range })
+              break
             }
-
-            if (task?.type === "compaction") {
-              const result = yield* compaction.process({
-                messages: msgs,
-                parentID: lastUser.id,
-                sessionID,
-                auto: task.auto,
-                overflow: task.overflow,
+            case "file": {
+              if (part.mime?.startsWith("image/") && part.url.startsWith("data:")) {
+                result.push({
+                  type: "image",
+                  id: part.id ?? PartID.ascending(),
+                  filename: part.filename ?? "image",
+                  mime: part.mime,
+                  dataUrl: part.url,
+                })
+                break
+              }
+              const content = part.filename ?? part.url
+              const range = nextRange(content)
+              result.push({
+                type: "file",
+                content,
+                path: part.url.startsWith("file:") ? fileURLToPath(part.url) : part.url,
+                ...range,
               })
-              if (result === "stop") break
-              continue
+              break
             }
-
-            if (
-              lastFinished &&
-              lastFinished.summary !== true &&
-              (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
-            ) {
-              yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
-              continue
+            case "subtask": {
+              const content = part.description || part.prompt || `/${part.command}`
+              const range = nextRange(content)
+              result.push({ type: "text", content, ...range })
+              break
             }
+          }
+        }
 
-            const agent = yield* agents.get(lastUser.agent)
-            if (!agent) {
-              const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
-              const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-              const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
-              yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
-              throw error
+        return result
+      }
+
+      const pendingPreview = (prompt: SessionPending.Composer["prompt"]) => {
+        const preview = prompt
+          .map((part) => {
+            if (part.type === "image") return `[image:${part.filename}]`
+            return part.content
+          })
+          .join("")
+          .trim()
+        return preview || "Pending message"
+      }
+
+      const pendingPreviewFromRequestParts = (parts: PromptInput["parts"]) => {
+        const text = parts
+          .flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : []))
+          .join("")
+          .trim()
+        if (text) return text
+        return pendingPreview(promptComposerFromParts(parts))
+      }
+
+      const buildPendingPromptDraft = (
+        input: PromptInput,
+        resolved?: { agentName: string; model: NonNullable<PromptInput["model"]>; variant?: string },
+      ): SessionPending.Draft => {
+        const composer = {
+          prompt: promptComposerFromParts(input.parts),
+          context: [],
+        } satisfies SessionPending.Composer
+
+        return {
+          kind: "prompt",
+          preview: pendingPreviewFromRequestParts(input.parts),
+          composer,
+          request: {
+            messageID: input.messageID,
+            model: resolved?.model ?? input.model,
+            agent: resolved?.agentName ?? input.agent,
+            tools: input.tools,
+            format: input.format,
+            system: input.system,
+            variant: resolved?.variant ?? input.variant,
+            parts: structuredClone(input.parts),
+          },
+        }
+      }
+
+      const buildPendingCommandDraft = (input: CommandInput): SessionPending.Draft => {
+        const content = `/${input.command}${input.arguments ? ` ${input.arguments}` : ""}`
+        return {
+          kind: "command",
+          preview: content,
+          composer: {
+            prompt: [{ type: "text", content, start: 0, end: content.length }],
+            context: [],
+          },
+          request: {
+            agent: input.agent,
+            model: input.model,
+            arguments: input.arguments,
+            command: input.command,
+            variant: input.variant,
+            parts: structuredClone(input.parts),
+          },
+        }
+      }
+
+      const snapshotPendingDraft = Effect.fn("SessionPrompt.snapshotPendingDraft")(function* (
+        sessionID: SessionID,
+        draft: SessionPending.Draft,
+      ) {
+        if (draft.kind === "prompt") {
+          const resolved = yield* resolvePromptIdentity({
+            sessionID,
+            messageID: draft.request.messageID,
+            model: draft.request.model,
+            agent: draft.request.agent,
+            tools: draft.request.tools,
+            format: draft.request.format,
+            system: draft.request.system,
+            variant: draft.request.variant,
+            parts: structuredClone(draft.request.parts),
+          })
+          return {
+            ...structuredClone(draft),
+            request: {
+              ...structuredClone(draft.request),
+              model: resolved.model,
+              agent: resolved.agentName,
+              variant: resolved.variant,
+            },
+          } satisfies SessionPending.Draft
+        }
+        const prepared = yield* buildCommandPrompt(
+          {
+            sessionID,
+            ...draft.request,
+          },
+          { triggerBeforeHook: false },
+        )
+        return {
+          ...structuredClone(draft),
+          request: {
+            ...structuredClone(draft.request),
+            resolved: {
+              model: prepared.model,
+              agent: prepared.agent,
+              variant: prepared.variant,
+              parts: structuredClone(prepared.parts),
+            },
+          },
+        } satisfies SessionPending.Draft
+      })
+
+      const addBusyPendingItemWithinLock = Effect.fn("SessionPrompt.addBusyPendingItemWithinLock")(function* (
+        sessionID: SessionID,
+        draft: SessionPending.Draft,
+        options?: { noReply?: boolean },
+      ) {
+        const lane: SessionPending.Lane = (yield* state.isPromptRunning(sessionID)) ? "steer" : "queue"
+        const itemID = options?.noReply === true ? ulid() : undefined
+        const next = yield* pending.addPreparedWithinLock({
+          sessionID,
+          lane,
+          draft,
+          id: itemID,
+        })
+        if (options?.noReply !== true) return
+        const item = [...next.steer, ...next.queue].find((entry) => entry.id === itemID)
+        if (!item) {
+          throw new Error(`Failed to find pending item ${itemID} after enqueue`)
+        }
+        noReplyPendingItems.set(item.id, {
+          sessionID,
+          state: "pending",
+        })
+      })
+
+      const enqueuePrompt = Effect.fn("SessionPrompt.enqueuePrompt")(function* (input: PromptInput) {
+        yield* ensureSubscriptions()
+        const resolved = yield* resolvePromptIdentity(input)
+        const draft = buildPendingPromptDraft(input, resolved)
+        // The async prompt API always creates the next normal turn. Explicit
+        // steer behavior stays on the dedicated pending-add / steer path.
+        yield* pending.addPrepared({ sessionID: input.sessionID, lane: "queue", draft })
+      })
+
+      const ensureForegroundPromptAvailable = Effect.fn("SessionPrompt.ensureForegroundPromptAvailable")(function* (
+        sessionID: SessionID,
+        options?: { reservation?: ForegroundStartupReservation },
+      ) {
+        if (options?.reservation && foregroundStarting.get(sessionID) !== options.reservation) {
+          throw new SessionPending.ConflictError({
+            sessionID,
+            message: "Session foreground startup reservation is no longer active",
+          })
+        }
+        if (!options?.reservation && foregroundStarting.has(sessionID)) {
+          throw new SessionPending.ConflictError({
+            sessionID,
+            message: "Session is starting a prompt; use prompt_async or pending follow-ups instead",
+          })
+        }
+        if (yield* state.isStopRequested(sessionID)) {
+          throw new SessionPending.ConflictError({
+            sessionID,
+            message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+          })
+        }
+        if ((yield* state.busyKind(sessionID)) !== "idle") {
+          throw new SessionPending.ConflictError({
+            sessionID,
+            message: "Session is busy; use prompt_async or pending follow-ups instead",
+          })
+        }
+
+        const pendingInfo = yield* pending.get(sessionID)
+        if (foregroundBlockedByPending(pendingInfo)) {
+          throw new SessionPending.ConflictError({
+            sessionID,
+            message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+          })
+        }
+      })
+
+      const clearForegroundStartupReservation = (
+        sessionID: SessionID,
+        reservation: ForegroundStartupReservation,
+      ) => {
+        foregroundStartupCancelled.delete(reservation)
+        if (foregroundStarting.get(sessionID) !== reservation) return
+        foregroundStarting.delete(sessionID)
+      }
+
+      const beginForegroundStartupReservation = (sessionID: SessionID) => {
+        if (foregroundStarting.has(sessionID)) {
+          throw new SessionPending.ConflictError({
+            sessionID,
+            message: "Session is starting a prompt; use prompt_async or pending follow-ups instead",
+          })
+        }
+        const reservation = Symbol(sessionID)
+        foregroundStarting.set(sessionID, reservation)
+        return reservation
+      }
+
+      const startForegroundPrompt: (
+        input: PromptInput,
+        options?: { reservation?: ForegroundStartupReservation },
+      ) => Effect.Effect<ForegroundStart, unknown, never> = Effect.fn("SessionPrompt.startForegroundPrompt")(function* (
+        input: PromptInput,
+        options?: { reservation?: ForegroundStartupReservation },
+      ) {
+        const accepted = yield* Deferred.make<void, unknown>()
+        const result = yield* Deferred.make<MessageV2.WithParts, unknown>()
+        let submitted = false
+        let resumePausedQueueAfterResult = false
+        const reservation = options?.reservation ?? beginForegroundStartupReservation(input.sessionID)
+
+        yield* state
+          .ensureRunning(
+            input.sessionID,
+            foregroundFallback(input),
+            Effect.gen(function* () {
+              const started = yield* pending.withLock(
+                input.sessionID,
+                Effect.gen(function* () {
+                  if (foregroundStarting.get(input.sessionID) !== reservation) {
+                    return { started: false, resumePausedQueue: false }
+                  }
+                  if (foregroundStartupCancelled.has(reservation)) {
+                    return { started: false, resumePausedQueue: false }
+                  }
+                  const pendingInfo = yield* pending.get(input.sessionID)
+                  const resumePausedQueue = foregroundShouldResumePausedQueue(pendingInfo)
+                  yield* ensureForegroundStartupOpen(input.sessionID)
+                  if (foregroundStartupCancelled.has(reservation)) {
+                    return { started: false, resumePausedQueue: false }
+                  }
+                  yield* submitPromptInput(input)
+                  return { started: true, resumePausedQueue }
+                }),
+              )
+              if (!started.started) {
+                return yield* foregroundFallback(input)
+              }
+              submitted = true
+              resumePausedQueueAfterResult = started.resumePausedQueue
+              if (resumePausedQueueAfterResult) {
+                yield* pending.resume(input.sessionID).pipe(Effect.ignore)
+                resumePausedQueueAfterResult = false
+              }
+              yield* Deferred.succeed(accepted, undefined)
+              clearForegroundStartupReservation(input.sessionID, reservation)
+              const result = yield* runLoop(input.sessionID)
+              const latestPending = yield* pending.get(input.sessionID)
+              resumePausedQueueAfterResult ||= foregroundShouldResumePausedQueue(latestPending)
+              return result
+            }).pipe(
+              Effect.onExit((exit) =>
+                Effect.gen(function* () {
+                  if (!submitted) {
+                    if (Exit.isFailure(exit)) {
+                      yield* Deferred.failCause(accepted, exit.cause).pipe(Effect.ignore)
+                    } else {
+                      yield* Deferred.succeed(accepted, undefined).pipe(Effect.ignore)
+                    }
+                  }
+                }),
+              ),
+            ),
+          )
+          .pipe(
+            Effect.onExit((exit) =>
+              Effect.gen(function* () {
+                clearForegroundStartupReservation(input.sessionID, reservation)
+                if (!submitted) {
+                  yield* state.setPromptRunning(input.sessionID, false)
+                  yield* pending.refresh(input.sessionID)
+                }
+                if (submitted && Exit.isSuccess(exit)) {
+                  yield* Effect.gen(function* () {
+                    const latestPending = yield* pending.get(input.sessionID)
+                    if (resumePausedQueueAfterResult || foregroundShouldResumePausedQueue(latestPending)) {
+                      yield* pending.resume(input.sessionID)
+                    }
+                  }).pipe(Effect.ignore)
+                }
+                yield* Deferred.done(result, exit)
+              }).pipe(Effect.ignore),
+            ),
+          )
+          .pipe(Effect.forkIn(scope))
+
+        return { accepted, result }
+      })
+
+      const startReservedForegroundPrompt: (
+        input: PromptInput,
+        reservation: ForegroundStartupReservation,
+      ) => Effect.Effect<ForegroundStart, unknown, never> = Effect.fn(
+        "SessionPrompt.startReservedForegroundPrompt",
+      )(function* (input: PromptInput, reservation: ForegroundStartupReservation) {
+          const started = yield* Effect.gen(function* () {
+            yield* ensureForegroundPromptAvailable(input.sessionID, { reservation })
+            return yield* startForegroundPrompt(input, { reservation })
+          }).pipe(Effect.exit)
+          if (Exit.isFailure(started)) {
+            clearForegroundStartupReservation(input.sessionID, reservation)
+            return yield* Effect.failCause(started.cause)
+          }
+          return started.value
+        })
+
+      const prompt: (input: PromptInput) => PromptResultEffect = Effect.fn("SessionPrompt.prompt")(function* (
+        input: PromptInput,
+      ) {
+        yield* ensureSubscriptions()
+        if (input.noReply === true) {
+          const submitted = yield* pending.withLock(
+            input.sessionID,
+            Effect.gen(function* () {
+              const pendingInfo = yield* pending.get(input.sessionID)
+              const resumePausedQueue = foregroundShouldResumePausedQueue(pendingInfo)
+              yield* ensureForegroundPromptAvailable(input.sessionID)
+              const message = yield* submitPromptInput(input)
+              return { message, resumePausedQueue }
+            }),
+          )
+          if (submitted.resumePausedQueue) {
+            yield* pending.resume(input.sessionID)
+          }
+          return submitted.message
+        }
+        const foregroundRun = yield* pending.withLock(
+          input.sessionID,
+          Effect.gen(function* () {
+            const reservation = beginForegroundStartupReservation(input.sessionID)
+            return yield* startReservedForegroundPrompt(input, reservation)
+          }),
+        )
+        yield* pending.refresh(input.sessionID)
+        return yield* Effect.gen(function* () {
+          yield* Deferred.await(foregroundRun.accepted)
+          return yield* Deferred.await(foregroundRun.result)
+        }).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              run.fork(cancel(input.sessionID))
+            }),
+          ),
+        )
+      })
+
+      const promptAsync = Effect.fn("SessionPrompt.promptAsync")(function* (input: PromptInput) {
+        yield* ensureSubscriptions()
+        if (input.noReply === true) {
+          const resolved = yield* resolvePromptIdentity(input)
+          const nextTurnDraft = buildPendingPromptDraft(input, resolved)
+          const resumePausedQueue = yield* pending.withLock(
+            input.sessionID,
+            Effect.gen(function* () {
+              const pendingInfo = yield* pending.get(input.sessionID)
+              const resumePausedQueue = foregroundShouldResumePausedQueue(pendingInfo)
+              const stopRequested = yield* state.isStopRequested(input.sessionID)
+              if (stopRequested) {
+                throw new SessionPending.ConflictError({
+                  sessionID: input.sessionID,
+                  message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+                })
+              }
+              if (foregroundBlockedByPending(pendingInfo)) {
+                throw new SessionPending.ConflictError({
+                  sessionID: input.sessionID,
+                  message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+                })
+              }
+              if (foregroundStarting.has(input.sessionID) || (yield* state.busyKind(input.sessionID)) !== "idle") {
+                yield* addBusyPendingItemWithinLock(input.sessionID, nextTurnDraft, { noReply: true })
+                return false
+              }
+              yield* submitPromptInput(input)
+              return resumePausedQueue
+            }),
+          )
+          if (resumePausedQueue) {
+            yield* pending.resume(input.sessionID)
+          }
+          return
+        }
+        const resolved = yield* resolvePromptIdentity(input)
+        const nextTurnDraft = buildPendingPromptDraft(input, resolved)
+        const run = yield* pending.withLock(
+          input.sessionID,
+          Effect.gen(function* () {
+            const alreadyStarting = foregroundStarting.has(input.sessionID)
+            if (alreadyStarting) {
+              const pendingInfo = yield* pending.get(input.sessionID)
+              const stopRequested = yield* state.isStopRequested(input.sessionID)
+              if (stopRequested) {
+                throw new SessionPending.ConflictError({
+                  sessionID: input.sessionID,
+                  message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+                })
+              }
+              if (foregroundBlockedByPending(pendingInfo)) {
+                throw new SessionPending.ConflictError({
+                  sessionID: input.sessionID,
+                  message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+                })
+              }
+              yield* pending.addPreparedWithinLock({
+                sessionID: input.sessionID,
+                lane: "queue",
+                draft: nextTurnDraft,
+              })
+              return "enqueued" as const
             }
-            const maxSteps = agent.steps ?? Infinity
-            const isLastStep = step >= maxSteps
-            msgs = yield* insertReminders({ messages: msgs, agent, session })
+            const reservation = beginForegroundStartupReservation(input.sessionID)
+            const started = yield* Effect.gen(function* () {
+              const pendingInfo = yield* pending.get(input.sessionID)
+              const stopRequested = yield* state.isStopRequested(input.sessionID)
+              if (stopRequested) {
+                throw new SessionPending.ConflictError({
+                  sessionID: input.sessionID,
+                  message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+                })
+              }
+              if (foregroundBlockedByPending(pendingInfo)) {
+                throw new SessionPending.ConflictError({
+                  sessionID: input.sessionID,
+                  message: "Session is paused or has pending follow-ups; resolve or resume them before sending a new prompt",
+                })
+              }
+              const busyKind = yield* state.busyKind(input.sessionID)
+              if (busyKind !== "idle") {
+                yield* pending.addPreparedWithinLock({
+                  sessionID: input.sessionID,
+                  lane: "queue",
+                  draft: nextTurnDraft,
+                })
+                return "enqueued" as const
+              }
+              return yield* startReservedForegroundPrompt(input, reservation)
+            }).pipe(Effect.exit)
+            if (Exit.isFailure(started)) {
+              clearForegroundStartupReservation(input.sessionID, reservation)
+              return yield* Effect.failCause(started.cause)
+            }
+            if (started.value === "enqueued") clearForegroundStartupReservation(input.sessionID, reservation)
+            return started.value
+          }),
+        )
 
-            const msg: MessageV2.Assistant = {
+        if (run === "enqueued") {
+          return
+        }
+
+        yield* pending.refresh(input.sessionID)
+        yield* Deferred.await(run.accepted)
+        yield* Deferred.await(run.result).pipe(
+          Effect.catch((error: unknown) =>
+            bus.publish(Session.Event.Error, {
+              sessionID: input.sessionID,
+              error: new NamedError.Unknown({ message: error instanceof Error ? error.message : String(error) }).toObject(),
+            }),
+          ),
+          Effect.forkIn(scope),
+        )
+      })
+
+      const requireAssistantMessage = Effect.fnUntraced(function* (message: MessageV2.WithParts) {
+        if (message.info.role === "assistant") {
+          return message as AssistantWithParts
+        }
+        throw new Error("Expected assistant message")
+      })
+
+      const abortedAssistantFallback = (
+        sessionID: SessionID,
+        options?: {
+          agent?: string
+          model?: { providerID: ProviderID; modelID: ModelID }
+          parentID?: MessageID
+          message?: string
+          parts?: MessageV2.Part[]
+        },
+      ): AssistantResultEffect =>
+        Effect.gen(function* () {
+          const session = yield* sessions.get(sessionID)
+          const ctx = yield* InstanceState.context
+          const defaultAgent = options?.agent ?? (yield* agents.defaultAgent())
+          const defaultModel = options?.model ?? (yield* lastModel(sessionID))
+          const now = Date.now()
+          return {
+            info: {
               id: MessageID.ascending(),
-              parentID: lastUser.id,
-              role: "assistant",
-              mode: agent.name,
-              agent: agent.name,
-              variant: lastUser.model.variant,
-              path: { cwd: ctx.directory, root: ctx.worktree },
+              sessionID,
+              role: "assistant" as const,
+              time: { created: now, completed: now },
+              error: new MessageV2.AbortedError({
+                message: options?.message ?? "Session canceled before assistant reply was available",
+              }).toObject(),
+              parentID: options?.parentID ?? MessageID.ascending(),
+              modelID: defaultModel.modelID,
+              providerID: defaultModel.providerID,
+              mode: "default",
+              agent: defaultAgent,
+              path: {
+                cwd: session.directory,
+                root: ctx.worktree,
+              },
               cost: 0,
-              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              modelID: model.id,
-              providerID: model.providerID,
-              time: { created: Date.now() },
-              sessionID,
+              tokens: {
+                input: 0,
+                output: 0,
+                reasoning: 0,
+                cache: { read: 0, write: 0 },
+              },
+            },
+            parts: options?.parts ?? [],
+          } satisfies AssistantWithParts
+        })
+
+      const lastAssistant: (sessionID: SessionID) => AssistantResultEffect = (sessionID) =>
+        Effect.gen(function* () {
+          const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
+          if (Option.isSome(match)) return yield* requireAssistantMessage(match.value)
+          const msgs = yield* sessions.messages({ sessionID, limit: 1 })
+          if (msgs.length > 0) {
+            const last = msgs[0]
+            if (last.info.role === "assistant") return yield* requireAssistantMessage(last)
+            return yield* abortedAssistantFallback(sessionID, {
+              agent: last.info.agent,
+              model: last.info.model,
+              parentID: last.info.id,
+            })
+          }
+          return yield* abortedAssistantFallback(sessionID)
+        })
+
+      const shellFallback = (input: ShellInput): AssistantResultEffect =>
+        Effect.gen(function* () {
+          const match = yield* sessions.findMessage(input.sessionID, (m) => m.info.role !== "user")
+          if (Option.isSome(match)) {
+            const assistant = yield* requireAssistantMessage(match.value)
+            const now = Date.now()
+            return {
+              ...assistant,
+              info: {
+                ...assistant.info,
+                time: assistant.info.time.completed ? assistant.info.time : { ...assistant.info.time, completed: now },
+              },
+              parts: assistant.parts.map((part) => {
+                if (part.type !== "tool" || part.tool !== "bash" || part.state.status !== "running") return part
+                return {
+                  ...part,
+                  state: {
+                    status: "completed",
+                    time: { start: part.state.time.start, end: now },
+                    input: part.state.input,
+                    title: "",
+                    metadata: {
+                      output: "\n\n<metadata>\nUser aborted the command\n</metadata>",
+                      description: "",
+                    },
+                    output: "\n\n<metadata>\nUser aborted the command\n</metadata>",
+                  },
+                } satisfies MessageV2.ToolPart
+              }),
             }
-            yield* sessions.updateMessage(msg)
-            const handle = yield* processor.create({
-              assistantMessage: msg,
-              sessionID,
-              model,
+          }
+          const shellAgent = yield* agents.get(input.agent)
+          const model = input.model ?? shellAgent?.model ?? (yield* provider.defaultModel())
+          const parentID = input.messageID ?? MessageID.ascending()
+          const assistant = yield* abortedAssistantFallback(input.sessionID, {
+            agent: input.agent,
+            model,
+            parentID,
+            message: "User aborted the command",
+          })
+          const toolPart: MessageV2.ToolPart = {
+            type: "tool",
+            id: PartID.ascending(),
+            messageID: assistant.info.id,
+            sessionID: input.sessionID,
+            tool: "bash",
+            callID: ulid(),
+            state: {
+              status: "completed",
+              time: { start: Date.now(), end: Date.now() },
+              input: { command: input.command },
+              title: "",
+              metadata: {
+                output: "\n\n<metadata>\nUser aborted the command\n</metadata>",
+                description: "",
+              },
+              output: "\n\n<metadata>\nUser aborted the command\n</metadata>",
+            },
+          }
+          return {
+            ...assistant,
+            parts: [toolPart],
+          }
+        })
+
+      const fallbackMessage = Effect.fnUntraced(function* (sessionID: SessionID) {
+        const msgs = yield* sessions.messages({ sessionID, limit: 1 })
+        if (msgs.length > 0) return msgs[0]
+        return {
+          info: {
+            id: MessageID.ascending(),
+            sessionID,
+            role: "user" as const,
+            time: { created: Date.now() },
+            agent: "build",
+            model: {
+              providerID: ProviderID.make("test"),
+              modelID: ModelID.make("test"),
+            },
+          },
+          parts: [],
+        } satisfies MessageV2.WithParts
+      })
+
+      const foregroundFallback = Effect.fnUntraced(function* (input: PromptInput) {
+        const assistant = yield* sessions.findMessage(input.sessionID, (m) => m.info.role === "assistant")
+        if (Option.isSome(assistant)) return yield* requireAssistantMessage(assistant.value)
+        const session = yield* sessions.get(input.sessionID)
+        const ctx = yield* InstanceState.context
+        const { agentName, model, variant } = yield* resolvePromptIdentity(input)
+        const now = Date.now()
+        return {
+          info: {
+            id: MessageID.ascending(),
+            sessionID: input.sessionID,
+            role: "assistant" as const,
+            time: { created: now, completed: now },
+            error: new MessageV2.AbortedError({ message: "Prompt canceled before startup completed" }).toObject(),
+            parentID: MessageID.ascending(),
+            modelID: model.modelID,
+            providerID: model.providerID,
+            mode: "default",
+            agent: agentName,
+            path: {
+              cwd: session.directory,
+              root: ctx.worktree,
+            },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            ...(variant ? { variant } : {}),
+          },
+          parts: [],
+        } satisfies AssistantWithParts
+      })
+
+      const runLoop: (sessionID: SessionID) => AssistantResultEffect = Effect.fn("SessionPrompt.run")(function* (
+        sessionID: SessionID,
+      ) {
+        yield* state.setPromptRunning(sessionID, true)
+        yield* pending.refresh(sessionID)
+        return yield* Effect.gen(function* () {
+            const ctx = yield* InstanceState.context
+            const slog = elog.with({ sessionID })
+            let structured: unknown | undefined
+            let step = 0
+            let promptTurnOpen = true
+            const executedSteerCommands: Array<{ name: string; arguments: string }> = []
+            const session = yield* sessions.get(sessionID)
+            const closePromptTurn = Effect.fnUntraced(function* () {
+              if (!promptTurnOpen) return
+              promptTurnOpen = false
+              yield* state.setPromptRunning(sessionID, false)
+              yield* pending.refresh(sessionID)
             })
 
-            const outcome: "break" | "continue" = yield* Effect.gen(function* () {
-              const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-              const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+            while (true) {
+              yield* status.set(sessionID, { type: "busy" })
+              yield* slog.info("loop", { step })
 
-              const tools = yield* resolveTools({
-                agent,
-                session,
-                model,
-                tools: lastUser.tools,
-                processor: handle,
-                bypassAgentCheck,
-                messages: msgs,
-              })
-
-              if (lastUser.format?.type === "json_schema") {
-                tools["StructuredOutput"] = createStructuredOutputTool({
-                  schema: lastUser.format.schema,
-                  onSuccess(output) {
-                    structured = output
-                  },
-                })
+              while (true) {
+                const claimedSteer = yield* Effect.uninterruptibleMask((restore) =>
+                  Effect.gen(function* () {
+                    const steer = yield* pending.takeSteer(sessionID)
+                    if (!steer) return undefined
+                    const noReplySteer = noReplyPendingItems.get(steer.id)
+                    if (noReplySteer) noReplySteer.state = "running-steer"
+                    const dispatch = yield* restore(
+                      pending.dispatchClaimed(
+                        sessionID,
+                        steer,
+                        submitPendingItem(sessionID, steer, { noReply: true }).pipe(Effect.exit),
+                      ).pipe(
+                        Effect.onInterrupt(() =>
+                          Effect.gen(function* () {
+                            if (noReplySteer) noReplySteer.state = "pending"
+                            yield* pending.restore(sessionID, steer)
+                          }),
+                        ),
+                      ),
+                    )
+                    return {
+                      steer,
+                      noReplySteer,
+                      dispatch,
+                    }
+                  }),
+                )
+                if (!claimedSteer) break
+                const { steer, noReplySteer, dispatch } = claimedSteer
+                if (Option.isNone(dispatch)) {
+                  if (noReplySteer) noReplySteer.state = "pending"
+                  break
+                }
+                if (steer.draft.kind === "command") {
+                  executedSteerCommands.push({
+                    name: steer.draft.request.command,
+                    arguments: steer.draft.request.arguments,
+                  })
+                }
+                const result = dispatch.value
+                if (Exit.isFailure(result)) {
+                  yield* pending.restore(sessionID, steer)
+                  yield* pending.pause(sessionID, { promoteSteers: true })
+                  if (noReplySteer) {
+                    yield* clearNoReplyPendingItem(steer.id)
+                  }
+                  return yield* Effect.failCause(result.cause)
+                }
               }
 
-              if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
+              let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
-              if (step > 1 && lastFinished) {
-                for (const m of msgs) {
-                  if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
-                  for (const p of m.parts) {
-                    if (p.type !== "text" || p.ignored || p.synthetic) continue
-                    if (!p.text.trim()) continue
-                    p.text = [
-                      "<system-reminder>",
-                      "The user sent the following message:",
-                      p.text,
-                      "",
-                      "Please address this message and continue with your tasks.",
-                      "</system-reminder>",
-                    ].join("\n")
+              let lastUser: MessageV2.User | undefined
+              let lastAssistant: MessageV2.Assistant | undefined
+              let lastFinished: MessageV2.Assistant | undefined
+              let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
+              for (let i = msgs.length - 1; i >= 0; i--) {
+                const msg = msgs[i]
+                if (!lastUser && msg.info.role === "user") lastUser = msg.info
+                if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
+                if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
+                if (lastUser && lastFinished) break
+                const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
+                if (task && !lastFinished) tasks.push(...task)
+              }
+
+              if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+
+              const lastAssistantMsg = msgs.findLast(
+                (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
+              )
+              // Some providers return "stop" even when the assistant message contains tool calls.
+              // Keep the loop running so tool results can be sent back to the model.
+              // Skip provider-executed tool parts — those were fully handled within the
+              // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
+              const hasToolCalls =
+                lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+
+              if (
+                lastAssistant?.finish &&
+                !["tool-calls"].includes(lastAssistant.finish) &&
+                !hasToolCalls &&
+                lastUser.id < lastAssistant.id
+              ) {
+                yield* closePromptTurn()
+                yield* slog.info("exiting loop")
+                break
+              }
+
+              step++
+              if (step === 1)
+                yield* title({
+                  session,
+                  modelID: lastUser.model.modelID,
+                  providerID: lastUser.model.providerID,
+                  history: msgs,
+                }).pipe(Effect.ignore, Effect.forkIn(scope))
+
+              const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+              const task = tasks.pop()
+
+              if (task?.type === "subtask") {
+                yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+                continue
+              }
+
+              if (task?.type === "compaction") {
+                const result = yield* compaction.process({
+                  messages: msgs,
+                  parentID: lastUser.id,
+                  sessionID,
+                  auto: task.auto,
+                  overflow: task.overflow,
+                })
+                if (result === "stop") {
+                  yield* closePromptTurn()
+                  break
+                }
+                continue
+              }
+
+              if (
+                lastFinished &&
+                lastFinished.summary !== true &&
+                (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
+              ) {
+                yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+                continue
+              }
+
+              const agent = yield* agents.get(lastUser.agent)
+              if (!agent) {
+                const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+                const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+                const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
+                yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+                throw error
+              }
+              const maxSteps = agent.steps ?? Infinity
+              const isLastStep = step >= maxSteps
+              msgs = yield* insertReminders({ messages: msgs, agent, session })
+
+              const msg: MessageV2.Assistant = {
+                id: MessageID.ascending(),
+                parentID: lastUser.id,
+                role: "assistant",
+                mode: agent.name,
+                agent: agent.name,
+                variant: lastUser.model.variant,
+                path: { cwd: ctx.directory, root: ctx.worktree },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                modelID: model.id,
+                providerID: model.providerID,
+                time: { created: Date.now() },
+                sessionID,
+              }
+              yield* sessions.updateMessage(msg)
+              const handle = yield* processor.create({
+                assistantMessage: msg,
+                sessionID,
+                model,
+              })
+
+              const outcome: "break" | "continue" = yield* Effect.gen(function* () {
+                const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+                const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+
+                const tools = yield* resolveTools({
+                  agent,
+                  session,
+                  model,
+                  tools: lastUser.tools,
+                  processor: handle,
+                  bypassAgentCheck,
+                  messages: msgs,
+                })
+
+                if (lastUser.format?.type === "json_schema") {
+                  tools["StructuredOutput"] = createStructuredOutputTool({
+                    schema: lastUser.format.schema,
+                    onSuccess(output) {
+                      structured = output
+                    },
+                  })
+                }
+
+                if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
+
+                if (step > 1 && lastFinished) {
+                  for (const m of msgs) {
+                    if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
+                    for (const p of m.parts) {
+                      if (p.type !== "text" || p.ignored || p.synthetic) continue
+                      if (!p.text.trim()) continue
+                      p.text = [
+                        "<system-reminder>",
+                        "The user sent the following message:",
+                        p.text,
+                        "",
+                        "Please address this message and continue with your tasks.",
+                        "</system-reminder>",
+                      ].join("\n")
+                    }
                   }
                 }
-              }
 
-              yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+                yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-              const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-                sys.skills(agent),
-                Effect.sync(() => sys.environment(model)),
-                instruction.system().pipe(Effect.orDie),
-                MessageV2.toModelMessagesEffect(msgs, model),
-              ])
-              const system = [...env, ...(skills ? [skills] : []), ...instructions]
-              const format = lastUser.format ?? { type: "text" as const }
-              if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-              const result = yield* handle.process({
-                user: lastUser,
-                agent,
-                permission: session.permission,
-                sessionID,
-                parentSessionID: session.parentID,
-                system,
-                messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
-                tools,
-                model,
-                toolChoice: format.type === "json_schema" ? "required" : undefined,
-              })
+                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+                  sys.skills(agent),
+                  Effect.sync(() => sys.environment(model)),
+                  instruction.system().pipe(Effect.orDie),
+                  MessageV2.toModelMessagesEffect(msgs, model),
+                ])
+                const system = [...env, ...(skills ? [skills] : []), ...instructions]
+                const format = lastUser.format ?? { type: "text" as const }
+                if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+                const result = yield* handle.process({
+                  user: lastUser,
+                  agent,
+                  permission: session.permission,
+                  sessionID,
+                  parentSessionID: session.parentID,
+                  system,
+                  messages: [
+                    ...modelMsgs,
+                    ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : []),
+                  ],
+                  tools,
+                  model,
+                  toolChoice: format.type === "json_schema" ? "required" : undefined,
+                })
 
-              if (structured !== undefined) {
-                handle.message.structured = structured
-                handle.message.finish = handle.message.finish ?? "stop"
-                yield* sessions.updateMessage(handle.message)
-                return "break" as const
-              }
-
-              const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
-              if (finished && !handle.message.error) {
-                if (format.type === "json_schema") {
-                  handle.message.error = new MessageV2.StructuredOutputError({
-                    message: "Model did not produce structured output",
-                    retries: 0,
-                  }).toObject()
+                if (structured !== undefined) {
+                  handle.message.structured = structured
+                  handle.message.finish = handle.message.finish ?? "stop"
                   yield* sessions.updateMessage(handle.message)
+                  yield* closePromptTurn()
                   return "break" as const
                 }
+
+                const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+                if (finished && !handle.message.error) {
+                  if (format.type === "json_schema") {
+                    handle.message.error = new MessageV2.StructuredOutputError({
+                      message: "Model did not produce structured output",
+                      retries: 0,
+                    }).toObject()
+                    yield* sessions.updateMessage(handle.message)
+                    yield* closePromptTurn()
+                    return "break" as const
+                  }
+                }
+
+                if (result === "stop") {
+                  yield* closePromptTurn()
+                  return "break" as const
+                }
+                if (result === "compact") {
+                  yield* compaction.create({
+                    sessionID,
+                    agent: lastUser.agent,
+                    model: lastUser.model,
+                    auto: true,
+                    overflow: !handle.message.finish,
+                  })
+                }
+                return "continue" as const
+              }).pipe(Effect.ensuring(instruction.clear(handle.message.id)))
+              if (outcome === "break") {
+                yield* closePromptTurn()
+                break
               }
+              continue
+            }
 
-              if (result === "stop") return "break" as const
-              if (result === "compact") {
-                yield* compaction.create({
-                  sessionID,
-                  agent: lastUser.agent,
-                  model: lastUser.model,
-                  auto: true,
-                  overflow: !handle.message.finish,
-                })
-              }
-              return "continue" as const
-            }).pipe(Effect.ensuring(instruction.clear(handle.message.id)))
-            if (outcome === "break") break
-            continue
-          }
+            yield* closePromptTurn()
+            yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+            const assistant = yield* lastAssistant(sessionID)
+            if (executedSteerCommands.length > 0 && !assistant.info.error) {
+              yield* Effect.forEach(
+                executedSteerCommands,
+                (command) =>
+                  bus.publish(Command.Event.Executed, {
+                    name: command.name,
+                    sessionID,
+                    arguments: command.arguments,
+                    messageID: assistant.info.id,
+                  }),
+                { discard: true },
+              )
+            }
+            return assistant
+          }).pipe(
+            Effect.onExit(() => clearRunningNoReplySteers(sessionID)),
+            Effect.ensuring(state.setPromptRunning(sessionID, false).pipe(Effect.andThen(pending.refresh(sessionID)))),
+          )
+      })
 
-          yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
-          return yield* lastAssistant(sessionID)
-        },
-      )
-
-      const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts> = Effect.fn(
+      const loop: (input: z.infer<typeof LoopInput>) => PromptResultEffect = Effect.fn(
         "SessionPrompt.loop",
       )(function* (input: z.infer<typeof LoopInput>) {
+        yield* ensureSubscriptions()
         return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
       })
 
-      const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
+      const shell: (input: ShellInput) => PromptResultEffect = Effect.fn("SessionPrompt.shell")(
         function* (input: ShellInput) {
-          return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input))
+          yield* ensureSubscriptions()
+          return yield* state.startShell(input.sessionID, shellFallback(input), shellImpl(input))
         },
       )
 
-      const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-        yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
+      const applyCommandBeforeHook = Effect.fn("SessionPrompt.applyCommandBeforeHook")(function* (
+        sessionID: SessionID,
+        request: {
+          command: string
+          arguments: string
+        },
+        prepared: PromptInput,
+      ) {
+        const parts = structuredClone(prepared.parts)
+        yield* plugin.trigger(
+          "command.execute.before",
+          { command: request.command, sessionID, arguments: request.arguments },
+          { parts },
+        )
+        return {
+          ...prepared,
+          parts,
+        } satisfies PromptInput
+      })
+
+      const buildCommandPrompt = Effect.fn("SessionPrompt.buildCommandPrompt")(function* (
+        input: CommandInput,
+        options?: { triggerBeforeHook?: boolean },
+      ) {
         const cmd = yield* commands.get(input.command)
         if (!cmd) {
           const available = (yield* commands.list()).map((c) => c.name)
@@ -1633,27 +2550,255 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             : yield* lastModel(input.sessionID)
           : taskModel
 
-        yield* plugin.trigger(
-          "command.execute.before",
-          { command: input.command, sessionID: input.sessionID, arguments: input.arguments },
-          { parts },
-        )
-
-        const result = yield* prompt({
+        const prepared = {
           sessionID: input.sessionID,
           messageID: input.messageID,
           model: userModel,
           agent: userAgent,
           parts,
           variant: input.variant,
+        } satisfies PromptInput
+
+        if (options?.triggerBeforeHook === false) return prepared
+        return yield* applyCommandBeforeHook(
+          input.sessionID,
+          { command: input.command, arguments: input.arguments },
+          prepared,
+        )
+      })
+
+      const runCommand = Effect.fn("SessionPrompt.runCommand")(function* (
+        input: CommandInput,
+        options?: { noReply?: boolean },
+      ) {
+        const prepared = yield* buildCommandPrompt(input)
+        const result = yield* prompt({
+          ...prepared,
+          noReply: options?.noReply,
         })
-        yield* bus.publish(Command.Event.Executed, {
-          name: input.command,
-          sessionID: input.sessionID,
-          arguments: input.arguments,
-          messageID: result.info.id,
-        })
+        if (options?.noReply !== true) {
+          yield* bus.publish(Command.Event.Executed, {
+            name: input.command,
+            sessionID: input.sessionID,
+            arguments: input.arguments,
+            messageID: result.info.id,
+          })
+        }
         return result
+      })
+
+      const commandPromptFromDraft = Effect.fn("SessionPrompt.commandPromptFromDraft")(function* (
+        sessionID: SessionID,
+        request: Extract<SessionPending.Draft, { kind: "command" }>["request"],
+      ) {
+        if (request.resolved) {
+          return yield* applyCommandBeforeHook(
+            sessionID,
+            { command: request.command, arguments: request.arguments },
+            {
+              sessionID,
+              model: request.resolved.model,
+              agent: request.resolved.agent,
+              parts: structuredClone(request.resolved.parts),
+              variant: request.resolved.variant,
+            } satisfies PromptInput,
+          )
+        }
+
+        return yield* buildCommandPrompt({
+          sessionID,
+          ...request,
+        })
+      })
+
+      const submitPendingItem: (
+        sessionID: SessionID,
+        item: SessionPending.Item,
+        options?: { noReply?: boolean },
+      ) => PromptResultEffect = Effect.fn("SessionPrompt.submitPendingItem")(function* (
+        sessionID: SessionID,
+        item: SessionPending.Item,
+        options?: { noReply?: boolean },
+      ) {
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            if (item.draft.kind === "prompt") {
+              const request = {
+                ...item.draft.request,
+                sessionID,
+                noReply: options?.noReply,
+              } satisfies PromptInput
+              if (options?.noReply === true) return yield* submitPromptInput(request)
+              return yield* prompt(request)
+            }
+            const prepared = yield* restore(commandPromptFromDraft(sessionID, item.draft.request))
+            const request = {
+              ...prepared,
+              noReply: options?.noReply,
+            } satisfies PromptInput
+            const result =
+              options?.noReply === true ? yield* submitPromptInput(request) : yield* prompt(request)
+            if (options?.noReply !== true) {
+              yield* bus.publish(Command.Event.Executed, {
+                name: item.draft.request.command,
+                sessionID,
+                arguments: item.draft.request.arguments,
+                messageID: result.info.id,
+              })
+            }
+            return result
+          }),
+        )
+      })
+
+      const startQueuedPendingItem = Effect.fn("SessionPrompt.startQueuedPendingItem")(function* (
+        sessionID: SessionID,
+        item: SessionPending.Item,
+      ) {
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            if (item.draft.kind === "prompt") {
+              const latestAssistant = (yield* sessions.messages({ sessionID })).findLast(
+                (message) => message.info.role === "assistant",
+              )
+              const draftMessageID = item.draft.request.messageID
+              const messageID =
+                draftMessageID && (!latestAssistant || latestAssistant.info.id < draftMessageID)
+                  ? draftMessageID
+                  : MessageID.ascending()
+              yield* submitPromptInput({
+                ...item.draft.request,
+                sessionID,
+                messageID,
+              })
+              return undefined
+            }
+
+            const prepared = yield* restore(commandPromptFromDraft(sessionID, item.draft.request))
+            const message = yield* submitPromptInput(prepared)
+            return {
+              name: item.draft.request.command,
+              arguments: item.draft.request.arguments,
+              userMessageID: message.info.id,
+            }
+          }),
+        )
+      })
+
+      const runNextQueuedPendingItem: (sessionID: SessionID) => PromptResultEffect = Effect.fn(
+        "SessionPrompt.runNextQueuedPendingItem",
+      )(function* (sessionID: SessionID) {
+        const claimedQueue = yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const item = yield* pending.takeQueueClaimed(sessionID)
+            if (!item) return undefined
+            const noReplyQueue = noReplyPendingItems.get(item.id)
+            if (noReplyQueue) noReplyQueue.state = "running-queue"
+            const dispatch = yield* restore(
+              pending.dispatchClaimed(
+                sessionID,
+                item,
+                startQueuedPendingItem(sessionID, item).pipe(Effect.exit),
+              ).pipe(
+                Effect.onInterrupt(() =>
+                  Effect.gen(function* () {
+                    if (noReplyQueue) noReplyQueue.state = "pending"
+                    yield* pending.restore(sessionID, item)
+                  }),
+                ),
+              ),
+            )
+            return {
+              item,
+              noReplyQueue,
+              dispatch,
+            }
+          }),
+        )
+        if (!claimedQueue) return yield* fallbackMessage(sessionID)
+
+        const { item, noReplyQueue, dispatch } = claimedQueue
+        if (Option.isNone(dispatch)) {
+          if (noReplyQueue) noReplyQueue.state = "pending"
+          yield* status.set(sessionID, { type: "idle" })
+          yield* pending.refresh(sessionID)
+          return yield* fallbackMessage(sessionID)
+        }
+        if (Exit.isFailure(dispatch.value)) {
+          yield* status.set(sessionID, { type: "idle" })
+          yield* pending.refresh(sessionID)
+          yield* pending.restore(sessionID, item)
+          yield* pending.pause(sessionID)
+          yield* clearNoReplyPendingItem(item.id)
+          return yield* Effect.failCause(dispatch.value.cause)
+        }
+        if (noReplyQueue) {
+          yield* clearNoReplyPendingItem(item.id)
+          yield* status.set(sessionID, { type: "idle" })
+          yield* pending.refresh(sessionID)
+          return yield* fallbackMessage(sessionID)
+        }
+
+        const result = yield* runLoop(sessionID).pipe(Effect.exit)
+        if (Exit.isFailure(result)) {
+          yield* pending.pause(sessionID)
+          yield* clearNoReplyPendingItem(item.id)
+          return yield* Effect.failCause(result.cause)
+        }
+
+        if (dispatch.value.value) {
+          if (
+            result.value.info.parentID === dispatch.value.value.userMessageID &&
+            typeof result.value.info.time.completed === "number" &&
+            !result.value.info.error
+          ) {
+            yield* bus.publish(Command.Event.Executed, {
+              name: dispatch.value.value.name,
+              sessionID,
+              arguments: dispatch.value.value.arguments,
+              messageID: result.value.info.id,
+            })
+          }
+        }
+
+        yield* clearNoReplyPendingItem(item.id)
+        return result.value
+      })
+
+      const pumpPendingQueue: (sessionID: SessionID) => Effect.Effect<void, unknown> = Effect.fn(
+        "SessionPrompt.pumpPendingQueue",
+      )(function* (sessionID: SessionID) {
+        if (queuePumpRunning.has(sessionID)) return
+        queuePumpRunning.add(sessionID)
+        try {
+          if (yield* state.isStopRequested(sessionID)) return
+          if (foregroundStarting.has(sessionID)) return
+          const info = yield* pending.get(sessionID)
+          if (info.paused || info.steer.length > 0 || info.queue.length === 0) return
+          const currentStatus = yield* status.get(sessionID)
+          if (currentStatus.type !== "idle") return
+          yield* state.ensureRunning(sessionID, fallbackMessage(sessionID), runNextQueuedPendingItem(sessionID))
+        } finally {
+          queuePumpRunning.delete(sessionID)
+          const info = yield* pending.get(sessionID)
+          const currentStatus = yield* status.get(sessionID)
+          if (
+            !(yield* state.isStopRequested(sessionID)) &&
+            !foregroundStarting.has(sessionID) &&
+            !info.paused &&
+            info.steer.length === 0 &&
+            info.queue.length > 0 &&
+            currentStatus.type === "idle"
+          ) {
+            yield* pumpPendingQueue(sessionID)
+          }
+        }
+      })
+
+      const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
+        yield* ensureSubscriptions()
+        yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
+        return yield* runCommand(input)
       })
 
       const promptOps: TaskPromptOps = {
@@ -1662,9 +2807,106 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         prompt: (input) => prompt(input),
       }
 
+      const pumpWithErrorHandling = (sessionID: SessionID) =>
+        pumpPendingQueue(sessionID).pipe(
+          Effect.catch((error: unknown) =>
+            bus.publish(Session.Event.Error, {
+              sessionID,
+              error: new NamedError.Unknown({ message: error instanceof Error ? error.message : String(error) }).toObject(),
+            }),
+          ),
+        )
+
+      const activatePending = Effect.fn("SessionPrompt.activatePending")(function* (sessionID: SessionID) {
+        yield* ensureSubscriptions()
+        const info = yield* pending.get(sessionID)
+        if (info.paused || info.steer.length > 0 || info.queue.length === 0) return
+        const current = yield* status.get(sessionID)
+        if (current.type !== "idle") return
+        run.fork(pumpWithErrorHandling(sessionID))
+      })
+
+      const loopWithErrorHandling = (sessionID: SessionID) =>
+        loop({ sessionID }).pipe(
+          Effect.catch((error: unknown) =>
+            bus.publish(Session.Event.Error, {
+              sessionID,
+              error: new NamedError.Unknown({ message: error instanceof Error ? error.message : String(error) }).toObject(),
+            }),
+          ),
+        )
+
+      const subscriptions = yield* InstanceState.make<void, never, never>(() =>
+        Effect.gen(function* () {
+          const offStatus = yield* bus.subscribeCallback(
+            SessionStatus.Event.Status,
+            InstanceState.bind((evt) => {
+              run.fork(
+                Effect.gen(function* () {
+                  if (evt.properties.status.type !== "idle") return
+                  const info = yield* pending.get(evt.properties.sessionID)
+                  if (info.steer.length > 0) {
+                    yield* pending.promoteSteersToQueue(evt.properties.sessionID)
+                    return
+                  }
+                  yield* pumpWithErrorHandling(evt.properties.sessionID)
+                }),
+              )
+            }),
+          )
+
+          const offPending = yield* bus.subscribeCallback(
+            SessionPending.Event.Updated,
+            InstanceState.bind((evt) => {
+              run.fork(
+                Effect.gen(function* () {
+                  for (const [itemID, item] of noReplyPendingItems.entries()) {
+                    if (item.sessionID !== evt.properties.sessionID || item.state !== "pending") continue
+                    const steer = evt.properties.pending.steer.some((item) => item.id === itemID)
+                    const queue = evt.properties.pending.queue.some((item) => item.id === itemID)
+                    if (steer || queue) {
+                      if (
+                        (steer && !evt.properties.pending.paused) ||
+                        (queue && !evt.properties.pending.paused)
+                      ) {
+                        continue
+                      }
+                      yield* clearNoReplyPendingItem(itemID)
+                      continue
+                    }
+                    yield* clearNoReplyPendingItem(itemID)
+                  }
+                  if (evt.properties.pending.paused || evt.properties.pending.steer.length > 0) return
+                  const current = yield* status.get(evt.properties.sessionID)
+                  if (current.type !== "idle") return
+                  yield* pumpWithErrorHandling(evt.properties.sessionID)
+                }),
+              )
+            }),
+          )
+
+          yield* Effect.addFinalizer(
+            () =>
+              Effect.sync(() => {
+                offPending()
+                offStatus()
+              }),
+          )
+        }),
+      )
+
+      const ensureSubscriptions = Effect.fn("SessionPrompt.ensureSubscriptions")(function* () {
+        yield* InstanceState.get(subscriptions)
+      })
+
       return Service.of({
         cancel,
+        isForegroundStarting,
         prompt,
+        promptAsync,
+        enqueuePrompt,
+        activatePending,
+        snapshotPendingDraft,
         loop,
         shell,
         command,
@@ -1676,6 +2918,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   export const defaultLayer = Layer.suspend(() =>
     layer.pipe(
       Layer.provide(SessionRunState.defaultLayer),
+      Layer.provide(SessionPending.defaultLayer),
       Layer.provide(SessionStatus.defaultLayer),
       Layer.provide(SessionCompaction.defaultLayer),
       Layer.provide(SessionProcessor.defaultLayer),
@@ -1705,6 +2948,49 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
+  const PromptInputPart = z.discriminatedUnion("type", [
+    MessageV2.TextPart.omit({
+      messageID: true,
+      sessionID: true,
+    })
+      .partial({
+        id: true,
+      })
+      .meta({
+        ref: "TextPartInput",
+      }),
+    MessageV2.FilePart.omit({
+      messageID: true,
+      sessionID: true,
+    })
+      .partial({
+        id: true,
+      })
+      .meta({
+        ref: "FilePartInput",
+      }),
+    MessageV2.AgentPart.omit({
+      messageID: true,
+      sessionID: true,
+    })
+      .partial({
+        id: true,
+      })
+      .meta({
+        ref: "AgentPartInput",
+      }),
+    MessageV2.SubtaskPart.omit({
+      messageID: true,
+      sessionID: true,
+    })
+      .partial({
+        id: true,
+      })
+      .meta({
+        ref: "SubtaskPartInput",
+      }),
+  ])
+
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
     messageID: MessageID.zod.optional(),
@@ -1725,55 +3011,24 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     format: MessageV2.Format.optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
-    parts: z.array(
-      z.discriminatedUnion("type", [
-        MessageV2.TextPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "TextPartInput",
-          }),
-        MessageV2.FilePart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "FilePartInput",
-          }),
-        MessageV2.AgentPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "AgentPartInput",
-          }),
-        MessageV2.SubtaskPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "SubtaskPartInput",
-          }),
-      ]),
-    ),
+    parts: z.array(PromptInputPart),
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
   export async function prompt(input: PromptInput) {
     return runPromise((svc) => svc.prompt(PromptInput.parse(input)))
+  }
+
+  export async function promptAsync(input: PromptInput) {
+    return runPromise((svc) => svc.promptAsync(PromptInput.parse(input)))
+  }
+
+  export async function enqueuePrompt(input: PromptInput) {
+    return runPromise((svc) => svc.enqueuePrompt(PromptInput.parse(input)))
+  }
+
+  export async function activatePending(sessionID: SessionID) {
+    return runPromise((svc) => svc.activatePending(SessionID.zod.parse(sessionID)))
   }
 
   export async function resolvePromptParts(template: string) {
@@ -1782,6 +3037,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export async function cancel(sessionID: SessionID) {
     return runPromise((svc) => svc.cancel(SessionID.zod.parse(sessionID)))
+  }
+
+  export async function isForegroundStarting(sessionID: SessionID) {
+    return runPromise((svc) => svc.isForegroundStarting(SessionID.zod.parse(sessionID)))
   }
 
   export const LoopInput = z.object({

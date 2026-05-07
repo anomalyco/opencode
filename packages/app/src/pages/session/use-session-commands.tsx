@@ -14,15 +14,25 @@ import { useTerminal } from "@/context/terminal"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
-import { extractPromptFromParts } from "@/utils/prompt"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import { type Session, UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
+  busy: (sessionID: string) => boolean
+  fail?: (error: unknown) => void
+  stopSession?: (sessionID: string) => Promise<void>
+  prepareHistoryMutation?: (sessionID: string) => Promise<void>
+  mergeSession?: (session: Session) => void
   review?: () => boolean
+  historyMutationBlocked?: () => boolean
+  runHistoryMutation?: <T>(sessionID: string, task: () => Promise<T>) => Promise<T>
+  ensureRevertBoundaryLoaded?: (sessionID: string) => Promise<void>
+  ensureUndoBoundaryLoaded?: (sessionID: string) => Promise<void>
+  invalidatePending?: (sessionID: string) => Promise<unknown> | unknown
+  restoreHistoryComposer: (messageID?: string) => void
 }
 
 const withCategory = (category: string) => {
@@ -31,6 +41,9 @@ const withCategory = (category: string) => {
     category,
   })
 }
+
+const isPendingConflictError = (error: unknown) =>
+  typeof error === "object" && error !== null && "name" in error && error.name === "SessionPendingConflictError"
 
 export const useSessionCommands = (actions: SessionCommandContext) => {
   const command = useCommand()
@@ -67,8 +80,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
 
-  const idle = { type: "idle" as const }
-  const status = () => sync.data.session_status[params.id ?? ""] ?? idle
   const messages = () => {
     const id = params.id
     if (!id) return []
@@ -108,6 +119,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const navigateMessageByOffset = actions.navigateMessageByOffset
   const setActiveMessage = actions.setActiveMessage
   const focusInput = actions.focusInput
+  const runHistoryMutation = async <T,>(sessionID: string, task: () => Promise<T>) =>
+    actions.runHistoryMutation ? actions.runHistoryMutation(sessionID, task) : task()
 
   const sessionCommand = withCategory(language.t("command.category.session"))
   const fileCommand = withCategory(language.t("command.category.file"))
@@ -281,45 +294,98 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const undo = async () => {
     const sessionID = params.id
     if (!sessionID) return
+    if (actions.historyMutationBlocked?.()) return
 
-    if (status().type !== "idle") {
-      await sdk.client.session.abort({ sessionID }).catch(() => {})
+    try {
+      await runHistoryMutation(sessionID, async () => {
+        if (actions.prepareHistoryMutation) {
+          await actions.prepareHistoryMutation(sessionID)
+        } else if (actions.busy(sessionID)) {
+          await (actions.stopSession?.(sessionID) ?? sdk.client.session.stop({ sessionID }))
+        }
+        await actions.ensureUndoBoundaryLoaded?.(sessionID)
+        if (params.id !== sessionID) return
+
+        const revert = info()?.revert?.messageID
+        const message = findLast(userMessages(), (x) => !revert || x.id < revert)
+        if (!message) return
+
+        const result = await sdk.client.session.revert({ sessionID, messageID: message.id })
+        if (result.error) {
+          if (isPendingConflictError(result.error)) {
+            await actions.invalidatePending?.(sessionID)
+          }
+          throw result.error
+        }
+        if (result.data) {
+          actions.mergeSession?.(result.data)
+        }
+        if (params.id !== sessionID) return
+        actions.restoreHistoryComposer(message.id)
+
+        const prev = findLast(userMessages(), (x) => x.id < message.id)
+        setActiveMessage(prev)
+      })
+    } catch (error) {
+      actions.fail?.(error)
     }
-
-    const revert = info()?.revert?.messageID
-    const message = findLast(userMessages(), (x) => !revert || x.id < revert)
-    if (!message) return
-
-    await sdk.client.session.revert({ sessionID, messageID: message.id })
-    const parts = sync.data.part[message.id]
-    if (parts) {
-      const restored = extractPromptFromParts(parts, { directory: sdk.directory })
-      prompt.set(restored)
-    }
-
-    const prev = findLast(userMessages(), (x) => x.id < message.id)
-    setActiveMessage(prev)
   }
 
   const redo = async () => {
     const sessionID = params.id
     if (!sessionID) return
+    if (actions.historyMutationBlocked?.()) return
 
-    const revertMessageID = info()?.revert?.messageID
-    if (!revertMessageID) return
+    try {
+      await runHistoryMutation(sessionID, async () => {
+        if (actions.prepareHistoryMutation) {
+          await actions.prepareHistoryMutation(sessionID)
+        } else if (actions.busy(sessionID)) {
+          await (actions.stopSession?.(sessionID) ?? sdk.client.session.stop({ sessionID }))
+        }
+        await actions.ensureRevertBoundaryLoaded?.(sessionID)
+        if (params.id !== sessionID) return
 
-    const next = userMessages().find((x) => x.id > revertMessageID)
-    if (!next) {
-      await sdk.client.session.unrevert({ sessionID })
-      prompt.reset()
-      const last = findLast(userMessages(), (x) => x.id >= revertMessageID)
-      setActiveMessage(last)
-      return
+        const revertMessageID = info()?.revert?.messageID
+        if (!revertMessageID) return
+
+        const next = userMessages().find((x) => x.id > revertMessageID)
+        if (!next) {
+          const result = await sdk.client.session.unrevert({ sessionID })
+          if (result.error) {
+            if (isPendingConflictError(result.error)) {
+              await actions.invalidatePending?.(sessionID)
+            }
+            throw result.error
+          }
+          if (result.data) {
+            actions.mergeSession?.(result.data)
+          }
+          if (params.id !== sessionID) return
+          actions.restoreHistoryComposer()
+          const last = findLast(userMessages(), (x) => x.id >= revertMessageID)
+          setActiveMessage(last)
+          return
+        }
+
+        const result = await sdk.client.session.revert({ sessionID, messageID: next.id })
+        if (result.error) {
+          if (isPendingConflictError(result.error)) {
+            await actions.invalidatePending?.(sessionID)
+          }
+          throw result.error
+        }
+        if (result.data) {
+          actions.mergeSession?.(result.data)
+        }
+        if (params.id !== sessionID) return
+        actions.restoreHistoryComposer(next.id)
+        const prev = findLast(userMessages(), (x) => x.id < next.id)
+        setActiveMessage(prev)
+      })
+    } catch (error) {
+      actions.fail?.(error)
     }
-
-    await sdk.client.session.revert({ sessionID, messageID: next.id })
-    const prev = findLast(userMessages(), (x) => x.id < next.id)
-    setActiveMessage(prev)
   }
 
   const compact = async () => {
@@ -385,7 +451,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.undo"),
       description: language.t("command.session.undo.description"),
       slash: "undo",
-      disabled: !params.id || visibleUserMessages().length === 0,
+      disabled: !params.id || visibleUserMessages().length === 0 || !!actions.historyMutationBlocked?.(),
       onSelect: undo,
     }),
     sessionCommand({
@@ -393,7 +459,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled: !params.id || !info()?.revert?.messageID,
+      disabled: !params.id || !info()?.revert?.messageID || !!actions.historyMutationBlocked?.(),
       onSelect: redo,
     }),
     sessionCommand({

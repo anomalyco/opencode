@@ -1,8 +1,8 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { batch, createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocal } from "@/context/local"
+import { type ModelKey, useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import {
   ContentPart,
@@ -48,7 +48,7 @@ import {
   type PromptHistoryStoredEntry,
   promptLength,
 } from "./prompt-input/history"
-import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
+import { createPromptSubmit, type FollowupActionResult, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -61,11 +61,26 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
-  edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
-  onEditLoaded?: () => void
-  shouldQueue?: () => boolean
-  onQueue?: (draft: FollowupDraft) => void
-  onAbort?: () => void
+  editingID?: string
+  edit?: {
+    id: string
+    prompt: Prompt
+    context: FollowupDraft["context"]
+    agent?: string
+    model?: FollowupDraft["model"]
+    variant?: string
+    baseDraft?: FollowupDraft["pendingBaseDraft"]
+  }
+  onEditCancel?: () => Promise<FollowupActionResult> | FollowupActionResult
+  onEditSubmit?: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
+  submitBlockedReason?: string
+  editSubmitBlockedReason?: string
+  editCancelBlockedReason?: string
+  followupEnabled?: boolean
+  followupLane?: (event: Event) => "queue" | "steer" | undefined
+  onQueue?: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
+  onSteer?: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
+  onAbort?: () => void | (() => void)
   onSubmit?: () => void
 }
 
@@ -103,6 +118,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const sync = useSync()
   const local = useLocal()
+  const [editSelection, setEditSelection] = createSignal<{
+    agent?: string
+    model?: ModelKey
+    variant: ReturnType<typeof local.model.variant.current>
+  }>()
+  const [restoreEditSelectionWhenDraftClears, setRestoreEditSelectionWhenDraftClears] = createSignal(false)
   const files = useFile()
   const prompt = usePrompt()
   const layout = useLayout()
@@ -280,6 +301,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.mode === "shell") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
   })
+  const clearPromptContext = () => {
+    for (const item of prompt.context.items()) {
+      prompt.context.remove(item.key)
+    }
+  }
   const blank = createMemo(() => {
     const text = prompt
       .current()
@@ -287,20 +313,39 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .join("")
     return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
   })
-  const stopping = createMemo(() => working() && blank())
+  const editing = createMemo(() => !!props.editingID)
+  const emptyEdit = createMemo(() => editing() && blank())
+  const stopping = createMemo(() => working() && blank() && !editing())
+  const stopEditingRun = createMemo(() => working() && editing())
+  const sendBlocked = createMemo(() => !!props.submitBlockedReason && !props.editingID && !props.followupEnabled)
+  const editSubmitBlocked = createMemo(() => !!props.editingID && !!props.editSubmitBlockedReason)
+  const editCancelBlocked = createMemo(() => !!props.editingID && !!props.editCancelBlockedReason)
+  const submitIcon = createMemo(() => {
+    if (stopping() && !editing()) return "stop"
+    if (editing()) return "edit"
+    return "arrow-up"
+  })
+  const submitLabel = createMemo(() => {
+    if (stopping() && !editing()) return language.t("prompt.action.stop")
+    if (editing()) return language.t("common.save")
+    return language.t("prompt.action.send")
+  })
   const tip = () => {
-    if (stopping()) {
+    if (stopping() && !editing()) {
       return (
         <div class="flex items-center gap-2">
-          <span>{language.t("prompt.action.stop")}</span>
+          <span>{submitLabel()}</span>
           <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
         </div>
       )
     }
 
+    if (sendBlocked()) return props.submitBlockedReason
+    if (editSubmitBlocked()) return props.editSubmitBlockedReason
+
     return (
       <div class="flex items-center gap-2">
-        <span>{language.t("prompt.action.send")}</span>
+        <span>{submitLabel()}</span>
         <Icon name="enter" size="small" class="text-icon-base" />
       </div>
     )
@@ -381,6 +426,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
+  const replaceEditComments = (items: FollowupDraft["context"]) => {
+    comments.replace(
+      items.flatMap((item, index) => {
+        const comment = item.comment?.trim()
+        const selection = item.selection
+        if (!comment || !selection) return []
+        const commentID = item.commentID ?? item.key
+        return [
+          {
+            id: commentID,
+            file: item.path,
+            selection: {
+              start: Math.min(selection.startLine, selection.endLine),
+              end: Math.max(selection.startLine, selection.endLine),
+            },
+            comment,
+            time: Date.now() + index,
+          },
+        ]
+      }),
+    )
+  }
+
   const applyHistoryComments = (items: PromptHistoryComment[]) => {
     comments.replace(
       items.map((item) => ({
@@ -445,6 +513,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     requestAnimationFrame(() => editorRef?.focus())
   }
 
+  const [followupPending, setFollowupPending] = createSignal(false)
+
   const shellModeKey = "mod+shift+x"
   const normalModeKey = "mod+shift+e"
 
@@ -454,7 +524,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       title: language.t("prompt.action.attachFile"),
       category: language.t("command.category.file"),
       keybind: "mod+u",
-      disabled: store.mode !== "normal",
+      disabled: store.mode !== "normal" || followupPending(),
       onSelect: pick,
     },
     {
@@ -462,8 +532,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       title: language.t("command.prompt.mode.shell"),
       category: language.t("command.category.session"),
       keybind: shellModeKey,
-      disabled: store.mode === "shell",
-      onSelect: () => setMode("shell"),
+      disabled: store.mode === "shell" || editing(),
+      onSelect: () => {
+        if (editing()) return
+        setMode("shell")
+      },
     },
     {
       id: "prompt.mode.normal",
@@ -1006,44 +1079,113 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setCurrentHistory("entries", next)
   }
 
+  const hasComposerDraft = () => {
+    const text = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+      .trim()
+    return (
+      text.length > 0 ||
+      prompt.current().some((part) => part.type === "image") ||
+      prompt.context.items().length > 0 ||
+      comments.all().length > 0
+    )
+  }
+
+  let hydratedEditID: string | undefined
+
   createEffect(
     on(
       () => props.edit?.id,
       (id) => {
         const edit = props.edit
+        if (!id) {
+          const wasEditing = !!hydratedEditID
+          hydratedEditID = undefined
+          if (wasEditing) {
+            const restoreSelection = editSelection()
+            if (restoreSelection && !hasComposerDraft()) {
+              local.agent.set(restoreSelection.agent)
+              local.model.set(restoreSelection.model)
+              local.model.variant.set(restoreSelection.variant)
+            } else if (restoreSelection) {
+              setRestoreEditSelectionWhenDraftClears(true)
+            }
+          }
+          if (!restoreEditSelectionWhenDraftClears()) {
+            setEditSelection(undefined)
+          }
+          return
+        }
         if (!id || !edit) return
+        if (hydratedEditID === id) return
 
-        for (const item of prompt.context.items()) {
-          prompt.context.remove(item.key)
+        const previousEditID = hydratedEditID
+        hydratedEditID = id
+
+        if (!previousEditID) {
+          setRestoreEditSelectionWhenDraftClears(false)
+          const model = local.model.current()
+          setEditSelection({
+            agent: local.agent.current()?.name,
+            model: model
+              ? {
+                  providerID: model.provider.id,
+                  modelID: model.id,
+                }
+              : undefined,
+            variant: local.model.variant.current(),
+          })
         }
 
+        clearPromptContext()
+        replaceEditComments(edit.context)
+
         for (const item of edit.context) {
+          const commentID = item.comment?.trim() ? (item.commentID ?? item.key) : undefined
           prompt.context.add({
             type: item.type,
             path: item.path,
             selection: item.selection,
             comment: item.comment,
-            commentID: item.commentID,
+            commentID,
             commentOrigin: item.commentOrigin,
             preview: item.preview,
           })
         }
 
-        setStore("mode", "normal")
-        setStore("popover", null)
-        setStore("historyIndex", -1)
-        setStore("savedPrompt", null)
+        batch(() => {
+          if (edit.agent !== undefined) local.agent.set(edit.agent)
+          if (edit.model !== undefined) local.model.set(edit.model)
+          if (edit.variant !== undefined || edit.baseDraft) local.model.variant.set(edit.variant)
+          setStore("mode", "normal")
+          setStore("popover", null)
+          setStore("historyIndex", -1)
+          setStore("savedPrompt", null)
+        })
         prompt.set(edit.prompt, promptLength(edit.prompt))
         requestAnimationFrame(() => {
           editorRef.focus()
           setCursorPosition(editorRef, promptLength(edit.prompt))
           queueScroll()
         })
-        props.onEditLoaded?.()
       },
       { defer: true },
     ),
   )
+
+  createEffect(() => {
+    if (!restoreEditSelectionWhenDraftClears() || props.edit?.id || hasComposerDraft()) return
+    const restoreSelection = editSelection()
+    if (restoreSelection) {
+      local.agent.set(restoreSelection.agent)
+      local.model.set(restoreSelection.model)
+      local.model.variant.set(restoreSelection.variant)
+    }
+    setRestoreEditSelectionWhenDraftClears(false)
+    setEditSelection(undefined)
+  })
 
   const navigateHistory = (direction: "up" | "down") => {
     const result = navigatePromptHistory({
@@ -1064,6 +1206,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
+    blocked: followupPending,
     setDraggingType: (type) => setStore("draggingType", type),
     focusEditor: () => {
       editorRef.focus()
@@ -1082,6 +1225,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const { abort, handleSubmit } = createPromptSubmit({
     info,
+    edit: () =>
+      props.editingID
+        ? {
+            id: props.editingID,
+            baseDraft: props.edit && props.edit.id === props.editingID ? props.edit.baseDraft : undefined,
+          }
+        : undefined,
     imageAttachments,
     commentCount,
     autoAccept: () => accepting(),
@@ -1098,8 +1248,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setPopover: (popover) => setStore("popover", popover),
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: props.shouldQueue,
+    submitBlocked: sendBlocked,
+    followupLane: props.followupLane,
+    followupPending,
+    setFollowupPending,
     onQueue: props.onQueue,
+    onSteer: props.onSteer,
+    onEditSubmit: props.onEditSubmit,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
   })
@@ -1130,7 +1285,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    if (event.key === "!" && store.mode === "normal") {
+    if (event.key === "!" && store.mode === "normal" && !props.editingID) {
       const cursorPosition = getCursorPosition(editorRef)
       if (cursorPosition === 0) {
         setStore("mode", "shell")
@@ -1155,7 +1310,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
 
-      if (working()) {
+      if (working() && !props.editingID) {
         abort()
         event.preventDefault()
         event.stopPropagation()
@@ -1250,6 +1405,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       if (event.repeat) return
+      if (followupPending()) return
+      if (emptyEdit()) return
+      if ((sendBlocked() || editSubmitBlocked()) && !stopping()) return
       if (
         working() &&
         prompt
@@ -1304,6 +1462,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }}
           openComment={openComment}
           remove={(item) => {
+            if (followupPending()) return
             if (item.commentID) comments.remove(item.path, item.commentID)
             prompt.context.remove(item.key)
           }}
@@ -1314,7 +1473,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onOpen={(attachment) =>
             dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
           }
-          onRemove={removeAttachment}
+          onRemove={(id) => {
+            if (followupPending()) return
+            removeAttachment(id)
+          }}
           removeLabel={language.t("prompt.attachment.remove")}
         />
         <div
@@ -1322,7 +1484,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
-            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+            if (
+              target.closest(
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-stop-editing"]',
+              )
+            ) {
               return
             }
             editorRef?.focus()
@@ -1342,7 +1508,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               role="textbox"
               aria-multiline="true"
               aria-label={placeholder()}
-              contenteditable="true"
+              contenteditable={followupPending() ? "false" : "true"}
               autocapitalize={store.mode === "normal" ? "sentences" : "off"}
               autocorrect={store.mode === "normal" ? "on" : "off"}
               spellcheck={store.mode === "normal"}
@@ -1393,6 +1559,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               accept={ACCEPTED_FILE_TYPES.join(",")}
               class="hidden"
               onChange={(e) => {
+                if (followupPending()) {
+                  e.currentTarget.value = ""
+                  return
+                }
                 const list = e.currentTarget.files
                 if (list) void addAttachments(Array.from(list))
                 e.currentTarget.value = ""
@@ -1400,17 +1570,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
+              <Show when={stopEditingRun()}>
+                <Tooltip placement="top" value={language.t("prompt.action.stop")}>
+                  <IconButton
+                    data-action="prompt-stop-editing"
+                    type="button"
+                    icon="stop"
+                    variant="secondary"
+                    class="size-8"
+                    style={buttons()}
+                    onClick={abort}
+                    aria-label={language.t("prompt.action.stop")}
+                  />
+                </Tooltip>
+              </Show>
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"
                   type="submit"
-                  disabled={store.mode !== "normal" || (!working() && blank())}
+                  disabled={
+                    store.mode !== "normal" ||
+                    followupPending() ||
+                    emptyEdit() ||
+                    (blank() && !working()) ||
+                    (!stopping() && (sendBlocked() || editSubmitBlocked()))
+                  }
                   tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={stopping() ? "stop" : "arrow-up"}
+                  icon={submitIcon()}
                   variant="primary"
                   class="size-8"
                   style={buttons()}
-                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  aria-label={submitLabel()}
                 />
               </Tooltip>
             </div>
@@ -1424,25 +1614,62 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
               }}
             >
-              <TooltipKeybind
-                placement="top"
-                title={language.t("prompt.action.attachFile")}
-                keybind={command.keybind("file.attach")}
+              <Show
+                when={props.editingID}
+                fallback={
+                  <TooltipKeybind
+                    placement="top"
+                    title={language.t("prompt.action.attachFile")}
+                    keybind={command.keybind("file.attach")}
+                  >
+                    <Button
+                      data-action="prompt-attach"
+                      type="button"
+                      variant="ghost"
+                      class="size-8 p-0"
+                      style={buttons()}
+                      onClick={pick}
+                      disabled={store.mode !== "normal" || followupPending()}
+                      tabIndex={store.mode === "normal" && !followupPending() ? undefined : -1}
+                      aria-label={language.t("prompt.action.attachFile")}
+                    >
+                      <Icon name="plus" class="size-4.5" />
+                    </Button>
+                  </TooltipKeybind>
+                }
               >
-                <Button
-                  data-action="prompt-attach"
-                  type="button"
-                  variant="ghost"
-                  class="size-8 p-0"
-                  style={buttons()}
-                  onClick={pick}
-                  disabled={store.mode !== "normal"}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  aria-label={language.t("prompt.action.attachFile")}
-                >
-                  <Icon name="plus" class="size-4.5" />
-                </Button>
-              </TooltipKeybind>
+                <Tooltip placement="top" value={language.t("prompt.action.cancelEdit")}>
+                  <Button
+                    data-action="prompt-edit-cancel"
+                    type="button"
+                    variant="ghost"
+                    class="size-8 p-0"
+                    style={buttons()}
+                    onClick={async () => {
+                      if (followupPending() || editCancelBlocked()) return
+                      setFollowupPending(true)
+                      try {
+                        const result = await props.onEditCancel?.()
+                        if (!result || result.kind === "applied") {
+                          comments.clear()
+                          prompt.reset()
+                          clearPromptContext()
+                          setStore("mode", "normal")
+                          setStore("popover", null)
+                          queueScroll()
+                        }
+                      } finally {
+                        setFollowupPending(false)
+                      }
+                    }}
+                    disabled={store.mode !== "normal" || followupPending() || editCancelBlocked()}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    aria-label={language.t("prompt.action.cancelEdit")}
+                  >
+                    <Icon name="close" class="size-4.5" />
+                  </Button>
+                </Tooltip>
+              </Show>
             </div>
           </div>
         </div>

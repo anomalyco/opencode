@@ -1,4 +1,5 @@
 import type { Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { Message, SessionPending, SessionPendingItem, SessionStatus } from "@opencode-ai/sdk/v2/client"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {
@@ -27,7 +28,9 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
+import { findLast } from "@opencode-ai/util/array"
 import { checksum } from "@opencode-ai/util/encode"
+import { retry } from "@opencode-ai/util/retry"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
@@ -40,7 +43,7 @@ import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
+import { type FollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
   createOpenReviewFile,
@@ -49,6 +52,32 @@ import {
   focusTerminalById,
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
+import {
+  createPendingSnapshotCoordinator,
+  derivePendingControllerState,
+  getEditCancelBlockReason,
+  getEditSaveBlockReason,
+  getHistoryMutationBlockReason,
+  type PendingBlockReason,
+  type PendingMutationOptions,
+  getPendingItemActionBlockReason,
+  getPendingMoveLaneBlockReason,
+  getQueueSubmitBlockReason,
+  getResumeBlockReason,
+  getStartEditBlockReason,
+  getSteerSubmitBlockReason,
+  getVisibleEditingItemID,
+  resolveFollowupLane,
+  shouldClearLocalStopProjection,
+} from "@/pages/session/pending-controller"
+import {
+  clearPromptContextItems,
+  fromPendingDraft,
+  pendingDraftPreview,
+  restoreComposerFromRequestParts,
+  restorePromptContextItems,
+  toPendingDraft,
+} from "@/pages/session/pending-draft"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -59,15 +88,13 @@ import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
-import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 
 const emptyUserMessages: UserMessage[] = []
-type FollowupItem = FollowupDraft & { id: string }
-type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
-const emptyFollowups: FollowupItem[] = []
+const emptyPending: SessionPending = { paused: false, steer: [], queue: [] }
+const STALE_INCOMPLETE_ASSISTANT_SYNC_GRACE_MS = 4_000
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
@@ -240,7 +267,6 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
       if (growth > 0) break
       if (raw <= 0) break
-      if (opts?.prefetch) break
       if (!input.historyMore()) break
     }
 
@@ -541,20 +567,15 @@ export default function Page() {
     },
   })
 
-  const [followup, setFollowup] = persisted(
-    Persist.workspace(sdk.directory, "followup", ["followup.v1"]),
-    createStore<{
-      items: Record<string, FollowupItem[] | undefined>
-      failed: Record<string, string | undefined>
-      paused: Record<string, boolean | undefined>
-      edit: Record<string, FollowupEdit | undefined>
-    }>({
-      items: {},
-      failed: {},
-      paused: {},
-      edit: {},
-    }),
-  )
+  const [pendingUI, setPendingUI] = createStore({
+    loading: {} as Record<string, boolean | undefined>,
+    fresh: {} as Record<string, boolean | undefined>,
+    mutating: {} as Record<string, boolean | undefined>,
+    historyMutating: {} as Record<string, boolean | undefined>,
+    localEdit: {} as Record<string, string | undefined>,
+    stopProjected: {} as Record<string, boolean | undefined>,
+    stopProjectedAtUserMessage: {} as Record<string, string | null | undefined>,
+  })
 
   createComputed((prev) => {
     const key = sessionKey()
@@ -1123,13 +1144,6 @@ export default function Page() {
     inputRef?.focus()
   }
 
-  useSessionCommands({
-    navigateMessageByOffset,
-    setActiveMessage,
-    focusInput,
-    review: reviewTab,
-  })
-
   const openReviewFile = createOpenReviewFile({
     showAllFiles,
     tabForPath: file.tab,
@@ -1506,6 +1520,72 @@ export default function Page() {
     scroller: () => scroller,
   })
 
+  const waitForHistoryLoad = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve())
+    })
+
+  const nextRevertBoundaryLoadStep = () => {
+    const revertID = revertMessageID()
+    if (!revertID) return "done" as const
+    if (!messagesReady()) return "wait" as const
+
+    const loaded = userMessages()
+    if (loaded.length === 0) {
+      if (historyLoading()) return "wait" as const
+      if (!historyMore()) return "done" as const
+      return "load" as const
+    }
+    if (loaded.some((item) => item.id === revertID)) return "done" as const
+
+    const oldestLoaded = loaded[0]?.id
+    if (!oldestLoaded || oldestLoaded <= revertID) return "done" as const
+    if (historyLoading()) return "wait" as const
+    if (!historyMore()) return "done" as const
+    return "load" as const
+  }
+
+  const ensureRevertBoundaryLoaded = async (sessionID: string) => {
+    while (params.id === sessionID) {
+      const step = nextRevertBoundaryLoadStep()
+      if (step === "done") return
+      if (step === "wait") {
+        await waitForHistoryLoad()
+        continue
+      }
+      await sync.session.history.loadMore(sessionID)
+    }
+  }
+
+  const nextUndoBoundaryLoadStep = () => {
+    const revertID = revertMessageID()
+    if (!revertID) return "done" as const
+    if (!messagesReady()) return "wait" as const
+
+    const loaded = userMessages()
+    if (loaded.length === 0) {
+      if (historyLoading()) return "wait" as const
+      if (!historyMore()) return "done" as const
+      return "load" as const
+    }
+    if (loaded.some((item) => item.id < revertID)) return "done" as const
+    if (historyLoading()) return "wait" as const
+    if (!historyMore()) return "done" as const
+    return "load" as const
+  }
+
+  const ensureUndoBoundaryLoaded = async (sessionID: string) => {
+    while (params.id === sessionID) {
+      const step = nextUndoBoundaryLoadStep()
+      if (step === "done") return
+      if (step === "wait") {
+        await waitForHistoryLoad()
+        continue
+      }
+      await sync.session.history.loadMore(sessionID)
+    }
+  }
+
   fill = () => {
     if (fillFrame !== undefined) return
 
@@ -1545,6 +1625,25 @@ export default function Page() {
     ),
   )
 
+  createEffect(
+    on(
+      () =>
+        [
+          params.id,
+          revertMessageID(),
+          messagesReady(),
+          historyLoading(),
+          historyMore(),
+          userMessages()[0]?.id,
+        ] as const,
+      ([sessionID]) => {
+        if (!sessionID || nextRevertBoundaryLoadStep() !== "load") return
+        void sync.session.history.loadMore(sessionID)
+      },
+      { defer: true },
+    ),
+  )
+
   const draft = (id: string) =>
     extractPromptFromParts(sync.data.part[id] ?? [], {
       directory: sdk.directory,
@@ -1569,6 +1668,53 @@ export default function Page() {
     })
   }
 
+  const pendingRefreshErrorMeta = Symbol("pending-refresh-error")
+  const backgroundPendingRefreshCounts = new Map<string, number>()
+  const foregroundPendingRefreshCounts = new Map<string, number>()
+
+  const updatePendingRefreshCount = (map: Map<string, number>, sessionID: string, delta: 1 | -1) => {
+    const next = (map.get(sessionID) ?? 0) + delta
+    if (next > 0) {
+      map.set(sessionID, next)
+      return
+    }
+    map.delete(sessionID)
+  }
+
+  const trackPendingRefresh = <T,>(sessionID: string, background: boolean, task: () => Promise<T>) => {
+    const counts = background ? backgroundPendingRefreshCounts : foregroundPendingRefreshCounts
+    updatePendingRefreshCount(counts, sessionID, 1)
+    return task().finally(() => {
+      updatePendingRefreshCount(counts, sessionID, -1)
+    })
+  }
+
+  const tagPendingRefreshError = (sessionID: string, error: unknown) => ({
+    [pendingRefreshErrorMeta]: {
+      error,
+      silent:
+        (foregroundPendingRefreshCounts.get(sessionID) ?? 0) === 0 &&
+        (backgroundPendingRefreshCounts.get(sessionID) ?? 0) > 0,
+    },
+  })
+
+  const unwrapPendingRefreshError = (error: unknown) => {
+    if (!error || typeof error !== "object") return
+    const meta = (error as Record<PropertyKey, unknown>)[pendingRefreshErrorMeta]
+    if (!meta || typeof meta !== "object") return
+    if (!("error" in meta) || !("silent" in meta)) return
+    return meta as { error: unknown; silent: boolean }
+  }
+
+  const reportPendingError = (error: unknown) => {
+    const tagged = unwrapPendingRefreshError(error)
+    if (tagged) {
+      if (!tagged.silent) fail(tagged.error)
+      return
+    }
+    fail(error)
+  }
+
   const merge = (next: NonNullable<ReturnType<typeof info>>) =>
     sync.set("session", (list) => {
       const idx = list.findIndex((item) => item.id === next.id)
@@ -1587,151 +1733,520 @@ export default function Page() {
       return out
     })
 
+  const latestIncompleteAssistant = (sessionID: string) =>
+    findLast(
+      sync.data.message[sessionID] ?? [],
+      (item) => item.role === "assistant" && typeof item.time.completed !== "number",
+    )
+
+  const hasIncompleteAssistant = (sessionID: string) => !!latestIncompleteAssistant(sessionID)
+
+  const latestUserMessageID = (sessionID: string) =>
+    findLast(sync.data.message[sessionID] ?? [], (item) => item.role === "user")?.id
+
   const busy = (sessionID: string) => {
     if ((sync.data.session_status[sessionID] ?? { type: "idle" as const }).type !== "idle") return true
-    return (sync.data.message[sessionID] ?? []).some(
-      (item) => item.role === "assistant" && typeof item.time.completed !== "number",
+    return hasIncompleteAssistant(sessionID)
+  }
+
+  const clearPromptContext = () => {
+    clearPromptContextItems(prompt.context.items(), (key) => prompt.context.remove(key))
+  }
+
+  const restorePromptContext = (items: ReturnType<typeof prompt.context.items>) => {
+    restorePromptContextItems(items, (item) =>
+      prompt.context.add({
+        type: item.type,
+        path: item.path,
+        selection: item.selection,
+        comment: item.comment,
+        commentID: item.commentID,
+        commentOrigin: item.commentOrigin,
+        preview: item.preview,
+      }),
     )
   }
 
-  const queuedFollowups = createMemo(() => {
-    const id = params.id
-    if (!id) return emptyFollowups
-    return followup.items[id] ?? emptyFollowups
-  })
-
-  const editingFollowup = createMemo(() => {
-    const id = params.id
-    if (!id) return
-    return followup.edit[id]
-  })
-
-  const followupMutation = useMutation(() => ({
-    mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
-      const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
-      if (!item) return
-
-      if (input.manual) setFollowup("paused", input.sessionID, undefined)
-      setFollowup("failed", input.sessionID, undefined)
-
-      const ok = await sendFollowupDraft({
-        client: sdk.client,
-        sync,
-        globalSync,
-        draft: item,
-        optimisticBusy: item.sessionDirectory === sdk.directory,
-      }).catch((err) => {
-        setFollowup("failed", input.sessionID, input.id)
-        fail(err)
-        return false
-      })
-      if (!ok) return
-
-      setFollowup("items", input.sessionID, (items) => (items ?? []).filter((entry) => entry.id !== input.id))
-      if (input.manual) resumeScroll()
-    },
-  }))
-
-  const followupBusy = (sessionID: string) =>
-    followupMutation.isPending && followupMutation.variables?.sessionID === sessionID
-
-  const sendingFollowup = createMemo(() => {
-    const id = params.id
-    if (!id) return
-    if (!followupBusy(id)) return
-    return followupMutation.variables?.id
-  })
-
-  const queueEnabled = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
-  })
-
-  const followupText = (item: FollowupDraft) => {
-    const text = item.prompt
-      .map((part) => {
-        if (part.type === "image") return `[image:${part.filename}]`
-        if (part.type === "file") return `[file:${part.path}]`
-        if (part.type === "agent") return `@${part.name}`
-        return part.content
-      })
-      .join("")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => !!line)
-
-    if (text) return text
-    return `[${language.t("common.attachment")}]`
-  }
-
-  const queueFollowup = (draft: FollowupDraft) => {
-    setFollowup("items", draft.sessionID, (items) => [
-      ...(items ?? []),
-      { id: Identifier.ascending("message"), ...draft },
-    ])
-    setFollowup("failed", draft.sessionID, undefined)
-    setFollowup("paused", draft.sessionID, undefined)
-  }
-
-  const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
-
-  const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
-    if (sync.session.get(sessionID)?.parentID) return Promise.resolve()
-    const item = (followup.items[sessionID] ?? []).find((entry) => entry.id === id)
-    if (!item) return Promise.resolve()
-    if (followupBusy(sessionID)) return Promise.resolve()
-
-    return followupMutation.mutateAsync({ sessionID, id, manual: opts?.manual })
-  }
-
-  const editFollowup = (id: string) => {
-    const sessionID = params.id
-    if (!sessionID) return
-    if (followupBusy(sessionID)) return
-
-    const item = queuedFollowups().find((entry) => entry.id === id)
-    if (!item) return
-
-    setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
-    setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
-    setFollowup("edit", sessionID, {
-      id: item.id,
-      prompt: item.prompt,
-      context: item.context,
+  const restoreComposerFromParts = (parts: unknown[] | undefined) => {
+    return restoreComposerFromRequestParts({
+      parts,
+      directory: sdk.directory,
+      attachmentName: language.t("common.attachment"),
+      existingComments: comments.all(),
+      currentContextItems: () => prompt.context.items(),
+      removeContext: (key) => prompt.context.remove(key),
+      addContext: (item) =>
+        prompt.context.add({
+          type: item.type,
+          path: item.path,
+          selection: item.selection,
+          comment: item.comment,
+          commentID: item.commentID,
+          commentOrigin: item.commentOrigin,
+          preview: item.preview,
+        }),
+      replaceComments: (next) => comments.replace(next),
+      setPrompt: (next) => prompt.set(next),
     })
   }
 
-  const clearFollowupEdit = () => {
-    const id = params.id
-    if (!id) return
-    setFollowup("edit", id, undefined)
+  const restoreHistoryComposer = (messageID?: string) => {
+    if (messageID && restoreComposerFromParts(sync.data.part[messageID])) return
+    batch(() => {
+      clearPromptContext()
+      comments.clear()
+      if (messageID) {
+        prompt.set(draft(messageID))
+        return
+      }
+      prompt.reset()
+    })
   }
 
-  const halt = (sessionID: string) =>
-    busy(sessionID) ? sdk.client.session.abort({ sessionID }).catch(() => {}) : Promise.resolve()
+  const isSteerUnavailableError = (error: unknown) =>
+    typeof error === "object" && error !== null && "name" in error && error.name === "SessionSteerUnavailableError"
+  const isPendingConflictError = (error: unknown) =>
+    typeof error === "object" && error !== null && "name" in error && error.name === "SessionPendingConflictError"
+
+  const pendingStateKnown = (sessionID: string) => sync.data.session_pending[sessionID] !== undefined
+  const pendingStateFresh = (sessionID: string) => pendingStateKnown(sessionID) && !!pendingUI.fresh[sessionID]
+  const rawPendingState = (sessionID: string) => sync.data.session_pending[sessionID] ?? emptyPending
+  const pendingItemByID = (sessionID: string, itemID: string | undefined) => {
+    if (!itemID || !pendingStateKnown(sessionID)) return undefined
+    const pending = rawPendingState(sessionID)
+    return [...pending.steer, ...pending.queue].find((item) => item.id === itemID)
+  }
+
+  const pendingSnapshotStore = (directory?: string) => sync.child(directory)[0]
+  const pendingSnapshotSet = (directory?: string) => sync.child(directory)[1]
+  const currentPendingDirectory = () => sdk.directory
+
+  const pendingCoordinator = createPendingSnapshotCoordinator({
+    emptyState: emptyPending,
+    isKnown: (sessionID, directory) => pendingSnapshotStore(directory).session_pending[sessionID] !== undefined,
+    read: (sessionID, directory) => pendingSnapshotStore(directory).session_pending[sessionID] ?? emptyPending,
+    write: (sessionID, next, directory) => pendingSnapshotSet(directory)("session_pending", sessionID, next),
+    isLoading: (sessionID) => !!pendingUI.loading[sessionID],
+    setLoading: (sessionID, next) => setPendingUI("loading", sessionID, next),
+    isMutating: (sessionID) => !!pendingUI.mutating[sessionID],
+    setMutating: (sessionID, next) => setPendingUI("mutating", sessionID, next),
+    fetch: async (sessionID, directory) => {
+      const client = directory ? sdk.createClient({ directory, throwOnError: true }) : sdk.client
+      try {
+        const result = await retry(() => client.session.pending({ sessionID }))
+        return result.data
+      } catch (error) {
+        throw tagPendingRefreshError(sessionID, error)
+      }
+    },
+    onError: reportPendingError,
+  })
+
+  const refreshPending = async (
+    sessionID: string,
+    opts?: { force?: boolean; supersede?: boolean; directory?: string; background?: boolean },
+  ) =>
+    trackPendingRefresh(sessionID, !!opts?.background, async () => {
+      const result = await pendingCoordinator.refresh(sessionID, {
+        force: opts?.force,
+        supersede: opts?.supersede,
+        directory: opts?.directory ?? currentPendingDirectory(),
+        background: opts?.background,
+      })
+      if (result === "applied") {
+        setPendingUI("fresh", sessionID, true)
+      }
+      return result
+    })
+
+  const statusRefreshInFlight = new Map<string, Promise<Record<string, SessionStatus> | undefined>>()
+  const refreshSessionStatus = (directory = currentPendingDirectory()) => {
+    const existing = statusRefreshInFlight.get(directory)
+    if (existing) return existing
+    const client = directory ? sdk.createClient({ directory, throwOnError: true }) : sdk.client
+    const task = retry(() => client.session.status())
+      .then((result) => {
+        if (result.data) pendingSnapshotSet(directory)("session_status", result.data)
+        return result.data
+      })
+      .catch((error) => {
+        reportPendingError(error)
+        return undefined
+      })
+      .finally(() => {
+        if (statusRefreshInFlight.get(directory) === task) statusRefreshInFlight.delete(directory)
+      })
+    statusRefreshInFlight.set(directory, task)
+    return task
+  }
+
+  const completeLocalAssistantIfRemoteCompleted = async (sessionID: string, messageID: string) => {
+    const messages = await retry(() => sdk.client.session.messages({ sessionID, limit: 80 }))
+    const message = (messages.data ?? []).find((item) => item.info?.id === messageID)?.info
+    if (message?.role !== "assistant" || typeof message.time.completed !== "number") return false
+    if (params.id !== sessionID) return false
+
+    let updated = false
+    sync.set("message", sessionID, (current: Message[] | undefined) => {
+      if (!current) return current
+      const index = current.findIndex((item) => item.id === messageID)
+      if (index === -1 || current[index]?.role !== "assistant") return current
+      const next = current.slice()
+      next[index] = message
+      updated = true
+      return next
+    })
+    return updated
+  }
+
+  const invalidatePending = (sessionID: string, opts?: { directory?: string }) => {
+    setPendingUI("fresh", sessionID, false)
+    setPendingUI("loading", sessionID, true)
+    return refreshPending(sessionID, {
+      force: true,
+      directory: opts?.directory ?? currentPendingDirectory(),
+    })
+  }
+
+  const blockPending = (sessionID: string, reason?: PendingBlockReason, directory = currentPendingDirectory()) =>
+    pendingCoordinator.blocked(sessionID, reason, { directory })
+
+  const pendingMutationTasks = new Map<string, Promise<unknown>>()
+  const trackPendingMutation = <T,>(sessionID: string, task: Promise<T>) => {
+    const tracked = task.catch(() => undefined).finally(() => {
+      if (pendingMutationTasks.get(sessionID) === tracked) pendingMutationTasks.delete(sessionID)
+    })
+    pendingMutationTasks.set(sessionID, tracked)
+    return task
+  }
+
+  const mutatePending = (
+    sessionID: string,
+    reason: PendingBlockReason | undefined,
+    task: () => Promise<{ data?: SessionPending }>,
+    opts?: PendingMutationOptions,
+  ) =>
+    trackPendingMutation(
+      sessionID,
+      pendingCoordinator
+        .mutate(sessionID, reason, task, {
+          ...opts,
+          directory: opts?.directory ?? currentPendingDirectory(),
+        })
+        .then((result) => {
+          if (result.kind === "applied") {
+            setPendingUI("fresh", sessionID, true)
+          }
+          return result
+        })
+        .catch((error) => {
+          void invalidatePending(sessionID, { directory: opts?.directory })
+          throw error
+        }),
+    )
+
+  const waitForPendingMutation = async (sessionID: string) => {
+    while (pendingUI.mutating[sessionID]) {
+      const task = pendingMutationTasks.get(sessionID)
+      if (!task) {
+        await Promise.resolve()
+        return
+      }
+      await task
+    }
+  }
+
+  const pendingRowActionQueue = new Map<string, Promise<unknown>>()
+  const enqueuePendingRowAction = <T,>(sessionID: string, task: () => T | Promise<T>) => {
+    const previous = pendingRowActionQueue.get(sessionID) ?? Promise.resolve()
+    const current = previous
+      .catch(() => undefined)
+      .then(async () => {
+        await waitForPendingMutation(sessionID)
+        return task()
+      })
+    const tracked = current.finally(() => {
+      if (pendingRowActionQueue.get(sessionID) === tracked) pendingRowActionQueue.delete(sessionID)
+    })
+    pendingRowActionQueue.set(sessionID, tracked)
+    return current
+  }
+
+  createEffect(
+    on(
+      () => params.id,
+      (sessionID) => {
+        if (!sessionID) return
+        setPendingUI("fresh", sessionID, false)
+        setPendingUI("loading", sessionID, true)
+        void untrack(() => refreshPending(sessionID, { force: true, background: true }))
+        const timer = window.setInterval(() => {
+          void refreshPending(sessionID, { force: true, background: true })
+        }, 1000)
+        onCleanup(() => window.clearInterval(timer))
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [params.id, sync.data.session_status[params.id ?? ""]?.type] as const,
+      ([sessionID]) => {
+        if (!sessionID || pendingUI.mutating[sessionID]) return
+        void untrack(() => refreshPending(sessionID, { force: true, background: true }))
+      },
+      { defer: true },
+    ),
+  )
+
+  const incompleteAssistantStatusMissingSince = new Map<string, number>()
+
+  createEffect(
+    on(
+      () => params.id,
+      (sessionID) => {
+        if (!sessionID) return
+
+        const reconcile = () => {
+          if (!busy(sessionID)) {
+            incompleteAssistantStatusMissingSince.delete(sessionID)
+            return
+          }
+          if (sync.data.session_status[sessionID]) {
+            incompleteAssistantStatusMissingSince.delete(sessionID)
+            return
+          }
+
+          void refreshSessionStatus().then(async (statuses) => {
+            if (params.id !== sessionID || !statuses) return
+            const incompleteAssistant = latestIncompleteAssistant(sessionID)
+            if (statuses[sessionID] || !incompleteAssistant) {
+              incompleteAssistantStatusMissingSince.delete(sessionID)
+              return
+            }
+
+            const now = Date.now()
+            const missingSince = incompleteAssistantStatusMissingSince.get(sessionID) ?? now
+            incompleteAssistantStatusMissingSince.set(sessionID, missingSince)
+            if (now - missingSince < STALE_INCOMPLETE_ASSISTANT_SYNC_GRACE_MS) return
+
+            if (latestIncompleteAssistant(sessionID)?.id !== incompleteAssistant.id) {
+              incompleteAssistantStatusMissingSince.delete(sessionID)
+              return
+            }
+            const completed = await completeLocalAssistantIfRemoteCompleted(sessionID, incompleteAssistant.id).catch(
+              () => false,
+            )
+            if (completed) incompleteAssistantStatusMissingSince.delete(sessionID)
+          })
+        }
+
+        reconcile()
+        const timer = window.setInterval(reconcile, 1000)
+        onCleanup(() => {
+          window.clearInterval(timer)
+          incompleteAssistantStatusMissingSince.delete(sessionID)
+        })
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [params.id, sync.data.session_pending[params.id ?? ""]] as const,
+      ([sessionID, pending], prev) => {
+        if (!sessionID || !pending) return
+        if (sessionID !== prev?.[0]) return
+        if (pending === prev?.[1]) return
+        setPendingUI("fresh", sessionID, true)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => {
+        const sessionID = params.id
+        return [
+          sessionID,
+          sessionID ? pendingUI.stopProjected[sessionID] : undefined,
+          sessionID ? pendingUI.stopProjectedAtUserMessage[sessionID] : undefined,
+          sessionID ? latestUserMessageID(sessionID) : undefined,
+          sync.data.session_pending[sessionID ?? ""],
+        ] as const
+      },
+      ([sessionID, projected, projectedAtUserMessage, currentUserMessage, pending]) => {
+        if (!sessionID || !projected || !pending) return
+        if (
+          shouldClearLocalStopProjection({
+            projected,
+            pending,
+            runtime: busy(sessionID) ? "busy" : "idle",
+            projectedAtUserMessageID: projectedAtUserMessage,
+            latestUserMessageID: currentUserMessage,
+          })
+        ) {
+          batch(() => {
+            setPendingUI("stopProjected", sessionID, undefined)
+            setPendingUI("stopProjectedAtUserMessage", sessionID, undefined)
+          })
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  const optimisticStopPending = (sessionID: string) => {
+    batch(() => {
+      setPendingUI("stopProjectedAtUserMessage", sessionID, latestUserMessageID(sessionID) ?? null)
+      setPendingUI("stopProjected", sessionID, true)
+    })
+    return () => {
+      batch(() => {
+        setPendingUI("stopProjected", sessionID, undefined)
+        setPendingUI("stopProjectedAtUserMessage", sessionID, undefined)
+      })
+    }
+  }
+
+  const beginOptimisticStop = (sessionID: string) => {
+    const rollback = optimisticStopPending(sessionID)
+    void refreshPending(sessionID, { force: true })
+    return rollback
+  }
+
+  const stopSession = async (sessionID: string) => {
+    if (!busy(sessionID)) return
+    const rollback = beginOptimisticStop(sessionID)
+    try {
+      await sdk.client.session.stop({ sessionID })
+      await refreshSessionStatus()
+      await refreshPending(sessionID, { force: true, supersede: true })
+    } catch (error) {
+      throw error
+    } finally {
+      rollback()
+    }
+  }
+
+  createEffect(
+    on(
+      () => {
+        const sessionID = params.id
+        if (!sessionID) return undefined
+        const pending = sync.data.session_pending[sessionID]
+        return [
+          sessionID,
+          pendingUI.stopProjected[sessionID],
+          sync.data.session_status[sessionID]?.type,
+          pending?.paused,
+          pending?.stopRequested,
+          pending?.steer.length ?? 0,
+          pending?.queue.length ?? 0,
+        ] as const
+      },
+      (state) => {
+        if (!state) return
+        const [sessionID, _stopProjected, status, paused, stopRequested, steerCount, queueCount] = state
+        if (status !== "busy" || !paused || stopRequested) return
+        if (steerCount === 0 && queueCount === 0) return
+        void refreshSessionStatus()
+        void refreshPending(sessionID, { force: true, background: true })
+      },
+      { defer: true },
+    ),
+  )
+
+  const prepareHistoryMutation = async (sessionID: string) => {
+    if (!busy(sessionID)) return
+    await stopSession(sessionID)
+    const refreshResult = await refreshPending(sessionID, { force: true, supersede: true })
+    if (refreshResult !== "applied" || !pendingStateFresh(sessionID)) {
+      throw new Error("pending refresh failed before history mutation")
+    }
+    const pending = rawPendingState(sessionID)
+    if (pending.paused && pending.steer.length === 0 && pending.queue.length === 0) {
+      await mutatePending(sessionID, undefined, () => sdk.client.session.pendingResume({ sessionID }), {
+        throwOnError: true,
+      })
+    }
+  }
+
+  const pendingReady = createMemo(() => {
+    const id = params.id
+    if (!id) return true
+    return pendingStateFresh(id)
+  })
+
+  const composerHasDraft = createMemo(() => {
+    const text = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+      .trim()
+    return (
+      text.length > 0 ||
+      prompt.current().some((part) => part.type === "image") ||
+      prompt.context.items().length > 0 ||
+      comments.all().length > 0
+    )
+  })
+
+  const withHistoryMutation = async <T,>(sessionID: string, task: () => Promise<T>) => {
+    if (pendingUI.historyMutating[sessionID]) {
+      throw new Error("history mutation already in progress")
+    }
+    setPendingUI("historyMutating", sessionID, true)
+    try {
+      return await task()
+    } finally {
+      setPendingUI("historyMutating", sessionID, undefined)
+    }
+  }
+
+  const haltForHistoryMutation = (sessionID: string) => prepareHistoryMutation(sessionID)
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
       const prev = prompt.current().slice()
+      const prevContext = prompt.context.items().slice()
+      const prevComments = comments.all().slice()
       const last = info()?.revert
-      const value = draft(input.messageID)
-      batch(() => {
-        roll(input.sessionID, { messageID: input.messageID })
-        prompt.set(value)
-      })
-      await halt(input.sessionID)
-        .then(() => sdk.client.session.revert(input))
-        .then((result) => {
+      await withHistoryMutation(input.sessionID, async () => {
+        await haltForHistoryMutation(input.sessionID)
+        batch(() => {
+          roll(input.sessionID, { messageID: input.messageID })
+          restoreHistoryComposer(input.messageID)
+        })
+        try {
+          const result = await sdk.client.session.revert(input)
+          if (result.error) {
+            if (isPendingConflictError(result.error)) {
+              await invalidatePending(input.sessionID)
+            }
+            throw result.error
+          }
           if (result.data) merge(result.data)
-        })
-        .catch((err) => {
-          batch(() => {
-            roll(input.sessionID, last)
-            prompt.set(prev)
-          })
+          if (params.id === input.sessionID) {
+            setActiveMessage(findLast(userMessages(), (item) => item.id < input.messageID))
+          }
+        } catch (err) {
+          if (isPendingConflictError(err)) {
+            await invalidatePending(input.sessionID)
+          }
+          roll(input.sessionID, last)
+          if (params.id === input.sessionID) {
+            batch(() => {
+              clearPromptContext()
+              comments.replace(prevComments)
+              restorePromptContext(prevContext)
+              prompt.set(prev)
+            })
+          }
           fail(err)
-        })
+        }
+      })
     },
   }))
 
@@ -1739,53 +2254,406 @@ export default function Page() {
     mutationFn: async (id: string) => {
       const sessionID = params.id
       if (!sessionID) return
+      try {
+        await withHistoryMutation(sessionID, async () => {
+          await haltForHistoryMutation(sessionID)
+          await ensureRevertBoundaryLoaded(sessionID)
+          if (params.id !== sessionID) return
 
-      const next = userMessages().find((item) => item.id > id)
-      const prev = prompt.current().slice()
-      const last = info()?.revert
+          const next = userMessages().find((item) => item.id > id)
+          const prev = prompt.current().slice()
+          const prevContext = prompt.context.items().slice()
+          const prevComments = comments.all().slice()
+          const last = info()?.revert
 
-      batch(() => {
-        roll(sessionID, next ? { messageID: next.id } : undefined)
-        if (next) {
-          prompt.set(draft(next.id))
-          return
-        }
-        prompt.reset()
-      })
-
-      const task = !next
-        ? halt(sessionID).then(() => sdk.client.session.unrevert({ sessionID }))
-        : halt(sessionID).then(() =>
-            sdk.client.session.revert({
-              sessionID,
-              messageID: next.id,
-            }),
-          )
-
-      await task
-        .then((result) => {
-          if (result.data) merge(result.data)
-        })
-        .catch((err) => {
-          batch(() => {
+          try {
+            batch(() => {
+              roll(sessionID, next ? { messageID: next.id } : undefined)
+              restoreHistoryComposer(next?.id)
+            })
+            const result = !next
+              ? await sdk.client.session.unrevert({ sessionID })
+              : await sdk.client.session.revert({
+                  sessionID,
+                  messageID: next.id,
+                })
+            if (result.error) {
+              if (isPendingConflictError(result.error)) {
+                await invalidatePending(sessionID)
+              }
+              throw result.error
+            }
+            if (result.data) merge(result.data)
+            if (params.id === sessionID) {
+              setActiveMessage(
+                !next
+                  ? findLast(userMessages(), (item) => !last?.messageID || item.id >= last.messageID)
+                  : findLast(userMessages(), (item) => item.id < next.id),
+              )
+            }
+          } catch (err) {
+            if (isPendingConflictError(err)) {
+              await invalidatePending(sessionID)
+            }
             roll(sessionID, last)
-            prompt.set(prev)
-          })
-          fail(err)
+            if (params.id === sessionID) {
+              batch(() => {
+                clearPromptContext()
+                comments.replace(prevComments)
+                restorePromptContext(prevContext)
+                prompt.set(prev)
+              })
+            }
+            fail(err)
+          }
         })
+      } catch (error) {
+        fail(error)
+      }
     },
   }))
 
-  const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
+  const reverting = createMemo(() => {
+    const sessionID = params.id
+    return (
+      revertMutation.isPending || restoreMutation.isPending || (!!sessionID && !!pendingUI.historyMutating[sessionID])
+    )
+  })
   const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
 
+  const pendingControllerInput = (sessionID = params.id) => {
+    const existingSession = !!sessionID
+    const runtime = sessionID && busy(sessionID) ? "busy" : "idle"
+    return {
+      existingSession,
+      runtime,
+      preferredFollowupLane: settings.general.followup(),
+      pendingKnowledge: existingSession && !pendingStateFresh(sessionID) ? "unknown" : "known",
+      pending: sessionID ? rawPendingState(sessionID) : emptyPending,
+      localEditID: sessionID ? pendingUI.localEdit[sessionID] : undefined,
+      composerHasDraft: composerHasDraft(),
+      refreshInFlight: sessionID ? !!pendingUI.loading[sessionID] : false,
+      followupMutationInFlight: sessionID ? !!pendingUI.mutating[sessionID] : false,
+      historyMutationInFlight: sessionID ? !!pendingUI.historyMutating[sessionID] : false,
+      stopProjectionActive: sessionID ? !!pendingUI.stopProjected[sessionID] : false,
+    } as const
+  }
+
+  const pendingRowActionInput = (sessionID = params.id) => ({
+    ...pendingControllerInput(sessionID),
+    followupMutationInFlight: false,
+  })
+
+  const pendingController = createMemo(() => derivePendingControllerState(pendingControllerInput()))
+  const pendingControllerState = () => pendingController() ?? derivePendingControllerState(pendingControllerInput())
+  const visiblePendingEditingID = createMemo(() => getVisibleEditingItemID(pendingControllerInput()))
+
+  const historyMutationBlocked = createMemo(() => !!getHistoryMutationBlockReason(pendingControllerInput()))
+
+  const blockedReasonText = (reason?: ReturnType<typeof getQueueSubmitBlockReason>, context?: "submit") => {
+    if (!reason) return
+    switch (reason) {
+      case "editing_in_progress":
+      case "editing_requires_empty_composer":
+        return language.t("session.followupDock.editingBlocked")
+      default:
+        if (context === "submit") return language.t("session.followupDock.pendingSubmitBlocked")
+        return language.t("session.followupDock.pendingBlocked")
+    }
+  }
+
+  const submitBlockedReason = createMemo(() => blockedReasonText(pendingControllerState().submitBlockedReason, "submit"))
+  const editSubmitBlockedReason = createMemo(() => blockedReasonText(getEditSaveBlockReason(pendingControllerInput())))
+  const editCancelBlockedReason = createMemo(() =>
+    blockedReasonText(getEditCancelBlockReason(pendingControllerInput())),
+  )
+
+  useSessionCommands({
+    navigateMessageByOffset,
+    setActiveMessage,
+    focusInput,
+    stopSession,
+    prepareHistoryMutation,
+    fail,
+    mergeSession: merge,
+    review: reviewTab,
+    historyMutationBlocked,
+    runHistoryMutation: withHistoryMutation,
+    ensureRevertBoundaryLoaded,
+    ensureUndoBoundaryLoaded,
+    invalidatePending,
+    busy,
+    restoreHistoryComposer,
+  })
+
+  const editingFollowup = createMemo(() => {
+    const id = params.id
+    if (!id) return
+    const editID = visiblePendingEditingID()
+    if (!editID) return
+    const item = pendingItemByID(id, editID)
+    if (!item) return
+    const draft = fromPendingDraft({
+      draft: item.draft,
+      directory: sdk.directory,
+      attachmentName: language.t("common.attachment"),
+    })
+    return {
+      id: item.id,
+      prompt: draft.prompt,
+      context: draft.context,
+      agent: draft.agent,
+      model: draft.model,
+      variant: draft.variant,
+      baseDraft: item.draft,
+    }
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    const localEdit = pendingUI.localEdit[id]
+    if (!localEdit) return
+    if (!pendingStateFresh(id)) return
+    if (pendingItemByID(id, localEdit)) return
+    setPendingUI("localEdit", id, undefined)
+  })
+
+  const queueEnabled = createMemo(() => {
+    if (!params.id || isChildSession() || composer.blocked()) return false
+    return pendingControllerState().canQueueSubmit
+  })
+
+  const steerEnabled = createMemo(() => {
+    if (!params.id || isChildSession() || composer.blocked()) return false
+    return pendingControllerState().canSteerSubmit
+  })
+
+  const followupOverrideKey = (event: Event) =>
+    event instanceof KeyboardEvent && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey
+
+  const followupLane = (event: Event): "queue" | "steer" | undefined => {
+    return resolveFollowupLane({
+      primaryFollowupLane: pendingControllerState().primaryFollowupLane,
+      override: followupOverrideKey(event),
+      canQueueSubmit: queueEnabled(),
+      canSteerSubmit: steerEnabled(),
+    })
+  }
+
+  const queueFollowup = (draft: FollowupDraft) =>
+    mutatePending(
+      draft.sessionID,
+      getQueueSubmitBlockReason(pendingControllerInput(draft.sessionID)),
+      () =>
+        sdk.client.session.pendingAdd({
+          sessionID: draft.sessionID,
+          lane: "queue",
+          draft: toPendingDraft({
+            draft,
+            commandNames: sync.data.command.map((item) => item.name),
+            attachmentName: language.t("common.attachment"),
+          }),
+        }),
+      { throwOnError: true },
+    )
+
+  const steerFollowup = async (draft: FollowupDraft) => {
+    const directory = currentPendingDirectory()
+    try {
+      return await mutatePending(
+        draft.sessionID,
+        getSteerSubmitBlockReason(pendingControllerInput(draft.sessionID)),
+        () =>
+          sdk.client.session.pendingAdd({
+            sessionID: draft.sessionID,
+            lane: "steer",
+            draft: toPendingDraft({
+              draft,
+              commandNames: sync.data.command.map((item) => item.name),
+              attachmentName: language.t("common.attachment"),
+            }),
+          }),
+        { throwOnError: true, suppressError: isSteerUnavailableError, directory },
+      )
+    } catch (err) {
+      if (!isSteerUnavailableError(err)) throw err
+      await invalidatePending(draft.sessionID, { directory })?.catch(() => {})
+      return pendingCoordinator.blocked(draft.sessionID, "cannot_steer_now", { directory })
+    }
+  }
+
+  const movePendingUp = (itemID: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    return enqueuePendingRowAction(sessionID, () =>
+      mutatePending(sessionID, getPendingItemActionBlockReason(pendingRowActionInput(sessionID)), () =>
+        sdk.client.session.pendingMoveUp({ sessionID, itemID }),
+      ),
+    )
+  }
+
+  const movePendingDown = (itemID: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    return enqueuePendingRowAction(sessionID, () =>
+      mutatePending(sessionID, getPendingItemActionBlockReason(pendingRowActionInput(sessionID)), () =>
+        sdk.client.session.pendingMoveDown({ sessionID, itemID }),
+      ),
+    )
+  }
+
+  const movePending = (itemID: string, lane: "steer" | "queue") => {
+    const sessionID = params.id
+    if (!sessionID) return
+    return enqueuePendingRowAction(sessionID, () => {
+      const directory = currentPendingDirectory()
+      const input = pendingRowActionInput(sessionID)
+      const blockReason = getPendingMoveLaneBlockReason(input, lane)
+      const moveOptions: PendingMutationOptions =
+        lane === "steer"
+          ? {
+              throwOnError: true,
+              suppressError: isSteerUnavailableError,
+              directory,
+            }
+          : { directory }
+      return mutatePending(
+        sessionID,
+        blockReason,
+        () => sdk.client.session.pendingMoveLane({ sessionID, itemID, lane }),
+        moveOptions,
+      ).catch((err) => {
+        if (lane === "steer" && isSteerUnavailableError(err)) {
+          void invalidatePending(sessionID, { directory })
+          return pendingCoordinator.blocked(sessionID, "cannot_steer_now", { directory })
+        }
+        throw err
+      })
+    })
+  }
+
+  const deletePending = async (itemID: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const next = await enqueuePendingRowAction(sessionID, () =>
+      mutatePending(sessionID, getPendingItemActionBlockReason(pendingRowActionInput(sessionID)), () =>
+        sdk.client.session.pendingDelete({ sessionID, itemID }),
+      ),
+    )
+    if (next.kind === "applied" && pendingUI.localEdit[sessionID] === itemID) {
+      setPendingUI("localEdit", sessionID, undefined)
+    }
+    return next
+  }
+
+  const editFollowup = async (itemID: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    return enqueuePendingRowAction(sessionID, () => startEditingFollowup(sessionID, itemID))
+  }
+
+  const startEditingFollowup = async (sessionID: string, itemID: string) => {
+    const directory = currentPendingDirectory()
+
+    const startLocalEdit = (): PendingBlockReason | undefined => {
+      const blockReason = getStartEditBlockReason(pendingRowActionInput(sessionID))
+      if (blockReason) return blockReason
+      if (!pendingItemByID(sessionID, itemID)) return "blocked_by_pending"
+      setPendingUI("localEdit", sessionID, itemID)
+      return undefined
+    }
+
+    let blockReason = startLocalEdit()
+    if (!blockReason) {
+      return {
+        kind: "applied" as const,
+        state: rawPendingState(sessionID),
+      }
+    }
+    if (blockReason !== "pending_unknown" && blockReason !== "blocked_by_pending") {
+      return blockPending(sessionID, blockReason, directory)
+    }
+
+    const refreshResult = await refreshPending(sessionID, {
+      force: true,
+      supersede: true,
+      directory,
+      background: true,
+    })
+    if (refreshResult !== "applied") {
+      return pendingCoordinator.blocked(sessionID, "blocked_by_pending", { directory })
+    }
+
+    blockReason = startLocalEdit()
+    if (blockReason) {
+      if (blockReason === "blocked_by_pending") setPendingUI("localEdit", sessionID, undefined)
+      return blockPending(sessionID, blockReason, directory)
+    }
+
+    if (!pendingItemByID(sessionID, itemID)) {
+      setPendingUI("localEdit", sessionID, undefined)
+      return pendingCoordinator.blocked(sessionID, "blocked_by_pending", { directory })
+    }
+
+    return {
+      kind: "applied" as const,
+      state: rawPendingState(sessionID),
+    }
+  }
+
+  const commitFollowupEdit = async (draft: FollowupDraft) => {
+    const sessionID = params.id
+    const itemID = visiblePendingEditingID()
+    const directory = currentPendingDirectory()
+    if (!sessionID || !itemID) return pendingCoordinator.blocked(draft.sessionID, "blocked_by_pending", { directory })
+    try {
+      const next = await mutatePending(
+        sessionID,
+        getEditSaveBlockReason(pendingControllerInput(sessionID)),
+        () =>
+          sdk.client.session.pendingEditCommit({
+            sessionID,
+            itemID,
+            draft: toPendingDraft({
+              draft,
+              commandNames: sync.data.command.map((item) => item.name),
+              attachmentName: language.t("common.attachment"),
+            }),
+          }),
+        { throwOnError: true, suppressError: isPendingConflictError, directory },
+      )
+      if (next.kind === "applied") {
+        setPendingUI("localEdit", sessionID, undefined)
+      }
+      return next
+    } catch (err) {
+      if (!isPendingConflictError(err)) throw err
+      setPendingUI("localEdit", sessionID, undefined)
+      void invalidatePending(sessionID, { directory })
+      return pendingCoordinator.blocked(sessionID, "blocked_by_pending", { directory })
+    }
+  }
+
+  const cancelFollowupEdit = async () => {
+    const sessionID = params.id
+    if (!sessionID || !pendingUI.localEdit[sessionID]) return blockPending(params.id ?? "", "blocked_by_pending")
+    const blockReason = getEditCancelBlockReason(pendingControllerInput(sessionID))
+    if (blockReason) return blockPending(sessionID, blockReason)
+    setPendingUI("localEdit", sessionID, undefined)
+    return {
+      kind: "applied" as const,
+      state: rawPendingState(sessionID),
+    }
+  }
+
   const revert = (input: { sessionID: string; messageID: string }) => {
-    if (reverting()) return
+    if (reverting() || historyMutationBlocked()) return
     return revertMutation.mutateAsync(input)
   }
 
   const restore = (id: string) => {
-    if (!params.id || reverting()) return
+    if (!params.id || reverting() || historyMutationBlocked()) return
     return restoreMutation.mutateAsync(id)
   }
 
@@ -1797,23 +2665,63 @@ export default function Page() {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { revert }
+  const actions = createMemo(() => (historyMutationBlocked() ? undefined : { revert }))
 
-  createEffect(() => {
+  const resumePending = () => {
     const sessionID = params.id
     if (!sessionID) return
+    return mutatePending(sessionID, getResumeBlockReason(pendingControllerInput(sessionID)), () =>
+      sdk.client.session.pendingResume({ sessionID }),
+    )
+  }
 
-    const item = queuedFollowups()[0]
-    if (!item) return
-    if (followupBusy(sessionID)) return
-    if (followup.failed[sessionID] === item.id) return
-    if (followup.paused[sessionID]) return
-    if (isChildSession()) return
-    if (composer.blocked()) return
-    if (busy(sessionID)) return
-
-    void sendFollowup(sessionID, item.id)
+  const pendingStopProjected = createMemo(() => pendingControllerState().projectionAxis === "stopProjected")
+  const pendingDockPaused = createMemo(() => {
+    const controller = pendingControllerState()
+    return (
+      controller.pendingShape !== "empty" &&
+      (controller.effectivePending?.paused ?? false) &&
+      !controller.canSteerSubmit
+    )
   })
+
+  const pendingDockLoading = createMemo(() => {
+    const controller = pendingControllerState()
+    return (
+      controller.pendingKnowledge === "unknown" ||
+      controller.networkAxis === "mutating" ||
+      (controller.networkAxis === "historyMutating" && controller.pendingShape !== "empty")
+    )
+  })
+
+  const pendingRows = (lane: "steer" | "queue", items: SessionPendingItem[]) => {
+    const queuedActionInput = pendingRowActionInput()
+    const editingID = visiblePendingEditingID()
+    const controller = pendingControllerState()
+    const locked = controller.pendingKnowledge === "unknown" || controller.networkAxis === "historyMutating"
+    const reorderLocked = locked || controller.projectionAxis === "stopProjected"
+
+    return items.map((item, index) => {
+      const moveReason = getPendingItemActionBlockReason(queuedActionInput)
+      const moveLaneReason = getPendingMoveLaneBlockReason(queuedActionInput, lane === "steer" ? "queue" : "steer")
+      const editReason = getStartEditBlockReason(queuedActionInput)
+      const deleteReason = getPendingItemActionBlockReason(queuedActionInput)
+      return {
+        id: item.id,
+        text: item.draft.preview,
+        editing: editingID === item.id,
+        disableUp: reorderLocked || !!moveReason || index === 0,
+        disableDown: reorderLocked || !!moveReason || index === items.length - 1,
+        disableMoveLane: locked || !!moveLaneReason,
+        disableEdit: !!editReason,
+        editHint:
+          editReason === "editing_requires_empty_composer"
+            ? language.t("session.followupDock.editDisabledDraft")
+            : undefined,
+        disableDelete: locked || !!deleteReason,
+      }
+    })
+  }
 
   createResizeObserver(
     () => promptDock,
@@ -1841,6 +2749,7 @@ export default function Page() {
     sessionKey,
     sessionID: () => params.id,
     messagesReady,
+    loadedUserMessages: userMessages,
     visibleUserMessages,
     historyMore,
     historyLoading,
@@ -1939,7 +2848,7 @@ export default function Page() {
                       loadingClass: "px-4 py-4 text-text-weak",
                       emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
                     })}
-                    actions={actions}
+                    actions={actions()}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
                     setScrollRef={setScrollRef}
@@ -1992,21 +2901,50 @@ export default function Page() {
             followup={
               params.id && !isChildSession()
                 ? {
-                    queue: queueEnabled,
-                    items: followupDock(),
-                    sending: sendingFollowup(),
+                    lane: followupLane,
+                    pending: {
+                      ready: pendingReady(),
+                      paused: pendingDockPaused(),
+                      stopProjected: pendingStopProjected(),
+                      editing: !!visiblePendingEditingID(),
+                      canResume: pendingControllerState().canResume,
+                      loading: pendingDockLoading(),
+                      steer: pendingRows("steer", pendingControllerState().effectivePending?.steer ?? []),
+                      queue: pendingRows("queue", pendingControllerState().effectivePending?.queue ?? []),
+                      onResume: () => {
+                        void resumePending()
+                      },
+                      onMoveUp: (id) => {
+                        void movePendingUp(id)
+                      },
+                      onMoveDown: (id) => {
+                        void movePendingDown(id)
+                      },
+                      onMoveLane: (id, lane) => {
+                        void movePending(id, lane)
+                      },
+                      onEdit: (id) => {
+                        void editFollowup(id)
+                      },
+                      onDelete: (id) => {
+                        void deletePending(id)
+                      },
+                    },
+                    editingID: visiblePendingEditingID(),
                     edit: editingFollowup(),
+                    submitBlockedReason: submitBlockedReason(),
+                    editSubmitBlockedReason: editSubmitBlockedReason(),
+                    editCancelBlockedReason: editCancelBlockedReason(),
+                    followupEnabled:
+                      pendingControllerState().canQueueSubmit || pendingControllerState().canSteerSubmit,
                     onQueue: queueFollowup,
+                    onSteer: steerFollowup,
                     onAbort: () => {
-                      const id = params.id
-                      if (!id) return
-                      setFollowup("paused", id, true)
+                      if (!params.id) return
+                      return beginOptimisticStop(params.id)
                     },
-                    onSend: (id) => {
-                      void sendFollowup(params.id!, id, { manual: true })
-                    },
-                    onEdit: editFollowup,
-                    onEditLoaded: clearFollowupEdit,
+                    onEditCancel: cancelFollowupEdit,
+                    onEditSubmit: commitFollowupEdit,
                   }
                 : undefined
             }
@@ -2015,7 +2953,7 @@ export default function Page() {
                 ? {
                     items: rolled(),
                     restoring: restoring(),
-                    disabled: reverting(),
+                    disabled: reverting() || historyMutationBlocked(),
                     onRestore: restore,
                   }
                 : undefined

@@ -1,3 +1,4 @@
+import type { SessionPending, SessionPendingDraft } from "@opencode-ai/sdk/v2"
 import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -10,13 +11,15 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
+import { useComments } from "@/context/comments"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { promptProbe } from "@/testing/prompt"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
-import { buildRequestParts } from "./build-request-parts"
+import type { PendingActionResult, PendingBlockReason } from "@/pages/session/pending-controller"
+import { buildCommandRequestParts, buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 
@@ -35,7 +38,12 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  pendingBaseDraft?: SessionPendingDraft
 }
+
+export type FollowupActionBlockReason = PendingBlockReason
+
+export type FollowupActionResult<TState = SessionPending> = PendingActionResult<TState>
 
 type FollowupSendInput = {
   client: ReturnType<typeof useSDK>["client"]
@@ -75,6 +83,15 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   const [head, ...tail] = text.split(" ")
   const cmd = head?.startsWith("/") ? head.slice(1) : undefined
   if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
+    const messageID = input.messageID ?? Identifier.ascending("message")
+    const { requestParts } = buildCommandRequestParts({
+      prompt: input.draft.prompt.filter((part) => part.type !== "text"),
+      context: input.draft.context,
+      images,
+      messageID,
+      sessionID: input.draft.sessionID,
+      sessionDirectory: input.draft.sessionDirectory,
+    })
     setBusy()
     try {
       if (!(await wait())) {
@@ -89,13 +106,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
         agent: input.draft.agent,
         model: `${input.draft.model.providerID}/${input.draft.model.modelID}`,
         variant: input.draft.variant,
-        parts: images.map((attachment) => ({
-          id: Identifier.ascending("part"),
-          type: "file" as const,
-          mime: attachment.mime,
-          url: attachment.dataUrl,
-          filename: attachment.filename,
-        })),
+        parts: requestParts,
       })
       return true
     } catch (err) {
@@ -167,6 +178,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
 type PromptSubmitInput = {
   info: Accessor<{ id: string } | undefined>
+  edit?: Accessor<{ id: string; baseDraft?: SessionPendingDraft } | undefined>
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
@@ -181,9 +193,14 @@ type PromptSubmitInput = {
   setPopover: (popover: "at" | "slash" | null) => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
-  shouldQueue?: Accessor<boolean>
-  onQueue?: (draft: FollowupDraft) => void
-  onAbort?: () => void
+  submitBlocked?: Accessor<boolean>
+  followupLane?: (event: Event) => "queue" | "steer" | undefined
+  followupPending?: Accessor<boolean>
+  setFollowupPending?: (pending: boolean) => void
+  onQueue?: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
+  onSteer?: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
+  onEditSubmit?: (draft: FollowupDraft) => Promise<FollowupActionResult> | FollowupActionResult
+  onAbort?: () => void | (() => void)
   onSubmit?: () => void
 }
 
@@ -201,6 +218,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const sdk = useSDK()
   const sync = useSync()
   const globalSync = useGlobalSync()
+  const comments = useComments()
   const local = useLocal()
   const permission = usePermission()
   const prompt = usePrompt()
@@ -225,20 +243,30 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const [, setStore] = globalSync.child(sdk.directory)
     setStore("todo", sessionID, [])
 
-    input.onAbort?.()
+    const rollbackAbort = input.onAbort?.()
+    const rollback = () => {
+      if (typeof rollbackAbort === "function") rollbackAbort()
+    }
 
     const queued = pending.get(sessionID)
     if (queued) {
       queued.abort.abort()
       queued.cleanup()
       pending.delete(sessionID)
+      rollback()
       return Promise.resolve()
     }
     return sdk.client.session
-      .abort({
+      .stop({
         sessionID,
       })
-      .catch(() => {})
+      .then(
+        () => undefined,
+        () => {
+          rollback()
+          return undefined
+        },
+      )
   }
 
   const restoreCommentItems = (items: CommentItem[]) => {
@@ -288,11 +316,16 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
     const mode = input.mode()
+    const editingID = input.edit?.()?.id
+    const blankDraft = text.trim().length === 0 && images.length === 0 && input.commentCount() === 0
 
-    if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
+    if (blankDraft) {
+      if (editingID) return
       if (input.working()) abort()
       return
     }
+
+    if (input.followupPending?.()) return
 
     const currentModel = local.model.current()
     const currentAgent = local.agent.current()
@@ -399,6 +432,26 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
+      pendingBaseDraft: input.edit?.()?.baseDraft,
+    }
+    const currentComments = comments.all().map((item) => ({
+      ...item,
+      selection: { ...item.selection },
+    }))
+    const applyFollowup = async (lane: "queue" | "steer") => {
+      input.setFollowupPending?.(true)
+      try {
+        const result = await (lane === "queue" ? input.onQueue?.(draft) : input.onSteer?.(draft))
+        if (!result || result.kind === "applied") {
+          clearDraftState()
+        } else if (result.kind === "failed") {
+          restoreInput()
+        }
+      } catch {
+        restoreInput()
+      } finally {
+        input.setFollowupPending?.(false)
+      }
     }
 
     const clearInput = () => {
@@ -407,9 +460,21 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       input.setPopover(null)
     }
 
+    const clearDraftState = () => {
+      clearContext()
+      clearInput()
+      comments.clear()
+    }
+
+    const hasActiveDraftState = () =>
+      draftText(prompt.current()).trim().length > 0 ||
+      prompt.current().some((part) => part.type === "image") ||
+      prompt.context.items().length > 0 ||
+      comments.all().length > 0
+
     const restoreInput = () => {
       prompt.set(currentPrompt, input.promptLength(currentPrompt))
-      input.setMode(mode)
+      input.setMode(editingID ? "normal" : mode)
       input.setPopover(null)
       requestAnimationFrame(() => {
         const editor = input.editor()
@@ -420,12 +485,76 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
-      input.onQueue?.(draft)
+    const restoreDraftState = () => {
+      if (hasActiveDraftState()) return
       clearContext()
-      clearInput()
+      for (const item of context) {
+        prompt.context.add(item)
+      }
+      comments.replace(currentComments)
+      restoreInput()
+    }
+
+    const restoreAsyncSendState = () => {
+      const currentParts = prompt.current()
+      if (draftText(currentParts).trim().length > 0 || draftImages(currentParts).length > 0) return
+
+      const expectedContextKeys = context.filter((item) => !commentItems.some((comment) => comment.key === item.key)).map((item) => item.key)
+      const currentContextKeys = prompt.context.items().map((item) => item.key)
+      if (
+        currentContextKeys.length !== expectedContextKeys.length ||
+        currentContextKeys.some((key, index) => key !== expectedContextKeys[index])
+      ) {
+        return
+      }
+
+      const liveComments = comments.all()
+      if (
+        liveComments.length !== currentComments.length ||
+        liveComments.some(
+          (item, index) =>
+            item.id !== currentComments[index]?.id ||
+            item.file !== currentComments[index]?.file ||
+            item.comment !== currentComments[index]?.comment,
+        )
+      ) {
+        return
+      }
+
+      restoreCommentItems(commentItems)
+      restoreInput()
+    }
+
+    if (editingID && mode === "shell") {
+      input.setMode("normal")
+      restoreInput()
       return
     }
+
+    if (editingID) {
+      input.setFollowupPending?.(true)
+      try {
+        const result = await input.onEditSubmit?.(draft)
+        if (!result || result.kind === "applied") {
+          clearDraftState()
+        } else if (result.kind === "failed") {
+          restoreInput()
+        }
+      } catch {
+        restoreInput()
+      } finally {
+        input.setFollowupPending?.(false)
+      }
+      return
+    }
+
+    const followupLane = !isNewSession && mode === "normal" ? input.followupLane?.(event) : undefined
+    if (followupLane) {
+      await applyFollowup(followupLane)
+      return
+    }
+
+    if (input.submitBlocked?.()) return
 
     promptProbe.submit({ sessionID: session.id, directory: sessionDirectory })
     input.onSubmit?.()
@@ -454,7 +583,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
-        clearInput()
+        const messageID = Identifier.ascending("message")
+        const { requestParts } = buildCommandRequestParts({
+          prompt: currentPrompt.filter((part) => part.type !== "text"),
+          context,
+          images,
+          messageID,
+          sessionID: session.id,
+          sessionDirectory,
+        })
+        input.setFollowupPending?.(true)
+        clearDraftState()
         client.session
           .command({
             sessionID: session.id,
@@ -463,20 +602,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
-            parts: images.map((attachment) => ({
-              id: Identifier.ascending("part"),
-              type: "file" as const,
-              mime: attachment.mime,
-              url: attachment.dataUrl,
-              filename: attachment.filename,
-            })),
+            parts: requestParts,
           })
           .catch((err) => {
             showToast({
               title: language.t("prompt.toast.commandSendFailed.title"),
               description: formatServerError(err, language.t, language.t("common.requestFailed")),
             })
-            restoreInput()
+            restoreDraftState()
+          })
+          .finally(() => {
+            input.setFollowupPending?.(false)
           })
         return
       }
@@ -569,8 +705,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         description: errorMessage(err),
       })
       removeOptimisticMessage()
-      restoreCommentItems(commentItems)
-      restoreInput()
+      restoreAsyncSendState()
     })
   }
 

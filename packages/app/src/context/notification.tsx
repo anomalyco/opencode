@@ -50,6 +50,7 @@ type NotificationIndex = {
 
 const MAX_NOTIFICATIONS = 500
 const NOTIFICATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
+const IDLE_NOTIFICATION_DEDUPE_MS = 1_000
 
 function pruneNotifications(list: Notification[]) {
   const cutoff = Date.now() - NOTIFICATION_TTL_MS
@@ -132,6 +133,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
 
     const meta = { pruned: false, disposed: false }
+    const recentIdleNotifications = new Map<string, number>()
 
     const updateUnseen = (scope: "session" | "project", key: string, unseen: Notification[]) => {
       setIndex(scope, "unseen", key, unseen)
@@ -226,12 +228,27 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       return sessionID === activeSession
     }
 
+    const hasRecentIdleNotification = (directory: string, sessionID: string | undefined) => {
+      const key = `${directory}:${sessionID ?? "global"}`
+      const time = Date.now()
+      const last = recentIdleNotifications.get(key)
+      if (last !== undefined && time - last < IDLE_NOTIFICATION_DEDUPE_MS) return true
+      recentIdleNotifications.set(key, time)
+
+      for (const [candidate, timestamp] of recentIdleNotifications) {
+        if (time - timestamp > IDLE_NOTIFICATION_DEDUPE_MS * 10) recentIdleNotifications.delete(candidate)
+      }
+
+      return false
+    }
+
     const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
       const sessionID = event.properties.sessionID
       void lookup(directory, sessionID).then((session) => {
         if (meta.disposed) return
         if (!session) return
         if (session.parentID) return
+        if (hasRecentIdleNotification(directory, sessionID)) return
 
         if (settings.sounds.agentEnabled()) {
           void playSoundById(settings.sounds.agent())

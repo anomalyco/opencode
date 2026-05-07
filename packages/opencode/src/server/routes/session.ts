@@ -1,6 +1,6 @@
 import { Hono } from "hono"
-import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
+import { Effect } from "effect"
 import { SessionID, MessageID, PartID } from "@/session/schema"
 import z from "zod"
 import { Session } from "../../session"
@@ -13,6 +13,7 @@ import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
+import { SessionPending } from "../../session/pending"
 import { AppRuntime } from "../../effect/app-runtime"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
@@ -21,12 +22,46 @@ import { Log } from "../../util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { errors } from "../error"
+import { errors, STEER_UNAVAILABLE_ERROR } from "../error"
 import { lazy } from "../../util/lazy"
-import { Bus } from "../../bus"
-import { NamedError } from "@opencode-ai/util/error"
 
 const log = Log.create({ service: "server" })
+
+const ensureHistoryMutationAllowed = (pending: SessionPending.Info, sessionID: SessionID) => {
+  if (pending.steer.length === 0 && pending.queue.length === 0) return
+  throw new SessionPending.ConflictError({
+    sessionID,
+    message: "Resolve or resume pending follow-ups before mutating history",
+  })
+}
+
+const runHistoryMutationWithPendingLock = async <T>(sessionID: SessionID, task: () => Promise<T>) =>
+  AppRuntime.runPromise(
+    SessionPending.Service.use((svc) =>
+      svc.withLock(
+        sessionID,
+        svc.get(sessionID).pipe(
+          Effect.flatMap((pending) => {
+            return SessionRunState.Service.use((runState) => runState.isStopRequested(sessionID)).pipe(
+              Effect.flatMap((stopRequested) => {
+                if (stopRequested) {
+                  throw new SessionPending.ConflictError({
+                    sessionID,
+                    message: "Stop is still in progress",
+                  })
+                }
+                ensureHistoryMutationAllowed(pending, sessionID)
+                return Effect.tryPromise({
+                  try: task,
+                  catch: (error) => error,
+                })
+              }),
+            )
+          }),
+        ),
+      ),
+    ),
+  )
 
 export const SessionRoutes = lazy(() =>
   new Hono()
@@ -188,6 +223,275 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const todos = await AppRuntime.runPromise(Todo.Service.use((svc) => svc.get(sessionID)))
         return c.json(todos)
+      },
+    )
+    .get(
+      "/:sessionID/pending",
+      describeRoute({
+        summary: "Get pending follow-ups",
+        description: "Retrieve the server-owned pending steer and queue lanes for a session.",
+        operationId: "session.pending",
+        responses: {
+          200: {
+            description: "Pending follow-up state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPending.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        const pending = await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.get(sessionID)))
+        return c.json(pending)
+      },
+    )
+    .post(
+      "/:sessionID/pending",
+      describeRoute({
+        summary: "Add pending follow-up",
+        description: "Create a new pending follow-up in the steer or queue lane for a session.",
+        operationId: "session.pending_add",
+        requestBody: {
+          required: true,
+          content: {},
+        },
+        responses: {
+          200: {
+            description: "Updated pending follow-up state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPending.Info),
+              },
+            },
+          },
+          400: STEER_UNAVAILABLE_ERROR,
+          ...errors(404, 409),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator("json", SessionPending.AddInput.omit({ sessionID: true })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        await Session.get(sessionID)
+        const pending = await AppRuntime.runPromise(
+          SessionPending.Service.use((pendingSvc) =>
+            pendingSvc.addResolved({
+              ...body,
+              sessionID,
+              resolveDraft: SessionPrompt.Service.use((promptSvc) =>
+                promptSvc.snapshotPendingDraft(sessionID, body.draft),
+              ),
+            }),
+          ),
+        )
+        await SessionPrompt.activatePending(sessionID)
+        return c.json(pending)
+      },
+    )
+    .delete(
+      "/:sessionID/pending/:itemID",
+      describeRoute({
+        summary: "Delete pending follow-up",
+        description: "Delete a pending follow-up item from either lane.",
+        operationId: "session.pending_delete",
+        responses: {
+          200: {
+            description: "Updated pending follow-up state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPending.Info),
+              },
+            },
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator("param", SessionPending.ItemInput),
+      async (c) => {
+        const params = c.req.valid("param")
+        await Session.get(params.sessionID)
+        const pending = await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.remove(params)))
+        return c.json(pending)
+      },
+    )
+    .post(
+      "/:sessionID/pending/:itemID/move_up",
+      describeRoute({
+        summary: "Move pending item up",
+        description: "Move a pending follow-up one slot earlier inside its current lane.",
+        operationId: "session.pending_move_up",
+        responses: {
+          200: {
+            description: "Updated pending follow-up state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPending.Info),
+              },
+            },
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator("param", SessionPending.ItemInput),
+      async (c) => {
+        const params = c.req.valid("param")
+        await Session.get(params.sessionID)
+        const pending = await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.moveUp(params)))
+        return c.json(pending)
+      },
+    )
+    .post(
+      "/:sessionID/pending/:itemID/move_down",
+      describeRoute({
+        summary: "Move pending item down",
+        description: "Move a pending follow-up one slot later inside its current lane.",
+        operationId: "session.pending_move_down",
+        responses: {
+          200: {
+            description: "Updated pending follow-up state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPending.Info),
+              },
+            },
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator("param", SessionPending.ItemInput),
+      async (c) => {
+        const params = c.req.valid("param")
+        await Session.get(params.sessionID)
+        const pending = await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.moveDown(params)))
+        return c.json(pending)
+      },
+    )
+    .post(
+      "/:sessionID/pending/:itemID/move_lane",
+      describeRoute({
+        summary: "Move pending item between lanes",
+        description: "Move a pending follow-up between the queue and steer lanes.",
+        operationId: "session.pending_move_lane",
+        requestBody: {
+          required: true,
+          content: {},
+        },
+        responses: {
+          200: {
+            description: "Updated pending follow-up state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPending.Info),
+              },
+            },
+          },
+          400: STEER_UNAVAILABLE_ERROR,
+          ...errors(404, 409),
+        },
+      }),
+      validator("param", SessionPending.ItemInput),
+      validator("json", z.object({ lane: SessionPending.Lane })),
+      async (c) => {
+        const params = c.req.valid("param")
+        const body = c.req.valid("json")
+        await Session.get(params.sessionID)
+        const pending = await AppRuntime.runPromise(
+          SessionPending.Service.use((svc) => svc.moveLane({ ...params, lane: body.lane })),
+        )
+        if (body.lane === "queue" && pending.queue.some((item) => item.id === params.itemID)) {
+          await SessionPrompt.activatePending(params.sessionID)
+        }
+        return c.json(pending)
+      },
+    )
+    .post(
+      "/:sessionID/pending/:itemID/edit_commit",
+      describeRoute({
+        summary: "Save edits to a pending follow-up",
+        description: "Replace a pending follow-up draft.",
+        operationId: "session.pending_edit_commit",
+        requestBody: {
+          required: true,
+          content: {},
+        },
+        responses: {
+          200: {
+            description: "Updated pending follow-up state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPending.Info),
+              },
+            },
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator("param", SessionPending.ItemInput),
+      validator("json", z.object({ draft: SessionPending.Draft })),
+      async (c) => {
+        const params = c.req.valid("param")
+        const body = c.req.valid("json")
+        await Session.get(params.sessionID)
+        const pending = await AppRuntime.runPromise(
+          SessionPending.Service.use((pendingSvc) =>
+            pendingSvc.commitEditResolved({
+              ...params,
+              resolveDraft: SessionPrompt.Service.use((promptSvc) =>
+                promptSvc.snapshotPendingDraft(params.sessionID, body.draft),
+              ),
+            }),
+          ),
+        )
+        return c.json(pending)
+      },
+    )
+    .post(
+      "/:sessionID/pending/resume",
+      describeRoute({
+        summary: "Resume pending follow-ups",
+        description: "Explicitly resume paused pending follow-ups.",
+        operationId: "session.pending_resume",
+        responses: {
+          200: {
+            description: "Updated pending follow-up state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPending.Info),
+              },
+            },
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        const pending = await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.resume(sessionID)))
+        await SessionPrompt.activatePending(sessionID)
+        return c.json(pending)
       },
     )
     .post(
@@ -398,7 +702,66 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        await SessionPrompt.cancel(c.req.valid("param").sessionID)
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        await SessionPrompt.cancel(sessionID)
+        return c.json(true)
+      },
+    )
+    .post(
+      "/:sessionID/stop",
+      describeRoute({
+        summary: "Stop session",
+        description:
+          "Stop an active session, promote steer follow-ups to queued work, and pause pending follow-ups until resumed.",
+        operationId: "session.stop",
+        responses: {
+          200: {
+            description: "Stopped session",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        const shouldStop = await AppRuntime.runPromise(SessionRunState.Service.use((svc) => svc.requestStop(sessionID)))
+        const foregroundStarting = await SessionPrompt.isForegroundStarting(sessionID)
+        const pendingInfo = await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.get(sessionID)))
+        const shouldPauseScheduler =
+          pendingInfo.paused ||
+          pendingInfo.steer.length > 0 ||
+          pendingInfo.queue.length > 0
+        if (!shouldStop && !foregroundStarting && !shouldPauseScheduler) {
+          await AppRuntime.runPromise(SessionRunState.Service.use((svc) => svc.finishStop(sessionID)))
+          await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.refresh(sessionID)))
+          return c.json(true)
+        }
+        let beganStop = false
+        try {
+          await AppRuntime.runPromise(
+            SessionPending.Service.use((svc) => svc.beginStop(sessionID)),
+          )
+          beganStop = true
+          if (shouldStop || foregroundStarting) await SessionPrompt.cancel(sessionID)
+        } finally {
+          if (beganStop) {
+            await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.finishStop(sessionID))).catch(() => {})
+          }
+          await AppRuntime.runPromise(SessionRunState.Service.use((svc) => svc.finishStop(sessionID)))
+          await AppRuntime.runPromise(SessionPending.Service.use((svc) => svc.refresh(sessionID))).catch(() => {})
+        }
         return c.json(true)
       },
     )
@@ -803,6 +1166,10 @@ export const SessionRoutes = lazy(() =>
         summary: "Send message",
         description: "Create and send a new message to a session, streaming the AI response.",
         operationId: "session.prompt",
+        requestBody: {
+          required: true,
+          content: {},
+        },
         responses: {
           200: {
             description: "Created message",
@@ -817,39 +1184,7 @@ export const SessionRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400, 404),
-        },
-      }),
-      validator(
-        "param",
-        z.object({
-          sessionID: SessionID.zod,
-        }),
-      ),
-      validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
-      async (c) => {
-        c.status(200)
-        c.header("Content-Type", "application/json")
-        return stream(c, async (stream) => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          stream.write(JSON.stringify(msg))
-        })
-      },
-    )
-    .post(
-      "/:sessionID/prompt_async",
-      describeRoute({
-        summary: "Send async message",
-        description:
-          "Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.",
-        operationId: "session.prompt_async",
-        responses: {
-          204: {
-            description: "Prompt accepted",
-          },
-          ...errors(400, 404),
+          ...errors(400, 404, 409),
         },
       }),
       validator(
@@ -862,14 +1197,39 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
-          log.error("prompt_async failed", { sessionID, error: err })
-          Bus.publish(Session.Event.Error, {
-            sessionID,
-            error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
-          })
-        })
-
+        const msg = await SessionPrompt.prompt({ ...body, sessionID })
+        return c.json(msg)
+      },
+    )
+    .post(
+      "/:sessionID/prompt_async",
+      describeRoute({
+        summary: "Send async message",
+        description:
+          "Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.",
+        operationId: "session.prompt_async",
+        requestBody: {
+          required: true,
+          content: {},
+        },
+        responses: {
+          204: {
+            description: "Prompt accepted",
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        await AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.promptAsync({ ...body, sessionID })))
         return c.body(null, 204)
       },
     )
@@ -879,6 +1239,10 @@ export const SessionRoutes = lazy(() =>
         summary: "Send command",
         description: "Send a new command to a session for execution by the AI assistant.",
         operationId: "session.command",
+        requestBody: {
+          required: true,
+          content: {},
+        },
         responses: {
           200: {
             description: "Created message",
@@ -893,7 +1257,7 @@ export const SessionRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400, 404),
+          ...errors(400, 404, 409),
         },
       }),
       validator(
@@ -948,6 +1312,10 @@ export const SessionRoutes = lazy(() =>
         summary: "Revert message",
         description: "Revert a specific message in a session, undoing its effects and restoring the previous state.",
         operationId: "session.revert",
+        requestBody: {
+          required: true,
+          content: {},
+        },
         responses: {
           200: {
             description: "Updated session",
@@ -957,7 +1325,7 @@ export const SessionRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400, 404),
+          ...errors(400, 404, 409),
         },
       }),
       validator(
@@ -970,10 +1338,12 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         log.info("revert", c.req.valid("json"))
-        const session = await SessionRevert.revert({
-          sessionID,
-          ...c.req.valid("json"),
-        })
+        const session = await runHistoryMutationWithPendingLock(sessionID, () =>
+          SessionRevert.revert({
+            sessionID,
+            ...c.req.valid("json"),
+          }),
+        )
         return c.json(session)
       },
     )
@@ -992,7 +1362,7 @@ export const SessionRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400, 404),
+          ...errors(400, 404, 409),
         },
       }),
       validator(
@@ -1003,7 +1373,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const session = await SessionRevert.unrevert({ sessionID })
+        const session = await runHistoryMutationWithPendingLock(sessionID, () => SessionRevert.unrevert({ sessionID }))
         return c.json(session)
       },
     )

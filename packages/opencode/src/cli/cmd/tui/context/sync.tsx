@@ -14,6 +14,7 @@ import type {
   McpResource,
   FormatterStatus,
   SessionStatus,
+  SessionPending,
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
@@ -30,6 +31,12 @@ import { useArgs } from "./args"
 import { batch, createEffect, on } from "solid-js"
 import { Log } from "@/util/log"
 import { ConsoleState, emptyConsoleState, type ConsoleState as ConsoleStateType } from "@/config/console-state"
+
+const emptyPendingState = {
+  paused: false,
+  steer: [],
+  queue: [],
+} satisfies SessionPending
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -56,6 +63,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       session_diff: {
         [sessionID: string]: Snapshot.FileDiff[]
+      }
+      session_pending: {
+        [sessionID: string]: SessionPending
       }
       todo: {
         [sessionID: string]: Todo[]
@@ -94,6 +104,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session: [],
       session_status: {},
       session_diff: {},
+      session_pending: {},
       todo: {},
       message: {},
       part: {},
@@ -190,6 +201,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "todo.updated":
           setStore("todo", event.properties.sessionID, event.properties.todos)
+          break
+
+        case "session.pending.updated":
+          setStore("session_pending", event.properties.sessionID, event.properties.pending)
           break
 
         case "session.diff":
@@ -484,14 +499,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
+        pendingKnown(sessionID: string) {
+          return store.session_pending[sessionID] !== undefined
+        },
+        pending(sessionID: string) {
+          return store.session_pending[sessionID] ?? emptyPendingState
+        },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
           const workspace = project.workspace.current()
-          const [session, messages, todo, diff] = await Promise.all([
+          const [session, messages, todo, diff, pending] = await Promise.all([
             sdk.client.session.get({ sessionID, workspace }, { throwOnError: true }),
             sdk.client.session.messages({ sessionID, limit: 100, workspace }),
             sdk.client.session.todo({ sessionID, workspace }),
             sdk.client.session.diff({ sessionID, workspace }),
+            sdk.client.session.pending({ sessionID, workspace }),
           ])
           setStore(
             produce((draft) => {
@@ -499,6 +521,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
+              if (pending.data) {
+                draft.session_pending[sessionID] = pending.data
+              }
               draft.message[sessionID] = messages.data!.map((x) => x.info)
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
