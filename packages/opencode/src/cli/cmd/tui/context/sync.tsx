@@ -32,6 +32,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
 import path from "path"
 import { useKV } from "./kv"
+import { createSyncMessageEventBuffer, type SyncMessageEvent } from "./sync-message-event-buffer"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -112,6 +113,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const kv = useKV()
 
     const fullSyncedSessions = new Set<string>()
+    const deferredMessageEvents = createSyncMessageEventBuffer()
     let syncedWorkspace = project.workspace.current()
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
@@ -130,9 +132,140 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    function hasPendingPermission(sessionID: string) {
+      return (store.permission[sessionID]?.length ?? 0) > 0
+    }
+
+    function applyMessageEvent(event: SyncMessageEvent) {
+      if (event.type === "message.updated") {
+        const messages = store.message[event.properties.info.sessionID]
+        if (!messages) {
+          setStore("message", event.properties.info.sessionID, [event.properties.info])
+          return
+        }
+        const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
+        if (result.found) {
+          setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
+          return
+        }
+        setStore(
+          "message",
+          event.properties.info.sessionID,
+          produce((draft) => {
+            draft.splice(result.index, 0, event.properties.info)
+          }),
+        )
+        const updated = store.message[event.properties.info.sessionID]
+        if (updated.length <= 100) return
+        const oldest = updated[0]
+        batch(() => {
+          setStore(
+            "message",
+            event.properties.info.sessionID,
+            produce((draft) => {
+              draft.shift()
+            }),
+          )
+          setStore(
+            "part",
+            produce((draft) => {
+              delete draft[oldest.id]
+            }),
+          )
+        })
+        return
+      }
+
+      if (event.type === "message.removed") {
+        const messages = store.message[event.properties.sessionID]
+        const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
+        if (result.found) {
+          setStore(
+            "message",
+            event.properties.sessionID,
+            produce((draft) => {
+              draft.splice(result.index, 1)
+            }),
+          )
+        }
+        return
+      }
+
+      if (event.type === "message.part.updated") {
+        const parts = store.part[event.properties.part.messageID]
+        if (!parts) {
+          setStore("part", event.properties.part.messageID, [event.properties.part])
+          return
+        }
+        const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
+        if (result.found) {
+          setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+          return
+        }
+        setStore(
+          "part",
+          event.properties.part.messageID,
+          produce((draft) => {
+            draft.splice(result.index, 0, event.properties.part)
+          }),
+        )
+        return
+      }
+
+      if (event.type === "message.part.delta") {
+        const parts = store.part[event.properties.messageID]
+        if (!parts) return
+        const result = Binary.search(parts, event.properties.partID, (p) => p.id)
+        if (!result.found) return
+        setStore(
+          "part",
+          event.properties.messageID,
+          produce((draft) => {
+            const part = draft[result.index]
+            const field = event.properties.field as keyof typeof part
+            const existing = part[field] as string | undefined
+            ;(part[field] as string) = (existing ?? "") + event.properties.delta
+          }),
+        )
+        return
+      }
+
+      const parts = store.part[event.properties.messageID]
+      const result = Binary.search(parts, event.properties.partID, (p) => p.id)
+      if (result.found) {
+        setStore(
+          "part",
+          event.properties.messageID,
+          produce((draft) => {
+            draft.splice(result.index, 1)
+          }),
+        )
+      }
+    }
+
+    function processMessageEvent(event: SyncMessageEvent) {
+      if (!hasPendingPermission(event.properties.sessionID)) {
+        applyMessageEvent(event)
+        return
+      }
+      deferredMessageEvents.push(event)
+    }
+
+    function flushDeferredMessageEvents(sessionID: string) {
+      if (hasPendingPermission(sessionID)) return
+      const buffered = deferredMessageEvents.drain(sessionID)
+      if (buffered.length === 0) return
+      batch(() => {
+        for (const event of buffered) {
+          applyMessageEvent(event)
+        }
+      })
+    }
+
     event.subscribe((event) => {
       switch (event.type) {
         case "server.instance.disposed":
+          deferredMessageEvents.clear()
           void bootstrap()
           break
         case "permission.replied": {
@@ -147,6 +280,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               draft.splice(match.index, 1)
             }),
           )
+          flushDeferredMessageEvents(event.properties.sessionID)
           break
         }
 
@@ -250,111 +384,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
-        case "message.updated": {
-          const messages = store.message[event.properties.info.sessionID]
-          if (!messages) {
-            setStore("message", event.properties.info.sessionID, [event.properties.info])
-            break
-          }
-          const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
-          if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
-            break
-          }
-          setStore(
-            "message",
-            event.properties.info.sessionID,
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
-            }),
-          )
-          const updated = store.message[event.properties.info.sessionID]
-          if (updated.length > 100) {
-            const oldest = updated[0]
-            batch(() => {
-              setStore(
-                "message",
-                event.properties.info.sessionID,
-                produce((draft) => {
-                  draft.shift()
-                }),
-              )
-              setStore(
-                "part",
-                produce((draft) => {
-                  delete draft[oldest.id]
-                }),
-              )
-            })
-          }
+        case "message.updated":
+        case "message.removed":
+        case "message.part.updated":
+        case "message.part.delta":
+        case "message.part.removed":
+          processMessageEvent(event)
           break
-        }
-        case "message.removed": {
-          const messages = store.message[event.properties.sessionID]
-          const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
-          if (result.found) {
-            setStore(
-              "message",
-              event.properties.sessionID,
-              produce((draft) => {
-                draft.splice(result.index, 1)
-              }),
-            )
-          }
-          break
-        }
-        case "message.part.updated": {
-          const parts = store.part[event.properties.part.messageID]
-          if (!parts) {
-            setStore("part", event.properties.part.messageID, [event.properties.part])
-            break
-          }
-          const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
-          if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
-            break
-          }
-          setStore(
-            "part",
-            event.properties.part.messageID,
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.part)
-            }),
-          )
-          break
-        }
-
-        case "message.part.delta": {
-          const parts = store.part[event.properties.messageID]
-          if (!parts) break
-          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (!result.found) break
-          setStore(
-            "part",
-            event.properties.messageID,
-            produce((draft) => {
-              const part = draft[result.index]
-              const field = event.properties.field as keyof typeof part
-              const existing = part[field] as string | undefined
-              ;(part[field] as string) = (existing ?? "") + event.properties.delta
-            }),
-          )
-          break
-        }
-
-        case "message.part.removed": {
-          const parts = store.part[event.properties.messageID]
-          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (result.found)
-            setStore(
-              "part",
-              event.properties.messageID,
-              produce((draft) => {
-                draft.splice(result.index, 1)
-              }),
-            )
-          break
-        }
 
         case "lsp.updated": {
           const workspace = project.workspace.current()
