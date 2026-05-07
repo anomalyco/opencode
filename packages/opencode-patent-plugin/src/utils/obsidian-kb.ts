@@ -16,11 +16,20 @@ import { existsSync } from "fs"
 import { readFile, readdir, stat } from "fs/promises"
 import { resolve, join, relative, extname } from "path"
 import { quickSearch } from "./obsidian-index.js"
+import { SimpleCache } from "./cache.js"
 
 /**
  * Obsidian 知识库路径。必须通过环境变量 OBSIDIAN_KB_PATH 指定。
  */
 const KNOWLEDGE_BASE_PATH = process.env.OBSIDIAN_KB_PATH ?? ""
+
+/** KB 查询结果缓存（TTL 5 分钟，最多 200 条） */
+const kbCache = new SimpleCache<string>({ ttlMs: 5 * 60 * 1000, maxSize: 200 })
+
+// 启动时验证路径
+if (KNOWLEDGE_BASE_PATH && !existsSync(KNOWLEDGE_BASE_PATH)) {
+  console.warn(`[ObsidianKB] OBSIDIAN_KB_PATH 指定的路径不存在: ${KNOWLEDGE_BASE_PATH}`)
+}
 
 /**
  * Markdown 文件信息
@@ -238,9 +247,22 @@ export async function getKnowledgeBaseStats(): Promise<{
 }
 
 /**
- * 快速法规查询
+ * 快速法规查询（带缓存）
  */
 export async function queryLawFromKB(
+  lawName: string,
+  articleNumber?: string,
+): Promise<string> {
+  const cacheKey = `law:${lawName}:${articleNumber || ""}`
+  const cached = kbCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  const result = await queryLawFromKBInternal(lawName, articleNumber)
+  kbCache.set(cacheKey, result)
+  return result
+}
+
+async function queryLawFromKBInternal(
   lawName: string,
   articleNumber?: string,
 ): Promise<string> {
@@ -278,9 +300,21 @@ export async function queryLawFromKB(
 }
 
 /**
- * 查询审查指南
+ * 查询审查指南（带缓存）
  */
 export async function queryGuidelinesFromKB(
+  topic: string,
+): Promise<string> {
+  const cacheKey = `guidelines:${topic}`
+  const cached = kbCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  const result = await queryGuidelinesFromKBInternal(topic)
+  kbCache.set(cacheKey, result)
+  return result
+}
+
+async function queryGuidelinesFromKBInternal(
   topic: string,
 ): Promise<string> {
   const folders = ["Wiki/审查指南", "Raw/审查指南", "Raw/审查指南_md"]
@@ -303,9 +337,21 @@ export async function queryGuidelinesFromKB(
 }
 
 /**
- * 查询复审无效决定
+ * 查询复审无效决定（带缓存）
  */
 export async function queryInvalidationFromKB(
+  keyword: string,
+): Promise<string> {
+  const cacheKey = `invalidation:${keyword}`
+  const cached = kbCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  const result = await queryInvalidationFromKBInternal(keyword)
+  kbCache.set(cacheKey, result)
+  return result
+}
+
+async function queryInvalidationFromKBInternal(
   keyword: string,
 ): Promise<string> {
   const folders = ["Wiki/复审无效", "Raw/无效复审决定"]
@@ -327,9 +373,21 @@ export async function queryInvalidationFromKB(
 }
 
 /**
- * 查询专利判决
+ * 查询专利判决（带缓存）
  */
 export async function queryJudgmentFromKB(
+  keyword: string,
+): Promise<string> {
+  const cacheKey = `judgment:${keyword}`
+  const cached = kbCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  const result = await queryJudgmentFromKBInternal(keyword)
+  kbCache.set(cacheKey, result)
+  return result
+}
+
+async function queryJudgmentFromKBInternal(
   keyword: string,
 ): Promise<string> {
   const folders = ["Wiki/专利判决", "Raw/专利判决", "Raw/指导性专利判决文书", "Raw/指导性专利判决文书_md"]

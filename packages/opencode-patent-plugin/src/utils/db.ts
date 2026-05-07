@@ -67,6 +67,24 @@ export async function query<T = any>(
 }
 
 /**
+ * 数据库健康检查
+ *
+ * 测试连接并返回延迟信息，用于插件启动时诊断。
+ */
+export async function checkDBHealth(
+  config?: Partial<DBConfig>,
+): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  const start = Date.now()
+  try {
+    const pool = getPool(config)
+    await pool.query("SELECT 1")
+    return { ok: true, latencyMs: Date.now() - start }
+  } catch (err: any) {
+    return { ok: false, latencyMs: Date.now() - start, error: err?.message }
+  }
+}
+
+/**
  * 专利数据库查询
  */
 export async function queryPatentDB<T = any>(sql: string, params?: any[]): Promise<T[]> {

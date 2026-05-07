@@ -3,7 +3,17 @@
  *
  * 使用 fetch 调用 OpenAI-compatible API（DeepSeek/Qwen/GLM 等均兼容）。
  * 通过插件配置传入 API 信息，不依赖 OpenCode SDK client 的 model 属性。
+ *
+ * v2: 新增重试（指数退避）+ 超时保护（30s）
  */
+
+import { withRetry } from "../utils/retry.js"
+
+/** LLM 请求超时（ms） */
+const LLM_TIMEOUT = 30_000
+
+/** 可重试的 HTTP 状态码 */
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])
 
 export interface OpenCodeLLMConfig {
   /** API Base URL（如 https://api.deepseek.com/v1） */
@@ -32,7 +42,7 @@ export class OpenCodeLLMAdapter {
   }
 
   /**
-   * 单次聊天调用
+   * 单次聊天调用（带重试 + 超时）
    */
   async chat(params: {
     messages: Array<{ role: string; content: string }>
@@ -45,73 +55,112 @@ export class OpenCodeLLMAdapter {
     usage?: { promptTokens: number; completionTokens: number }
     model?: string
   }> {
-    const { baseUrl, apiKey, modelId, temperature, maxTokens } = this.config
+    return withRetry(
+      async () => {
+        const { baseUrl, apiKey, modelId, temperature, maxTokens } = this.config
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: params.model ?? modelId ?? "deepseek-chat",
-        messages: params.messages.map((msg) => ({
-          role: msg.role as "user" | "assistant" | "system",
-          content: msg.content,
-        })),
-        temperature: params.temperature ?? temperature ?? 0.3,
-        max_tokens: params.maxTokens ?? maxTokens ?? 4096,
-      }),
-    })
+        // AbortController 超时保护
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT)
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "unknown error")
-      throw new Error(`LLM API error (${response.status}): ${errorText}`)
-    }
+        try {
+          const response = await fetch(`${baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: params.model ?? modelId ?? "deepseek-chat",
+              messages: params.messages.map((msg) => ({
+                role: msg.role as "user" | "assistant" | "system",
+                content: msg.content,
+              })),
+              temperature: params.temperature ?? temperature ?? 0.3,
+              max_tokens: params.maxTokens ?? maxTokens ?? 4096,
+            }),
+            signal: controller.signal,
+          })
 
-    const data = await response.json() as any
-    const content = data.choices?.[0]?.message?.content ?? ""
-
-    return {
-      message: {
-        role: "assistant" as const,
-        content,
-      },
-      content,
-      usage: data.usage
-        ? {
-            promptTokens: data.usage.prompt_tokens ?? 0,
-            completionTokens: data.usage.completion_tokens ?? 0,
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => "unknown error")
+            const error: any = new Error(`LLM API error (${response.status}): ${errorText}`)
+            error.status = response.status
+            throw error
           }
-        : undefined,
-      model: data.model,
-    }
+
+          const data = (await response.json()) as any
+          const content = data.choices?.[0]?.message?.content ?? ""
+
+          return {
+            message: {
+              role: "assistant" as const,
+              content,
+            },
+            content,
+            usage: data.usage
+              ? {
+                  promptTokens: data.usage.prompt_tokens ?? 0,
+                  completionTokens: data.usage.completion_tokens ?? 0,
+                }
+              : undefined,
+            model: data.model,
+          }
+        } catch (err: any) {
+          // AbortError 转为更友好的消息
+          if (err?.name === "AbortError") {
+            throw new Error(`LLM API timeout (${LLM_TIMEOUT / 1000}s)`)
+          }
+          throw err
+        } finally {
+          clearTimeout(timeoutId)
+        }
+      },
+      {
+        maxRetries: 2,
+        retryable: (err) => RETRYABLE_STATUSES.has(err?.status) ||
+          /timeout|ECONNREFUSED|ECONNRESET|fetch failed/i.test(err?.message || ""),
+      },
+    )
   }
 
   /**
-   * 嵌入向量
+   * 嵌入向量（带超时）
    */
   async embed(texts: string[]): Promise<number[][]> {
     const { baseUrl, apiKey } = this.config
 
-    const response = await fetch(`${baseUrl}/embeddings`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "text-embedding-v3",
-        input: texts,
-      }),
-    })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT)
 
-    if (!response.ok) {
-      throw new Error(`Embedding API error (${response.status})`)
+    try {
+      const response = await fetch(`${baseUrl}/embeddings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "text-embedding-v3",
+          input: texts,
+        }),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Embedding API error (${response.status})`)
+      }
+
+      const data = (await response.json()) as any
+      return (data.data ?? []).map((d: any) => d.embedding as number[])
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        throw new Error(`Embedding API timeout (${LLM_TIMEOUT / 1000}s)`)
+      }
+      throw err
+    } finally {
+      clearTimeout(timeoutId)
     }
-
-    const data = await response.json() as any
-    return (data.data ?? []).map((d: any) => d.embedding as number[])
   }
 
   /** 检查适配器是否可用 */
@@ -134,19 +183,19 @@ export function createDefaultLLM(
 ): OpenCodeLLMAdapter {
   const baseUrl =
     (options?.baseUrl as string) ??
-    (options?.llm as Record<string, unknown>)?.baseUrl as string ??
+    ((options?.llm as Record<string, unknown>)?.baseUrl as string) ??
     process.env.LLM_BASE_URL ??
     ""
 
   const apiKey =
     (options?.apiKey as string) ??
-    (options?.llm as Record<string, unknown>)?.apiKey as string ??
+    ((options?.llm as Record<string, unknown>)?.apiKey as string) ??
     process.env.LLM_API_KEY ??
     ""
 
   const modelId =
     (options?.model as string) ??
-    (options?.llm as Record<string, unknown>)?.model as string ??
+    ((options?.llm as Record<string, unknown>)?.model as string) ??
     process.env.LLM_MODEL ??
     undefined
 
