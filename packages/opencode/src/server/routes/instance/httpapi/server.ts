@@ -25,6 +25,7 @@ import { ProviderAuth } from "@/provider/auth"
 import { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
+import { PtyTicket } from "@/pty/ticket"
 import { Question } from "@/question"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
@@ -44,7 +45,7 @@ import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { Workspace } from "@/control-plane/workspace"
-import { isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
+import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
@@ -72,6 +73,7 @@ import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/w
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
+import { errorLayer } from "./middleware/error"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -143,6 +145,7 @@ const uiRoute = HttpRouter.use((router) =>
 export function createRoutes(corsOptions?: CorsOptions) {
   return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
     Layer.provide([
+      errorLayer,
       cors(corsOptions),
       runtime,
       Account.defaultLayer,
@@ -163,6 +166,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       ProviderAuth.defaultLayer,
       Provider.defaultLayer,
       Pty.defaultLayer,
+      PtyTicket.defaultLayer,
       Question.defaultLayer,
       Ripgrep.defaultLayer,
       Session.defaultLayer,
@@ -187,6 +191,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       FetchHttpClient.layer,
       HttpServer.layerServices,
     ]),
+    Layer.provideMerge(Layer.succeed(CorsConfig)(corsOptions)),
     Layer.provideMerge(InstanceLayer.layer),
     Layer.provideMerge(Observability.layer),
   )

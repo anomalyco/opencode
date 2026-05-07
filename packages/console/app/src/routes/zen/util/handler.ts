@@ -23,7 +23,8 @@ import {
   ModelError,
   RateLimitError,
   FreeUsageLimitError,
-  SubscriptionUsageLimitError,
+  GoUsageLimitError,
+  BlackUsageLimitError,
 } from "./error"
 import {
   buildCostChunk,
@@ -70,6 +71,7 @@ export async function handler(
     modelList: "lite" | "full"
     parseApiKey: (headers: Headers) => string | undefined
     parseModel: (url: string, body: any) => string
+    parseVariant: (url: string, body: any) => string | undefined
     parseIsStream: (url: string, body: any) => boolean
   },
 ) {
@@ -92,6 +94,7 @@ export async function handler(
     const url = input.request.url
     const body = await input.request.json()
     const model = opts.parseModel(url, body)
+    const variant = opts.parseVariant(url, body)
     const isStream = opts.parseIsStream(url, body)
     const rawIp = input.request.headers.get("x-real-ip") ?? ""
     const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
@@ -108,6 +111,7 @@ export async function handler(
       request: requestId,
       client: ocClient,
       user_agent: userAgent,
+      "model.variant": variant,
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
@@ -116,7 +120,7 @@ export async function handler(
     const trialProviders = await trialLimiter?.check()
     const rateLimiter = modelInfo.allowAnonymous
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
-      : createKeyRateLimiter(modelInfo.id, zenApiKey, input.request)
+      : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
@@ -158,11 +162,14 @@ export async function handler(
                 Object.entries(obj).flatMap(([k, v]) => {
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
-                  if (v === "$ip") return [[k, ip]]
-                  if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
-                  if (v.startsWith("$header.")) {
-                    const headerValue = input.request.headers.get(v.slice(8))
-                    return headerValue ? [[k, headerValue]] : []
+                  if (typeof v === "string") {
+                    if (v === "$ip") return [[k, ip]]
+                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v === "$session") return sessionId ? [[k, sessionId]] : []
+                    if (v.startsWith("$header.")) {
+                      const headerValue = input.request.headers.get(v.slice(8))
+                      return headerValue ? [[k, headerValue]] : []
+                    }
                   }
                   return [[k, v]]
                 }),
@@ -393,7 +400,8 @@ export async function handler(
     if (
       error instanceof RateLimitError ||
       error instanceof FreeUsageLimitError ||
-      error instanceof SubscriptionUsageLimitError
+      error instanceof GoUsageLimitError ||
+      error instanceof BlackUsageLimitError
     ) {
       const headers = new Headers()
       if (error.retryAfter) {
@@ -402,7 +410,14 @@ export async function handler(
       return new Response(
         JSON.stringify({
           type: "error",
-          error: { type: error.constructor.name, message: error.message },
+          error: {
+            type: error.constructor.name,
+            message: error.message,
+          },
+          metadata:
+            error instanceof GoUsageLimitError || error instanceof BlackUsageLimitError
+              ? { workspace: error.workspace }
+              : {},
         }),
         { status: 429, headers },
       )
@@ -691,10 +706,11 @@ export async function handler(
             timeUpdated: sub.timeFixedUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
+            throw new BlackUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceeded", {
                 retryIn: formatRetryTime(result.resetInSec),
               }),
+              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -709,10 +725,11 @@ export async function handler(
             timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
+            throw new BlackUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceeded", {
                 retryIn: formatRetryTime(result.resetInSec),
               }),
+              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -737,8 +754,9 @@ export async function handler(
             timeUpdated: sub.timeWeeklyUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
+            throw new GoUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -752,8 +770,9 @@ export async function handler(
             timeSubscribed: sub.timeCreated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
+            throw new GoUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -767,8 +786,9 @@ export async function handler(
             timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
+            throw new GoUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -917,6 +937,13 @@ export async function handler(
       "tokens.cache_read": cacheReadTokens,
       "tokens.cache_write_5m": cacheWrite5mTokens,
       "tokens.cache_write_1h": cacheWrite1hTokens,
+      "cost.input.microcents": centsToMicroCents(inputCost),
+      "cost.output.microcents": centsToMicroCents(outputCost),
+      "cost.reasoning.microcents": reasoningCost ? centsToMicroCents(reasoningCost) : undefined,
+      "cost.cache_read.microcents": cacheReadCost ? centsToMicroCents(cacheReadCost) : undefined,
+      "cost.cache_write.microcents": cacheWrite5mCost ? centsToMicroCents(cacheWrite5mCost) : undefined,
+      "cost.total.microcents": centsToMicroCents(totalCostInCent),
+      // deprecated - remove after May 20, 2026
       "cost.input": Math.round(inputCost),
       "cost.output": Math.round(outputCost),
       "cost.reasoning": reasoningCost ? Math.round(reasoningCost) : undefined,
