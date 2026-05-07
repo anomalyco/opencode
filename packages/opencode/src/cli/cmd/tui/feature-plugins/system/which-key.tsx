@@ -3,7 +3,7 @@ import { RGBA, TextAttributes, type KeyEvent, type Renderable } from "@opentui/c
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { useBindings, useKeymapSelector } from "../../keymap"
-import type { ActiveKey, Binding } from "@opentui/keymap"
+import type { ActiveKey } from "@opentui/keymap"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 
@@ -116,13 +116,6 @@ function previousGroup(items: readonly Item[], index: number) {
   if (!item) return undefined
   if (item.type === "group") return item.label
   return item.group
-}
-
-function commandBindings(
-  bindings: readonly Binding<Renderable, KeyEvent>[],
-  commands: readonly string[],
-): Binding<Renderable, KeyEvent>[] {
-  return bindings.filter((binding) => typeof binding.cmd === "string" && commands.includes(binding.cmd))
 }
 
 function commandShortcut(api: TuiPluginApi, name: string) {
@@ -256,7 +249,7 @@ function WhichKeyPanel(props: {
         },
       },
     ],
-    bindings: commandBindings(props.api.tuiConfig.keymap.sections.which_key, scrollCommands),
+    bindings: props.api.tuiConfig.keymap.pick("which_key", scrollCommands),
   }))
 
   createEffect(() => {
@@ -384,7 +377,7 @@ const tui: TuiPlugin = async (api) => {
         },
       },
     ],
-    bindings: commandBindings(api.tuiConfig.keymap.sections.which_key, toggleCommands),
+    bindings: api.tuiConfig.keymap.pick("which_key", toggleCommands),
   })
 
   api.slots.register({
