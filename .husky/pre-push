@@ -1,5 +1,7 @@
 #!/bin/sh
 set -e
+# Hooks run with a minimal PATH; default bun install lives here
+export PATH="$HOME/.bun/bin:$PATH"
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '
