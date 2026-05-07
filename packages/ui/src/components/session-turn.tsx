@@ -22,6 +22,7 @@ import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
+import { busy } from "./session-status"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 import { normalize } from "./session-diff"
@@ -320,7 +321,7 @@ export function SessionTurn(
     if (typeof props.active === "boolean" && !props.active) return idle
     return data.store.session_status[props.sessionID] ?? idle
   })
-  const working = createMemo(() => status().type !== "idle" && active())
+  const working = createMemo(() => active() && busy(status()))
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
 
   const assistantCopyPartID = createMemo(() => {

@@ -52,6 +52,11 @@ type TabHandoff = {
   at: number
 }
 
+type Takeover = {
+  all: string[]
+  current?: string
+}
+
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
@@ -275,6 +280,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
+        takeover: {
+          all: [] as string[],
+          current: undefined as string | undefined,
+        },
         handoff: {
           tabs: undefined as TabHandoff | undefined,
         },
@@ -633,6 +642,47 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("browser", "width", width)
+        },
+      },
+      takeover: {
+        all: createMemo(() => store.takeover?.all ?? [], [], { equals: same }),
+        current: createMemo(() => store.takeover?.current),
+        has(id: string) {
+          return (store.takeover?.all ?? []).includes(id)
+        },
+        enter(id: string) {
+          const cur = store.takeover ?? ({ all: [] } satisfies Takeover)
+          const all = cur.all.includes(id) ? cur.all : [...cur.all, id]
+          setStore("takeover", { all, current: id })
+        },
+        setCurrent(id?: string) {
+          const cur = store.takeover
+          if (!cur) {
+            setStore("takeover", { all: [], current: id })
+            return
+          }
+          if (cur.current === id) return
+          setStore("takeover", "current", id)
+        },
+        clear(id: string) {
+          const cur = store.takeover
+          if (!cur) return
+          if (!cur.all.includes(id) && cur.current !== id) return
+          setStore("takeover", {
+            all: cur.all.filter((item) => item !== id),
+            ...(cur.current === id ? {} : cur.current ? { current: cur.current } : {}),
+          })
+        },
+        prune(all: string[]) {
+          const cur = store.takeover
+          if (!cur) return
+          const next = cur.all.filter((item) => all.includes(item))
+          const current = cur.current && next.includes(cur.current) ? cur.current : undefined
+          if (same(next, cur.all) && current === cur.current) return
+          setStore("takeover", {
+            all: next,
+            ...(current ? { current } : {}),
+          })
         },
       },
       review: {

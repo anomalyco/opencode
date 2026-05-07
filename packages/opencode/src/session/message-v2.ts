@@ -254,6 +254,16 @@ export type RetryPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof RetryPa
   error: APIError
 }
 
+export const SessionEventPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("session-event"),
+  event: Schema.Literal("suspended", "resumed"),
+  reason: Schema.Literal("browser_takeover"),
+})
+  .annotate({ identifier: "SessionEventPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type SessionEventPart = Types.DeepMutable<Schema.Schema.Type<typeof SessionEventPart>>
+
 export const StepStartPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("step-start"),
@@ -414,6 +424,7 @@ const _Part = Schema.Union([
   PatchPart,
   AgentPart,
   RetryPart,
+  SessionEventPart,
   CompactionPart,
 ]).annotate({ discriminator: "type", identifier: "Part" })
 export const Part = Object.assign(_Part, {
@@ -429,6 +440,7 @@ export const Part = Object.assign(_Part, {
     | PatchPart
     | AgentPart
     | RetryPart
+    | SessionEventPart
     | CompactionPart
   >,
 })
@@ -444,6 +456,7 @@ export type Part =
   | PatchPart
   | AgentPart
   | RetryPart
+  | SessionEventPart
   | CompactionPart
 
 // Zod discriminated union kept for the legacy Hono OpenAPI path.

@@ -36,6 +36,8 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { promptEnabled, promptProbe } from "@/testing/prompt"
+import { busy } from "@/utils/session-status"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
@@ -246,7 +248,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "idle",
       },
   )
-  const working = createMemo(() => status()?.type !== "idle")
+  const working = createMemo(() => busy(status()))
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )

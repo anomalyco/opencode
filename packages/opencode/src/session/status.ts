@@ -28,6 +28,16 @@ export const Info = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("busy"),
   }),
+  Schema.Struct({
+    type: Schema.Literal("suspending"),
+    reason: Schema.Literal("browser_takeover"),
+    note: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("paused"),
+    reason: Schema.Literal("browser_takeover"),
+    note: Schema.optional(Schema.String),
+  }),
 ])
   .annotate({ identifier: "SessionStatus" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))

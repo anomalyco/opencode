@@ -32,6 +32,7 @@ import { useSync } from "@/context/sync"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
+import { busy } from "@/utils/session-status"
 import { makeTimer } from "@solid-primitives/timer"
 
 type MessageComment = {
@@ -259,7 +260,11 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync.data.session_status[id] ?? idle
   })
-  const working = createMemo(() => sessionStatus().type !== "idle")
+  const working = createMemo(() => {
+    const status = sessionStatus()
+    if (status.type === "paused") return false
+    return !!pending() || busy(status)
+  })
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
@@ -287,7 +292,7 @@ export function MessageTimeline(props: {
     }
 
     const status = sessionStatus()
-    if (status.type !== "idle") {
+    if (busy(status)) {
       const messages = sessionMessages()
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === "user") return messages[i].id

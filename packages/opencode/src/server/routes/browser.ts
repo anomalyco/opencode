@@ -31,6 +31,9 @@ const Viewport = z.object({
 const Open = z.object({
   url: z.string().min(1),
 })
+const Action = z.object({
+  action: z.enum(["back", "forward", "reload"]),
+})
 const Tree = z.object({
   sessionID: SessionID.zod,
   tabs: z.array(
@@ -60,24 +63,22 @@ const send = (ws: Browser.Socket, data: unknown) => {
   ws.send(JSON.stringify(data))
 }
 
-const tree = async (root: ID) => {
-  const seen = new Set([root])
-  const out = [root]
+const input = (value: unknown) => {
+  if (typeof value === "string" || value instanceof ArrayBuffer) return value
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice().buffer
+}
 
+const tree = async (root: ID) => {
+  const out = [root]
   await AppRuntime.runPromise(
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       for (const id of out) {
         const kids = yield* sessions.children(id)
-        for (const kid of kids) {
-          if (seen.has(kid.id)) continue
-          seen.add(kid.id)
-          out.push(kid.id)
-        }
+        out.push(...kids.map((item) => item.id))
       }
     }),
   )
-
   return out
 }
 
@@ -276,6 +277,35 @@ export const BrowserRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/action",
+      describeRoute({
+        summary: "Run browser navigation action",
+        description: "Run a navigation action on the active browser tab.",
+        operationId: "browser.action",
+        responses: {
+          200: {
+            description: "Browser runtime status",
+            content: {
+              "application/json": {
+                schema: resolver(Browser.Info),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      param,
+      validator("json", Action),
+      async (c) => {
+        return c.json(
+          await Browser.action({
+            sessionID: c.req.valid("param").sessionID,
+            action: c.req.valid("json").action,
+          }),
+        )
+      },
+    )
+    .post(
       "/:sessionID/open",
       describeRoute({
         summary: "Open browser URL",
@@ -325,6 +355,67 @@ export const BrowserRoutes = lazy(() =>
       },
     )
     .get(
+      "/:sessionID/tabs/watch",
+      describeRoute({
+        summary: "Watch browser tabs",
+        description: "Keep session browser tab discovery active over a WebSocket connection.",
+        operationId: "browser.tabs.watch",
+        responses: {
+          200: {
+            description: "Connected tab watcher",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      param,
+      upgradeWebSocket(async (c) => {
+        const sessionID = SessionID.zod.parse(c.req.param("sessionID"))
+        let handler: Awaited<ReturnType<typeof Browser.observe>> | undefined
+        let closed = false
+
+        return {
+          async onOpen(_event, ws) {
+            const raw = ws.raw
+            if (!socket(raw)) {
+              closed = true
+              ws.close()
+              return
+            }
+
+            await Browser.observe(sessionID)
+              .then((next) => {
+                if (closed) {
+                  next.onClose()
+                  return
+                }
+                handler = next
+                send(raw, { type: "ready" })
+              })
+              .catch((error: unknown) => {
+                send(raw, {
+                  type: "error",
+                  error: error instanceof Error ? error.message : String(error),
+                })
+                if (raw.readyState === 1) raw.close(1011, "browser tab watcher startup failed")
+              })
+          },
+          onClose() {
+            closed = true
+            handler?.onClose()
+          },
+          onError() {
+            closed = true
+            handler?.onClose()
+          },
+        }
+      }),
+    )
+    .get(
       "/:sessionID/stream/connect",
       describeRoute({
         summary: "Connect to browser stream",
@@ -347,7 +438,7 @@ export const BrowserRoutes = lazy(() =>
         const sessionID = SessionID.zod.parse(c.req.param("sessionID"))
         let handler: Awaited<ReturnType<typeof Browser.connect>> | undefined
 
-        const pending: string[] = []
+        const pending: (string | ArrayBuffer)[] = []
         let ready = false
 
         return {
@@ -378,12 +469,13 @@ export const BrowserRoutes = lazy(() =>
               })
           },
           onMessage(event) {
-            if (typeof event.data !== "string") return
+            const data = input(event.data)
+            if (!data) return
             if (!ready || !handler) {
-              pending.push(event.data)
+              pending.push(data)
               return
             }
-            handler.onMessage(event.data)
+            handler.onMessage(data)
           },
           onClose() {
             handler?.onClose()

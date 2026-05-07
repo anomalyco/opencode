@@ -191,6 +191,27 @@ describe("session.list", () => {
     })
   })
 
+  test("descendants returns nested children", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const root = await Session.create({ title: "root-session" })
+        const child = await Session.create({ title: "child-session", parentID: root.id })
+        const grand = await Session.create({ title: "grand-session", parentID: child.id })
+        const other = await Session.create({ title: "other-session" })
+
+        const list = await Session.descendants(root.id)
+        const ids = list.map((item) => item.id)
+
+        expect(ids).toContain(child.id)
+        expect(ids).toContain(grand.id)
+        expect(ids).not.toContain(root.id)
+        expect(ids).not.toContain(other.id)
+      },
+    })
+  })
+
   test("filters by start time", async () => {
     await using tmp = await tmpdir({ git: true })
     await WithInstance.provide({

@@ -35,6 +35,7 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
+import { SessionPause } from "./pause"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
@@ -61,6 +62,7 @@ import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
 import { SessionTable } from "./session.sql"
+import z from "zod"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -80,6 +82,8 @@ const elog = EffectLogger.create({ service: "session.prompt" })
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  readonly resume: (sessionID: SessionID) => Effect.Effect<z.infer<typeof ControlResult>>
+  readonly suspend: (input: z.infer<typeof SuspendInput>) => Effect.Effect<z.infer<typeof ControlResult>>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
   readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
@@ -130,6 +134,44 @@ export const layer = Layer.effect(
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* elog.info("cancel", { sessionID })
       yield* state.cancel(sessionID)
+    })
+
+    const event = Effect.fn("SessionPrompt.event")(function* (input: {
+      sessionID: SessionID
+      event: SessionPause.Event
+      reason: SessionPause.Reason
+    }) {
+      const msg = yield* sessions.findMessage(input.sessionID, () => true)
+      if (Option.isNone(msg)) return
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: msg.value.info.id,
+        sessionID: input.sessionID,
+        type: "session-event",
+        event: input.event,
+        reason: input.reason,
+      } satisfies MessageV2.SessionEventPart)
+    })
+
+    const suspend = Effect.fn("SessionPrompt.suspend")(function* (input: z.infer<typeof SuspendInput>) {
+      const next = {
+        type: "paused" as const,
+        reason: input.reason,
+        ...(input.note ? { note: input.note } : {}),
+      }
+      yield* status.set(input.sessionID, next)
+      yield* event({ sessionID: input.sessionID, event: "suspended", reason: input.reason })
+      return { applied: true, status: next }
+    })
+
+    const resume = Effect.fn("SessionPrompt.resume")(function* (sessionID: SessionID) {
+      const prev = yield* status.get(sessionID)
+      const next = { type: "idle" as const }
+      if (prev.type === "paused" || prev.type === "suspending") {
+        yield* event({ sessionID, event: "resumed", reason: prev.reason })
+      }
+      yield* status.set(sessionID, next)
+      return { applied: prev.type === "paused" || prev.type === "suspending", status: next }
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -1759,6 +1801,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     return Service.of({
       cancel,
+      resume,
+      suspend,
       prompt,
       loop,
       shell,
@@ -1802,6 +1846,17 @@ export const defaultLayer = Layer.suspend(() =>
 const ModelRef = Schema.Struct({
   providerID: ProviderID,
   modelID: ModelID,
+})
+
+export const SuspendInput = z.object({
+  sessionID: SessionID.zod,
+  reason: SessionPause.Reason,
+  note: z.string().optional(),
+})
+
+export const ControlResult = z.object({
+  applied: z.boolean(),
+  status: SessionStatus.Info.zod,
 })
 
 export const PromptInput = Schema.Struct({

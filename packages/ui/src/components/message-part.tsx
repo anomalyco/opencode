@@ -1391,6 +1391,11 @@ PART_MAPPING["compaction"] = function CompactionPartDisplay() {
   return <MessageDivider label={i18n.t("ui.messagePart.compaction")} />
 }
 
+PART_MAPPING["session-event"] = function SessionEventPartDisplay(props) {
+  const part = () => props.part as PartType & { event: "suspended" | "resumed" }
+  return <MessageDivider label={part().event === "suspended" ? "Suspended" : "Resumed"} />
+}
+
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()

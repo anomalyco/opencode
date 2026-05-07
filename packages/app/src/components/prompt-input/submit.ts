@@ -389,6 +389,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
+    if (sync.data.session_status[session.id]?.type === "paused") {
+      showToast({
+        title: language.t("prompt.toast.promptSendFailed.title"),
+        description: "Press Resume before sending a prompt.",
+      })
+      return
+    }
+
     const model = {
       modelID: currentModel.id,
       providerID: currentModel.provider.id,

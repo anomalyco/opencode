@@ -14,6 +14,7 @@ import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
+import { busy } from "@/utils/session-status"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { childSessionOnPath, hasProjectPermissions } from "./helpers"
 
@@ -162,12 +163,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         typeof (message as { time?: { completed?: unknown } }).time?.completed !== "number",
     )
     const status = sessionStore.session_status[props.session.id]
-    return (
-      pending !== undefined ||
-      status?.type === "busy" ||
-      status?.type === "retry" ||
-      (status !== undefined && status.type !== "idle")
-    )
+    if (status?.type === "paused") return false
+    return pending !== undefined || busy(status)
   })
 
   const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))

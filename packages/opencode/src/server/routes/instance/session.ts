@@ -448,6 +448,70 @@ export const SessionRoutes = lazy(() =>
         }),
     )
     .post(
+      "/:sessionID/suspend",
+      describeRoute({
+        summary: "Suspend session",
+        description:
+          "Request a safe-checkpoint suspension for a session and return after the session has entered paused state.",
+        operationId: "session.suspend",
+        responses: {
+          200: {
+            description: "Suspended session",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPrompt.ControlResult),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator("json", SessionPrompt.SuspendInput.omit({ sessionID: true })),
+      async (c) =>
+        jsonRequest("SessionRoutes.suspend", c, function* () {
+          const svc = yield* SessionPrompt.Service
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          return yield* svc.suspend({ ...body, sessionID })
+        }),
+    )
+    .post(
+      "/:sessionID/resume",
+      describeRoute({
+        summary: "Resume session",
+        description: "Resume a previously suspended session and return after the parked execution flow has been unparked.",
+        operationId: "session.resume",
+        responses: {
+          200: {
+            description: "Resumed session",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPrompt.ControlResult),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.resume", c, function* () {
+          const svc = yield* SessionPrompt.Service
+          return yield* svc.resume(c.req.valid("param").sessionID)
+        }),
+    )
+    .post(
       "/:sessionID/share",
       describeRoute({
         summary: "Share session",

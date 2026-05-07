@@ -1,4 +1,5 @@
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
 import z from "zod"
 import semver from "semver"
@@ -9,9 +10,13 @@ import { makeRuntime } from "@/effect/run-service"
 import { Global } from "@opencode-ai/core/global"
 import { Npm } from "@opencode-ai/core/npm"
 import { type SessionID, SessionID as Session } from "@/session/schema"
+import { SessionTable } from "@/session/session.sql"
+import { Database, and, eq, inArray } from "@/storage/db"
 import * as Log from "@opencode-ai/core/util/log"
+import { Flock } from "@/util/flock"
 import { Process } from "@/util/process"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Instance } from "@/project/instance"
+import { Cause, Effect, Layer, ServiceMap } from "effect"
 
 export namespace Browser {
   const log = Log.create({ service: "browser" })
@@ -49,6 +54,13 @@ export namespace Browser {
   const Stream = z.object({
     stream: Status,
   })
+  const SeenTab = z.object({
+    active: z.boolean().optional().nullable(),
+    title: z.string().optional().nullable(),
+    type: z.string().optional().nullable(),
+    url: z.string().optional().nullable(),
+  })
+  const SeenTabs = z.array(SeenTab)
 
   export const Info = z
     .object({
@@ -116,6 +128,8 @@ export namespace Browser {
     cache: Map<SessionID, Cell>
     queue: Map<SessionID, Promise<void>>
     live: Map<SessionID, Slot>
+    poll?: ReturnType<typeof setTimeout>
+    seen: Map<SessionID, string>
   }
 
   export interface Interface {
@@ -132,9 +146,12 @@ export namespace Browser {
       scale?: number
     }) => Effect.Effect<Tabs>
     readonly viewport: (input: { sessionID: SessionID; width: number; height: number; scale?: number }) => Effect.Effect<Info>
+    readonly action: (input: { sessionID: SessionID; action: "back" | "forward" | "reload" }) => Effect.Effect<Info>
     readonly open: (input: { sessionID: SessionID; url: string }) => Effect.Effect<Info>
     readonly close: (sessionID: SessionID) => Effect.Effect<Info>
     readonly remove: (sessionID: SessionID) => Effect.Effect<void>
+    readonly live: (ids?: SessionID[]) => Effect.Effect<Tabs[]>
+    readonly observe: (sessionID: SessionID) => Effect.Effect<{ onClose: () => void }>
     readonly connect: (
       sessionID: SessionID,
       ws: Socket,
@@ -147,9 +164,31 @@ export namespace Browser {
   const Min = "0.25.3"
   const Idle = 30_000
   const Poll = 1_200
+  const Wait = 500
 
   const profile = (sessionID: SessionID) => path.join(profiles, sessionID)
+  export const key = (sessionID: SessionID) => `browser:${profile(sessionID)}`
   const snap = (data: Tabs) => JSON.stringify(data.tabs)
+  const sign = (port: number, data?: Tabs) => `${port}:${data ? snap(data) : ""}`
+  const socket = () => {
+    if (process.env.AGENT_BROWSER_SOCKET_DIR) return process.env.AGENT_BROWSER_SOCKET_DIR
+    if (process.env.XDG_RUNTIME_DIR) return path.join(process.env.XDG_RUNTIME_DIR, "agent-browser")
+    if (process.env.HOME) return path.join(process.env.HOME, ".agent-browser")
+    return path.join(os.tmpdir(), "agent-browser")
+  }
+  const code = (err: unknown) => {
+    if (!err || typeof err !== "object") return
+    if (!("code" in err) || typeof err.code !== "string") return
+    return err.code
+  }
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch (err) {
+      return code(err) !== "ESRCH"
+    }
+  }
   const makeInfo = (sessionID: SessionID, data: z.infer<typeof Status>) =>
     ({
       sessionID,
@@ -159,6 +198,20 @@ export namespace Browser {
       ...(data.connected !== undefined ? { connected: data.connected } : {}),
       ...(data.screencasting !== undefined ? { screencasting: data.screencasting } : {}),
     }) satisfies Info
+
+  const none = (sessionID: SessionID) =>
+    ({
+      sessionID,
+      profile: profile(sessionID),
+      enabled: false,
+      connected: false,
+      screencasting: false,
+    }) satisfies Info
+  const empty = (sessionID: SessionID) =>
+    ({
+      sessionID,
+      tabs: [],
+    }) satisfies Tabs
 
   function parse(raw: string) {
     const text = raw.trim()
@@ -280,7 +333,13 @@ export namespace Browser {
       const state = yield* InstanceState.make<State>(
         Effect.fn("Browser.state")(function* () {
           yield* Effect.promise(() => fs.mkdir(profiles, { recursive: true }))
-          return { cache: new Map(), queue: new Map(), live: new Map() }
+          const out: State = { cache: new Map(), queue: new Map(), live: new Map(), seen: new Map() }
+          yield* Effect.addFinalizer(
+            () => Effect.sync(() => {
+              if (out.poll) clearTimeout(out.poll)
+            }),
+          )
+          return out
         }),
       )
 
@@ -365,6 +424,112 @@ export namespace Browser {
         return raw(sessionID)
       })
 
+      const read = async (dir: string, sessionID: SessionID) => {
+        const port = Number.parseInt((await Bun.file(path.join(dir, `${sessionID}.stream`)).text().catch(() => "")).trim(), 10)
+        if (!Number.isInteger(port) || port < 1) return
+        const pid = Number.parseInt((await Bun.file(path.join(dir, `${sessionID}.pid`)).text().catch(() => "")).trim(), 10)
+        if (!Number.isInteger(pid) || pid < 1 || !alive(pid)) return
+        return port
+      }
+
+      const note = Effect.fn("Browser.note")(function* (sessionID: SessionID, port: number) {
+        const s = yield* InstanceState.get(state)
+        const prev = s.cache.get(sessionID)?.info
+        const info = {
+          sessionID,
+          profile: profile(sessionID),
+          enabled: true,
+          port,
+          ...(prev?.connected !== undefined ? { connected: prev.connected } : {}),
+          ...(prev?.screencasting !== undefined ? { screencasting: prev.screencasting } : {}),
+        } satisfies Info
+        const cell = s.cache.get(sessionID) ?? {}
+        cell.info = info
+        s.cache.set(sessionID, cell)
+        return info
+      })
+
+      const scan = Effect.fn("Browser.scan")(function* (ids?: SessionID[]) {
+        const dir = socket()
+        const out = new Map<SessionID, number>()
+        if (ids) {
+          yield* Effect.promise(() =>
+            Promise.all(
+              ids.map(async (sessionID) => {
+                const port = await read(dir, sessionID)
+                if (port) out.set(sessionID, port)
+              }),
+            ).then(() => undefined),
+          )
+          return out
+        }
+
+        const list = yield* Effect.promise(() => fs.readdir(dir).catch(() => [] as string[]))
+        yield* Effect.promise(() =>
+          Promise.all(
+            list
+              .filter((name) => name.endsWith(".stream"))
+              .map(async (name) => {
+                const next = Session.zod.safeParse(name.slice(0, -".stream".length))
+                if (!next.success) return
+                const sessionID = next.data
+                const port = await read(dir, sessionID)
+                if (!port) return
+                out.set(sessionID, port)
+              }),
+          ).then(() => undefined),
+        )
+        return out
+      })
+
+      const known = Effect.fn("Browser.known")(function* (ids: SessionID[]) {
+        if (ids.length === 0) return new Set<SessionID>()
+        const rows = yield* Effect.sync(() =>
+          Database.use((db) =>
+            db
+              .select({ id: SessionTable.id })
+              .from(SessionTable)
+              .where(and(eq(SessionTable.project_id, Instance.project.id), inArray(SessionTable.id, ids)))
+              .all(),
+          ),
+        )
+        return new Set(rows.map((row) => row.id))
+      })
+
+      const probe = Effect.fn("Browser.probe")(function* (sessionID: SessionID) {
+        const out = yield* scan([sessionID])
+        const port = out.get(sessionID)
+        if (!port) return
+        return yield* note(sessionID, port)
+      })
+
+      const grab = Effect.fn("Browser.grab")(function* (sessionID: SessionID, port: number) {
+        const res = yield* Effect.promise(() =>
+          fetch(`http://127.0.0.1:${port}/api/tabs`, {
+            signal: AbortSignal.timeout(Wait),
+          }),
+        )
+        if (!res.ok) throw new Error(`agent-browser tabs request failed: ${res.status} ${res.statusText}`)
+        const raw = yield* Effect.promise(() => res.json())
+        const next = SeenTabs.safeParse(raw)
+        if (!next.success) throw ParseError
+        const data = {
+          sessionID,
+          tabs: next.data.map((tab, index) => ({
+            active: tab.active === true,
+            index,
+            title: tab.title ?? "",
+            url: tab.url ?? "",
+            ...(tab.type ? { type: tab.type } : {}),
+          })),
+        } satisfies Tabs
+        const s = yield* InstanceState.get(state)
+        const cell = s.cache.get(sessionID) ?? {}
+        cell.tabs = data
+        s.cache.set(sessionID, cell)
+        return data
+      })
+
       const call = Effect.fn("Browser.call")(function* (sessionID: SessionID, args: string[]) {
         const s = yield* InstanceState.get(state)
         const prev = s.queue.get(sessionID) ?? Promise.resolve()
@@ -382,7 +547,9 @@ export namespace Browser {
             ...process.env,
             ...(yield* vars(sessionID)),
           }
-          const out = yield* Effect.promise(() => Process.run([cmd, ...args], { nothrow: true, env }))
+          const out = yield* Effect.promise(() =>
+            Flock.withLock(key(sessionID), () => Process.run([cmd, ...args], { nothrow: true, env })),
+          )
           if (out.code !== 0) throw new Error(detail(out))
           return out.stdout.toString()
         } finally {
@@ -392,11 +559,10 @@ export namespace Browser {
       })
 
       const status = Effect.fn("Browser.status")(function* (sessionID: SessionID) {
-        const s = yield* InstanceState.get(state)
-        const hit = s.cache.get(sessionID)?.info
+        const hit = yield* probe(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
         if (hit) return hit
-        const json = yield* call(sessionID, ["stream", "status", "--json"])
-        const info = makeInfo(sessionID, statusPayload(parse(json)))
+        const s = yield* InstanceState.get(state)
+        const info = none(sessionID)
         const cell = s.cache.get(sessionID) ?? {}
         cell.info = info
         s.cache.set(sessionID, cell)
@@ -404,6 +570,8 @@ export namespace Browser {
       })
 
       const freshInfo = Effect.fn("Browser.freshInfo")(function* (sessionID: SessionID) {
+        const hit = yield* probe(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (hit) return hit
         const s = yield* InstanceState.get(state)
         const json = yield* call(sessionID, ["stream", "status", "--json"])
         const info = makeInfo(sessionID, statusPayload(parse(json)))
@@ -414,6 +582,11 @@ export namespace Browser {
       })
 
       const freshTabs = Effect.fn("Browser.freshTabs")(function* (sessionID: SessionID) {
+        const hit = yield* probe(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (hit?.port) {
+          const data = yield* grab(sessionID, hit.port).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (data) return data
+        }
         const s = yield* InstanceState.get(state)
         const json = yield* call(sessionID, ["tab", "list", "--json"])
         const data = pack(sessionID, tabPayload(parse(json)))
@@ -421,6 +594,23 @@ export namespace Browser {
         cell.tabs = data
         s.cache.set(sessionID, cell)
         return data
+      })
+
+      const peek = Effect.fn("Browser.peek")(function* (sessionID: SessionID) {
+        const info = yield* probe(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (!info?.port) return
+        const tabs = yield* grab(sessionID, info.port).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        return { info, ...(tabs ? { tabs } : {}) }
+      })
+
+      const wait = Effect.fn("Browser.wait")(function* (sessionID: SessionID) {
+        let n = 0
+        while (n < 20) {
+          const info = yield* freshInfo(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (info?.enabled && info.port) return info
+          n += 1
+          yield* Effect.sleep("250 millis")
+        }
       })
 
       const dropInfo = Effect.fn("Browser.dropInfo")(function* (sessionID: SessionID) {
@@ -445,6 +635,11 @@ export namespace Browser {
         if (input.info) cell.info = input.info
         if (input.tabs) cell.tabs = input.tabs
         if (input.info || input.tabs) s.cache.set(input.sessionID, cell)
+        if (input.info?.enabled === false) {
+          s.seen.delete(input.sessionID)
+        } else if (input.tabs) {
+          s.seen.set(input.sessionID, sign(cell.info?.port ?? 0, input.tabs))
+        }
         if (input.tabs) {
           const slot = s.live.get(input.sessionID)
           if (slot) slot.tabs = snap(input.tabs)
@@ -507,9 +702,8 @@ export namespace Browser {
         slot.refs = Math.max(0, slot.refs - 1)
         if (slot.refs > 0) return
         if (slot.timer) clearTimeout(slot.timer)
-        const timer = setTimeout(() => idle(sessionID, timer), Idle)
-        slot.timer = timer
-        s.live.set(sessionID, slot)
+        if (slot.poll) clearTimeout(slot.poll)
+        s.live.delete(sessionID)
       })
 
       const enable = Effect.fn("Browser.enable")(function* (input: { sessionID: SessionID; port?: number }) {
@@ -524,15 +718,13 @@ export namespace Browser {
         )
         if (fail) {
           if (!locked(fail)) throw fail
-          log.info("browser profile lock detected, retrying", { sessionID: input.sessionID })
-          const info = yield* freshInfo(input.sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
-          if (!info?.enabled || !info.port) {
-            yield* call(input.sessionID, ["close"]).pipe(Effect.catch(() => Effect.succeed("")))
-            json = yield* call(input.sessionID, args)
-          } else {
+          log.info("browser profile lock detected, waiting", { sessionID: input.sessionID })
+          const info = yield* wait(input.sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (info) {
             yield* emit({ sessionID: input.sessionID, info })
             return info
           }
+          json = yield* call(input.sessionID, args)
         }
         try {
           const info = makeInfo(input.sessionID, statusPayload(parse(json)))
@@ -554,23 +746,105 @@ export namespace Browser {
           s.live.delete(sessionID)
         }
         yield* call(sessionID, ["stream", "disable"])
-        const info = {
-          sessionID,
-          profile: profile(sessionID),
-          enabled: false,
-          connected: false,
-          screencasting: false,
-        } satisfies Info
+        const info = none(sessionID)
         yield* emit({ sessionID, info })
         return info
       })
 
       const tabs = Effect.fn("Browser.tabs")(function* (sessionID: SessionID) {
+        const data = yield* peek(sessionID)
+        if (data?.tabs) return data.tabs
         const s = yield* InstanceState.get(state)
         const hit = s.cache.get(sessionID)?.tabs
-        if (hit) return hit
-        return yield* freshTabs(sessionID)
+        if (data?.info && hit) return hit
+        return empty(sessionID)
       })
+
+      const live = Effect.fn("Browser.live")(function* (ids?: SessionID[]) {
+        const out = yield* scan(ids)
+        const list = ids ?? [...out.keys()]
+        const all = yield* Effect.forEach(
+          list,
+          (sessionID) =>
+            Effect.gen(function* () {
+              const port = out.get(sessionID)
+              if (!port) return
+              yield* note(sessionID, port)
+              const data = yield* grab(sessionID, port).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              if (!data || data.tabs.length === 0) return
+              return data
+            }),
+          { concurrency: "unbounded" },
+        )
+        return all.filter((item): item is Tabs => !!item)
+      })
+
+      const sweep = Effect.fn("Browser.sweep")(function* () {
+        const ports = yield* scan()
+        const ids = yield* known([...ports.keys()])
+        const s = yield* InstanceState.get(state)
+
+        yield* Effect.forEach(
+          [...s.seen.keys()].filter((sessionID) => !ids.has(sessionID) || !ports.has(sessionID)),
+          (sessionID) =>
+            emit({
+              sessionID,
+              info: none(sessionID),
+              tabs: empty(sessionID),
+            }),
+          { concurrency: "unbounded", discard: true },
+        )
+
+        yield* Effect.forEach(
+          [...ids],
+          (sessionID) =>
+            Effect.gen(function* () {
+              const port = ports.get(sessionID)
+              if (!port) return
+              const old = (yield* InstanceState.get(state)).seen.get(sessionID)
+              const info = yield* note(sessionID, port)
+              const data = yield* grab(sessionID, port).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              if (!data) {
+                const next = sign(port)
+                if (old === next) return
+                const s = yield* InstanceState.get(state)
+                s.seen.set(sessionID, next)
+                yield* emit({ sessionID, info })
+                return
+              }
+              if (old === sign(port, data)) return
+              yield* emit({ sessionID, info, tabs: data })
+            }),
+          { concurrency: 8, discard: true },
+        )
+      })
+
+      const start = Effect.fn("Browser.start")(function* (delay = 0) {
+        const s = yield* InstanceState.get(state)
+        if (s.poll) return
+        const timer = setTimeout(() => loop(timer), delay)
+        timer.unref?.()
+        s.poll = timer
+      })
+
+      const loop = InstanceState.bind((timer: ReturnType<typeof setTimeout>) => {
+        void Effect.runPromise(
+          Effect.gen(function* () {
+            const s = yield* InstanceState.get(state)
+            if (s.poll !== timer) return
+            s.poll = undefined
+            yield* sweep().pipe(
+              Effect.catchCause((cause) => {
+                log.error("browser discovery failed", { cause: Cause.pretty(cause) })
+                return Effect.void
+              }),
+            )
+            yield* start(Poll)
+          }),
+        )
+      })
+
+      yield* start()
 
       const tick = InstanceState.bind((sessionID: SessionID, poll: ReturnType<typeof setTimeout>) => {
         void Effect.runPromise(
@@ -580,13 +854,17 @@ export namespace Browser {
             if (!slot || slot.poll !== poll) return
             slot.poll = undefined
 
-            const data = yield* freshTabs(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const hit = yield* peek(sessionID)
             const next = s.live.get(sessionID)
             if (!next) return
 
-            if (data) {
+            if (hit?.tabs) {
+              const text = snap(hit.tabs)
+              if (next.tabs !== text) yield* emit({ sessionID, info: hit.info, tabs: hit.tabs })
+            } else if (!hit?.info) {
+              const data = empty(sessionID)
               const text = snap(data)
-              if (next.tabs !== text) yield* emit({ sessionID, tabs: data })
+              if (next.tabs && next.tabs !== text) yield* emit({ sessionID, info: none(sessionID), tabs: data })
             }
 
             if (next.poll) return
@@ -608,6 +886,29 @@ export namespace Browser {
         const poll = setTimeout(() => tick(sessionID, poll), Poll)
         slot.poll = poll
       })
+
+      const observe: Interface["observe"] = (sessionID: SessionID) =>
+        Effect.gen(function* () {
+          yield* keep(sessionID)
+          yield* watch(sessionID)
+          const hit = yield* peek(sessionID)
+          if (hit) yield* emit({ sessionID, ...hit })
+          let closed = false
+          const stop = Instance.bind(() => {
+            void Effect.runPromise(drop(sessionID))
+          })
+
+          log.info("browser tabs watched", { sessionID, port: hit?.info.port })
+
+          return {
+            onClose: () => {
+              if (closed) return
+              closed = true
+              log.info("browser tabs unwatched", { sessionID, port: hit?.info.port })
+              stop()
+            },
+          }
+        }).pipe(Effect.orDie)
 
       const focus = Effect.fn("Browser.focus")(function* (sessionID: SessionID, index: number) {
         const next = Math.max(0, Math.floor(index))
@@ -659,20 +960,32 @@ export namespace Browser {
         return yield* stateInfo(input.sessionID)
       })
 
-      const open = Effect.fn("Browser.open")(function* (input: { sessionID: SessionID; url: string }) {
-        yield* call(input.sessionID, ["open", input.url])
-        const data = yield* freshTabs(input.sessionID)
-        const info = yield* status(input.sessionID).pipe(
+      const nav = Effect.fn("Browser.nav")(function* (sessionID: SessionID) {
+        const data = yield* freshTabs(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const info = yield* freshInfo(sessionID).pipe(
           Effect.catch(() =>
             Effect.succeed({
-              sessionID: input.sessionID,
-              profile: profile(input.sessionID),
+              sessionID,
+              profile: profile(sessionID),
               enabled: true,
             } satisfies Info),
           ),
         )
-        yield* emit({ sessionID: input.sessionID, info, tabs: data })
+        yield* emit({ sessionID, info, ...(data ? { tabs: data } : {}) })
         return info
+      })
+
+      const action = Effect.fn("Browser.action")(function* (input: {
+        sessionID: SessionID
+        action: "back" | "forward" | "reload"
+      }) {
+        yield* call(input.sessionID, [input.action])
+        return yield* nav(input.sessionID)
+      })
+
+      const open = Effect.fn("Browser.open")(function* (input: { sessionID: SessionID; url: string }) {
+        yield* call(input.sessionID, ["open", input.url])
+        return yield* nav(input.sessionID)
       })
 
       const close = Effect.fn("Browser.close")(function* (sessionID: SessionID) {
@@ -680,15 +993,7 @@ export namespace Browser {
         yield* dropTabs(sessionID)
         yield* dropInfo(sessionID)
         const data = yield* freshTabs(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
-        const info = yield* freshInfo(sessionID).pipe(
-          Effect.catch(() =>
-            Effect.succeed({
-              sessionID,
-              profile: profile(sessionID),
-              enabled: false,
-            } satisfies Info),
-          ),
-        )
+        const info = yield* freshInfo(sessionID).pipe(Effect.catch(() => Effect.succeed(none(sessionID))))
         yield* emit({ sessionID, info, ...(data ? { tabs: data } : {}) })
         return info
       })
@@ -711,14 +1016,29 @@ export namespace Browser {
 
       const connect: Interface["connect"] = (sessionID: SessionID, ws: Socket) =>
         Effect.gen(function* () {
-          const first = yield* status(sessionID).pipe(Effect.catch(() => enable({ sessionID })))
-          const info = first.enabled ? first : yield* enable({ sessionID })
-          if (!info.port) throw new Error("agent-browser stream is enabled but no port is available")
+          const info = yield* probe(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (!info?.port) throw new Error("agent-browser session is not running for this sessionID")
 
           const conn = new WebSocket(`ws://127.0.0.1:${info.port}`)
           yield* keep(sessionID)
           yield* watch(sessionID)
           let closed = false
+          const pending: (string | ArrayBuffer)[] = []
+          const stop = Instance.bind(() => {
+            void Effect.runPromise(drop(sessionID))
+          })
+          const down = Instance.bind(() => {
+            void Effect.runPromise(
+              Effect.gen(function* () {
+                const hit = yield* probe(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                yield* emit({
+                  sessionID,
+                  info: hit ? { ...hit, connected: false, screencasting: false } : none(sessionID),
+                  ...(!hit ? { tabs: empty(sessionID) } : {}),
+                })
+              }),
+            )
+          })
 
           const send = (data: unknown) => {
             if (ws.readyState !== 1) return
@@ -733,69 +1053,74 @@ export namespace Browser {
             if (data instanceof Uint8Array) ws.send(data)
           }
 
+          const input = (data: string | ArrayBuffer) => {
+            if (conn.readyState === WebSocket.OPEN) {
+              conn.send(data)
+              return
+            }
+            if (conn.readyState !== WebSocket.CONNECTING) return
+            pending.push(data)
+          }
+
           const end = () => {
             if (conn.readyState === WebSocket.CLOSED || conn.readyState === WebSocket.CLOSING) return
             conn.close()
           }
+
+          conn.addEventListener("open", () => {
+            conn.send(JSON.stringify({ type: "screencast_start" }))
+            for (const item of pending.splice(0)) {
+              conn.send(item)
+            }
+          })
 
           conn.addEventListener("message", (event) => {
             send(event.data)
           })
 
           conn.addEventListener("error", () => {
-            void Effect.runPromise(
-              Effect.gen(function* () {
-                const hit = yield* status(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
-                if (!hit) return
-                yield* emit({
-                  sessionID,
-                  info: {
-                    ...hit,
-                    connected: false,
-                    screencasting: false,
-                  },
-                })
-              }),
-            )
+            down()
             if (ws.readyState === 1) ws.close(1011, "browser stream error")
             end()
           })
 
           conn.addEventListener("close", () => {
-            void Effect.runPromise(
-              Effect.gen(function* () {
-                const hit = yield* status(sessionID).pipe(Effect.catch(() => Effect.succeed(undefined)))
-                if (!hit) return
-                yield* emit({
-                  sessionID,
-                  info: {
-                    ...hit,
-                    connected: false,
-                    screencasting: false,
-                  },
-                })
-              }),
-            )
+            down()
             if (ws.readyState === 1) ws.close(1000, "browser stream ended")
           })
 
           log.info("browser stream connected", { sessionID, port: info.port })
 
           return {
-            onMessage: (_message: string | ArrayBuffer) => {
-              // v1 observer mode: do not forward input to browser runtime
+            onMessage: (message: string | ArrayBuffer) => {
+              input(message)
             },
             onClose: () => {
               if (closed) return
               closed = true
               log.info("browser stream disconnected", { sessionID, port: info.port })
-              void Effect.runPromise(drop(sessionID))
+              stop()
               end()
             },
           }
         }).pipe(Effect.orDie)
 
-      return Service.of({ env: vars, status, enable, disable, tabs, select, viewport, open, close, remove, connect })
+      return Service.of({
+        env: vars,
+        status,
+        enable,
+        disable,
+        tabs,
+        select,
+        viewport,
+        action,
+        open,
+        close,
+        remove,
+        live,
+        observe,
+        connect,
+      })
     }),
   )
 
@@ -835,6 +1160,10 @@ export namespace Browser {
     return runPromise((svc) => svc.open(input))
   }
 
+  export async function action(input: { sessionID: SessionID; action: "back" | "forward" | "reload" }) {
+    return runPromise((svc) => svc.action(input))
+  }
+
   export async function viewport(input: { sessionID: SessionID; width: number; height: number; scale?: number }) {
     return runPromise((svc) => svc.viewport(input))
   }
@@ -845,6 +1174,14 @@ export namespace Browser {
 
   export async function remove(sessionID: SessionID) {
     return runPromise((svc) => svc.remove(sessionID))
+  }
+
+  export async function live(ids?: SessionID[]) {
+    return runPromise((svc) => svc.live(ids))
+  }
+
+  export async function observe(sessionID: SessionID) {
+    return runPromise((svc) => svc.observe(sessionID))
   }
 
   export async function connect(sessionID: SessionID, ws: Socket) {
