@@ -108,6 +108,7 @@ export const SessionPaths = {
   update: `${root}/:sessionID`,
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
+  cancelTool: `${root}/:sessionID/tool/:callID/cancel`,
   share: `${root}/:sessionID/share`,
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
@@ -252,6 +253,17 @@ export const SessionApi = HttpApi.make("session")
             description: "Create a new session by forking an existing session at a specific message point.",
           }),
         ),
+        HttpApiEndpoint.post("cancelTool", SessionPaths.cancelTool, {
+          params: { sessionID: SessionID, callID: Schema.String },
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.cancelTool",
+            summary: "Cancel tool",
+            description: "Cancel a specific active tool execution.",
+          }),
+        ),
+
         HttpApiEndpoint.post("abort", SessionPaths.abort, {
           params: { sessionID: SessionID },
           success: Schema.Boolean,
@@ -607,6 +619,22 @@ export const sessionHandlers = Layer.unwrap(
       )
     })
 
+    const cancelTool = Effect.fn("SessionHttpApi.cancelTool")(function* (ctx: {
+      params: { sessionID: SessionID; callID: string }
+    }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            SessionPrompt.Service.use((svc) => svc.cancelTool(ctx.params.sessionID, ctx.params.callID)).pipe(
+              Effect.provide(SessionPrompt.defaultLayer),
+            ),
+          ),
+        ),
+      )
+      return true
+    })
+
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
       const instance = yield* InstanceState.context
       yield* Effect.promise(() =>
@@ -922,6 +950,7 @@ export const sessionHandlers = Layer.unwrap(
         .handle("remove", remove)
         .handle("update", update)
         .handle("fork", fork)
+        .handle("cancelTool", cancelTool)
         .handle("abort", abort)
         .handle("init", init)
         .handle("share", share)

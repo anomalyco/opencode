@@ -22,7 +22,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "@/tool/registry"
-import { MCP } from "../mcp"
+import { MCP, McpContextMap } from "../mcp"
 import { LSP } from "@/lsp/lsp"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ulid } from "ulid"
@@ -72,6 +72,7 @@ const elog = EffectLogger.create({ service: "session.prompt" })
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  readonly cancelTool: (sessionID: SessionID, callID: string) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
   readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
@@ -98,6 +99,8 @@ export const layer = Layer.effect(
     const fsys = yield* AppFileSystem.Service
     const mcp = yield* MCP.Service
     const lsp = yield* LSP.Service
+
+    const activeTools = new Map<string, AbortController>()
     const registry = yield* ToolRegistry.Service
     const truncate = yield* Truncate.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
@@ -123,6 +126,14 @@ export const layer = Layer.effect(
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* elog.info("cancel", { sessionID })
       yield* state.cancel(sessionID)
+    })
+
+    const cancelTool = Effect.fn("SessionPrompt.cancelTool")(function* (sessionID: SessionID, callID: string) {
+      const key = `${sessionID}:${callID}`
+      const controller = activeTools.get(key)
+      if (controller) {
+        controller.abort(new Error("Tool execution was cancelled by the user."))
+      }
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -370,9 +381,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const run = yield* runner()
       const promptOps = yield* ops()
 
-      const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
+      const context = (args: any, options: ToolExecutionOptions, toolAbortSignal: AbortSignal): Tool.Context => ({
         sessionID: input.session.id,
-        abort: options.abortSignal!,
+        abort: toolAbortSignal,
         messageID: input.processor.message.id,
         callID: options.toolCallId,
         extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
@@ -413,9 +424,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           description: item.description,
           inputSchema: jsonSchema(schema),
           execute(args, options) {
+            const toolAbort = new AbortController()
+            const key = `${input.session.id}:${options.toolCallId}`
+            activeTools.set(key, toolAbort)
+            
+            if (options.abortSignal) {
+              const listener = () => toolAbort.abort(options.abortSignal?.reason)
+              options.abortSignal.addEventListener("abort", listener)
+              toolAbort.signal.addEventListener("abort", () => {
+                options.abortSignal?.removeEventListener("abort", listener)
+              })
+            }
+
             return run.promise(
               Effect.gen(function* () {
-                const ctx = context(args, options)
+                const ctx = context(args, options, toolAbort.signal)
                 yield* plugin.trigger(
                   "tool.execute.before",
                   { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -428,19 +451,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     ...attachment,
                     id: PartID.ascending(),
                     sessionID: ctx.sessionID,
-                    messageID: input.processor.message.id,
+                    messageID: ctx.messageID,
                   })),
                 }
-                yield* plugin.trigger(
-                  "tool.execute.after",
-                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
-                  output,
-                )
-                if (options.abortSignal?.aborted) {
+                if (options.abortSignal?.aborted || toolAbort.signal.aborted) {
                   yield* input.processor.completeToolCall(options.toolCallId, output)
                 }
                 return output
-              }),
+              }).pipe(Effect.ensuring(Effect.sync(() => activeTools.delete(key)))),
             )
           },
         })
@@ -453,74 +471,91 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
         const transformed = ProviderTransform.schema(input.model, schema)
         item.inputSchema = jsonSchema(transformed)
-        item.execute = (args, opts) =>
-          run.promise(
-            Effect.gen(function* () {
-              const ctx = context(args, opts)
-              yield* plugin.trigger(
-                "tool.execute.before",
-                { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-                { args },
-              )
-              yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-              const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
-                execute(args, opts),
-              )
-              yield* plugin.trigger(
-                "tool.execute.after",
-                { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
-                result,
-              )
+        item.execute = (args, opts) => {
+          const toolAbort = new AbortController()
+          const cacheKey = `${input.session.id}:${opts.toolCallId}`
+          activeTools.set(cacheKey, toolAbort)
+          
+          if (opts.abortSignal) {
+            const listener = () => toolAbort.abort(opts.abortSignal?.reason)
+            opts.abortSignal.addEventListener("abort", listener)
+            toolAbort.signal.addEventListener("abort", () => {
+              opts.abortSignal?.removeEventListener("abort", listener)
+            })
+          }
 
-              const textParts: string[] = []
-              const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
-              for (const contentItem of result.content) {
-                if (contentItem.type === "text") textParts.push(contentItem.text)
-                else if (contentItem.type === "image") {
-                  attachments.push({
-                    type: "file",
-                    mime: contentItem.mimeType,
-                    url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+          return run.promise(
+            Effect.gen(function* () {
+              const ctx = context(args, opts, toolAbort.signal)
+
+                yield* plugin.trigger(
+                  "tool.execute.before",
+                  { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
+                  { args },
+                )
+                yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
+                const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() => {
+                  McpContextMap.set(opts.toolCallId, ctx)
+                  return execute(args, { ...opts, abortSignal: toolAbort.signal }).finally(() => {
+                    McpContextMap.delete(opts.toolCallId)
                   })
-                } else if (contentItem.type === "resource") {
-                  const { resource } = contentItem
-                  if (resource.text) textParts.push(resource.text)
-                  if (resource.blob) {
+                })
+                yield* plugin.trigger(
+                  "tool.execute.after",
+                  { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+                  result,
+                )
+
+                const textParts: string[] = []
+                const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
+                for (const contentItem of result.content) {
+                  if (contentItem.type === "text") textParts.push(contentItem.text)
+                  else if (contentItem.type === "image") {
                     attachments.push({
                       type: "file",
-                      mime: resource.mimeType ?? "application/octet-stream",
-                      url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                      filename: resource.uri,
+                      mime: contentItem.mimeType,
+                      url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
                     })
+                  } else if (contentItem.type === "resource") {
+                    const { resource } = contentItem
+                    if (resource.text) textParts.push(resource.text)
+                    if (resource.blob) {
+                      attachments.push({
+                        type: "file",
+                        mime: resource.mimeType ?? "application/octet-stream",
+                        url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
+                        filename: resource.uri,
+                      })
+                    }
                   }
                 }
-              }
 
-              const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
-              const metadata = {
-                ...result.metadata,
-                truncated: truncated.truncated,
-                ...(truncated.truncated && { outputPath: truncated.outputPath }),
-              }
+                const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
+                const metadata = {
+                  ...result.metadata,
+                  truncated: truncated.truncated,
+                  ...(truncated.truncated && { outputPath: truncated.outputPath }),
+                }
 
-              const output = {
-                title: "",
-                metadata,
-                output: truncated.content,
-                attachments: attachments.map((attachment) => ({
-                  ...attachment,
-                  id: PartID.ascending(),
-                  sessionID: ctx.sessionID,
-                  messageID: input.processor.message.id,
-                })),
-                content: result.content,
-              }
-              if (opts.abortSignal?.aborted) {
-                yield* input.processor.completeToolCall(opts.toolCallId, output)
-              }
-              return output
-            }),
-          )
+                const output = {
+                  title: "",
+                  metadata,
+                  output: truncated.content,
+                  attachments: attachments.map((attachment) => ({
+                    ...attachment,
+                    id: PartID.ascending(),
+                    sessionID: ctx.sessionID,
+                    messageID: input.processor.message.id,
+                  })),
+                  content: result.content,
+                }
+                if (opts.abortSignal?.aborted || toolAbort.signal.aborted) {
+                  yield* input.processor.completeToolCall(opts.toolCallId, output)
+                }
+                return output
+              }).pipe(Effect.ensuring(Effect.sync(() => activeTools.delete(cacheKey)))),
+            )
+          }
         tools[key] = item
       }
 
@@ -1633,11 +1668,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     return Service.of({
       cancel,
+      cancelTool,
       prompt,
+      resolvePromptParts,
       loop,
       shell,
       command,
-      resolvePromptParts,
     })
   }),
 )

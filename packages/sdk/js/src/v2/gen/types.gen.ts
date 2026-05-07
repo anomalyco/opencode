@@ -3615,6 +3615,41 @@ export type SessionForkResponses = {
 
 export type SessionForkResponse = SessionForkResponses[keyof SessionForkResponses]
 
+export type SessionCancelToolData = {
+  body?: never
+  path: {
+    sessionID: string
+    callID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/tool/{callID}/cancel"
+}
+
+export type SessionCancelToolErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCancelToolError = SessionCancelToolErrors[keyof SessionCancelToolErrors]
+
+export type SessionCancelToolResponses = {
+  /**
+   * Cancelled tool
+   */
+  200: boolean
+}
+
+export type SessionCancelToolResponse = SessionCancelToolResponses[keyof SessionCancelToolResponses]
+
 export type SessionAbortData = {
   body?: never
   path: {

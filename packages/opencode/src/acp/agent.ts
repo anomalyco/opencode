@@ -304,6 +304,9 @@ export class Agent implements ACPAgent {
                           title: part.tool,
                           locations: toLocations(part.tool, part.state.input),
                           rawInput: part.state.input,
+                          rawOutput: {
+                            metadata: part.state.metadata,
+                          },
                         },
                       })
                       .catch((error) => {
@@ -332,6 +335,9 @@ export class Agent implements ACPAgent {
                     title: part.tool,
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
+                    rawOutput: {
+                      metadata: part.state.metadata,
+                    },
                     ...(content.length > 0 && { content }),
                   },
                 })
@@ -862,6 +868,9 @@ export class Agent implements ACPAgent {
                   title: part.tool,
                   locations: toLocations(part.tool, part.state.input),
                   rawInput: part.state.input,
+                  rawOutput: {
+                    metadata: part.state.metadata,
+                  },
                   ...(runningContent.length > 0 && { content: runningContent }),
                 },
               })

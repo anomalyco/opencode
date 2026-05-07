@@ -1621,17 +1621,29 @@ function GenericTool(props: ToolProps<any>) {
     return [...lines().slice(0, maxLines), "…"].join("\n")
   })
 
+  const progress = () => {
+    if (props.metadata?.progress !== undefined && typeof props.metadata.progress === "number") {
+      const p = props.metadata.progress
+      const t = props.metadata.total
+      if (typeof t === "number" && t > 0) {
+        return ` (${Math.round((p / t) * 100)}%)`
+      }
+      return ` (${p})`
+    }
+    return ""
+  }
+
   return (
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
         <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
-          {props.tool} {input(props.input)}
+          {props.tool} {input(props.input)}{progress()}
         </InlineTool>
       }
     >
       <BlockTool
-        title={`# ${props.tool} ${input(props.input)}`}
+        title={`# ${props.tool} ${input(props.input)}${progress()}`}
         part={props.part}
         onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
       >
@@ -1661,6 +1673,7 @@ function InlineTool(props: {
   const ctx = use()
   const sync = useSync()
   const renderer = useRenderer()
+  const sdk = useSDK()
   const [hover, setHover] = createSignal(false)
 
   const permission = createMemo(() => {
@@ -1724,11 +1737,23 @@ function InlineTool(props: {
           <Spinner color={fg()} children={props.children} />
         </Match>
         <Match when={true}>
-          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+          <box flexDirection="row">
+            <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+              <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+                <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+              </Show>
+            </text>
+            <Show when={props.part.state.status === "running" && !permission()}>
+              <text
+                fg={theme.error}
+                onMouseUp={() => {
+                  void sdk.client.session.cancelTool({ sessionID: ctx.sessionID, callID: props.part.callID })
+                }}
+              >
+                {" [Cancel]"}
+              </text>
             </Show>
-          </text>
+          </box>
         </Match>
       </Switch>
       <Show when={error() && !denied()}>

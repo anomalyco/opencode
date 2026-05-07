@@ -265,6 +265,7 @@ export function GenericTool(props: {
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
+  metadata?: Record<string, unknown>
 }) {
   const i18n = useI18n()
 
@@ -273,9 +274,25 @@ export function GenericTool(props: {
       icon="mcp"
       status={props.status}
       trigger={{
-        title: i18n.t("ui.basicTool.called", { tool: props.tool }),
-        subtitle: label(props.input),
-        args: args(props.input),
+        get title() {
+          let progressStr = ""
+          if (props.metadata?.progress !== undefined && typeof props.metadata.progress === "number") {
+            const p = props.metadata.progress
+            const t = props.metadata.total
+            if (typeof t === "number" && t > 0) {
+              progressStr = ` (${Math.round((p / t) * 100)}%)`
+            } else {
+              progressStr = ` (${p})`
+            }
+          }
+          return `${i18n.t("ui.basicTool.called", { tool: props.tool })}${progressStr}`
+        },
+        get subtitle() {
+          return label(props.input)
+        },
+        get args() {
+          return args(props.input)
+        },
       }}
       hideDetails={props.hideDetails}
     />

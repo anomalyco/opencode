@@ -114,6 +114,9 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
 
+import type { Context as ToolContext } from "@/tool/tool"
+export const McpContextMap = new Map<string, ToolContext>()
+
 // Convert MCP tool definition to AI SDK Tool type
 function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
   const inputSchema = mcpTool.inputSchema
@@ -129,7 +132,9 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
   return dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(schema),
-    execute: async (args: unknown) => {
+    execute: async (args: unknown, options?: any) => {
+      const toolCallId = options?.toolCallId
+      const ctx = toolCallId ? McpContextMap.get(toolCallId) : undefined
       return client.callTool(
         {
           name: mcpTool.name,
@@ -139,6 +144,21 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
         {
           resetTimeoutOnProgress: true,
           timeout,
+          signal: options?.abortSignal,
+          onprogress: (progressPayload) => {
+            if (ctx && ctx.metadata) {
+              Effect.runPromise(
+                ctx.metadata({
+                  title: `Working...`,
+                  metadata: {
+                    progress: progressPayload?.progress,
+                    total: progressPayload?.total,
+                    description: mcpTool.name,
+                  },
+                })
+              ).catch((e) => log.error("Failed to update progress from MCP", { error: e }))
+            }
+          },
         },
       )
     },

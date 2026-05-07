@@ -408,6 +408,38 @@ export const SessionRoutes = lazy(() =>
         }),
     )
     .post(
+      "/:sessionID/tool/:callID/cancel",
+      describeRoute({
+        summary: "Cancel tool",
+        description: "Cancel a specific active tool execution.",
+        operationId: "session.cancelTool",
+        responses: {
+          200: {
+            description: "Cancelled tool",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+          callID: z.string(),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.cancelTool", c, function* () {
+          const svc = yield* SessionPrompt.Service
+          yield* svc.cancelTool(c.req.valid("param").sessionID, c.req.valid("param").callID)
+          return true
+        }),
+    )
+    .post(
       "/:sessionID/abort",
       describeRoute({
         summary: "Abort session",
