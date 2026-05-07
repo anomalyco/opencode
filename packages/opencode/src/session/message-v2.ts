@@ -865,11 +865,10 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       // a proxy, or a lower-level library, but preserving a non-empty separator
       // here is the only safe replay point we have.
       // Use a single space so the separator survives replay without changing
-      // the neighboring signed reasoning blocks. Bedrock-hosted Claude stores
-      // the same signature under the bedrock metadata namespace.
+      // the neighboring signed reasoning blocks.
       const hasSignedReasoning = msg.parts.some((part) => {
         if (part.type !== "reasoning") return false
-        return part.metadata?.anthropic?.signature != null || part.metadata?.bedrock?.signature != null
+        return part.metadata?.anthropic?.signature != null
       })
       for (const part of msg.parts) {
         if (part.type === "text") {

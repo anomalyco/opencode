@@ -1182,8 +1182,9 @@ describe("session.message-v2.toModelMessage", () => {
     expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("the answer")
   })
 
-  test("substitutes space for empty text when reasoning signature is under 'bedrock' namespace", async () => {
-    // AWS Bedrock hosts Anthropic Claude but stores signatures under metadata.bedrock
+  test("leaves empty text alone when reasoning signature is under 'bedrock' namespace", async () => {
+    // Bedrock signed reasoning is preserved as reasoning metadata, but unlike the
+    // direct Anthropic path we do not preserve empty text separators for Bedrock.
     const assistantID = "m-assistant-bedrock"
     const input: MessageV2.WithParts[] = [
       {
@@ -1205,7 +1206,7 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual([" ", "answer"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
   })
 
   test("leaves empty text alone when reasoning has no Anthropic signature", async () => {
