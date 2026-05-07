@@ -723,11 +723,11 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ### DigitalOcean
 
-DigitalOcean's [GenAI Platform](https://docs.digitalocean.com/products/genai-platform/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
+DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
 
 OpenCode supports two authentication methods:
 
-- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode auto-creates a Model Access Key and discovers your Inference Routers.
+- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode auto-creates a Model Access Key and discovers your available Models & Inference Routers.
 - **Model Access Key** — Paste an existing key from the DigitalOcean console.
 
 #### OAuth (Recommended)
@@ -751,7 +751,7 @@ OpenCode supports two authentication methods:
 3. Your browser opens to authorize OpenCode. Sign in and approve.
 
    :::note
-   OpenCode creates a Model Access Key named `opencode-oauth-<timestamp>` in your DigitalOcean account. You can rotate or revoke it from the **Model Access Keys** page in the GenAI Platform section of the DigitalOcean console.
+   OpenCode creates a Model Access Key named `opencode-oauth-<timestamp>` in your DigitalOcean account. You can rotate or revoke it from the **Model Access Keys** page in the "Manage" section of the DigitalOcean console under Inference.
    :::
 
 4. Run the `/models` command. Your Inference Routers appear under **DigitalOcean | Inference Routers**, sorted above the base DO models.
@@ -766,7 +766,7 @@ OpenCode supports two authentication methods:
 
 If you'd rather paste a key directly:
 
-1. Head over to the **Model Access Keys** page in the GenAI Platform section of the [DigitalOcean console](https://cloud.digitalocean.com/) and create a new key.
+1. Head over to the **Manage** page in the Inference section of the [DigitalOcean console](https://cloud.digitalocean.com/) and create a new key.
 
 2. Run the `/connect` command and select **DigitalOcean**, then **Paste Model Access Key**.
 
@@ -799,7 +799,7 @@ export DIGITALOCEAN_ACCESS_TOKEN=your-model-access-key
 
 Inference Routers let you define a routing policy across multiple models — picking the cheapest, fastest, or most appropriate model per request based on the task. After OAuth, OpenCode surfaces each router as `router:<router-name>` under the **DigitalOcean | Inference Routers** group in the model picker.
 
-Selecting a router model is a drop-in replacement for any other model — OpenCode forwards your request and DigitalOcean picks the underlying model based on your router's policy.
+Selecting a router model is a drop-in replacement for any other model — OpenCode forwards your request and DigitalOcean picks the underlying model based on your router's policy. Learn more about [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/)
 
 ---
 
