@@ -13,7 +13,8 @@ import { invoke } from "@tauri-apps/api/core"
 // CodeMirror 内置 UI 短语翻译(@codemirror/search 走 phrase 取词)
 // ============================================================
 
-const PHRASES: Record<string, Record<string, string>> = {
+// FORK: export for unit tests(R5 测试纪律 / 关键模块清单)2026-05-07
+export const PHRASES: Record<string, Record<string, string>> = {
   zh: {
     Find: "查找",
     Replace: "替换",
@@ -46,7 +47,8 @@ const PHRASES: Record<string, Record<string, string>> = {
 // 列表续延(普通 - / 编号 1. / 任务 - [ ])+ 块引用 > 续延
 // ============================================================
 
-const LIST_PATTERNS = [
+// FORK: export for unit tests 2026-05-07
+export const LIST_PATTERNS = [
   // task list:`  - [ ] 内容` 或 `  - [x] 内容`
   /^(\s*)([-*+])\s+(\[[ xX]\])\s*(.*)$/,
   // numbered:`  1. 内容`
@@ -163,7 +165,8 @@ const insertLinkCommand: Command = (view) => {
 // ============================================================
 
 // 允许 [], [ ], [x], [X] 全部形态(空括号当未勾选处理)
-const TASK_PATTERN = /^(\s*[-*+]\s+\[)( |x|X)?(\]\s*.*)$/
+// FORK: export for unit tests 2026-05-07
+export const TASK_PATTERN = /^(\s*[-*+]\s+\[)( |x|X)?(\]\s*.*)$/
 
 const toggleTaskCheckCommand: Command = (view) => {
   const sel = view.state.selection.main
@@ -240,7 +243,8 @@ const tableTabCommand: Command = (view) => {
 // 智能 URL 粘贴 — 选区非空 + 粘贴是 URL → 改写 [选中](URL)
 // ============================================================
 
-const URL_PATTERN = /^https?:\/\/\S+$/
+// FORK: export for unit tests 2026-05-07
+export const URL_PATTERN = /^https?:\/\/\S+$/
 
 function handlePasteHook(view: EditorView, event: ClipboardEvent): boolean {
   const sel = view.state.selection.main
@@ -267,7 +271,8 @@ function handlePasteHook(view: EditorView, event: ClipboardEvent): boolean {
 // 拖图 / 截图粘贴 — 自动写文件 + 插入 ![](path)
 // ============================================================
 
-const IMAGE_EXT_PATTERN = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i
+// FORK: export for unit tests 2026-05-07
+export const IMAGE_EXT_PATTERN = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -283,7 +288,8 @@ function readFileAsBase64(file: File): Promise<string> {
   })
 }
 
-function timestampName(originalName: string): string {
+// FORK: export for unit tests 2026-05-07
+export function timestampName(originalName: string): string {
   const ext = originalName.includes(".") ? originalName.slice(originalName.lastIndexOf(".") + 1) : "png"
   const ts = new Date()
     .toISOString()
@@ -293,7 +299,8 @@ function timestampName(originalName: string): string {
 }
 
 /** 计算 .md 文件相对路径所在目录的"上级数"— 用于拼 `../` 跳到 root */
-function depthOf(filePathRel: string | undefined): number {
+// FORK: export for unit tests 2026-05-07
+export function depthOf(filePathRel: string | undefined): number {
   if (!filePathRel) return 0
   // 规整成 forward-slash + 去前导/末尾 /
   const norm = filePathRel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")
