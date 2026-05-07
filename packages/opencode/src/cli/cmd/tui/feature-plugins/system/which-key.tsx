@@ -9,10 +9,14 @@ import type { InternalTuiPlugin } from "../../plugin/internal"
 
 const command = {
   toggle: "tui-which-key.toggle",
+  toggleLayout: "tui-which-key.layout.toggle",
 } as const
 
 const DEFAULT_KEY = "ctrl+alt+k"
+const DEFAULT_LAYOUT_KEY = "ctrl+alt+shift+k"
 const LAYER_PRIORITY = 900
+
+type Layout = "dock" | "overlay"
 
 type WhichKeyOptions = {
   key?: unknown
@@ -119,7 +123,14 @@ function previousGroup(items: readonly Item[], index: number) {
   return item.group
 }
 
-function WhichKeyOverlay(props: { api: TuiPluginApi; pinned: () => boolean; trigger: string }) {
+function WhichKeyPanel(props: {
+  api: TuiPluginApi
+  layout: Layout
+  mode: () => Layout
+  pinned: () => boolean
+  trigger: string
+  modeTrigger: string
+}) {
   const dimensions = useTerminalDimensions()
   const [offset, setOffset] = createSignal(0)
   const pending = useKeymapSelector((keymap) => keymap.getPendingSequence())
@@ -169,6 +180,7 @@ function WhichKeyOverlay(props: { api: TuiPluginApi; pinned: () => boolean; trig
   })
   const prefix = createMemo(() => props.api.keys.formatSequence(pending()))
   const trigger = createMemo(() => props.api.keys.formatSequence(props.api.keymap.parseKeySequence(props.trigger)))
+  const modeTrigger = createMemo(() => props.api.keys.formatSequence(props.api.keymap.parseKeySequence(props.modeTrigger)))
   const look = createMemo(() => skin(props.api))
   const top = createMemo(() => Math.max(0, dimensions().height - visibleRows() - 3))
   const columnWidth = createMemo(() => Math.max(24, Math.floor((width() - 2 - (columns() - 1) * 2) / columns())))
@@ -221,15 +233,16 @@ function WhichKeyOverlay(props: { api: TuiPluginApi; pinned: () => boolean; trig
   return (
     <Show when={visible()}>
       <box
-        position="absolute"
+        position={props.layout === "overlay" ? "absolute" : "relative"}
         zIndex={3500}
         left={left}
-        top={top()}
+        top={props.layout === "overlay" ? top() : undefined}
         width={dimensions().width}
         backgroundColor={look().panel}
         paddingLeft={1}
         paddingRight={1}
         paddingTop={1}
+        flexShrink={0}
         flexDirection="column"
       >
         <Show when={shown().length > 0} fallback={<text fg={look().muted}>No reachable bindings</text>}>
@@ -293,7 +306,7 @@ function WhichKeyOverlay(props: { api: TuiPluginApi; pinned: () => boolean; trig
             {props.pinned() ? `toggle ${trigger()}` : prefix() ? `pending ${prefix()}` : trigger()}
           </text>
           <text fg={look().muted} wrapMode="none">
-            {`${position()}  scroll ctrl+alt+up/down`}
+            {`${position()}  ${props.mode()} ${modeTrigger()}  scroll ctrl+alt+up/down`}
           </text>
         </box>
       </box>
@@ -304,6 +317,7 @@ function WhichKeyOverlay(props: { api: TuiPluginApi; pinned: () => boolean; trig
 const tui: TuiPlugin = async (api, options) => {
   const trigger = pickKey(options as WhichKeyOptions | undefined)
   const [pinned, setPinned] = createSignal(false)
+  const [layout, setLayout] = createSignal<Layout>("dock")
 
   api.keymap.registerLayer({
     priority: LAYER_PRIORITY,
@@ -317,14 +331,51 @@ const tui: TuiPlugin = async (api, options) => {
           setPinned((value) => !value)
         },
       },
+      {
+        name: command.toggleLayout,
+        title: "Toggle key bindings layout",
+        desc: "Switch which-key between dock and overlay mode",
+        category: "System",
+        run() {
+          setLayout((value) => (value === "dock" ? "overlay" : "dock"))
+        },
+      },
     ],
-    bindings: [{ key: trigger, cmd: command.toggle, desc: "Show key bindings", group: "Global" }],
+    bindings: [
+      { key: trigger, cmd: command.toggle, desc: "Show key bindings", group: "Global" },
+      { key: DEFAULT_LAYOUT_KEY, cmd: command.toggleLayout, desc: "Toggle key bindings layout", group: "Global" },
+    ],
   })
 
   api.slots.register({
     slots: {
       app() {
-        return <WhichKeyOverlay api={api} pinned={pinned} trigger={trigger} />
+        return (
+          <Show when={layout() === "overlay"}>
+            <WhichKeyPanel
+              api={api}
+              layout="overlay"
+              mode={layout}
+              pinned={pinned}
+              trigger={trigger}
+              modeTrigger={DEFAULT_LAYOUT_KEY}
+            />
+          </Show>
+        )
+      },
+      app_bottom() {
+        return (
+          <Show when={layout() === "dock"}>
+            <WhichKeyPanel
+              api={api}
+              layout="dock"
+              mode={layout}
+              pinned={pinned}
+              trigger={trigger}
+              modeTrigger={DEFAULT_LAYOUT_KEY}
+            />
+          </Show>
+        )
       },
     },
   })

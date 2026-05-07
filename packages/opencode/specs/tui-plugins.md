@@ -315,6 +315,7 @@ Theme install behavior:
 Current host slot names:
 
 - `app`
+- `app_bottom`
 - `home_logo`
 - `home_prompt` with props `{ workspace_id?, ref? }`
 - `home_prompt_right` with props `{ workspace_id? }`
@@ -333,7 +334,8 @@ Slot notes:
 - `api.slots.register(plugin)` does not return an unregister function.
 - Returned ids are `pluginId`, `pluginId:1`, `pluginId:2`, and so on.
 - Plugin-provided `id` is not allowed.
-- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `home_prompt_right`, `session_prompt_right`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `app_bottom`, `home_prompt_right`, `session_prompt_right`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- `app_bottom` is rendered in normal layout flow below the active route, while `app` is rendered afterward for global app-level UI.
 - Plugins can define custom slot names in `api.slots.register(...)` and render them from plugin UI with `ui.Slot`.
 
 ### Plugin control and lifecycle
