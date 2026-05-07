@@ -52,6 +52,10 @@ export const isHttpInteraction = (interaction: Interaction): interaction is Http
 export const isWebSocketInteraction = (interaction: Interaction): interaction is WebSocketInteraction =>
   interaction.transport === "websocket"
 
+export const httpInteractions = (cassette: Cassette) => cassette.interactions.filter(isHttpInteraction)
+
+export const webSocketInteractions = (cassette: Cassette) => cassette.interactions.filter(isWebSocketInteraction)
+
 export const CassetteSchema = Schema.Struct({
   version: Schema.Literal(1),
   metadata: Schema.optional(CassetteMetadataSchema),

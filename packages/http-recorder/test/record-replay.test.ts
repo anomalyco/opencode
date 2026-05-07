@@ -1,6 +1,10 @@
+import { NodeFileSystem } from "@effect/platform-node"
 import { describe, expect, test } from "bun:test"
-import { Cause, Effect, Exit } from "effect"
-import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { Cause, Effect, Exit, Scope, Stream } from "effect"
+import { Headers, HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
 import { HttpRecorder } from "../src"
 import { redactedErrorRequest } from "../src/diff"
 
@@ -23,6 +27,18 @@ const runWith = <A, E>(
   options: HttpRecorder.RecordReplayOptions,
   effect: Effect.Effect<A, E, HttpClient.HttpClient>,
 ) => Effect.runPromise(effect.pipe(Effect.provide(HttpRecorder.cassetteLayer(name, options))))
+
+const runRecorder = <A, E>(effect: Effect.Effect<A, E, HttpRecorder.Cassette.Service | Scope.Scope>) =>
+  Effect.runPromise(
+    Effect.scoped(
+      effect.pipe(
+        Effect.provide(
+          HttpRecorder.Cassette.layer({ directory: fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-")) }),
+        ),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    ),
+  )
 
 const failureText = (exit: Exit.Exit<unknown, unknown>) => {
   if (Exit.isSuccess(exit)) return ""
@@ -136,6 +152,86 @@ describe("http-recorder", () => {
 
     expect(cassette.metadata).toMatchObject({ name: "websocket/basic", provider: "openai" })
     expect(HttpRecorder.parseCassette(HttpRecorder.formatCassette(cassette))).toEqual(cassette)
+  })
+
+  test("replays websocket interactions from the shared cassette service", async () => {
+    await runRecorder(
+      Effect.gen(function* () {
+        const cassette = yield* HttpRecorder.Cassette.Service
+        yield* cassette.write(
+          "websocket/replay",
+          HttpRecorder.cassetteFor(
+            "websocket/replay",
+            [
+              {
+                transport: "websocket",
+                open: { url: "wss://example.test/realtime", headers: { "content-type": "application/json" } },
+                client: [{ kind: "text", body: JSON.stringify({ type: "response.create" }) }],
+                server: [{ kind: "text", body: JSON.stringify({ type: "response.completed" }) }],
+              },
+            ],
+            undefined,
+          ),
+        )
+        const executor = yield* HttpRecorder.makeWebSocketExecutor({
+          name: "websocket/replay",
+          cassette,
+          compareClientMessagesAsJson: true,
+          live: { open: () => Effect.die(new Error("unexpected live WebSocket open")) },
+        })
+        const connection = yield* executor.open({
+          url: "wss://example.test/realtime",
+          headers: Headers.fromInput({ "content-type": "application/json" }),
+        })
+        yield* connection.sendText(JSON.stringify({ type: "response.create" }))
+        const messages: Array<string | Uint8Array> = []
+        yield* connection.messages.pipe(Stream.runForEach((message) => Effect.sync(() => messages.push(message))))
+        yield* connection.close
+
+        expect(messages).toEqual([JSON.stringify({ type: "response.completed" })])
+      }),
+    )
+  })
+
+  test("records websocket interactions into the shared cassette service", async () => {
+    await runRecorder(
+      Effect.gen(function* () {
+        const cassette = yield* HttpRecorder.Cassette.Service
+        const executor = yield* HttpRecorder.makeWebSocketExecutor({
+          name: "websocket/record",
+          mode: "record",
+          metadata: { provider: "test" },
+          cassette,
+          live: {
+            open: () =>
+              Effect.succeed({
+                sendText: () => Effect.void,
+                messages: Stream.fromIterable([JSON.stringify({ type: "response.completed" })]),
+                close: Effect.void,
+              }),
+          },
+        })
+        const connection = yield* executor.open({
+          url: "wss://example.test/realtime",
+          headers: Headers.fromInput({ "content-type": "application/json" }),
+        })
+        yield* connection.sendText(JSON.stringify({ type: "response.create" }))
+        yield* connection.messages.pipe(Stream.runDrain)
+        yield* connection.close
+
+        expect(yield* cassette.read("websocket/record")).toMatchObject({
+          metadata: { name: "websocket/record", provider: "test" },
+          interactions: [
+            {
+              transport: "websocket",
+              open: { url: "wss://example.test/realtime", headers: { "content-type": "application/json" } },
+              client: [{ kind: "text", body: JSON.stringify({ type: "response.create" }) }],
+              server: [{ kind: "text", body: JSON.stringify({ type: "response.completed" }) }],
+            },
+          ],
+        })
+      }),
+    )
   })
 
   test("default matcher dispatches multi-interaction cassettes by request shape", async () => {

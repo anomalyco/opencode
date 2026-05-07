@@ -4,13 +4,16 @@ import type { RequestSnapshot } from "./schema"
 const JsonValue = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownOption(JsonValue)
 
-const canonicalize = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(canonicalize)
-  if (value !== null && typeof value === "object") {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value)
+
+export const canonicalizeJson = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalizeJson)
+  if (isRecord(value)) {
     return Object.fromEntries(
-      Object.keys(value as Record<string, unknown>)
+      Object.keys(value)
         .toSorted()
-        .map((key) => [key, canonicalize((value as Record<string, unknown>)[key])]),
+        .map((key) => [key, canonicalizeJson(value[key])]),
     )
   }
   return value
@@ -22,10 +25,10 @@ export const canonicalSnapshot = (snapshot: RequestSnapshot): string =>
   JSON.stringify({
     method: snapshot.method,
     url: snapshot.url,
-    headers: canonicalize(snapshot.headers),
+    headers: canonicalizeJson(snapshot.headers),
     body: Option.match(decodeJson(snapshot.body), {
       onNone: () => snapshot.body,
-      onSome: canonicalize,
+      onSome: canonicalizeJson,
     }),
   })
 

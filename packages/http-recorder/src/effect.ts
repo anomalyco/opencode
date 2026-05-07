@@ -11,7 +11,7 @@ import { redactedErrorRequest, mismatchDetail, requestDiff } from "./diff"
 import { defaultMatcher, decodeJson, type RequestMatcher } from "./matching"
 import { redactHeaders, redactUrl, type SecretFinding } from "./redaction"
 import {
-  isHttpInteraction,
+  httpInteractions,
   type Cassette,
   type CassetteMetadata,
   type HttpInteraction,
@@ -138,7 +138,7 @@ export const recordingLayer = (
 
       const selectInteraction = (cassette: Cassette, incoming: HttpInteraction["request"]) =>
         Effect.gen(function* () {
-          const interactions = cassette.interactions.filter(isHttpInteraction)
+          const interactions = httpInteractions(cassette)
           if (sequential) {
             const index = yield* Ref.get(cursor)
             const interaction = interactions[index]

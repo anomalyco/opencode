@@ -2,7 +2,7 @@ import { Option } from "effect"
 import { Headers, HttpBody, HttpClientRequest, UrlParams } from "effect/unstable/http"
 import { decodeJson } from "./matching"
 import { REDACTED, redactUrl, secretFindings } from "./redaction"
-import { isHttpInteraction, type Cassette, type RequestSnapshot } from "./schema"
+import { httpInteractions, type Cassette, type RequestSnapshot } from "./schema"
 
 const safeText = (value: unknown) => {
   if (value === undefined) return "undefined"
@@ -75,7 +75,7 @@ export const requestDiff = (expected: RequestSnapshot, received: RequestSnapshot
 }
 
 export const mismatchDetail = (cassette: Cassette, incoming: RequestSnapshot) => {
-  const interactions = cassette.interactions.filter(isHttpInteraction)
+  const interactions = httpInteractions(cassette)
   if (interactions.length === 0) return "cassette has no recorded HTTP interactions"
   const ranked = interactions
     .map((interaction, index) => ({ index, lines: requestDiff(interaction.request, incoming) }))
