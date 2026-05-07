@@ -11,7 +11,9 @@ export default $config({
         stripe: {
           apiKey: process.env.STRIPE_SECRET_KEY!,
         },
+        random: "4.19.2",
         planetscale: "0.4.1",
+        honeycomb: "0.49.0",
       },
     }
   },
@@ -19,5 +21,8 @@ export default $config({
     await import("./infra/app.js")
     await import("./infra/console.js")
     await import("./infra/enterprise.js")
+    if ($app.stage === "production" || $app.stage === "vimtor") {
+      await import("./infra/monitoring.js")
+    }
   },
 })

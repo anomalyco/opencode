@@ -95,7 +95,7 @@
   color: var(--text-base);
 }
 
-[data-slot="message-nav-tooltip"] {
+.message-nav-tooltip {
   z-index: 1000;
 }
 
@@ -108,6 +108,7 @@
   background: var(--surface-raised-stronger-non-alpha);
   max-height: calc(100vh - 6rem);
   overflow-y: auto;
+  overflow-x: hidden;
 
   /* border/shadow-xs/base */
   box-shadow:

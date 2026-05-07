@@ -1,6 +1,14 @@
 import { Stripe } from "stripe"
-import { Database, eq, sql } from "./drizzle"
-import { BillingTable, PaymentTable, SubscriptionTable, UsageTable } from "./schema/billing.sql"
+import { and, Database, eq, isNull, sql } from "./drizzle"
+import {
+  BillingTable,
+  CouponTable,
+  CouponType,
+  LiteTable,
+  PaymentTable,
+  SubscriptionTable,
+  UsageTable,
+} from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
@@ -9,6 +17,7 @@ import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
 import { BlackData } from "./black"
+import { LiteData } from "./lite"
 
 export namespace Billing {
   export const ITEM_CREDIT_NAME = "opencode credits"
@@ -146,6 +155,37 @@ export namespace Billing {
     return amountInMicroCents
   }
 
+  export const redeemCoupon = async (email: string, type: (typeof CouponType)[number]) => {
+    const coupon = await Database.use((tx) =>
+      tx
+        .select()
+        .from(CouponTable)
+        .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type)))
+        .then((rows) => rows[0]),
+    )
+    if (!coupon) throw new Error("Invalid coupon code")
+    if (coupon.timeRedeemed) throw new Error("Coupon already redeemed")
+
+    if (type === "BUILDATHON") await grantCredit(Actor.workspace(), 500)
+
+    await Database.use((tx) =>
+      tx
+        .update(CouponTable)
+        .set({ timeRedeemed: sql`now()` })
+        .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type))),
+    )
+  }
+
+  export const getCoupons = async (email: string) => {
+    return await Database.use((tx) =>
+      tx
+        .select({ type: CouponTable.type, timeRedeemed: CouponTable.timeRedeemed })
+        .from(CouponTable)
+        .where(and(eq(CouponTable.email, email), isNull(CouponTable.timeRedeemed)))
+        .then((rows) => rows.map((row) => row.type)),
+    )
+  }
+
   export const setMonthlyLimit = fn(z.number(), async (input) => {
     return await Database.use((tx) =>
       tx
@@ -211,13 +251,14 @@ export namespace Billing {
         invoice_creation: {
           enabled: true,
         },
-        payment_intent_data: {
-          setup_future_usage: "on_session",
+        payment_method_options: {
+          card: {
+            setup_future_usage: "on_session",
+          },
         },
-        payment_method_types: ["card"],
-        payment_method_data: {
-          allow_redisplay: "always",
-        },
+        //payment_method_data: {
+        //  allow_redisplay: "always",
+        //},
         tax_id_collection: {
           enabled: true,
         },
@@ -230,6 +271,133 @@ export namespace Billing {
       })
 
       return session.url
+    },
+  )
+
+  export const generateLiteCheckoutUrl = fn(
+    z.object({
+      successUrl: z.string(),
+      cancelUrl: z.string(),
+      method: z.enum(["alipay", "upi"]).optional(),
+    }),
+    async (input) => {
+      const user = Actor.assert("user")
+      const { successUrl, cancelUrl, method } = input
+
+      const email = (await User.getAuthEmail(user.properties.userID))!
+      const billing = await Billing.get()
+
+      if (billing.subscriptionID) throw new Error("Already subscribed to Black")
+      if (billing.liteSubscriptionID) throw new Error("Already subscribed to Lite")
+
+      const coupons = await Billing.getCoupons(email)
+      const coupon = coupons.includes("GO12MONTHS100")
+        ? LiteData.twelveMonths100Coupon
+        : coupons.includes("GO6MONTHS100")
+          ? LiteData.sixMonths100Coupon
+          : coupons.includes("GO3MONTHS100")
+            ? LiteData.threeMonths100Coupon
+            : coupons.includes("GOFREEMONTH")
+              ? LiteData.firstMonth100Coupon
+              : LiteData.firstMonth50Coupon
+      const createSession = () =>
+        Billing.stripe().checkout.sessions.create({
+          mode: "subscription",
+          discounts: [{ coupon }],
+          ...(billing.customerID
+            ? {
+                customer: billing.customerID,
+                customer_update: {
+                  name: "auto",
+                  address: "auto",
+                },
+              }
+            : {
+                customer_email: email,
+              }),
+          ...(() => {
+            if (method === "alipay") {
+              return {
+                line_items: [{ price: LiteData.priceID(), quantity: 1 }],
+                payment_method_types: ["alipay"],
+                adaptive_pricing: {
+                  enabled: false,
+                },
+              }
+            }
+            if (method === "upi") {
+              return {
+                line_items: [
+                  {
+                    price_data: {
+                      currency: "inr",
+                      product: LiteData.productID(),
+                      recurring: {
+                        interval: "month",
+                        interval_count: 1,
+                      },
+                      unit_amount: LiteData.priceInr(),
+                    },
+                    quantity: 1,
+                  },
+                ],
+                payment_method_types: ["upi"] as any,
+                adaptive_pricing: {
+                  enabled: false,
+                },
+              }
+            }
+            return {
+              line_items: [{ price: LiteData.priceID(), quantity: 1 }],
+              billing_address_collection: "required",
+            }
+          })(),
+          tax_id_collection: {
+            enabled: true,
+          },
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          subscription_data: {
+            metadata: {
+              workspaceID: Actor.workspace(),
+              userID: user.properties.userID,
+              userEmail: email,
+              coupon,
+              type: "lite",
+            },
+          },
+        })
+
+      try {
+        const session = await createSession()
+        return session.url
+      } catch (e: any) {
+        if (
+          e.type !== "StripeInvalidRequestError" ||
+          !e.message.includes("You cannot combine currencies on a single customer")
+        )
+          throw e
+
+        // get pending payment intent
+        const intents = await Billing.stripe().paymentIntents.search({
+          query: `-status:'canceled' AND -status:'processing' AND -status:'succeeded' AND customer:'${billing.customerID}'`,
+        })
+        if (intents.data.length === 0) throw e
+
+        for (const intent of intents.data) {
+          // get checkout session
+          const sessions = await Billing.stripe().checkout.sessions.list({
+            customer: billing.customerID!,
+            payment_intent: intent.id,
+          })
+
+          // delete pending payment intent
+          await Billing.stripe().checkout.sessions.expire(sessions.data[0].id)
+        }
+
+        const session = await createSession()
+        return session.url
+      }
     },
   )
 
@@ -271,7 +439,7 @@ export namespace Billing {
     },
   )
 
-  export const subscribe = fn(
+  export const subscribeBlack = fn(
     z.object({
       seats: z.number(),
       coupon: z.string().optional(),
@@ -336,7 +504,7 @@ export namespace Billing {
     },
   )
 
-  export const unsubscribe = fn(
+  export const unsubscribeBlack = fn(
     z.object({
       subscriptionID: z.string(),
     }),
@@ -357,6 +525,31 @@ export namespace Billing {
           .where(eq(BillingTable.workspaceID, workspaceID))
 
         await tx.delete(SubscriptionTable).where(eq(SubscriptionTable.workspaceID, workspaceID))
+      })
+    },
+  )
+
+  export const unsubscribeLite = fn(
+    z.object({
+      subscriptionID: z.string(),
+    }),
+    async ({ subscriptionID }) => {
+      const workspaceID = await Database.use((tx) =>
+        tx
+          .select({ workspaceID: BillingTable.workspaceID })
+          .from(BillingTable)
+          .where(eq(BillingTable.liteSubscriptionID, subscriptionID))
+          .then((rows) => rows[0]?.workspaceID),
+      )
+      if (!workspaceID) throw new Error("Workspace ID not found for subscription")
+
+      await Database.transaction(async (tx) => {
+        await tx
+          .update(BillingTable)
+          .set({ liteSubscriptionID: null, lite: null })
+          .where(eq(BillingTable.workspaceID, workspaceID))
+
+        await tx.delete(LiteTable).where(eq(LiteTable.workspaceID, workspaceID))
       })
     },
   )

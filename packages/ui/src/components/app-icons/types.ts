@@ -9,6 +9,7 @@ export const iconNames = [
   "terminal",
   "iterm2",
   "ghostty",
+  "warp",
   "xcode",
   "android-studio",
   "antigravity",

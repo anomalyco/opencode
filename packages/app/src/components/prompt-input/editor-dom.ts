@@ -1,5 +1,20 @@
+const MAX_BREAKS = 200
+
 export function createTextFragment(content: string): DocumentFragment {
   const fragment = document.createDocumentFragment()
+  let breaks = 0
+  for (const char of content) {
+    if (char !== "\n") continue
+    breaks += 1
+    if (breaks > MAX_BREAKS) {
+      const tail = content.endsWith("\n")
+      const text = tail ? content.slice(0, -1) : content
+      if (text) fragment.appendChild(document.createTextNode(text))
+      if (tail) fragment.appendChild(document.createElement("br"))
+      return fragment
+    }
+  }
+
   const segments = content.split("\n")
   segments.forEach((segment, index) => {
     if (segment) {

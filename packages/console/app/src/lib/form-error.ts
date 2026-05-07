@@ -48,6 +48,9 @@ const map = {
   "Provider is required": "error.providerRequired",
   "API key is required": "error.apiKeyRequired",
   "Model is required": "error.modelRequired",
+  "workspace.reload.error.paymentFailed": "workspace.reload.error.paymentFailed",
+  "Payment failed": "workspace.reload.error.paymentFailed",
+  "Payment failed.": "workspace.reload.error.paymentFailed",
 } as const satisfies Record<string, Key>
 
 export function formErrorReloadAmountMin(amount: number) {

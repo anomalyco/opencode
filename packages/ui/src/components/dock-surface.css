@@ -1,0 +1,23 @@
+[data-dock-surface="shell"] {
+  background-color: var(--surface-raised-stronger-non-alpha);
+  box-shadow: var(--shadow-xs-border);
+  position: relative;
+  z-index: 10;
+  border-radius: 12px;
+  overflow: clip;
+}
+
+[data-dock-surface="tray"] {
+  background-color: var(--background-base);
+  border: 1px solid var(--border-weak-base);
+  position: relative;
+  z-index: 0;
+  border-radius: 12px;
+  overflow: clip;
+}
+
+[data-dock-surface="tray"][data-dock-attach="top"] {
+  margin-top: -0.875rem;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}

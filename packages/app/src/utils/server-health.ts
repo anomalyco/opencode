@@ -1,4 +1,6 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import { usePlatform } from "@/context/platform"
+import type { ServerConnection } from "@/context/server"
+import { createSdkForServer } from "./server"
 
 export type ServerHealth = { healthy: boolean; version?: string }
 
@@ -12,12 +14,24 @@ interface CheckServerHealthOptions {
 const defaultTimeoutMs = 3000
 const defaultRetryCount = 2
 const defaultRetryDelayMs = 100
+const cacheMs = 750
+const healthCache = new Map<
+  string,
+  { at: number; done: boolean; fetch: typeof globalThis.fetch; promise: Promise<ServerHealth> }
+>()
+
+function cacheKey(server: ServerConnection.HttpBase) {
+  return `${server.url}\n${server.username ?? ""}\n${server.password ?? ""}`
+}
 
 function timeoutSignal(timeoutMs: number) {
   const timeout = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout
   if (timeout) {
     try {
-      return { signal: timeout.call(AbortSignal, timeoutMs), clear: undefined as (() => void) | undefined }
+      return {
+        signal: timeout.call(AbortSignal, timeoutMs),
+        clear: undefined as (() => void) | undefined,
+      }
     } catch {}
   }
   const controller = new AbortController()
@@ -52,7 +66,7 @@ function retryable(error: unknown, signal?: AbortSignal) {
 }
 
 export async function checkServerHealth(
-  url: string,
+  server: ServerConnection.HttpBase,
   fetch: typeof globalThis.fetch,
   opts?: CheckServerHealthOptions,
 ): Promise<ServerHealth> {
@@ -67,8 +81,8 @@ export async function checkServerHealth(
       .catch(() => ({ healthy: false }))
   }
   const attempt = (count: number): Promise<ServerHealth> =>
-    createOpencodeClient({
-      baseUrl: url,
+    createSdkForServer({
+      server,
       fetch,
       signal,
     })
@@ -76,4 +90,24 @@ export async function checkServerHealth(
       .then((x) => (x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }))
       .catch((error) => next(count, error))
   return attempt(0).finally(() => timeout?.clear?.())
+}
+
+export function useCheckServerHealth() {
+  const platform = usePlatform()
+  const fetcher = platform.fetch ?? globalThis.fetch
+
+  return (http: ServerConnection.HttpBase) => {
+    const key = cacheKey(http)
+    const hit = healthCache.get(key)
+    const now = Date.now()
+    if (hit && hit.fetch === fetcher && (!hit.done || now - hit.at < cacheMs)) return hit.promise
+    const promise = checkServerHealth(http, fetcher).finally(() => {
+      const next = healthCache.get(key)
+      if (!next || next.promise !== promise) return
+      next.done = true
+      next.at = Date.now()
+    })
+    healthCache.set(key, { at: now, done: false, fetch: fetcher, promise })
+    return promise
+  }
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
+import { fileURLToPath } from "url"
 
-const dir = new URL("..", import.meta.url).pathname
+const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 import { $ } from "bun"
@@ -8,7 +9,16 @@ import path from "path"
 
 import { createClient } from "@hey-api/openapi-ts"
 
-await $`bun dev generate > ${dir}/openapi.json`.cwd(path.resolve(dir, "../../opencode"))
+const openapiSource = process.env.OPENCODE_SDK_OPENAPI === "hono" ? "hono" : "httpapi"
+const opencode = path.resolve(dir, "../../opencode")
+
+// `bun dev generate` now derives the spec from the Effect HttpApi contract by
+// default; pass `--hono` to fall back to the legacy Hono spec for parity diffs.
+if (openapiSource === "httpapi") {
+  await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
+} else {
+  await $`bun dev generate --hono > ${dir}/openapi.json`.cwd(opencode)
+}
 
 await createClient({
   input: "./openapi.json",

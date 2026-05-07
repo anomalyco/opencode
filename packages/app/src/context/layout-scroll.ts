@@ -33,8 +33,16 @@ export function createScrollPersistence(opts: Options) {
   }
 
   function seed(sessionKey: string) {
-    if (cache[sessionKey]) return
-    setCache(sessionKey, clone(opts.getSnapshot(sessionKey)))
+    const next = clone(opts.getSnapshot(sessionKey))
+    const current = cache[sessionKey]
+    if (!current) {
+      setCache(sessionKey, next)
+      return
+    }
+
+    if (Object.keys(current).length > 0) return
+    if (Object.keys(next).length === 0) return
+    setCache(sessionKey, next)
   }
 
   function scroll(sessionKey: string, tab: string) {

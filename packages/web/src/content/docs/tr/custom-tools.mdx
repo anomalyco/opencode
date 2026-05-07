@@ -79,6 +79,32 @@ Bu iki araç oluşturur: `math_add` ve `math_multiply`.
 
 ---
 
+#### Yerleşik araçlarla ad çakışmaları
+
+Özel araçlar, araç adına göre anahtarlanır. Özel bir araç yerleşik bir araçla aynı adı kullanıyorsa, özel araç önceliklidir.
+
+Örneğin, bu dosya yerleşik `bash` aracının yerini alır:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Kasıtlı olarak yerleşik bir aracı değiştirmek istemiyorsanız benzersiz adları tercih edin. Yerleşik bir aracı devre dışı bırakmak ancak geçersiz kılmak istemiyorsanız [izinleri](/docs/permissions) kullanın.
+:::
+
+---
+
 ### Argümanlar
 
 Bağımsız değişken türlerini tanımlamak için yalnızca [Zod](https://zod.dev) olan `tool.schema` öğesini kullanabilirsiniz.

@@ -5,9 +5,9 @@ description: OpenCode 터미널 사용자 인터페이스 사용.
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode는 LLM과 함께 프로젝트를 위해 대화형 terminal 인터페이스 또는 TUI를 제공합니다.
+OpenCode는 LLM과 함께 프로젝트 작업을 하기 위한 대화형 터미널 인터페이스(TUI)를 제공합니다.
 
-opencode는 현재 디렉토리에 TUI를 시작합니다.
+OpenCode를 실행하면 현재 디렉토리에서 TUI가 시작됩니다.
 
 ```bash
 opencode
@@ -19,7 +19,7 @@ opencode
 opencode /path/to/project
 ```
 
-TUI에 있다면 메시지가 표시됩니다.
+TUI에 들어가면 메시지를 입력하여 프롬프트할 수 있습니다.
 
 ```text
 Give me a quick summary of the codebase.
@@ -29,10 +29,10 @@ Give me a quick summary of the codebase.
 
 ## 파일 참조
 
-`@`를 사용하여 메시지에 파일을 참조 할 수 있습니다. 이것은 현재 작업 디렉토리에서 fuzzy 파일 검색입니다.
+`@`를 사용하여 메시지에서 파일을 참조할 수 있습니다. 이것은 현재 작업 디렉토리에서 퍼지(fuzzy) 파일 검색을 수행합니다.
 
 :::tip
-`@`를 사용하여 메시지의 참조 파일을 사용할 수 있습니다.
+`@`를 사용하여 메시지에서 파일을 참조할 수 있습니다.
 :::
 
 ```text "@packages/functions/src/api/index.ts"
@@ -45,7 +45,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Bash 명령
 
-`!`를 사용하여 shell 명령을 실행합니다.
+`!`로 메시지를 시작하여 셸 명령을 실행합니다.
 
 ```bash frame="none"
 !ls -la
@@ -57,21 +57,21 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 명령
 
-opencode TUI를 사용할 때, `/`를 입력하여 명령 이름을 따라 작업을 신속하게 실행할 수 있습니다. 예를 들면:
+OpenCode TUI를 사용할 때 `/` 뒤에 명령 이름을 입력하여 작업을 빠르게 실행할 수 있습니다. 예를 들어:
 
 ```bash frame="none"
 /help
 ```
 
-대부분의 명령은 `ctrl+x`를 `ctrl+x`가 기본 리더 키입니다. [더 알아보기](/docs/keybinds).
+대부분의 명령에는 기본 리더 키인 `ctrl+x`를 사용하는 키바인드도 있습니다. [더 알아보기](/docs/keybinds).
 
-여기에 모든 가능한 슬래시 명령이 있습니다.
+사용 가능한 모든 슬래시 명령은 다음과 같습니다:
 
 ---
 
-### /connect
+### connect
 
-opencode에 대한 공급자를 추가합니다. 사용 가능한 공급자에서 선택하고 API 키를 추가 할 수 있습니다.
+OpenCode에 공급자를 추가합니다. 사용 가능한 공급자 중에서 선택하고 API 키를 추가할 수 있습니다.
 
 ```bash frame="none"
 /connect
@@ -79,67 +79,67 @@ opencode에 대한 공급자를 추가합니다. 사용 가능한 공급자에�
 
 ---
 
-### /compact
+### compact
 
-현재 세션을 압축합니다. 앨리스 : `/summarize`
+현재 세션을 압축합니다. _별칭_: `/summarize`
 
 ```bash frame="none"
 /compact
 ```
 
-** Keybind:** `ctrl+x c`
+**키바인드:** `ctrl+x c`
 
 ---
 
-### /details
+### details
 
-토글 툴 실행 세부 사항.
+도구 실행 세부 정보 토글.
 
 ```bash frame="none"
 /details
 ```
 
-** Keybind:** `ctrl+x d`
+**키바인드:** `ctrl+x d`
 
 ---
 
-### /editor
+### editor
 
-메시지를 작성하기 위한 외부 편집기를 엽니다. `EDITOR` 환경에서 설정된 편집기를 사용합니다. [더 알아보기](#editor-setup).
+메시지 작성을 위한 외부 편집기를 엽니다. `EDITOR` 환경 변수에 설정된 편집기를 사용합니다. [더 알아보기](#editor-setup).
 
 ```bash frame="none"
 /editor
 ```
 
-** Keybind:** `ctrl+x e`
+**키바인드:** `ctrl+x e`
 
 ---
 
-### /exit
+### exit
 
-opencode를 종료합니다. Aliases : `/quit`, `/q`
+OpenCode를 종료합니다. _별칭_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
 ```
 
-** Keybind:** `ctrl+x q`
+**키바인드:** `ctrl+x q`
 
 ---
 
-### /export
+### export
 
-Markdown에 대한 현재 대화를 내보내고 기본 편집기에서 열립니다. `EDITOR` 환경에서 설정된 편집기를 사용합니다. [더 알아보기](#editor-setup).
+현재 대화를 Markdown으로 내보내고 기본 편집기에서 엽니다. `EDITOR` 환경 변수에 설정된 편집기를 사용합니다. [더 알아보기](#editor-setup).
 
 ```bash frame="none"
 /export
 ```
 
-** Keybind:** `ctrl+x x`
+**키바인드:** `ctrl+x x`
 
 ---
 
-### /help
+### help
 
 도움말 대화 상자를 표시합니다.
 
@@ -147,107 +147,106 @@ Markdown에 대한 현재 대화를 내보내고 기본 편집기에서 열립�
 /help
 ```
 
-** Keybind:** `ctrl+x h`
+**키바인드:** `ctrl+x h`
 
 ---
 
-###### /init
+### init
 
-`AGENTS.md` 파일을 만들거나 업데이트하십시오. [더 알아보기](/docs/rules).
+`AGENTS.md` 파일을 생성하거나 업데이트합니다. [더 알아보기](/docs/rules).
 
 ```bash frame="none"
 /init
 ```
 
-** Keybind:** `ctrl+x i`
+**키바인드:** `ctrl+x i`
 
 ---
 
-## /models
+### models
 
-사용 가능한 모델 목록.
+사용 가능한 모델 목록을 표시합니다.
 
 ```bash frame="none"
 /models
 ```
 
-** Keybind:** `ctrl+x m`
+**키바인드:** `ctrl+x m`
 
 ---
 
-## /new
+### new
 
-새로운 세션을 시작합니다. 앨리스 : `/clear`
+새 세션을 시작합니다. _별칭_: `/clear`
 
 ```bash frame="none"
 /new
 ```
 
-** Keybind:** `ctrl+x n`
+**키바인드:** `ctrl+x n`
 
 ---
 
-##### /redo
+### redo
 
-이전 undone 메시지 Redo. `/undo`를 사용하는 후에만 유효한.
+이전에 실행 취소한 메시지를 다시 실행합니다. `/undo`를 사용한 후에만 사용할 수 있습니다.
 
 :::tip
-모든 파일 변경도 복원됩니다.
+모든 파일 변경 사항도 복원됩니다.
 :::
 
-내부적으로 Git을 사용하여 파일 변경을 관리합니다. 그래서 프로젝트 **
-Git 저장소**입니다.
+내부적으로 Git을 사용하여 파일 변경 사항을 관리합니다. 따라서 프로젝트가 **Git 저장소**여야 합니다.
 
 ```bash frame="none"
 /redo
 ```
 
-** Keybind:** `ctrl+x r`
+**키바인드:** `ctrl+x r`
 
 ---
 
-## /sessions
+### sessions
 
-세션 간 목록 및 전환. Aliases : `/resume`, `/continue`
+세션 목록을 표시하고 세션 간을 전환합니다. _별칭_: `/resume`, `/continue`
 
 ```bash frame="none"
 /sessions
 ```
 
-** Keybind:** `ctrl+x l`
+**키바인드:** `ctrl+x l`
 
 ---
 
-## 공유
+### share
 
-현재 세션 공유. [더 알아보기](/docs/share).
+현재 세션을 공유합니다. [더 알아보기](/docs/share).
 
 ```bash frame="none"
 /share
 ```
 
-** Keybind:** `ctrl+x s`
+**키바인드:** `ctrl+x s`
 
 ---
 
-## /theme
+### themes
 
-사용할 수 있는 테마 목록.
+사용 가능한 테마 목록을 표시합니다.
 
 ```bash frame="none"
-/theme
+/themes
 ```
 
-** Keybind:** `ctrl+x t`
+**키바인드:** `ctrl+x t`
 
 ---
 
-### /thinking
+### thinking
 
-대화의 사고/거주 블록의 가시성을 토합니다. 사용할 때, 확장 된 생각을 지원하는 모델의 이유 프로세스를 볼 수 있습니다.
+대화에서 생각/추론 블록의 가시성을 토글합니다. 활성화하면 확장된 사고를 지원하는 모델의 추론 과정을 볼 수 있습니다.
 
 :::note
-이 명령은 생각 블록이 ** 표시되었는지 여부 만 제어 ** - 모델의 소싱 기능을 활성화하거나 비활성화하지 않습니다. toggle 실제적인 reasoning 기능에, 모형 변종을 통해서 주기 위하여 `ctrl+t`를 이용합니다.
+이 명령은 생각 블록이 **표시되는지 여부만 제어**하며 모델의 추론 기능을 활성화하거나 비활성화하지 않습니다. 실제 추론 기능을 토글하려면 `ctrl+t`를 사용하여 모델 변형을 순환하십시오.
 :::
 
 ```bash frame="none"
@@ -256,28 +255,27 @@ Git 저장소**입니다.
 
 ---
 
-##### /undo
+### undo
 
-대화에서 마지막 메시지. 가장 최근의 사용자 메시지, 모든 후속 응답 및 모든 파일 변경 제거.
+대화의 마지막 메시지를 실행 취소합니다. 가장 최근의 사용자 메시지, 모든 후속 응답 및 모든 파일 변경 사항을 제거합니다.
 
 :::tip
-어떤 파일 변경도 복제됩니다.
+모든 파일 변경 사항도 되돌려집니다.
 :::
 
-내부적으로 Git을 사용하여 파일 변경을 관리합니다. 그래서 프로젝트 **
-Git 저장소**입니다.
+내부적으로 Git을 사용하여 파일 변경 사항을 관리합니다. 따라서 프로젝트가 **Git 저장소**여야 합니다.
 
 ```bash frame="none"
 /undo
 ```
 
-** Keybind:** `ctrl+x u`
+**키바인드:** `ctrl+x u`
 
 ---
 
-#### /unshare
+### unshare
 
-Unshare 현재 세션. [더 알아보기](/docs/share#un-sharing).
+현재 세션 공유를 취소합니다. [더 알아보기](/docs/share#un-sharing).
 
 ```bash frame="none"
 /unshare
@@ -285,9 +283,9 @@ Unshare 현재 세션. [더 알아보기](/docs/share#un-sharing).
 
 ---
 
-## 편집기 설정
+## Editor setup
 
-`/editor`와 `/export` 명령 모두는 `EDITOR` 환경변수에서 지정된 편집기를 사용합니다.
+`/editor`와 `/export` 명령 모두 `EDITOR` 환경 변수에 지정된 편집기를 사용합니다.
 
 <Tabs>
   <TabItem label="Linux/macOS">
@@ -301,8 +299,7 @@ Unshare 현재 세션. [더 알아보기](/docs/share#un-sharing).
     export EDITOR="code --wait"
     ```
 
-영원한 만들기 위하여, 당신의 shell 프로파일에 이것을 추가하십시오;
-`~/.bashrc`, `~/.zshrc`, 등.
+    영구적으로 설정하려면 셸 프로필(`~/.bashrc`, `~/.zshrc` 등)에 추가하십시오.
 
   </TabItem>
 
@@ -315,8 +312,7 @@ Unshare 현재 세션. [더 알아보기](/docs/share#un-sharing).
     set EDITOR=code --wait
     ```
 
-영구적으로, use **System Properties** > ** 환경
-변수**.
+    영구적으로 설정하려면 **시스템 속성** > **환경 변수**를 사용하십시오.
 
   </TabItem>
 
@@ -329,62 +325,72 @@ Unshare 현재 세션. [더 알아보기](/docs/share#un-sharing).
     $env:EDITOR = "code --wait"
     ```
 
-영구적으로 만들려면 PowerShell 프로파일에 추가하십시오.
+    영구적으로 설정하려면 PowerShell 프로필에 추가하십시오.
 
   </TabItem>
 </Tabs>
 
-인기있는 편집기 옵션은 다음과 같습니다 :
+인기 있는 편집기 옵션은 다음과 같습니다:
 
-- `code` - Visual Studio 코드
-- `cursor` - 커서
-- `windsurf` - 윈드 서핑
-- `nvim` - Neovim 편집기
-- `vim` - Vim 편집기
-- `nano` - 나노 편집기
-- `notepad` - 윈도우 노트패드
-- `subl` - 승화 텍스트
+- `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Neovim editor
+- `vim` - Vim editor
+- `nano` - Nano editor
+- `notepad` - Windows Notepad
+- `subl` - Sublime Text
 
 :::note
-VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야합니다.
+VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 합니다.
 :::
 
-일부 편집기는 명령줄 인수가 차단 모드에서 실행되어야 합니다. `--wait` 플래그는 닫힐 때까지 편집기 프로세스 블록을 만듭니다.
+일부 편집기는 차단 모드에서 실행하려면 명령줄 인수가 필요합니다. `--wait` 플래그는 편집기 프로세스가 닫힐 때까지 차단되도록 합니다.
 
 ---
 
 ## 구성
 
-opencode config 파일을 통해 TUI 동작을 사용자 정의할 수 있습니다.
+`tui.json` (또는 `tui.jsonc`) 파일을 통해 TUI 동작을 사용자 정의할 수 있습니다.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+이는 서버/런타임 동작을 구성하는 `opencode.json`과는 별개입니다.
+
 ### 옵션
 
-- `scroll_acceleration` - 부드러운 자연 스크롤을위한 macOS 스타일 스크롤 가속 가능. 사용할 때, 스크롤 속도는 빠른 스크롤 제스처로 증가하고 느린 움직임을 위해 정확한 유지. **이 설정은 `scroll_speed`를 통해 우선 순위를 부여하고 활성화 할 때. **
-- `scroll_speed` - 스크롤 명령 (최소 : `1`)을 사용하여 TUI 스크롤을 빠르게 제어합니다. 기본 `3`. ** 참고: `scroll_acceleration.enabled`가 `true`로 설정되면 무시됩니다.**
+- `theme` - UI 테마를 설정합니다. [더 알아보기](/docs/themes).
+- `keybinds` - 키보드 단축키를 사용자 정의합니다. [더 알아보기](/docs/keybinds).
+- `scroll_acceleration.enabled` - 부드럽고 자연스러운 스크롤을 위해 macOS 스타일의 스크롤 가속을 활성화합니다. 활성화하면 빠른 스크롤 제스처로 스크롤 속도가 증가하고 느린 움직임에서는 정밀하게 유지됩니다. **이 설정은 `scroll_speed`보다 우선하며 활성화 시 이를 덮어씁니다.**
+- `scroll_speed` - 스크롤 명령을 사용할 때 TUI 스크롤 속도를 제어합니다 (최소: `0.001`, 소수점 값 지원). 기본값은 `3`입니다. **참고: `scroll_acceleration.enabled`가 `true`로 설정되면 무시됩니다.**
+- `diff_style` - diff 렌더링 방식을 제어합니다. `"auto"`는 터미널 너비에 적응하고, `"stacked"`는 항상 단일 열 레이아웃을 표시합니다.
+
+`OPENCODE_TUI_CONFIG`를 사용하여 사용자 정의 TUI 설정 경로를 로드할 수 있습니다.
 
 ---
 
 ## 사용자 정의
 
-명령 팔레트 (`ctrl+x h` 또는 `/help`)를 사용하여 TUI보기의 다양한 측면을 사용자 정의 할 수 있습니다. 재시작에 따른 설정 persist.
+명령 팔레트(`ctrl+x h` 또는 `/help`)를 사용하여 TUI 보기의 다양한 측면을 사용자 정의할 수 있습니다. 설정은 다시 시작해도 유지됩니다.
 
 ---
 
 #### 사용자 이름 표시
 
-사용자 이름이 채팅 메시지에 나타나는지 여부를 수정합니다. 이것을 통해 접근:
+채팅 메시지에 사용자 이름이 표시되는지 여부를 토글합니다. 다음을 통해 액세스:
 
-- 명령 팔레트 : "username" 또는 "hide 사용자" 검색
-- 자동 설정은 TUI 세션을 통해 기억됩니다.
+- 명령 팔레트: "username" 또는 "hide username" 검색
+- 설정은 자동으로 유지되며 TUI 세션 간에 기억됩니다.

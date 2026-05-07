@@ -349,24 +349,34 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
 
 ## 設定
 
-OpenCode 設定ファイルを通じて TUI の動作をカスタマイズできます。
+`tui.json` (または `tui.jsonc`) ファイルを通じて TUI の動作をカスタマイズできます。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+これは、サーバー/ランタイムの動作を構成する `opencode.json` とは別です。
+
 ### オプション
 
-- `scroll_acceleration` - macOS スタイルのスクロールアクセラレーションを有効にして、スムーズで自然なスクロールを実現します。有効にすると、高速スクロールジェスチャではスクロール速度が向上し、ゆっくりとした動きでは正確なままになります。 **この設定は `scroll_speed` よりも優先され、有効になっている場合は上書きされます。**
-- `scroll_speed` - スクロールコマンドを使用するときに TUI がスクロールする速度を制御します (最小: `1`)。デフォルトは `3` です。 **注: `scroll_acceleration.enabled` が `true` に設定されている場合、これは無視されます。**
+- `theme` - UI テーマを設定します。[詳細はこちら](/docs/themes)。
+- `keybinds` - キーボードショートカットをカスタマイズします。[詳細はこちら](/docs/keybinds)。
+- `scroll_acceleration.enabled` - macOS スタイルのスクロールアクセラレーションを有効にして、スムーズで自然なスクロールを実現します。有効にすると、高速スクロールジェスチャではスクロール速度が向上し、ゆっくりとした動きでは正確なままになります。 **この設定は `scroll_speed` よりも優先され、有効になっている場合は上書きされます。**
+- `scroll_speed` - スクロールコマンドを使用するときに TUI がスクロールする速度を制御します (最小: `0.001`、小数をサポート)。デフォルトは `3` です。 **注: `scroll_acceleration.enabled` が `true` に設定されている場合、これは無視されます。**
+- `diff_style` - 差分レンダリングを制御します。 `"auto"` はターミナルの幅に適応し、`"stacked"` は常に 1 列のレイアウトを表示します。
+
+カスタム TUI 設定パスをロードするには、`OPENCODE_TUI_CONFIG` を使用します。
 
 ---
 

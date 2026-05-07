@@ -17,12 +17,13 @@ describe("createChildStoreManager", () => {
 
     const manager = createChildStoreManager({
       owner,
-      markStats() {},
-      incrementEvictions() {},
       isBooting: () => false,
       isLoadingSessions: () => false,
       onBootstrap() {},
       onDispose() {},
+      translate: (key) => key,
+      getSdk: () => null!,
+      global: { provider: null! },
     })
 
     Array.from({ length: 30 }, (_, index) => `/pinned-${index}`).forEach((directory) => {

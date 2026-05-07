@@ -1,6 +1,6 @@
 ---
 title: Programtillegg
-description: Skriv dine egne programtillegg for å utvide opencode.
+description: Skriv dine egne programtillegg for å utvide OpenCode.
 ---
 
 Plugins lar deg utvide OpenCode ved å koble til ulike hendelser og tilpasse atferd. Du kan lage plugins for å legge til nye funksjoner, integrere med eksterne tjenester eller endre standardoppførselen til OpenCode.
@@ -307,6 +307,10 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
   - `execute`: Funksjon som kjører når verktøyet kalles
 
 Dine egendefinerte verktøy vil være tilgjengelige for OpenCode sammen med innebygde verktøy.
+
+:::note
+Hvis et plugin-verktøy bruker samme navn som et innebygd verktøy, vil plugin-verktøyet ha forrang.
+:::
 
 ---
 

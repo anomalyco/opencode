@@ -355,24 +355,34 @@ Niektórzy edytory potrzebują argumentów wiersza poleceń, aby działać w try
 
 ## Skonfiguruj
 
-Możesz dostosować zachowanie TUI za pomocą pliku konfiguracyjnego opencode.
+Możesz dostosować zachowanie TUI za pomocą pliku `tui.json` (lub `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Jest to oddzielny plik od `opencode.json`, który konfiguruje zachowanie serwera/runtime.
+
 ### Opcje
 
-- `scroll_acceleration` — Włącz przyspieszenie przewijania w stylu macOS, aby zapewnić płynne, naturalne przewijanie. Po włączeniu prędkość przewijania wzrasta wraz z szybkimi gestami przewijania i pozostaje precyzyjna w przypadku wolniejszych ruchów. **To ustawienie ma pierwszeństwo przed `scroll_speed` i zastępuje je, gdy jest włączone.**
-- `scroll_speed` - Kontroluje szybkość przewijania TUI podczas korzystania z poleceń przewijania (minimum: `1`). Wartość domyślna to `3`. **Uwaga: jest to ignorowane, jeśli `scroll_acceleration.enabled` jest ustawione na `true`.**
+- `theme` - Ustawia motyw interfejsu. [Dowiedz się więcej](/docs/themes).
+- `keybinds` - Dostosowuje skróty klawiszowe. [Dowiedz się więcej](/docs/keybinds).
+- `scroll_acceleration.enabled` — Włącz przyspieszenie przewijania w stylu macOS, aby zapewnić płynne, naturalne przewijanie. Po włączeniu prędkość przewijania wzrasta wraz z szybkimi gestami przewijania i pozostaje precyzyjna w przypadku wolniejszych ruchów. **To ustawienie ma pierwszeństwo przed `scroll_speed` i zastępuje je, gdy jest włączone.**
+- `scroll_speed` - Kontroluje szybkość przewijania TUI podczas korzystania z poleceń przewijania (minimum: `0.001`, obsługuje wartości dziesiętne). Wartość domyślna to `3`. **Uwaga: jest to ignorowane, jeśli `scroll_acceleration.enabled` jest ustawione na `true`.**
+- `diff_style` - Steruje renderowaniem różnic. `"auto"` dostosowuje się do szerokości terminala, `"stacked"` zawsze pokazuje układ jednokolumnowy.
+
+Użyj `OPENCODE_TUI_CONFIG`, aby załadować niestandardową ścieżkę konfiguracji TUI.
 
 ---
 

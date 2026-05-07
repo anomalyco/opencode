@@ -5,9 +5,9 @@ description: Bruke opencode-terminalbrukergrensesnittet.
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode gir et interaktivt terminalgrensesnitt (TUI) for å jobbe med prosjektene dine med en LLM.
+OpenCode gir et interaktivt terminalgrensesnitt (TUI) for å jobbe med prosjektene dine med en LLM.
 
-Å kjøre opencode starter TUI for gjeldende katalog.
+Å kjøre OpenCode starter TUI for gjeldende katalog.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ Utdataene fra kommandoen legges til samtalen som et verktøyresultat.
 
 ## Kommandoer
 
-Når du bruker opencode TUI, kan du skrive `/` etterfulgt av et kommandonavn for raskt å utføre handlinger. For eksempel:
+Når du bruker OpenCode TUI, kan du skrive `/` etterfulgt av et kommandonavn for raskt å utføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Her er alle tilgjengelige slash-kommandoer:
 
 ### connect
 
-Legg til en leverandør til opencode. Lar deg velge fra tilgjengelige leverandører og legge til deres API-nøkler.
+Legg til en leverandør til OpenCode. Lar deg velge fra tilgjengelige leverandører og legge til deres API-nøkler.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Veksle visning av verktøydetaljer.
 
 ### exit
 
-Avslutt opencode. _Aliaser_: `/quit`, `/q`
+Avslutt OpenCode. _Aliaser_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -230,12 +230,12 @@ Del gjeldende økt. [Finn ut mer](/docs/share).
 
 ---
 
-### theme
+### themes
 
 Liste over tilgjengelige temaer.
 
 ```bash frame="none"
-/theme
+/themes
 ```
 
 **Nøkkelbinding:** `ctrl+x t`
@@ -355,24 +355,34 @@ Noen editorer trenger kommandolinjeargumenter for å kjøre i blokkeringsmodus. 
 
 ## Konfigurasjon
 
-Du kan tilpasse TUI-oppførselen gjennom opencode-konfigurasjonsfilen.
+Du kan tilpasse TUI-oppførselen gjennom `tui.json` (eller `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Dette er atskilt fra `opencode.json`, som konfigurerer server-/kjøretidsoppførsel.
+
 ### Alternativer
 
-- `scroll_acceleration` - Aktiver rulleakselerasjon i macOS-stil for jevn, naturlig rulling. Når aktivert, øker rullehastigheten med raske rullebevegelser og forblir presis for langsommere bevegelser. **Denne innstillingen har forrang over `scroll_speed` og overstyrer den når den er aktivert.**
-- `scroll_speed` - Styrer hvor raskt TUI ruller når du bruker rullekommandoer (minimum: `1`). Standard er `3`. **Merk: Dette ignoreres hvis `scroll_acceleration.enabled` er satt til `true`.**
+- `theme` - Angir UI-temaet ditt. [Finn ut mer](/docs/themes).
+- `keybinds` - Tilpasser hurtigtaster. [Finn ut mer](/docs/keybinds).
+- `scroll_acceleration.enabled` - Aktiver rulleakselerasjon i macOS-stil for jevn, naturlig rulling. Når aktivert, øker rullehastigheten med raske rullebevegelser og forblir presis for langsommere bevegelser. **Denne innstillingen har forrang over `scroll_speed` og overstyrer den når den er aktivert.**
+- `scroll_speed` - Styrer hvor raskt TUI ruller når du bruker rullekommandoer (minimum: `0.001`, støtter desimalverdier). Standard er `3`. **Merk: Dette ignoreres hvis `scroll_acceleration.enabled` er satt til `true`.**
+- `diff_style` - Kontrollerer diff-gjengivelse. `"auto"` tilpasser seg terminalbredden, `"stacked"` viser alltid en enkeltkolonneoppsett.
+
+Bruk `OPENCODE_TUI_CONFIG` for å laste en egendefinert TUI-konfigurasjonsbane.
 
 ---
 

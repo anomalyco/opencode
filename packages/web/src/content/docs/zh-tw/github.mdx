@@ -1,43 +1,43 @@
 ---
 title: GitHub
-description: 在 GitHub Issues 和拉取請求中使用 opencode。
+description: 在 GitHub Issue 和 Pull Request 中使用 OpenCode。
 ---
 
-opencode 與您的 GitHub 工作流程整合。在評論中提及 `/opencode` 或 `/oc`，opencode 將在您的 GitHub Actions Runner 中執行任務。
+OpenCode 可以與您的 GitHub 工作流程整合。在評論中提及 `/opencode` 或 `/oc`，OpenCode 就會在您的 GitHub Actions Runner 中執行任務。
 
 ---
 
-## 功能
+## 功能特性
 
-- **分類問題**：要求 opencode 調查問題並向您解釋。
-- **修復和實作**：要求 opencode 修復問題或實作功能。它將在一個新分支中工作並提交包含所有變更的 PR。
-- **安全**：opencode 在 GitHub 的 Runner 中執行。
+- **Issue 分類**：讓 OpenCode 調查某個 Issue 並為您做出解釋。
+- **修復與實作**：讓 OpenCode 修復 Issue 或實作某個功能。它會在新分支中工作，並提交包含所有變更的 PR。
+- **安全可靠**：OpenCode 在您自己的 GitHub Runner 中執行。
 
 ---
 
 ## 安裝
 
-在 GitHub 儲存庫中的專案中執行以下指令：
+在一個位於 GitHub 儲存庫中的專案裡執行以下指令：
 
 ```bash
 opencode github install
 ```
 
-這將引導您完成安裝 GitHub 應用程式、建立工作流程和設定 Secrets。
+該指令會引導您完成 GitHub App 的安裝、工作流程的建立以及密鑰的設定。
 
 ---
 
 ### 手動設定
 
-或者您可以手動設定。
+您也可以手動進行設定。
 
-1. **安裝 GitHub 應用程式**
+1. **安裝 GitHub App**
 
-   前往 [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent)。確保它已安裝在目標儲存庫上。
+   前往 [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent)，確保已在目標儲存庫中安裝該應用程式。
 
 2. **新增工作流程**
 
-   將以下工作流程檔案新增到儲存庫中的 `.github/workflows/opencode.yml` 中。確保在 `env` 中設定適當的 `model` 和所需的 API 金鑰。
+   將以下工作流程檔案新增到儲存庫的 `.github/workflows/opencode.yml` 中。請確保在 `env` 中設定合適的 `model` 及所需的 API 金鑰。
 
    ```yml title=".github/workflows/opencode.yml" {24,26}
    name: opencode
@@ -73,21 +73,21 @@ opencode github install
              # github_token: xxxx
    ```
 
-3. **設定 Secrets**
+3. **將 API 金鑰儲存到 Secrets 中**
 
-   在您的組織或專案的 **Settings** 中，展開左側的 **Secrets and variables**，然後選擇 **Actions**。並新增所需的 API 金鑰。
+   在您的組織或專案的 **Settings** 中，展開左側的 **Secrets and variables**，然後選擇 **Actions**，新增所需的 API 金鑰。
 
 ---
 
 ## 設定
 
-- `model`：與 opencode 一起使用的模型。採用 `provider/model` 格式。這是**必需的**。
-- `agent`: 使用的代理。必須是主要代理。如果未找到，則從設定退回到 `default_agent` 或 `"build"`。
-- `share`：是否分享 opencode 工作階段。對於公共儲存庫，預設為 **true**。
-- `prompt`：可選的自定義提示以覆寫預設行為。使用它來自定義 opencode 處理請求的方式。
-- `token`：可選的 GitHub 存取權杖，用於執行建立評論、提交變更和打開拉取請求等操作。預設情況下，opencode 使用來自 opencode GitHub 應用程式的安裝存取權杖，因此提交、評論和拉取請求顯示為來自應用程式。
+- `model`：OpenCode 使用的模型，格式為 `provider/model`。此項為**必填**。
+- `agent`：要使用的代理，必須是主代理。如果未找到，則回退到設定中的 `default_agent`，若仍未找到則使用 `"build"`。
+- `share`：是否共享 OpenCode 工作階段。對於公開儲存庫，預設為 **true**。
+- `prompt`：可選的自訂提示詞，用於覆寫預設行為。可透過此項自訂 OpenCode 處理請求的方式。
+- `token`：可選的 GitHub 存取權杖，用於執行建立評論、提交變更和建立 Pull Request 等操作。預設情況下，OpenCode 使用 OpenCode GitHub App 的安裝存取權杖，因此提交、評論和 Pull Request 會顯示為來自該應用程式。
 
-  或者，您可以使用 GitHub Action Runner 的 [內建 `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而無需安裝 opencode GitHub 應用程式。只需確保在您的工作流程中授予所需的權限：
+  您也可以使用 GitHub Action Runner 內建的 [`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而無需安裝 OpenCode GitHub App。只需確保在工作流程中授予所需的權限：
 
   ```yaml
   permissions:
@@ -97,26 +97,26 @@ opencode github install
     issues: write
   ```
 
-  **注意**：使用 `GITHUB_TOKEN` 時，opencode 執行的操作（如提交和評論）將不會觸發其他工作流程。
+  如果您願意，也可以使用[個人存取權杖](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)（PAT）。
 
 ---
 
 ## 支援的事件
 
-opencode 可以由以下 GitHub 事件觸發：
+OpenCode 可以由以下 GitHub 事件觸發：
 
-| 事件類型                      | 觸發條件                       | 詳情                                                                                    |
-| ----------------------------- | ------------------------------ | --------------------------------------------------------------------------------------- |
-| `issue_comment`               | 對問題或 PR 發表評論           | 在評論中提及 `/opencode` 或 `/oc`。 opencode 讀取上下文並可以建立分支、打開 PR 或回覆。 |
-| `pull_request_review_comment` | 對 PR 中的特定程式碼行進行評論 | 在檢查程式碼時提及 `/opencode` 或 `/oc`。 opencode 接收檔案路徑、行號和 diff 上下文。   |
-| `issues`                      | 問題已打開或已編輯             | 建立或修改問題時自動觸發 opencode。需要 `prompt` 輸入。                                 |
-| `pull_request`                | PR 已開啟或已更新              | 當 PR 被開啟、同步或重新開啟時自動觸發 opencode。對於自動評論很有用。                   |
-| `schedule`                    | 基於 Cron 的排程               | 按排程執行 opencode。需要 `prompt` 輸入。輸出進入日誌和 PR（沒有可評論的問題）。        |
-| `workflow_dispatch`           | 從 GitHub UI 手動觸發          | 透過「Actions」標籤按需觸發 opencode。需要 `prompt` 輸入。輸出進入日誌和 PR。           |
+| 事件類型                      | 觸發方式                       | 詳情                                                                                      |
+| ----------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `issue_comment`               | 在 Issue 或 PR 上發表評論      | 在評論中提及 `/opencode` 或 `/oc`。OpenCode 會讀取上下文，並可建立分支、提交 PR 或回覆。  |
+| `pull_request_review_comment` | 在 PR 中對特定程式碼行發表評論 | 在程式碼審查時提及 `/opencode` 或 `/oc`。OpenCode 會接收檔案路徑、行號和 diff 上下文。    |
+| `issues`                      | Issue 被建立或編輯             | 在 Issue 建立或修改時自動觸發 OpenCode。需要提供 `prompt` 輸入。                          |
+| `pull_request`                | PR 被建立或更新                | 在 PR 被開啟、同步或重新開啟時自動觸發 OpenCode。適用於自動化審查情境。                   |
+| `schedule`                    | 基於 Cron 的定時任務           | 按排程執行 OpenCode。需要提供 `prompt` 輸入。輸出會寫入日誌和 PR（沒有 Issue 可供評論）。 |
+| `workflow_dispatch`           | 從 GitHub UI 手動觸發          | 透過 Actions 分頁按需觸發 OpenCode。需要提供 `prompt` 輸入。輸出會寫入日誌和 PR。         |
 
-### 排程範例
+### 定時任務範例
 
-按排程執行 opencode 以執行自動化任務：
+按排程執行 OpenCode 以執行自動化任務：
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
 name: Scheduled OpenCode Task
@@ -150,13 +150,13 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-對於排程事件，`prompt` 輸入是**必需的**，因為沒有註釋可從中提取指令。排程工作流程在沒有使用者上下文的情況下執行以進行權限檢查，因此如果您希望 opencode 建立分支或 PR，工作流程必須授予 `contents: write` 和 `pull-requests: write`。
+對於定時事件，`prompt` 輸入為**必填**，因為沒有評論可供提取指令。定時工作流程在執行時沒有使用者上下文來進行權限檢查，因此如果您希望 OpenCode 建立分支或 PR，工作流程必須授予 `contents: write` 和 `pull-requests: write` 權限。
 
 ---
 
-### 拉取請求範例
+### Pull Request 範例
 
-打開或更新 PR 時自動審閱：
+在 PR 被建立或更新時自動進行審查：
 
 ```yaml title=".github/workflows/opencode-review.yml"
 name: opencode-review
@@ -191,13 +191,13 @@ jobs:
             - Suggest improvements
 ```
 
-對於 `pull_request` 事件，如果未提供 `prompt`，opencode 將預設審閱拉取請求。
+對於 `pull_request` 事件，如果未提供 `prompt`，OpenCode 將預設對該 Pull Request 進行審查。
 
 ---
 
-### 問題分類範例
+### Issue 分類範例
 
-自動分類新問題。此範例過濾超過 30 天的帳號以減少垃圾訊息：
+自動分類新建的 Issue。以下範例會過濾掉註冊不滿 30 天的帳戶以減少垃圾訊息：
 
 ```yaml title=".github/workflows/opencode-triage.yml"
 name: Issue Triage
@@ -246,13 +246,13 @@ jobs:
             Otherwise, do not comment.
 ```
 
-對於 `issues` 事件，`prompt` 輸入是**必需的**，因為沒有評論可從中提取指令。
+對於 `issues` 事件，`prompt` 輸入為**必填**，因為沒有評論可供提取指令。
 
 ---
 
-## 自定義提示
+## 自訂提示詞
 
-覆寫預設提示，為您的工作流程自定義 opencode 的行為。
+覆寫預設提示詞，以便為您的工作流程自訂 OpenCode 的行為。
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -265,57 +265,57 @@ jobs:
       - Suggest improvements
 ```
 
-這對於執行與您的專案相關的特定審閱標準、編碼標準或重點領域非常有用。
+這對於在專案中實施特定的審查標準、編碼規範或關注重點非常有用。
 
 ---
 
 ## 範例
 
-以下是如何在 GitHub 中使用 opencode 的一些範例。
+以下是在 GitHub 中使用 OpenCode 的一些範例。
 
-- **解釋一個問題**
+- **解釋 Issue**
 
-  在 GitHub Issue 中添加此評論。
+  在 GitHub Issue 中新增以下評論：
 
   ```
   /opencode explain this issue
   ```
 
-  opencode 將閱讀整個討論串，包括所有評論，並回覆並提供清晰的解釋。
+  OpenCode 會閱讀整個討論串（包括所有評論），並回覆一份清晰的解釋。
 
-- **解決問題**
+- **修復 Issue**
 
-  在 GitHub Issue 中，說：
+  在 GitHub Issue 中輸入：
 
   ```
   /opencode fix this
   ```
 
-  opencode 將建立一個新分支，實作變更，並使用變更打開 PR。
+  OpenCode 會建立一個新分支，實作變更，並提交一個包含所有修改的 PR。
 
-- **審閱 PR 並進行變更**
+- **審查 PR 並進行修改**
 
-  在 GitHub PR 上留下以下評論。
+  在 GitHub PR 上留下以下評論：
 
   ```
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  opencode 將實作請求的變更並將其推送到分支。
+  OpenCode 會實作所請求的變更並將其提交到同一個 PR 中。
 
-- **查看特定程式碼行**
+- **審查特定程式碼行**
 
-  直接在 PR 的「Files」標籤中的程式碼行上留下評論。 opencode 自動檢測檔案、行號和 diff 上下文以提供精確的回應。
+  在 PR 的「Files」分頁中直接對程式碼行留下評論。OpenCode 會自動偵測檔案、行號和 diff 上下文，從而提供精準的回應。
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  opencode 將查看：
-  - 正在審閱的確切檔案
-  - 具體程式碼行
+  當您對特定程式碼行發表評論時，OpenCode 會接收到：
+  - 正在審查的具體檔案
+  - 特定的程式碼行
   - 周圍的 diff 上下文
   - 行號資訊
 
-  這允許更有針對性的請求，而無需手動指定檔案路徑或行號。
+  這樣您就可以提出更有針對性的請求，而無需手動指定檔案路徑或行號。

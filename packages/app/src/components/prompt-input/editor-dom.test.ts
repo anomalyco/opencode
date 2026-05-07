@@ -24,6 +24,28 @@ describe("prompt-input editor dom", () => {
     expect((container.childNodes[1] as HTMLElement).tagName).toBe("BR")
   })
 
+  test("createTextFragment avoids break-node explosion for large multiline content", () => {
+    const content = Array.from({ length: 220 }, () => "line").join("\n")
+    const fragment = createTextFragment(content)
+    const container = document.createElement("div")
+    container.appendChild(fragment)
+
+    expect(container.childNodes.length).toBe(1)
+    expect(container.childNodes[0]?.nodeType).toBe(Node.TEXT_NODE)
+    expect(container.textContent).toBe(content)
+  })
+
+  test("createTextFragment keeps terminal break in large multiline fallback", () => {
+    const content = `${Array.from({ length: 220 }, () => "line").join("\n")}\n`
+    const fragment = createTextFragment(content)
+    const container = document.createElement("div")
+    container.appendChild(fragment)
+
+    expect(container.childNodes.length).toBe(2)
+    expect(container.childNodes[0]?.textContent).toBe(content.slice(0, -1))
+    expect((container.childNodes[1] as HTMLElement).tagName).toBe("BR")
+  })
+
   test("length helpers treat breaks as one char and ignore zero-width chars", () => {
     const container = document.createElement("div")
     container.appendChild(document.createTextNode("ab\u200B"))

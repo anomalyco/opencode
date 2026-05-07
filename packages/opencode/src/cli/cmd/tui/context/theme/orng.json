@@ -142,8 +142,8 @@
       "light": "lightStep2"
     },
     "diffLineNumber": {
-      "dark": "darkStep3",
-      "light": "lightStep3"
+      "dark": "diffContext",
+      "light": "#595755"
     },
     "diffAddedLineNumberBg": {
       "dark": "#162535",

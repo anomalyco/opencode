@@ -12,15 +12,13 @@ type Usage = {
   total_tokens?: number
 }
 
-export const openaiHelper: ProviderHelper = () => ({
+export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
   format: "openai",
   modifyUrl: (providerApi: string) => providerApi + "/responses",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
   },
-  modifyBody: (body: Record<string, any>) => {
-    return body
-  },
+  modifyBody: (body: Record<string, any>) => body,
   createBinaryStreamDecoder: () => undefined,
   streamSeparator: "\n\n",
   createUsageParser: () => {
@@ -35,7 +33,7 @@ export const openaiHelper: ProviderHelper = () => ({
         let json
         try {
           json = JSON.parse(data.slice(6)) as { response?: { usage?: Usage } }
-        } catch (e) {
+        } catch {
           return
         }
 
@@ -43,7 +41,6 @@ export const openaiHelper: ProviderHelper = () => ({
         usage = json.response.usage
       },
       retrieve: () => usage,
-      buidlCostChunk: (cost: string) => `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`,
     }
   },
   normalizeUsage: (usage: Usage) => {

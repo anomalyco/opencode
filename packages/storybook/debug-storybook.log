@@ -1,0 +1,307 @@
+[14:25:48.462] [INFO] storybook v10.2.10
+[14:25:48.749] [DEBUG] Getting package.json info for /Users/davidhill/Documents/Local/opencode/packages/storybook/package.json...
+[14:25:48.997] [INFO] Starting...
+[14:25:49.095] [DEBUG] Starting preview..
+[14:25:49.098] [WARN] 🚨 Unable to index files:
+- ./../ui/src/components/accordion.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/accordion.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/app-icon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/app-icon.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/avatar.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/avatar.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/basic-tool.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/basic-tool.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/checkbox.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/checkbox.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/code.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/code.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/collapsible.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/collapsible.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/context-menu.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/context-menu.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/dialog.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/dialog.stories.tsx (line 10, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/diff-changes.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/diff-changes.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/diff-ssr.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/diff-ssr.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/diff.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/diff.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/dock-prompt.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/dock-prompt.stories.tsx (line 15, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/dropdown-menu.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/dropdown-menu.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/favicon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/favicon.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/file-icon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/file-icon.stories.tsx (line 13, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/font.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/font.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/hover-card.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/hover-card.stories.tsx (line 13, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/icon-button.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/icon-button.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/icon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/icon.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/image-preview.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/image-preview.stories.tsx (line 13, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/inline-input.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/inline-input.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/keybind.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/keybind.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/line-comment.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/line-comment.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/list.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/list.stories.tsx (line 15, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/logo.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/logo.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/markdown.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/markdown.stories.tsx (line 12, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/message-nav.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/message-nav.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/message-part.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/message-part.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/popover.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/popover.stories.tsx (line 16, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/progress-circle.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/progress-circle.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/progress.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/progress.stories.tsx (line 15, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/provider-icon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/provider-icon.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/radio-group.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/radio-group.stories.tsx (line 13, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/resize-handle.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/resize-handle.stories.tsx (line 17, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/select.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/select.stories.tsx (line 16, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/session-review.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-review.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/session-turn.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-turn.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/spinner.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/spinner.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/sticky-accordion-header.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/sticky-accordion-header.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/switch.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/switch.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/tabs.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/tabs.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/tag.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/tag.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/text-field.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/text-field.stories.tsx (line 14, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/text-shimmer.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/text-shimmer.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/toast.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/toast.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/tooltip.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/tooltip.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/typewriter.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/typewriter.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+[14:25:49.109] [ERROR] Failed to build the preview
+[14:25:49.110] [ERROR] Error: [38;2;241;97;97mUnable to index files:
+- ./../ui/src/components/accordion.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/accordion.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/app-icon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/app-icon.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/avatar.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/avatar.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/basic-tool.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/basic-tool.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/checkbox.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/checkbox.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/code.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/code.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/collapsible.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/collapsible.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/context-menu.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/context-menu.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/dialog.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/dialog.stories.tsx (line 10, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/diff-changes.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/diff-changes.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/diff-ssr.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/diff-ssr.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/diff.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/diff.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/dock-prompt.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/dock-prompt.stories.tsx (line 15, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/dropdown-menu.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/dropdown-menu.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/favicon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/favicon.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/file-icon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/file-icon.stories.tsx (line 13, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/font.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/font.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/hover-card.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/hover-card.stories.tsx (line 13, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/icon-button.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/icon-button.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/icon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/icon.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/image-preview.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/image-preview.stories.tsx (line 13, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/inline-input.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/inline-input.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/keybind.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/keybind.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/line-comment.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/line-comment.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/list.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/list.stories.tsx (line 15, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/logo.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/logo.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/markdown.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/markdown.stories.tsx (line 12, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/message-nav.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/message-nav.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/message-part.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/message-part.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/popover.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/popover.stories.tsx (line 16, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/progress-circle.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/progress-circle.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/progress.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/progress.stories.tsx (line 15, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/provider-icon.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/provider-icon.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/radio-group.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/radio-group.stories.tsx (line 13, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/resize-handle.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/resize-handle.stories.tsx (line 17, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/select.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/select.stories.tsx (line 16, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/session-review.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-review.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/session-turn.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-turn.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/spinner.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/spinner.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/sticky-accordion-header.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/sticky-accordion-header.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/switch.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/switch.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/tabs.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/tabs.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/tag.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/tag.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/text-field.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/text-field.stories.tsx (line 14, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/text-shimmer.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/text-shimmer.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/toast.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/toast.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/tooltip.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/tooltip.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export
+- ./../ui/src/components/typewriter.stories.tsx: CSF: default export must be an object /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/typewriter.stories.tsx (line 6, col 0)
+
+More info: https://storybook.js.org/docs/writing-stories?ref=error#default-export[39m
+    at _StoryIndexGenerator.getIndexAndStats (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/storybook@10.2.10+4edd68b244e756bb/node_modules/storybook/dist/core-server/index.js:6085:15)
+    at async _StoryIndexGenerator.getIndex (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/storybook@10.2.10+4edd68b244e756bb/node_modules/storybook/dist/core-server/index.js:6074:13)
+    at async getOptimizeDeps (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/@storybook+builder-vite@10.2.10+a2a25316dbcddd7f/node_modules/@storybook/builder-vite/dist/index.js:1862:15)
+    at async createViteServer (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/@storybook+builder-vite@10.2.10+a2a25316dbcddd7f/node_modules/@storybook/builder-vite/dist/index.js:1888:19)
+    at async Module.start (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/@storybook+builder-vite@10.2.10+a2a25316dbcddd7f/node_modules/@storybook/builder-vite/dist/index.js:1923:17)
+    at async storybookDevServer (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/storybook@10.2.10+4edd68b244e756bb/node_modules/storybook/dist/core-server/index.js:7241:83)
+    at async buildOrThrow (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/storybook@10.2.10+4edd68b244e756bb/node_modules/storybook/dist/core-server/index.js:4504:12)
+    at async buildDevStandalone (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/storybook@10.2.10+4edd68b244e756bb/node_modules/storybook/dist/core-server/index.js:7611:66)
+    at async withTelemetry (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/storybook@10.2.10+4edd68b244e756bb/node_modules/storybook/dist/_node-chunks/chunk-S3MWHNYJ.js:218:12)
+    at async dev (file:///Users/davidhill/Documents/Local/opencode/node_modules/.bun/storybook@10.2.10+4edd68b244e756bb/node_modules/storybook/dist/bin/core.js:2734:3)
+[14:25:49.118] [WARN] Broken build, fix the error above.
+You may need to refresh the browser.
