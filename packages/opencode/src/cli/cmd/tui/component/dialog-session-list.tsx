@@ -70,8 +70,10 @@ export function DialogSessionList() {
         sync,
         project,
         toast,
+        sourceWorkspaceID: session.workspaceID,
         workspaceID,
         sessionID: session.id,
+        copyChanges: false,
         done: list,
       })
     }

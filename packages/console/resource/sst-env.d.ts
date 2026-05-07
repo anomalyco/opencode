@@ -91,8 +91,8 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "INCIDENT_WEBHOOK_SIGNING_SECRET": {
-      "type": "sst.sst.Secret"
+    "HoneycombWebhookSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
       "value": string
     }
     "R2AccessKey": {
