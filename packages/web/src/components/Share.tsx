@@ -527,10 +527,12 @@ export function fromV1(v1: Message.Info): MessageWithParts {
       mode: "build",
       error: v1.metadata.error,
       parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
+        const messageID = v1.id;
+        const sessionID = v1.metadata.sessionID;
         const base = {
           id: index.toString(),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
+          messageID,
+          sessionID,
         }
         if (part.type === "text") {
           return [
@@ -610,10 +612,12 @@ export function fromV1(v1: Message.Info): MessageWithParts {
         created: v1.metadata.time.created,
       },
       parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
+        const messageID = v1.id;
+        const sessionID = v1.metadata.sessionID;
         const base = {
           id: index.toString(),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
+          messageID,
+          sessionID,
         }
         if (part.type === "text") {
           return [
