@@ -86,6 +86,45 @@ describe("tool.question", () => {
     ),
   )
 
+  // Issue #100: qwen3.6 が `options:[]` のときに `questions` を JSON 文字列で送るケース。
+  // schema preprocess (normalizeQuestionsInput) が execute() 入口で吸収して、
+  // 通常の質問フローへ進むことを保証する。
+  it.live("normalizes Qwen-style stringified JSON questions input (#100)", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const question = yield* Question.Service
+        const toolInfo = yield* QuestionTool
+        const tool = yield* toolInfo.init()
+
+        // 実ログ (#100 / Test B) と同じ形式: surrounding newlines + JSON 文字列 + options:[]
+        const stringifiedInput =
+          '\n[{"question": "このタスクの実装言語は何ですか？", "header": "実装言語", "options": [], "multiple": false}]\n'
+
+        const fiber = yield* tool
+          .execute({ questions: stringifiedInput } as unknown as Parameters<typeof tool.execute>[0], ctx)
+          .pipe(Effect.forkScoped)
+        const item = yield* pending(question)
+        // 自由入力ケース: ユーザーが文字列で答える
+        yield* question.reply({ requestID: item.id, answers: [["TypeScript"]] })
+
+        const result = yield* Fiber.join(fiber)
+        expect(result.title).toBe("Asked 1 question")
+        expect(result.output).toContain(`"このタスクの実装言語は何ですか？"="TypeScript"`)
+      }),
+    ),
+  )
+
+  it.live("formatValidationError mentions canonical array shape and options-omission rule", () =>
+    Effect.gen(function* () {
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const msg = tool.formatValidationError!("dummy SchemaError(...)")
+      expect(msg).toContain("must be a JSON array")
+      expect(msg).toContain('"question"')
+      expect(msg).toContain("omit the \"options\" field")
+    }),
+  )
+
   // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
   //   test("should throw an Error for header exceeding 30 characters", async () => {
   //     const tool = await QuestionTool.init()

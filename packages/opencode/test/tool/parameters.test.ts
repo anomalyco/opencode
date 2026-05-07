@@ -176,6 +176,43 @@ describe("tool parameters", () => {
     test("rejects missing questions", () => {
       expect(accepts(Question, {})).toBe(false)
     })
+
+    // Issue #21 / #67 / #100 — qwen 系モデルが `questions` を JSON 文字列で
+    // 送ってくるケース。preprocess (normalizeQuestionsInput) で吸収する。
+    test("normalizes stringified JSON array (#21 / #100 reproduction)", () => {
+      const parsed = parse(Question, {
+        questions:
+          '\n[{"question": "lang?", "header": "Lang", "options": [{"label": "TS", "description": "ts"}]}]\n',
+      })
+      expect(parsed.questions.length).toBe(1)
+      expect(parsed.questions[0].question).toBe("lang?")
+      expect(parsed.questions[0].options[0].label).toBe("TS")
+    })
+
+    // Issue #100 specific: options:[] のときに qwen3.6 が stringified で送る
+    test("normalizes stringified JSON with options:[] (#100 specific)", () => {
+      const parsed = parse(Question, {
+        questions: '\n[{"question": "free text?", "header": "FreeText", "options": [], "multiple": false}]\n',
+      })
+      expect(parsed.questions.length).toBe(1)
+      expect(parsed.questions[0].question).toBe("free text?")
+      expect(parsed.questions[0].options).toEqual([])
+    })
+
+    test("wraps a single question object into an array", () => {
+      const parsed = parse(Question, {
+        questions: { question: "pick", header: "Pick", options: [{ label: "a", description: "desc" }] },
+      })
+      expect(parsed.questions.length).toBe(1)
+      expect(parsed.questions[0].question).toBe("pick")
+    })
+
+    test("converts a plain string into a free-form question", () => {
+      const parsed = parse(Question, { questions: "Which language?" })
+      expect(parsed.questions.length).toBe(1)
+      expect(parsed.questions[0].question).toBe("Which language?")
+      expect(parsed.questions[0].options).toEqual([])
+    })
   })
 
   describe("read", () => {
