@@ -1,0 +1,52 @@
+name: compile linux-amd64 cli
+on:
+  workflow_dispatch:
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - id: version
+        run: |
+          ./script/version.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENCODE_CHANNEL: compile
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+  build-cli:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build Linux amd64 CLI
+        run: |
+          ./packages/opencode/script/build.ts --single
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_RELEASE: false
+          OPENCODE_CHANNEL: compile
+          OPENCODE_MODELS_URL: https://models.opencode.ai
+
+      - name: Verify Binary
+        run: |
+          ls -lh packages/opencode/dist/opencode-linux-x64/bin/opencode
+          packages/opencode/dist/opencode-linux-x64/bin/opencode --version
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli-linux-amd64
+          path: packages/opencode/dist/opencode-linux-x64/bin/opencode
