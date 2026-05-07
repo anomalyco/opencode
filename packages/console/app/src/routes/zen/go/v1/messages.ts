@@ -1,5 +1,6 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { handler } from "~/routes/zen/util/handler"
+import { parseAnthropicVariant } from "~/routes/zen/util/variant"
 
 export function POST(input: APIEvent) {
   return handler(input, {
@@ -7,7 +8,7 @@ export function POST(input: APIEvent) {
     modelList: "lite",
     parseApiKey: (headers: Headers) => headers.get("x-api-key") ?? undefined,
     parseModel: (url: string, body: any) => body.model,
-    parseVariant: (url: string, body: any) => body.effort,
+    parseVariant: (url: string, body: any) => parseAnthropicVariant(body),
     parseIsStream: (url: string, body: any) => !!body.stream,
   })
 }
