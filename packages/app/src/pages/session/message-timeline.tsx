@@ -64,6 +64,7 @@ const emptyTools: ToolPart[] = []
 const emptyAssistantMessages: AssistantMessage[] = []
 const idle = { type: "idle" as const }
 const estimatedTurnHeight = 680
+const gap = 48
 const windowOverscan = 1600
 const windowThreshold = 24
 const SCROLL_WARN_MS = 16
@@ -271,6 +272,7 @@ export function MessageTimeline(props: {
   let windowFrame: number | undefined
   let bottomFrame: number | undefined
   let mutationFrame: number | undefined
+  let blank: number | undefined
   let windowAdjustVersion = 0
   const turnHeights = new Map<string, number>()
 
@@ -283,7 +285,13 @@ export function MessageTimeline(props: {
     return Math.max(estimatedTurnHeight / 2, total / turnHeights.size)
   }
   const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? averageTurnHeight()
-  const totalHeight = createMemo(() => rendered().reduce((sum, id) => sum + estimateTurnHeight(id), 0))
+  const slot = (id: string, index: number, size: number) => estimateTurnHeight(id) + (index < size - 1 ? gap : 0)
+  const offset = (ids: string[], end: number) => {
+    let sum = 0
+    for (let i = 0; i < end; i++) sum += slot(ids[i]!, i, ids.length)
+    return sum
+  }
+  const totalHeight = createMemo(() => offset(rendered(), rendered().length))
   const [windowed, setWindowed] = createStore({
     start: 0,
     end: Infinity,
@@ -406,15 +414,13 @@ export function MessageTimeline(props: {
     const target = root.clientHeight + windowOverscan
     while (end > 0 && covered < target) {
       end -= 1
-      covered += estimateTurnHeight(ids[end]!)
+      covered += slot(ids[end]!, end, ids.length)
     }
 
-    let top = 0
-    for (let i = 0; i < end; i++) top += estimateTurnHeight(ids[i]!)
     return {
       start: end,
       end: ids.length,
-      top,
+      top: offset(ids, end),
       bottom: 0,
     }
   }
@@ -451,7 +457,7 @@ export function MessageTimeline(props: {
     let offset = 0
     let start = 0
     while (start < ids.length) {
-      const next = offset + estimateTurnHeight(ids[start]!)
+      const next = offset + slot(ids[start]!, start, ids.length)
       if (next >= min) break
       offset = next
       start += 1
@@ -460,7 +466,7 @@ export function MessageTimeline(props: {
     let end = start
     let tail = offset
     while (end < ids.length) {
-      tail += estimateTurnHeight(ids[end]!)
+      tail += slot(ids[end]!, end, ids.length)
       end += 1
       if (tail >= max) break
     }
@@ -511,11 +517,11 @@ export function MessageTimeline(props: {
     const span = root.clientHeight + windowOverscan * 2
     let start = index
     let end = index + 1
-    let covered = estimateTurnHeight(ids[index]!)
+    let covered = slot(ids[index]!, index, ids.length)
 
     while (covered < span && (start > 0 || end < ids.length)) {
-      const a = start > 0 ? estimateTurnHeight(ids[start - 1]!) : -1
-      const b = end < ids.length ? estimateTurnHeight(ids[end]!) : -1
+      const a = start > 0 ? slot(ids[start - 1]!, start - 1, ids.length) : -1
+      const b = end < ids.length ? slot(ids[end]!, end, ids.length) : -1
 
       if (a >= b && start > 0) {
         start -= 1
@@ -535,10 +541,8 @@ export function MessageTimeline(props: {
       }
     }
 
-    let top = 0
-    for (let i = 0; i < start; i++) top += estimateTurnHeight(ids[i]!)
-    let tail = top
-    for (let i = start; i < end; i++) tail += estimateTurnHeight(ids[i]!)
+    const top = offset(ids, start)
+    const tail = offset(ids, end)
 
     console.debug(
       `[buildTargetWindow] built window around target: id=${id} index=${index} window=[${start},${end}] top=${top} bottom=${Math.max(0, totalHeight() - tail)}`,
@@ -577,10 +581,8 @@ export function MessageTimeline(props: {
 
     const start = Math.min(next.start, index)
     const end = Math.max(next.end, index + 1)
-    let top = 0
-    for (let i = 0; i < start; i++) top += estimateTurnHeight(ids[i]!)
-    let tail = top
-    for (let i = start; i < end; i++) tail += estimateTurnHeight(ids[i]!)
+    const top = offset(ids, start)
+    const tail = offset(ids, end)
     return {
       start,
       end,
@@ -609,6 +611,7 @@ export function MessageTimeline(props: {
     const prev = { start: windowed.start, end: windowed.end, top: windowed.top, bottom: windowed.bottom }
 
     setWindowed(next)
+    audit(props.seekingMessageId ? "seek-window" : "apply-window")
     const adjustVersion = ++windowAdjustVersion
     if (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId) {
       console.debug("[applyWindow] bottom-anchored scroll path")
@@ -690,6 +693,29 @@ export function MessageTimeline(props: {
     if (!canWindow() || ids.length <= windowThreshold) return ids
     return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
   })
+
+  const audit = (source: string) => {
+    if (blank !== undefined) return
+    blank = requestAnimationFrame(() => {
+      blank = undefined
+      const root = viewport
+      const ids = rendered()
+      if (!root || !canWindow() || ids.length <= windowThreshold) return
+
+      const box = root.getBoundingClientRect()
+      const nodes = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
+      const hit = nodes.filter((node) => {
+        const rect = node.getBoundingClientRect()
+        return rect.bottom > box.top && rect.top < box.bottom
+      })
+      if (hit.length > 0) return
+
+      console.warn(
+        `[timeline] blank viewport: source=${source} scrollTop=${Math.round(root.scrollTop)} scrollHeight=${Math.round(root.scrollHeight)} clientHeight=${Math.round(root.clientHeight)} window=[${windowed.start},${windowed.end}] spacerTop=${Math.round(windowed.top)} spacerBottom=${Math.round(windowed.bottom)} total=${Math.round(totalHeight())} rendered=${ids.length} visible=${visibleRendered().length} first=${visibleRendered().at(0) || "none"} last=${visibleRendered().at(-1) || "none"} measured=${turnHeights.size} current=${props.currentMessageId || "none"} seeking=${props.seekingMessageId || "none"} live=${props.live} bottom=${props.scroll.bottom}`,
+      )
+      scheduleWindow()
+    })
+  }
 
   createEffect(
     on(
@@ -784,6 +810,7 @@ export function MessageTimeline(props: {
     if (windowFrame !== undefined) cancelAnimationFrame(windowFrame)
     if (bottomFrame !== undefined) cancelAnimationFrame(bottomFrame)
     if (mutationFrame !== undefined) cancelAnimationFrame(mutationFrame)
+    if (blank !== undefined) cancelAnimationFrame(blank)
   })
 
   createEffect(() => {
@@ -946,7 +973,7 @@ export function MessageTimeline(props: {
   createEffect(
     on(showHeader, (visible, prev) => {
       if (!import.meta.env.DEV || visible === prev) return
-      console.debug("[timeline] session title overlay", { visible, session: sessionID() })
+      console.debug(`[timeline] session title overlay: visible=${visible} session=${sessionID() || "none"}`)
     }),
   )
 
@@ -2064,6 +2091,7 @@ export function MessageTimeline(props: {
             const root = e.currentTarget
             const shouldWin = shouldWindow()
             props.onScheduleScrollState(e.currentTarget)
+            audit("scroll")
             const gesture = props.hasScrollGesture()
             // Programmatic scroll corrections also emit scroll events. Only let
             // real user gestures drive the auto-scroll state machine, otherwise
@@ -2096,10 +2124,10 @@ export function MessageTimeline(props: {
               class="items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
-                "flex flex-col gap-12": true,
               }}
               style={{
                 ...itemStyle(props.centered),
+                gap: "0px",
                 "margin-top": showHeader()
                   ? props.centered
                     ? "calc(64px + 0.125rem)"
@@ -2263,7 +2291,10 @@ export function MessageTimeline(props: {
           "min-w-0 w-full max-w-full": true,
           "turn-content-skip": skipRender(),
         }}
-        style={itemStyle(props.centered)}
+        style={{
+          ...itemStyle(props.centered),
+          "margin-bottom": item.index < rendered().length - 1 ? `${gap}px` : "0px",
+        }}
       >
         <Show when={commentCount() > 0}>
           <div class="w-full px-4 md:px-5 pb-2">

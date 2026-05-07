@@ -554,6 +554,9 @@ export default function Page() {
     const base = current ? msgs.findIndex((m) => m.id === current) : msgs.length
     const currentIndex = base === -1 ? msgs.length : base
     const targetIndex = currentIndex + offset
+    console.debug(
+      `[session] message offset navigation: offset=${offset} current=${current || "none"} currentIndex=${currentIndex} targetIndex=${targetIndex} total=${msgs.length}`,
+    )
     if (targetIndex < 0 || targetIndex > msgs.length) return
 
     if (targetIndex === msgs.length) {
