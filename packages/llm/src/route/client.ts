@@ -94,11 +94,22 @@ export type ModelRefInput = Omit<
   readonly http?: HttpOptionsInput
 }
 
-export type RouteModelInput = Omit<ModelRefInput, "provider" | "route">
+// `baseURL` is required on `ModelRefInput` (every materialized `ModelRef` has
+// a host) but optional at the route-input layers below. The route's `defaults`
+// can supply a canonical URL (e.g. OpenAI/Anthropic) so the user's input may
+// omit it. Routes without a canonical URL (OpenAI-compatible, GitHub Copilot)
+// re-tighten this in their own input type.
+export type RouteModelInput = Omit<ModelRefInput, "provider" | "route" | "baseURL"> & {
+  readonly baseURL?: string
+}
 
-export type RouteModelDefaults = Omit<ModelRefInput, "id" | "route">
+export type RouteModelDefaults = Omit<ModelRefInput, "id" | "route" | "baseURL"> & {
+  readonly baseURL?: string
+}
 
-export type RouteRoutedModelInput = Omit<ModelRefInput, "route">
+export type RouteRoutedModelInput = Omit<ModelRefInput, "route" | "baseURL"> & {
+  readonly baseURL?: string
+}
 
 export type RouteRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "route">>
 
@@ -133,6 +144,11 @@ const modelWithDefaults =
     const mapped = options.mapInput === undefined ? (input as RouteMappedModelInput) : options.mapInput(input)
     const provider = defaults.provider ?? route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
     if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
+    const baseURL = mapped.baseURL ?? defaults.baseURL ?? route.defaults.baseURL
+    if (!baseURL)
+      throw new Error(
+        `Route.model(${route.id}) requires a baseURL — supply it via input, defaults, or route defaults`,
+      )
     const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
     const providerOptions = mergeProviderOptions(route.defaults.providerOptions, defaults.providerOptions)
     const http = mergeHttpOptions(httpOptions(route.defaults.http), httpOptions(defaults.http))
@@ -140,6 +156,7 @@ const modelWithDefaults =
       ...route.defaults,
       ...defaults,
       ...mapped,
+      baseURL,
       provider,
       route: route.id,
       capabilities: mapped.capabilities ?? defaults.capabilities ?? route.defaults.capabilities,

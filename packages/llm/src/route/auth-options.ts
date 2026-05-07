@@ -31,6 +31,15 @@ export type ModelArgs<Base, Mode extends ApiKeyMode> = Mode extends "optional"
 export type ModelFactory<Base, Mode extends ApiKeyMode, Model> = (id: string, ...args: ModelArgs<Base, Mode>) => Model
 
 /**
+ * Require at least one of the keys in `T`. Use for option shapes where any
+ * subset of fields is acceptable but at least one must be present (e.g. Azure
+ * accepts `resourceName` or `baseURL`).
+ */
+export type AtLeastOne<T> = {
+  [K in keyof T]: Required<Pick<T, K>> & Partial<Omit<T, K>>
+}[keyof T]
+
+/**
  * Standard bearer-auth resolution for providers: honor an explicit `auth`
  * override, otherwise resolve `apiKey` (option > config var) and apply it as
  * a bearer token.

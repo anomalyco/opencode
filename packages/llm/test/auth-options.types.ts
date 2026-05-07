@@ -81,6 +81,7 @@ OpenAI.chat("gpt-4.1-mini", { auth: RuntimeAuth.bearer("oauth-token") })
 // @ts-expect-error auth is an override, so OpenAI Chat rejects apiKey with auth.
 OpenAI.chat("gpt-4.1-mini", { apiKey: "sk-test", auth: RuntimeAuth.bearer("oauth-token") })
 
+// @ts-expect-error Azure requires at least one of `resourceName` or `baseURL`.
 Azure.responses("deployment")
 Azure.responses("deployment", { apiKey: "azure-key", resourceName: "resource" })
 Azure.responses("deployment", { apiKey: configApiKey, resourceName: "resource" })
@@ -89,6 +90,7 @@ Azure.responses("deployment", { auth: RuntimeAuth.header("api-key", "azure-key")
 // @ts-expect-error auth is an override, so Azure rejects apiKey with auth.
 Azure.responses("deployment", { apiKey: "azure-key", auth: RuntimeAuth.header("api-key", "override") })
 
+// @ts-expect-error Azure requires at least one of `resourceName` or `baseURL`.
 Azure.chat("deployment")
 Azure.chat("deployment", { apiKey: "azure-key", resourceName: "resource" })
 Azure.chat("deployment", { apiKey: configApiKey, resourceName: "resource" })

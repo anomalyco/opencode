@@ -7,7 +7,7 @@ import { it } from "./lib/effect"
 
 const request = LLM.request({
   id: "req_auth",
-  model: LLM.model({ id: "fake-model", provider: "fake", route: "fake" }),
+  model: LLM.model({ id: "fake-model", provider: "fake", route: "fake", baseURL: "https://fake.local" }),
   prompt: "hello",
 })
 

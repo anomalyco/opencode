@@ -9,7 +9,10 @@ import * as OpenAIResponses from "../protocols/openai-responses"
 
 export const id = ProviderID.make("xai")
 
-export type ModelOptions = Omit<RouteModelInput, "id" | "apiKey" | "auth"> & ProviderAuthOption<"optional">
+export type ModelOptions = Omit<RouteModelInput, "id" | "apiKey" | "auth" | "baseURL"> &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+  }
 
 export const routes = [OpenAIResponses.route, OpenAICompatibleChat.route]
 

@@ -15,8 +15,9 @@ export const routes = [OpenAIResponses.route, OpenAIResponses.webSocketRoute, Op
 // This provider facade wraps the lower-level Responses and Chat model factories
 // with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
 // and default option normalization.
-type OpenAIModelInput<ModelInput> = Omit<ModelInput, "apiKey" | "auth"> &
+type OpenAIModelInput<ModelInput> = Omit<ModelInput, "apiKey" | "auth" | "baseURL"> &
   ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
 

@@ -48,7 +48,7 @@ const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (bod
 export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
   Effect.gen(function* () {
     const url = applyQuery(
-      (yield* renderEndpoint(input.endpoint, { request: input.request, body: input.body })).toString(),
+      renderEndpoint(input.endpoint, { request: input.request, body: input.body }).toString(),
       input.request.http?.query,
     )
     const body = yield* bodyWithOverlay(input.body, input.request, input.encodeBody)

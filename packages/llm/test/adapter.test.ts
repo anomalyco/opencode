@@ -44,6 +44,7 @@ const request = LLM.request({
     id: "fake-model",
     provider: "fake-provider",
     route: "fake",
+    baseURL: "https://fake.local",
   }),
   prompt: "hello",
 })
@@ -78,14 +79,14 @@ const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
 const fake = Route.make({
   id: "fake",
   protocol: fakeProtocol,
-  endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
+  endpoint: Endpoint.path("/chat"),
   framing: fakeFraming,
 })
 
 const gemini = Route.make({
   id: "gemini-fake",
   protocol: fakeProtocol,
-  endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
+  endpoint: Endpoint.path("/chat"),
   framing: fakeFraming,
 })
 
@@ -129,7 +130,7 @@ describe("llm route", () => {
     Effect.gen(function* () {
       const mapped = Route.model<RouteModelInput & { readonly region?: string }>(
         fake,
-        { provider: "fake-provider" },
+        { provider: "fake-provider", baseURL: "https://fake.local" },
         {
           mapInput: (input) => {
             const { region, ...rest } = input
@@ -154,7 +155,7 @@ describe("llm route", () => {
               from: () => Effect.succeed({ body: "late-default" }),
             },
           }),
-          endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
+          endpoint: Endpoint.path("/chat"),
           framing: fakeFraming,
         }),
       ).toThrow('Duplicate LLM route id "fake"')

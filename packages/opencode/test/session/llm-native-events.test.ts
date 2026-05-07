@@ -7,7 +7,7 @@ const types = (events: ReadonlyArray<{ readonly type: string }>) => events.map((
 describe("LLMNativeEvents", () => {
   test("synthesizes text and reasoning boundaries around native deltas", () => {
     const events = LLMNativeEvents.toSessionEvents([
-      { type: "request-start", id: "req_1", model: LLM.model({ id: "gpt-5", provider: "openai", route: "openai-responses" }) },
+      { type: "request-start", id: "req_1", model: LLM.model({ id: "gpt-5", provider: "openai", route: "openai-responses", baseURL: "https://api.openai.com/v1" }) },
       { type: "step-start", index: 0 },
       { type: "text-delta", text: "Hello" },
       { type: "text-delta", text: "!" },

@@ -25,7 +25,8 @@ export type OpenRouterProviderOptionsInput = ProviderOptions & {
   readonly openrouter?: OpenRouterOptions
 }
 
-export type ModelOptions = Omit<RouteModelInput, "id" | "providerOptions"> & {
+export type ModelOptions = Omit<RouteModelInput, "id" | "baseURL" | "providerOptions"> & {
+  readonly baseURL?: string
   readonly providerOptions?: OpenRouterProviderOptionsInput
 }
 type ModelInput = ModelOptions & Pick<RouteModelInput, "id">
@@ -69,7 +70,7 @@ const bodyOptions = (input: unknown) => {
 export const route = Route.make({
   id: ADAPTER,
   protocol,
-  endpoint: Endpoint.baseURL({ default: profile.baseURL, path: "/chat/completions" }),
+  endpoint: Endpoint.path("/chat/completions"),
   framing: Framing.sse,
 })
 

@@ -179,17 +179,22 @@ const PROVIDERS: Record<string, ProviderModel> = {
     Anthropic.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "anthropic-messages" })),
   "@ai-sdk/azure": (input, options) => {
     const create = options.useCompletionUrls === true ? Azure.chat : Azure.responses
+    // Azure requires at least one of `resourceName` or `baseURL`. The user's
+    // config supplies one of them via opencode's provider settings; if neither
+    // is set we let Azure's runtime check surface a clear error.
     return create(String(input.model.api.id), {
       ...sharedOptions(input, options, { protocol: azureProtocol(options), providerOptions: openAIOptions(options) }),
       resourceName: stringOption(options, "resourceName"),
       apiVersion: stringOption(options, "apiVersion"),
-    })
+    } as Azure.ModelOptions)
   },
   "@ai-sdk/baseten": openAICompatibleModel,
   "@ai-sdk/cerebras": openAICompatibleModel,
   "@ai-sdk/deepinfra": openAICompatibleModel,
   "@ai-sdk/fireworks": openAICompatibleModel,
   "@ai-sdk/github-copilot": (input, options) =>
+    // GitHub Copilot has no canonical public URL; the user's opencode config
+    // is expected to supply `baseURL`. Runtime check kicks in if it's missing.
     GitHubCopilot.model(
       String(input.model.api.id),
       {
@@ -197,7 +202,7 @@ const PROVIDERS: Record<string, ProviderModel> = {
           protocol: GitHubCopilot.shouldUseResponsesApi(String(input.model.api.id)) ? "openai-responses" : "openai-chat",
           providerOptions: openAIOptions(options),
         }),
-      },
+      } as GitHubCopilot.ModelOptions,
     ),
   "@ai-sdk/google": (input, options) =>
     Google.model(String(input.model.api.id), sharedOptions(input, options, { protocol: "gemini" })),

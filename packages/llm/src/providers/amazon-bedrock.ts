@@ -6,14 +6,20 @@ import type { BedrockCredentials } from "../protocols/bedrock-converse"
 
 export const id = ProviderID.make("amazon-bedrock")
 
-export type ModelOptions = Omit<RouteModelInput, "id"> & {
+export type ModelOptions = Omit<RouteModelInput, "id" | "baseURL"> & {
   readonly apiKey?: string
   readonly headers?: Record<string, string>
   readonly credentials?: BedrockCredentials
+  /** AWS region. Defaults to `us-east-1` when neither this nor `credentials.region` is set. */
+  readonly region?: string
+  /** Override the computed `https://bedrock-runtime.<region>.amazonaws.com` URL. */
+  readonly baseURL?: string
 }
 type ModelInput = ModelOptions & Pick<RouteModelInput, "id">
 
 export const routes = [BedrockConverse.route]
+
+const bedrockBaseURL = (region: string) => `https://bedrock-runtime.${region}.amazonaws.com`
 
 const converseModel = Route.model<ModelInput>(
   BedrockConverse.route,
@@ -23,9 +29,11 @@ const converseModel = Route.model<ModelInput>(
   },
   {
     mapInput: (input) => {
-      const { credentials, ...rest } = input
+      const { credentials, region, baseURL, ...rest } = input
+      const resolvedRegion = region ?? credentials?.region ?? "us-east-1"
       return {
         ...rest,
+        baseURL: baseURL ?? bedrockBaseURL(resolvedRegion),
         native: BedrockConverse.nativeCredentials(input.native, credentials),
       }
     },

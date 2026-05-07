@@ -28,12 +28,6 @@ export const model = (id: string | ModelID, options: ModelOptions) => {
   })
 }
 
-const profileBaseURL = (profile: OpenAICompatibleProfile, options: FamilyModelOptions) => {
-  const baseURL = options.baseURL ?? profile.baseURL
-  if (baseURL) return baseURL
-  throw new Error(`OpenAI-compatible profile ${profile.provider} requires a baseURL`)
-}
-
 export const profileModel = (
   profile: OpenAICompatibleProfile,
   id: string | ModelID,
@@ -43,7 +37,7 @@ export const profileModel = (
     ...options,
     id,
     provider: profile.provider,
-    baseURL: profileBaseURL(profile, options),
+    baseURL: options.baseURL ?? profile.baseURL,
     capabilities: options.capabilities ?? profile.capabilities,
   })
 

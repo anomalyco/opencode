@@ -19,6 +19,7 @@ import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 
 const ADAPTER = "gemini"
+export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // =============================================================================
 // Request Body Schema
@@ -380,11 +381,8 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   protocol,
-  endpoint: Endpoint.baseURL({
-    default: "https://generativelanguage.googleapis.com/v1beta",
-    // Gemini's path embeds the model id and pins SSE framing at the URL level.
-    path: ({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`,
-  }),
+  // Gemini's path embeds the model id and pins SSE framing at the URL level.
+  endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`),
   auth: Auth.apiKeyHeader("x-goog-api-key"),
   framing: Framing.sse,
 })
@@ -394,6 +392,7 @@ export const route = Route.make({
 // =============================================================================
 export const model = Route.model(route, {
   provider: "google",
+  baseURL: DEFAULT_BASE_URL,
   capabilities: capabilities({
     input: { image: true, audio: true, video: true, pdf: true },
     output: { reasoning: true },

@@ -157,17 +157,14 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
 const FakeAdapter = Route.make({
   id: "fake-echo",
   protocol: FakeProtocol,
-  endpoint: Endpoint.baseURL({
-    default: "https://fake.local",
-    path: "/v1/echo",
-  }),
+  endpoint: Endpoint.path("/v1/echo"),
   auth: Auth.passthrough,
   framing: Framing.sse,
 })
 
 // A provider module exports a Provider definition. The default `model` helper
 // sets provider identity, protocol id, and the route id resolved by the registry.
-const fakeEchoModel = Route.model(FakeAdapter, { provider: "fake-echo" })
+const fakeEchoModel = Route.model(FakeAdapter, { provider: "fake-echo", baseURL: "https://fake.local" })
 const FakeEcho = Provider.make({
   id: ProviderID.make("fake-echo"),
   model: (id: string, options: ProviderModelOptions = {}) => fakeEchoModel({ id, ...options }),

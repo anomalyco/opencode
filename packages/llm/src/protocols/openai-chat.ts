@@ -20,8 +20,8 @@ import { OpenAIOptions } from "./utils/openai-options"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-chat"
-const DEFAULT_BASE_URL = "https://api.openai.com/v1"
-const PATH = "/chat/completions"
+export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
+export const PATH = "/chat/completions"
 
 // =============================================================================
 // Request Body Schema
@@ -378,22 +378,10 @@ export const protocol = Protocol.make({
   },
 })
 
-export const endpoint = (
-  input: {
-    readonly defaultBaseURL?: string | false
-    readonly required?: string
-  } = {},
-) =>
-  Endpoint.baseURL<OpenAIChatBody>({
-    default: input.defaultBaseURL === false ? undefined : (input.defaultBaseURL ?? DEFAULT_BASE_URL),
-    path: PATH,
-    required: input.required,
-  })
-
 const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIChatBody))
 
 export const httpTransport = HttpTransport.httpJson({
-  endpoint: endpoint(),
+  endpoint: Endpoint.path(PATH),
   auth: Auth.bearer(),
   framing: Framing.sse,
   encodeBody,
@@ -405,6 +393,7 @@ export const route = Route.make({
   protocol,
   transport: httpTransport,
   defaults: {
+    baseURL: DEFAULT_BASE_URL,
     capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
   },
 })

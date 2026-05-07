@@ -21,8 +21,8 @@ import { OpenAIOptions } from "./utils/openai-options"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-responses"
-const DEFAULT_BASE_URL = "https://api.openai.com/v1"
-const PATH = "/responses"
+export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
+export const PATH = "/responses"
 
 // =============================================================================
 // Request Body Schema
@@ -501,25 +501,14 @@ export const protocol = Protocol.make({
   },
 })
 
-export const endpoint = (
-  input: {
-    readonly defaultBaseURL?: string | false
-    readonly required?: string
-  } = {},
-) =>
-  Endpoint.baseURL<OpenAIResponsesBody>({
-    default: input.defaultBaseURL === false ? undefined : (input.defaultBaseURL ?? DEFAULT_BASE_URL),
-    path: PATH,
-    required: input.required,
-  })
-
 const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesBody))
 const transportBase = {
-  endpoint: endpoint(),
+  endpoint: Endpoint.path<OpenAIResponsesBody>(PATH),
   auth: Auth.bearer(),
   encodeBody,
 }
 const routeDefaults = {
+  baseURL: DEFAULT_BASE_URL,
   capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
 }
 

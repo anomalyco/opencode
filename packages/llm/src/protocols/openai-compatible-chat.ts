@@ -13,19 +13,14 @@ export type OpenAICompatibleChatModelInput = Omit<RouteRoutedModelInput, "baseUR
 /**
  * Route for non-OpenAI providers that expose an OpenAI Chat-compatible
  * `/chat/completions` endpoint. Reuses `OpenAIChat.protocol` end-to-end and
- * only overrides:
- *
- * - the route id (`openai-compatible-chat`) so providers can be resolved
- *   per-family without colliding with native OpenAI;
- * - the endpoint, which requires `model.baseURL` (no provider default).
+ * overrides only the route id so providers can be resolved per-family without
+ * colliding with native OpenAI. The model carries the host on `baseURL`,
+ * supplied by whichever profile/provider helper builds it.
  */
 export const route = Route.make({
   id: ADAPTER,
   protocol: OpenAIChat.protocol,
-  endpoint: Endpoint.baseURL({
-    path: "/chat/completions",
-    required: "OpenAI-compatible Chat requires a baseURL",
-  }),
+  endpoint: Endpoint.path("/chat/completions"),
   framing: Framing.sse,
 })
 

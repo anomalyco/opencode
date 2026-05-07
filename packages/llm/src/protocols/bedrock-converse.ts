@@ -498,13 +498,11 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   protocol,
-  endpoint: Endpoint.baseURL<BedrockConverseBody>({
-    // Bedrock's URL embeds the region in the host and the validated modelId
-    // in the path. We reach into the validated body so the URL
-    // matches the body that gets signed.
-    default: ({ request }) => `https://bedrock-runtime.${BedrockAuth.region(request)}.amazonaws.com`,
-    path: ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
-  }),
+  // Bedrock's URL embeds the region in the host (set on `model.baseURL` by
+  // the provider helper from credentials) and the validated modelId in the
+  // path. We read the validated body so the URL matches the body that gets
+  // signed.
+  endpoint: Endpoint.path<BedrockConverseBody>(({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`),
   auth: BedrockAuth.auth,
   framing,
 })
@@ -529,8 +527,10 @@ const bedrockModel = Route.model<BedrockConverseModelInput>(
   {
     mapInput: (input) => {
       const { credentials, ...rest } = input
+      const region = credentials?.region ?? "us-east-1"
       return {
         ...rest,
+        baseURL: rest.baseURL ?? `https://bedrock-runtime.${region}.amazonaws.com`,
         native: nativeCredentials(input.native, credentials),
       }
     },

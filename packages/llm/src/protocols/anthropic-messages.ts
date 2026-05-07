@@ -20,6 +20,8 @@ import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./share
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "anthropic-messages"
+export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
+export const PATH = "/messages"
 
 // =============================================================================
 // Request Body Schema
@@ -574,7 +576,7 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   protocol,
-  endpoint: Endpoint.baseURL({ default: "https://api.anthropic.com/v1", path: "/messages" }),
+  endpoint: Endpoint.path(PATH),
   auth: Auth.apiKeyHeader("x-api-key"),
   framing: Framing.sse,
   headers: () => ({ "anthropic-version": "2023-06-01" }),
@@ -585,6 +587,7 @@ export const route = Route.make({
 // =============================================================================
 export const model = Route.model(route, {
   provider: "anthropic",
+  baseURL: DEFAULT_BASE_URL,
   capabilities: capabilities({
     output: { reasoning: true },
     tools: { calls: true, streamingInput: true },

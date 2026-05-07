@@ -8,6 +8,8 @@ import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-opt
 
 export const id = ProviderID.make("github-copilot")
 
+// GitHub Copilot has no canonical public URL — callers (opencode, etc.) must
+// supply `baseURL` explicitly.
 export type ModelOptions = Omit<ModelInput, "id" | "provider" | "route"> & {
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
@@ -27,12 +29,12 @@ const mapInput = (input: CopilotModelInput) => withOpenAIOptions(input.id, input
 const chatModel = Route.model<CopilotModelInput>(OpenAIChat.route, { provider: id }, { mapInput })
 const responsesModel = Route.model<CopilotModelInput>(OpenAIResponses.route, { provider: id }, { mapInput })
 
-export const responses = (modelID: string | ModelID, options: ModelOptions = {}) =>
+export const responses = (modelID: string | ModelID, options: ModelOptions) =>
   responsesModel({ ...options, id: modelID })
 
-export const chat = (modelID: string | ModelID, options: ModelOptions = {}) => chatModel({ ...options, id: modelID })
+export const chat = (modelID: string | ModelID, options: ModelOptions) => chatModel({ ...options, id: modelID })
 
-export const model = (modelID: string | ModelID, options: ModelOptions = {}) => {
+export const model = (modelID: string | ModelID, options: ModelOptions) => {
   const create = shouldUseResponsesApi(modelID) ? responsesModel : chatModel
   return create({ ...options, id: modelID })
 }

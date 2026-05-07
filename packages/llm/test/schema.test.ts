@@ -23,6 +23,7 @@ const model = new ModelRef({
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
   route: "openai-chat",
+  baseURL: "https://fake.local",
   capabilities,
   limits: new ModelLimits({}),
 })

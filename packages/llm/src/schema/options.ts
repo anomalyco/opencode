@@ -194,7 +194,7 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   id: ModelID,
   provider: ProviderID,
   route: RouteID,
-  baseURL: Schema.optional(Schema.String),
+  baseURL: Schema.String,
   /** Provider-specific API key convenience. Provider helpers normalize this into `auth`. */
   apiKey: Schema.optional(Schema.String),
   /** Optional transport auth policy. Opaque because it may contain functions. */
