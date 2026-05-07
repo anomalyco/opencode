@@ -97,7 +97,7 @@ export function retryable(error: Err) {
         if (days > 0) return hours > 0 ? `${unit(days, "day")} ${unit(hours, "hour")}` : unit(days, "day")
         if (hours > 0) return minutes > 0 ? `${unit(hours, "hour")} ${unit(minutes, "minute")}` : unit(hours, "hour")
         return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
-      })()
+      })
       return {
         message: PAYG_UPSELL_MESSAGE,
         action: {
