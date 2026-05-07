@@ -31,6 +31,7 @@ import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { CompletionCommand } from "./cli/cmd/completion"
 import { Heap } from "./cli/heap"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { isRecord } from "@/util/record"
@@ -111,7 +112,7 @@ const cli = yargs(args)
     })
   })
   .usage("")
-  .completion("completion", "generate shell completion script")
+  .command(CompletionCommand)
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
