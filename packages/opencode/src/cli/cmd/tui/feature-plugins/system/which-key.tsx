@@ -4,7 +4,8 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { useKeymapSelector } from "@opentui/keymap/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import type { ActiveKey } from "@opentui/keymap"
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { InternalTuiPlugin } from "../../plugin/internal"
 
 const command = {
   toggle: "tui-which-key.toggle",
@@ -238,12 +239,17 @@ function WhichKeyOverlay(props: { api: TuiPluginApi; pinned: () => boolean; trig
                 <For each={columnIndexes()}>
                   {(column) => {
                     const item = createMemo(() => shown()[column]?.[row])
+                    const binding = createMemo(() => {
+                      const value = item()
+                      if (value?.type !== "entry") return undefined
+                      return value
+                    })
                     return (
                       <box width={columnWidth()} flexDirection="row" gap={1}>
                         <Show when={item()}>
                           {(entry) => (
                             <Show
-                              when={entry().type === "entry" ? entry() : undefined}
+                              when={binding()}
                               fallback={
                                 <text fg={look().accent} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
                                   {`+${entry().label}`}
@@ -324,8 +330,9 @@ const tui: TuiPlugin = async (api, options) => {
   })
 }
 
-const plugin: TuiPluginModule & { id: string } = {
+const plugin: InternalTuiPlugin = {
   id: "tui-which-key",
+  enabled: false,
   tui,
 }
 

@@ -36,6 +36,7 @@ Example:
 - `plugin_enabled` is keyed by plugin id, not by plugin spec.
 - For file plugins, that id must come from the plugin module's exported `id`. For npm plugins, it is the exported `id` or the package name if `id` is omitted.
 - Plugins are enabled by default. `plugin_enabled` is only for explicit overrides, usually to disable a plugin with `false`.
+- Internal plugins can declare `enabled: false` to be registered but inactive by default; `plugin_enabled` and runtime KV can still enable them by id.
 - `plugin_enabled` is merged across config layers.
 - Runtime enable/disable state is also stored in KV under `plugin_enabled`; that KV state overrides config on startup.
 

@@ -1,7 +1,6 @@
 {
   "$schema": "https://opencode.ai/tui.json",
   "plugin": [
-    "./plugins/tui-which-key.tsx",
     [
       "./plugins/tui-smoke.tsx",
       {
