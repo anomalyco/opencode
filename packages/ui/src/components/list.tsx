@@ -34,6 +34,7 @@ export interface ListAddProps {
 
 export interface ListProps<T> extends FilteredListProps<T> {
   class?: string
+  style?: JSX.CSSProperties
   children: (item: T) => JSX.Element
   emptyMessage?: string
   loadingMessage?: string
@@ -260,7 +261,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   }
 
   return (
-    <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
+    <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }} style={props.style}>
       <Show when={!!props.search}>
         <div data-slot="list-search-wrapper">
           <div
