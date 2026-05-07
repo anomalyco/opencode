@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM } from "../../src"
-import { LLMClient } from "../../src/adapter"
+import { LLMClient } from "../../src/route"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
@@ -49,7 +49,7 @@ const providerFamilies = [
   ["togetherai", OpenAICompatible.togetherai, "https://api.together.xyz/v1"],
 ] as const
 
-describe("OpenAI-compatible Chat adapter", () => {
+describe("OpenAI-compatible Chat route", () => {
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
@@ -59,12 +59,11 @@ describe("OpenAI-compatible Chat adapter", () => {
         }),
       )
 
-      expect(prepared.adapter).toBe("openai-compatible-chat")
+      expect(prepared.route).toBe("openai-compatible-chat")
       expect(prepared.model).toMatchObject({
         id: "deepseek-chat",
         provider: "deepseek",
-        adapter: "openai-compatible-chat",
-        protocol: "openai-chat",
+        route: "openai-compatible-chat",
         baseURL: "https://api.deepseek.test/v1/",
         apiKey: "test-key",
         queryParams: { "api-version": "2026-01-01" },
@@ -93,9 +92,8 @@ describe("OpenAI-compatible Chat adapter", () => {
           return {
             id: String(model.id),
             provider: String(model.provider),
-            adapter: model.adapter,
-            protocol: model.protocol,
-            baseURL: model.baseURL,
+            route: model.route,
+                        baseURL: model.baseURL,
             apiKey: model.apiKey,
           }
         }),
@@ -103,8 +101,7 @@ describe("OpenAI-compatible Chat adapter", () => {
         providerFamilies.map(([provider, _, baseURL]) => ({
           id: `${provider}-model`,
           provider,
-          adapter: "openai-compatible-chat",
-          protocol: "openai-chat",
+          route: "openai-compatible-chat",
           baseURL,
           apiKey: "test-key",
         })),
@@ -116,8 +113,7 @@ describe("OpenAI-compatible Chat adapter", () => {
       })
       expect(custom).toMatchObject({
         provider: "deepseek",
-        adapter: "openai-compatible-chat",
-        protocol: "openai-chat",
+        route: "openai-compatible-chat",
         baseURL: "https://custom.deepseek.test/v1",
       })
     }),

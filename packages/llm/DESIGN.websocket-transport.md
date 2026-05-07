@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposal: keep OpenAI WebSocket support as a transport-level adapter route that reuses the existing OpenAI Responses protocol.
+Proposal: keep OpenAI WebSocket support as a transport-level route route that reuses the existing OpenAI Responses protocol.
 
-The implementation should deepen the adapter seam without making protocol authors think about sockets and without turning WebSocket into a provider option hidden inside an existing HTTP adapter.
+The implementation should deepen the route seam without making protocol authors think about sockets and without turning WebSocket into a provider option hidden inside an existing HTTP route.
 
 ## Goal
 
@@ -12,7 +12,7 @@ Support OpenAI's WebSocket Responses backend in `@opencode-ai/llm` while preserv
 
 - `Protocol` owns provider semantics: request lowering, payload schema, stream chunk schema, and chunk-to-`LLMEvent` parsing.
 - `Transport` owns movement: HTTP request/response, SSE framing, WebSocket message flow, and platform execution.
-- `Adapter` composes one protocol with one transport route.
+- `Route` composes one protocol with one transport route.
 - Effect services provide runtime capabilities such as HTTP execution and WebSocket construction.
 
 The key result should be an explicit model constructor:
@@ -31,10 +31,10 @@ OpenAI.chat("gpt-4o-mini")         // OpenAI Chat over HTTP SSE
 
 ## Current State
 
-`src/adapter/client.ts` currently combines two separate ideas in one module:
+`src/route/client.ts` currently combines two separate ideas in one module:
 
-- adapter registry, request option resolution, payload validation, and response collection
-- HTTP-specific execution details through `toHttp(...)`, `RequestExecutor.Service`, and `adapter.parse(response, context)`
+- route registry, request option resolution, payload validation, and response collection
+- HTTP-specific execution details through `toHttp(...)`, `RequestExecutor.Service`, and `route.parse(response, context)`
 
 The current runtime path is:
 
@@ -42,16 +42,16 @@ The current runtime path is:
 LLMRequest
   -> protocol.toPayload
   -> protocol.payload validation
-  -> adapter.toHttp
+  -> route.toHttp
   -> RequestExecutor.execute
-  -> adapter.parse(HttpClientResponse)
+  -> route.parse(HttpClientResponse)
   -> Framing
   -> protocol.chunk
   -> protocol.process
   -> LLMEvent
 ```
 
-That path is correct for HTTP providers, but it bakes in the assumption that every adapter produces an `HttpClientRequest` and consumes an `HttpClientResponse`.
+That path is correct for HTTP providers, but it bakes in the assumption that every route produces an `HttpClientRequest` and consumes an `HttpClientResponse`.
 
 Effect's OpenAI implementation does not fork the language model protocol for WebSocket mode. It builds the normal `/responses` request URL and headers, converts the URL from `http` to `ws`, sends a `response.create` message, and decodes the same OpenAI Responses stream event schema.
 
@@ -66,16 +66,16 @@ Effect's OpenAI implementation does not fork the language model protocol for Web
 
 ## Proposed Split
 
-Introduce a small internal `Transport` module and move the existing HTTP-specific adapter execution behind it.
+Introduce a small internal `Transport` module and move the existing HTTP-specific route execution behind it.
 
 The depth test for this module is important: do not add `Transport` only as a one-off wrapper around OpenAI WebSocket. It earns its keep only if the current HTTP path also moves behind the same seam, so `client.ts` stops knowing whether a route is HTTP or WebSocket.
 
 ```text
-src/adapter/client.ts              registry, model refs, compile/stream/generate
-src/adapter/transport.ts           type-safe transport seam
-src/adapter/http-transport.ts      current HTTP JSON POST + response framing behavior
-src/adapter/websocket-executor.ts  WebSocket runtime capability and error mapping
-src/protocols/openai-responses.ts  existing protocol + HTTP adapter + WebSocket adapter
+src/route/client.ts              registry, model refs, compile/stream/generate
+src/route/transport.ts           type-safe transport seam
+src/route/http-transport.ts      current HTTP JSON POST + response framing behavior
+src/route/websocket-executor.ts  WebSocket runtime capability and error mapping
+src/protocols/openai-responses.ts  existing protocol + HTTP route + WebSocket route
 src/providers/openai.ts            provider-facing constructors
 ```
 
@@ -96,7 +96,7 @@ HTTP and WebSocket differ only in `transport.prepare` and `transport.frames`. Ex
 
 ## Type-Safe Transport Interface
 
-The transport seam should be generic inside the adapter implementation. The registry can erase adapter types, just like it already erases payload types today, but individual transport constructors should keep `Payload`, `Prepared`, and `Frame` connected.
+The transport seam should be generic inside the route implementation. The registry can erase route types, just like it already erases payload types today, but individual transport constructors should keep `Payload`, `Prepared`, and `Frame` connected.
 
 ```ts
 export interface TransportContext {
@@ -136,7 +136,7 @@ type OpenAIResponsesWebSocketPrepared = {
 }
 ```
 
-The adapter keeps the generic relationship through construction:
+The route keeps the generic relationship through construction:
 
 ```ts
 export interface MakeInput<Payload, Prepared, Frame, Chunk, State> {
@@ -146,24 +146,24 @@ export interface MakeInput<Payload, Prepared, Frame, Chunk, State> {
 }
 ```
 
-The adapter registry can still erase these generics internally, but that erasure should remain local to `client.ts` as it does today:
+The route registry can still erase these generics internally, but that erasure should remain local to `client.ts` as it does today:
 
 ```ts
-// local registry erasure only; do not expose this from public adapter modules
+// local registry erasure only; do not expose this from public route modules
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
-type AnyAdapter = Adapter<any, any>
+type AnyRoute = Route<any, any>
 ```
 
 Do not use `unknown` for the internal registry unless TypeScript variance proves it assignable. The type-safety goal is that `Transport<Payload, Prepared, Frame>` is checked at construction time; registry erasure is an implementation detail after construction.
 
-## Adapter Runner
+## Route Runner
 
-`Adapter.make(...)` should become the generic runner constructor:
+`Route.make(...)` should become the generic runner constructor:
 
 ```ts
 export function make<Payload, Prepared, Frame, Chunk, State>(
   input: MakeInput<Payload, Prepared, Frame, Chunk, State>,
-): Adapter<Payload, Prepared> {
+): Route<Payload, Prepared> {
   const decodePayload = ProviderShared.validateWith(Schema.decodeUnknownEffect(input.protocol.payload))
   const decodeChunk = Schema.decodeUnknownEffect(input.protocol.chunk)
 
@@ -182,9 +182,9 @@ export function make<Payload, Prepared, Frame, Chunk, State>(
 }
 ```
 
-This preserves the public `LLMClient.prepare`, `LLMClient.stream`, and `LLMClient.generate` shape. `LLMClient.layer` captures a `TransportRuntime` once and passes it to adapters internally, so caller-facing methods remain environment-free.
+This preserves the public `LLMClient.prepare`, `LLMClient.stream`, and `LLMClient.generate` shape. `LLMClient.layer` captures a `TransportRuntime` once and passes it to routes internally, so caller-facing methods remain environment-free.
 
-`PreparedRequest.payload` remains `unknown` externally, with `PreparedRequestOf<Payload>` available for callers that know the adapter payload type. The transport-private `Prepared` type should not be exposed in `PreparedRequest` or provider-facing APIs.
+`PreparedRequest.payload` remains `unknown` externally, with `PreparedRequestOf<Payload>` available for callers that know the route payload type. The transport-private `Prepared` type should not be exposed in `PreparedRequest` or provider-facing APIs.
 
 `PreparedRequest.metadata` can record the transport id for debugging:
 
@@ -196,10 +196,10 @@ That is additive and optional.
 
 ## HTTP Transport
 
-The existing `Adapter.make(...)` input shape should remain available for ordinary adapters by re-expressing it as a helper around `Transport.httpJson(...)`.
+The existing `Route.make(...)` input shape should remain available for ordinary routes by re-expressing it as a helper around `Transport.httpJson(...)`.
 
 ```ts
-export const adapter = Adapter.makeHttp({
+export const route = Route.makeHttp({
   id: "openai-responses",
   protocol: OpenAIResponses.protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/responses" }),
@@ -208,7 +208,7 @@ export const adapter = Adapter.makeHttp({
 })
 ```
 
-`makeHttp(...)` should preserve today's adapter author ergonomics and internally build:
+`makeHttp(...)` should preserve today's route author ergonomics and internally build:
 
 ```ts
 Transport.httpJson({ endpoint, auth, framing, headers })
@@ -218,10 +218,10 @@ This keeps the first WebSocket patch small because existing protocol files do no
 
 ## OpenAI Responses WebSocket Transport
 
-Add a WebSocket adapter route in `src/protocols/openai-responses.ts`:
+Add a WebSocket route route in `src/protocols/openai-responses.ts`:
 
 ```ts
-export const websocketAdapter = Adapter.make({
+export const websocketAdapter = Route.make({
   id: "openai-responses-websocket",
   protocol,
   transport: Transport.openAIResponsesWebSocket({
@@ -262,7 +262,7 @@ That type is not enough by itself. The implementation must explicitly omit `stre
 
 ## Protocol Terminal Signal
 
-HTTP SSE streams end naturally. A WebSocket stream may remain open, so the adapter runner needs protocol help to know when one request is complete.
+HTTP SSE streams end naturally. A WebSocket stream may remain open, so the route runner needs protocol help to know when one request is complete.
 
 Add an optional protocol method:
 
@@ -314,7 +314,7 @@ export interface WebSocketConnection {
 }
 ```
 
-Do not make a second constructor service just to model header-capable WebSockets. The deep runtime seam is `WebSocketExecutor.Service`: tests, Bun, Node `ws`, or future platform layers can provide `open(...)` directly. The executor may expose a helper for wrapping an already-created `globalThis.WebSocket`, but adapter code should depend only on `WebSocketExecutor.Service`.
+Do not make a second constructor service just to model header-capable WebSockets. The deep runtime seam is `WebSocketExecutor.Service`: tests, Bun, Node `ws`, or future platform layers can provide `open(...)` directly. The executor may expose a helper for wrapping an already-created `globalThis.WebSocket`, but route code should depend only on `WebSocketExecutor.Service`.
 
 ```ts
 export const fromWebSocket: (
@@ -333,7 +333,7 @@ LLMClient.layerWithWebSocket    // HTTP + WebSocketExecutor.Service
 WebSocketExecutor.Service       // exported for explicit app/test wiring
 ```
 
-`LLMClient.layer` should remain enough for all existing adapters. It captures a `TransportRuntime` with `http` only. `LLMClient.layerWithWebSocket` captures both `http` and `webSocket`. If a caller selects `openai-responses-websocket` without the WebSocket-capable layer, the WebSocket transport should fail with a typed transport error that says the selected adapter requires `WebSocketExecutor.Service`.
+`LLMClient.layer` should remain enough for all existing routes. It captures a `TransportRuntime` with `http` only. `LLMClient.layerWithWebSocket` captures both `http` and `webSocket`. If a caller selects `openai-responses-websocket` without the WebSocket-capable layer, the WebSocket transport should fail with a typed transport error that says the selected route requires `WebSocketExecutor.Service`.
 
 ## Provider API
 
@@ -342,7 +342,7 @@ Expose the route explicitly from `src/providers/openai.ts`:
 ```ts
 export const responsesWebSocket = (
   id: string | ModelID,
-  options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {},
+  options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {},
 ) => OpenAIResponses.webSocketModel(
   withOpenAIOptions(id, { ...options, auth: auth(options) }, { textVerbosity: true }),
 )
@@ -357,18 +357,18 @@ export const provider = Provider.make({
 This makes transport choice visible in the model ref:
 
 ```ts
-model.adapter  // "openai-responses-websocket"
-model.protocol // "openai-responses"
+model.route  // "openai-responses-websocket"
+route.protocol // "openai-responses"
 ```
 
-That mirrors the existing adapter-route versus protocol distinction used by OpenAI-compatible providers.
+That mirrors the existing route-route versus protocol distinction used by OpenAI-compatible providers.
 
-## Adapter Author Experience
+## Route Author Experience
 
-HTTP adapter authors should keep the boring path:
+HTTP route authors should keep the boring path:
 
 ```ts
-export const adapter = Adapter.makeHttp({
+export const route = Route.makeHttp({
   id: "provider-chat",
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.provider.test/v1", path: "/chat/completions" }),
@@ -376,7 +376,7 @@ export const adapter = Adapter.makeHttp({
 })
 ```
 
-Non-HTTP adapter authors should write a transport and keep their prepared type private:
+Non-HTTP route authors should write a transport and keep their prepared type private:
 
 ```ts
 type Prepared = {
@@ -391,14 +391,14 @@ const transport: Transport<ProviderPayload, Prepared, string> = {
   frames: (prepared, context, runtime) => ...,
 }
 
-export const adapter = Adapter.make({
+export const route = Route.make({
   id: "provider-websocket",
   protocol,
   transport,
 })
 ```
 
-The adapter author chooses a transport frame type. The protocol author chooses a protocol frame/chunk schema. TypeScript keeps those connected through `Adapter.make(...)`.
+The route author chooses a transport frame type. The protocol author chooses a protocol frame/chunk schema. TypeScript keeps those connected through `Route.make(...)`.
 
 ## Test Plan
 
@@ -412,9 +412,9 @@ Transport-level tests:
 - WebSocket transport sends `response.create` and omits `stream`.
 - WebSocket transport converts `https` to `wss` and preserves query params.
 
-Adapter-level tests:
+Route-level tests:
 
-- `OpenAI.responsesWebSocket(...)` produces `adapter: "openai-responses-websocket"` and `protocol: "openai-responses"`.
+- `OpenAI.responsesWebSocket(...)` produces `route: "openai-responses-websocket"` and `protocol: "openai-responses"`.
 - `LLMClient.prepare<OpenAIResponsesPayload>(...)` returns the same payload shape as HTTP Responses.
 - Incoming `response.output_text.delta` emits `text-delta`.
 - Incoming function-call argument deltas emit existing tool events.
@@ -425,16 +425,16 @@ Regression tests:
 
 - Existing HTTP OpenAI Responses tests remain unchanged.
 - Existing `RequestExecutor` retry behavior remains HTTP-only.
-- `LLMClient.layer` can still run HTTP adapters without WebSocket services.
+- `LLMClient.layer` can still run HTTP routes without WebSocket services.
 - Selecting `openai-responses-websocket` with `LLMClient.layer` fails with a clear typed missing-WebSocket-runtime error.
 
 ## Rollout Steps
 
-1. Add `transport.ts` and `http-transport.ts` while preserving `Adapter.make(...)` or adding `Adapter.makeHttp(...)` as a compatibility helper. Do this only if the existing HTTP path moves behind the same seam in the same patch series.
+1. Add `transport.ts` and `http-transport.ts` while preserving `Route.make(...)` or adding `Route.makeHttp(...)` as a compatibility helper. Do this only if the existing HTTP path moves behind the same seam in the same patch series.
 2. Move the existing HTTP request-building and parsing pipeline behind `Transport.httpJson(...)` with no behavior changes.
 3. Add protocol `terminal?` and wire the runner to stop after terminal chunks.
-4. Add `adapter/transport/websocket.ts`, with tests using a fake executor layer.
-5. Add OpenAI Responses WebSocket transport and adapter route.
+4. Add `route/transport/websocket.ts`, with tests using a fake executor layer.
+5. Add OpenAI Responses WebSocket transport and route route.
 6. Add `OpenAI.responsesWebSocket(...)` provider facade and export tests.
 7. Add focused deterministic stream tests.
 8. Optionally add recorded/live WebSocket tests behind `RECORD=true` once deterministic coverage is stable.

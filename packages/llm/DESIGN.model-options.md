@@ -143,7 +143,7 @@ LLM.stream({
 
 Merge order:
 
-1. Protocol-generated payload and adapter-generated transport defaults.
+1. Protocol-generated payload and route-generated transport defaults.
 2. Model/provider defaults.
 3. Variant-resolved defaults.
 4. Call-level overrides.
@@ -258,7 +258,7 @@ If a raw field becomes common and stable, promote it from `http.body` into typed
 
 Do not keep `policy` as a separate public bucket for now. The useful ideas from `policy` still exist, but they should move to clearer homes.
 
-Usage is the best example. The library should always collect usage when the provider emits it. For providers that require an opt-in to include usage in streaming chunks, the adapter should opt in by default when it is safe and normal for that protocol.
+Usage is the best example. The library should always collect usage when the provider emits it. For providers that require an opt-in to include usage in streaming chunks, the route should opt in by default when it is safe and normal for that protocol.
 
 This matches other libraries:
 
@@ -275,7 +275,7 @@ policy: {
 
 Instead:
 
-- Common usage collection is adapter/protocol behavior.
+- Common usage collection is route/protocol behavior.
 - Provider-specific usage accounting stays in `providerOptions`, e.g. OpenRouter `usage` fields if needed.
 - Raw experimental usage fields stay in `http.body` until promoted.
 
@@ -283,7 +283,7 @@ Other former `policy` concepts map the same way:
 
 | Old policy idea | New home |
 | --- | --- |
-| Include streamed usage | Adapter/protocol default when safe; provider option only if genuinely configurable |
+| Include streamed usage | Route/protocol default when safe; provider option only if genuinely configurable |
 | Include cost/accounting | `providerOptions.<provider>` because cost accounting is provider-specific |
 | Retention / store | `providerOptions.openai.store`, `providerOptions.openrouter.provider.dataCollection`, `providerOptions.gateway`, etc. |
 | Prompt cache | Message/content-part `providerOptions` for cache markers, or provider-specific call options |
@@ -439,7 +439,7 @@ Recommended next code changes:
 - If it is provider behavior, put it in `providerOptions.<provider>`.
 - If it is a raw outgoing HTTP patch, put it in `http.body`, `http.headers`, or `http.query`.
 - If it applies to a message or content part, use message/part provider options rather than call-level options.
-- If it changes stream framing or chunk parsing, it belongs in adapter/protocol code.
+- If it changes stream framing or chunk parsing, it belongs in route/protocol code.
 - If it requires arbitrary logic, generate code or write a provider wrapper; do not put it in serializable config.
 
 ## Open Questions

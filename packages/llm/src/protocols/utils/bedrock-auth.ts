@@ -1,7 +1,7 @@
 import { AwsV4Signer } from "aws4fetch"
 import { Effect, Option, Schema } from "effect"
 import { Headers } from "effect/unstable/http"
-import { Auth, type AuthInput } from "../../adapter/auth"
+import { Auth, type AuthInput } from "../../route/auth"
 import type { LLMRequest } from "../../schema"
 import { ProviderShared } from "../shared"
 
@@ -9,7 +9,7 @@ import { ProviderShared } from "../shared"
  * AWS credentials for SigV4 signing. Bedrock also supports Bearer API key auth
  * via `model.apiKey`, which bypasses SigV4 signing. STS-vended credentials
  * should be refreshed by the consumer (rebuild the model) before they expire;
- * the adapter does not refresh.
+ * the route does not refresh.
  */
 export interface Credentials {
   readonly region: string

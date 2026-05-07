@@ -1,12 +1,12 @@
 import { Effect, Schema, Stream } from "effect"
-import { Adapter } from "../adapter/client"
-import { Auth, type Auth as AuthDef } from "../adapter/auth"
-import { Endpoint, type Endpoint as EndpointConfig } from "../adapter/endpoint"
-import { Framing } from "../adapter/framing"
-import { HttpTransport } from "../adapter/transport"
-import type { Transport } from "../adapter/transport"
+import { Route } from "../route/client"
+import { Auth, type Auth as AuthDef } from "../route/auth"
+import { Endpoint, type Endpoint as EndpointConfig } from "../route/endpoint"
+import { Framing } from "../route/framing"
+import { HttpTransport } from "../route/transport"
+import type { Transport } from "../route/transport"
 import { capabilities } from "../llm"
-import { Protocol } from "../adapter/protocol"
+import { Protocol } from "../route/protocol"
 import {
   LLMError,
   TransportReason,
@@ -452,7 +452,7 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
   })
 
 // =============================================================================
-// Protocol And OpenAI Adapter
+// Protocol And OpenAI Route
 // =============================================================================
 /**
  * The OpenAI Responses protocol — request lowering, payload schema, and the
@@ -482,7 +482,7 @@ export const endpoint = (
     required: input.required,
   })
 
-export const makeAdapter = (
+export const makeRoute = (
   input: {
     readonly id?: string
     readonly auth?: AuthDef
@@ -491,7 +491,7 @@ export const makeAdapter = (
     readonly endpointRequired?: string
   } = {},
 ) =>
-  Adapter.make({
+  Route.make({
     id: input.id ?? ADAPTER,
     protocol,
     endpoint: input.endpoint ?? endpoint({ defaultBaseURL: input.defaultBaseURL, required: input.endpointRequired }),
@@ -499,7 +499,7 @@ export const makeAdapter = (
     framing: Framing.sse,
   })
 
-export const adapter = makeAdapter()
+export const route = makeRoute()
 
 type WebSocketPrepared = {
   readonly url: string
@@ -572,7 +572,7 @@ const webSocketTransport = (
       Effect.gen(function* () {
         if (!runtime.webSocket)
           return yield* webSocketTransportError(
-            "OpenAI Responses WebSocket adapter requires WebSocketExecutor.Service",
+            "OpenAI Responses WebSocket route requires WebSocketExecutor.Service",
             prepared.url,
           )
         const connection = yield* runtime.webSocket.open({ url: prepared.url, headers: prepared.headers })
@@ -588,7 +588,7 @@ const webSocketTransport = (
     ),
 })
 
-export const makeWebSocketAdapter = (
+export const makeWebSocketRoute = (
   input: {
     readonly id?: string
     readonly auth?: AuthDef
@@ -597,23 +597,23 @@ export const makeWebSocketAdapter = (
     readonly endpointRequired?: string
   } = {},
 ) =>
-  Adapter.make({
+  Route.make({
     id: input.id ?? `${ADAPTER}-websocket`,
     protocol,
     transport: webSocketTransport(input),
   })
 
-export const webSocketAdapter = makeWebSocketAdapter()
+export const webSocketRoute = makeWebSocketRoute()
 
 // =============================================================================
 // Model Helper
 // =============================================================================
-export const model = Adapter.model(adapter, {
+export const model = Route.model(route, {
   provider: "openai",
   capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
 })
 
-export const webSocketModel = Adapter.model(webSocketAdapter, {
+export const webSocketModel = Route.model(webSocketRoute, {
   provider: "openai",
   capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
 })

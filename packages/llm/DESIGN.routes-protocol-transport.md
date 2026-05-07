@@ -6,11 +6,11 @@ The current vocabulary has become awkward:
 
 - `Provider`
 - `ModelRef`
-- `Adapter`
-- `Adapter.model(...)`
+- `Route`
+- `Route.model(...)`
 - `Transport`
 
-Each term points at a real concept, but the boundaries are not obvious from the API. `Adapter` is especially overloaded: it sounds like a provider-facing model helper, but in practice it is the runnable route that combines protocol parsing, endpoint/auth preparation, and transport execution.
+Each term points at a real concept, but the boundaries are not obvious from the API. `Route` is especially overloaded: it sounds like a provider-facing model helper, but in practice it is the runnable route that combines protocol parsing, endpoint/auth preparation, and transport execution.
 
 OpenAI Responses over both HTTP SSE and WebSocket made this visible. Both routes share the same semantic protocol and parser, but they move frames differently. That should be easy to express without making model/provider metadata feel attached to a transport implementation.
 
@@ -53,11 +53,12 @@ ModelRef {
   provider: "openai"
   id: "gpt-4.1-mini"
   route: "openai-responses-websocket"
-  protocol: "openai-responses"
   capabilities: ...
   auth/baseURL/headers/options: ...
 }
 ```
+
+`protocol` is intentionally not stored here. It is route metadata and should be read from the registered route during prepare/stream execution. Keeping both `model.route` and `route.protocol` denormalized invites drift.
 
 ### Protocol
 
@@ -93,6 +94,7 @@ It owns:
 - preparing transport-private request data
 - executing or opening the transport
 - turning raw transport output into protocol frames
+- applying auth/endpoint/header mechanics that are specific to transport request construction
 
 Examples:
 
@@ -102,6 +104,10 @@ Examples:
 - Bedrock event-stream bytes
 
 The transport should not own provider semantic parsing.
+
+Auth belongs here because signing and header construction are transport mechanics. HTTP bearer auth, Azure `api-key`, SigV4 signing, and WebSocket construction headers all affect how the request is sent, not how provider chunks are semantically parsed.
+
+Bedrock Converse should eventually become an explicit transport too: `Transport.bedrockEventStream(...)` can own AWS event-stream bytes and SigV4 mechanics while `BedrockConverse.protocol` keeps request lowering and event parsing.
 
 ### Route
 
@@ -114,7 +120,7 @@ It combines:
 - transport
 - endpoint/auth/header interpretation where needed by the transport
 
-This is what the current `Adapter` really is.
+This is what the old `Adapter` concept really was.
 
 Example:
 
@@ -176,7 +182,6 @@ ModelRef {
   provider: "openai"
   id: "gpt-4.1-mini"
   route: "openai-responses-websocket"
-  protocol: "openai-responses"
 }
 ```
 
@@ -205,19 +210,27 @@ Late selection makes errors, prepared requests, recordings, and route metadata l
 
 ## Ideal Internal API
 
-Rename the current `Adapter` concept to `Route` over time.
+Rename the old `Adapter` concept to `Route` as a coordinated public API change, or do not rename it at all. A half-renamed world is worse than either endpoint.
+
+The coherent target is:
+
+- `Adapter` type/module concept -> `Route`
+- `adapterRegistry` -> `routeRegistry`
+- `model.adapter` -> `model.route`
+- `PreparedRequest.adapter` -> `PreparedRequest.route`
+- remove `model.protocol`; derive protocol from the registered route
 
 Current shape:
 
 ```ts
-Adapter.make({
+Route.make({
   id: "openai-responses",
   protocol,
   endpoint,
   framing,
 })
 
-Adapter.make({
+Route.make({
   id: "openai-responses-websocket",
   protocol,
   transport,
@@ -240,37 +253,48 @@ Route.make({
 })
 ```
 
-Provider helpers should map user options to concrete routes:
+Raw routes should stay reusable: they are protocol + transport mechanics. Provider identity, capabilities, limits, and generation defaults are model-factory defaults layered onto a route.
+
+The ideal authoring shape is a configured route value:
+
+```ts
+const responsesHttp = responsesHttpRoute.with({
+  provider: "openai",
+  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+})
+
+const model = responsesHttp.model("gpt-4.1-mini", { apiKey })
+```
+
+This is better than `Provider.model(...)`: a provider is the catalog namespace, while route configuration means "from this runnable route, make a model-ref constructor with these provider/model defaults."
+
+Capabilities belong in this configured-route/default layer and on the final `ModelRef`, not on the raw route. The defaults are close to route selection because they are provider API defaults, but they must remain overridable because capabilities and limits can vary by concrete model id.
+
+Provider helpers should then map user options to concrete route-backed model factories:
 
 ```ts
 const responsesRoutes = {
-  http: responsesHttpRoute,
-  websocket: responsesWebSocketRoute,
+  http: responsesHttpRoute.with(openaiResponsesDefaults),
+  websocket: responsesWebSocketRoute.with(openaiResponsesDefaults),
 } as const
-
-export const responses = Provider.model({
-  provider: "openai",
-  defaultRoute: responsesRoutes.http,
-  routes: responsesRoutes,
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-})
 ```
 
 The generated helper can support:
 
 ```ts
 OpenAI.responses("gpt-4.1-mini")
+OpenAI.responses("gpt-4.1-mini", { transport: "http" })
 OpenAI.responses("gpt-4.1-mini", { transport: "websocket" })
 ```
 
-and produce a concrete `ModelRef` with `route`/current `adapter` set to the selected route id.
+and produce a concrete `ModelRef` with `route` set to the selected route id.
 
 ## Why Not Multi-Transport Adapters?
 
 A tempting shape is:
 
 ```ts
-Adapter.make({
+Route.make({
   id: "openai-responses",
   protocol,
   transports: {
@@ -280,9 +304,9 @@ Adapter.make({
 })
 ```
 
-This is reasonable if the object is renamed to `RouteFamily`, but it is awkward if it remains the executable adapter. A runnable route should be concrete. A route family is a provider/model helper concern.
+This is reasonable if the object is renamed to `RouteFamily`, but it is awkward if it remains the executable route. A runnable route should be concrete. A route family is a provider/model helper concern.
 
-Problems with late multi-transport adapter selection:
+Problems with late multi-transport route selection:
 
 - `prepare(...)` cannot describe one concrete prepared request shape.
 - recorded tests need to know which cassette/transport route is active.
@@ -293,23 +317,252 @@ Problems with late multi-transport adapter selection:
 Better split:
 
 - `Route`: one runnable route.
-- `Provider.model(...)`: optional route family selector that chooses a concrete route while building `ModelRef`.
+- provider helper route table: optional route family selector that chooses a concrete route-backed model factory while building `ModelRef`.
+
+Route families may exist as local provider-helper implementation detail, but they should not replace concrete routes in the registry.
+
+## Route Derivation Smells
+
+The current code still has several related smells:
+
+- Protocol files expose hand-written `makeRoute(...)` factories.
+- Provider files derive variants by passing knobs like `defaultBaseURL: false` and `endpointRequired` into those factories.
+- Provider identity and capabilities are added later through `Route.model(route, defaults)` rather than being visibly attached to a provider-bound route.
+- The same reusable route shape sometimes acts like a template and sometimes acts like a user-facing provider route.
+
+These are all symptoms of the same missing concept: route derivation.
+
+### Endpoint Policy Smell
+
+`defaultBaseURL: false` means "do not use the route template's default URL; require the model/provider options to supply one."
+
+`endpointRequired` is the custom error message used when no base URL is available.
+
+This is too implicit. It makes provider variants read like they are toggling random endpoint internals:
+
+```ts
+OpenAIResponses.makeRoute({
+  id: "azure-openai-responses",
+  defaultBaseURL: false,
+  endpointRequired: "Azure OpenAI requires resourceName or baseURL",
+})
+```
+
+The intended behavior is really an endpoint policy:
+
+```ts
+Endpoint.baseURL({
+  path: "/responses",
+  default: "https://api.openai.com/v1",
+})
+
+Endpoint.requiredBaseURL({
+  path: "/responses",
+  message: "Azure OpenAI requires resourceName or baseURL",
+})
+```
+
+or one API with explicit variants:
+
+```ts
+Endpoint.baseURL({
+  path: "/responses",
+  base: { type: "default", url: "https://api.openai.com/v1" },
+})
+
+Endpoint.baseURL({
+  path: "/responses",
+  base: { type: "required", message: "Azure OpenAI requires resourceName or baseURL" },
+})
+```
+
+The route should not expose `defaultBaseURL: false`; it should expose an endpoint with a clear policy.
+
+### Hand-Written Factory Smell
+
+This shape is a smell:
+
+```ts
+export const makeRoute = (input = {}) =>
+  Route.make({
+    id: input.id ?? "openai-responses",
+    protocol,
+    endpoint: input.endpoint ?? endpoint(...),
+    auth: input.auth,
+    framing: Framing.sse,
+  })
+```
+
+It exists only because route values are not yet easy to copy and modify.
+
+The target is immutable derivation:
+
+```ts
+export const responsesTemplate = Route.template({
+  protocol: OpenAIResponses.protocol,
+  transport: Transport.httpJson({
+    endpoint: Endpoint.baseURL({ path: "/responses", base: { type: "default", url: DEFAULT_BASE_URL } }),
+    auth: Auth.bearer(),
+    framing: Framing.sse,
+  }),
+})
+
+export const openAIResponses = responsesTemplate.route({
+  id: "openai-responses",
+  provider: "openai",
+  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+})
+
+export const azureResponses = openAIResponses.with({
+  id: "azure-openai-responses",
+  provider: "azure",
+  transport: Transport.httpJson({
+    endpoint: Endpoint.requiredBaseURL({ path: "/responses", message: "Azure OpenAI requires resourceName or baseURL" }),
+    auth: azureAuth,
+    framing: Framing.sse,
+  }),
+})
+```
+
+This preserves reuse without hiding variant behavior behind protocol-specific factory parameters.
+
+### One Route Concept
+
+Prefer one `Route` concept, not `RouteTemplate` plus `Route`.
+
+Every route used by a provider helper should have a provider. Reuse can still happen by immutably deriving one provider route from another:
+
+```ts
+export const responses = Route.make({
+  id: "openai-responses",
+  provider: "openai",
+  protocol: OpenAIResponses.protocol,
+  transport: Transport.httpJson({
+    endpoint: Endpoint.baseURL({ path: "/responses", base: { type: "default", url: DEFAULT_BASE_URL } }),
+    auth: Auth.bearer(),
+    framing: Framing.sse,
+  }),
+  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+})
+
+export const azureResponses = responses.with({
+  id: "azure-openai-responses",
+  provider: "azure",
+  transport: responses.transport.with({
+    endpoint: Endpoint.requiredBaseURL({ path: "/responses", message: "Azure OpenAI requires resourceName or baseURL" }),
+    auth: azureAuth,
+  }),
+})
+```
+
+The risk is inherited provider/default leakage. Mitigate that with API shape:
+
+- `.with(...)` is immutable and returns a new route.
+- deriving a provider route should require `id` and `provider` when either changes.
+- duplicate route ids should fail or be explicit.
+- provider/capabilities/limits/generation are route defaults and remain overridable by model options.
+- `.model(...)` uses the route defaults and returns a concrete `ModelRef` with `route` set.
+
+### Typed Transport Derivation
+
+Transport replacement should not force callers to restate unrelated internals.
+
+This is awkward:
+
+```ts
+const azureResponses = responses.with({
+  id: "azure-openai-responses",
+  provider: "azure",
+  transport: Transport.httpJson({
+    endpoint: Endpoint.requiredBaseURL(...),
+    auth: azureAuth,
+    framing: Framing.sse, // only repeated because the whole transport was rebuilt
+  }),
+})
+```
+
+Transport values should be immutable and copyable too:
+
+```ts
+const azureResponses = responses.with({
+  id: "azure-openai-responses",
+  provider: "azure",
+  transport: responses.transport.with({
+    endpoint: Endpoint.requiredBaseURL(...),
+    auth: azureAuth,
+  }),
+})
+```
+
+For authoring ergonomics, route can expose typed transport-specific helpers:
+
+```ts
+const azureResponses = responses.withHttpJson({
+  id: "azure-openai-responses",
+  provider: "azure",
+  endpoint: Endpoint.requiredBaseURL(...),
+  auth: azureAuth,
+})
+```
+
+`withHttpJson(...)` should only exist on HTTP JSON routes. WebSocket routes get WebSocket-specific derivation:
+
+```ts
+const customResponsesWs = responsesWebSocket.withWebSocket({
+  id: "custom-openai-responses-websocket",
+  endpoint: customEndpoint,
+  auth: customAuth,
+})
+```
+
+This gives a useful type-level distinction without adding a second route concept:
+
+```ts
+Route<Payload, Prepared, Frame, Transport>
+```
+
+The route knows its transport type, so derivation can offer the right partial override API for that transport.
+
+### Coherent Target
+
+The smallest coherent target that addresses all these smells:
+
+- Replace protocol-specific `makeRoute(...)` factories with immutable route derivation.
+- Replace `defaultBaseURL: false` / `endpointRequired` with explicit endpoint policies.
+- Treat provider/capabilities/limits/generation as route defaults that can be overridden by model options.
+- Keep one `Route` concept; reuse happens through immutable `.with(...)` derivation.
+- Make transports immutable/copyable so provider variants can override endpoint/auth without restating framing or unrelated transport internals.
+- Let provider modules export provider-bound routes and model helpers, not protocol-template internals as the primary API.
+
+## Registry Semantics
+
+Routes are registered by route id, not by provider/model id.
+
+```ts
+routeRegistry.set("openai-responses", responsesHttpRoute)
+routeRegistry.set("openai-responses-websocket", responsesWebSocketRoute)
+```
+
+`ModelRef` carries the selected route id:
+
+```ts
+OpenAI.responses("gpt-4.1-mini", { transport: "websocket" })
+// ModelRef { provider: "openai", id: "gpt-4.1-mini", route: "openai-responses-websocket" }
+```
+
+Execution resolves the route:
+
+```ts
+const route = routeRegistry.get(request.model.route)
+```
+
+Importing a provider module should register the routes that its exported helpers can select. For `OpenAI.responses(...)`, that means both the HTTP and WebSocket Responses routes are available once the OpenAI provider module is imported. If bundle size or tree-shaking later require finer control, route registration can become explicit, but selector sugar must never produce a `ModelRef` for a route that was not registered by the same import path.
 
 ## Prepared Requests And Metadata
 
 Prepared requests should expose concrete route details.
 
-Current names can remain during migration:
-
-```ts
-PreparedRequest {
-  adapter: "openai-responses-websocket"
-  model.protocol: "openai-responses"
-  metadata: { transport: "websocket-json" }
-}
-```
-
-Long-term names should be clearer:
+Prepared output should be concrete and derived from route resolution:
 
 ```ts
 PreparedRequest {
@@ -319,7 +572,9 @@ PreparedRequest {
 }
 ```
 
-## OpenCode Config API
+`PreparedRequest.protocol` is acceptable because prepare has already resolved the route. It is derived output metadata, not duplicated model configuration.
+
+## OpenCode Config Constraint
 
 OpenCode can expose user-friendly provider options while still resolving to a concrete route before execution.
 
@@ -337,7 +592,9 @@ Example config:
 }
 ```
 
-Bridge behavior:
+The package-level constraint is simple: transport selection must be string-serializable and route-agnostic enough for config files.
+
+Bridge behavior can be:
 
 ```ts
 const model = options.transport === "websocket"
@@ -357,49 +614,48 @@ The bridge should not pass transport selection through `LLM.request.http`.
 
 ## Migration Plan
 
-### Step 1: Stabilize Current Implementation
+### Step 1: Rename Adapter To Route Publicly
+
+Do this as one coordinated schema/API change, not as a partial internal alias.
+
+Rename:
+
+- `Adapter` export -> `Route`
+- `AdapterShape` -> `RouteShape`
+- `AdapterContext` -> `RouteContext`
+- `AnyAdapter` -> `AnyRoute`
+- `routeRegistry` -> `routeRegistry`
+- `model.adapter` -> `model.route`
+- `PreparedRequest.adapter` -> `PreparedRequest.route`
+- error reason fields from `adapter` to `route` where they identify the runnable route
+
+Remove:
+
+- `model.protocol`
+
+Derive protocol from route metadata after route resolution. If missing-route errors need extra context, route id plus provider/model id are sufficient.
+
+Temporary compatibility aliases are acceptable only if they are clearly deprecated and not used in new code/docs.
+
+### Step 2: Move Toward Configured Routes
+
+Current implementation can keep `Route.model(route, defaults)` while the rename lands. The cleaner target is:
+
+```ts
+const configured = route.with(defaults)
+const model = configured.model(id, options)
+```
+
+Do not move this to `Provider.model(...)`. A provider is the catalog namespace; configured routes own route-backed model-ref construction.
+
+### Step 3: Keep Runtime Behavior Stable
 
 Keep current runtime behavior:
 
-- `Adapter.make(...)` supports both HTTP composition and explicit custom transports.
+- `Route.make(...)` supports explicit transports.
 - `OpenAI.responses(...)` returns HTTP SSE.
 - `OpenAI.responsesWebSocket(...)` returns WebSocket.
 - Both routes share `OpenAIResponses.protocol`.
-
-### Step 2: Introduce Route Naming Internally
-
-Add aliases without breaking existing imports:
-
-```ts
-export const Route = Adapter
-export type Route = AdapterShape
-```
-
-Prefer `Route` in new internal code and docs.
-
-Keep `Adapter` as a compatibility alias until the rest of the package has moved.
-
-### Step 3: Move Model Factory Naming Out Of Adapter
-
-Replace callsites like:
-
-```ts
-Adapter.model(route, defaults)
-```
-
-with clearer provider/model helper naming:
-
-```ts
-Provider.model(route, defaults)
-```
-
-or:
-
-```ts
-ModelFactory.fromRoute(route, defaults)
-```
-
-This keeps provider metadata attached to model construction, not to the route itself.
 
 ### Step 4: Add Transport Selector Sugar
 
@@ -411,22 +667,12 @@ Implementation rule:
 - return a concrete `ModelRef`
 - do not defer selection to execution
 
-### Step 5: Rename Metadata Carefully
-
-If worth the churn, rename schema fields later:
-
-- `model.adapter` -> `model.route`
-- `PreparedRequest.adapter` -> `PreparedRequest.route`
-
-This likely needs a compatibility period because these fields may be user-visible.
+Keep `OpenAI.responsesWebSocket(...)` permanently as the canonical discoverable alias. The option-style form is ergonomic sugar; the alias is load-bearing for code search and explicitness.
 
 ## Open Questions
 
-- Should `transport: "http"` be accepted explicitly, or should only non-default transports be named?
-- Should explicit aliases like `OpenAI.responsesWebSocket(...)` remain permanently for discoverability?
 - Is `Route` the best name, or is `ModelRoute` clearer because routes are selected by models?
-- Should `Protocol` ids stay on `ModelRef`, or are they derivable from route metadata at prepare time?
-- Should route families exist as a named internal concept, or only inside provider helper implementation?
+- Should route families become a named helper type, or remain local provider-helper implementation detail?
 
 ## Recommendation
 
@@ -438,4 +684,4 @@ Adopt this mental model:
 - `Transport`: mechanics for moving frames.
 - `Route`: concrete runnable protocol + transport composition.
 
-Keep route selection at model construction time. Let provider helpers expose ergonomic transport choices, but always resolve them into concrete route ids before requests execute.
+Commit to the public `Route -> Route` rename if we pursue this plan. Keep route selection at model construction time. Let provider helpers expose ergonomic transport choices, but always resolve them into concrete route ids before requests execute. Store the selected route id on `ModelRef`; derive protocol from the route registry.

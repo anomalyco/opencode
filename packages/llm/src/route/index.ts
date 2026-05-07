@@ -1,12 +1,12 @@
-export { Adapter, LLMClient, modelCapabilities, modelLimits, modelRef } from "./client"
+export { Route, LLMClient, modelCapabilities, modelLimits, modelRef } from "./client"
 export type {
-  Adapter as AdapterShape,
-  AdapterModelDefaults,
-  AdapterModelInput,
-  AdapterRoutedModelDefaults,
-  AdapterRoutedModelInput,
-  AnyAdapter,
-  AdapterContext,
+  Route as RouteShape,
+  RouteModelDefaults,
+  RouteModelInput,
+  RouteRoutedModelDefaults,
+  RouteRoutedModelInput,
+  AnyRoute,
+  RouteContext,
   Interface as LLMClientShape,
   Service as LLMClientService,
   ModelCapabilitiesInput,

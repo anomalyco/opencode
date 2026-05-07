@@ -5,7 +5,7 @@ import {
   modelRef,
   type ModelCapabilitiesInput,
   type ModelRefInput,
-} from "./adapter/client"
+} from "./route/client"
 import {
   GenerationOptions,
   HttpOptions,

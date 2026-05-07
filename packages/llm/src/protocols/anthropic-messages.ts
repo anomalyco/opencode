@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
-import { Adapter } from "../adapter/client"
-import { Auth } from "../adapter/auth"
-import { Endpoint } from "../adapter/endpoint"
-import { Framing } from "../adapter/framing"
+import { Route } from "../route/client"
+import { Auth } from "../route/auth"
+import { Endpoint } from "../route/endpoint"
+import { Framing } from "../route/framing"
 import { capabilities } from "../llm"
-import { Protocol } from "../adapter/protocol"
+import { Protocol } from "../route/protocol"
 import {
   Usage,
   type CacheHint,
@@ -499,7 +499,7 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
   })
 
 // =============================================================================
-// Protocol And Anthropic Adapter
+// Protocol And Anthropic Route
 // =============================================================================
 /**
  * The Anthropic Messages protocol — request lowering, payload schema, and the
@@ -516,7 +516,7 @@ export const protocol = Protocol.define({
   process: processChunk,
 })
 
-export const adapter = Adapter.make({
+export const route = Route.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.anthropic.com/v1", path: "/messages" }),
@@ -528,7 +528,7 @@ export const adapter = Adapter.make({
 // =============================================================================
 // Model Helper
 // =============================================================================
-export const model = Adapter.model(adapter, {
+export const model = Route.model(route, {
   provider: "anthropic",
   capabilities: capabilities({
     output: { reasoning: true },

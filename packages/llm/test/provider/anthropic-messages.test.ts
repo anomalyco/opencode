@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM, LLMError } from "../../src"
-import { LLMClient } from "../../src/adapter"
+import { LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
@@ -21,7 +21,7 @@ const request = LLM.request({
   generation: { maxTokens: 20, temperature: 0 },
 })
 
-describe("Anthropic Messages adapter", () => {
+describe("Anthropic Messages route", () => {
   it.effect("prepares Anthropic Messages target", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(request)

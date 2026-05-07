@@ -14,7 +14,7 @@ packages/llm/
   src/                     package implementation
     schema.ts              canonical request, response, event, and error model
     llm.ts                 public constructors and runtime helpers
-    adapter/               adapter composition, transport, auth, framing, protocol contracts
+    route/               route composition, transport, auth, framing, protocol contracts
     protocols/             OpenAI, Anthropic, Gemini, Bedrock, and compatible protocols
     providers/             provider definitions and provider-specific routing metadata
     tool*.ts               typed tool definitions and tool-loop runtime
@@ -26,15 +26,15 @@ packages/llm/
 
 - Start with `example/tutorial.ts` to see the caller-facing API.
 - Read `src/llm.ts` and `src/schema.ts` for the public runtime and canonical model.
-- Follow `src/adapter/client.ts` to understand request preparation, transport, parsing, and collection.
-- Read `src/adapter/protocol.ts`, `src/protocols/`, and `src/providers/` when adding or changing providers.
+- Follow `src/route/client.ts` to understand request preparation, transport, parsing, and collection.
+- Read `src/route/protocol.ts`, `src/protocols/`, and `src/providers/` when adding or changing providers.
 - Read `src/tool-runtime.ts` and the recorded tests when changing tool loops or streaming behavior.
 
 ## Tour Index
 
 - **Use-site shape**: Sections 1-2 show the public API and canonical request model.
 - **Request lifecycle**: Sections 3-4 name the main runtime pieces and follow one request through compile, HTTP, parse, and collect.
-- **Provider internals**: Sections 5-8 explain protocols, adapter composition, provider helpers, and provider option lowering.
+- **Provider internals**: Sections 5-8 explain protocols, route composition, provider helpers, and provider option lowering.
 - **Tools and streams**: Sections 9-10 show tool-loop behavior and provider-specific parser examples.
 - **Testing story**: Sections 11-13 cover deterministic fixtures, recorded cassettes, and recording commands.
 - **Wrap-up paths**: Sections 14-15 summarize the design payoff and suggest shorter reading paths for demos.
@@ -97,40 +97,40 @@ The key design choice is that the public request model stays provider-neutral. C
 Before following one request through the runtime, name the main concepts:
 
 - `LLMRequest`: the canonical provider-neutral request. This is what callers build and what protocols read.
-- `ModelRef`: the selected model plus routing metadata. `model.adapter` chooses the runnable adapter route; `model.protocol` records the wire protocol semantics.
+- `ModelRef`: the selected model plus routing metadata. `model.route` chooses the runnable route route; `route.protocol` records the wire protocol semantics.
 - `generation`: provider-neutral call controls. Model values are defaults; request values override them.
 - `providerOptions`: namespaced provider-native knobs. Model values are defaults; request values override by provider namespace.
 - `http`: last-resort serializable overlays for final body, headers, and query params.
 - `Protocol`: the wire-format brain. It converts `LLMRequest` into a provider-native payload and parses provider-native stream chunks back into `LLMEvent`s.
-- `Adapter`: the runnable deployment. It combines one `Protocol` with an `Endpoint`, `Auth`, `Framing`, and headers.
+- `Route`: the runnable deployment. It combines one `Protocol` with an `Endpoint`, `Auth`, `Framing`, and headers.
 - `RequestExecutor`: the transport boundary. It sends an `HttpClientRequest` and returns an `HttpClientResponse`.
 - `LLMEvent`: the normalized stream output. Every provider eventually emits the same event vocabulary.
 
-The most important distinction is adapter route versus protocol implementation:
+The most important distinction is route route versus protocol implementation:
 
 ```ts
 const model: ModelRef = OpenAICompatible.deepseek.model("deepseek-chat")
 
-model.adapter // "openai-compatible-chat" — which runnable adapter to use
-model.protocol // "openai-chat"            — which wire protocol it speaks
+model.route // "openai-compatible-chat" — which runnable route to use
+route.protocol // "openai-chat"            — which wire protocol it speaks
 ```
 
-Most adapters have the same value for both fields. OpenAI-compatible Chat is the useful exception: it routes through the generic compatible adapter while reusing the OpenAI Chat wire protocol.
+Most routes have the same value for both fields. OpenAI-compatible Chat is the useful exception: it routes through the generic compatible route while reusing the OpenAI Chat wire protocol.
 
 ## 4. Follow One Request Through The Pipeline
 
-The runtime pipeline is concentrated in [`src/adapter/client.ts`](./src/adapter/client.ts).
+The runtime pipeline is concentrated in [`src/route/client.ts`](./src/route/client.ts).
 
 The important functions are:
 
-- `Adapter.model`, which binds a provider model factory to the adapter that can run it.
-- `LLMClient`, which selects a registered adapter, builds the payload, sends HTTP, and parses the response.
-- `Adapter.make`, which composes protocol semantics with endpoint, auth, and framing.
+- `Route.model`, which binds a provider model factory to the route that can run it.
+- `LLMClient`, which selects a registered route, builds the payload, sends HTTP, and parses the response.
+- `Route.make`, which composes protocol semantics with endpoint, auth, and framing.
 
 At runtime, the flow is easier to read as a sequence of values. There are two levels to keep separate:
 
 - The main request path: caller input becomes a provider HTTP request, then normalized events.
-- The parser zoom-in: `adapter.parse(...)` hides response framing, chunk decoding, and stream state.
+- The parser zoom-in: `route.parse(...)` hides response framing, chunk decoding, and stream state.
 
 ```text
 RequestInput
@@ -141,7 +141,7 @@ RequestInput
   -> Stream<LLMEvent>
   -> LLMResponse
 
-Zoom into adapter.parse(...):
+Zoom into route.parse(...):
 
 HttpClientResponse.stream
   -> Framing
@@ -203,16 +203,16 @@ const generated: LLMResponse = LLMClient.generate(request)
 
 // Internally, all three alternatives start by compiling the request. The client
 // first resolves model defaults plus request overrides, then selects the
-// runnable adapter from the registry keyed by `request.model.adapter`.
+// runnable route from the registry keyed by `request.model.route`.
 const resolvedRequest: LLMRequest = resolveModelAndCallOptions(request)
-const adapter: Adapter<Payload> = resolveAdapter(request.model)
+const route: Route<Payload> = resolveAdapter(request.model)
 
-// Adapter.toPayload is the protocol conversion boundary.
+// Route.toPayload is the protocol conversion boundary.
 // LLMRequest -> provider-native Payload
 // It builds the JSON body shape for this API family, but does not choose a URL,
 // add auth, encode JSON, or send HTTP.
 // OpenAI Chat example output:
-const draftPayload: Payload = adapter.toPayload(resolvedRequest)
+const draftPayload: Payload = route.toPayload(resolvedRequest)
 // {
 //   model: "gpt-4o-mini",
 //   messages: [
@@ -229,11 +229,11 @@ const draftPayload: Payload = adapter.toPayload(resolvedRequest)
 
 // The candidate payload is validated against the protocol schema before HTTP
 // construction.
-const payload: Payload = validatePayload(draftPayload, adapter.payloadSchema)
+const payload: Payload = validatePayload(draftPayload, route.payloadSchema)
 
-// Adapter.make composes Endpoint + Auth + JSON body encoding into a real request.
+// Route.make composes Endpoint + Auth + JSON body encoding into a real request.
 // Payload + HttpContext -> HttpClientRequest
-const httpRequest: HttpClientRequest.HttpClientRequest = adapter.toHttp(payload, {
+const httpRequest: HttpClientRequest.HttpClientRequest = route.toHttp(payload, {
   request: resolvedRequest,
 })
 
@@ -246,17 +246,17 @@ const httpRequest: HttpClientRequest.HttpClientRequest = adapter.toHttp(payload,
 const httpResponse: HttpClientResponse.HttpClientResponse = RequestExecutor.execute(httpRequest)
 
 // -----------------------------------------------------------------------------
-// Stage 5: Adapter Parses The Provider Stream
+// Stage 5: Route Parses The Provider Stream
 // -----------------------------------------------------------------------------
 
-// Public adapter parsing exposes only normalized events.
+// Public route parsing exposes only normalized events.
 // HttpClientResponse -> Stream<LLMEvent>
-const events: Stream.Stream<LLMEvent, LLMError> = adapter.parse(httpResponse, {
+const events: Stream.Stream<LLMEvent, LLMError> = route.parse(httpResponse, {
   request: payloadStep.request,
 })
 
-// ◆ Zoom in: what Adapter.parse hides ◆
-// Adapter.make builds `parse` from Framing + protocol chunk decoding +
+// ◆ Zoom in: what Route.parse hides ◆
+// Route.make builds `parse` from Framing + protocol chunk decoding +
 // Protocol.process. Those pieces have their own concrete types:
 type Frame = string // One transport-framed item, before provider Schema decoding.
 type Chunk = OpenAIChatChunk // One provider-native stream object, after Schema decoding.
@@ -277,7 +277,7 @@ const frames: Stream.Stream<Frame, ProviderChunkError> = framing.frame(httpRespo
 // AnthropicMessagesChunk, GeminiChunk, and so on.
 // Frame -> Chunk
 const decodeChunk: (frame: Frame) => Effect.Effect<Chunk, ProviderChunkError> = (frame) =>
-  Schema.decodeUnknownEffect(protocol.chunk)(frame).pipe(Effect.mapError(() => chunkError(adapter.id, frame)))
+  Schema.decodeUnknownEffect(protocol.chunk)(frame).pipe(Effect.mapError(() => chunkError(route.id, frame)))
 
 const chunks: Stream.Stream<Chunk, ProviderChunkError> = frames.pipe(Stream.mapEffect(decodeChunk))
 
@@ -290,13 +290,13 @@ const eventBatches: Stream.Stream<ReadonlyArray<LLMEvent>, ProviderChunkError> =
   Stream.mapAccumEffect(initialState, protocol.process),
 )
 
-// This flattened stream is what `adapter.parse(...)` exposes as `events`.
+// This flattened stream is what `route.parse(...)` exposes as `events`.
 // Stream<ReadonlyArray<LLMEvent>> -> Stream<LLMEvent>
 const eventsFromInternals: Stream.Stream<LLMEvent, LLMError> = eventBatches.pipe(Stream.flatMap(Stream.fromIterable))
 
 // ◇ Zoom out: back to the client lifecycle ◇
 // From here on, the client no longer cares about frames, chunks, or parser
-// state. It only has the normalized event stream returned by `adapter.parse(...)`.
+// state. It only has the normalized event stream returned by `route.parse(...)`.
 
 // -----------------------------------------------------------------------------
 // Stage 6: Client Exposes Or Collects Events
@@ -315,7 +315,7 @@ See examples in [`test/provider/openai-chat.test.ts`](./test/provider/openai-cha
 
 ## 5. Protocols Are The Provider-Native Semantics
 
-The protocol abstraction is defined in [`src/adapter/protocol.ts`](./src/adapter/protocol.ts).
+The protocol abstraction is defined in [`src/route/protocol.ts`](./src/route/protocol.ts).
 
 A protocol owns the parts that are intrinsic to an API family:
 
@@ -365,18 +365,18 @@ Public Model Input
 Request Payload Schema
 Request To Payload
 Stream Parsing
-Protocol And Adapter
+Protocol And Route
 Model Helper
 ```
 
-That layout keeps the same story in each file: wire payload, request lowering, stream parsing, and adapter assembly.
+That layout keeps the same story in each file: wire payload, request lowering, stream parsing, and route assembly.
 
-## 6. Adapter Composition Is Where The Reuse Shows Up
+## 6. Route Composition Is Where The Reuse Shows Up
 
-The adapter composition rule is:
+The route composition rule is:
 
 ```ts
-Adapter = Protocol + Endpoint + Auth + Framing
+Route = Protocol + Endpoint + Auth + Framing
 ```
 
 ```text
@@ -385,23 +385,23 @@ Adapter = Protocol + Endpoint + Auth + Framing
                  +-------------------+
                            |
 +----------+     +---------v---------+     +------+     +---------+
-| Endpoint | --> |      Adapter      | <-- | Auth | <-- | Framing |
+| Endpoint | --> |      Route      | <-- | Auth | <-- | Framing |
 +----------+     +-------------------+     +------+     +---------+
      URL              runnable route        headers      bytes -> frames
 ```
 
 The pieces live in these files:
 
-- Protocol contract: [`src/adapter/protocol.ts`](./src/adapter/protocol.ts)
-- Adapter constructor: [`src/adapter/client.ts`](./src/adapter/client.ts)
-- Endpoint rendering: [`src/adapter/endpoint.ts`](./src/adapter/endpoint.ts)
-- Auth strategies: [`src/adapter/auth.ts`](./src/adapter/auth.ts)
-- Stream framing: [`src/adapter/framing.ts`](./src/adapter/framing.ts)
+- Protocol contract: [`src/route/protocol.ts`](./src/route/protocol.ts)
+- Route constructor: [`src/route/client.ts`](./src/route/client.ts)
+- Endpoint rendering: [`src/route/endpoint.ts`](./src/route/endpoint.ts)
+- Auth strategies: [`src/route/auth.ts`](./src/route/auth.ts)
+- Stream framing: [`src/route/framing.ts`](./src/route/framing.ts)
 
-The runnable adapter erases the response internals after composition. Callers only need a payload type plus a normalized parser:
+The runnable route erases the response internals after composition. Callers only need a payload type plus a normalized parser:
 
 ```ts
-interface Adapter<Payload> {
+interface Route<Payload> {
   readonly id: string
   readonly protocol: ProtocolID
   readonly payloadSchema: Schema.Codec<Payload, unknown>
@@ -417,7 +417,7 @@ interface Adapter<Payload> {
 }
 ```
 
-`id` is the adapter route used for model lookup. `protocol` is the wire protocol implementation id. Most adapters use matching values, but OpenAI-compatible Chat is intentionally different: the adapter route is `openai-compatible-chat`, while the reused wire protocol is `openai-chat`.
+`id` is the route route used for model lookup. `protocol` is the wire protocol implementation id. Most routes use matching values, but OpenAI-compatible Chat is intentionally different: the route route is `openai-compatible-chat`, while the reused wire protocol is `openai-chat`.
 
 `Endpoint` receives both the canonical request and the validated provider payload, so dynamic paths can read either side:
 
@@ -459,12 +459,12 @@ interface Framing<Frame> {
 }
 ```
 
-OpenAI Chat is the base case. It defines a full protocol and adapter in [`src/protocols/openai-chat.ts`](./src/protocols/openai-chat.ts).
+OpenAI Chat is the base case. It defines a full protocol and route in [`src/protocols/openai-chat.ts`](./src/protocols/openai-chat.ts).
 
 OpenAI-compatible Chat is the code-reuse showcase in [`src/protocols/openai-compatible-chat.ts`](./src/protocols/openai-compatible-chat.ts):
 
 ```ts
-export const adapter = Adapter.make({
+export const route = Route.make({
   id: "openai-compatible-chat",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.baseURL({
@@ -475,9 +475,9 @@ export const adapter = Adapter.make({
 })
 ```
 
-That adapter reuses `OpenAIChat.protocol` end-to-end. It changes the deployment axes: adapter route id, endpoint, and provider identity.
+That route reuses `OpenAIChat.protocol` end-to-end. It changes the deployment axes: route route id, endpoint, and provider identity.
 
-The payoff is that providers like DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, Groq, and OpenRouter can share the same Chat protocol instead of copying a 300-line adapter.
+The payoff is that providers like DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, Groq, and OpenRouter can share the same Chat protocol instead of copying a 300-line route.
 
 Provider family wiring lives here:
 
@@ -519,7 +519,7 @@ Examples:
 - `OpenAICompatible.deepseek.model` constructs a named OpenAI-compatible deployment model in [`src/providers/openai-compatible.ts`](./src/providers/openai-compatible.ts).
 - `OpenRouter.model` constructs an OpenAI-compatible Chat model with OpenRouter options in [`src/providers/openrouter.ts`](./src/providers/openrouter.ts).
 
-Provider definitions should usually not contain stream parsing, JSON decoding, or protocol details. They set provider identity, defaults, capabilities, deployment options, auth defaults, and model-bound adapters. Keep lower-level adapter arrays as separate advanced exports; they are implementation details, not fields on `Provider.make(...)`.
+Provider definitions should usually not contain stream parsing, JSON decoding, or protocol details. They set provider identity, defaults, capabilities, deployment options, auth defaults, and model-bound routes. Keep lower-level route arrays as separate advanced exports; they are implementation details, not fields on `Provider.make(...)`.
 
 ## 8. Provider Options Lower In Providers Or Protocols
 
@@ -690,7 +690,7 @@ For a provider-composition demo:
 
 1. Open [`src/protocols/openai-chat.ts`](./src/protocols/openai-chat.ts).
 2. Open [`src/protocols/openai-compatible-chat.ts`](./src/protocols/openai-compatible-chat.ts).
-3. Compare `OpenAIChat.protocol` reuse with a different adapter id and endpoint.
+3. Compare `OpenAIChat.protocol` reuse with a different route id and endpoint.
 4. Open [`src/providers/openrouter.ts`](./src/providers/openrouter.ts) to show provider-specific options layered into a reused Chat payload.
 5. Open [`src/providers/openai-compatible-profile.ts`](./src/providers/openai-compatible-profile.ts) to show family metadata and defaults.
 

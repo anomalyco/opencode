@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
-import { Adapter } from "../adapter/client"
-import { Auth } from "../adapter/auth"
-import { Endpoint } from "../adapter/endpoint"
-import { Framing } from "../adapter/framing"
+import { Route } from "../route/client"
+import { Auth } from "../route/auth"
+import { Endpoint } from "../route/endpoint"
+import { Framing } from "../route/framing"
 import { capabilities } from "../llm"
-import { Protocol } from "../adapter/protocol"
+import { Protocol } from "../route/protocol"
 import {
   Usage,
   type FinishReason,
@@ -347,7 +347,7 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
 }
 
 // =============================================================================
-// Protocol And Gemini Adapter
+// Protocol And Gemini Route
 // =============================================================================
 /**
  * The Gemini protocol — request lowering, payload schema, and the streaming-
@@ -364,7 +364,7 @@ export const protocol = Protocol.define({
   onHalt: finish,
 })
 
-export const adapter = Adapter.make({
+export const route = Route.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({
@@ -379,7 +379,7 @@ export const adapter = Adapter.make({
 // =============================================================================
 // Model Helper
 // =============================================================================
-export const model = Adapter.model(adapter, {
+export const model = Route.model(route, {
   provider: "google",
   capabilities: capabilities({
     input: { image: true, audio: true, video: true, pdf: true },

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
-import { LLMClient } from "../../src/adapter"
+import { LLMClient } from "../../src/route"
 import * as OpenRouter from "../../src/providers/openrouter"
 import { it } from "../lib/effect"
 
@@ -22,7 +22,7 @@ describe("OpenRouter", () => {
         LLM.request({ model, prompt: "Say hello." }),
       )
 
-      expect(prepared.adapter).toBe("openrouter")
+      expect(prepared.route).toBe("openrouter")
       expect(prepared.payload).toMatchObject({
         model: "openai/gpt-4o-mini",
         messages: [{ role: "user", content: "Say hello." }],

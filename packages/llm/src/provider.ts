@@ -1,7 +1,7 @@
-import type { AdapterModelInput } from "./adapter/client"
+import type { RouteModelInput } from "./route/client"
 import type { ModelID, ModelRef, ProviderID } from "./schema"
 
-export type ModelOptions = Omit<AdapterModelInput, "id">
+export type ModelOptions = Omit<RouteModelInput, "id">
 
 export type ModelFactory<Options extends ModelOptions = ModelOptions> = (
   id: string | ModelID,

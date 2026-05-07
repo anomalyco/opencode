@@ -8,7 +8,7 @@ The first implementation should prioritize diagnostics and conservative rate-lim
 
 ## Current State
 
-`src/adapter/executor.ts` centralizes provider HTTP execution through `RequestExecutor.Service`:
+`src/route/executor.ts` centralizes provider HTTP execution through `RequestExecutor.Service`:
 
 ```ts
 execute: (request) => http.execute(request).pipe(Effect.mapError(toHttpError), Effect.flatMap(statusError))
@@ -23,7 +23,7 @@ This is enough for coarse handling, but weak for production debugging and retry 
 
 ## Non-Goals
 
-- Do not retry after any response stream element has been returned to an adapter parser.
+- Do not retry after any response stream element has been returned to an route parser.
 - Do not retry provider chunk parse errors or mid-stream provider error events.
 - Do not add provider-specific error classes in the first pass.
 - Do not parse every provider error body into provider-native shapes in the executor.
@@ -173,7 +173,7 @@ const requestId = (headers: Record<string, string>) => {
 }
 ```
 
-This is diagnostic only; adapters can still expose richer provider metadata later.
+This is diagnostic only; routes can still expose richer provider metadata later.
 
 ### 4. Classify Retryable Status Responses Conservatively
 
@@ -201,7 +201,7 @@ Potential future additions after provider evidence:
 
 - `500`, `502` for transient provider failures.
 - Cloudflare edge statuses such as `520`, `522`, `524` for OpenAI-compatible front doors.
-- Provider-specific policies keyed by adapter/provider.
+- Provider-specific policies keyed by route/provider.
 
 ### 5. Parse `Retry-After` And Simple Rate-Limit Headers
 
@@ -235,7 +235,7 @@ Keep raw redacted headers on `HttpResponseDetails` so callers can inspect provid
 
 ### 6. Add Conservative Pre-Stream Retry In `RequestExecutor`
 
-Retry should live in `src/adapter/executor.ts`, not in each adapter.
+Retry should live in `src/route/executor.ts`, not in each route.
 
 The executor owns this boundary:
 
@@ -274,7 +274,7 @@ execute: (request) => executeOnce(request).pipe(retryStatusFailures(defaultRetry
 
 Do not add `HttpOptions.retry` in the first patch.
 
-`RequestExecutor.execute` currently receives only `HttpClientRequest.HttpClientRequest`. It does not receive the original `LLMRequest`, merged model/request `HttpOptions`, adapter ID, provider ID, or generation/tool context.
+`RequestExecutor.execute` currently receives only `HttpClientRequest.HttpClientRequest`. It does not receive the original `LLMRequest`, merged model/request `HttpOptions`, route ID, provider ID, or generation/tool context.
 
 Per-request retry configuration requires one of these changes first:
 

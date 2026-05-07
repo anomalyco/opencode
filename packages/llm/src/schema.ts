@@ -1,17 +1,12 @@
 import { Schema } from "effect"
 
-/**
- * Stable string identifier for a protocol implementation. The discriminator
- * value lives on `ModelRef.protocol` and on the `Adapter.protocol` field. This
- * describes the wire semantics: payload lowering, chunk decoding, and stream
- * parsing. Runtime lookup uses `AdapterID` instead.
- */
+/** Stable string identifier for a protocol implementation. */
 export const ProtocolID = Schema.String
 export type ProtocolID = Schema.Schema.Type<typeof ProtocolID>
 
-/** Stable string identifier for the runnable adapter route. */
-export const AdapterID = Schema.String
-export type AdapterID = Schema.Schema.Type<typeof AdapterID>
+/** Stable string identifier for the runnable route. */
+export const RouteID = Schema.String
+export type RouteID = Schema.Schema.Type<typeof RouteID>
 
 export const ModelID = Schema.String.pipe(Schema.brand("LLM.ModelID"))
 export type ModelID = typeof ModelID.Type
@@ -219,8 +214,7 @@ export namespace ModelLimits {
 export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   id: ModelID,
   provider: ProviderID,
-  adapter: AdapterID,
-  protocol: ProtocolID,
+  route: RouteID,
   baseURL: Schema.optional(Schema.String),
   /** Provider-specific API key convenience. Provider helpers normalize this into `auth`. */
   apiKey: Schema.optional(Schema.String),
@@ -246,7 +240,7 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
    * Provider-specific opaque options. Reach for this only when the value is
    * genuinely provider-private and does not fit a typed axis (e.g. Bedrock's
    * `aws_credentials` / `aws_region` for SigV4). Anything used by more than
-   * one adapter should grow into a typed field instead.
+   * one route should grow into a typed field instead.
    */
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
@@ -257,8 +251,7 @@ export namespace ModelRef {
   export const input = (model: ModelRef): Input => ({
     id: model.id,
     provider: model.provider,
-    adapter: model.adapter,
-    protocol: model.protocol,
+    route: model.route,
     baseURL: model.baseURL,
     apiKey: model.apiKey,
     auth: model.auth,
@@ -662,7 +655,8 @@ export type LLMEvent = Schema.Schema.Type<typeof llmEventTagged>
 
 export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.PreparedRequest")({
   id: Schema.String,
-  adapter: Schema.String,
+  route: RouteID,
+  protocol: ProtocolID,
   model: ModelRef,
   payload: Schema.Unknown,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -671,10 +665,10 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
 /**
  * A `PreparedRequest` whose `payload` is typed as `Payload`. Use with the
  * generic on `LLMClient.prepare<Payload>(...)` when the caller knows which
- * adapter their request will resolve to and wants its native shape statically
+ * route their request will resolve to and wants its native shape statically
  * exposed (debug UIs, request previews, plan rendering).
  *
- * The runtime payload is identical — the adapter still emits `payload: unknown`
+ * The runtime payload is identical — the route still emits `payload: unknown`
  * — so this is a type-level assertion the caller makes about what they expect
  * to find. The prepare runtime does not validate the assertion.
  */
@@ -775,10 +769,9 @@ export class InvalidRequestReason extends Schema.Class<InvalidRequestReason>("LL
   }
 }
 
-export class NoAdapterReason extends Schema.Class<NoAdapterReason>("LLM.Error.NoAdapter")({
-  _tag: Schema.tag("NoAdapter"),
-  adapter: AdapterID,
-  protocol: ProtocolID,
+export class NoRouteReason extends Schema.Class<NoRouteReason>("LLM.Error.NoRoute")({
+  _tag: Schema.tag("NoRoute"),
+  route: RouteID,
   provider: ProviderID,
   model: ModelID,
 }) {
@@ -787,7 +780,7 @@ export class NoAdapterReason extends Schema.Class<NoAdapterReason>("LLM.Error.No
   }
 
   get message() {
-    return `No LLM adapter for ${this.provider}/${this.model} using ${this.adapter} (${this.protocol})`
+    return `No LLM route for ${this.provider}/${this.model} using ${this.route}`
   }
 }
 
@@ -866,7 +859,7 @@ export class TransportReason extends Schema.Class<TransportReason>("LLM.Error.Tr
 export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOutputReason>("LLM.Error.InvalidProviderOutput")({
   _tag: Schema.tag("InvalidProviderOutput"),
   message: Schema.String,
-  adapter: Schema.optional(Schema.String),
+  route: Schema.optional(Schema.String),
   raw: Schema.optional(Schema.String),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
@@ -889,7 +882,7 @@ export class UnknownProviderReason extends Schema.Class<UnknownProviderReason>("
 
 export const LLMErrorReason = Schema.Union([
   InvalidRequestReason,
-  NoAdapterReason,
+  NoRouteReason,
   AuthenticationReason,
   RateLimitReason,
   QuotaExceededReason,

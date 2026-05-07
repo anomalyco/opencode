@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMError } from "../../src"
-import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/adapter"
+import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIResponses from "../../src/protocols/openai-responses"
@@ -27,7 +27,7 @@ const request = LLM.request({
 
 const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
 
-describe("OpenAI Responses adapter", () => {
+describe("OpenAI Responses route", () => {
   it.effect("prepares OpenAI Responses target", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(request)
@@ -51,8 +51,8 @@ describe("OpenAI Responses adapter", () => {
         model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
       }))
 
-      expect(prepared.adapter).toBe("openai-responses-websocket")
-      expect(prepared.model.protocol).toBe("openai-responses")
+      expect(prepared.route).toBe("openai-responses-websocket")
+      expect(prepared.protocol).toBe("openai-responses")
       expect(prepared.metadata).toEqual({ transport: "websocket-json" })
       expect(prepared.payload).toMatchObject({ model: "gpt-4.1-mini", stream: true })
     }),

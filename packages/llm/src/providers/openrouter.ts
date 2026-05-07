@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter/client"
-import { Endpoint } from "../adapter/endpoint"
-import { Framing } from "../adapter/framing"
+import { Route, type RouteModelInput } from "../route/client"
+import { Endpoint } from "../route/endpoint"
+import { Framing } from "../route/framing"
 import { capabilities } from "../llm"
 import { Provider } from "../provider"
-import { Protocol } from "../adapter/protocol"
+import { Protocol } from "../route/protocol"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
@@ -25,10 +25,10 @@ export type OpenRouterProviderOptionsInput = ProviderOptions & {
   readonly openrouter?: OpenRouterOptions
 }
 
-export type ModelOptions = Omit<AdapterModelInput, "id" | "providerOptions"> & {
+export type ModelOptions = Omit<RouteModelInput, "id" | "providerOptions"> & {
   readonly providerOptions?: OpenRouterProviderOptionsInput
 }
-type ModelInput = ModelOptions & Pick<AdapterModelInput, "id">
+type ModelInput = ModelOptions & Pick<RouteModelInput, "id">
 
 const OpenRouterPayload = Schema.StructWithRest(Schema.Struct(OpenAIChat.payloadFields), [
   Schema.Record(Schema.String, Schema.Any),
@@ -56,17 +56,17 @@ const payloadOptions = (input: unknown) => {
   }
 }
 
-export const adapter = Adapter.make({
+export const route = Route.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({ default: profile.baseURL, path: "/chat/completions" }),
   framing: Framing.sse,
 })
 
-export const adapters = [adapter]
+export const routes = [route]
 
-const modelRef = Adapter.model<ModelInput>(
-  adapter,
+const modelRef = Route.model<ModelInput>(
+  route,
   {
     provider: profile.provider,
     baseURL: profile.baseURL,

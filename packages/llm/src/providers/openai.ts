@@ -1,6 +1,6 @@
-import { Auth } from "../adapter/auth"
-import type { ProviderAuthOption } from "../adapter/auth-options"
-import type { AdapterModelInput } from "../adapter/client"
+import { Auth } from "../route/auth"
+import type { ProviderAuthOption } from "../route/auth-options"
+import type { RouteModelInput } from "../route/client"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
@@ -11,7 +11,7 @@ export type { OpenAIOptionsInput } from "./openai-options"
 
 export const id = ProviderID.make("openai")
 
-export const adapters = [OpenAIResponses.adapter, OpenAIResponses.webSocketAdapter, OpenAIChat.adapter]
+export const routes = [OpenAIResponses.route, OpenAIResponses.webSocketRoute, OpenAIChat.route]
 
 // This provider facade wraps the lower-level Responses and Chat model factories
 // with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
@@ -28,17 +28,17 @@ const auth = (options: ProviderAuthOption<"optional">) => {
     .bearer()
 }
 
-export const responses = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
+export const responses = (id: string | ModelID, options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {}) => {
   const { apiKey: _, ...rest } = options
   return OpenAIResponses.model(withOpenAIOptions(id, { ...rest, auth: auth(options) }, { textVerbosity: true }))
 }
 
-export const responsesWebSocket = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
+export const responsesWebSocket = (id: string | ModelID, options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {}) => {
   const { apiKey: _, ...rest } = options
   return OpenAIResponses.webSocketModel(withOpenAIOptions(id, { ...rest, auth: auth(options) }, { textVerbosity: true }))
 }
 
-export const chat = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
+export const chat = (id: string | ModelID, options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {}) => {
   const { apiKey: _, ...rest } = options
   return OpenAIChat.model(withOpenAIOptions(id, { ...rest, auth: auth(options) }))
 }

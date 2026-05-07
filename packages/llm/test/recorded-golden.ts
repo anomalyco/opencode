@@ -22,6 +22,7 @@ type ScenarioInput = GoldenScenarioID | {
 type TargetInput = {
   readonly name: string
   readonly model: ModelRef
+  readonly protocol?: string
   readonly requires?: ReadonlyArray<string>
   readonly transport?: Transport
   readonly prefix?: string
@@ -42,13 +43,13 @@ const scenarioTitle = (id: GoldenScenarioID) => {
 const defaultPrefix = (target: TargetInput) => {
   if (target.prefix) return target.prefix
   const transport = target.transport === "websocket" ? "-websocket" : ""
-  return `${target.model.provider}-${target.model.protocol}${transport}`
+  return `${target.model.provider}-${target.protocol ?? target.model.route}${transport}`
 }
 
 const metadata = (target: TargetInput) => ({
   provider: target.model.provider,
-  protocol: target.model.protocol,
-  adapter: target.model.adapter,
+  protocol: target.protocol,
+  route: target.model.route,
   transport: target.transport ?? "http",
   model: target.model.id,
   ...target.metadata,
@@ -64,7 +65,7 @@ const runTarget = (target: TargetInput) => {
     ? recordedWebSocketTests({
       prefix: defaultPrefix(target),
       provider: target.model.provider,
-      protocol: target.model.protocol,
+      protocol: target.protocol,
       requires: target.requires,
       tags: tags(target),
       metadata: metadata(target),
@@ -72,7 +73,7 @@ const runTarget = (target: TargetInput) => {
     : recordedTests({
       prefix: defaultPrefix(target),
       provider: target.model.provider,
-      protocol: target.model.protocol,
+      protocol: target.protocol,
       requires: target.requires,
       tags: tags(target),
       options: { ...target.options, metadata: { ...target.options?.metadata, ...metadata(target) } },

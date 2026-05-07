@@ -1,8 +1,8 @@
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLMClient, RequestExecutor } from "../../src/adapter"
-import type { Service as LLMClientService } from "../../src/adapter/client"
-import type { Service as RequestExecutorService } from "../../src/adapter/executor"
+import { LLMClient, RequestExecutor } from "../../src/route"
+import type { Service as LLMClientService } from "../../src/route/client"
+import type { Service as RequestExecutorService } from "../../src/route/executor"
 
 export type HandlerInput = {
   readonly request: HttpClientRequest.HttpClientRequest

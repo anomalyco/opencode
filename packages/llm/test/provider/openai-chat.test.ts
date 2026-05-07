@@ -5,7 +5,7 @@ import { LLM, LLMError } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
-import { LLMClient } from "../../src/adapter"
+import { LLMClient } from "../../src/route"
 import { it } from "../lib/effect"
 import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http"
 import { deltaChunk, usageChunk } from "../lib/openai-chunks"
@@ -29,11 +29,11 @@ const request = LLM.request({
   generation: { maxTokens: 20, temperature: 0 },
 })
 
-describe("OpenAI Chat adapter", () => {
+describe("OpenAI Chat route", () => {
   it.effect("prepares OpenAI Chat payload", () =>
     Effect.gen(function* () {
       // Pass the OpenAIChat payload type so `prepared.payload` is statically
-      // typed to the adapter's native shape — the assertions below read field
+      // typed to the route's native shape — the assertions below read field
       // names without `unknown` casts.
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatPayload>(request)
       const _typed: { readonly model: string; readonly stream: true } = prepared.payload

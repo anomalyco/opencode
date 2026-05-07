@@ -2,12 +2,12 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { LLM } from "../src"
-import { Auth } from "../src/adapter/auth"
+import { Auth } from "../src/route/auth"
 import { it } from "./lib/effect"
 
 const request = LLM.request({
   id: "req_auth",
-  model: LLM.model({ id: "fake-model", provider: "fake", protocol: "fake" }),
+  model: LLM.model({ id: "fake-model", provider: "fake", route: "fake" }),
   prompt: "hello",
 })
 

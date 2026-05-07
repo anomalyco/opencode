@@ -1,7 +1,7 @@
-import { Auth } from "../adapter/auth"
-import type { ProviderAuthOption } from "../adapter/auth-options"
-import { Adapter } from "../adapter/client"
-import type { AdapterModelInput } from "../adapter/client"
+import { Auth } from "../route/auth"
+import type { ProviderAuthOption } from "../route/auth-options"
+import { Route } from "../route/client"
+import type { RouteModelInput } from "../route/client"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
@@ -10,11 +10,11 @@ import * as OpenAIResponses from "../protocols/openai-responses"
 
 export const id = ProviderID.make("xai")
 
-export type ModelOptions = Omit<AdapterModelInput, "id" | "apiKey" | "auth"> & ProviderAuthOption<"optional">
+export type ModelOptions = Omit<RouteModelInput, "id" | "apiKey" | "auth"> & ProviderAuthOption<"optional">
 
-export const adapters = [OpenAIResponses.adapter, OpenAICompatibleChat.adapter]
+export const routes = [OpenAIResponses.route, OpenAICompatibleChat.route]
 
-const responsesModel = Adapter.model(OpenAIResponses.adapter, { provider: id })
+const responsesModel = Route.model(OpenAIResponses.route, { provider: id })
 const chatModel = OpenAICompatibleChat.model
 
 const auth = (options: ProviderAuthOption<"optional">) => {

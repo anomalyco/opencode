@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMEvent, LLMRequest, LLMResponse } from "../src"
-import { LLMClient } from "../src/adapter"
+import { LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { tool, ToolFailure } from "../src/tool"
@@ -43,7 +43,7 @@ const schema_only_weather = tool({
 })
 
 describe("LLMClient tools", () => {
-  it.effect("uses the registered model adapter when adding runtime tools", () =>
+  it.effect("uses the registered model route when adding runtime tools", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
 

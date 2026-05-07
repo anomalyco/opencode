@@ -14,7 +14,7 @@ Provider.make({
   id: ProviderID.make("bad"),
   model,
   // @ts-expect-error provider definitions should not grow accidental top-level fields.
-  adapters: [],
+  routes: [],
 })
 
 const requiredProvider = Provider.make({

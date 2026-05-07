@@ -11,7 +11,6 @@ import * as ProviderShared from "../protocols/shared"
 import * as ToolRuntime from "../tool-runtime"
 import type { Tools } from "../tool"
 import type {
-  AdapterID,
   LLMError,
   LLMEvent,
   PreparedRequestOf,
@@ -27,19 +26,20 @@ import {
   ModelLimits,
   ModelRef,
   LLMError as LLMErrorClass,
-  NoAdapterReason,
+  NoRouteReason,
   PreparedRequest,
   ProviderID,
+  RouteID,
   mergeGenerationOptions,
   mergeHttpOptions,
   mergeProviderOptions,
 } from "../schema"
 
-export interface AdapterContext {
+export interface RouteContext {
   readonly request: LLMRequest
 }
 
-export interface Adapter<Payload, Prepared = unknown> {
+export interface Route<Payload, Prepared = unknown> {
   readonly id: string
   readonly protocol: ProtocolID
   readonly transport: string
@@ -47,32 +47,32 @@ export interface Adapter<Payload, Prepared = unknown> {
   readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
   readonly prepareTransport: (
     payload: Payload,
-    context: AdapterContext,
+    context: RouteContext,
   ) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
     prepared: Prepared,
-    context: AdapterContext,
+    context: RouteContext,
     runtime: TransportRuntime,
   ) => Stream.Stream<LLMEvent, LLMError>
 }
 
-// Adapter registries intentionally erase payload generics after construction.
-// Normal call sites use `OpenAIChat.adapter`; callers only need payload types
+// Route registries intentionally erase payload generics after construction.
+// Normal call sites use `OpenAIChat.route`; callers only need payload types
 // when preparing a request with a protocol-specific type assertion.
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
-export type AnyAdapter = Adapter<any, any>
+export type AnyRoute = Route<any, any>
 
-const adapterRegistry = new Map<string, AnyAdapter>()
+const routeRegistry = new Map<string, AnyRoute>()
 
-// The first adapter registered for an id is the package default. Adapter lookup
-// is intentionally global: model refs name an adapter id, and importing the
-// provider/protocol/custom-adapter module registers the runnable implementation.
-const register = <Adapter extends AnyAdapter>(adapter: Adapter): Adapter => {
-  if (!adapterRegistry.has(adapter.id)) adapterRegistry.set(adapter.id, adapter)
-  return adapter
+// The first route registered for an id is the package default. Route lookup is
+// intentionally global: model refs name a route id, and importing the
+// provider/protocol/custom-route module registers the runnable implementation.
+const register = <R extends AnyRoute>(route: R): R => {
+  if (!routeRegistry.has(route.id)) routeRegistry.set(route.id, route)
+  return route
 }
 
-const registeredAdapter = (id: string) => adapterRegistry.get(id)
+const registeredRoute = (id: string) => routeRegistry.get(id)
 
 export type ModelCapabilitiesInput = Exclude<ModelCapabilities.Input, ModelCapabilities>
 
@@ -80,11 +80,11 @@ export type HttpOptionsInput = HttpOptions.Input
 
 export type ModelRefInput = Omit<
   ConstructorParameters<typeof ModelRef>[0],
-  "id" | "provider" | "adapter" | "capabilities" | "limits" | "generation" | "http" | "auth"
+  "id" | "provider" | "route" | "capabilities" | "limits" | "generation" | "http" | "auth"
 > & {
   readonly id: string | ModelID
   readonly provider: string | ProviderID
-  readonly adapter?: string | AdapterID
+  readonly route: string | RouteID
   readonly auth?: AuthDef
   readonly capabilities?: ModelCapabilities.Input
   readonly limits?: ModelLimits.Input
@@ -92,21 +92,21 @@ export type ModelRefInput = Omit<
   readonly http?: HttpOptionsInput
 }
 
-export type AdapterModelInput = Omit<ModelRefInput, "provider" | "adapter" | "protocol">
+export type RouteModelInput = Omit<ModelRefInput, "provider" | "route">
 
-export type AdapterModelDefaults = Omit<ModelRefInput, "id" | "adapter" | "protocol">
+export type RouteModelDefaults = Omit<ModelRefInput, "id" | "route">
 
-export type AdapterRoutedModelInput = Omit<ModelRefInput, "adapter" | "protocol">
+export type RouteRoutedModelInput = Omit<ModelRefInput, "route">
 
-export type AdapterRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "adapter" | "protocol">>
+export type RouteRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "route">>
 
-type AdapterMappedModelInput = AdapterModelInput | AdapterRoutedModelInput
+type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
 
-export interface AdapterModelOptions<Input extends AdapterMappedModelInput, Output extends AdapterMappedModelInput = AdapterMappedModelInput> {
+export interface RouteModelOptions<Input extends RouteMappedModelInput, Output extends RouteMappedModelInput = RouteMappedModelInput> {
   readonly mapInput?: (input: Input) => Output
 }
 
-export interface AdapterMappedModelOptions<Input, Output extends AdapterMappedModelInput = AdapterMappedModelInput> {
+export interface RouteMappedModelOptions<Input, Output extends RouteMappedModelInput = RouteMappedModelInput> {
   readonly mapInput: (input: Input) => Output
 }
 
@@ -127,45 +127,43 @@ export const modelRef = (input: ModelRefInput) =>
     ...input,
     id: ModelID.make(input.id),
     provider: ProviderID.make(input.provider),
-    adapter: input.adapter ?? input.protocol,
-    protocol: input.protocol,
+    route: RouteID.make(input.route),
     capabilities: modelCapabilities(input.capabilities),
     limits: modelLimits(input.limits),
     generation: generationOptions(input.generation),
     http: httpOptions(input.http),
   })
 
-function model<Input extends AdapterModelInput = AdapterModelInput>(
-  adapter: AnyAdapter,
-  defaults: AdapterModelDefaults,
-  options?: AdapterModelOptions<Input, AdapterModelInput>,
+function model<Input extends RouteModelInput = RouteModelInput>(
+  route: AnyRoute,
+  defaults: RouteModelDefaults,
+  options?: RouteModelOptions<Input, RouteModelInput>,
 ): (input: Input) => ModelRef
-function model<Input extends AdapterRoutedModelInput = AdapterRoutedModelInput>(
-  adapter: AnyAdapter,
-  defaults?: AdapterRoutedModelDefaults,
-  options?: AdapterModelOptions<Input, AdapterRoutedModelInput>,
+function model<Input extends RouteRoutedModelInput = RouteRoutedModelInput>(
+  route: AnyRoute,
+  defaults?: RouteRoutedModelDefaults,
+  options?: RouteModelOptions<Input, RouteRoutedModelInput>,
 ): (input: Input) => ModelRef
-function model<Input, Output extends AdapterMappedModelInput = AdapterMappedModelInput>(
-  adapter: AnyAdapter,
-  defaults: Partial<Omit<ModelRefInput, "id" | "adapter" | "protocol">>,
-  options: AdapterMappedModelOptions<Input, Output>,
+function model<Input, Output extends RouteMappedModelInput = RouteMappedModelInput>(
+  route: AnyRoute,
+  defaults: Partial<Omit<ModelRefInput, "id" | "route">>,
+  options: RouteMappedModelOptions<Input, Output>,
 ): (input: Input) => ModelRef
 function model<Input>(
-  adapter: AnyAdapter,
-  defaults: Partial<Omit<ModelRefInput, "id" | "adapter" | "protocol">> = {},
-  options: { readonly mapInput?: (input: Input) => AdapterMappedModelInput } = {},
+  route: AnyRoute,
+  defaults: Partial<Omit<ModelRefInput, "id" | "route">> = {},
+  options: { readonly mapInput?: (input: Input) => RouteMappedModelInput } = {},
 ) {
   return (input: Input) => {
-    const mapped = options.mapInput === undefined ? input as AdapterMappedModelInput : options.mapInput(input)
+    const mapped = options.mapInput === undefined ? input as RouteMappedModelInput : options.mapInput(input)
     const provider = defaults.provider ?? ("provider" in mapped ? mapped.provider : undefined)
-    if (!provider) throw new Error(`Adapter.model(${adapter.id}) requires a provider`)
-    register(adapter)
+    if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
+    register(route)
     return modelRef({
       ...defaults,
       ...mapped,
       provider,
-      adapter: adapter.id,
-      protocol: adapter.protocol,
+      route: route.id,
       capabilities: mapped.capabilities ?? defaults.capabilities,
       limits: mapped.limits ?? defaults.limits,
       generation: mergeGenerationOptions(defaults.generation, mapped.generation),
@@ -181,10 +179,10 @@ export interface Interface {
    * construction without sending it. Returns the prepared request including the
    * provider-native payload.
    *
-   * Pass a `Payload` type argument to statically expose the adapter's payload
+   * Pass a `Payload` type argument to statically expose the route's payload
     * shape (e.g. `prepare<OpenAIChatPayload>(...)`) — the runtime payload is
    * identical, so this is a type-level assertion the caller makes about which
-   * adapter the request will resolve to.
+   * route the request will resolve to.
    */
   readonly prepare: <Payload = unknown>(request: LLMRequest) => Effect.Effect<PreparedRequestOf<Payload>, LLMError>
   readonly stream: StreamMethod
@@ -203,11 +201,11 @@ export interface GenerateMethod {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
-const noAdapter = (model: ModelRef) =>
+const noRoute = (model: ModelRef) =>
   new LLMErrorClass({
     module: "LLMClient",
-    method: "resolveAdapter",
-    reason: new NoAdapterReason({ adapter: model.adapter, protocol: model.protocol, provider: model.provider, model: model.id }),
+    method: "resolveRoute",
+    reason: new NoRouteReason({ route: model.route, provider: model.provider, model: model.id }),
   })
 
 const resolveRequestOptions = (request: LLMRequest) =>
@@ -218,7 +216,7 @@ const resolveRequestOptions = (request: LLMRequest) =>
   })
 
 export interface MakeInput<Payload, Frame, Chunk, State> {
-  /** Adapter id used in registry lookup and error messages. */
+  /** Route id used in registry lookup and error messages. */
   readonly id: string
   /** Semantic API contract — owns lowering, payload schema, and parsing. */
   readonly protocol: Protocol<Payload, Frame, Chunk, State>
@@ -233,7 +231,7 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
 }
 
 export interface MakeTransportInput<Payload, Prepared, Frame, Chunk, State> {
-  /** Adapter id used in registry lookup and error messages. */
+  /** Route id used in registry lookup and error messages. */
   readonly id: string
   /** Semantic API contract — owns lowering, payload schema, and parsing. */
   readonly protocol: Protocol<Payload, Frame, Chunk, State>
@@ -241,15 +239,15 @@ export interface MakeTransportInput<Payload, Prepared, Frame, Chunk, State> {
   readonly transport: Transport<Payload, Prepared, Frame>
 }
 
-const streamError = (adapter: string, message: string, cause: Cause.Cause<unknown>) => {
+const streamError = (route: string, message: string, cause: Cause.Cause<unknown>) => {
   const failed = cause.reasons.find(Cause.isFailReason)?.error
   if (failed instanceof LLMErrorClass) return failed
-  return ProviderShared.chunkError(adapter, message, Cause.pretty(cause))
+  return ProviderShared.chunkError(route, message, Cause.pretty(cause))
 }
 
 function makeFromTransport<Payload, Prepared, Frame, Chunk, State>(
   input: MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
-): Adapter<Payload, Prepared> {
+): Route<Payload, Prepared> {
   const protocol = input.protocol
   const decodeChunkEffect = Schema.decodeUnknownEffect(protocol.chunk)
   const decodeChunk = (route: string) => (frame: Frame) =>
@@ -271,7 +269,7 @@ function makeFromTransport<Payload, Prepared, Frame, Chunk, State>(
     toPayload: protocol.toPayload,
     prepareTransport: input.transport.prepare,
     streamPrepared: (prepared, ctx, runtime) => {
-      const route = `${ctx.request.model.provider}/${ctx.request.model.adapter}`
+      const route = `${ctx.request.model.provider}/${ctx.request.model.route}`
       const chunks = input.transport.frames(prepared, ctx, runtime).pipe(
         Stream.mapEffect(decodeChunk(route)),
         protocol.terminal ? Stream.takeUntil(protocol.terminal) : (stream) => stream,
@@ -286,9 +284,9 @@ function makeFromTransport<Payload, Prepared, Frame, Chunk, State>(
 
 export function make<Payload, Prepared, Frame, Chunk, State>(
   input: MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
-): Adapter<Payload, Prepared>
+): Route<Payload, Prepared>
 /**
- * Build an `Adapter` by composing the four orthogonal pieces of a deployment:
+ * Build a `Route` by composing the four orthogonal pieces of a deployment:
  *
  * - `Protocol` — what is the API I'm speaking?
  * - `Endpoint` — where do I send the request?
@@ -298,16 +296,16 @@ export function make<Payload, Prepared, Frame, Chunk, State>(
  * Plus optional `headers` for cross-cutting deployment concerns (provider
  * version pins, per-deployment quirks).
  *
- * This is the canonical adapter constructor. If a new adapter does not fit
+ * This is the canonical route constructor. If a new route does not fit
  * this four-axis model, add a purpose-built constructor rather than widening
  * the public surface preemptively.
  */
 export function make<Payload, Frame, Chunk, State>(
   input: MakeInput<Payload, Frame, Chunk, State>,
-): Adapter<Payload, HttpTransport.HttpPrepared<Frame>>
+): Route<Payload, HttpTransport.HttpPrepared<Frame>>
 export function make<Payload, Prepared, Frame, Chunk, State>(
   input: MakeInput<Payload, Frame, Chunk, State> | MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
-): Adapter<Payload, Prepared> | Adapter<Payload, HttpTransport.HttpPrepared<Frame>> {
+): Route<Payload, Prepared> | Route<Payload, HttpTransport.HttpPrepared<Frame>> {
   if ("transport" in input) return makeFromTransport(input)
   const protocol = input.protocol
   const encodePayload = Schema.encodeSync(Schema.fromJsonString(protocol.payload))
@@ -329,19 +327,19 @@ export function make<Payload, Prepared, Frame, Chunk, State>(
 // execute transport.
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   const resolved = resolveRequestOptions(request)
-  const adapter = registeredAdapter(resolved.model.adapter)
-  if (!adapter) return yield* noAdapter(resolved.model)
+  const route = registeredRoute(resolved.model.route)
+  if (!route) return yield* noRoute(resolved.model)
 
-  const payload = yield* adapter.toPayload(resolved).pipe(
-    Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(adapter.payloadSchema))),
+  const payload = yield* route.toPayload(resolved).pipe(
+    Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.payloadSchema))),
   )
-  const prepared = yield* adapter.prepareTransport(payload, {
+  const prepared = yield* route.prepareTransport(payload, {
     request: resolved,
   })
 
   return {
     request: resolved,
-    adapter,
+    route,
     payload,
     prepared,
   }
@@ -352,10 +350,11 @@ const prepareWith = Effect.fn("LLMClient.prepare")(function* (request: LLMReques
 
   return new PreparedRequest({
     id: compiled.request.id ?? "request",
-    adapter: compiled.adapter.id,
+    route: compiled.route.id,
+    protocol: compiled.route.protocol,
     model: compiled.request.model,
     payload: compiled.payload,
-    metadata: { transport: compiled.adapter.transport },
+    metadata: { transport: compiled.route.transport },
   })
 })
 
@@ -363,7 +362,7 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request)
-      return compiled.adapter.streamPrepared(compiled.prepared, { request: compiled.request }, runtime)
+      return compiled.route.streamPrepared(compiled.prepared, { request: compiled.request }, runtime)
     }),
   )
 
@@ -434,7 +433,7 @@ export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Ser
   }),
 )
 
-export const Adapter = { make, model } as const
+export const Route = { make, model } as const
 
 export const LLMClient = {
   Service,

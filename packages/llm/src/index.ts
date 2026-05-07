@@ -1,14 +1,14 @@
-export { LLMClient, modelCapabilities, modelLimits, modelRef } from "./adapter/client"
-export { Auth } from "./adapter/auth"
+export { LLMClient, modelCapabilities, modelLimits, modelRef } from "./route/client"
+export { Auth } from "./route/auth"
 export { Provider } from "./provider"
 export type {
-  AdapterModelInput,
-  AdapterRoutedModelInput,
+  RouteModelInput,
+  RouteRoutedModelInput,
   Interface as LLMClientShape,
   Service as LLMClientService,
   ModelCapabilitiesInput,
   ModelRefInput,
-} from "./adapter/client"
+} from "./route/client"
 export * from "./schema"
 export { Tool, ToolFailure, toDefinitions, tool } from "./tool"
 export type { AnyExecutableTool, AnyTool, ExecutableTool, ExecutableTools, Tool as ToolShape, ToolExecute, Tools, ToolSchema } from "./tool"

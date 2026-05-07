@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { LLM, LLMClient, Provider } from "@opencode-ai/llm"
-import { Adapter, Protocol } from "@opencode-ai/llm/adapter"
+import { Route, Protocol } from "@opencode-ai/llm/route"
 import { Provider as ProviderSubpath } from "@opencode-ai/llm/provider"
 import { OpenAI, OpenAICompatible, OpenRouter, XAI } from "@opencode-ai/llm/providers"
 import * as GitHubCopilot from "@opencode-ai/llm/providers/github-copilot"
@@ -16,8 +16,8 @@ describe("public exports", () => {
     expect(ProviderSubpath.make).toBe(Provider.make)
   })
 
-  test("adapter barrel exposes adapter-authoring APIs", () => {
-    expect(Adapter.make).toBeFunction()
+  test("route barrel exposes route-authoring APIs", () => {
+    expect(Route.make).toBeFunction()
     expect(Protocol.define).toBeFunction()
   })
 
@@ -34,22 +34,20 @@ describe("public exports", () => {
     expect(XAI.apis.responses).toBe(XAI.responses)
     expect(XAI.apis.chat).toBe(XAI.chat)
     expect(XAI.responses("grok-4.3", { apiKey: "fixture" })).toMatchObject({
-      adapter: "openai-responses",
-      protocol: "openai-responses",
+      route: "openai-responses",
     })
     expect(XAI.chat("grok-4.3", { apiKey: "fixture" })).toMatchObject({
-      adapter: "openai-compatible-chat",
-      protocol: "openai-chat",
+      route: "openai-compatible-chat",
     })
     expect(GitHubCopilot.model).toBeFunction()
   })
 
-  test("protocol barrels expose supported low-level adapters", () => {
-    expect(OpenAIChat.adapter.id).toBe("openai-chat")
-    expect(OpenAICompatibleChat.adapter.id).toBe("openai-compatible-chat")
-    expect(OpenAIResponses.adapter.id).toBe("openai-responses")
-    expect(OpenAIResponses.webSocketAdapter.id).toBe("openai-responses-websocket")
-    expect(AnthropicMessages.adapter.id).toBe("anthropic-messages")
+  test("protocol barrels expose supported low-level routes", () => {
+    expect(OpenAIChat.route.id).toBe("openai-chat")
+    expect(OpenAICompatibleChat.route.id).toBe("openai-compatible-chat")
+    expect(OpenAIResponses.route.id).toBe("openai-responses")
+    expect(OpenAIResponses.webSocketRoute.id).toBe("openai-responses-websocket")
+    expect(AnthropicMessages.route.id).toBe("anthropic-messages")
   })
 
 })

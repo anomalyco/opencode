@@ -12,7 +12,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./adapter": "./src/adapter/index.ts",
+    "./route": "./src/route/index.ts",
     "./provider": "./src/provider.ts",
     "./providers": "./src/providers/index.ts",
     "./providers/amazon-bedrock": "./src/providers/amazon-bedrock.ts",

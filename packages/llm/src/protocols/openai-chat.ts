@@ -1,10 +1,10 @@
 import { Array as Arr, Effect, Schema } from "effect"
-import { Adapter } from "../adapter/client"
-import type { Auth } from "../adapter/auth"
-import { Endpoint, type Endpoint as EndpointConfig } from "../adapter/endpoint"
-import { Framing } from "../adapter/framing"
+import { Route } from "../route/client"
+import type { Auth } from "../route/auth"
+import { Endpoint, type Endpoint as EndpointConfig } from "../route/endpoint"
+import { Framing } from "../route/framing"
 import { capabilities } from "../llm"
-import { Protocol } from "../adapter/protocol"
+import { Protocol } from "../route/protocol"
 import {
   Usage,
   type FinishReason,
@@ -26,7 +26,7 @@ const PATH = "/chat/completions"
 // Request Payload Schema
 // =============================================================================
 // The payload schema is the provider-native JSON body. `toPayload` below builds
-// this shape from the common `LLMRequest`, then `Adapter.make` validates and
+// this shape from the common `LLMRequest`, then `Route.make` validates and
 // JSON-encodes it before transport.
 const OpenAIChatFunction = Schema.Struct({
   name: Schema.String,
@@ -254,7 +254,7 @@ const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LL
 
 const toPayload = Effect.fn("OpenAIChat.toPayload")(function* (request: LLMRequest) {
   // `toPayload` returns the provider payload only. Endpoint, auth, framing,
-  // validation, and HTTP execution are composed by `Adapter.make`.
+  // validation, and HTTP execution are composed by `Route.make`.
   const generation = request.generation
   return {
     model: request.model.id,
@@ -353,11 +353,11 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
 }
 
 // =============================================================================
-// Protocol And OpenAI Adapter
+// Protocol And OpenAI Route
 // =============================================================================
 /**
  * The OpenAI Chat protocol — request lowering, payload schema, and the
- * streaming-chunk state machine. Reused by every adapter
+ * streaming-chunk state machine. Reused by every route
  * that speaks OpenAI Chat over HTTP+SSE: native OpenAI, DeepSeek, TogetherAI,
  * Cerebras, Baseten, Fireworks, DeepInfra, and (once added) Azure OpenAI Chat.
  */
@@ -381,17 +381,17 @@ export const endpoint = (input: {
     required: input.required,
   })
 
-export const makeAdapter = (input: {
+export const makeRoute = (input: {
   readonly id?: string
   readonly auth?: Auth
   readonly endpoint?: EndpointConfig<OpenAIChatPayload>
   readonly defaultBaseURL?: string | false
   readonly endpointRequired?: string
 } = {}) =>
-  Adapter.make({
+  Route.make({
     id: input.id ?? ADAPTER,
     protocol,
-    // The adapter supplies deployment concerns around the protocol: URL, auth,
+    // The route supplies deployment concerns around the protocol: URL, auth,
     // and response framing. Other providers can reuse `protocol` with different
     // endpoint/auth choices instead of cloning this whole file.
     endpoint: input.endpoint ?? endpoint({ defaultBaseURL: input.defaultBaseURL, required: input.endpointRequired }),
@@ -399,14 +399,14 @@ export const makeAdapter = (input: {
     framing: Framing.sse,
   })
 
-export const adapter = makeAdapter()
+export const route = makeRoute()
 
 // =============================================================================
 // Model Helper
 // =============================================================================
-export const model = Adapter.model(adapter, {
-  // `Adapter.model` creates a user-facing model factory bound to this adapter.
-  // The model adapter route and protocol are derived from the adapter, so
+export const model = Route.model(route, {
+  // `Route.model` creates a user-facing model factory bound to this route.
+  // The model route is derived from the route, so
   // provider authors only specify provider identity and defaults here.
   provider: "openai",
   capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),

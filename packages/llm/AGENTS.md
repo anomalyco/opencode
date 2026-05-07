@@ -33,25 +33,25 @@ const request = LLM.request({
 const response = yield* LLMClient.generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` selects a registered adapter by `request.model.adapter`, prepares a typed provider payload, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` selects a registered route by `request.model.route`, prepares a typed provider payload, asks the route for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
-Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.prepare<Payload>(request)` to compile a request through the adapter pipeline without sending it — the optional `Payload` type argument narrows `.payload` to the adapter's native shape (e.g. `prepare<OpenAIChatPayload>(...)` returns a `PreparedRequestOf<OpenAIChatPayload>`). The runtime payload is identical; the generic is a type-level assertion.
+Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.prepare<Payload>(request)` to compile a request through the route pipeline without sending it — the optional `Payload` type argument narrows `.payload` to the route's native shape (e.g. `prepare<OpenAIChatPayload>(...)` returns a `PreparedRequestOf<OpenAIChatPayload>`). The runtime payload is identical; the generic is a type-level assertion.
 
 Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g. `events.filter(LLMEvent.is.toolCall)`). The kebab-case `LLMEvent.guards["tool-call"]` form also works but prefer `is.*` in new code.
 
 ### Adapters
 
-An adapter is the registered, runnable composition of four orthogonal pieces:
+An route is the registered, runnable composition of four orthogonal pieces:
 
-- **`Protocol`** (`src/adapter/protocol.ts`) — semantic API contract. Owns request lowering, the payload schema, the chunk schema, and the streaming chunk-to-event state machine. `Adapter.make(...)` validates and JSON-encodes the payload from the payload schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
-- **`Endpoint`** (`src/adapter/endpoint.ts`) — URL construction. Receives the request and the validated payload so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any payload field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
-- **`Auth`** (`src/adapter/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Adapter.make` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
-- **`Framing`** (`src/adapter/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
+- **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request lowering, the payload schema, the chunk schema, and the streaming chunk-to-event state machine. `Route.make(...)` validates and JSON-encodes the payload from the payload schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Endpoint`** (`src/route/endpoint.ts`) — URL construction. Receives the request and the validated payload so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any payload field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
+- **`Auth`** (`src/route/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Route.make` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
+- **`Framing`** (`src/route/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
 
-Compose them via `Adapter.make(...)`:
+Compose them via `Route.make(...)`:
 
 ```ts
-export const adapter = Adapter.make({
+export const route = Route.make({
   id: "openai-chat",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/chat/completions" }),
@@ -59,11 +59,11 @@ export const adapter = Adapter.make({
 })
 ```
 
-The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Adapter.make(...)` call instead of a 300-400 line adapter clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
+The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
-New adapters should start with `Adapter.make(...)`. If a future provider genuinely cannot fit the four-axis model, add a purpose-built constructor for that case rather than widening the public surface preemptively.
+New routes should start with `Route.make(...)`. If a future provider genuinely cannot fit the four-axis model, add a purpose-built constructor for that case rather than widening the public surface preemptively.
 
-When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), the seam is `Framing` plus a parallel `Endpoint` / `Auth` interpretation — not a fork of the adapter contract.
+When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), the seam is `Framing` plus a parallel `Endpoint` / `Auth` interpretation — not a fork of the route contract.
 
 ### Provider Definitions
 
@@ -85,8 +85,8 @@ Keep provider definitions small and explicit:
 - Use only `id`, `model`, and optional `apis` in `Provider.make(...)`.
 - Use branded `ProviderID.make(...)` and `ModelID.make(...)` where ids are constructed directly.
 - Use `model` for the default API path and `apis` for named provider-native alternatives such as OpenAI `responses` versus `chat`.
-- Do not add author-facing `kind`, `version`, or `adapters` fields.
-- Export lower-level `adapters` arrays separately only when advanced internal wiring needs them.
+- Do not add author-facing `kind`, `version`, or `routes` fields.
+- Export lower-level `routes` arrays separately only when advanced internal wiring needs them.
 - Prefer `apiKey` as provider-specific sugar and `auth` as the explicit override; keep them mutually exclusive in provider option types with `ProviderAuthOption`.
 
 Built-in providers are namespace modules from `src/providers/index.ts`, so aliases like `OpenAI.model(...)`, `OpenAI.responses(...)`, and `OpenAI.apis.chat(...)` are fine. External provider packages should default-export the `Provider.make(...)` result and may add named aliases if useful.
@@ -97,9 +97,9 @@ Built-in providers are namespace modules from `src/providers/index.ts`, so alias
 packages/llm/src/
   schema.ts             // LLMRequest, LLMEvent, errors — canonical Schema model
   llm.ts                // request constructors and convenience helpers
-  adapter/
-    index.ts            // @opencode-ai/llm/adapter advanced barrel
-    client.ts           // Adapter.make + LLMClient.prepare/stream/generate
+  route/
+    index.ts            // @opencode-ai/llm/route advanced barrel
+    client.ts           // Route.make + LLMClient.prepare/stream/generate
     executor.ts         // RequestExecutor service + transport error mapping
     protocol.ts         // Protocol type + Protocol.define
     endpoint.ts         // Endpoint type + Endpoint.baseURL
@@ -107,12 +107,12 @@ packages/llm/src/
     framing.ts          // Framing type + Framing.sse
   protocols/
     shared.ts           // ProviderShared toolkit used inside protocol impls
-    openai-chat.ts      // protocol + adapter (compose OpenAIChat.protocol)
+    openai-chat.ts      // protocol + route (compose OpenAIChat.protocol)
     openai-responses.ts
     anthropic-messages.ts
     gemini.ts
     bedrock-converse.ts
-    openai-compatible-chat.ts  // adapter that reuses OpenAIChat.protocol
+    openai-compatible-chat.ts  // route that reuses OpenAIChat.protocol
 
   providers/
     openai-compatible.ts // generic compatible helper + family model helpers
@@ -125,17 +125,17 @@ packages/llm/src/
 
 The dependency arrow points down: `providers/*.ts` files import `protocols`, `endpoint`, `auth`, and `framing`; protocols do not import provider metadata. Lower-level modules know nothing about specific providers.
 
-### Shared adapter helpers
+### Shared route helpers
 
 `ProviderShared` exports a small toolkit used inside protocol implementations to keep them focused on provider-native shapes:
 
-- `framed({ adapter, response, readError, framing, decodeChunk, initial, process, onHalt? })` — the canonical streaming pipeline used by `Adapter.make(...)`. You rarely call this directly anymore.
+- `framed({ route, response, readError, framing, decodeChunk, initial, process, onHalt? })` — the canonical streaming pipeline used by `Route.make(...)`. You rarely call this directly anymore.
 - `sseFraming` — the SSE-specific framing step. Already wired through `Framing.sse`; reach for it directly only when wrapping or composing.
 - `joinText(parts)` — joins an array of `TextPart` (or anything with a `.text`) with newlines. Use this anywhere a protocol flattens text content into a single string for a provider field.
-- `parseToolInput(adapter, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<adapter>` tool call `<name>`" error message. Treats empty input as `{}`. Use this in `finishToolCall` / `finalizeToolCalls`; do not roll a fresh `parseJson` callsite.
-- `parseJson(adapter, raw, message)` — generic JSON-via-Schema decode for non-tool payloads.
-- `chunkError(adapter, message, ...)` — typed `ProviderChunkError` constructor for stream-time failures.
-- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Adapter.make(...)` uses this for payload validation; lower-level adapters can reuse it.
+- `parseToolInput(route, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<route>` tool call `<name>`" error message. Treats empty input as `{}`. Use this in `finishToolCall` / `finalizeToolCalls`; do not roll a fresh `parseJson` callsite.
+- `parseJson(route, raw, message)` — generic JSON-via-Schema decode for non-tool payloads.
+- `chunkError(route, message, ...)` — typed `ProviderChunkError` constructor for stream-time failures.
+- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Route.make(...)` uses this for payload validation; lower-level routes can reuse it.
 
 If you find yourself copying a 3-to-5-line snippet between two protocols, lift it into `ProviderShared` next to these helpers rather than duplicating.
 
@@ -219,7 +219,7 @@ Provider-defined / hosted tools (e.g. Anthropic `web_search` / `code_execution` 
 - The runtime detects `providerExecuted` on `tool-call` and **skips client dispatch** — no handler is invoked and no `tool-error` is raised for "unknown tool". The provider already executed it.
 - Both events are appended to the assistant message in `assistantContent` so the next round's history carries the call + result for context. Anthropic encodes them back as `server_tool_use` + `web_search_tool_result` (or `code_execution_tool_result` / `web_fetch_tool_result`) blocks; OpenAI Responses callers typically use `previous_response_id` instead of resending hosted-tool items.
 
-Add provider-defined tools to `request.tools` (no runtime entry needed). The matching adapter must know how to lower the tool definition into the provider-native shape; right now Anthropic accepts `web_search` / `code_execution` / `web_fetch` and OpenAI Responses accepts the hosted tool names listed above.
+Add provider-defined tools to `request.tools` (no runtime entry needed). The matching route must know how to lower the tool definition into the provider-native shape; right now Anthropic accepts `web_search` / `code_execution` / `web_fetch` and OpenAI Responses accepts the hosted tool names listed above.
 
 ### Recording Tests
 
@@ -246,7 +246,7 @@ Pass `provider`, `protocol`, and optional `tags` to `recordedTests(...)` / `reco
 
 Filters apply in replay and record mode. Combine them with `RECORD=true` when refreshing only one provider or scenario.
 
-**Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` in `@opencode-ai/http-recorder` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON adapters omit the field and decode as text.
+**Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` in `@opencode-ai/http-recorder` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON routes omit the field and decode as text.
 
 **Matching strategies.** Replay defaults to structural matching, which finds an interaction by comparing method, URL, allow-listed headers, and the canonical JSON body. This is the right choice for tool loops because each round's request differs (the message history grows). For scenarios where successive requests are byte-identical and expect different responses (retries, polling), pass `dispatch: "sequential"` in `RecordReplayOptions` — replay then walks the cassette in record order via an internal cursor. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 
@@ -256,25 +256,25 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 ### Completed Foundation
 
-- [x] Add an adapter registry so `LLMClient` can choose an adapter by provider/protocol instead of requiring a single adapter.
+- [x] Add an route registry so `LLMClient` can choose an route by provider/protocol instead of requiring a single route.
 - [x] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
 - [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
 - [x] Add OpenAI Chat recorded tests for tool-result follow-up and usage chunks.
 - [x] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
-- [x] Add an OpenAI Responses adapter once the Chat adapter shape feels stable.
-- [x] Add Anthropic Messages adapter coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
-- [x] Add Gemini adapter coverage for text, media input, tool calls, reasoning deltas, finish reasons, usage, and recorded cassettes.
+- [x] Add an OpenAI Responses route once the Chat route shape feels stable.
+- [x] Add Anthropic Messages route coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
+- [x] Add Gemini route coverage for text, media input, tool calls, reasoning deltas, finish reasons, usage, and recorded cassettes.
 - [x] Port Gemini schema sanitizer behavior into the Gemini protocol; do not keep a divergent generic helper long term.
 
 ### Provider Coverage
 
-- [x] Add a generic OpenAI-compatible Chat adapter for non-OpenAI providers that expose `/chat/completions`.
+- [x] Add a generic OpenAI-compatible Chat route for non-OpenAI providers that expose `/chat/completions`.
 - [x] Keep OpenAI Responses as a separate first-class protocol for providers that actually implement `/responses`; do not treat generic OpenAI-compatible providers as Responses-capable by default.
-- [x] Cover OpenAI-compatible provider families that can share the generic adapter first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
+- [x] Cover OpenAI-compatible provider families that can share the generic route first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
 - [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, Perplexity, and Cohere. xAI already has a thin model helper that routes to OpenAI Responses.
 - [x] Add Bedrock Converse support: wire format (messages / system / inferenceConfig / toolConfig), AWS event stream binary framing via `@smithy/eventstream-codec`, SigV4 signing via `aws4fetch` (or Bearer API key path), text/reasoning/tool/usage/finish decoding, cache hints, image/document content, deterministic tests, and recorded basic text/tool cassettes. Additional model-specific fields are still TODO.
 - [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini vs Vertex Anthropic protocol/provider wrappers.
-- [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible adapter and provider option model are stable.
+- [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible route and provider option model are stable.
 
 ### OpenCode Parity Patches
 
@@ -299,7 +299,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 ### Native OpenCode Rollout
 
 - [x] Add a native event bridge that maps `LLMEvent` streams into the existing `SessionProcessor` event contract without creating a second processor.
-- [ ] Extract runtime-neutral OpenCode tool resolution from `SessionPrompt.resolveTools`, then build both existing-stream and native `@opencode-ai/llm` tool adapters from the same resolved shape.
+- [ ] Extract runtime-neutral OpenCode tool resolution from `SessionPrompt.resolveTools`, then build both existing-stream and native `@opencode-ai/llm` tool routes from the same resolved shape.
 - [ ] Map `Permission.RejectedError`, `Permission.CorrectedError`, validation failures, thrown tool failures, and aborts into model-visible native tool error/results.
 - [ ] Wire a native stream producer behind an explicit local flag and provider allowlist; the producer should consume `nativeMessages`, call `LLMNative.request(...)`, stream through `LLMClient.stream(...)`, and feed `LLMNativeEvents.mapper()` into `SessionProcessor`.
 - [ ] Add end-to-end native stream tests through the actual session loop for text, reasoning, tool-call streaming, tool success, rejected permission, corrected permission, thrown tool error, abort, and provider-executed tool history.
@@ -316,10 +316,10 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] Add semantic replay assertions for LLM cassettes: replay raw HTTP, parse provider streams, and compare normalized `LLMEvent[]` or `LLMResponse` snapshots in addition to request matching.
 - [ ] Add stream chunk-boundary fuzzing for text/SSE cassettes so parser tests prove correctness independent of provider chunk boundaries.
 - [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.
-- [x] Cover provider-error and HTTP-status sad paths with deterministic fixtures across adapters (Anthropic mid-stream + 4xx; OpenAI Responses mid-stream + 4xx; OpenAI Chat 4xx). Live recordings of provider errors are still TODO when stable cassettes can be captured.
+- [x] Cover provider-error and HTTP-status sad paths with deterministic fixtures across routes (Anthropic mid-stream + 4xx; OpenAI Responses mid-stream + 4xx; OpenAI Chat 4xx). Live recordings of provider errors are still TODO when stable cassettes can be captured.
 - [x] Improve cassette ergonomics for multi-interaction flows: pretty-printed JSON for diff-friendly cassettes, explicit sequential dispatch, and a recorded tool-loop scaffold (`openai-chat-tool-loop.recorded.test.ts`).
 - [x] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
-- [x] Add adapter parity fixtures for generic OpenAI-compatible Chat before adding provider-specific wrappers.
+- [x] Add route parity fixtures for generic OpenAI-compatible Chat before adding provider-specific wrappers.
 
 ### Recorded Cassette Backlog
 
@@ -335,5 +335,5 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] Mistral, Groq, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
 - [ ] xAI basic/tool cassettes for its OpenAI Responses model helper path.
 - [x] Bedrock Converse basic text and tool-call cassettes (recorded against `us.amazon.nova-micro-v1:0` in us-east-1). Cache-hint cassettes still TODO.
-- [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex adapter shape is decided.
+- [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex route shape is decided.
 - [ ] Gateway/OpenRouter routing-header cassettes after routing support lands.

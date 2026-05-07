@@ -57,8 +57,8 @@ const inputDelta = (tool: PendingTool, text: string): ToolInputDelta => ({
   ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
 })
 
-const toolCall = (adapter: string, tool: PendingTool, inputOverride?: string) =>
-  parseToolInput(adapter, tool.name, inputOverride ?? tool.input).pipe(
+const toolCall = (route: string, tool: PendingTool, inputOverride?: string) =>
+  parseToolInput(route, tool.name, inputOverride ?? tool.input).pipe(
     Effect.map((input): ToolCall =>
       tool.providerExecuted
         ? {
@@ -108,7 +108,7 @@ export const start = <K extends StreamKey>(
  * appear on the first delta for that index.
  */
 export const appendOrStart = <K extends StreamKey>(
-  adapter: string,
+  route: string,
   tools: State<K>,
   key: K,
   delta: { readonly id?: string; readonly name?: string; readonly text: string },
@@ -117,7 +117,7 @@ export const appendOrStart = <K extends StreamKey>(
   const current = tools[key]
   const id = delta.id ?? current?.id
   const name = delta.name ?? current?.name
-  if (!id || !name) return chunkError(adapter, missingToolMessage)
+  if (!id || !name) return chunkError(route, missingToolMessage)
 
   const tool = {
     id,
@@ -136,14 +136,14 @@ export const appendOrStart = <K extends StreamKey>(
  * argument delta.
  */
 export const appendExisting = <K extends StreamKey>(
-  adapter: string,
+  route: string,
   tools: State<K>,
   key: K,
   text: string,
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
   const current = tools[key]
-  if (!current) return chunkError(adapter, missingToolMessage)
+  if (!current) return chunkError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current }
   return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
 }
@@ -153,11 +153,11 @@ export const appendExisting = <K extends StreamKey>(
  * from state, and return the optional public `tool-call` event. Missing keys are
  * a no-op because some providers emit stop events for non-tool content blocks.
  */
-export const finish = <K extends StreamKey>(adapter: string, tools: State<K>, key: K) =>
+export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K) =>
   Effect.gen(function* () {
     const tool = tools[key]
     if (!tool) return { tools }
-    return { tools: withoutTool(tools, key), event: yield* toolCall(adapter, tool) }
+    return { tools: withoutTool(tools, key), event: yield* toolCall(route, tool) }
   })
 
 /**
@@ -165,11 +165,11 @@ export const finish = <K extends StreamKey>(adapter: string, tools: State<K>, ke
  * OpenAI Responses can send accumulated deltas and then repeat the completed
  * arguments on `response.output_item.done`; the final value wins.
  */
-export const finishWithInput = <K extends StreamKey>(adapter: string, tools: State<K>, key: K, input: string) =>
+export const finishWithInput = <K extends StreamKey>(route: string, tools: State<K>, key: K, input: string) =>
   Effect.gen(function* () {
     const tool = tools[key]
     if (!tool) return { tools }
-    return { tools: withoutTool(tools, key), event: yield* toolCall(adapter, tool, input) }
+    return { tools: withoutTool(tools, key), event: yield* toolCall(route, tool, input) }
   })
 
 /**
@@ -177,12 +177,12 @@ export const finishWithInput = <K extends StreamKey>(adapter: string, tools: Sta
  * not emit per-tool stop events, so all accumulated calls finish when the choice
  * receives a terminal `finish_reason`.
  */
-export const finishAll = <K extends StreamKey>(adapter: string, tools: State<K>) =>
+export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =>
   Effect.gen(function* () {
     const pending = Object.values<PendingTool | undefined>(tools).filter((tool): tool is PendingTool => tool !== undefined)
     return {
       tools: empty<K>(),
-      events: yield* Effect.forEach(pending, (tool) => toolCall(adapter, tool)),
+      events: yield* Effect.forEach(pending, (tool) => toolCall(route, tool)),
     }
   })
 

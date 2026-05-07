@@ -10,7 +10,7 @@ export interface EndpointInput<Payload> {
 export type EndpointPart<Payload> = string | ((input: EndpointInput<Payload>) => string)
 
 /**
- * Declarative URL construction for one adapter.
+ * Declarative URL construction for one route.
  *
  * `Endpoint` is the deployment-side answer to "where does this request go?".
  * `render(...)` interprets this data after protocol lowering, so dynamic pieces
@@ -25,11 +25,11 @@ export interface Endpoint<Payload> {
 
 /**
  * Build a URL from the model's `baseURL` (or a default) plus a path. Appends
- * `model.queryParams` so adapters that need request-level query params
+ * `model.queryParams` so routes that need request-level query params
  * (Azure `api-version`, etc.) get them for free.
  *
  * Both `default` and `path` may be strings or functions of the
- * `EndpointInput`, for adapters whose URL embeds the model id, region, or
+ * `EndpointInput`, for routes whose URL embeds the model id, region, or
  * another payload field.
  */
 export const baseURL = <Payload>(input: {

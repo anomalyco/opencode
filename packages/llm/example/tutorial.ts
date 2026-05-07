@@ -1,6 +1,6 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
 import { LLM, LLMClient, Provider, ProviderID, Tool, type ProviderModelOptions } from "@opencode-ai/llm"
-import { Adapter, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode-ai/llm/adapter"
+import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode-ai/llm/route"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
 /**
@@ -148,9 +148,9 @@ const FakeProtocol = Protocol.define<FakePayload, string, string, void>({
   onHalt: () => [{ type: "request-finish", reason: "stop" }],
 })
 
-// An adapter is the runnable binding for that protocol. It adds the deployment
+// An route is the runnable binding for that protocol. It adds the deployment
 // axes that the protocol deliberately does not know: URL, auth, and framing.
-const FakeAdapter = Adapter.make({
+const FakeAdapter = Route.make({
   id: "fake-echo",
   protocol: FakeProtocol,
   endpoint: Endpoint.baseURL({
@@ -162,8 +162,8 @@ const FakeAdapter = Adapter.make({
 })
 
 // A provider module exports a Provider definition. The default `model` helper
-// sets provider identity, protocol id, and the adapter id resolved by the registry.
-const fakeEchoModel = Adapter.model(FakeAdapter, { provider: "fake-echo" })
+// sets provider identity, protocol id, and the route id resolved by the registry.
+const fakeEchoModel = Route.model(FakeAdapter, { provider: "fake-echo" })
 const FakeEcho = Provider.make({
   id: ProviderID.make("fake-echo"),
   model: (id: string, options: ProviderModelOptions = {}) => fakeEchoModel({ id, ...options }),
@@ -181,7 +181,7 @@ const inspectFakeProvider = Effect.gen(function* () {
   )
 
   console.log("\n== fake provider prepare ==")
-  console.log("adapter:", prepared.adapter)
+  console.log("route:", prepared.route)
   console.log("payload:", Formatter.formatJson(prepared.payload, { space: 2 }))
 })
 

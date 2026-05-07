@@ -4,7 +4,7 @@ import { LLMError } from "../src/schema"
 import { ToolStream } from "../src/protocols/utils/tool-stream"
 import { it } from "./lib/effect"
 
-const ADAPTER = "test-adapter"
+const ADAPTER = "test-route"
 
 describe("ToolStream", () => {
   it.effect("starts from OpenAI-style deltas and finalizes parsed input", () =>

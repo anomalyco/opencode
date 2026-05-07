@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError } from "../../src"
-import { LLMClient } from "../../src/adapter"
+import { LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"

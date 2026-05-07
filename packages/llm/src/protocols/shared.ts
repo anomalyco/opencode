@@ -12,7 +12,7 @@ export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.o
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
 
 /**
- * Plain-record narrowing. Excludes arrays so adapters checking nested JSON
+ * Plain-record narrowing. Excludes arrays so routes checking nested JSON
  * Schema fragments don't accidentally treat a tuple as a key/value bag.
  */
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -30,10 +30,10 @@ export interface ToolAccumulator {
 }
 
 /**
- * `Usage.totalTokens` policy shared by every adapter. Honors a provider-
+ * `Usage.totalTokens` policy shared by every route. Honors a provider-
  * supplied total; otherwise falls back to `inputTokens + outputTokens` only
  * when at least one is defined. Returns `undefined` when neither input nor
- * output is known so adapters don't publish a misleading `0`.
+ * output is known so routes don't publish a misleading `0`.
  */
 export const totalTokens = (
   inputTokens: number | undefined,
@@ -45,21 +45,21 @@ export const totalTokens = (
   return (inputTokens ?? 0) + (outputTokens ?? 0)
 }
 
-export const chunkError = (adapter: string, message: string, raw?: string) =>
+export const chunkError = (route: string, message: string, raw?: string) =>
   new LLMError({
     module: "ProviderShared",
     method: "stream",
-    reason: new InvalidProviderOutputReason({ adapter, message, raw }),
+    reason: new InvalidProviderOutputReason({ route, message, raw }),
   })
 
-export const parseJson = (adapter: string, input: string, message: string) =>
+export const parseJson = (route: string, input: string, message: string) =>
   Effect.try({
     try: () => decodeJson(input),
-    catch: () => chunkError(adapter, message, input),
+    catch: () => chunkError(route, message, input),
   })
 
 /**
- * Join the `text` field of a list of parts with newlines. Used by adapters
+ * Join the `text` field of a list of parts with newlines. Used by routes
  * that flatten system / message content arrays into a single provider string
  * (OpenAI Chat `system` content, OpenAI Responses `system` content, Gemini
  * `systemInstruction.parts[].text`).
@@ -71,16 +71,16 @@ export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) =>
  * Parse the streamed JSON input of a tool call. Treats an empty string as
  * `"{}"` — providers occasionally finish a tool call without ever emitting
  * input deltas (e.g. zero-arg tools). The error message is uniform across
- * adapters: `Invalid JSON input for <adapter> tool call <name>`.
+ * routes: `Invalid JSON input for <route> tool call <name>`.
  */
-export const parseToolInput = (adapter: string, name: string, raw: string) =>
-  parseJson(adapter, raw || "{}", `Invalid JSON input for ${adapter} tool call ${name}`)
+export const parseToolInput = (route: string, name: string, raw: string) =>
+  parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
 /**
  * Encode a `MediaPart`'s raw bytes for inclusion in a JSON request body.
  * `data: string` is assumed to already be base64 (matches caller convention
  * across Gemini / Bedrock); `data: Uint8Array` is base64-encoded here. Used
- * by every adapter that supports image / document inputs.
+ * by every route that supports image / document inputs.
  */
 export const mediaBytes = (part: MediaPart) =>
   typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
@@ -123,8 +123,8 @@ export const sseFraming = (
 /**
  * Canonical invalid-request constructor. Lift one-line `const invalid =
  * (message) => invalidRequest(message)` aliases out of every
- * adapter so the error constructor lives in one place. If we ever extend
- * `InvalidRequestReason` with adapter context or trace metadata, the change
+ * route so the error constructor lives in one place. If we ever extend
+ * `InvalidRequestReason` with route context or trace metadata, the change
  * lands here.
  */
 export const invalidRequest = (message: string) =>
@@ -135,7 +135,7 @@ export const invalidRequest = (message: string) =>
   })
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
-  adapter: string,
+  route: string,
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
   cases: {
     readonly auto: () => Auto
@@ -148,7 +148,7 @@ export const matchToolChoice = <Auto, None, Required, Tool>(
     if (toolChoice.type === "auto") return cases.auto()
     if (toolChoice.type === "none") return cases.none()
     if (toolChoice.type === "required") return cases.required()
-    if (!toolChoice.name) return yield* invalidRequest(`${adapter} tool choice requires a tool name`)
+    if (!toolChoice.name) return yield* invalidRequest(`${route} tool choice requires a tool name`)
     return cases.tool(toolChoice.name)
   })
 
@@ -167,14 +167,14 @@ export const supportsContent = <const Type extends ContentType>(
   (types as ReadonlyArray<ContentType>).includes(part.type)
 
 export const unsupportedContent = (
-  adapter: string,
+  route: string,
   role: LLMRequest["messages"][number]["role"],
   types: ReadonlyArray<ContentType>,
 ) =>
-  invalidRequest(`${adapter} ${role} messages only support ${formatContentTypes(types)} content for now`)
+  invalidRequest(`${route} ${role} messages only support ${formatContentTypes(types)} content for now`)
 
 /**
- * Build a `validate` step from a Schema decoder. Replaces the per-adapter
+ * Build a `validate` step from a Schema decoder. Replaces the per-route
  * lambda body `(payload) => decode(payload).pipe(Effect.mapError((e) =>
  * invalid(e.message)))`. Any decode error is translated into
  * `LLMError` carrying the original parse-error message.
@@ -186,9 +186,9 @@ export const validateWith =
 
 /**
  * Build an HTTP POST with a JSON body. Sets `content-type: application/json`
- * automatically after caller-supplied headers so adapters cannot accidentally
+ * automatically after caller-supplied headers so routes cannot accidentally
  * send JSON with a stale content type. The body is passed pre-encoded so
- * adapters can choose between
+ * routes can choose between
  * `Schema.encodeSync(payload)` and `ProviderShared.encodeJson(payload)`.
  */
 export const jsonPost = (input: {

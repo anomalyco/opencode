@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError } from "../src"
-import { Endpoint } from "../src/adapter"
+import { Endpoint } from "../src/route"
 
 const request = (input: {
   readonly baseURL?: string
@@ -11,7 +11,7 @@ const request = (input: {
     model: LLM.model({
       id: "model-1",
       provider: "test",
-      protocol: "test-protocol",
+      route: "test-route",
       baseURL: input.baseURL,
       queryParams: input.queryParams,
     }),
@@ -30,7 +30,7 @@ describe("Endpoint", () => {
     expect(url.toString()).toBe("https://api.example.test/v1/chat")
   })
 
-  test("model baseURL overrides adapter default and query params are appended", async () => {
+  test("model baseURL overrides route default and query params are appended", async () => {
     const url = await Effect.runPromise(
       Endpoint.render(Endpoint.baseURL({ default: "https://api.example.test/v1", path: "/chat?alt=sse" }), {
         request: request({
@@ -61,7 +61,7 @@ describe("Endpoint", () => {
     expect(url.toString()).toBe("https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream")
   })
 
-  test("fails when no model or adapter baseURL is available", async () => {
+  test("fails when no model or route baseURL is available", async () => {
     const error = await Effect.runPromise(
       Endpoint.render(Endpoint.baseURL({ path: "/chat", required: "test endpoint requires a baseURL" }), {
         request: request(),

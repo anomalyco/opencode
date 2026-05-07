@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM } from "../src"
-import { Adapter, Endpoint, LLMClient, Protocol, type AdapterModelInput, type FramingDef } from "../src/adapter"
+import { Route, Endpoint, LLMClient, Protocol, type RouteModelInput, type FramingDef } from "../src/route"
 import { ModelRef } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
@@ -40,8 +40,7 @@ const request = LLM.request({
   model: LLM.model({
     id: "fake-model",
     provider: "fake-provider",
-    adapter: "fake",
-    protocol: "fake",
+    route: "fake",
   }),
   prompt: "hello",
 })
@@ -71,14 +70,14 @@ const fakeProtocol = Protocol.define<FakePayload, FakeChunk, FakeChunk, void>({
   process: (state, chunk) => Effect.succeed([state, [raiseChunk(chunk)]] as const),
 })
 
-const fake = Adapter.make({
+const fake = Route.make({
   id: "fake",
   protocol: fakeProtocol,
   endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
   framing: fakeFraming,
 })
 
-const gemini = Adapter.make({
+const gemini = Route.make({
   id: "gemini-fake",
   protocol: fakeProtocol,
   endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
@@ -98,8 +97,8 @@ const echoLayer = dynamicResponse(({ text, respond }) =>
 
 const it = testEffect(echoLayer)
 
-describe("llm adapter", () => {
-  it.effect("stream and generate use the adapter pipeline", () =>
+describe("llm route", () => {
+  it.effect("stream and generate use the route pipeline", () =>
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
@@ -110,31 +109,31 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("selects adapters by request adapter", () =>
+  it.effect("selects routes by request route", () =>
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
       const prepared = yield* llm.prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "gemini-fake" }) }),
+        LLM.updateRequest(request, { model: updateModel(request.model, { route: "gemini-fake" }) }),
       )
 
-      expect(prepared.adapter).toBe("gemini-fake")
+      expect(prepared.route).toBe("gemini-fake")
     }),
   )
 
-  it.effect("uses registered adapters by model adapter id", () =>
+  it.effect("uses registered routes by model route id", () =>
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
       const prepared = yield* llm.prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "gemini-fake" }) }),
+        LLM.updateRequest(request, { model: updateModel(request.model, { route: "gemini-fake" }) }),
       )
 
-      expect(prepared.adapter).toBe("gemini-fake")
+      expect(prepared.route).toBe("gemini-fake")
     }),
   )
 
   it.effect("maps model input before building refs", () =>
     Effect.gen(function* () {
-      const mapped = Adapter.model<AdapterModelInput & { readonly region?: string }>(
+      const mapped = Route.model<RouteModelInput & { readonly region?: string }>(
         fake,
         { provider: "fake-provider" },
         {
@@ -149,9 +148,9 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("keeps the first registered adapter as the default", () =>
+  it.effect("keeps the first registered route as the default", () =>
     Effect.gen(function* () {
-      Adapter.make({
+      Route.make({
         id: "fake",
         protocol: Protocol.define({
           ...fakeProtocol,
@@ -168,16 +167,16 @@ describe("llm adapter", () => {
     }),
   )
 
-  it.effect("rejects missing adapter", () =>
+  it.effect("rejects missing route", () =>
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
       const error = yield* llm
         .prepare(
-          LLM.updateRequest(request, { model: updateModel(request.model, { adapter: "missing" }) }),
+          LLM.updateRequest(request, { model: updateModel(request.model, { route: "missing" }) }),
         )
         .pipe(Effect.flip)
 
-      expect(error.message).toContain("No LLM adapter")
+      expect(error.message).toContain("No LLM route")
     }),
   )
 })

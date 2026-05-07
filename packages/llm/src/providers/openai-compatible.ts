@@ -18,7 +18,7 @@ export type FamilyModelOptions = Omit<OpenAICompatibleChatModelInput, "id" | "pr
   readonly baseURL?: string
 }
 
-export const adapters = [OpenAICompatibleChat.adapter]
+export const routes = [OpenAICompatibleChat.route]
 
 export const model = (id: string | ModelID, options: ModelOptions) => {
   return OpenAICompatibleChat.model({

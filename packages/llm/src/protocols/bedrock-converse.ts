@@ -1,8 +1,8 @@
 import { Effect, Schema } from "effect"
-import { Adapter, type AdapterModelInput } from "../adapter/client"
-import { Endpoint } from "../adapter/endpoint"
+import { Route, type RouteModelInput } from "../route/client"
+import { Endpoint } from "../route/endpoint"
 import { capabilities } from "../llm"
-import { Protocol } from "../adapter/protocol"
+import { Protocol } from "../route/protocol"
 import {
   Usage,
   type CacheHint,
@@ -27,14 +27,14 @@ export type { Credentials as BedrockCredentials } from "./utils/bedrock-auth"
 // =============================================================================
 // Public Model Input
 // =============================================================================
-export type BedrockConverseModelInput = AdapterModelInput & {
+export type BedrockConverseModelInput = RouteModelInput & {
   /**
    * Bearer API key (Bedrock's newer API key auth). Sets the `Authorization`
    * header and bypasses SigV4 signing. Mutually exclusive with `credentials`.
    */
   readonly apiKey?: string
   /**
-   * AWS credentials for SigV4 signing. The adapter signs each request at
+   * AWS credentials for SigV4 signing. The route signs each request at
    * `toHttp` time using `aws4fetch`. Mutually exclusive with `apiKey`.
    */
   readonly credentials?: BedrockCredentials
@@ -476,7 +476,7 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
     : []
 
 // =============================================================================
-// Protocol And Bedrock Adapter
+// Protocol And Bedrock Route
 // =============================================================================
 /**
  * The Bedrock Converse protocol — request lowering, payload schema, and the
@@ -492,7 +492,7 @@ export const protocol = Protocol.define({
   onHalt,
 })
 
-export const adapter = Adapter.make({
+export const route = Route.make({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL<BedrockConversePayload>({
@@ -517,8 +517,8 @@ export const defaultCapabilities = capabilities({
 
 export const nativeCredentials = BedrockAuth.nativeCredentials
 
-const bedrockModel = Adapter.model<BedrockConverseModelInput>(
-  adapter,
+const bedrockModel = Route.model<BedrockConverseModelInput>(
+  route,
   {
     provider: "bedrock",
     capabilities: defaultCapabilities,

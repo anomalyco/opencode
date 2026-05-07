@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMEvent, LLMResponse, type LLMRequest, type ModelRef } from "../src"
-import { LLMClient } from "../src/adapter"
+import { LLMClient } from "../src/route"
 import { tool } from "../src/tool"
 
 export const weatherToolName = "get_weather"

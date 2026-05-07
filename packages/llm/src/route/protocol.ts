@@ -4,7 +4,7 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
 /**
  * The semantic API contract of one model server family.
  *
- * A `Protocol` owns the parts of an adapter that are intrinsic to "what does
+ * A `Protocol` owns the parts of an route that are intrinsic to "what does
  * this API look like": how a common `LLMRequest` lowers into a provider-native
  * shape, what payload Schema that shape must satisfy before it is JSON-encoded,
  * and how the streaming response decodes back into common `LLMEvent`s.
@@ -19,13 +19,13 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
  *
  * A `Protocol` is **not** a deployment. It does not know which URL, which
  * headers, or which auth scheme to use. Those are deployment concerns owned
- * by `Adapter.make(...)` along with the chosen `Endpoint`, `Auth`,
+ * by `Route.make(...)` along with the chosen `Endpoint`, `Auth`,
  * and `Framing`. This separation is what lets DeepSeek, TogetherAI, Cerebras,
  * etc. all reuse `OpenAIChat.protocol` without forking 300 lines per provider.
  *
  * The four type parameters reflect the pipeline:
  *
- * - `Payload` — provider-native request payload candidate. `Adapter.make(...)`
+ * - `Payload` — provider-native request payload candidate. `Route.make(...)`
  *   validates and JSON-encodes it with `payload`.
  * - `Frame` — one unit of the framed response stream. SSE: a JSON data
  *   string. AWS event stream: a parsed binary frame.

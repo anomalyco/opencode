@@ -3,7 +3,7 @@ import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM } from "../../src"
-import { LLMClient } from "../../src/adapter"
+import { LLMClient } from "../../src/route"
 import * as BedrockConverse from "../../src/protocols/bedrock-converse"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
@@ -59,7 +59,7 @@ const baseRequest = LLM.request({
   generation: { maxTokens: 64, temperature: 0 },
 })
 
-describe("Bedrock Converse adapter", () => {
+describe("Bedrock Converse route", () => {
   it.effect("prepares Converse target with system, inference config, and messages", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(baseRequest)
@@ -271,7 +271,7 @@ describe("Bedrock Converse adapter", () => {
         LLM.updateRequest(baseRequest, { model: signed }),
       )
 
-      expect(prepared.adapter).toBe("bedrock-converse")
+      expect(prepared.route).toBe("bedrock-converse")
       // The prepare phase doesn't sign — toHttp does. We assert the credential
       // is plumbed onto the model native field for the signer to find.
       expect(prepared.model.native).toMatchObject({

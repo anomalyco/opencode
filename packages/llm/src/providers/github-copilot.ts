@@ -1,4 +1,4 @@
-import { Adapter } from "../adapter/client"
+import { Route } from "../route/client"
 import type { ModelInput } from "../llm"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
@@ -8,7 +8,7 @@ import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-opt
 
 export const id = ProviderID.make("github-copilot")
 
-export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol"> & {
+export type ModelOptions = Omit<ModelInput, "id" | "provider" | "route"> & {
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
 type CopilotModelInput = ModelOptions & Pick<ModelInput, "id">
@@ -20,12 +20,12 @@ export const shouldUseResponsesApi = (modelID: string | ModelID) => {
   return Number(match[1]) >= 5 && !model.startsWith("gpt-5-mini")
 }
 
-export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
+export const routes = [OpenAIResponses.route, OpenAIChat.route]
 
 const mapInput = (input: CopilotModelInput) => withOpenAIOptions(input.id, input)
 
-const chatModel = Adapter.model<CopilotModelInput>(OpenAIChat.adapter, { provider: id }, { mapInput })
-const responsesModel = Adapter.model<CopilotModelInput>(OpenAIResponses.adapter, { provider: id }, { mapInput })
+const chatModel = Route.model<CopilotModelInput>(OpenAIChat.route, { provider: id }, { mapInput })
+const responsesModel = Route.model<CopilotModelInput>(OpenAIResponses.route, { provider: id }, { mapInput })
 
 export const responses = (modelID: string | ModelID, options: ModelOptions = {}) => responsesModel({ ...options, id: modelID })
 

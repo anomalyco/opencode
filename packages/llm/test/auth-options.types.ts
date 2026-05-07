@@ -1,7 +1,7 @@
 import { Config } from "effect"
-import type { Auth } from "../src/adapter/auth"
-import type { ModelFactory } from "../src/adapter/auth-options"
-import { Auth as RuntimeAuth } from "../src/adapter/auth"
+import type { Auth } from "../src/route/auth"
+import type { ModelFactory } from "../src/route/auth-options"
+import { Auth as RuntimeAuth } from "../src/route/auth"
 import * as Azure from "../src/providers/azure"
 import * as OpenAI from "../src/providers/openai"
 

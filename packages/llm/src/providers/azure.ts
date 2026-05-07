@@ -1,6 +1,6 @@
-import { Auth } from "../adapter/auth"
-import type { ProviderAuthOption } from "../adapter/auth-options"
-import { Adapter } from "../adapter/client"
+import { Auth } from "../route/auth"
+import type { ProviderAuthOption } from "../route/auth-options"
+import { Route } from "../route/client"
 import type { ModelInput } from "../llm"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
@@ -10,9 +10,9 @@ import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-opt
 
 export const id = ProviderID.make("azure")
 const MISSING_BASE_URL = "Azure OpenAI requires resourceName or baseURL"
-const adapterAuth = Auth.remove("authorization").andThen(Auth.apiKeyHeader("api-key"))
+const routeAuth = Auth.remove("authorization").andThen(Auth.apiKeyHeader("api-key"))
 
-export type ModelOptions = Omit<ModelInput, "id" | "provider" | "protocol" | "apiKey" | "auth"> & ProviderAuthOption<"optional"> & {
+export type ModelOptions = Omit<ModelInput, "id" | "provider" | "route" | "apiKey" | "auth"> & ProviderAuthOption<"optional"> & {
   readonly resourceName?: string
   readonly apiVersion?: string
   readonly useCompletionUrls?: boolean
@@ -26,21 +26,21 @@ const resourceBaseURL = (resourceName: string | undefined) => {
   return `https://${resource}.openai.azure.com/openai/v1`
 }
 
-const responsesAdapter = OpenAIResponses.makeAdapter({
+const responsesAdapter = OpenAIResponses.makeRoute({
   id: "azure-openai-responses",
-  auth: adapterAuth,
+    auth: routeAuth,
   defaultBaseURL: false,
   endpointRequired: MISSING_BASE_URL,
 })
 
-const chatAdapter = OpenAIChat.makeAdapter({
+const chatAdapter = OpenAIChat.makeRoute({
   id: "azure-openai-chat",
-  auth: adapterAuth,
+    auth: routeAuth,
   defaultBaseURL: false,
   endpointRequired: MISSING_BASE_URL,
 })
 
-export const adapters = [responsesAdapter, chatAdapter]
+export const routes = [responsesAdapter, chatAdapter]
 
 const mapInput = (input: AzureModelInput) => {
   const { apiKey: _, apiVersion, resourceName, useCompletionUrls, ...rest } = input
@@ -61,8 +61,8 @@ const mapInput = (input: AzureModelInput) => {
   }
 }
 
-const chatModel = Adapter.model<AzureModelInput>(chatAdapter, { provider: id }, { mapInput })
-const responsesModel = Adapter.model<AzureModelInput>(responsesAdapter, { provider: id }, { mapInput })
+const chatModel = Route.model<AzureModelInput>(chatAdapter, { provider: id }, { mapInput })
+const responsesModel = Route.model<AzureModelInput>(responsesAdapter, { provider: id }, { mapInput })
 
 export const responses = (modelID: string | ModelID, options: ModelOptions = {}) => responsesModel({ ...options, id: modelID })
 

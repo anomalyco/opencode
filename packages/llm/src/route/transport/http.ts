@@ -92,8 +92,8 @@ export const httpJson = <Payload, Frame>(input: {
             response.stream.pipe(
               Stream.mapError((error) =>
                 ProviderShared.chunkError(
-                  `${context.request.model.provider}/${context.request.model.adapter}`,
-                  `Failed to read ${context.request.model.provider}/${context.request.model.adapter} stream`,
+                  `${context.request.model.provider}/${context.request.model.route}`,
+                  `Failed to read ${context.request.model.provider}/${context.request.model.route} stream`,
                   ProviderShared.errorText(error),
                 )
               ),
