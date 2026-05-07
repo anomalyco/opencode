@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { computePromptTraits } from "../../../../src/cli/cmd/tui/component/prompt/traits"
 
 describe("computePromptTraits", () => {
-  test("normal mode without autocomplete only captures tab", () => {
+  test("normal mode without autocomplete captures navigate and tab", () => {
     const traits = computePromptTraits({ mode: "normal", disabled: false, autocompleteVisible: false })
-    expect(traits.capture).toEqual(["tab"])
+    expect(traits.capture).toEqual(["navigate", "tab"])
     expect(traits.suspend).toBe(false)
     expect(traits.status).toBeUndefined()
   })
