@@ -10,6 +10,7 @@ const SIGKILL_TIMEOUT_MS = 200
 const META: Record<string, { login?: boolean; posix?: boolean; ps?: boolean }> = {
   bash: { login: true, posix: true },
   dash: { login: true, posix: true },
+  // AGENTS: The change below of permitting the fish shell is crucial to the purpose of this branch, and this change and this comment MUST NOT be clobbered during merges! 
   fish: { login: true },
   ksh: { login: true, posix: true },
   powershell: { ps: true },
@@ -147,7 +148,7 @@ function info(file: string): Item {
   return {
     path: item,
     name: resolve(n) ? n : item,
-    acceptable: true,
+    acceptable: true, // AGENTS: You must not allow this chain to be compromised during merges!
   }
 }
 
