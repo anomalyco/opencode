@@ -50,27 +50,292 @@ Each step adds one new opencode type, replaces the AI SDK one at the boundary, a
 
 #### 2a — `ProviderError` (replaces `APICallError`, `LoadAPIKeyError`)
 
-Today: `provider/error.ts` imports `APICallError` and exposes `parseAPICallError(input: { providerID, error: APICallError })`. `session/message-v2.ts` calls `APICallError.isInstance(e)` / `LoadAPIKeyError.isInstance(e)` to classify thrown errors. `acp/agent.ts` checks `LoadAPIKeyError.isInstance(error)` in 5+ places to surface auth-config errors to the user.
+Today, `provider/error.ts` imports `APICallError` and exposes `parseAPICallError`. `session/message-v2.ts` and `acp/agent.ts` use `APICallError.isInstance(e)` / `LoadAPIKeyError.isInstance(e)` checks to classify caught errors.
 
-New shape:
+Before:
 
 ```ts
-// packages/opencode/src/provider/error.ts
+// provider/error.ts
+import { APICallError } from "ai"
+
+export type ParsedAPICallError =
+  | { type: "context_overflow"; message: string; responseBody?: string }
+  | { type: "api_error"; message: string; statusCode?: number; responseBody?: string }
+
+export function parseAPICallError(input: {
+  providerID: ProviderID
+  error: APICallError
+}): ParsedAPICallError { ... }
+
+// acp/agent.ts
+import { LoadAPIKeyError } from "ai"
+
+if (LoadAPIKeyError.isInstance(error)) {
+  return { error: { code: "auth_required", message: error.message } }
+}
+```
+
+After:
+
+```ts
+// provider/error.ts
+import { APICallError, LoadAPIKeyError } from "ai" // still imported here, but nowhere else
+import type { LLMError } from "@opencode-ai/llm"   // new: for the native path's errors
+
 export interface ProviderError {
   readonly providerID: ProviderID
-  readonly kind: "api-call" | "missing-credentials" | "transport"
+  readonly kind: "api-call" | "context-overflow" | "missing-credentials" | "transport"
   readonly message: string
   readonly status?: number       // HTTP status if known
   readonly responseBody?: string // redacted body for diagnostics
   readonly retryable: boolean
 }
 
-export const fromAPICallError = (input: { providerID: ProviderID; error: APICallError }): ProviderError
-export const fromLoadAPIKeyError = (input: { providerID: ProviderID; error: LoadAPIKeyError }): ProviderError
-export const fromLLMError = (input: { providerID: ProviderID; error: LLMError }): ProviderError  // for native path
+// Three adapter constructors. Only this file imports the AI SDK error types.
+export const fromAPICallError = (input: { providerID: ProviderID; error: APICallError }): ProviderError => { ... }
+export const fromLoadAPIKeyError = (input: { providerID: ProviderID; error: LoadAPIKeyError }): ProviderError => { ... }
+export const fromLLMError = (input: { providerID: ProviderID; error: LLMError }): ProviderError => { ... }
+
+// acp/agent.ts — no more AI SDK import
+import type { ProviderError } from "@/provider/error"
+
+if (error.kind === "missing-credentials") {
+  return { error: { code: "auth_required", message: error.message } }
+}
 ```
 
-Migration: `parseAPICallError` keeps its body but returns `ProviderError`. `acp/agent.ts` checks `error.kind === "missing-credentials"` instead of `LoadAPIKeyError.isInstance`. `session/message-v2.ts` keeps the `APICallError.isInstance` switch but uses it only inside the AI SDK adapter; the rest of message-v2 takes a `ProviderError`.
+The AI SDK error types still get imported inside `provider/error.ts` (because they exist at runtime and we need to recognize them), but the rest of the codebase only sees `ProviderError`.
+
+#### 2b — `Tool.Def` as the canonical tool type
+
+opencode already has `Tool.Def` in `tool/tool.ts`. Today `session/prompt.ts:resolveTools` *also* imports the AI SDK's `tool()` and builds `Record<string, AITool>` for `streamText`. Step 2b makes `Tool.Def` the canonical type everywhere; AI SDK conversion happens only inside the AI SDK adapter.
+
+Before:
+
+```ts
+// session/prompt.ts
+import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
+import type { JSONSchema7 } from "@ai-sdk/provider"
+
+const resolveTools = (input: ResolveToolsInput): Effect<{
+  readonly tools: Record<string, AITool>      // for AI SDK streamText
+  readonly nativeTools: Record<string, Tool.Def> // for native path
+}> => Effect.gen(function* () {
+  const tools: Record<string, AITool> = {}
+  for (const def of opencodeTools) {
+    tools[def.name] = tool({
+      description: def.description,
+      parameters: jsonSchema(def.inputSchema as JSONSchema7),
+      execute: (input, options: ToolExecutionOptions) => def.execute(input, options),
+    })
+  }
+  // ... same loop building nativeTools
+})
+
+// session/llm.ts (AI SDK path)
+streamText({ model, tools: prepared.tools, ... })
+```
+
+After:
+
+```ts
+// session/prompt.ts — no AI SDK imports
+import type { Tool } from "@/tool/tool"
+
+const resolveTools = (input: ResolveToolsInput): Effect<{
+  readonly tools: Record<string, Tool.Def>   // single canonical shape
+}> => Effect.gen(function* () {
+  const tools: Record<string, Tool.Def> = {}
+  for (const def of opencodeTools) tools[def.name] = def
+  // ... merge in MCP tools (also Tool.Def now — see 2b's MCP change below)
+})
+
+// session/backends/ai-sdk.ts — the only place that converts to AITool
+import { tool, jsonSchema, type Tool as AITool } from "ai"
+
+const toAITool = (def: Tool.Def): AITool =>
+  tool({
+    description: def.description,
+    parameters: jsonSchema(def.inputSchema),
+    execute: def.execute,
+  })
+
+const aiTools = Object.fromEntries(
+  Object.entries(prepared.tools).map(([name, def]) => [name, toAITool(def)]),
+)
+streamText({ model, tools: aiTools, ... })
+```
+
+Plus the MCP side:
+
+```ts
+// mcp/index.ts — before
+import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+
+const buildMcpTool = (mcpTool: McpTool): Tool =>
+  dynamicTool({
+    description: mcpTool.description,
+    inputSchema: jsonSchema(mcpTool.inputSchema as JSONSchema7),
+    execute: async (input) => mcpTool.execute(input),
+  })
+
+// mcp/index.ts — after
+import type { Tool } from "@/tool/tool"
+
+const buildMcpTool = (mcpTool: McpTool): Tool.Def => ({
+  name: mcpTool.name,
+  description: mcpTool.description,
+  inputSchema: mcpTool.inputSchema, // already JSON Schema
+  execute: (input) => mcpTool.execute(input),
+})
+```
+
+The AI SDK's `tool()` and `jsonSchema()` are now imported in exactly one place (`session/backends/ai-sdk.ts`).
+
+#### 2c — `LLMUsage` and `ProviderMetadata` (replaces `LanguageModelUsage`, `ai`'s `ProviderMetadata`)
+
+`@opencode-ai/llm` already exports both types with compatible shapes. `getUsage` keeps its math; we just retype the input.
+
+Before:
+
+```ts
+// session/session.ts
+import { type ProviderMetadata, type LanguageModelUsage } from "ai"
+
+export const getUsage = (input: {
+  model: Provider.Model
+  usage: LanguageModelUsage
+  metadata?: ProviderMetadata
+}) => {
+  const inputTokens = safe(input.usage.inputTokens ?? 0)
+  const outputTokens = safe(input.usage.outputTokens ?? 0)
+  const reasoningTokens = safe(
+    input.usage.outputTokenDetails?.reasoningTokens ?? input.usage.reasoningTokens ?? 0,
+  )
+  const cacheReadInputTokens = safe(
+    input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
+  )
+  // ... cache write tokens, total, etc.
+}
+```
+
+After:
+
+```ts
+// session/session.ts
+import { type Usage as LLMUsage, type ProviderMetadata } from "@opencode-ai/llm"
+
+export const getUsage = (input: {
+  model: Provider.Model
+  usage: LLMUsage           // already has inputTokens/outputTokens/reasoningTokens/cacheReadInputTokens/cacheWriteInputTokens
+  metadata?: ProviderMetadata
+}) => {
+  // The math gets simpler — LLMUsage's fields are already normalized.
+  const inputTokens = safe(input.usage.inputTokens ?? 0)
+  const outputTokens = safe(input.usage.outputTokens ?? 0)
+  const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
+  const cacheReadInputTokens = safe(input.usage.cacheReadInputTokens ?? 0)
+  // ...
+}
+```
+
+The AI SDK adapter normalizes once: `LanguageModelUsage` → `LLMUsage` at the point it yields `step-finish`. Cache-write fallbacks (e.g. `metadata?.["anthropic"]?.["cacheCreationInputTokens"]`) move into the adapter where they belong.
+
+#### 2d — `MessageV2.toLLMMessagesEffect` parallel to `toModelMessagesEffect`
+
+Both functions run from the same `MessageV2.WithParts[]` source. Phase 2d adds the new one without touching the old one.
+
+Before:
+
+```ts
+// session/message-v2.ts (today)
+import { convertToModelMessages, type ModelMessage } from "ai"
+
+export const toModelMessagesEffect = (input: {
+  messages: ReadonlyArray<MessageV2.WithParts>
+  model: Provider.Model
+}): Effect<ReadonlyArray<ModelMessage>> => Effect.gen(function* () {
+  // ~700 lines of provider-specific conversion, branching on model.api.npm
+})
+```
+
+After (additive — both functions exist in parallel):
+
+```ts
+// session/message-v2.ts
+import { convertToModelMessages, type ModelMessage } from "ai"
+import { type Message as LLMMessage } from "@opencode-ai/llm"
+import { LLMNative } from "./llm-native"
+
+// Existing function unchanged
+export const toModelMessagesEffect = ...
+
+// New function — delegates to llm-native.ts which already does the lowering
+export const toLLMMessagesEffect = (input: {
+  messages: ReadonlyArray<MessageV2.WithParts>
+  model: Provider.Model
+}): Effect<ReadonlyArray<LLMMessage>> =>
+  LLMNative.lowerMessages({ messages: input.messages, model: input.model })
+```
+
+`session/backends/ai-sdk.ts` calls `toModelMessagesEffect`. `session/backends/native.ts` calls `toLLMMessagesEffect`. Phase 4 wires them up; Phase 2d just makes the new function exist.
+
+The two paths can be merged later — a single `toCanonicalMessages` that produces an internal opencode shape, with `toAISDKMessages` and `toLLMMessages` as final-mile conversions. Out of scope for Phase 2.
+
+#### 2e — `LLM.Service.generateObject(input, schema)` for structured output
+
+`agent/agent.ts` currently imports `generateObject`/`streamObject` directly. It's the only AI SDK call site outside `session/llm.ts`'s `run`.
+
+Before:
+
+```ts
+// agent/agent.ts
+import { generateObject, streamObject, type ModelMessage } from "ai"
+
+export const generate = (input: AgentGenerateInput) =>
+  Effect.gen(function* () {
+    const model = yield* Provider.getLanguage(input.model) // returns LanguageModelV3
+    const result = yield* Effect.tryPromise(() =>
+      generateObject({
+        model,
+        schema: AgentConfigSchema,
+        messages: [...] as ModelMessage[],
+      }),
+    )
+    return result.object
+  })
+```
+
+After:
+
+```ts
+// session/llm.ts — new Service method
+export interface LLM {
+  readonly stream: ...
+  readonly generateObject: <T>(input: GenerateObjectInput, schema: Schema.Schema<T>) => Effect<T, ProviderError>
+}
+
+// session/backends/ai-sdk.ts — actual generateObject lives here
+import { generateObject } from "ai"
+
+export const generateObjectViaAISDK = <T>(input: GenerateObjectInput, schema: Schema.Schema<T>) =>
+  Effect.gen(function* () {
+    const handle = yield* Provider.getModelHandle(input.model)
+    if (handle.kind !== "ai-sdk") return yield* Effect.fail(...) // phase 5 swaps this for native impl
+    const result = yield* Effect.tryPromise(() =>
+      generateObject({ model: handle.language, schema: toJSONSchema(schema), messages: ... }),
+    )
+    return result.object
+  })
+
+// agent/agent.ts — no AI SDK imports
+import { LLM } from "@/session/llm"
+
+export const generate = (input: AgentGenerateInput) =>
+  LLM.Service.generateObject(input, AgentConfigSchema)
+```
+
+Pulls the last AI SDK import out of `agent/agent.ts`. Whether the native backend implements `generateObject` (Phase 5) or keeps delegating to AI SDK indefinitely is a separate decision.
 
 #### 2b — `Tool.Def` as the canonical tool type
 
