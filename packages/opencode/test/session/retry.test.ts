@@ -134,6 +134,16 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
   })
 
+  test("maps OpenAI service_unavailable_error json messages", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        error: { type: "service_unavailable_error", message: "Service unavailable" },
+      }),
+    )
+    expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
+  })
+
   test("does not retry unknown json messages", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
     expect(SessionRetry.retryable(error)).toBeUndefined()
@@ -289,6 +299,25 @@ describe("session.message-v2.fromError", () => {
       statusCode: 404,
       responseHeaders: { "content-type": "application/json" },
       responseBody: '{"error":"boom"}',
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("marks OpenAI service_unavailable_error response bodies as retryable", () => {
+    const error = new APICallError({
+      message: "Service unavailable",
+      url: "https://api.openai.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({
+        error: {
+          type: "service_unavailable_error",
+          message: "Service unavailable",
+        },
+      }),
       isRetryable: false,
     })
     const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError

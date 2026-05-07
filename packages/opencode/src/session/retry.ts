@@ -89,7 +89,9 @@ export function retryable(error: Err) {
     }
   })
   if (!json || typeof json !== "object") return undefined
-  const code = typeof json.code === "string" ? json.code : ""
+  const code = [json.code, json.error?.code, json.error?.type]
+    .filter((item): item is string => typeof item === "string")
+    .join(" ")
 
   if (json.type === "error" && json.error?.type === "too_many_requests") {
     return "Too Many Requests"

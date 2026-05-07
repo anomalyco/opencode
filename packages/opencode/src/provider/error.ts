@@ -29,6 +29,7 @@ const OVERFLOW_PATTERNS = [
 
 function isOpenAiErrorRetryable(e: APICallError) {
   const status = e.statusCode
+  if (isServiceUnavailable(e.responseBody)) return true
   if (!status) return e.isRetryable
   // openai sometimes returns 404 for models that are actually available
   return status === 404 || e.isRetryable
@@ -102,6 +103,14 @@ function json(input: unknown) {
   return undefined
 }
 
+function isServiceUnavailable(input: unknown) {
+  const body = json(input)
+  if (!body || typeof body !== "object") return false
+  if (!("error" in body) || !body.error || typeof body.error !== "object") return false
+  const error = body.error as Record<string, unknown>
+  return error.code === "service_unavailable_error" || error.type === "service_unavailable_error"
+}
+
 export type ParsedStreamError =
   | {
       type: "context_overflow"
@@ -111,7 +120,7 @@ export type ParsedStreamError =
   | {
       type: "api_error"
       message: string
-      isRetryable: false
+      isRetryable: boolean
       responseBody: string
     }
 
@@ -121,6 +130,14 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
 
   const responseBody = JSON.stringify(body)
   if (body.type !== "error") return
+  if (isServiceUnavailable(body)) {
+    return {
+      type: "api_error",
+      message: typeof body?.error?.message === "string" ? body.error.message : "Service unavailable",
+      isRetryable: true,
+      responseBody,
+    }
+  }
 
   switch (body?.error?.code) {
     case "context_length_exceeded":

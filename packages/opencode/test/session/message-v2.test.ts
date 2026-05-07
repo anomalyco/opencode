@@ -1075,6 +1075,26 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("marks service_unavailable_error stream errors as retryable", () => {
+    const input = {
+      type: "error",
+      error: {
+        type: "service_unavailable_error",
+        message: "Service unavailable",
+      },
+    }
+    const result = MessageV2.fromError(input, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: "Service unavailable",
+        isRetryable: true,
+        responseBody: JSON.stringify(input),
+      },
+    })
+  })
+
   test("detects context overflow from APICallError provider messages", () => {
     const cases = [
       "prompt is too long: 213462 tokens > 200000 maximum",
