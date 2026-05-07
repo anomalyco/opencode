@@ -116,7 +116,7 @@ export function DialogSessionList() {
       .map((x) => x.id)
   }
 
-  const [browseOrder, setBrowseOrder] = createSignal<string[]>([])
+  const [browseOrder, setBrowseOrder] = createSignal<string[]>(orderByRecency(sync.data.session))
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
@@ -182,7 +182,6 @@ export function DialogSessionList() {
 
   onMount(() => {
     dialog.setSize("large")
-    setBrowseOrder(orderByRecency(sync.data.session))
   })
 
   return (
