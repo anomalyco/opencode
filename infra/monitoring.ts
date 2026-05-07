@@ -66,7 +66,7 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
       },
       {
         name: "is_failed_provider_http_status",
-        expression: `IF(AND(GTE($llm.error.code, "400"), NOT(EQUALS($llm.error.code, "401"))), 1, 0)`,
+        expression: `IF(GTE($llm.error.code, "400"), 1, 0)`,
       },
     ],
     calculations: [
@@ -86,9 +86,9 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
       },
     ],
     formulas: [
-      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 500), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
+      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 250), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
     ],
-    timeRange: 900,
+    timeRange: 1800,
   }).json
 }
 
@@ -137,17 +137,17 @@ new honeycomb.Trigger("IncreasedProviderHttpErrorsGo", {
   description,
   queryJson: providerHttpErrorsQuery("go"),
   alertType: "on_change",
-  frequency: 300,
+  frequency: 600,
   thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
   recipients: [
-    // {
-    //   id: webhookRecipient.id,
-    //   notificationDetails: [
-    //     {
-    //       variables: [{ name: "type", value: "provider_http_errors" }],
-    //     },
-    //   ],
-    // },
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "provider_http_errors" }],
+        },
+      ],
+    },
   ],
 })
 
@@ -156,16 +156,16 @@ new honeycomb.Trigger("IncreasedProviderHttpErrorsZen", {
   description,
   queryJson: providerHttpErrorsQuery("zen"),
   alertType: "on_change",
-  frequency: 300,
+  frequency: 600,
   thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
   recipients: [
-    // {
-    //   id: webhookRecipient.id,
-    //   notificationDetails: [
-    //     {
-    //       variables: [{ name: "type", value: "provider_http_errors" }],
-    //     },
-    //   ],
-    // },
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "provider_http_errors" }],
+        },
+      ],
+    },
   ],
 })
