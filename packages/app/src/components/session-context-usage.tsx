@@ -227,16 +227,14 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
             }}
             trigger={circle()}
             class="[&_[data-slot=popover-body]]:p-0 w-[min(380px,calc(100vw-40px))] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
+            style={{ "box-shadow": "none", "background-color": "transparent", "border": "none", "backdrop-filter": "none", "-webkit-backdrop-filter": "none" }}
             gutter={4}
             placement={props.placement === "bottom" ? "bottom-end" : "top-end"}
           >
             <div
               class="w-[min(380px,calc(100vw-40px))] rounded-xl overflow-hidden border border-border-weak-base shadow-[var(--shadow-lg-border-base)]"
-              classList={{
-                "bg-background-stronger/70 backdrop-blur-xl": !win(),
-                "bg-background-stronger": win(),
-              }}
               style={{
+                "background-color": win() ? "var(--background-stronger)" : "color-mix(in srgb, var(--background-stronger) 70%, transparent)",
                 "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
                 "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
               }}

@@ -4129,7 +4129,7 @@ export default function Layout(props: ParentProps) {
 
             <Show when={findbar.open && platform.find}>
               <div class="pointer-events-none absolute top-3 right-3 z-30 w-[min(480px,calc(100%-24px))]">
-                <div class="pointer-events-auto flex flex-row items-center gap-2 rounded-2xl border border-border-weak-base bg-background-stronger/92 px-2 py-2 shadow-lg backdrop-blur-xl">
+                <div class="pointer-events-auto flex flex-row items-center gap-2 rounded-2xl border border-border-weak-base px-2 py-2 shadow-lg" style={{ "background-color": "color-mix(in srgb, var(--background-stronger) 92%, transparent)", "backdrop-filter": "blur(24px) saturate(150%)", "-webkit-backdrop-filter": "blur(24px) saturate(150%)" }}>
                   <div class="flex flex-1 min-w-0 flex-row items-center gap-2 rounded-xl bg-surface-panel px-3 ring-1 ring-border-weaker-base/70">
                     <Icon name="magnifying-glass" size="small" class="shrink-0 text-text-weaker" />
                     <InlineInput

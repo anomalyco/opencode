@@ -600,9 +600,10 @@ export function QuickAssistant() {
         <button
           type="button"
           class="fixed right-5 bottom-5 z-40 flex items-center gap-2 rounded-full border border-border-weak-base px-3 py-2 shadow-[var(--shadow-lg-border-base)]"
-          classList={{
-            "bg-background-stronger/92 backdrop-blur-xl": !win(),
-            "bg-surface-raised-stronger-non-alpha": win(),
+          style={{
+            "background-color": win() ? "var(--surface-raised-stronger-non-alpha)" : "color-mix(in srgb, var(--background-stronger) 92%, transparent)",
+            "backdrop-filter": win() ? "none" : "blur(24px) saturate(150%)",
+            "-webkit-backdrop-filter": win() ? "none" : "blur(24px) saturate(150%)",
           }}
           onClick={open}
         >
@@ -617,11 +618,8 @@ export function QuickAssistant() {
       <Show when={saved.open}>
         <div
           class="fixed right-5 bottom-5 z-40 w-[min(520px,calc(100vw-24px))] overflow-hidden rounded-xl border border-border-weak-base shadow-[var(--shadow-lg-border-base)]"
-          classList={{
-            "bg-background-stronger/70 backdrop-blur-xl": !win(),
-            "bg-background-stronger": win(),
-          }}
           style={{
+            "background-color": win() ? "var(--background-stronger)" : "color-mix(in srgb, var(--background-stronger) 70%, transparent)",
             "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
             "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
           }}
