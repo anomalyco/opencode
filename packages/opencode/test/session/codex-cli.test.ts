@@ -86,6 +86,34 @@ describe("SessionCodexCli", () => {
     )
   })
 
+  test("inputFromMessage builds a single Codex turn from the current user message", () => {
+    expect(
+      SessionCodexCli.inputFromMessage(
+        message("user", "msg_user", [
+          {
+            id: PartID.make("prt_user"),
+            sessionID,
+            messageID: MessageID.make("msg_user"),
+            type: "text",
+            text: "Inspect this screenshot",
+          },
+          {
+            id: PartID.make("prt_image"),
+            sessionID,
+            messageID: MessageID.make("msg_user"),
+            type: "file",
+            mime: "image/png",
+            filename: "screenshot.png",
+            url: "data:image/png;base64,abc",
+          },
+        ]),
+      ),
+    ).toEqual([
+      { type: "text", text: "Inspect this screenshot", text_elements: [] },
+      { type: "image", url: "data:image/png;base64,abc" },
+    ])
+  })
+
   test("patchFiles maps Codex file updates to UI patch metadata", () => {
     expect(
       SessionCodexCli.patchFiles(

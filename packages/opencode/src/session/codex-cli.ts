@@ -43,14 +43,21 @@ type Input = {
   abort?: AbortSignal
   cwd: string
   root: string
-  prompt: string
+  threadID?: string
+  userInput: UserInput[]
   model: Provider.Model
   outputSchema?: Record<string, unknown>
   system: string[]
+  updateThreadID?: (threadID: string) => Promise<void>
   updateMessage: (message: MessageV2.Assistant) => Promise<void>
   updatePart: (part: MessageV2.Part) => Promise<void>
   updatePartDelta: (part: MessageV2.Part, field: string, delta: string) => Promise<void>
 }
+
+type UserInput =
+  | { type: "text"; text: string; text_elements: [] }
+  | { type: "image"; url: string }
+  | { type: "localImage"; path: string }
 
 type Item = {
   id?: unknown
@@ -147,11 +154,29 @@ function partText(part: MessageV2.Part) {
 
 export function promptFromMessages(messages: MessageV2.WithParts[]) {
   const blocks = messages.flatMap((message) => {
-    const text = message.parts.map(partText).filter((part): part is string => !!part?.trim()).join("\n\n")
+    const text = promptFromMessage(message)
     if (!text) return []
     return [`${message.info.role === "user" ? "User" : "Assistant"}:\n${text}`]
   })
   return blocks.join("\n\n")
+}
+
+export function promptFromMessage(message: MessageV2.WithParts) {
+  return message.parts.map(partText).filter((part): part is string => !!part?.trim()).join("\n\n")
+}
+
+export function inputFromMessage(message: MessageV2.WithParts): UserInput[] {
+  const text = promptFromMessage(message)
+  const input: UserInput[] = [
+    ...(text ? [{ type: "text" as const, text, text_elements: [] as [] }] : []),
+    ...message.parts.flatMap((part): UserInput[] => {
+      if (part.type !== "file" || !part.mime.startsWith("image/")) return []
+      if (part.url.startsWith("file://")) return [{ type: "localImage" as const, path: part.url.slice("file://".length) }]
+      return [{ type: "image" as const, url: part.url }]
+    }),
+  ]
+  if (input.length > 0) return input
+  return [{ type: "text", text: "", text_elements: [] }]
 }
 
 function findThreadID(value: unknown): string | undefined {
@@ -231,6 +256,18 @@ function serviceTier(model: Provider.Model) {
   const tier = string(model.options.serviceTier)
   if (tier === "fast" || tier === "flex") return tier
   if (tier === "priority") return "fast"
+}
+
+function threadParams(input: Input) {
+  return {
+    cwd: input.cwd,
+    model: input.model.api.id,
+    modelProvider: modelProvider(input.model),
+    approvalPolicy: string(input.model.options.approvalPolicy) ?? "never",
+    sandbox: string(input.model.options.sandbox) ?? "workspace-write",
+    serviceTier: serviceTier(input.model) ?? null,
+    developerInstructions: input.system.join("\n\n") || null,
+  }
 }
 
 export async function run(input: Input) {
@@ -549,27 +586,25 @@ export async function run(input: Input) {
       aborted,
     ])
     send({ method: "initialized" })
+    const startThread = () => request("thread/start", { ...threadParams(input), sessionStartSource: "startup" })
+    const resumeThread = () =>
+      input.threadID
+        ? request("thread/resume", { threadId: input.threadID, ...threadParams(input), excludeTurns: true }).catch(() =>
+            startThread(),
+          )
+        : startThread()
     const thread = await Promise.race([
-      request("thread/start", {
-        cwd: input.cwd,
-        model: input.model.api.id,
-        modelProvider: modelProvider(input.model),
-        approvalPolicy: string(input.model.options.approvalPolicy) ?? "never",
-        sandbox: string(input.model.options.sandbox) ?? "workspace-write",
-        serviceTier: serviceTier(input.model) ?? null,
-        developerInstructions: input.system.join("\n\n") || null,
-        sessionStartSource: "startup",
-        threadSource: "user",
-      }),
+      resumeThread(),
       closed,
       aborted,
     ])
     threadID = findThreadID(thread) ?? threadID
     if (!threadID) throw new Error("Codex app-server did not return a thread id")
+    if (threadID !== input.threadID) await input.updateThreadID?.(threadID)
     await Promise.race([
       request("turn/start", {
         threadId: threadID,
-        input: [{ type: "text", text: input.prompt }],
+        input: input.userInput,
         model: input.model.api.id,
         effort: reasoningEffort(input.model) ?? null,
         serviceTier: serviceTier(input.model) ?? null,

@@ -50,6 +50,7 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect"
 import { SessionCodexCli } from "./codex-cli"
+import { Global } from "@/global"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -106,6 +107,21 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
+    })
+    const codexThreadsFile = path.join(Global.Path.state, "codex-threads.json")
+    const codexThreadKey = (directory: string, sessionID: SessionID) => `${directory}\n${sessionID}`
+    const codexThreads = Effect.fn("SessionPrompt.codexThreads")(function* () {
+      const data = yield* fsys.readJson(codexThreadsFile).pipe(Effect.orElseSucceed(() => ({})))
+      if (!data || typeof data !== "object" || Array.isArray(data)) return {}
+      return Object.fromEntries(
+        Object.entries(data).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+      )
+    })
+    const getCodexThreadID = Effect.fn("SessionPrompt.getCodexThreadID")(function* (key: string) {
+      return (yield* codexThreads())[key]
+    })
+    const saveCodexThreadID = Effect.fn("SessionPrompt.saveCodexThreadID")(function* (key: string, threadID: string) {
+      yield* fsys.writeJson(codexThreadsFile, { ...(yield* codexThreads()), [key]: threadID }, 0o600)
     })
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       const run = yield* runner()
@@ -1448,6 +1464,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   },
                 }
               : model
+            const lastUserMsg = msgs.findLast((m) => m.info.role === "user" && m.info.id === lastUser.id)
+            if (!lastUserMsg) {
+              const error = new NamedError.Unknown({ message: `User message not found: ${lastUser.id}` })
+              yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+              throw error
+            }
+            const codexKey = codexThreadKey(ctx.directory, sessionID)
+            const codexThreadID = yield* getCodexThreadID(codexKey)
             const controller = new AbortController()
             const exit = yield* Effect.callback<void, Error>((resume) => {
               SessionCodexCli.run({
@@ -1455,10 +1479,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 abort: controller.signal,
                 cwd: ctx.directory,
                 root: ctx.worktree,
-                prompt: SessionCodexCli.promptFromMessages(msgs),
+                threadID: codexThreadID,
+                userInput: SessionCodexCli.inputFromMessage(lastUserMsg),
                 model: codexModel,
                 outputSchema,
                 system,
+                updateThreadID: (threadID) =>
+                  bridge.promise(saveCodexThreadID(codexKey, threadID).pipe(Effect.ignore)).then(() => undefined),
                 updateMessage: (message) => bridge.promise(sessions.updateMessage(message)).then(() => undefined),
                 updatePart: (part) => bridge.promise(sessions.updatePart(part)).then(() => undefined),
                 updatePartDelta: (part, field, delta) =>
