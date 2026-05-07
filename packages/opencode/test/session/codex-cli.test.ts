@@ -39,8 +39,8 @@ function message(role: "user" | "assistant", id: string, parts: MessageV2.Part[]
 }
 
 describe("SessionCodexCli", () => {
-  test("promptFromMessages flattens visible text and tool outputs", () => {
-    const prompt = SessionCodexCli.promptFromMessages([
+  test("responseItemsFromMessages preserves history as separate Codex items", () => {
+    const items = SessionCodexCli.responseItemsFromMessages([
       message("user", "msg_user", [
         {
           id: PartID.make("prt_user"),
@@ -78,12 +78,23 @@ describe("SessionCodexCli", () => {
       ]),
     ])
 
-    expect(prompt).toBe(
-      [
-        "User:\nFix the failing test",
-        "Assistant:\n[reasoning]\nNeed to inspect logs\n\n[tool:bash]\n1 failed",
-      ].join("\n\n"),
-    )
+    expect(items).toEqual([
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Fix the failing test" }],
+      },
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "output_text",
+            text: "[reasoning]\nNeed to inspect logs\n\n[tool:bash]\n1 failed",
+          },
+        ],
+      },
+    ])
   })
 
   test("inputFromMessage builds a single Codex turn from the current user message", () => {

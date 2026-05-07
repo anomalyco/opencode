@@ -43,12 +43,11 @@ type Input = {
   abort?: AbortSignal
   cwd: string
   root: string
-  threadID?: string
+  historyItems: Json[]
   userInput: UserInput[]
   model: Provider.Model
   outputSchema?: Record<string, unknown>
   system: string[]
-  updateThreadID?: (threadID: string) => Promise<void>
   updateMessage: (message: MessageV2.Assistant) => Promise<void>
   updatePart: (part: MessageV2.Part) => Promise<void>
   updatePartDelta: (part: MessageV2.Part, field: string, delta: string) => Promise<void>
@@ -58,6 +57,11 @@ type UserInput =
   | { type: "text"; text: string; text_elements: [] }
   | { type: "image"; url: string }
   | { type: "localImage"; path: string }
+
+type ResponseContent =
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; image_url: string }
+  | { type: "output_text"; text: string }
 
 type Item = {
   id?: unknown
@@ -145,6 +149,7 @@ function itemID(item: Item) {
 }
 
 function partText(part: MessageV2.Part) {
+  if (part.type === "text" && part.ignored) return
   if (part.type === "text") return part.text
   if (part.type === "reasoning") return `[reasoning]\n${part.text}`
   if (part.type !== "tool") return
@@ -152,17 +157,41 @@ function partText(part: MessageV2.Part) {
   if (part.state.status === "error") return `[tool:${part.tool}:error]\n${part.state.error}`
 }
 
-export function promptFromMessages(messages: MessageV2.WithParts[]) {
-  const blocks = messages.flatMap((message) => {
-    const text = promptFromMessage(message)
-    if (!text) return []
-    return [`${message.info.role === "user" ? "User" : "Assistant"}:\n${text}`]
-  })
-  return blocks.join("\n\n")
+function promptFromMessage(message: MessageV2.WithParts) {
+  return message.parts.map(partText).filter((part): part is string => !!part?.trim()).join("\n\n")
 }
 
-export function promptFromMessage(message: MessageV2.WithParts) {
-  return message.parts.map(partText).filter((part): part is string => !!part?.trim()).join("\n\n")
+function inputContentFromMessage(message: MessageV2.WithParts): ResponseContent[] {
+  const text = promptFromMessage(message)
+  const content: ResponseContent[] = text ? [{ type: "input_text", text }] : []
+  return content.concat(
+    message.parts.flatMap((part): ResponseContent[] => {
+      if (part.type !== "file" || !part.mime.startsWith("image/")) return []
+      if (part.url.startsWith("file://")) {
+        return [
+          {
+            type: "input_text" as const,
+            text: `[Attached local image: ${part.filename ?? part.url.slice("file://".length)}]`,
+          },
+        ]
+      }
+      return [{ type: "input_image" as const, image_url: part.url }]
+    }),
+  )
+}
+
+export function responseItemsFromMessages(messages: MessageV2.WithParts[]): Json[] {
+  return messages.flatMap((message): Json[] => {
+    if (message.info.role === "user") {
+      const content = inputContentFromMessage(message)
+      if (content.length === 0) return []
+      return [{ type: "message", role: "user", content }]
+    }
+
+    const text = promptFromMessage(message)
+    if (!text) return []
+    return [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }]
+  })
 }
 
 export function inputFromMessage(message: MessageV2.WithParts): UserInput[] {
@@ -267,6 +296,7 @@ function threadParams(input: Input) {
     sandbox: string(input.model.options.sandbox) ?? "workspace-write",
     serviceTier: serviceTier(input.model) ?? null,
     developerInstructions: input.system.join("\n\n") || null,
+    ephemeral: true,
   }
 }
 
@@ -586,21 +616,20 @@ export async function run(input: Input) {
       aborted,
     ])
     send({ method: "initialized" })
-    const startThread = () => request("thread/start", { ...threadParams(input), sessionStartSource: "startup" })
-    const resumeThread = () =>
-      input.threadID
-        ? request("thread/resume", { threadId: input.threadID, ...threadParams(input), excludeTurns: true }).catch(() =>
-            startThread(),
-          )
-        : startThread()
     const thread = await Promise.race([
-      resumeThread(),
+      request("thread/start", { ...threadParams(input), sessionStartSource: "startup", threadSource: "user" }),
       closed,
       aborted,
     ])
     threadID = findThreadID(thread) ?? threadID
     if (!threadID) throw new Error("Codex app-server did not return a thread id")
-    if (threadID !== input.threadID) await input.updateThreadID?.(threadID)
+    if (input.historyItems.length > 0) {
+      await Promise.race([
+        request("thread/injectItems", { threadId: threadID, items: input.historyItems }),
+        closed,
+        aborted,
+      ])
+    }
     await Promise.race([
       request("turn/start", {
         threadId: threadID,
