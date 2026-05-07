@@ -18,22 +18,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "effect": "catalog:",
-    "zod": "catalog:",
-    "@yunpat/core": "file:/Users/xujian/projects/YunPat/packages/core",
-    "@yunpat/agent-researcher": "file:/Users/xujian/projects/YunPat/packages/agents/researcher",
-    "@yunpat/agent-patent-writer": "file:/Users/xujian/projects/YunPat/packages/agents/patent-writer",
-    "@yunpat/agent-patent-responder": "file:/Users/xujian/projects/YunPat/packages/agents/patent-responder",
-    "@yunpat/agent-patent-analyzer": "file:/Users/xujian/projects/YunPat/packages/agents/patent-analyzer",
-    "@yunpat/agent-search": "file:/Users/xujian/projects/YunPat/packages/agents/search",
-    "@yunpat/agent-quality": "file:/Users/xujian/projects/YunPat/packages/agents/quality",
-    "@yunpat/agent-invention": "file:/Users/xujian/projects/YunPat/packages/agents/invention",
-    "@yunpat/agent-claims": "file:/Users/xujian/projects/YunPat/packages/agents/claims",
-    "@yunpat/agent-specification": "file:/Users/xujian/projects/YunPat/packages/agents/specification-drafter",
-    "@yunpat/patent-tools": "file:/Users/xujian/projects/YunPat/packages/patent-tools",
-    "@yunpat/patent-knowledge": "file:/Users/xujian/projects/YunPat/packages/patent-knowledge",
-    "@yunpat/patent-database": "file:/Users/xujian/projects/YunPat/packages/patent-database",
-    "@yunpat/skills": "file:/Users/xujian/projects/YunPat/packages/skills",
-    "@yunpat/builtin-tools": "file:/Users/xujian/projects/YunPat/packages/builtin-tools"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/node22": "catalog:",
@@ -45,5 +30,8 @@
   },
   "engines": {
     "opencode": ">=1.14.0"
+  },
+  "yunpat": {
+    "note": "YunPat packages are loaded dynamically at runtime via require/import from YUNPAT_PATH"
   }
 }

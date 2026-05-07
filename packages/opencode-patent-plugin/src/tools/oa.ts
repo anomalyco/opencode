@@ -1,5 +1,6 @@
 /**
  * OA Response Tools
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
  *
  * 封装 YunPat 审查意见答辩能力为 OpenCode Plugin Tools
  */
@@ -10,7 +11,7 @@ import type { PatentPluginContext } from "../types.js"
 /**
  * 注册审查意见答辩工具集
  */
-export async function registerOATools(context: PatentPluginContext) {
+export async function registerOATools(pluginContext: PatentPluginContext) {
   return {
     /**
      * 审查意见分析与答辩
@@ -42,21 +43,21 @@ export async function registerOATools(context: PatentPluginContext) {
           metadata: { action: args.action },
         })
 
-        const { action, office_action, application_claims = "", context = "" } = args
+        const { action, office_action, application_claims = "", context: extraContext = "" } = args
 
         switch (action) {
           case "parse":
-            return await oaParse(office_action, context)
+            return await oaParse(office_action, pluginContext)
           case "analyze":
-            return await oaAnalyze(office_action, application_claims, context)
+            return await oaAnalyze(office_action, application_claims, pluginContext)
           case "simulate":
-            return await oaSimulate(office_action, application_claims, context)
+            return await oaSimulate(office_action, application_claims, pluginContext)
           case "respond":
-            return await oaRespond(office_action, application_claims, context)
+            return await oaRespond(office_action, application_claims, pluginContext)
           case "revise_claims":
-            return await oaReviseClaims(office_action, application_claims, context)
+            return await oaReviseClaims(office_action, application_claims, pluginContext)
           case "validate":
-            return await oaValidate(office_action, application_claims, context)
+            return await oaValidate(office_action, application_claims, pluginContext)
           default:
             return `未知的答辩动作: ${action}`
         }
@@ -65,8 +66,8 @@ export async function registerOATools(context: PatentPluginContext) {
   }
 }
 
-async function oaParse(officeAction: string, context: PatentPluginContext) {
-  const response = await context.llm.chat({
+async function oaParse(officeAction: string, pluginContext: PatentPluginContext) {
+  const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你是审查意见解析专家。准确提取审查意见通知书中的结构化信息。" },
       { role: "user", content: `请解析以下审查意见通知书：\n\n${officeAction}\n\n请提取：\n1. OA 编号、申请号\n2. 驳回类型（新颖性/创造性/公开不充分/不清楚/超范围）\n3. 引用的对比文件列表\n4. 被驳回的权利要求\n5. 审查员论点摘要\n6. 答复期限` },
@@ -76,8 +77,8 @@ async function oaParse(officeAction: string, context: PatentPluginContext) {
   return `## 步骤 1/5：审查意见解析 ✅\n\n${response.content}\n\n---\n\n*请确认解析是否完整准确。确认后将继续步骤 2：深度分析。*`
 }
 
-async function oaAnalyze(officeAction: string, claims: string, context: PatentPluginContext) {
-  const response = await context.llm.chat({
+async function oaAnalyze(officeAction: string, claims: string, pluginContext: PatentPluginContext) {
+  const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你是专利分析专家。运用新颖性单独对比原则和创造性三步法进行深度分析。" },
       { role: "user", content: `请对以下审查意见进行深度技术分析：\n\n**审查意见**：\n${officeAction}\n\n**当前权利要求**：\n${claims}\n\n请按驳回类型逐一分析：\n1. 新颖性（A22.2）：单独对比原则，逐特征比对\n2. 创造性（A22.3）：三步法（最接近现有技术→区别特征→技术启示）\n3. 其他驳回理由（如适用）` },
@@ -87,8 +88,8 @@ async function oaAnalyze(officeAction: string, claims: string, context: PatentPl
   return `## 步骤 2/5：深度分析 ✅\n\n${response.content}\n\n---\n\n*请确认技术分析。确认后将继续步骤 3：答辩策略。*`
 }
 
-async function oaSimulate(officeAction: string, claims: string, context: PatentPluginContext) {
-  const response = await context.llm.chat({
+async function oaSimulate(officeAction: string, claims: string, pluginContext: PatentPluginContext) {
+  const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你模拟专利审查员视角，预判申请人的答辩可能性和审查员可能的反驳。" },
       { role: "user", content: `请从审查员角度分析以下案件：\n\n**审查意见**：\n${officeAction}\n\n**权利要求**：\n${claims}\n\n请输出：\n1. 审查员可能的反驳论点\n2. 申请方答辩的薄弱环节\n3. 建议的答辩策略方向` },
@@ -98,8 +99,8 @@ async function oaSimulate(officeAction: string, claims: string, context: PatentP
   return `## 审查员视角模拟\n\n${response.content}\n\n---\n\n*以上模拟结果仅供参考。*`
 }
 
-async function oaRespond(officeAction: string, claims: string, context: PatentPluginContext) {
-  const response = await context.llm.chat({
+async function oaRespond(officeAction: string, claims: string, pluginContext: PatentPluginContext) {
+  const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你是审查意见答辩专家。撰写结构化的意见陈述书。" },
       { role: "user", content: `请基于以下审查意见和权利要求，撰写意见陈述书草案：\n\n**审查意见**：\n${officeAction}\n\n**权利要求**：\n${claims}\n\n请按以下结构撰写：\n一、关于驳回理由N（类型）\n  1. 审查员观点概述\n  2. 申请人的意见（逐条回应）\n  3. 技术对比分析（详细对比表）\n  4. 法律依据（法条和审查指南引用）\n  5. 结论（明确请求）\n二、权利要求修改说明（如修改）\n  修改依据 + 修改内容标注 + 修改后文本` },
@@ -109,8 +110,8 @@ async function oaRespond(officeAction: string, claims: string, context: PatentPl
   return `## 步骤 4/5：答辩文本撰写 ✅\n\n${response.content}\n\n---\n\n*请逐条审阅修改。确认后将继续步骤 5：验证打包。*`
 }
 
-async function oaReviseClaims(officeAction: string, claims: string, context: PatentPluginContext) {
-  const response = await context.llm.chat({
+async function oaReviseClaims(officeAction: string, claims: string, pluginContext: PatentPluginContext) {
+  const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你是权利要求修改专家。确保修改不超范围（A33），并克服驳回理由。" },
       { role: "user", content: `请基于审查意见修改以下权利要求，生成修改对照表：\n\n**审查意见**：\n${officeAction}\n\n**原权利要求**：\n${claims}\n\n请输出：\n1. 修改对照表（原文 vs 修改后 + 修改依据）\n2. 修改后的完整权利要求书\n3. 修改如何克服驳回理由的说明` },
@@ -120,6 +121,6 @@ async function oaReviseClaims(officeAction: string, claims: string, context: Pat
   return `## 权利要求修改建议\n\n${response.content}\n\n---\n\n*请逐条审阅修改。权利要求修改必须经用户逐条批准。*`
 }
 
-async function oaValidate(officeAction: string, claims: string, context: PatentPluginContext) {
+async function oaValidate(officeAction: string, claims: string, pluginContext: PatentPluginContext) {
   return `## 步骤 5/5：验证与打包 ✅\n\n验证项目：\n- [ ] 所有驳回理由均已回应\n- [ ] 权利要求修改不超范围（A33）\n- [ ] 格式符合国知局要求\n- [ ] 法律依据引用完整\n\n> 注：完整验证功能需要接入 YunPat PatentResponderAgent（@yunpat/agent-patent-responder V5）的验证模块。`
 }

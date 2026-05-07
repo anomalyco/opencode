@@ -4,8 +4,6 @@
  * 将 OpenCode 的模型调用桥接到 YunPat 的 LLMAdapter 接口
  */
 
-import type { LLMAdapter, ChatParams, ChatResponse, ChatChunk } from "@yunpat/core"
-
 export interface OpenCodeLLMConfig {
   /** OpenCode SDK 客户端 */
   client: any
@@ -24,7 +22,7 @@ export interface OpenCodeLLMConfig {
  *
  * 将 OpenCode 的 chat API 适配为 YunPat 的 LLMAdapter 接口
  */
-export class OpenCodeLLMAdapter implements LLMAdapter {
+export class OpenCodeLLMAdapter {
   private config: OpenCodeLLMConfig
 
   constructor(config: OpenCodeLLMConfig) {
@@ -34,7 +32,7 @@ export class OpenCodeLLMAdapter implements LLMAdapter {
   /**
    * 单次聊天调用
    */
-  async chat(params: ChatParams): Promise<ChatResponse> {
+  async chat(params: { messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number }): Promise<{ content: string; usage?: any; model?: string }> {
     const { client, modelId, providerId, temperature, maxTokens } = this.config
 
     // 构建 OpenCode 消息格式
@@ -65,7 +63,7 @@ export class OpenCodeLLMAdapter implements LLMAdapter {
   /**
    * 流式聊天调用
    */
-  async *chatStream(params: ChatParams): AsyncGenerator<ChatChunk> {
+  async *chatStream(params: { messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number }): AsyncGenerator<{ content: string; done?: boolean }> {
     const { client, modelId, providerId, temperature, maxTokens } = this.config
 
     const messages = params.messages.map((msg) => ({

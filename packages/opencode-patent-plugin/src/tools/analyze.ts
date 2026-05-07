@@ -1,5 +1,6 @@
 /**
  * Patent Analyze Tools
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
  *
  * 封装 YunPat 专利分析能力为 OpenCode Plugin Tools
  */
@@ -10,7 +11,7 @@ import type { PatentPluginContext } from "../types.js"
 /**
  * 注册专利分析工具集
  */
-export async function registerAnalyzeTools(context: PatentPluginContext) {
+export async function registerAnalyzeTools(pluginContext: PatentPluginContext) {
   return {
     /**
      * 专利分析（新颖性/创造性/侵权等）
@@ -35,7 +36,7 @@ export async function registerAnalyzeTools(context: PatentPluginContext) {
         context: tool.schema.string().optional().describe("额外上下文"),
       },
       async execute(args, ctx) {
-        const { action, target, reference = "", context = "" } = args
+        const { action, target, reference = "", context: extraContext = "" } = args
 
         // 分析操作无需审批
         ctx.metadata({
@@ -43,10 +44,10 @@ export async function registerAnalyzeTools(context: PatentPluginContext) {
           metadata: { action },
         })
 
-        const response = await context.llm.chat({
+        const response = await pluginContext.llm.chat({
           messages: [
             { role: "system", content: buildAnalyzeSystemPrompt(action) },
-            { role: "user", content: buildAnalyzeUserPrompt(action, target, reference, context) },
+            { role: "user", content: buildAnalyzeUserPrompt(action, target, reference, extraContext) },
           ],
         })
 

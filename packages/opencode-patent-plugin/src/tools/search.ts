@@ -1,5 +1,6 @@
 /**
  * Patent Search Tools
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
  *
  * 封装 YunPat 专利检索能力为 OpenCode Plugin Tools
  */
@@ -10,7 +11,7 @@ import type { PatentPluginContext } from "../types.js"
 /**
  * 注册专利检索工具集
  */
-export async function registerSearchTools(context: PatentPluginContext) {
+export async function registerSearchTools(pluginContext: PatentPluginContext) {
   return {
     /**
      * 专利文献检索

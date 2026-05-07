@@ -6,11 +6,12 @@
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
 
 /**
  * 注册规则研究工具集
  */
-export async function registerResearchTools(context: PatentPluginContext) {
+export async function registerResearchTools(pluginContext: PatentPluginContext) {
   return {
     /**
      * 专利法规与实务研究
@@ -35,32 +36,53 @@ export async function registerResearchTools(context: PatentPluginContext) {
         depth: tool.schema.enum(["概述", "详细", "深度"]).optional().describe("研究深度"),
       },
       async execute(args, ctx) {
-        // 公开知识库检索无需审批
         const { topic, scope = "全部", depth = "详细" } = args
 
         try {
-          // TODO: 实例化 YunPat ResearcherAgent 并执行研究
-          // const agent = new ResearcherAgent({...})
-          // const result = await agent.run({ topic, scope, depth })
+          // 尝试动态加载 YunPat ResearcherAgent
+          const yunpat = await loadYunPatModule("agents/researcher")
 
-          // 临时实现：直接调用 LLM 进行知识研究
-          const prompt = buildResearchPrompt(topic, scope, depth)
-          const response = await context.llm.chat({
-            messages: [
-              { role: "system", content: "你是知识产权法规研究专家，熟悉中国专利法及实施细则、审查指南、复审无效案例。" },
-              { role: "user", content: prompt },
-            ],
-          })
+          if (yunpat?.ResearcherAgent) {
+            // 使用真实的 YunPat Agent
+            const agent = new yunpat.ResearcherAgent({
+              llm: pluginContext.llm,
+              name: "ResearcherAgent",
+              description: "知识产权法规研究专家",
+            })
 
-          ctx.metadata({
-            title: `规则研究: ${topic}`,
-            metadata: { scope, depth, sources: [] },
-          })
+            const result = await agent.run({
+              question: topic,
+              depth: mapDepth(depth),
+              sources: ["database"],
+              maxResults: 10,
+            })
 
-          return response.content
+            ctx.metadata({
+              title: `规则研究: ${topic}`,
+              metadata: { scope, depth, sources: result.data?.sources?.length ?? 0 },
+            })
+
+            return formatResearchResult(result.data)
+          }
         } catch (error) {
-          return `研究执行失败: ${error instanceof Error ? error.message : String(error)}`
+          console.warn("[YunPat] ResearcherAgent not available, falling back to LLM:", error)
         }
+
+        // 降级：直接调用 LLM 进行知识研究
+        const prompt = buildResearchPrompt(topic, scope, depth)
+        const response = await pluginContext.llm.chat({
+          messages: [
+            { role: "system", content: "你是知识产权法规研究专家，熟悉中国专利法及实施细则、审查指南、复审无效案例。" },
+            { role: "user", content: prompt },
+          ],
+        })
+
+        ctx.metadata({
+          title: `规则研究: ${topic}`,
+          metadata: { scope, depth, sources: [], mode: "llm-fallback" },
+        })
+
+        return response.content
       },
     }),
 
@@ -85,6 +107,50 @@ export async function registerResearchTools(context: PatentPluginContext) {
       },
     }),
   }
+}
+
+/**
+ * 映射深度参数
+ */
+function mapDepth(depth: string): "quick" | "standard" | "comprehensive" {
+  const map: Record<string, "quick" | "standard" | "comprehensive"> = {
+    "概述": "quick",
+    "详细": "standard",
+    "深度": "comprehensive",
+  }
+  return map[depth] ?? "standard"
+}
+
+/**
+ * 格式化研究结果
+ */
+function formatResearchResult(data: any): string {
+  if (!data) return "研究完成，但未返回有效数据。"
+
+  const result = data as any
+  let output = "## 研究报告\n\n"
+
+  if (result.summary) {
+    output += `### 摘要\n${result.summary}\n\n`
+  }
+
+  if (result.keyFindings?.length) {
+    output += "### 核心发现\n"
+    result.keyFindings.forEach((f: string, i: number) => {
+      output += `${i + 1}. ${f}\n`
+    })
+    output += "\n"
+  }
+
+  if (result.sources?.length) {
+    output += "### 参考来源\n"
+    result.sources.forEach((s: any, i: number) => {
+      output += `${i + 1}. ${s.title}${s.url ? ` (${s.url})` : ""}\n`
+    })
+    output += "\n"
+  }
+
+  return output
 }
 
 /**

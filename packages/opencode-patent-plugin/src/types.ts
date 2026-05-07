@@ -17,7 +17,7 @@ export interface PatentPluginContext {
   /** Git worktree 根目录 */
   worktree: string
   /** Plugin 配置选项 */
-  options: Record<string, unknown>
+  options?: Record<string, unknown>
 }
 
 /**
@@ -32,4 +32,73 @@ export interface PatentTaskResult {
   metadata?: Record<string, unknown>
   /** 错误信息 */
   error?: string
+}
+
+/**
+ * YunPat Agent 结果（动态加载时使用的通用接口）
+ */
+export interface AgentResult {
+  success: boolean
+  data: unknown
+  error?: Error
+  executionTime: number
+  requiresHITL?: boolean
+  hitlCheckpoint?: string
+}
+
+/**
+ * 研究查询参数
+ */
+export interface ResearchQuery {
+  question: string
+  depth?: "quick" | "standard" | "comprehensive"
+  sources?: Array<"web" | "academic" | "database">
+  timeRange?: "day" | "week" | "month" | "year" | "all"
+  maxResults?: number
+}
+
+/**
+ * 研究计划
+ */
+export interface ResearchPlan {
+  searchStrategy: {
+    keywords: string[]
+    queries: string[]
+    sourcePriority: string[]
+  }
+  extractionStrategy: {
+    infoTypes: string[]
+    dataPoints: string[]
+  }
+  analysisStrategy: {
+    dimensions: string[]
+    criteria: string[]
+  }
+}
+
+/**
+ * 研究结果
+ */
+export interface ResearchResult {
+  summary: string
+  keyFindings: string[]
+  sources: Array<{
+    title: string
+    url?: string
+    summary: string
+  }>
+  analysis: {
+    trends: string[]
+    comparisons: Array<{
+      dimension: string
+      findings: string[]
+    }>
+    knowledgeGraph: Array<{
+      entity: string
+      relations: Array<{
+        target: string
+        type: string
+      }>
+    }>
+  }
 }

@@ -70,7 +70,8 @@ const PatentPlugin: Plugin = async (input, options) => {
 
     // 专利操作审批策略
     "permission.ask": async (permission, output) => {
-      const perm = permission.permission
+      const perm = permission.type
+      const patterns = Array.isArray(permission.pattern) ? permission.pattern : [permission.pattern].filter(Boolean)
 
       // 公开数据库检索：自动放行
       if (perm === "patent_search" || perm === "patent_research") {
