@@ -45,7 +45,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
       <div class="flex flex-col gap-3 px-2.5" onKeyDown={handleKeyDown}>
         <div class="text-14-medium text-text-base px-2.5">{language.t("dialog.model.unpaid.freeModels.title")}</div>
         <List
-          class="[&_[data-slot=list-scroll]]:overflow-visible"
+          class="[&_[data-slot=list-viewport]]:overflow-visible"
           ref={(ref) => (listRef = ref)}
           items={model.list}
           current={model.current()}

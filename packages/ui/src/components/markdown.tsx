@@ -78,7 +78,7 @@ function clip(text: string, size = 40) {
 }
 
 function view(node: HTMLElement) {
-  return node.closest(".scroll-view__viewport,[data-slot='session-turn-content']") as HTMLElement | null
+  return node.closest("[data-slot='scroll-view-viewport'],[data-slot='session-turn-content']") as HTMLElement | null
 }
 
 function snap(node: HTMLElement | null) {

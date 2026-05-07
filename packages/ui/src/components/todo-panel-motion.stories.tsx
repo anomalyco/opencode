@@ -258,7 +258,7 @@ export const Playground = {
             <div data-component="todo-session-frame">
               <div data-component="todo-session-panel">
                 <div data-slot="todo-preview-content">
-                  <div data-slot="todo-preview-scroll" class="scroll-view__viewport" ref={scrollRef}>
+                  <div data-slot="todo-preview-scroll" ref={scrollRef}>
                     <div data-slot="todo-preview-spacer" />
                     <div data-slot="todo-preview-msg" data-strong="true">
                       Thinking Checking type safety
