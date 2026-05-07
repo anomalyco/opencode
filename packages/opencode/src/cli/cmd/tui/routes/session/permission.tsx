@@ -16,6 +16,7 @@ import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { Global } from "@opencode-ai/core/global"
 import { ShellID } from "@/tool/shell/id"
+import { webSearchToolLabel } from "@/tool/websearch"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
@@ -340,7 +341,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const query = typeof data.query === "string" ? data.query : ""
               return {
                 icon: "◈",
-                title: `Exa Web Search "${query}"`,
+                title: `${webSearchToolLabel(data.provider, props.request.sessionID)} "${query}"`,
                 body: (
                   <Show when={query}>
                     <box paddingLeft={1}>
