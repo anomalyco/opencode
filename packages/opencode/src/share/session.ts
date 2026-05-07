@@ -21,20 +21,19 @@ export const layer = Layer.effect(
     const session = yield* Session.Service
     const shareNext = yield* ShareNext.Service
     const scope = yield* Scope.Scope
+    const sync = yield* SyncEvent.Service
 
     const share = Effect.fn("SessionShare.share")(function* (sessionID: SessionID) {
       const conf = yield* cfg.get()
       if (conf.share === "disabled") throw new Error("Sharing is disabled in configuration")
       const result = yield* shareNext.create(sessionID)
-      yield* Effect.sync(() =>
-        SyncEvent.run(Session.Event.Updated, { sessionID, info: { share: { url: result.url } } }),
-      )
+      yield* sync.run(Session.Event.Updated, { sessionID, info: { share: { url: result.url } } })
       return result
     })
 
     const unshare = Effect.fn("SessionShare.unshare")(function* (sessionID: SessionID) {
       yield* shareNext.remove(sessionID)
-      yield* Effect.sync(() => SyncEvent.run(Session.Event.Updated, { sessionID, info: { share: { url: null } } }))
+      yield* sync.run(Session.Event.Updated, { sessionID, info: { share: { url: null } } })
     })
 
     const create = Effect.fn("SessionShare.create")(function* (input?: Session.CreateInput) {
@@ -54,6 +53,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(ShareNext.defaultLayer),
   Layer.provide(Session.defaultLayer),
   Layer.provide(Config.defaultLayer),
+  Layer.provide(SyncEvent.defaultLayer),
 )
 
 export * as SessionShare from "./session"

@@ -23,6 +23,7 @@ export interface DialogSelectProps<T> {
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
+  renderFilter?: boolean
   keybind?: {
     keybind?: Keybind.Info
     title: string
@@ -42,7 +43,7 @@ export interface DialogSelectOption<T = any> {
   categoryView?: JSX.Element
   disabled?: boolean
   bg?: RGBA
-  gutter?: JSX.Element
+  gutter?: () => JSX.Element
   margin?: JSX.Element
   onSelect?: (ctx: DialogContext) => void
 }
@@ -81,7 +82,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let input: InputRenderable
 
   const filtered = createMemo(() => {
-    if (props.skipFilter) return props.options.filter((x) => x.disabled !== true)
+    if (props.skipFilter || props.renderFilter === false) return props.options.filter((x) => x.disabled !== true)
     const needle = store.filter.toLowerCase()
     const options = pipe(
       props.options,
@@ -250,30 +251,32 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             esc
           </text>
         </box>
-        <box paddingTop={1}>
-          <input
-            onInput={(e) => {
-              batch(() => {
-                setStore("filter", e)
-                props.onFilter?.(e)
-              })
-            }}
-            focusedBackgroundColor={theme.backgroundPanel}
-            cursorColor={theme.primary}
-            focusedTextColor={theme.textMuted}
-            ref={(r) => {
-              input = r
-              input.traits = { status: "FILTER" }
-              setTimeout(() => {
-                if (!input) return
-                if (input.isDestroyed) return
-                input.focus()
-              }, 1)
-            }}
-            placeholder={props.placeholder ?? "Search"}
-            placeholderColor={theme.textMuted}
-          />
-        </box>
+        <Show when={props.renderFilter !== false}>
+          <box paddingTop={1}>
+            <input
+              onInput={(e) => {
+                batch(() => {
+                  setStore("filter", e)
+                  props.onFilter?.(e)
+                })
+              }}
+              focusedBackgroundColor={theme.backgroundPanel}
+              cursorColor={theme.primary}
+              focusedTextColor={theme.textMuted}
+              ref={(r) => {
+                input = r
+                input.traits = { status: "FILTER" }
+                setTimeout(() => {
+                  if (!input) return
+                  if (input.isDestroyed) return
+                  input.focus()
+                }, 1)
+              }}
+              placeholder={props.placeholder ?? "Search"}
+              placeholderColor={theme.textMuted}
+            />
+          </box>
+        </Show>
       </box>
       <Show
         when={grouped().length > 0}
@@ -407,7 +410,7 @@ function Option(props: {
   active?: boolean
   current?: boolean
   footer?: JSX.Element | string
-  gutter?: JSX.Element
+  gutter?: () => JSX.Element
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
@@ -422,7 +425,7 @@ function Option(props: {
       </Show>
       <Show when={!props.current && props.gutter}>
         <box flexShrink={0} marginRight={0}>
-          {props.gutter}
+          {props.gutter?.()}
         </box>
       </Show>
       <text

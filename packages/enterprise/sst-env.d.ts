@@ -35,6 +35,10 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
+    "DISCORD_INCIDENT_WEBHOOK_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "DISCORD_SUPPORT_BOT_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
@@ -84,6 +88,10 @@ declare module "sst" {
       "value": string
     }
     "HONEYCOMB_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "INCIDENT_WEBHOOK_SIGNING_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }

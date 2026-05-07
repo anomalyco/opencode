@@ -14,10 +14,13 @@ import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, Context, Schema } from "effect"
+import * as DateTime from "effect/DateTime"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
+import { EventV2 } from "@/v2/event"
+import { SessionEvent } from "@/v2/session-event"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -556,7 +559,21 @@ export const layer: Layer.Layer<
       }
 
       if (processor.message.error) return "stop"
-      if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      if (result === "continue") {
+        const summary = summaryText(
+          (yield* session.messages({ sessionID: input.sessionID })).find((item) => item.info.id === msg.id) ?? {
+            info: msg,
+            parts: [],
+          },
+        )
+        EventV2.run(SessionEvent.Compaction.Ended.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+          text: summary ?? "",
+          include: selected.tail_start_id,
+        })
+        yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      }
       return result
     })
 
@@ -582,6 +599,11 @@ export const layer: Layer.Layer<
         type: "compaction",
         auto: input.auto,
         overflow: input.overflow,
+      })
+      EventV2.run(SessionEvent.Compaction.Started.Sync, {
+        sessionID: input.sessionID,
+        timestamp: DateTime.makeUnsafe(Date.now()),
+        reason: input.auto ? "auto" : "manual",
       })
     })
 

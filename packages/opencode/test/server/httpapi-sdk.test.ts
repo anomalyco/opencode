@@ -4,7 +4,9 @@ import type * as Scope from "effect/Scope"
 import { HttpRouter } from "effect/unstable/http"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { validateSession } from "../../src/cli/cmd/tui/validate-session"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { Server } from "../../src/server/server"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -12,10 +14,11 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Config } from "@/config/config"
 import { Session as SessionNs } from "@/session/session"
+import { errorMessage } from "../../src/util/error"
 import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
 
 const original = {
@@ -63,18 +66,21 @@ function client(
   directory?: string,
   input?: { password?: string; username?: string; headers?: Record<string, string> },
 ) {
-  const serverApp = app(backend, input)
-  const fetch = Object.assign(
-    async (request: RequestInfo | URL, init?: RequestInit) =>
-      await serverApp.fetch(request instanceof Request ? request : new Request(request, init)),
-    { preconnect: globalThis.fetch.preconnect },
-  ) satisfies typeof globalThis.fetch
   return createOpencodeClient({
     baseUrl: "http://localhost",
     directory,
     headers: input?.headers,
-    fetch,
+    fetch: serverFetch(backend, input),
   })
+}
+
+function serverFetch(backend: Backend, input?: { password?: string; username?: string }) {
+  const serverApp = app(backend, input)
+  return Object.assign(
+    async (request: RequestInfo | URL, init?: RequestInit) =>
+      await serverApp.fetch(request instanceof Request ? request : new Request(request, init)),
+    { preconnect: globalThis.fetch.preconnect },
+  ) satisfies typeof globalThis.fetch
 }
 
 function authorization(username: string, password: string) {
@@ -128,6 +134,16 @@ function capture(request: () => Promise<SdkResult>) {
   )
 }
 
+function captureThrown(request: () => Promise<unknown>) {
+  return call(async () => {
+    try {
+      await request()
+    } catch (error) {
+      return error
+    }
+  })
+}
+
 function expectStatus(request: () => Promise<{ response: Response }>, status: number) {
   return call(request).pipe(
     Effect.tap((result) => Effect.sync(() => expect(result.response.status).toBe(status))),
@@ -169,7 +185,7 @@ function sessionTitles(value: unknown) {
 
 function resetState() {
   return Effect.promise(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
     await resetDatabase()
   })
 }
@@ -226,7 +242,7 @@ function seedMessage(directory: string, sessionID: string) {
   const id = SessionID.make(sessionID)
   return call(
     async () =>
-      await Instance.provide({
+      await WithInstance.provide({
         directory,
         fn: () =>
           Effect.runPromise(
@@ -260,7 +276,7 @@ afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
@@ -334,6 +350,46 @@ describe("HttpApi SDK", () => {
       firstEvent(() => sdk.event.subscribe(undefined, { signal: AbortSignal.timeout(1_000) })).pipe(
         Effect.map((event) => ({ type: record(record(event).payload).type })),
       ),
+    ),
+  )
+
+  parity("matches generated SDK missing session errors across backends", (backend) =>
+    withStandardProject(backend, ({ sdk }) =>
+      Effect.gen(function* () {
+        const sessionID = "ses_missing"
+        const expected = {
+          name: "NotFoundError",
+          data: { message: `Session not found: ${sessionID}` },
+        }
+        const missing = yield* capture(() => sdk.session.get({ sessionID }))
+        const thrown = yield* captureThrown(() => sdk.session.get({ sessionID }, { throwOnError: true }))
+
+        expect(missing.error).toEqual(expected)
+        expect(thrown).toEqual(expected)
+        return {
+          status: missing.status,
+          error: missing.error,
+          thrown,
+        }
+      }),
+    ),
+  )
+
+  parity("formats missing session validation errors for -s", (backend) =>
+    withStandardProject(backend, ({ directory }) =>
+      Effect.gen(function* () {
+        const sessionID = "ses_206f84f18ffeZ6hhD7pFYAiW5T"
+        const thrown = yield* captureThrown(() =>
+          validateSession({
+            url: "http://localhost",
+            directory,
+            sessionID,
+            fetch: serverFetch(backend),
+          }),
+        )
+        expect(errorMessage(thrown)).toBe(`Session not found: ${sessionID}`)
+        return errorMessage(thrown)
+      }),
     ),
   )
 

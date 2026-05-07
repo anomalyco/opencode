@@ -469,6 +469,13 @@ describe("session.message-v2.toModelMessage", () => {
           },
           {
             ...basePart(assistantID, "a2"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { openai: { reasoning: "meta" } },
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a3"),
             type: "tool",
             callID: "call-1",
             tool: "bash",
@@ -495,6 +502,7 @@ describe("session.message-v2.toModelMessage", () => {
         role: "assistant",
         content: [
           { type: "text", text: "done" },
+          { type: "text", text: "thinking" },
           {
             type: "tool-call",
             toolCallId: "call-1",
@@ -612,7 +620,7 @@ describe("session.message-v2.toModelMessage", () => {
               status: "completed",
               input: { cmd: "ls" },
               output: "abcdefghij",
-              title: "Bash",
+              title: "Shell",
               metadata: {},
               time: { start: 0, end: 1 },
             },
@@ -732,9 +740,9 @@ describe("session.message-v2.toModelMessage", () => {
       "12179",
       "4575",
       "",
-      "<bash_metadata>",
+      "<shell_metadata>",
       "User aborted the command",
-      "</bash_metadata>",
+      "</shell_metadata>",
     ].join("\n")
 
     const input: MessageV2.WithParts[] = [
@@ -1089,6 +1097,108 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     ])
+  })
+
+  test("substitutes space for empty text between signed reasoning blocks", async () => {
+    // Reproduces the bug pattern: [reasoning(sig), text(""), reasoning(sig), text(full)]
+    const assistantID = "m-assistant"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          { ...basePart(assistantID, "p1"), type: "step-start" },
+          {
+            ...basePart(assistantID, "p2"),
+            type: "reasoning",
+            text: "thinking-one",
+            metadata: { anthropic: { signature: "sig1" } },
+          },
+          { ...basePart(assistantID, "p3"), type: "text", text: "" },
+          { ...basePart(assistantID, "p4"), type: "step-start" },
+          {
+            ...basePart(assistantID, "p5"),
+            type: "reasoning",
+            text: "thinking-two",
+            metadata: { anthropic: { signature: "sig2" } },
+          },
+          { ...basePart(assistantID, "p6"), type: "text", text: "the answer" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // step-start splits into two assistant messages; SDK's groupIntoBlocks merges them later
+    expect(result).toHaveLength(2)
+    expect((result[0].content as any[]).find((p) => p.type === "text").text).toBe(" ")
+    expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("the answer")
+  })
+
+  test("substitutes space for empty text when reasoning signature is under 'bedrock' namespace", async () => {
+    // AWS Bedrock hosts Anthropic Claude but stores signatures under metadata.bedrock
+    const assistantID = "m-assistant-bedrock"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "p1"),
+            type: "reasoning",
+            text: "thinking-bedrock",
+            metadata: { bedrock: { signature: "bedrock-sig" } },
+          },
+          { ...basePart(assistantID, "p2"), type: "text", text: "" },
+          { ...basePart(assistantID, "p3"), type: "text", text: "answer" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result).toHaveLength(1)
+    const texts = (result[0].content as any[]).filter((p) => p.type === "text")
+    expect(texts.map((t) => t.text)).toStrictEqual([" ", "answer"])
+  })
+
+  test("leaves empty text alone when reasoning has no Anthropic signature", async () => {
+    // Non-Anthropic providers' reasoning doesn't position-validate, so empty text
+    // should be filtered normally rather than substituted.
+    const assistantID = "m-assistant-unsigned"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          { ...basePart(assistantID, "p1"), type: "reasoning", text: "thinking" },
+          { ...basePart(assistantID, "p2"), type: "text", text: "" },
+          { ...basePart(assistantID, "p3"), type: "text", text: "answer" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result).toHaveLength(1)
+    const texts = (result[0].content as any[]).filter((p) => p.type === "text")
+    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
+  })
+
+  test("leaves empty text alone in assistant messages without reasoning", async () => {
+    const assistantID = "m-assistant-no-reasoning"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          { ...basePart(assistantID, "p1"), type: "text", text: "" },
+          { ...basePart(assistantID, "p2"), type: "text", text: "hello" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result).toHaveLength(1)
+    const texts = (result[0].content as any[]).filter((p) => p.type === "text")
+    expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
   })
 })
 

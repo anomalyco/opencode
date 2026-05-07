@@ -1,14 +1,8 @@
 import { ProxyUtil } from "@/server/proxy-util"
 import { Effect, Stream } from "effect"
-import {
-  FetchHttpClient,
-  HttpBody,
-  HttpClient,
-  HttpClientRequest,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/unstable/http"
+import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
+import { WebSocketTracker } from "../websocket-tracker"
 
 function webSource(request: HttpServerRequest.HttpServerRequest): Request | undefined {
   return request.source instanceof Request ? request.source : undefined
@@ -35,6 +29,33 @@ export function websocket(
       })
       const writeInbound = yield* inbound.writer
       const writeOutbound = yield* outbound.writer
+      const closeSocket = (socket: Socket.Socket, write: (event: Socket.CloseEvent) => Effect.Effect<void, unknown>) =>
+        socket
+          .runRaw(() => Effect.void, {
+            onOpen: write(WebSocketTracker.SERVER_CLOSING_EVENT()).pipe(Effect.catch(() => Effect.void)),
+          })
+          .pipe(
+            Effect.timeout("1 second"),
+            Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+            Effect.catch(() => Effect.void),
+          )
+      const closeAccepted = Effect.all([closeSocket(inbound, writeInbound), closeSocket(outbound, writeOutbound)], {
+        concurrency: "unbounded",
+        discard: true,
+      })
+      const registered = yield* WebSocketTracker.register(
+        Effect.all(
+          [
+            writeInbound(WebSocketTracker.SERVER_CLOSING_EVENT()),
+            writeOutbound(WebSocketTracker.SERVER_CLOSING_EVENT()),
+          ],
+          { concurrency: "unbounded", discard: true },
+        ),
+      )
+      if (!registered) {
+        yield* closeAccepted
+        return HttpServerResponse.empty()
+      }
 
       yield* outbound
         .runRaw((message) => writeInbound(message))
@@ -66,12 +87,13 @@ function statusText(response: unknown) {
 }
 
 export function http(
+  client: HttpClient.HttpClient,
   url: string | URL,
   extra: HeadersInit | undefined,
   request: HttpServerRequest.HttpServerRequest,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.gen(function* () {
-    const response = yield* HttpClient.execute(
+    const response = yield* client.execute(
       HttpClientRequest.make(request.method as never)(url, {
         headers: ProxyUtil.headers(request.headers as HeadersInit, extra),
         body: requestBody(request),
@@ -86,10 +108,7 @@ export function http(
       statusText: statusText(response),
       headers,
     })
-  }).pipe(
-    Effect.provide(FetchHttpClient.layer),
-    Effect.catch(() => Effect.succeed(HttpServerResponse.empty({ status: 500 }))),
-  )
+  }).pipe(Effect.catch(() => Effect.succeed(HttpServerResponse.empty({ status: 500 }))))
 }
 
 export * as HttpApiProxy from "./proxy"

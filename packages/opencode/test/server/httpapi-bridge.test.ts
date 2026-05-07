@@ -12,7 +12,7 @@ import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -119,7 +119,23 @@ type RequestBody = {
 function parameterKey(param: unknown): string | undefined {
   if (!param || typeof param !== "object" || !("in" in param) || !("name" in param)) return undefined
   if (typeof param.in !== "string" || typeof param.name !== "string") return undefined
-  return `${param.in}:${param.name}:${"required" in param && param.required === true}`
+  return `${param.in}:${param.name}:${"required" in param && param.required === true}:${stableSchema(
+    "schema" in param ? param.schema : undefined,
+  )}`
+}
+
+function stableSchema(input: unknown): string {
+  return JSON.stringify(sortSchema(input))
+}
+
+function sortSchema(input: unknown): unknown {
+  if (Array.isArray(input)) return input.map(sortSchema)
+  if (!input || typeof input !== "object") return input
+  return Object.fromEntries(
+    Object.entries(input)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => [key, sortSchema(value)]),
+  )
 }
 
 function parameterSchema(input: {
@@ -192,7 +208,7 @@ afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
@@ -206,15 +222,22 @@ describe("HttpApi server", () => {
   })
 
   test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
-    const honoRoutes = openApiRouteKeys(await Server.openapi())
+    const honoRoutes = openApiRouteKeys(await Server.openapiHono())
     const effectRoutes = openApiRouteKeys(effectOpenApi())
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
-    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
+    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([
+      "GET /api/session",
+      "GET /api/session/{sessionID}/context",
+      "GET /api/session/{sessionID}/message",
+      "POST /api/session/{sessionID}/compact",
+      "POST /api/session/{sessionID}/prompt",
+      "POST /api/session/{sessionID}/wait",
+    ])
   })
 
   test("matches generated OpenAPI route parameters", async () => {
-    const hono = openApiParameters(await Server.openapi())
+    const hono = openApiParameters(await Server.openapiHono())
     const effect = openApiParameters(effectOpenApi())
 
     expect(
@@ -225,7 +248,7 @@ describe("HttpApi server", () => {
   })
 
   test("matches generated OpenAPI request body shape", async () => {
-    const hono = openApiRequestBodies(await Server.openapi())
+    const hono = openApiRequestBodies(await Server.openapiHono())
     const effect = openApiRequestBodies(effectOpenApi())
 
     expect(
@@ -256,6 +279,18 @@ describe("HttpApi server", () => {
       minimum: 0,
       maximum: Number.MAX_SAFE_INTEGER,
     })
+  })
+
+  test("matches SDK-affecting request schema details", () => {
+    const effect = effectOpenApi()
+    const sessionUpdate = effect.paths["/session/{sessionID}"]?.patch?.requestBody
+    const sessionUpdateSchema =
+      typeof sessionUpdate === "object" && sessionUpdate && "content" in sessionUpdate
+        ? sessionUpdate.content?.["application/json"]?.schema
+        : undefined
+    const sessionUpdateProperties = sessionUpdateSchema?.properties as Record<string, OpenApiSchema> | undefined
+    const time = sessionUpdateProperties?.time
+    expect(time?.properties?.archived).toEqual({ type: "number" })
   })
 
   test("documents event routes as server-sent events", () => {

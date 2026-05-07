@@ -1,5 +1,6 @@
 import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
+import { Session } from "@/session/session"
 import { Database } from "@/storage/db"
 import { SyncEvent } from "@/sync"
 import { EventTable } from "@/sync/event.sql"
@@ -12,12 +13,16 @@ import { or } from "drizzle-orm"
 import { Effect, Scope } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { HistoryPayload, ReplayPayload } from "../groups/sync"
+import { HistoryPayload, ReplayPayload, SessionPayload } from "../groups/sync"
+import * as Log from "@opencode-ai/core/util/log"
+
+const log = Log.create({ service: "server.sync" })
 
 export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handlers) =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
     const scope = yield* Scope.Scope
+    const sync = yield* SyncEvent.Service
 
     const start = Effect.fn("SyncHttpApi.start")(function* () {
       yield* workspace
@@ -34,8 +39,41 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         type: event.type,
         data: { ...event.data },
       }))
-      SyncEvent.replayAll(events)
-      return { sessionID: events[0].aggregateID }
+      const source = events[0].aggregateID
+      log.info("sync replay requested", {
+        sessionID: source,
+        events: events.length,
+        first: events[0]?.seq,
+        last: events.at(-1)?.seq,
+        directory: ctx.payload.directory,
+      })
+      yield* sync.replayAll(events)
+      log.info("sync replay complete", {
+        sessionID: source,
+        events: events.length,
+        first: events[0]?.seq,
+        last: events.at(-1)?.seq,
+      })
+      return { sessionID: source }
+    })
+
+    const steal = Effect.fn("SyncHttpApi.steal")(function* (ctx: { payload: typeof SessionPayload.Type }) {
+      const workspaceID = yield* InstanceState.workspaceID
+      if (!workspaceID) throw new Error("Cannot steal session without workspace context")
+
+      yield* sync.run(Session.Event.Updated, {
+        sessionID: ctx.payload.sessionID,
+        info: {
+          workspaceID,
+        },
+      })
+
+      log.info("sync session stolen", {
+        sessionID: ctx.payload.sessionID,
+        workspaceID,
+      })
+
+      return { sessionID: ctx.payload.sessionID }
     })
 
     const history = Effect.fn("SyncHttpApi.history")(function* (ctx: { payload: typeof HistoryPayload.Type }) {
@@ -54,6 +92,6 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
       )
     })
 
-    return handlers.handle("start", start).handle("replay", replay).handle("history", history)
+    return handlers.handle("start", start).handle("replay", replay).handle("steal", steal).handle("history", history)
   }),
 )
