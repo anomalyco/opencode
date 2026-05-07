@@ -6,6 +6,7 @@ import { createStore } from "solid-js/store"
 import z from "zod"
 import { isRecord } from "@/util/record"
 import { createSimpleContext } from "./helper"
+import { resolveNvimSelection, resolveNvimSockets } from "./editor-nvim"
 import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
@@ -40,13 +41,13 @@ const EditorSelectionSchema = z
   .union([
     z.object({
       filePath: z.string(),
-      source: z.enum(["websocket", "zed"]).optional(),
+      source: z.enum(["websocket", "zed", "nvim"]).optional(),
       ranges: z.array(EditorSelectionRangeSchema).min(1),
     }),
     z.object({
       text: z.string(),
       filePath: z.string(),
-      source: z.enum(["websocket", "zed"]).optional(),
+      source: z.enum(["websocket", "zed", "nvim"]).optional(),
       selection: z.object({
         start: PositionSchema,
         end: PositionSchema,
@@ -104,6 +105,11 @@ type EditorLockFile = {
   mtimeMs: number
 }
 
+type PolledEditorSelectionResult =
+  | { type: "selection"; selection: EditorSelection }
+  | { type: "empty" }
+  | { type: "unavailable" }
+
 export const { use: useEditorContext, provider: EditorContextProvider } = createSimpleContext({
   name: "EditorContext",
   init: (props: { WebSocketImpl?: typeof WebSocket }) => {
@@ -126,8 +132,8 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     let reconnect: ReturnType<typeof setTimeout> | undefined
     let attempt = 0
     let requestID = 0
-    let zedSelection: Promise<void> | undefined
-    let lastZedSelectionKey: string | undefined
+    let polledSelection: Promise<void> | undefined
+    let lastPolledSelectionKey: string | undefined
     let directory = process.cwd()
     let preserveSelectionOnReconnect = false
     const pending = new Map<number, string>()
@@ -138,12 +144,12 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       if (changed) setStore("selectionSent", false)
     }
 
-    const clearSelectionForReconnect = (options?: { resetZedSelectionKey?: boolean }) => {
+    const clearSelectionForReconnect = (options?: { resetPolledSelectionKey?: boolean }) => {
       if (preserveSelectionOnReconnect) {
         preserveSelectionOnReconnect = false
         return
       }
-      if (options?.resetZedSelectionKey) lastZedSelectionKey = undefined
+      if (options?.resetPolledSelectionKey) lastPolledSelectionKey = undefined
       setSelection(undefined)
     }
 
@@ -163,31 +169,31 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
       const connection = resolveEditorConnection(directory)
       if (!connection) {
-        const dbPath = resolveZedDbPath()
-        if (!dbPath) {
+        if (!hasPolledEditorSelectionSource()) {
           setStore("status", "disabled")
           scheduleReconnect()
           return
         }
-        zedSelection ??= resolveZedSelection(dbPath, directory)
+
+        polledSelection ??= resolvePolledEditorSelection(directory)
           .then((result) => {
             if (closed || socket) return
             if (result.type === "unavailable") return
             const selection = result.type === "selection" ? result.selection : undefined
             const key = editorSelectionKey(selection)
-            if (key !== lastZedSelectionKey) {
-              lastZedSelectionKey = key
+            if (key !== lastPolledSelectionKey) {
+              lastPolledSelectionKey = key
               setSelection(selection)
               setStore("status", selection ? "connected" : "disabled")
             }
           })
           .catch(() => {
-            // Keep the last known Zed selection for transient polling failures.
+            // Keep the last known editor selection for transient polling failures.
           })
           .finally(() => {
-            zedSelection = undefined
+            polledSelection = undefined
           })
-        scheduleZedPoll()
+        schedulePolledEditorSelection()
         return
       }
 
@@ -263,7 +269,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       reconnect = setTimeout(connect, delay)
     }
 
-    const scheduleZedPoll = () => {
+    const schedulePolledEditorSelection = () => {
       if (closed) return
       if (reconnect) clearTimeout(reconnect)
       reconnect = setTimeout(connect, 1000)
@@ -272,7 +278,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     const reconnectWithDirectory = (nextDirectory?: string) => {
       const resolved = nextDirectory || process.cwd()
       const sameDirectory = directory === resolved
-      clearSelectionForReconnect({ resetZedSelectionKey: !sameDirectory })
+      clearSelectionForReconnect({ resetPolledSelectionKey: !sameDirectory })
       if (sameDirectory) return
 
       directory = resolved
@@ -302,7 +308,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection(directory) || resolveZedDbPath())
+        return Boolean(resolveEditorConnection(directory) || hasPolledEditorSelectionSource())
       },
       connected() {
         return store.status === "connected"
@@ -311,8 +317,8 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         return store.selection
       },
       clearSelection() {
-        lastZedSelectionKey = undefined
-        zedSelection = undefined
+        lastPolledSelectionKey = undefined
+        polledSelection = undefined
         setSelection(undefined)
       },
       preserveSelectionFromNewSession() {
@@ -365,6 +371,21 @@ function resolveEditorConnection(directory: string): EditorConnection | undefine
       source: `lock:${lock.port}`,
     }
   }
+}
+
+async function resolvePolledEditorSelection(directory: string): Promise<PolledEditorSelectionResult> {
+  const dbPath = resolveZedDbPath()
+  const zed = dbPath ? await resolveZedSelection(dbPath, directory) : { type: "empty" as const }
+  if (zed.type === "selection") return zed
+
+  const nvim = await resolveNvimSelection(directory)
+  if (nvim.type !== "empty") return nvim
+  if (zed.type === "unavailable") return zed
+  return nvim
+}
+
+function hasPolledEditorSelectionSource() {
+  return Boolean(resolveZedDbPath() || resolveNvimSockets().length > 0)
 }
 
 function resolveEditorLockFile(activeDirectory: string) {
