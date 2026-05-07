@@ -2,8 +2,10 @@ import { describe, test, expect, beforeEach } from "bun:test"
 import { ModeController, ExecutionMode, getModeDisplay, getModeController } from "@shell-mode"
 import { handleModeToggleKey, shouldUseShellCompletion } from "@tui-integration"
 
+import type { KeyEvent } from "@opentui/core"
+
 // Minimal KeyEvent shape for testing — only the fields handleModeToggleKey reads
-function makeKey(overrides: { ctrl?: boolean; meta?: boolean; shift?: boolean; name?: string; sequence?: string } = {}) {
+function makeKey(overrides: { ctrl?: boolean; meta?: boolean; shift?: boolean; name?: string; sequence?: string } = {}): KeyEvent {
   return {
     ctrl: false,
     meta: false,
@@ -20,7 +22,7 @@ function makeKey(overrides: { ctrl?: boolean; meta?: boolean; shift?: boolean; n
     preventDefault() {},
     stopPropagation() {},
     ...overrides,
-  }
+  } as unknown as KeyEvent
 }
 
 // ──────────────────────────────────────────────────────────
