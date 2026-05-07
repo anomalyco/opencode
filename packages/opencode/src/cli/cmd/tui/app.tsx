@@ -644,6 +644,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
+      title: "Open menu",
+      value: "menu.show",
+      slash: {
+        name: "menu",
+      },
+      showInMenu: false,
+      onSelect: () => {
+        command.show()
+      },
+      category: "System",
+    },
+    {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {

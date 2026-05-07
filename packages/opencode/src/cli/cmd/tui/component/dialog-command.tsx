@@ -26,6 +26,7 @@ export type CommandOption = DialogSelectOption<string> & {
   keybind?: string
   suggested?: boolean
   slash?: Slash
+  showInMenu?: boolean
   hidden?: boolean
   enabled?: boolean
 }
@@ -46,7 +47,8 @@ function init() {
   })
 
   const isEnabled = (option: CommandOption) => option.enabled !== false
-  const isVisible = (option: CommandOption) => isEnabled(option) && !option.hidden
+  const isVisible = (option: CommandOption) => isEnabled(option) && !option.hidden && option.showInMenu !== false
+  const isSlashVisible = (option: CommandOption) => isEnabled(option) && !option.hidden
 
   const visibleOptions = createMemo(() => entries().filter((option) => isVisible(option)))
   const suggestedOptions = createMemo(() =>
@@ -85,9 +87,9 @@ function init() {
       }
     },
     slashes() {
-      return visibleOptions().flatMap((option) => {
+      return entries().flatMap((option) => {
         const slash = option.slash
-        if (!slash) return []
+        if (!slash || !isSlashVisible(option)) return []
         return {
           display: "/" + slash.name,
           description: option.description ?? option.title,

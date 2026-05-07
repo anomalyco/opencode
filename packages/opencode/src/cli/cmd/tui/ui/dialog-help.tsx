@@ -29,7 +29,7 @@ export function DialogHelp() {
       </box>
       <box paddingBottom={1}>
         <text fg={theme.textMuted}>
-          Press {keybind.print("command_list")} to see all available actions and commands in any context.
+          Press {keybind.print("command_list")} or run /menu to see all available actions and commands in any context.
         </text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
