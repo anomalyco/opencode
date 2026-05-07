@@ -6,15 +6,18 @@ const path = require("path")
 const os = require("os")
 
 function run(target) {
-  const result = childProcess.spawnSync(target, process.argv.slice(2), {
-    stdio: "inherit",
+  const child = childProcess.spawn(target, process.argv.slice(2), {
+    stdio: [0, 1, 2],
+    detached: true,
+    windowsHide: false,
   })
-  if (result.error) {
-    console.error(result.error.message)
+  child.on("error", (err) => {
+    console.error(err.message)
     process.exit(1)
-  }
-  const code = typeof result.status === "number" ? result.status : 0
-  process.exit(code)
+  })
+  child.on("exit", (code) => {
+    process.exit(typeof code === "number" ? code : 0)
+  })
 }
 
 const envPath = process.env.OPENCODE_BIN_PATH
