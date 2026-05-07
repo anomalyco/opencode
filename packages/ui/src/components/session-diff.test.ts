@@ -19,6 +19,21 @@ describe("session diff", () => {
     expect(text(view, "additions")).toBe("one\nthree\n")
   })
 
+  test("keeps missing final newlines from unified patches", () => {
+    const diff = {
+      file: "a.ts",
+      patch:
+        "Index: a.ts\n===================================================================\n--- a.ts\t\n+++ a.ts\t\n@@ -1,2 +1,2 @@\n one\n-two\n\\ No newline at end of file\n+three\n\\ No newline at end of file\n",
+      additions: 1,
+      deletions: 1,
+      status: "modified" as const,
+    }
+    const view = normalize(diff)
+
+    expect(text(view, "deletions")).toBe("one\ntwo")
+    expect(text(view, "additions")).toBe("one\nthree")
+  })
+
   test("converts legacy content into a patch", () => {
     const diff = {
       file: "a.ts",

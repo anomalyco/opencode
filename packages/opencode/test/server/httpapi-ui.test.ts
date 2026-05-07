@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
@@ -258,6 +259,38 @@ describe("HttpApi UI fallback", () => {
     expect(readPath).toBe("/$bunfs/root/assets/app.js")
     expect(response.headers.get("content-type")).toContain("text/javascript")
     expect(await response.text()).toBe("console.log('embedded')")
+  })
+
+  test("allows embedded UI terminal wasm and theme preload CSP", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    const script = 'document.documentElement.dataset.theme = "dark"'
+
+    const response = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        return yield* serveEmbeddedUIEffect(
+          "/",
+          {
+            ...fs,
+            readFile: (path) => {
+              return path === "/$bunfs/root/index.html"
+                ? Effect.succeed(
+                    new TextEncoder().encode(
+                      `<html><head><script id="oc-theme-preload-script">${script}</script></head></html>`,
+                    ),
+                  )
+                : Effect.die(`unexpected embedded UI path: ${path}`)
+            },
+          },
+          { "index.html": "/$bunfs/root/index.html" },
+        )
+      }).pipe(Effect.provide(AppFileSystem.defaultLayer), Effect.map(HttpServerResponse.toWeb)),
+    )
+
+    const csp = response.headers.get("content-security-policy") ?? ""
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'")
+    expect(csp).toContain(`'sha256-${createHash("sha256").update(script).digest("base64")}'`)
+    expect(csp).toContain("connect-src * data:")
   })
 
   test("keeps matched API routes ahead of the UI fallback", async () => {
