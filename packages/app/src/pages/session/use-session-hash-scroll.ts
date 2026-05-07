@@ -84,21 +84,15 @@ export const useSessionHashScroll = (input: {
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
     const raw = getComputedStyle(root).getPropertyValue("--session-title-inset").trim()
-    const cssInset = Number.parseFloat(raw) || 0
-    
-    const header = root.querySelector("[data-session-title]")
-    const headerVisible = header instanceof HTMLElement
-    // Prefer the CSS variable, but fall back to the header's actual height
-    // when the variable hasn't updated yet after a route transition.
-    const inset = headerVisible ? Math.max(cssInset, header.getBoundingClientRect().height) : cssInset
-    
+    const inset = Number.parseFloat(raw) || 0
+
     const top = targetTop({
       itemTop: a.top,
       rootTop: b.top,
       scrollTop: root.scrollTop,
       inset,
     })
-    
+
     root.scrollTo({ top, behavior })
     return true
   }
@@ -117,11 +111,11 @@ export const useSessionHashScroll = (input: {
     const el = document.getElementById(anchorId)
     const elByQuery = document.querySelector(`[id="${anchorId}"]`)
     const elByDataAttr = document.querySelector(`[data-message-id="${id}"]`)
-    
+
     console.debug(
-      `[seek] attempt: messageId=${id} anchorId=${anchorId} retriesLeft=${left} foundById=${!!el} foundByQuery=${!!elByQuery} foundByDataAttr=${!!elByDataAttr} currentMessageId=${input.currentMessageId() || "none"}`
+      `[seek] attempt: messageId=${id} anchorId=${anchorId} retriesLeft=${left} foundById=${!!el} foundByQuery=${!!elByQuery} foundByDataAttr=${!!elByDataAttr} currentMessageId=${input.currentMessageId() || "none"}`,
     )
-    
+
     if (el) {
       console.debug(`[seek] found element: messageId=${id} anchorId=${anchorId} behavior=${behavior}`)
       const result = scrollToElement(el, behavior)
@@ -142,7 +136,7 @@ export const useSessionHashScroll = (input: {
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     console.debug(
-      `[scrollToMessage] called: messageId=${message.id} behavior=${behavior} currentMessageId=${input.currentMessageId() || "none"}`
+      `[scrollToMessage] called: messageId=${message.id} behavior=${behavior} currentMessageId=${input.currentMessageId() || "none"}`,
     )
     cancel()
     input.setSeekingMessage(message.id)
@@ -207,17 +201,17 @@ export const useSessionHashScroll = (input: {
     const hash = location.hash
     if (!hash) clearing = false
     if (!input.sessionID() || !input.messagesReady()) return
-    
+
     // Don't cancel if hash matches currentMessageId - let seek() retries continue
     const messageId = messageIdFromHash(hash.slice(1))
     const skipCancel = messageId && messageId === input.currentMessageId()
-    
+
     if (!skipCancel) {
       cancel()
     } else {
       console.debug(`[hash effect] skipping cancel: hash matches currentMessageId=${messageId}`)
     }
-    
+
     queue(() => applyHash("auto"))
   })
 
