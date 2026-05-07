@@ -8,24 +8,21 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
-// FORK: 设置页脚显示 DeskFox <Platform> + installer 版本号(YYYY.M.D.N), 2026-05-06
-// installer-versions.json 由 bump-installer-version.{ps1,sh} 在每次 bump 时同步更新对应平台 key
-import installerVersions from "@opencode-ai/branding/installer-versions.json"
+// FORK: 设置页脚显示 DeskFox for <Platform> + installer 版本号(YYYY.M.D.N), 2026-05-06
+// 计算逻辑抽到 dialog-settings-version.ts 便于 unit 测试(D1) 2026-05-07
+import { formatAppName, getInstallerVersion } from "./dialog-settings-version"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
 
-  // FORK: 设置页脚 — DeskFox <Platform> + installer 版本号
-  const platformLabel =
-    platform.os === "macos" ? "macOS"
-    : platform.os === "windows" ? "Windows"
-    : platform.os === "linux" ? "Linux"
-    : ""
-  const installerVer =
-    platform.os === "macos" ? installerVersions.macos
-    : platform.os === "windows" ? installerVersions.windows
-    : platform.version
+  // FORK: 设置页脚 — DeskFox for <Platform> + installer 版本号
+  // 实际计算抽到 dialog-settings-version.ts(便于 unit 测试)
+  const appName = formatAppName(platform.os as Parameters<typeof formatAppName>[0])
+  const installerVer = getInstallerVersion(
+    platform.os as Parameters<typeof getInstallerVersion>[0],
+    platform.version,
+  )
 
   return (
     <Dialog size="x-large" transition>
@@ -64,7 +61,7 @@ export const DialogSettings: Component = () => {
               </div>
             </div>
             <div class="flex flex-col gap-1 pl-1 py-1 text-12-medium text-text-weak">
-              <span>{platformLabel ? `DeskFox for ${platformLabel}` : "DeskFox"}</span>
+              <span>{appName}</span>
               <span class="text-11-regular">v{installerVer}</span>
             </div>
           </div>
