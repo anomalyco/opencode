@@ -127,6 +127,24 @@ export const layer = Layer.effect(
       return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.String))(stdout)
     }, Effect.scoped)
     const viewLatestVersion = Effect.fnUntraced(function* (pkg: string) {
+      // Always hit npm registry directly first to bypass Bun/npm local cache
+      const registryLatest = yield* Effect.tryPromise({
+        try: async () => {
+          const encoded = pkg.replace("/", "%2F")
+          const res = await fetch(`https://registry.npmjs.org/${encoded}`)
+          if (!res.ok) throw new Error(`Registry returned ${res.status}`)
+          const data = (await res.json()) as { "dist-tags"?: { latest?: string } }
+          const latest = data["dist-tags"]?.latest
+          if (typeof latest !== "string") throw new Error("No latest tag")
+          return latest
+        },
+        catch: () => undefined as string | undefined,
+      }).pipe(Effect.orElseSucceed(() => undefined as string | undefined))
+
+      if (typeof registryLatest === "string") {
+        return registryLatest
+      }
+
       return yield* runView(["npm", "view", pkg, "dist-tags.latest", "--json"]).pipe(
         Effect.catch(() =>
           runView(["pnpm", "view", pkg, "dist-tags.latest", "--json"]).pipe(
@@ -135,6 +153,20 @@ export const layer = Layer.effect(
         ),
       )
     })
+    const cleanupTempResidues = Effect.fnUntraced(function* (nodeModulesPath: string) {
+      const entries = yield* fs.readDirectory(nodeModulesPath).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      const tempPattern = /^\.[a-z0-9-]+-[a-zA-Z0-9]{8,}$/
+      for (const entry of entries) {
+        if (tempPattern.test(entry)) {
+          const fullPath = path.join(nodeModulesPath, entry)
+          const stat = yield* fs.stat(fullPath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (stat?.type === "Directory") {
+            yield* fs.remove(fullPath, { recursive: true }).pipe(Effect.ignore)
+          }
+        }
+      }
+    })
+
     const reify = (input: { dir: string; add?: string[] }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
@@ -193,12 +225,30 @@ export const layer = Layer.effect(
       })()
 
       if (yield* afs.existsSafe(dir)) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const parsed = npa(pkg)
+        const rawSpec = parsed.rawSpec || ""
+        if (rawSpec === "latest" || (!rawSpec && parsed.raw === parsed.name)) {
+          const cachedPkgJson = yield* afs
+            .readJson(path.join(dir, "node_modules", name, "package.json"))
+            .pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const pkgJson = cachedPkgJson as Record<string, unknown> | undefined
+          if (pkgJson && typeof pkgJson.version === "string") {
+            const isStale = yield* outdated(parsed.name ?? pkg, pkgJson.version)
+            if (isStale) {
+              yield* fs.remove(dir, { recursive: true }).pipe(Effect.ignore)
+            }
+          }
+        }
+
+        if (yield* afs.existsSafe(dir)) {
+          return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        }
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) return yield* new InstallFailedError({ add: [pkg], dir })
+      yield* cleanupTempResidues(path.join(dir, "node_modules")).pipe(Effect.ignore)
       return resolveEntryPoint(first.name, first.path)
     }, Effect.scoped)
 

@@ -94,50 +94,78 @@ describe("Npm.install", () => {
   })
 })
 
+function mockFetch(pkg: string, version: string) {
+  const original = globalThis.fetch
+  const mock = async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString()
+    if (url.includes(`/registry.npmjs.org/${pkg}`)) {
+      return Response.json({ "dist-tags": { latest: version } })
+    }
+    return original(input)
+  }
+  mock.preconnect = (original as any).preconnect ?? (() => Promise.resolve())
+  globalThis.fetch = mock as typeof globalThis.fetch
+  return { restore: () => { globalThis.fetch = original } }
+}
+
+function noFetch() {
+  const original = globalThis.fetch
+  const mock = async () => { throw new Error("network disabled") }
+  mock.preconnect = (original as any).preconnect ?? (() => Promise.resolve())
+  globalThis.fetch = mock as typeof globalThis.fetch
+  return { restore: () => { globalThis.fetch = original } }
+}
+
 describe("Npm.outdated", () => {
   test("checks latest via npm view", async () => {
-    const calls: string[][] = []
-    const layer = testLayer((cmd, args) => {
-      calls.push([cmd, ...args])
-      if (cmd === "npm" && args[0] === "view") return '"2.0.0"\n'
-      return ""
-    })
+    const { restore } = mockFetch("example", "2.0.0")
+    try {
+      const layer = testLayer()
 
-    const result = await Effect.runPromise(
-      Npm.Service.use((svc) => svc.outdated("example", "1.0.0")).pipe(Effect.provide(layer)),
-    )
+      const result = await Effect.runPromise(
+        Npm.Service.use((svc) => svc.outdated("example", "1.0.0")).pipe(Effect.provide(layer)),
+      )
 
-    expect(result).toBe(true)
-    expect(calls).toContainEqual(["npm", "view", "example", "dist-tags.latest", "--json"])
+      expect(result).toBe(true)
+    } finally {
+      restore()
+    }
   })
 
   test("keeps range comparison behavior", async () => {
-    const layer = testLayer((cmd, args) => {
-      if (cmd === "npm" && args[0] === "view") return '"2.3.0"\n'
-      return ""
-    })
+    const { restore } = mockFetch("example", "2.3.0")
+    try {
+      const layer = testLayer()
 
-    const result = await Effect.runPromise(
-      Npm.Service.use((svc) => svc.outdated("example", "^2.0.0")).pipe(Effect.provide(layer)),
-    )
+      const result = await Effect.runPromise(
+        Npm.Service.use((svc) => svc.outdated("example", "^2.0.0")).pipe(Effect.provide(layer)),
+      )
 
-    expect(result).toBe(false)
+      expect(result).toBe(false)
+    } finally {
+      restore()
+    }
   })
 
   test("falls back when npm view is unavailable", async () => {
-    const calls: string[][] = []
-    const layer = testLayer((cmd, args) => {
-      calls.push([cmd, ...args])
-      if (cmd === "pnpm" && args[0] === "view") return '"2.0.0"\n'
-      return ""
-    })
+    const { restore } = noFetch()
+    try {
+      const calls: string[][] = []
+      const layer = testLayer((cmd, args) => {
+        calls.push([cmd, ...args])
+        if (cmd === "pnpm" && args[0] === "view") return '"2.0.0"'
+        return ""
+      })
 
-    const result = await Effect.runPromise(
-      Npm.Service.use((svc) => svc.outdated("example", "1.0.0")).pipe(Effect.provide(layer)),
-    )
+      const result = await Effect.runPromise(
+        Npm.Service.use((svc) => svc.outdated("example", "1.0.0")).pipe(Effect.provide(layer)),
+      )
 
-    expect(result).toBe(true)
-    expect(calls).toContainEqual(["npm", "view", "example", "dist-tags.latest", "--json"])
-    expect(calls).toContainEqual(["pnpm", "view", "example", "dist-tags.latest", "--json"])
+      expect(result).toBe(true)
+      expect(calls).toContainEqual(["npm", "view", "example", "dist-tags.latest", "--json"])
+      expect(calls).toContainEqual(["pnpm", "view", "example", "dist-tags.latest", "--json"])
+    } finally {
+      restore()
+    }
   })
 })
