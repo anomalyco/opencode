@@ -28,27 +28,27 @@ export const PATH = "/responses"
 // Request Body Schema
 // =============================================================================
 const OpenAIResponsesInputText = Schema.Struct({
-  type: Schema.Literal("input_text"),
+  type: Schema.tag("input_text"),
   text: Schema.String,
 })
 
 const OpenAIResponsesOutputText = Schema.Struct({
-  type: Schema.Literal("output_text"),
+  type: Schema.tag("output_text"),
   text: Schema.String,
 })
 
 const OpenAIResponsesInputItem = Schema.Union([
-  Schema.Struct({ role: Schema.Literal("system"), content: Schema.String }),
-  Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(OpenAIResponsesInputText) }),
-  Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(OpenAIResponsesOutputText) }),
+  Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
+  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputText) }),
+  Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenAIResponsesOutputText) }),
   Schema.Struct({
-    type: Schema.Literal("function_call"),
+    type: Schema.tag("function_call"),
     call_id: Schema.String,
     name: Schema.String,
     arguments: Schema.String,
   }),
   Schema.Struct({
-    type: Schema.Literal("function_call_output"),
+    type: Schema.tag("function_call_output"),
     call_id: Schema.String,
     output: Schema.String,
   }),
@@ -56,7 +56,7 @@ const OpenAIResponsesInputItem = Schema.Union([
 type OpenAIResponsesInputItem = Schema.Schema.Type<typeof OpenAIResponsesInputItem>
 
 const OpenAIResponsesTool = Schema.Struct({
-  type: Schema.Literal("function"),
+  type: Schema.tag("function"),
   name: Schema.String,
   description: Schema.String,
   parameters: JsonObject,
@@ -66,7 +66,7 @@ type OpenAIResponsesTool = Schema.Schema.Type<typeof OpenAIResponsesTool>
 
 const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
-  Schema.Struct({ type: Schema.Literal("function"), name: Schema.String }),
+  Schema.Struct({ type: Schema.tag("function"), name: Schema.String }),
 ])
 
 // Fields shared between the HTTP body and the WebSocket `response.create`
@@ -105,7 +105,7 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
 const OpenAIResponsesWebSocketMessage = Schema.StructWithRest(
   Schema.Struct({
-    type: Schema.Literal("response.create"),
+    type: Schema.tag("response.create"),
     ...OpenAIResponsesCoreFields,
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -324,7 +324,10 @@ const HOSTED_TOOLS = {
     input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
   },
   local_shell_call: { name: "local_shell", input: (item) => item.action ?? {} },
-} as const satisfies Record<string, { readonly name: string; readonly input: (item: OpenAIResponsesStreamItem) => unknown }>
+} as const satisfies Record<
+  string,
+  { readonly name: string; readonly input: (item: OpenAIResponsesStreamItem) => unknown }
+>
 
 type HostedToolType = keyof typeof HOSTED_TOOLS
 
@@ -346,7 +349,14 @@ const hostedToolEvents = (
   const tool = HOSTED_TOOLS[item.type]
   const providerMetadata = openaiMetadata({ itemId: item.id })
   return [
-    { type: "tool-call", id: item.id, name: tool.name, input: tool.input(item), providerExecuted: true, providerMetadata },
+    {
+      type: "tool-call",
+      id: item.id,
+      name: tool.name,
+      input: tool.input(item),
+      providerExecuted: true,
+      providerMetadata,
+    },
     {
       type: "tool-result",
       id: item.id,

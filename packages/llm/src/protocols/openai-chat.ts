@@ -36,14 +36,14 @@ const OpenAIChatFunction = Schema.Struct({
 })
 
 const OpenAIChatTool = Schema.Struct({
-  type: Schema.Literal("function"),
+  type: Schema.tag("function"),
   function: OpenAIChatFunction,
 })
 type OpenAIChatTool = Schema.Schema.Type<typeof OpenAIChatTool>
 
 const OpenAIChatAssistantToolCall = Schema.Struct({
   id: Schema.String,
-  type: Schema.Literal("function"),
+  type: Schema.tag("function"),
   function: Schema.Struct({
     name: Schema.String,
     arguments: Schema.String,
@@ -61,13 +61,13 @@ const OpenAIChatMessage = Schema.Union([
     reasoning_content: Schema.optional(Schema.String),
   }),
   Schema.Struct({ role: Schema.Literal("tool"), tool_call_id: Schema.String, content: Schema.String }),
-])
+]).pipe(Schema.toTaggedUnion("role"))
 type OpenAIChatMessage = Schema.Schema.Type<typeof OpenAIChatMessage>
 
 const OpenAIChatToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   Schema.Struct({
-    type: Schema.Literal("function"),
+    type: Schema.tag("function"),
     function: Schema.Struct({ name: Schema.String }),
   }),
 ])

@@ -518,14 +518,14 @@ export const defaultCapabilities = capabilities({
 
 export const nativeCredentials = BedrockAuth.nativeCredentials
 
-const bedrockModel = Route.model<BedrockConverseModelInput>(
+const bedrockModel = Route.model(
   route,
   {
     provider: "bedrock",
     capabilities: defaultCapabilities,
   },
   {
-    mapInput: (input) => {
+    mapInput: (input: BedrockConverseModelInput) => {
       const { credentials, ...rest } = input
       const region = credentials?.region ?? "us-east-1"
       return {

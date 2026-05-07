@@ -20,20 +20,20 @@ export const CassetteMetadataSchema = Schema.Record(Schema.String, Schema.Unknow
 export type CassetteMetadata = Schema.Schema.Type<typeof CassetteMetadataSchema>
 
 export const HttpInteractionSchema = Schema.Struct({
-  transport: Schema.Literal("http"),
+  transport: Schema.tag("http"),
   request: RequestSnapshotSchema,
   response: ResponseSnapshotSchema,
 })
 export type HttpInteraction = Schema.Schema.Type<typeof HttpInteractionSchema>
 
 export const WebSocketFrameSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("text"), body: Schema.String }),
-  Schema.Struct({ kind: Schema.Literal("binary"), body: Schema.String, bodyEncoding: Schema.Literal("base64") }),
+  Schema.Struct({ kind: Schema.tag("text"), body: Schema.String }),
+  Schema.Struct({ kind: Schema.tag("binary"), body: Schema.String, bodyEncoding: Schema.Literal("base64") }),
 ])
 export type WebSocketFrame = Schema.Schema.Type<typeof WebSocketFrameSchema>
 
 export const WebSocketInteractionSchema = Schema.Struct({
-  transport: Schema.Literal("websocket"),
+  transport: Schema.tag("websocket"),
   open: Schema.Struct({
     url: Schema.String,
     headers: Schema.Record(Schema.String, Schema.String),
@@ -43,14 +43,14 @@ export const WebSocketInteractionSchema = Schema.Struct({
 })
 export type WebSocketInteraction = Schema.Schema.Type<typeof WebSocketInteractionSchema>
 
-export const InteractionSchema = Schema.Union([HttpInteractionSchema, WebSocketInteractionSchema])
-export type Interaction = HttpInteraction | WebSocketInteraction
+export const InteractionSchema = Schema.Union([HttpInteractionSchema, WebSocketInteractionSchema]).pipe(
+  Schema.toTaggedUnion("transport"),
+)
+export type Interaction = Schema.Schema.Type<typeof InteractionSchema>
 
-export const isHttpInteraction = (interaction: Interaction): interaction is HttpInteraction =>
-  interaction.transport === "http"
+export const isHttpInteraction = InteractionSchema.guards.http
 
-export const isWebSocketInteraction = (interaction: Interaction): interaction is WebSocketInteraction =>
-  interaction.transport === "websocket"
+export const isWebSocketInteraction = InteractionSchema.guards.websocket
 
 export const httpInteractions = (cassette: Cassette) => cassette.interactions.filter(isHttpInteraction)
 

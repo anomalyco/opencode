@@ -4,7 +4,7 @@ import type { CacheHint } from "../../schema"
 // Bedrock cache markers are positional: emit a `cachePoint` block immediately
 // after the content the caller wants treated as a cacheable prefix.
 export const CachePointBlock = Schema.Struct({
-  cachePoint: Schema.Struct({ type: Schema.Literal("default") }),
+  cachePoint: Schema.Struct({ type: Schema.tag("default") }),
 })
 export type CachePointBlock = Schema.Schema.Type<typeof CachePointBlock>
 

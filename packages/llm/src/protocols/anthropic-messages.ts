@@ -26,24 +26,24 @@ export const PATH = "/messages"
 // =============================================================================
 // Request Body Schema
 // =============================================================================
-const AnthropicCacheControl = Schema.Struct({ type: Schema.Literal("ephemeral") })
+const AnthropicCacheControl = Schema.Struct({ type: Schema.tag("ephemeral") })
 
 const AnthropicTextBlock = Schema.Struct({
-  type: Schema.Literal("text"),
+  type: Schema.tag("text"),
   text: Schema.String,
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 type AnthropicTextBlock = Schema.Schema.Type<typeof AnthropicTextBlock>
 
 const AnthropicThinkingBlock = Schema.Struct({
-  type: Schema.Literal("thinking"),
+  type: Schema.tag("thinking"),
   thinking: Schema.String,
   signature: Schema.optional(Schema.String),
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
 const AnthropicToolUseBlock = Schema.Struct({
-  type: Schema.Literal("tool_use"),
+  type: Schema.tag("tool_use"),
   id: Schema.String,
   name: Schema.String,
   input: Schema.Unknown,
@@ -52,7 +52,7 @@ const AnthropicToolUseBlock = Schema.Struct({
 type AnthropicToolUseBlock = Schema.Schema.Type<typeof AnthropicToolUseBlock>
 
 const AnthropicServerToolUseBlock = Schema.Struct({
-  type: Schema.Literal("server_tool_use"),
+  type: Schema.tag("server_tool_use"),
   id: Schema.String,
   name: Schema.String,
   input: Schema.Unknown,
@@ -81,7 +81,7 @@ const AnthropicServerToolResultBlock = Schema.Struct({
 type AnthropicServerToolResultBlock = Schema.Schema.Type<typeof AnthropicServerToolResultBlock>
 
 const AnthropicToolResultBlock = Schema.Struct({
-  type: Schema.Literal("tool_result"),
+  type: Schema.tag("tool_result"),
   tool_use_id: Schema.String,
   content: Schema.String,
   is_error: Schema.optional(Schema.Boolean),
@@ -102,7 +102,7 @@ type AnthropicToolResultBlock = Schema.Schema.Type<typeof AnthropicToolResultBlo
 const AnthropicMessage = Schema.Union([
   Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
   Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
-])
+]).pipe(Schema.toTaggedUnion("role"))
 type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
 
 const AnthropicTool = Schema.Struct({
@@ -115,11 +115,11 @@ type AnthropicTool = Schema.Schema.Type<typeof AnthropicTool>
 
 const AnthropicToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.Literals(["auto", "any"]) }),
-  Schema.Struct({ type: Schema.Literal("tool"), name: Schema.String }),
+  Schema.Struct({ type: Schema.tag("tool"), name: Schema.String }),
 ])
 
 const AnthropicThinking = Schema.Struct({
-  type: Schema.Literal("enabled"),
+  type: Schema.tag("enabled"),
   budget_tokens: Schema.Number,
 })
 

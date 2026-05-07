@@ -164,7 +164,7 @@ export const LLMErrorReason = Schema.Union([
   TransportReason,
   InvalidProviderOutputReason,
   UnknownProviderReason,
-])
+]).pipe(Schema.toTaggedUnion("_tag"))
 export type LLMErrorReason = Schema.Schema.Type<typeof LLMErrorReason>
 
 export class LLMError extends Schema.TaggedErrorClass<LLMError>()("LLM.Error", {

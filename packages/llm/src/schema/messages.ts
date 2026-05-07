@@ -189,7 +189,7 @@ export const ResponseFormat = Schema.Union([
   Schema.Struct({ type: Schema.Literal("text") }),
   Schema.Struct({ type: Schema.Literal("json"), schema: JsonSchema }),
   Schema.Struct({ type: Schema.Literal("tool"), tool: ToolDefinition }),
-])
+]).pipe(Schema.toTaggedUnion("type"))
 export type ResponseFormat = Schema.Schema.Type<typeof ResponseFormat>
 
 export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
