@@ -38,9 +38,18 @@ Write-Host "========================================" -ForegroundColor Cyan
 
 # ── 查找二进制 ────────────────────────────────────────
 $binary = Join-Path $BuildDir "dist\opencode-$Target\bin\opencode"
+$binaryZip = Join-Path $BuildDir "dist\opencode-$Target\bin\opencode.zip"
+$binaryBin = Join-Path $BuildDir "dist\opencode-$Target\bin"
 if (-not (Test-Path $binary)) {
-    Write-Error "ARM64 binary not found: $binary"
-    exit 1
+    if (-not (Test-Path $binaryZip)) {
+        Write-Error "ARM64 binary not found: $binaryZip"
+        exit 1
+    }
+    Expand-Archive -Path $binaryZip -DestinationPath $binaryBin -Force
+    if (-not (Test-Path $binary)) {
+        Write-Error "ARM64 binary not found: $binary"
+        exit 1
+    }
 }
 $binarySize = [math]::Round((Get-Item $binary).Length / 1MB, 1)
 Write-Host "`n  Binary found: $binary ($binarySize MB)" -ForegroundColor Gray
