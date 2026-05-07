@@ -25,7 +25,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
+import { Effect, Exit, Layer, Option, Context, Schema, Stream, Schedule, Duration } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -119,11 +119,49 @@ function remoteURL(key: string, value: string) {
   log.warn("invalid remote mcp url", { key })
 }
 
-// Convert MCP tool definition to AI SDK Tool type
-function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
+// --- Transport error detection (inline to avoid SDK import issues) ---
+const TRANSPORT_ERROR_CODES = new Set([
+  "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH", "ENOTFOUND",
+  "EPIPE", "ECONNABORTED", "UND_ERR_SOCKET", "UND_ERR_CLOSED",
+  "ConnectionRefused", "ConnectionReset", "ConnectionAborted",
+  "ConnectionClosed", "Timeout", "SocketClosed", "NotConnected",
+  "FailedToOpenSocket",
+])
+
+function isStreamableHTTPError(e: unknown): e is Error & { code: number | undefined } {
+  return e instanceof Error && "code" in e && (typeof (e as any).code === "number" || typeof (e as any).code === "undefined")
+}
+
+function isTransportError(e: unknown): boolean {
+  if (isStreamableHTTPError(e)) {
+    if (e.code === -1) return true
+    if (typeof e.code !== "number") return false
+    if (e.code === 401 || e.code === 403) return false
+    return e.code >= 400
+  }
+  if (!(e instanceof Error)) return false
+  const err = e as Error & { code?: string; cause?: { code?: string } }
+  if (err.cause?.code && TRANSPORT_ERROR_CODES.has(err.cause.code)) return true
+  if (err.code && TRANSPORT_ERROR_CODES.has(err.code)) return true
+  if (err.message.includes("fetch failed")) return true
+  if (err.message.includes("Unable to connect")) return true
+  return false
+}
+
+// --- State reference - declared early so it's available to async callbacks ---
+let mcpStateRef: InstanceState.InstanceState<State> | undefined
+
+// Convert MCP tool definition to AI SDK Tool type with auto-reconnect on transport errors
+function makeTool(
+  clientName: string,
+  mcpTool: MCPToolDef,
+  client: MCPClient,
+  bridge: EffectBridge.Shape,
+  reconnectClient: (name: string) => Promise<boolean>,
+  timeout?: number,
+): Tool {
   const inputSchema = mcpTool.inputSchema
 
-  // Spread first, then override type to ensure it's always "object"
   const schema: JSONSchema7 = {
     ...(inputSchema as JSONSchema7),
     type: "object",
@@ -134,18 +172,28 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
   return dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(schema),
-    execute: async (args: unknown) => {
-      return client.callTool(
-        {
-          name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
-        },
-        CallToolResultSchema,
-        {
-          resetTimeoutOnProgress: true,
-          timeout,
-        },
-      )
+    execute: (args: unknown) => {
+      const payload = {
+        name: mcpTool.name,
+        arguments: (args || {}) as Record<string, unknown>,
+      }
+      const opts = { resetTimeoutOnProgress: true, timeout }
+      return client.callTool(payload, CallToolResultSchema, opts).catch(async (e) => {
+        if (!isTransportError(e)) throw e
+        log.warn("mcp transport error, attempting reconnect", {
+          clientName,
+          tool: mcpTool.name,
+          error: e instanceof Error ? e.message : String(e),
+        })
+        const ok = await reconnectClient(clientName)
+        if (!ok) throw e
+        const state = mcpStateRef
+        if (!state) throw e
+        const next = await bridge.promise(InstanceState.get(state))
+        const fresh = next.clients[clientName]
+        if (!fresh || next.status[clientName]?.status !== "connected") throw e
+        return fresh.callTool(payload, CallToolResultSchema, opts)
+      })
     },
   })
 }
@@ -444,6 +492,61 @@ export const layer = Layer.effect(
       return { mcpClient, status, defs: listed } satisfies CreateResult
     })
     const cfgSvc = yield* Config.Service
+    const layerBridge = yield* EffectBridge.make()
+    const reconnecting = new Map<string, Promise<boolean>>()
+
+    // Single-flight reconnect: concurrent tool calls for the same MCP name
+    // share one in-flight Promise instead of each triggering a new connect.
+    // The entry is removed on both success and failure.
+    const reconnectClient = (name: string): Promise<boolean> => {
+      const existing = reconnecting.get(name)
+      if (existing) return existing
+      const p = layerBridge
+        .promise(getMcpConfig(name))
+        .then((mcp) => {
+          if (!mcp) return false
+          return layerBridge
+            .promise(createAndStore(name, { ...mcp, enabled: true }))
+            .then((status) => status.status === "connected")
+        })
+        .catch((err) => {
+          log.error("mcp reconnect failed", { name, error: err instanceof Error ? err.message : String(err) })
+          return false
+        })
+        .finally(() => {
+          reconnecting.delete(name)
+        })
+      reconnecting.set(name, p)
+      return p
+    }
+
+    // Periodic health-check: attempt to reconnect failed servers every 30 seconds.
+    // Uses a scoped fiber so it is cleaned up when the instance is disposed.
+    const startHealthCheck = Effect.fn("MCP.healthCheck")(function* () {
+      const s = yield* InstanceState.get(mcpStateRef!)
+      const cfg = yield* cfgSvc.get()
+      const config = cfg.mcp ?? {}
+      const failedServers = Object.entries(s.status).filter(
+        ([name, st]) => st.status === "failed" && config[name] && isMcpConfigured(config[name]),
+      )
+      if (failedServers.length > 0) {
+        log.info("mcp health-check: attempting reconnect for failed servers", {
+          servers: failedServers.map(([name]) => name),
+        })
+      }
+      for (const [name] of failedServers) {
+        // Skip if already reconnecting
+        if (reconnecting.has(name)) continue
+        const mcp = config[name]
+        if (!mcp) continue
+        const ok = yield* Effect.promise(() => reconnectClient(name))
+        if (ok) {
+          log.info("mcp health-check: reconnected", { server: name })
+        } else {
+          log.debug("mcp health-check: reconnect still failed", { server: name })
+        }
+      }
+    })
 
     const descendants = Effect.fnUntraced(
       function* (pid: number) {
@@ -521,7 +624,14 @@ export const layer = Layer.effect(
                 return
               }
 
-              const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.void))
+              const result = yield* create(key, mcp).pipe(
+                Effect.catch((err: unknown) => {
+                  const msg = err instanceof Error ? err.message : String(err)
+                  log.error("mcp server initialization failed, marking as failed", { key, error: msg })
+                  s.status[key] = { status: "failed", error: msg }
+                  return Effect.void
+                }),
+              )
               if (!result) return
 
               s.status[key] = result.status
@@ -557,9 +667,17 @@ export const layer = Layer.effect(
           }),
         )
 
+// Start periodic health-check for failed MCP servers (auto-reconnect every 30s)
+        yield* startHealthCheck().pipe(
+          Effect.catchCause(() => Effect.void),
+          Effect.repeat(Schedule.spaced(Duration.seconds(30))),
+          Effect.forkScoped,
+        )
+
         return s
       }),
     )
+    mcpStateRef = state
 
     function closeClient(s: State, name: string) {
       const client = s.clients[name]
@@ -667,7 +785,14 @@ export const layer = Layer.effect(
 
             const timeout = entry?.timeout ?? defaultTimeout
             for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = makeTool(
+                clientName,
+                mcpTool,
+                client,
+                layerBridge,
+                reconnectClient,
+                timeout,
+              )
             }
           }),
         { concurrency: "unbounded" },
