@@ -78,6 +78,7 @@ export type GoUpsellArtRenderOptions = {
 }
 
 const CACHE_FRAME_COUNT = Math.round(PERIOD / (1000 / 30))
+const CACHE_FRAMES_PER_RENDER = 1
 
 export function toRgb(color: RGBA): Rgb {
   const [r, g, b] = color.toInts()
@@ -130,13 +131,14 @@ export class GoUpsellArtPainter {
   private pulsePrimary = 0
   private cacheDirty = true
   private frameCache: Array<{ fg: Uint16Array; bg: Uint16Array }> = []
+  private cacheBuildIndex = 0
 
   setBackgroundPanel(value: RGBA | Rgb | undefined) {
     if (!value) return false
     const next = value instanceof RGBA ? toRgb(value) : value
     if (sameRgb(this.panelRgb, next)) return false
     this.panelRgb = next
-    this.cacheDirty = true
+    this.invalidateCache()
     return true
   }
 
@@ -145,7 +147,7 @@ export class GoUpsellArtPainter {
     const next = value instanceof RGBA ? toRgb(value) : value
     if (sameRgb(this.logoBaseRgb, next)) return false
     this.logoBaseRgb = next
-    this.cacheDirty = true
+    this.invalidateCache()
     return true
   }
 
@@ -154,7 +156,7 @@ export class GoUpsellArtPainter {
     const next = value instanceof RGBA ? toRgb(value) : value
     if (sameRgb(this.primaryRgb, next)) return false
     this.primaryRgb = next
-    this.cacheDirty = true
+    this.invalidateCache()
     return true
   }
 
@@ -168,6 +170,12 @@ export class GoUpsellArtPainter {
     }
     this.drawBackground(frameBuffer, this.elapsed)
     this.drawLogo(frameBuffer, this.elapsed, rgb)
+  }
+
+  private invalidateCache() {
+    this.cacheDirty = true
+    this.cacheBuildIndex = 0
+    this.frameCache = []
   }
 
   private rebuildGeometry(frameBuffer: OptimizedBuffer, rgb: boolean) {
@@ -203,23 +211,37 @@ export class GoUpsellArtPainter {
     }
 
     this.logoRgb = rgb
-    this.cacheDirty = true
+    this.invalidateCache()
     this.rebuildCellTemplate(frameBuffer, rgb)
   }
 
   private drawCached(frameBuffer: OptimizedBuffer, rgb: boolean) {
-    if (this.cacheDirty || this.frameCache.length === 0) this.rebuildFrameCache(frameBuffer, rgb)
-    const frame = this.frameCache[Math.floor((this.elapsed / PERIOD) * this.frameCache.length) % this.frameCache.length]
-    if (!frame) return
-    frameBuffer.buffers.fg.set(frame.fg)
-    frameBuffer.buffers.bg.set(frame.bg)
+    if (this.cacheDirty) this.startFrameCache(frameBuffer, rgb)
+    if (this.cacheBuildIndex < CACHE_FRAME_COUNT) {
+      this.buildFrameCache(frameBuffer, rgb)
+      this.drawBackground(frameBuffer, this.elapsed)
+      this.drawLogo(frameBuffer, this.elapsed, rgb)
+      return
+    }
+
+    const frame = this.frameCache[Math.floor((this.elapsed / PERIOD) * CACHE_FRAME_COUNT) % CACHE_FRAME_COUNT]
+    if (frame) {
+      frameBuffer.buffers.fg.set(frame.fg)
+      frameBuffer.buffers.bg.set(frame.bg)
+    }
   }
 
-  private rebuildFrameCache(frameBuffer: OptimizedBuffer, rgb: boolean) {
+  private startFrameCache(frameBuffer: OptimizedBuffer, rgb: boolean) {
     this.frameCache = []
+    this.cacheBuildIndex = 0
     this.rebuildCellTemplate(frameBuffer, rgb)
-    for (let i = 0; i < CACHE_FRAME_COUNT; i++) {
-      const t = (i / CACHE_FRAME_COUNT) * PERIOD
+    this.cacheDirty = false
+  }
+
+  private buildFrameCache(frameBuffer: OptimizedBuffer, rgb: boolean) {
+    const end = Math.min(CACHE_FRAME_COUNT, this.cacheBuildIndex + CACHE_FRAMES_PER_RENDER)
+    for (; this.cacheBuildIndex < end; this.cacheBuildIndex++) {
+      const t = (this.cacheBuildIndex / CACHE_FRAME_COUNT) * PERIOD
       this.drawBackground(frameBuffer, t)
       this.drawLogo(frameBuffer, t, rgb)
       this.frameCache.push({
@@ -227,7 +249,6 @@ export class GoUpsellArtPainter {
         bg: new Uint16Array(frameBuffer.buffers.bg),
       })
     }
-    this.cacheDirty = false
   }
 
   private rebuildCellTemplate(frameBuffer: OptimizedBuffer, rgb: boolean) {
