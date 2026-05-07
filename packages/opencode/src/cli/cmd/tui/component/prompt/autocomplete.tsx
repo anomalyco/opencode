@@ -53,7 +53,8 @@ function extractLineRange(input: string) {
 export type AutocompleteRef = {
   onInput: (value: string) => void
   onKeyDown: (e: KeyEvent) => void
-  visible: false | "@" | "/"
+  visible: false | "@" | "/" | "shell"
+  show: (mode: "@" | "/" | "shell") => void
 }
 
 export type AutocompleteOption = {
@@ -78,6 +79,7 @@ export function Autocomplete(props: {
   fileStyleId: number
   agentStyleId: number
   promptPartTypeId: () => number
+  shellOptions?: AutocompleteOption[]
 }) {
   const editor = useEditorContext()
   const sdk = useSDK()
@@ -428,6 +430,7 @@ export function Autocomplete(props: {
   })
 
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
+    if (store.visible === "shell") return props.shellOptions ?? []
     const filesValue = files()
     const agentsValue = agents()
     const commandsValue = commands()
@@ -520,11 +523,11 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   }
 
-  function show(mode: "@" | "/") {
+  function show(mode: "@" | "/" | "shell") {
     command.keybinds(false)
     setStore({
       visible: mode,
-      index: props.input().cursorOffset,
+      index: mode === "shell" ? 0 : props.input().cursorOffset,
     })
   }
 
@@ -555,8 +558,15 @@ export function Autocomplete(props: {
       get visible() {
         return store.visible
       },
+      show(mode: "@" | "/" | "shell") {
+        show(mode)
+      },
       onInput(value) {
         if (store.visible) {
+          if (store.visible === "shell") {
+            hide()
+            return
+          }
           if (
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
@@ -623,6 +633,11 @@ export function Autocomplete(props: {
             return
           }
           if (name === "tab") {
+            if (store.visible === "shell") {
+              select()
+              e.preventDefault()
+              return
+            }
             const selected = options()[store.selected]
             if (selected?.isDirectory) {
               expandDirectory()

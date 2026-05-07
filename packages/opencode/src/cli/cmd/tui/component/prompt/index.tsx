@@ -23,7 +23,7 @@ import { computePromptTraits } from "./traits"
 import { assign } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
-import { type AutocompleteRef, Autocomplete } from "./autocomplete"
+import { type AutocompleteRef, type AutocompleteOption, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
 import { useRenderer, useTerminalDimensions, useKeyboard, type JSX } from "@opentui/solid"
 import * as Editor from "@tui/util/editor"
@@ -348,6 +348,10 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
 
+  const [shellCompletions, setShellCompletions] = createSignal<string[]>([])
+  const [shellCompletionBase, setShellCompletionBase] = createSignal("")
+  const [shellCompletionOptions, setShellCompletionOptions] = createSignal<AutocompleteOption[]>([])
+
   createEffect(
     on(
       () => props.sessionID,
@@ -600,21 +604,28 @@ export function Prompt(props: PromptProps) {
       },
     ]
   })
-
-  const [shellCompletions, setShellCompletions] = createSignal<string[]>([])
-  const [shellCompletionBase, setShellCompletionBase] = createSignal("")
-
   useKeyboard((evt) => {
-    if (store.mode !== "shell" || evt.name !== "tab" || evt.ctrl || evt.meta) return
+    if (store.mode !== "shell" || evt.ctrl || evt.meta) return
+    if (autocomplete.visible === "shell") {
+      if (evt.name === "tab" || evt.name === "return" || evt.name === "up" || evt.name === "down" || evt.name === "escape") {
+        autocomplete.onKeyDown(evt)
+        if (evt.name === "tab" || evt.name === "return" || evt.name === "escape") evt.preventDefault()
+      }
+      return
+    }
+    if (evt.name !== "tab") return
     evt.preventDefault()
     evt.stopPropagation()
     if (!input) return
 
     const text = input.plainText
+    const endsWithSpace = text.endsWith(" ") || text.endsWith("\t")
     const words = text.split(/\s+/)
-    const partial = words[words.length - 1] || ""
-    const partialIndex = text.lastIndexOf(partial)
-    if (partial.length === 0 || partialIndex < 0) return
+    let partial = endsWithSpace ? "" : (words[words.length - 1] || "")
+    const partialIndex = endsWithSpace ? text.length : text.lastIndexOf(partial)
+    if (partial.length === 0 && !endsWithSpace) return
+    if (partialIndex < 0) return
+    const fsPartial = partial.startsWith("~") ? partial.replace(/^~/, process.env.HOME || "/root") : partial
 
     const apply = (c: string) => {
       const newText = text.substring(0, partialIndex) + c
@@ -622,38 +633,77 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", "input", newText)
       input.cursorOffset = Bun.stringWidth(newText)
     }
-    const isDir = (p: string) => { try { return statSync(p).isDirectory() } catch { return false } }
+    const isDir = (p: string) => { try { return statSync(p.startsWith("~") ? p.replace(/^~/, process.env.HOME || "/root") : p).isDirectory() } catch { return false } }
 
     if (partial === shellCompletionBase() && shellCompletions().length > 0) {
-      const base = partial.substring(0, partial.lastIndexOf("/") + 1)
-      const display = shellCompletions().slice(0, 8).map((s) => base ? s.slice(base.length) : s).join("  ")
-      toast.show({ message: display + (shellCompletions().length > 8 ? `  ...(${shellCompletions().length} total)` : ""), variant: "info", duration: 3000 })
+      autocomplete.show("shell")
       return
     }
 
     try {
-      const isFirstWord = words.length === 1
       let completions: string[] = []
 
-      let dir: string
-      let searchPrefix: string
-      if (partial.endsWith("/")) {
-        dir = partial.slice(0, -1) || "/"
-        searchPrefix = ""
-      } else {
-        dir = path.dirname(partial) || "."
-        searchPrefix = path.basename(partial)
-      }
-      try {
-        const entries = readdirSync(dir)
-        completions = entries
-          .filter((e) => !searchPrefix || e.startsWith(searchPrefix))
-          .map((e) => partial.endsWith("/") ? partial + e : path.join(dir, e))
-      } catch (e) {
-        toast.show({ message: `readdir failed: ${e}`, variant: "error", duration: 3000 })
+      if (!endsWithSpace) {
+        let dir: string
+        let searchPrefix: string
+        if (fsPartial.endsWith("/")) {
+          dir = fsPartial.slice(0, -1) || "/"
+          searchPrefix = ""
+        } else {
+          dir = path.dirname(fsPartial) || "."
+          searchPrefix = path.basename(fsPartial)
+        }
+        try {
+          const entries = readdirSync(dir)
+          completions = entries
+            .filter((e) => !searchPrefix || e.startsWith(searchPrefix))
+            .map((e) => fsPartial.endsWith("/") ? partial + e : path.join(dir, e))
+        } catch (e) {
+          toast.show({ message: `readdir failed: ${e}`, variant: "error", duration: 3000 })
+        }
       }
 
-      if (isFirstWord && completions.length === 0) {
+      if (completions.length === 0) {
+        try {
+          const compPoint = partialIndex + partial.length
+          const bashScript = `set +o nounset 2>/dev/null
+source /usr/share/bash-completion/bash_completion 2>/dev/null || true
+COMP_LINE=${JSON.stringify(text)}
+COMP_POINT=${compPoint}
+COMP_WORDS=(${JSON.stringify(text)})
+COMP_CWORD=$(( ${JSON.stringify(text).split(" ").length - 1} ))
+COMP_TYPE=9
+CMD=${JSON.stringify(words[0])}
+_completion_loader $CMD 2>/dev/null || true
+fn=$(complete -p $CMD 2>/dev/null | sed -n "s/.* -F \\([^ ]*\\).*/\\1/p")
+[[ -n "$fn" ]] && declare -f "$fn" >/dev/null 2>&1 && $fn 2>/dev/null
+printf '%s\\n' "\${COMPREPLY[@]}"`.replace(/\\n/g, "\n")
+          const zshScript = `autoload -Uz compinit 2>/dev/null && compinit -id 2>/dev/null
+_compadd() { for x in "$@"; do [[ "$x" != -* ]] && echo "$x"; done }
+alias compadd=_compadd
+COMP_LINE=${JSON.stringify(text)}
+COMP_POINT=${compPoint}
+_main_complete 2>/dev/null`
+          const shell = process.env.SHELL || "/bin/bash"
+          const script = shell.includes("zsh") ? zshScript : bashScript
+          const sh = shell.includes("zsh") ? "zsh" : "bash"
+          const proc = Bun.spawnSync({ cmd: [sh, "-c", script], stdout: "pipe", stderr: "pipe" })
+          const output = new TextDecoder().decode(proc.stdout)
+          completions = [...new Set(output.split("\n").filter((s) => s.trim().length > 0))]
+        } catch {}
+      }
+
+      if (completions.length === 0 && endsWithSpace) {
+        try {
+          const listDir = fsPartial.startsWith("/") ? fsPartial : "."
+          const entries = readdirSync(listDir)
+          completions = entries
+        } catch (e) {
+          toast.show({ message: `readdir failed: ${e}`, variant: "error", duration: 3000 })
+        }
+      }
+
+      if (!endsWithSpace && completions.length === 0) {
         try {
           const proc = Bun.spawnSync({ cmd: ["bash", "-c", `compgen -c -- ${JSON.stringify(partial)}`], stdout: "pipe", stderr: "pipe" })
           const output = new TextDecoder().decode(proc.stdout)
@@ -662,37 +712,54 @@ export function Prompt(props: PromptProps) {
       }
 
       completions = [...new Set(completions)]
-      if (completions.length === 0) {
-        toast.show({ message: `no matches for "${partial}"`, variant: "info", duration: 2000 })
-        return
-      }
+      if (completions.length === 0) return
 
       if (completions.length === 1) {
         const suffix = isDir(completions[0]) && !completions[0].endsWith("/") ? "/" : ""
-        const applied = completions[0] + suffix
-        apply(applied)
-        setShellCompletionBase(applied)
+        apply(completions[0] + suffix)
+        setShellCompletionBase(completions[0] + suffix)
         setShellCompletions([])
         return
       }
 
-      let prefix = completions[0]
-      for (let i = 1; i < completions.length; i++) {
-        while (!completions[i].startsWith(prefix)) prefix = prefix.slice(0, -1)
-        if (prefix.length <= partial.length) break
+      const sorted = [...completions].sort((a, b) => a.length - b.length)
+      let lcp = sorted[0]
+      for (let i = 1; i < sorted.length; i++) {
+        while (!sorted[i].startsWith(lcp)) lcp = lcp.slice(0, -1)
+        if (lcp.length <= partial.length) break
       }
 
-      if (prefix.length > partial.length) {
-        apply(prefix)
-        setShellCompletionBase(prefix)
-      } else {
-        setShellCompletionBase(partial)
+      if (lcp.length > partial.length) {
+        apply(lcp)
+        setShellCompletionBase(lcp)
+        setShellCompletions(completions)
+        const lcpBase = lcp.substring(0, lcp.lastIndexOf("/") + 1)
+        setShellCompletionOptions(
+          completions.map((s) => ({
+            display: lcpBase ? s.slice(lcpBase.length) : s,
+            onSelect: () => {
+              const suffix = isDir(s) && !s.endsWith("/") ? "/" : ""
+              apply(s + suffix)
+            },
+          })),
+        )
+        autocomplete.show("shell")
+        return
       }
 
-      setShellCompletions(completions)
       const base = partial.substring(0, partial.lastIndexOf("/") + 1)
-      const display = completions.slice(0, 8).map((s) => base ? s.slice(base.length) : s).join("  ")
-      toast.show({ message: display + (completions.length > 8 ? `  ...(${completions.length} total)` : ""), variant: "info", duration: 3000 })
+      setShellCompletions(completions)
+      setShellCompletionBase(partial)
+      setShellCompletionOptions(
+        completions.map((s) => ({
+          display: base ? s.slice(base.length) : s,
+          onSelect: () => {
+            const suffix = isDir(s) && !s.endsWith("/") ? "/" : ""
+            apply(s + suffix)
+          },
+        })),
+      )
+      autocomplete.show("shell")
     } catch (e) {
       toast.show({ message: `tab complete error: ${e}`, variant: "error", duration: 5000 })
     }
@@ -1316,6 +1383,7 @@ export function Prompt(props: PromptProps) {
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
+        shellOptions={shellCompletionOptions()}
       />
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
@@ -1401,6 +1469,7 @@ export function Prompt(props: PromptProps) {
                   }
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
+                if (store.mode === "shell" && autocomplete.visible) autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
