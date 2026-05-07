@@ -9,9 +9,9 @@ import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import {
   LLMClient,
   type LLMClientService,
-  type ProtocolID,
+  type RouteID,
 } from "@opencode-ai/llm"
-import { RequestExecutor } from "@opencode-ai/llm/adapter"
+import { RequestExecutor } from "@opencode-ai/llm/route"
 import "@opencode-ai/llm/protocols"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -479,16 +479,16 @@ const live: Layer.Layer<
     //   - The caller populated `input.nativeMessages` with `MessageV2.WithParts`
     //     (the AI SDK `messages` array isn't enough — the LLM-native bridge
     //     needs the typed parts).
-    //   - The bridge can route the model to one of the protocols listed in
-    //     `NATIVE_PROTOCOLS`. The adapter registry is broader than this
-    //     allowlist so we can enable providers incrementally.
+    //   - The bridge can route the model to one of the routes listed in
+    //     `NATIVE_ROUTES`. The route registry is broader than this allowlist
+    //     so we can enable providers incrementally.
     //   - If tools are present, the caller supplied a native tool definition
     //     for every AI SDK tool key so the native path can dispatch them.
     //
     // Otherwise it returns `undefined` and the caller falls through to the
     // existing AI SDK path. The return shape is deliberately narrow — we are
     // not yet committed to native-by-default for any provider.
-    const NATIVE_PROTOCOLS = new Set<ProtocolID>(["anthropic-messages"])
+    const NATIVE_ROUTES = new Set<RouteID>(["anthropic-messages"])
     const runNative = Effect.fn("LLM.runNative")(function* (input: StreamRequest, prepared: PreparedStream) {
       if (!Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE) return undefined
       if (!input.nativeMessages || input.nativeMessages.length === 0) return undefined
@@ -547,13 +547,13 @@ const live: Layer.Layer<
         Effect.catchTag("LLMNative.UnsupportedContentError", () => Effect.void),
       )
       if (!llmRequest) return undefined
-      if (!NATIVE_PROTOCOLS.has(llmRequest.model.protocol)) return undefined
+      if (!NATIVE_ROUTES.has(llmRequest.model.route)) return undefined
 
       log.info("native stream", {
         sessionID: input.sessionID,
         modelID: input.model.id,
         providerID: input.model.providerID,
-        protocol: llmRequest.model.protocol,
+        route: llmRequest.model.route,
       })
 
       // Stateful LLMEvent → SessionEvent translator. `map.map(event)` is called

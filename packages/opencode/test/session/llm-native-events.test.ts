@@ -7,7 +7,7 @@ const types = (events: ReadonlyArray<{ readonly type: string }>) => events.map((
 describe("LLMNativeEvents", () => {
   test("synthesizes text and reasoning boundaries around native deltas", () => {
     const events = LLMNativeEvents.toSessionEvents([
-      { type: "request-start", id: "req_1", model: LLM.model({ id: "gpt-5", provider: "openai", protocol: "openai-responses" }) },
+      { type: "request-start", id: "req_1", model: LLM.model({ id: "gpt-5", provider: "openai", route: "openai-responses" }) },
       { type: "step-start", index: 0 },
       { type: "text-delta", text: "Hello" },
       { type: "text-delta", text: "!" },
@@ -83,7 +83,6 @@ describe("LLMNativeEvents", () => {
         title: "Lookup",
         metadata: { count: 1 },
         output: "sunny",
-        attachments: [{ id: "prt_file", sessionID: "ses_test", messageID: "msg_test", type: "file", mime: "text/plain", url: "data:text/plain;base64,c3Vubnk=" }],
       },
     })
     expect(events.filter((event) => event.type === "tool-error")).toEqual([

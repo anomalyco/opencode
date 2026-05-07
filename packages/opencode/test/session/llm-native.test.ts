@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { LLMClient, type LLMRequest } from "@opencode-ai/llm"
-import { RequestExecutor } from "@opencode-ai/llm/adapter"
+import { RequestExecutor } from "@opencode-ai/llm/route"
 import "@opencode-ai/llm/protocols"
 import { Cause, Effect, Layer, Exit, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
@@ -153,8 +153,7 @@ describe("LLMNative.request", () => {
       model: {
         id: "gpt-5",
         provider: "openai",
-        protocol: "openai-responses",
-        apiKey: "openai-key",
+        route: "openai-responses",
         headers: { "x-model": "model", "x-request": "request", "x-override": "request" },
       },
       system: [{ type: "text", text: "You are concise." }],
@@ -606,7 +605,7 @@ describe("LLMNative.request", () => {
     })
     const prepared = yield* prepare(request)
 
-    expect(prepared.payload).toMatchObject({
+    expect(prepared.body).toMatchObject({
       model: "gpt-5",
       input: [
         { role: "user", content: [{ type: "input_text", text: "What is the weather?" }] },
@@ -667,10 +666,9 @@ describe("LLMNative.request", () => {
 
     expect(request.model).toMatchObject({
       provider: "anthropic",
-      protocol: "anthropic-messages",
-      apiKey: "anthropic-key",
+      route: "anthropic-messages",
     })
-    expect(prepared.payload).toMatchObject({
+    expect(prepared.body).toMatchObject({
       model: "claude-sonnet-4-5",
       system: [{ type: "text", text: "You are concise." }],
       messages: [
@@ -736,12 +734,10 @@ describe("LLMNative.request", () => {
 
     expect(request.model).toMatchObject({
       provider: "togetherai",
-      adapter: "openai-compatible-chat",
-      protocol: "openai-chat",
+      route: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
-      apiKey: "together-key",
     })
-    expect(prepared.payload).toMatchObject({
+    expect(prepared.body).toMatchObject({
       model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       messages: [
         { role: "user", content: "What is the weather?" },
@@ -799,10 +795,8 @@ describe("LLMNative.request", () => {
     expect(request.model).toMatchObject({
       id: "gpt-5-deployment",
       provider: "azure",
-      adapter: "azure-openai-responses",
-      protocol: "openai-responses",
+      route: "azure-openai-responses",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
-      apiKey: "azure-key",
       queryParams: { "api-version": "2025-04-01-preview" },
     })
   }))
@@ -824,10 +818,8 @@ describe("LLMNative.request", () => {
     expect(request.model).toMatchObject({
       id: "gpt-4-1-deployment",
       provider: "azure",
-      adapter: "azure-openai-chat",
-      protocol: "openai-chat",
+      route: "azure-openai-chat",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
-      apiKey: "azure-key",
       queryParams: { "api-version": "v1" },
     })
   }))
@@ -869,11 +861,10 @@ describe("LLMNative.request", () => {
 
     expect(request.model).toMatchObject({
       provider: "google",
-      protocol: "gemini",
+      route: "gemini",
       baseURL: "https://generativelanguage.googleapis.com/v1beta",
-      apiKey: "google-key",
     })
-    expect(prepared.payload).toMatchObject({
+    expect(prepared.body).toMatchObject({
       systemInstruction: { parts: [{ text: "You are concise." }] },
       contents: [
         { role: "user", parts: [{ text: "What is the weather?" }] },
@@ -939,7 +930,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* prepare(request)
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         system: [
           { type: "text", text: "First", cache_control: { type: "ephemeral" } },
           { type: "text", text: "Second", cache_control: { type: "ephemeral" } },
@@ -947,7 +938,7 @@ describe("LLMNative.request", () => {
         ],
       })
       // The third system block must not carry a cache_control marker.
-      expect(cacheControl(payloadArray(prepared.payload, "system")[2])).toBeUndefined()
+      expect(cacheControl(payloadArray(prepared.body, "system")[2])).toBeUndefined()
     }))
 
   it.effect("lowers cache hints to Anthropic cache_control on the last text block of the last 2 messages", () =>
@@ -961,7 +952,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* prepare(request)
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         messages: [
           { role: "user", content: [{ type: "text", text: "m0" }] },
           { role: "user", content: [{ type: "text", text: "m1", cache_control: { type: "ephemeral" } }] },
@@ -969,7 +960,7 @@ describe("LLMNative.request", () => {
         ],
       })
       // The first message's text must not carry cache_control.
-      const firstMessage = payloadArray(prepared.payload, "messages")[0]
+      const firstMessage = payloadArray(prepared.body, "messages")[0]
       expect(cacheControl(payloadArray(firstMessage, "content")[0])).toBeUndefined()
     }))
 
@@ -985,7 +976,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* prepare(request)
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         system: [{ text: "You are concise." }, { cachePoint: { type: "default" } }],
         messages: [
           {
@@ -1012,7 +1003,7 @@ describe("LLMNative.request", () => {
 
       // The serialized OpenAI Responses payload has no cache concept; the
       // assertion is that nothing in the payload carries a cache marker.
-      const json = JSON.stringify(prepared.payload)
+      const json = JSON.stringify(prepared.body)
       expect(json).not.toContain("cache_control")
       expect(json).not.toContain("cachePoint")
       expect(json).not.toContain("ephemeral")
@@ -1086,7 +1077,7 @@ describe("LLMNative.request", () => {
       })
       const prepared = yield* prepare(request)
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         messages: [
           { role: "user" },
           {

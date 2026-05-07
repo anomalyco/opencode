@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { LLMClient } from "@opencode-ai/llm"
-import { RequestExecutor } from "@opencode-ai/llm/adapter"
+import { RequestExecutor } from "@opencode-ai/llm/route"
 import "@opencode-ai/llm/protocols"
 import { Effect, Layer, Ref, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
@@ -309,7 +309,7 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
       const prepared = yield* Effect.gen(function* () {
         return yield* (yield* LLMClient.Service).prepare(llmRequest)
       }).pipe(Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer))))
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         tools: [
           {
             name: "lookup",
