@@ -7,6 +7,7 @@ export function POST(input: APIEvent) {
     modelList: "full",
     parseApiKey: (headers: Headers) => headers.get("x-api-key") ?? undefined,
     parseModel: (url: string, body: any) => body.model,
+    parseVariant: (url: string, body: any) => body.effort,
     parseIsStream: (url: string, body: any) => !!body.stream,
   })
 }
