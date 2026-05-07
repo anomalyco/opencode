@@ -1,8 +1,20 @@
 #!/bin/sh
 set -e
+
+BUN_BIN="${BUN_BIN:-$(command -v bun 2>/dev/null || true)}"
+if [ -z "$BUN_BIN" ] && [ -x "$HOME/.bun/bin/bun" ]; then
+  BUN_BIN="$HOME/.bun/bin/bun"
+fi
+if [ -z "$BUN_BIN" ]; then
+  echo "bun not found in PATH. Install bun or set BUN_BIN to the bun executable path." >&2
+  exit 127
+fi
+
+export PATH="$(dirname "$BUN_BIN"):$PATH"
+
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
-bun -e '
+"$BUN_BIN" -e '
 import { semver } from "bun";
 const pkg = await Bun.file("package.json").json();
 const expectedBunVersion = pkg.packageManager?.split("@")[1];
@@ -17,4 +29,4 @@ if (process.versions.bun !== expectedBunVersion) {
   console.warn(`Warning: Bun version ${process.versions.bun} differs from expected ${expectedBunVersion}`);
 }
 '
-bun typecheck
+"$BUN_BIN" turbo typecheck

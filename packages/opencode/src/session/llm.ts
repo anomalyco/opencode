@@ -38,6 +38,7 @@ export type StreamInput = {
   sessionID: string
   parentSessionID?: string
   model: Provider.Model
+  fallbackModels?: Provider.Model[]
   agent: Agent.Info
   permission?: Permission.Ruleset
   system: string[]

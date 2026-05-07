@@ -1233,6 +1233,7 @@ export type Config = {
     openTelemetry?: boolean
     primary_tools?: Array<string>
     continue_loop_on_deny?: boolean
+    suppress_retry_status_messages?: boolean
     mcp_timeout?: number
   }
 }

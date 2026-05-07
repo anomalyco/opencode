@@ -914,6 +914,40 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return yield* Effect.failCause(exit.cause)
     })
 
+    const resolveFallbackModels = Effect.fn("SessionPrompt.resolveFallbackModels")(function* (
+      agent: Agent.Info,
+      model: Provider.Model,
+      sessionID: SessionID,
+    ) {
+      const refs = (Array.isArray(agent.options?.["fallback_models"]) ? agent.options["fallback_models"] : []).flatMap(
+        (item) => {
+          if (typeof item === "string") return [item]
+          if (!item || typeof item !== "object") return []
+          if (!("model" in item) || typeof item.model !== "string") return []
+          return [item.model]
+        },
+      )
+
+      const resolved = yield* Effect.forEach(
+        refs,
+        (value) =>
+          Effect.gen(function* () {
+            const parsed = Provider.parseModel(value)
+            return yield* getModel(parsed.providerID, parsed.modelID, sessionID)
+          }).pipe(Effect.option),
+        { concurrency: "unbounded" },
+      )
+
+      return resolved
+        .filter(Option.isSome)
+        .map((item) => item.value)
+        .filter(
+          (item, index, all) =>
+            all.findIndex((x) => x.providerID === item.providerID && x.id === item.id) === index &&
+            !(item.providerID === model.providerID && item.id === model.id),
+        )
+    })
+
     const lastModel = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
@@ -1571,6 +1605,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+            const fallbackModels = yield* resolveFallbackModels(agent, model, sessionID)
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -1584,6 +1619,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
               tools,
               model,
+              fallbackModels,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
 

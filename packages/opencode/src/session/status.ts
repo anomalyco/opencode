@@ -45,6 +45,7 @@ export const Event = {
 export interface Interface {
   readonly get: (sessionID: SessionID) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Map<SessionID, Info>>
+  readonly shouldEmitRateLimitRetry: (sessionID: SessionID) => Effect.Effect<boolean>
   readonly set: (sessionID: SessionID, status: Info) => Effect.Effect<void>
 }
 
@@ -58,6 +59,9 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make(
       Effect.fn("SessionStatus.state")(() => Effect.succeed(new Map<SessionID, Info>())),
     )
+    const rateLimitRetryState = yield* InstanceState.make(
+      Effect.fn("SessionStatus.rateLimitRetryState")(() => Effect.succeed(new Set<SessionID>())),
+    )
 
     const get = Effect.fn("SessionStatus.get")(function* (sessionID: SessionID) {
       const data = yield* InstanceState.get(state)
@@ -66,6 +70,13 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("SessionStatus.list")(function* () {
       return new Map(yield* InstanceState.get(state))
+    })
+
+    const shouldEmitRateLimitRetry = Effect.fn("SessionStatus.shouldEmitRateLimitRetry")(function* (sessionID: SessionID) {
+      const data = yield* InstanceState.get(rateLimitRetryState)
+      if (data.has(sessionID)) return false
+      data.add(sessionID)
+      return true
     })
 
     const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
@@ -79,7 +90,7 @@ export const layer = Layer.effect(
       data.set(sessionID, status)
     })
 
-    return Service.of({ get, list, set })
+    return Service.of({ get, list, shouldEmitRateLimitRetry, set })
   }),
 )
 

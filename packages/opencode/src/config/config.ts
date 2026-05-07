@@ -287,6 +287,10 @@ export const Info = Schema.Struct({
       continue_loop_on_deny: Schema.optional(Schema.Boolean).annotate({
         description: "Continue the agent loop when a tool call is denied",
       }),
+      suppress_retry_status_messages: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Suppress retry status messages shown to users for transient provider retries. Go upsell retry notices are still emitted.",
+      }),
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),

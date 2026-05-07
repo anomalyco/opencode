@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Layer, Context, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -23,6 +23,7 @@ import { isRecord } from "@/util/record"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
 import { Modelv2 } from "@/v2/model"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 import * as DateTime from "effect/DateTime"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -129,9 +130,9 @@ export const layer: Layer.Layer<
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
 
-      const parse = (e: unknown) =>
+      const parse = (e: unknown, providerID: Provider.Model["providerID"] = input.model.providerID) =>
         MessageV2.fromError(e, {
-          providerID: input.model.providerID,
+          providerID,
           aborted,
         })
 
@@ -643,9 +644,9 @@ export const layer: Layer.Layer<
         yield* session.updateMessage(ctx.assistantMessage)
       })
 
-      const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
+      const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown, providerID?: Provider.Model["providerID"]) {
         slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
-        const error = parse(e)
+        const error = parse(e, providerID)
         if (MessageV2.ContextOverflowError.isInstance(error)) {
           ctx.needsCompaction = true
           yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
@@ -673,13 +674,29 @@ export const layer: Layer.Layer<
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         slog.info("process")
         ctx.needsCompaction = false
-        ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        const cfg = yield* config.get()
+        ctx.shouldBreak = cfg.experimental?.continue_loop_on_deny !== true
+        const suppressRetryStatusMessages = cfg.experimental?.suppress_retry_status_messages === true
+        const hasFallbackCandidates = (streamInput.fallbackModels?.length ?? 0) > 0
+        let fallbackNotified = false
+        const candidates = [streamInput.model, ...(streamInput.fallbackModels ?? [])].filter(
+          (item, index, all) =>
+            all.findIndex((x) => x.providerID === item.providerID && x.id === item.id) === index,
+        )
 
-        return yield* Effect.gen(function* () {
-          yield* Effect.gen(function* () {
+        const executeCandidate = Effect.fnUntraced(function* (candidate: Provider.Model, shouldRetry: boolean) {
+          ctx.model = candidate
+          ctx.assistantMessage.modelID = candidate.id
+          ctx.assistantMessage.providerID = candidate.providerID
+          yield* session.updateMessage(ctx.assistantMessage)
+
+          const base = Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
-            const stream = llm.stream(streamInput)
+            const stream = llm.stream({
+              ...streamInput,
+              model: candidate,
+            })
 
             yield* stream.pipe(
               Stream.tap((event) => handleEvent(event)),
@@ -691,7 +708,7 @@ export const layer: Layer.Layer<
               Effect.gen(function* () {
                 aborted = true
                 if (!ctx.assistantMessage.error) {
-                  yield* halt(new DOMException("Aborted", "AbortError"))
+                  yield* halt(new DOMException("Aborted", "AbortError"), candidate.providerID)
                 }
               }),
             ),
@@ -699,32 +716,81 @@ export const layer: Layer.Layer<
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
             ),
-            Effect.retry(
-              SessionRetry.policy({
-                parse,
-                set: (info) => {
-                  // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-                  EventV2.run(SessionEvent.Retried.Sync, {
-                    sessionID: ctx.sessionID,
-                    attempt: info.attempt,
-                    error: {
-                      message: info.message,
-                      isRetryable: true,
-                    },
-                    timestamp: DateTime.makeUnsafe(Date.now()),
-                  })
-                  return status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    next: info.next,
-                  })
-                },
-              }),
-            ),
-            Effect.catch(halt),
-            Effect.ensuring(cleanup()),
           )
+
+          const withRetry = shouldRetry
+            ? base.pipe(
+                Effect.retry(
+                  SessionRetry.policy({
+                    parse: (error) => parse(error, candidate.providerID),
+                    set: (info) => {
+                      const isGoUpsellRetry = info.message === SessionRetry.GO_UPSELL_MESSAGE
+                      const lowerRetryMessage = info.message.toLowerCase()
+                      const isRateLimitRetry =
+                        lowerRetryMessage.includes("429") ||
+                        lowerRetryMessage.includes("rate limit") ||
+                        lowerRetryMessage.includes("too many requests")
+                      const retryStatus = {
+                        type: "retry" as const,
+                        attempt: info.attempt,
+                        message: info.message,
+                        next: info.next,
+                      }
+                      EventV2.run(SessionEvent.Retried.Sync, {
+                        sessionID: ctx.sessionID,
+                        attempt: info.attempt,
+                        error: {
+                          message: info.message,
+                          isRetryable: true,
+                        },
+                        timestamp: DateTime.makeUnsafe(Date.now()),
+                      })
+                      if (isGoUpsellRetry) {
+                        return status.set(ctx.sessionID, retryStatus)
+                      }
+                      if ((suppressRetryStatusMessages || hasFallbackCandidates) && !isRateLimitRetry) return Effect.void
+                      if (!isRateLimitRetry) return status.set(ctx.sessionID, retryStatus)
+                      return status.shouldEmitRateLimitRetry(ctx.sessionID).pipe(
+                        Effect.flatMap((shouldEmit) => (shouldEmit ? status.set(ctx.sessionID, retryStatus) : Effect.void)),
+                      )
+                    },
+                  }),
+                ),
+              )
+            : base
+
+          return yield* withRetry.pipe(Effect.ensuring(cleanup()))
+        })
+
+        return yield* Effect.gen(function* () {
+          for (let index = 0; index < candidates.length; index++) {
+            const candidate = candidates[index]
+            const shouldRetry = index === candidates.length - 1
+            const exit = yield* Effect.exit(executeCandidate(candidate, shouldRetry))
+            if (Exit.isSuccess(exit)) break
+
+            const error = Cause.squash(exit.cause)
+            if (index < candidates.length - 1) {
+              const next = candidates[index + 1]
+              slog.warn("switching fallback model", {
+                from: `${candidate.providerID}/${candidate.id}`,
+                to: `${next.providerID}/${next.id}`,
+                reason: errorMessage(error),
+              })
+              if (!fallbackNotified) {
+                fallbackNotified = true
+                yield* bus.publish(TuiEvent.ToastShow, {
+                  title: "Model fallback",
+                  message: `Switched to ${next.name} after ${candidate.name} failed`,
+                  variant: "warning",
+                  duration: 5000,
+                })
+              }
+              continue
+            }
+
+            yield* halt(error, candidate.providerID)
+          }
 
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"

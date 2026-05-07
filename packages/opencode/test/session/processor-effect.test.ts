@@ -14,6 +14,7 @@ import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
+import { SessionRetry } from "../../src/session/retry"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
@@ -598,6 +599,132 @@ it.live("session.processor effect tests publish retry status updates", () =>
         expect(states).toStrictEqual([1])
       }),
     { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests suppress retry status updates when configured", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const bus = yield* Bus.Service
+
+        yield* llm.error(503, { error: "boom" })
+        yield* llm.text("")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const states: number[] = []
+        const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
+          if (evt.properties.sessionID !== chat.id) return
+          if (evt.properties.status.type === "retry") states.push(evt.properties.status.attempt)
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "retry" }],
+          tools: {},
+        })
+
+        off()
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(states).toStrictEqual([])
+      }),
+    {
+      git: true,
+      config: (url) => ({
+        ...providerCfg(url),
+        experimental: {
+          suppress_retry_status_messages: true,
+        },
+      }),
+    },
+  ),
+)
+
+it.live("session.processor effect tests preserve go upsell retry status updates when suppression is enabled", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const bus = yield* Bus.Service
+
+        yield* llm.error(429, {
+          type: "error",
+          error: {
+            code: "FreeUsageLimitError",
+            message: "free usage exhausted",
+          },
+        })
+        yield* llm.text("")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const messages: string[] = []
+        const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
+          if (evt.properties.sessionID !== chat.id) return
+          if (evt.properties.status.type === "retry") messages.push(evt.properties.status.message)
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "retry" }],
+          tools: {},
+        })
+
+        off()
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(messages).toStrictEqual([SessionRetry.GO_UPSELL_MESSAGE])
+      }),
+    {
+      git: true,
+      config: (url) => ({
+        ...providerCfg(url),
+        experimental: {
+          suppress_retry_status_messages: true,
+        },
+      }),
+    },
   ),
 )
 
