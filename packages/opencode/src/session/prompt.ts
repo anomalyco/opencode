@@ -82,6 +82,45 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
 
+function isOrphanedInterruptedTool(part: MessageV2.ToolPart): boolean {
+  if (part.state.status !== "error") return false
+  return part.state.metadata?.interrupted === true
+}
+
+/**
+ * Returns true when the assistant message has tool calls that should keep the
+ * run loop alive - either pending/running calls awaiting execution, or
+ * completed/error calls whose result the model hasn't seen yet (the
+ * "spurious stop" provider workaround).
+ *
+ * Excludes orphaned-interrupted tools. Those are tool_use blocks that were
+ * left over from a retried/aborted stream attempt and force-marked as
+ * `error` with `metadata.interrupted: true` by `processor.cleanup()`. They
+ * don't represent work the model is waiting on; including them would cause
+ * the loop to fire another LLM request whose history ends with an assistant
+ * message (after `convertToModelMessages` splits the message around the
+ * orphan), which providers like claude-opus-4-7 reject as prefill.
+ *
+ * Provider-executed tool parts (e.g. DWS Agent Platform) are handled inside
+ * the provider's stream and don't need a re-loop either.
+ */
+export function hasOpenToolCalls(parts: readonly MessageV2.Part[]): boolean {
+  return parts.some(
+    (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
+  )
+}
+
+/**
+ * Returns the first interrupted tool part on the message, if any. Used as a
+ * diagnostic when the run loop is about to exit - the presence of an
+ * interrupted tool means a previous stream attempt orphaned a tool_use that
+ * was force-marked as `error` by `processor.cleanup()`. Surfacing it lets us
+ * detect regressions where these orphans leak into the next request.
+ */
+export function findOrphanedInterruptedTool(parts: readonly MessageV2.Part[]): MessageV2.ToolPart | undefined {
+  return parts.find((part): part is MessageV2.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part))
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error>
@@ -1258,12 +1297,12 @@ export const layer = Layer.effect(
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
-          // Some providers return "stop" even when the assistant message contains tool calls.
-          // Keep the loop running so tool results can be sent back to the model.
-          // Skip provider-executed tool parts — those were fully handled within the
-          // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
-          const hasToolCalls =
-            lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+          // Some providers return "stop" even when the assistant message is still
+          // expecting a tool_result. Keep the loop running so the result can be
+          // delivered. Orphaned-interrupted tools (force-marked as error by
+          // processor.cleanup() after a retry/abort) are excluded so they don't
+          // hold the loop open and trigger an assistant-message-prefill 400.
+          const hasToolCalls = lastAssistantMsg ? hasOpenToolCalls(lastAssistantMsg.parts) : false
 
           if (
             lastAssistant?.finish &&
@@ -1271,6 +1310,14 @@ export const layer = Layer.effect(
             !hasToolCalls &&
             lastUser.id < lastAssistant.id
           ) {
+            const orphan = lastAssistantMsg ? findOrphanedInterruptedTool(lastAssistantMsg.parts) : undefined
+            if (orphan) {
+              yield* slog.warn("loop exit with orphaned interrupted tool", {
+                messageID: lastAssistant.id,
+                tool: orphan.tool,
+                callID: orphan.callID,
+              })
+            }
             yield* slog.info("exiting loop")
             break
           }

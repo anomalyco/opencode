@@ -241,6 +241,30 @@ function makeHttpNoLLMServer(input?: { processor?: "blocking" }) {
   return makePrompt(input)
 }
 
+function makeToolPart(state: MessageV2.ToolState, metadata: Record<string, unknown> = {}): MessageV2.ToolPart {
+  return {
+    id: PartID.ascending(),
+    messageID: MessageID.ascending(),
+    sessionID: SessionID.make("ses_test"),
+    type: "tool",
+    callID: "test-call",
+    tool: "edit",
+    state,
+    metadata,
+  }
+}
+
+function makeTextPart(text: string): MessageV2.TextPart {
+  return {
+    id: PartID.ascending(),
+    messageID: MessageID.ascending(),
+    sessionID: SessionID.make("ses_test"),
+    type: "text",
+    text,
+    time: { start: 0 },
+  }
+}
+
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
@@ -2313,4 +2337,120 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+it.instance("hasOpenToolCalls: returns false when there are no tool parts", () =>
+  Effect.gen(function* () {
+    expect(SessionPrompt.hasOpenToolCalls([makeTextPart("hello")])).toBe(false)
+  }),
+)
+
+it.instance("hasOpenToolCalls: returns true for a pending tool call", () =>
+  Effect.gen(function* () {
+    const tool = makeToolPart({ status: "pending", input: {}, raw: "" })
+    expect(SessionPrompt.hasOpenToolCalls([tool])).toBe(true)
+  }),
+)
+
+it.instance("hasOpenToolCalls: returns true for a running tool call", () =>
+  Effect.gen(function* () {
+    const tool = makeToolPart({
+      status: "running",
+      input: {},
+      title: "running",
+      metadata: {},
+      time: { start: 1 },
+    })
+    expect(SessionPrompt.hasOpenToolCalls([tool])).toBe(true)
+  }),
+)
+
+it.instance("hasOpenToolCalls: returns true for a completed tool call (spurious-stop workaround)", () =>
+  Effect.gen(function* () {
+    // Provider returned finish=stop but the model emitted a tool_use that ran
+    // successfully. The loop must continue so the tool_result is delivered.
+    const tool = makeToolPart({
+      status: "completed",
+      input: { value: "first" },
+      output: "ok",
+      title: "ok",
+      metadata: {},
+      time: { start: 1, end: 2 },
+    })
+    expect(SessionPrompt.hasOpenToolCalls([tool])).toBe(true)
+  }),
+)
+
+it.instance("hasOpenToolCalls: returns true for a non-interrupted error tool call", () =>
+  Effect.gen(function* () {
+    const tool = makeToolPart({
+      status: "error",
+      input: { value: "first" },
+      error: "tool failed",
+      time: { start: 1, end: 2 },
+    })
+    expect(SessionPrompt.hasOpenToolCalls([tool])).toBe(true)
+  }),
+)
+
+it.instance("hasOpenToolCalls: returns false for an orphaned interrupted tool call", () =>
+  Effect.gen(function* () {
+    // Force-marked by processor.cleanup() after a retry/abort orphaned the
+    // tool_use. The model never received this tool_result, so the loop must
+    // not be kept alive on its account.
+    const tool = makeToolPart({
+      status: "error",
+      input: {},
+      error: "Tool execution aborted",
+      metadata: { interrupted: true },
+      time: { start: 0, end: 0 },
+    })
+    expect(SessionPrompt.hasOpenToolCalls([tool])).toBe(false)
+  }),
+)
+
+it.instance("hasOpenToolCalls: ignores provider-executed tool parts", () =>
+  Effect.gen(function* () {
+    const tool = makeToolPart({ status: "pending", input: {}, raw: "" }, { providerExecuted: true })
+    expect(SessionPrompt.hasOpenToolCalls([tool])).toBe(false)
+  }),
+)
+
+it.instance("hasOpenToolCalls: returns true when at least one tool is open even if another is interrupted", () =>
+  Effect.gen(function* () {
+    const orphan = makeToolPart({
+      status: "error",
+      input: {},
+      error: "Tool execution aborted",
+      metadata: { interrupted: true },
+      time: { start: 0, end: 0 },
+    })
+    const pending = makeToolPart({ status: "pending", input: {}, raw: "" })
+    expect(SessionPrompt.hasOpenToolCalls([orphan, pending])).toBe(true)
+  }),
+)
+
+it.instance("findOrphanedInterruptedTool: returns the interrupted part", () =>
+  Effect.gen(function* () {
+    const orphan = makeToolPart({
+      status: "error",
+      input: {},
+      error: "Tool execution aborted",
+      metadata: { interrupted: true },
+      time: { start: 0, end: 0 },
+    })
+    expect(SessionPrompt.findOrphanedInterruptedTool([orphan])).toBe(orphan)
+  }),
+)
+
+it.instance("findOrphanedInterruptedTool: returns undefined for non-interrupted error", () =>
+  Effect.gen(function* () {
+    const tool = makeToolPart({
+      status: "error",
+      input: {},
+      error: "tool failed",
+      time: { start: 1, end: 2 },
+    })
+    expect(SessionPrompt.findOrphanedInterruptedTool([tool])).toBeUndefined()
+  }),
 )
