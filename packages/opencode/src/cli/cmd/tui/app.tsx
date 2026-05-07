@@ -69,7 +69,6 @@ import { OpencodeKeymapProvider, registerOpencodeKeymap, useBindings, useOpencod
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
-import { DialogRetryAction } from "./component/dialog-retry-action"
 
 function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
@@ -630,20 +629,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         run: () => {
           renderer.toggleDebugOverlay()
           dialog.clear()
-        },
-      },
-      {
-        name: "debug.go_upsell",
-        title: "Show Go upsell",
-        category: "Debug",
-        slashName: "go-upsell",
-        run: () => {
-          void DialogRetryAction.show(dialog, {
-            title: "Free limit reached",
-            message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
-            label: "subscribe",
-            link: "https://opencode.ai/go",
-          })
         },
       },
       {
