@@ -266,6 +266,9 @@ export type SessionStatus =
       type: "retry"
       attempt: number
       message: string
+      metadata?: {
+        [key: string]: unknown
+      }
       next: number
     }
   | {

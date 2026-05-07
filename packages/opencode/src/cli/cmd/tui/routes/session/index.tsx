@@ -260,17 +260,27 @@ export function Session() {
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
     if (evt.properties.status.type !== "retry") return
-    if (evt.properties.status.message !== SessionRetry.GO_UPSELL_MESSAGE) return
+    const isGoUpsell = evt.properties.status.metadata?.upsell === "go"
+    const isPaygUpsell = evt.properties.status.metadata?.upsell === "payg"
+    if (!isGoUpsell && !isPaygUpsell) return
     if (dialog.stack.length > 0) return
 
-    const seen = kv.get(GO_UPSELL_LAST_SEEN_AT)
-    if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
+    // const seen = kv.get(GO_UPSELL_LAST_SEEN_AT)
+    // if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
 
     if (kv.get(GO_UPSELL_DONT_SHOW)) return
 
-    void DialogGoUpsell.show(dialog).then((dontShowAgain) => {
+    void DialogGoUpsell.show(
+      dialog,
+      isPaygUpsell
+        ? {
+            mode: "payg",
+            url: typeof evt.properties.status.metadata?.url === "string" ? evt.properties.status.metadata.url : undefined,
+          }
+        : undefined,
+    ).then((dontShowAgain) => {
       if (dontShowAgain) kv.set(GO_UPSELL_DONT_SHOW, true)
-      kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
+      // kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
     })
   })
 

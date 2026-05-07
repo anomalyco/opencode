@@ -13,11 +13,13 @@ const PAD_X = 3
 const PAD_TOP_OUTER = 1
 
 export type DialogGoUpsellProps = {
+  mode?: "go" | "payg"
+  url?: string
   onClose?: (dontShowAgain?: boolean) => void
 }
 
 function subscribe(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog>) {
-  open(GO_URL).catch(() => {})
+  open(props.url ?? GO_URL).catch(() => {})
   props.onClose?.()
   dialog.clear()
 }
@@ -34,6 +36,8 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
   const [selected, setSelected] = createSignal<"dismiss" | "subscribe">("subscribe")
   const [center, setCenter] = createSignal<{ x: number; y: number } | undefined>()
   const [masks, setMasks] = createSignal<BgPulseMask[]>([])
+  const mode = () => props.mode ?? "go"
+  const url = () => props.url ?? GO_URL
   let content: BoxRenderable | undefined
   let logoBox: BoxRenderable | undefined
   let headingBox: BoxRenderable | undefined
@@ -103,27 +107,36 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
       <box paddingLeft={PAD_X} paddingRight={PAD_X} paddingBottom={1} gap={1}>
         <box ref={(item: BoxRenderable) => (headingBox = item)} flexDirection="row" justifyContent="space-between">
           <text attributes={TextAttributes.BOLD} fg={theme.text}>
-            Free limit reached
+            {mode() === "payg" ? "Go limit reached" : "Free limit reached"}
           </text>
           <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
             esc
           </text>
         </box>
         <box ref={(item: BoxRenderable) => (descBox = item)} gap={0}>
-          <box flexDirection="row">
-            <text fg={theme.textMuted}>Subscribe to </text>
-            <text attributes={TextAttributes.BOLD} fg={theme.textMuted}>
-              OpenCode Go
-            </text>
-            <text fg={theme.textMuted}> for reliable access to the</text>
-          </box>
-          <text fg={theme.textMuted}>best open-source models, starting at $5/month.</text>
+          {mode() === "payg" ? (
+            <>
+              <text fg={theme.textMuted}>Enable pay-as-you-go to keep using Go</text>
+              <text fg={theme.textMuted}>models after your subscription quota is used.</text>
+            </>
+          ) : (
+            <>
+              <box flexDirection="row">
+                <text fg={theme.textMuted}>Subscribe to </text>
+                <text attributes={TextAttributes.BOLD} fg={theme.textMuted}>
+                  OpenCode Go
+                </text>
+                <text fg={theme.textMuted}> for reliable access to the</text>
+              </box>
+              <text fg={theme.textMuted}>best open-source models, starting at $5/month.</text>
+            </>
+          )}
         </box>
         <box alignItems="center" gap={1} paddingBottom={1}>
           <box ref={(item: BoxRenderable) => (logoBox = item)}>
             <GoLogo />
           </box>
-          <Link href={GO_URL} fg={theme.primary} />
+          <Link href={url()} fg={theme.primary} />
         </box>
         <box ref={(item: BoxRenderable) => (buttonsBox = item)} flexDirection="row" justifyContent="space-between">
           <box
@@ -151,7 +164,7 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
               fg={selected() === "subscribe" ? fg : theme.text}
               attributes={selected() === "subscribe" ? TextAttributes.BOLD : undefined}
             >
-              subscribe
+              {mode() === "payg" ? "enable PAYG" : "subscribe"}
             </text>
           </box>
         </box>
@@ -160,10 +173,10 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
   )
 }
 
-DialogGoUpsell.show = (dialog: DialogContext) => {
+DialogGoUpsell.show = (dialog: DialogContext, props?: Pick<DialogGoUpsellProps, "mode" | "url">) => {
   return new Promise<boolean>((resolve) => {
     dialog.replace(
-      () => <DialogGoUpsell onClose={(dontShow) => resolve(dontShow ?? false)} />,
+      () => <DialogGoUpsell {...props} onClose={(dontShow) => resolve(dontShow ?? false)} />,
       () => resolve(false),
     )
   })
