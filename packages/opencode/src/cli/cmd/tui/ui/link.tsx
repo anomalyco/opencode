@@ -6,7 +6,7 @@ export interface LinkProps {
   href: string
   children?: JSX.Element | string
   fg?: RGBA
-  width?: string | number
+  width?: number | "auto" | `${number}%`
   wrapMode?: "word" | "none"
 }
 
