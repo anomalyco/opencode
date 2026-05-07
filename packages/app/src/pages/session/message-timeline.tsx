@@ -16,7 +16,8 @@ import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { List } from "@opencode-ai/ui/list"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { SessionRetry } from "@opencode-ai/ui/session-retry"
+import type { MarkdownStage } from "@opencode-ai/ui/markdown"
+import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -70,6 +71,7 @@ const windowThreshold = 24
 const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
+const IDLE_QUEUE_MS = 300
 
 type MathMode = "turn" | "markdown"
 
@@ -279,9 +281,13 @@ export function MessageTimeline(props: {
   let bottomFrame: number | undefined
   let mutationFrame: number | undefined
   let blank: number | undefined
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
   let windowAdjustVersion = 0
   const turnHeights = new Map<string, number>()
   const [revision, setRevision] = createSignal(0)
+  const [stageMark, setStageMark] = createSignal(0)
+  const stageByTurn = new Map<string, Map<string, MarkdownStage>>()
+  const upgraded = new Set<string>()
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
@@ -758,6 +764,31 @@ export function MessageTimeline(props: {
     return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
   })
 
+  const turnStage = (id: string): MarkdownStage => {
+    stageMark()
+    if (upgraded.has(id)) return "full"
+    const map = stageByTurn.get(id)
+    if (!map || map.size === 0) return "lite"
+    let rank = 0
+    for (const value of map.values()) {
+      if (value === "full") rank = Math.max(rank, 2)
+      else if (value === "structure") rank = Math.max(rank, 1)
+    }
+    if (rank === 2) return "full"
+    if (rank === 1) return "structure"
+    return "lite"
+  }
+
+  const idleTargets = createMemo(() => {
+    if (props.seekingMessageId) return [] as string[]
+    if (isWorking()) return [] as string[]
+
+    const ids = rendered()
+    const start = Math.max(0, windowed.start - 1)
+    const end = Math.min(ids.length, windowed.end + 1)
+    return ids.slice(start, end).filter((id) => turnStage(id) !== "full").slice(0, 3)
+  })
+
   const audit = (source: string) => {
     if (blank !== undefined) return
     blank = requestAnimationFrame(() => {
@@ -804,10 +835,34 @@ export function MessageTimeline(props: {
           changed = true
         }
       }
+      for (const id of stageByTurn.keys()) {
+        if (!ids.has(id)) {
+          stageByTurn.delete(id)
+          upgraded.delete(id)
+          changed = true
+        }
+      }
       if (changed) setRevision((value) => value + 1)
+      if (changed) setStageMark((value) => value + 1)
       scheduleWindow()
     }),
   )
+
+  createEffect(() => {
+    const ids = idleTargets()
+    if (idleTimer !== undefined) clearTimeout(idleTimer)
+    if (ids.length === 0) return
+
+    idleTimer = setTimeout(() => {
+      idleTimer = undefined
+      const id = idleTargets()[0]
+      if (!id || upgraded.has(id)) return
+      console.debug(`[markdown] idle upgrade: id=${id} queue=${idleTargets().join(",")}`)
+      upgraded.add(id)
+      setStageMark((value) => value + 1)
+      scheduleWindow()
+    }, IDLE_QUEUE_MS)
+  })
 
   createEffect(() => {
     if (canWindow()) return
@@ -856,6 +911,7 @@ export function MessageTimeline(props: {
     if (bottomFrame !== undefined) cancelAnimationFrame(bottomFrame)
     if (mutationFrame !== undefined) cancelAnimationFrame(mutationFrame)
     if (blank !== undefined) cancelAnimationFrame(blank)
+    if (idleTimer !== undefined) clearTimeout(idleTimer)
   })
 
   createEffect(() => {
@@ -2226,13 +2282,20 @@ export function MessageTimeline(props: {
       return item.index >= start && item.index < end
     })
     const seek = createMemo(() => props.seekingMessageId === item.messageID)
+    const stage = createMemo<MarkdownStage>(() => {
+      stageMark()
+      if (seek() || active()) return "full"
+      if (upgraded.has(item.messageID)) return "full"
+      if (near()) return "structure"
+      return "lite"
+    })
     const highlight = createMemo<"full" | "defer">(() => {
-      if (seek() || active() || near()) return "full"
+      if (stage() !== "lite") return "full"
       return "defer"
     })
     const math = createMemo<"full" | "defer">(() => {
       if (mathMode() !== "turn") return "full"
-      if (seek() || active() || near()) return "full"
+      if (stage() === "full") return "full"
       return "defer"
     })
     const skipRender = createMemo(() => isWorking() && !eager() && !near())
@@ -2393,6 +2456,25 @@ export function MessageTimeline(props: {
           markdownViewport={viewport}
           markdownHighlight={highlight()}
           markdownMath={math()}
+          markdownStage={stage()}
+          onMarkdownStage={(key, next) => {
+            const prev = stageByTurn.get(item.messageID)
+            if (!prev && next) {
+              stageByTurn.set(item.messageID, new Map([[key, next]]))
+              setStageMark((value) => value + 1)
+              return
+            }
+            if (!prev) return
+            if (next === undefined) {
+              if (!prev.delete(key)) return
+              if (prev.size === 0) stageByTurn.delete(item.messageID)
+              setStageMark((value) => value + 1)
+              return
+            }
+            if (prev.get(key) === next) return
+            prev.set(key, next)
+            setStageMark((value) => value + 1)
+          }}
           classes={{
             root: "min-w-0 w-full relative",
             content: "flex flex-col justify-between !overflow-visible",
