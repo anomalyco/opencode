@@ -27,7 +27,7 @@ import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode, checksum } from "@opencode-ai/util/encode"
-import { useNavigate, useSearchParams } from "@solidjs/router"
+import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
@@ -89,6 +89,7 @@ export default function Page() {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
+  const location = useLocation()
   const sdk = useSDK()
   const settings = useSettings()
   const sessionHistory = useSessionHistory()
@@ -1188,7 +1189,7 @@ export default function Page() {
     if (ui.mode === "live") return
     setUi("mode", "live")
   }
-  const enterAnchored = (id?: string) => {
+  const enterAnchored = () => {
     if (ui.mode === "anchored") return
     setUi("mode", "anchored")
   }
@@ -1211,6 +1212,8 @@ export default function Page() {
   let fillFrame: number | undefined
   let initialScrollKey: string | undefined
   let initialScrollFrame: number | undefined
+
+  const hasScrollTarget = () => !!location.hash || !!ui.pendingMessage || !!ui.seekingMessageId || !!store.messageId
 
   const clamp = (el: HTMLDivElement, reason = "clamp") => {
     const max = Math.max(0, el.scrollHeight - el.clientHeight)
@@ -1306,6 +1309,13 @@ export default function Page() {
           initialScrollFrame = requestAnimationFrame(() => {
             initialScrollFrame = undefined
             if (sessionKey() !== key) return
+            if (hasScrollTarget()) {
+              console.debug(
+                `[session] initial bottom skipped: key=${key} hash=${location.hash || "none"} pending=${ui.pendingMessage || "none"} seeking=${ui.seekingMessageId || "none"} current=${store.messageId || "none"}`,
+              )
+              initialScrollKey = undefined
+              return
+            }
             const el = scroller
             if (!el) return
             setStore("messageId", undefined)
@@ -1326,7 +1336,7 @@ export default function Page() {
       autoScroll.userScrolled,
       (scrolled) => {
         if (scrolled) {
-          enterAnchored(store.messageId ?? cursor())
+          enterAnchored()
           return
         }
         enterLive()
@@ -1360,15 +1370,6 @@ export default function Page() {
     scroller = el
     autoScroll.scrollRef(el)
     if (!el) return
-    let prevTop = el.scrollTop
-    const onScroll = () => {
-      const nextTop = el.scrollTop
-      prevTop = nextTop
-    }
-    el.addEventListener("scroll", onScroll, { passive: true })
-    onCleanup(() => {
-      el.removeEventListener("scroll", onScroll)
-    })
     scheduleScrollState(el)
     fill()
   }
@@ -1708,7 +1709,7 @@ export default function Page() {
       const el = scroller
       const delta = next - dockHeight
       const gap = el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0
-      const stick = el ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta) : false
+      const stick = el && !ui.seekingMessageId ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta) : false
 
       dockHeight = next
 
