@@ -1,5 +1,7 @@
 # Test Fixtures Guide
 
+- IMPORTANT: All Issues, Pull Requests, and commit messages must be written in Japanese unless the user explicitly requests otherwise. SecureCode developers are all native Japanese speakers.
+
 ## Temporary Directory Fixture
 
 The `tmpdir` function in `fixture/fixture.ts` creates temporary directories for tests with automatic cleanup.

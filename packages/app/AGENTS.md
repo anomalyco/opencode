@@ -1,5 +1,6 @@
 ## Debugging
 
+- IMPORTANT: All Issues, Pull Requests, and commit messages must be written in Japanese unless the user explicitly requests otherwise. SecureCode developers are all native Japanese speakers.
 - NEVER try to restart the app, or the server process, EVER.
 
 ## Local Dev

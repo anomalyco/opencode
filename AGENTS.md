@@ -1,3 +1,4 @@
+- IMPORTANT: All Issues, Pull Requests, and commit messages must be written in Japanese unless the user explicitly requests otherwise. SecureCode developers are all native Japanese speakers.
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
