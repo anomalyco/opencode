@@ -397,7 +397,7 @@ export const layer = Layer.effect(
                 sessionID: ctx.sessionID,
                 callID: value.id,
                 tool: value.name,
-                input,
+                input: structuredClone(input),
                 provider: {
                   executed: toolCall.part.metadata?.providerExecuted === true,
                   ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
