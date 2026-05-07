@@ -774,12 +774,13 @@ describe("workspace-old CRUD", () => {
             expect(calls.map((call) => `${call.method} ${call.url.pathname}`)).toEqual([
               "POST /warp-source/sync/history",
               "GET /warp-source/vcs/diff/raw",
+              "POST /warp-target/vcs/apply",
               "POST /warp-target/sync/replay",
               "POST /warp-target/sync/steal",
-              "POST /warp-target/vcs/apply",
             ])
             expect(calls[0].json).toEqual({ [session.id]: historyNextSeq - 1 })
-            expect(calls[2].json).toMatchObject({
+            expect(calls[2].json).toEqual({ patch: "remote patch" })
+            expect(calls[3].json).toMatchObject({
               directory: "remote-target-dir",
               events: [
                 {
@@ -794,8 +795,7 @@ describe("workspace-old CRUD", () => {
                 },
               ],
             })
-            expect(calls[3].json).toEqual({ sessionID: session.id })
-            expect(calls[4].json).toEqual({ patch: "remote patch" })
+            expect(calls[4].json).toEqual({ sessionID: session.id })
             expect((yield* sessionSvc.get(session.id)).title).toBe("from source history")
             expect(sessionSequenceOwner(session.id)).toBe(target.id)
           }),
