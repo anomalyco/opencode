@@ -270,7 +270,11 @@ describe("session.retry.retryable", () => {
             type: "GoUsageLimitError",
             message: "Subscription quota exceeded. You can continue using free models.",
           },
-          metadata: { workspace: "wrk_01K6XGM22R6FM8JVABE9XDQXGH" },
+          metadata: {
+            workspace: "wrk_01K6XGM22R6FM8JVABE9XDQXGH",
+            limit: "5 hour",
+            resetAt: 19_380,
+          },
         }),
       }).toObject(),
     )
@@ -279,7 +283,8 @@ describe("session.retry.retryable", () => {
       message: SessionRetry.PAYG_UPSELL_MESSAGE,
       action: {
         title: "Go limit reached",
-        message: "Enable pay-as-you-go to keep using Go models after your subscription quota is used.",
+        message:
+          "You hit your 5 hour limit. It will reset in 5 hours 23 minutes. You can also enable pay-as-you-go.",
         label: "enable PAYG",
         link: "https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
       },

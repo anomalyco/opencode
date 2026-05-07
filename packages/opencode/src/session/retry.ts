@@ -83,12 +83,29 @@ export function retryable(error: Err) {
     }
     if (error.data.responseBody?.includes("GoUsageLimitError")) {
       const body = parseJSON(error.data.responseBody)
-      const workspace = typeof body?.metadata?.workspace === "string" ? body.metadata.workspace : undefined
+      const workspace = str(body?.metadata?.workspace)
+      const limit = str(body?.metadata?.limit)
+      const resetAt = num(body?.metadata?.resetAt)
+      const resetIn = iife(() => {
+        if (resetAt === undefined) return ""
+        const seconds = Math.max(0, Math.ceil(resetAt))
+        const days = Math.floor(seconds / 86_400)
+        const hours = Math.floor((seconds % 86_400) / 3_600)
+        const minutes = Math.ceil((seconds % 3_600) / 60)
+        const unit = (value: number, name: string) => `${value} ${name}${value === 1 ? "" : "s"}`
+
+        if (days > 0) return hours > 0 ? `${unit(days, "day")} ${unit(hours, "hour")}` : unit(days, "day")
+        if (hours > 0) return minutes > 0 ? `${unit(hours, "hour")} ${unit(minutes, "minute")}` : unit(hours, "hour")
+        return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
+      })()
       return {
         message: PAYG_UPSELL_MESSAGE,
         action: {
           title: "Go limit reached",
-          message: "Enable pay-as-you-go to keep using Go models after your subscription quota is used.",
+          message:
+            limit && resetIn
+              ? `You hit your ${limit} limit. It will reset in ${resetIn}. You can also enable pay-as-you-go.`
+              : "Enable pay-as-you-go to keep using Go models after your subscription quota is used.",
           label: "enable PAYG",
           ...(workspace ? { link: `https://opencode.ai/workspace/${workspace}/go` } : {}),
         },
@@ -124,6 +141,17 @@ export function retryable(error: Err) {
     return { message: "Rate Limited" }
   }
   return undefined
+}
+
+function str(value: unknown) {
+  if (value === undefined || value === null) return ""
+  return String(value)
+}
+
+function num(value: unknown) {
+  const parsed = Number.parseFloat(str(value))
+  if (Number.isNaN(parsed)) return undefined
+  return parsed
 }
 
 function parseJSON(value: unknown) {
