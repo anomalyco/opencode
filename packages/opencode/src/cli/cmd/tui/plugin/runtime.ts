@@ -1,4 +1,5 @@
-import "@opentui/solid/runtime-plugin-support"
+import { runtimeModules as keymapRuntimeModules } from "@opentui/keymap/runtime-modules"
+import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
 import {
   type TuiDispose,
   type TuiPlugin,
@@ -39,6 +40,8 @@ import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
 import { ConfigPlugin } from "@/config/plugin"
 
+ensureRuntimePluginSupport({ additional: keymapRuntimeModules })
+
 type PluginLoad = {
   options: ConfigPlugin.Options | undefined
   spec: string
@@ -69,6 +72,36 @@ type PluginEntry = {
   enabled: boolean
   scope?: PluginScope
 }
+
+const ScopedKeymapMethods = new Set<PropertyKey>([
+  "acquireResource",
+  "registerLayer",
+  "registerLayerFields",
+  "prependLayerBindingsTransformer",
+  "appendLayerBindingsTransformer",
+  "prependBindingTransformer",
+  "appendBindingTransformer",
+  "prependBindingParser",
+  "appendBindingParser",
+  "registerToken",
+  "registerSequencePattern",
+  "prependBindingExpander",
+  "appendBindingExpander",
+  "registerBindingFields",
+  "registerCommandFields",
+  "prependCommandTransformer",
+  "appendCommandTransformer",
+  "prependCommandResolver",
+  "appendCommandResolver",
+  "prependLayerAnalyzer",
+  "appendLayerAnalyzer",
+  "intercept",
+  "on",
+  "prependEventMatchResolver",
+  "appendEventMatchResolver",
+  "prependDisambiguationResolver",
+  "appendDisambiguationResolver",
+])
 
 type RuntimeState = {
   directory: string
@@ -102,6 +135,25 @@ function fail(message: string, data: Record<string, unknown>) {
 function warn(message: string, data: Record<string, unknown>) {
   log.warn(message, data)
   console.warn(`[tui.plugin] ${message}`, data)
+}
+
+function createScopedKeymap(keymap: TuiPluginApi["keymap"], scope: PluginScope): TuiPluginApi["keymap"] {
+  const cache = new Map<PropertyKey, unknown>()
+  return new Proxy(keymap, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target)
+      if (typeof value !== "function") return value
+      if (cache.has(prop)) return cache.get(prop)
+      const fn = ScopedKeymapMethods.has(prop)
+        ? (...args: unknown[]) => {
+            const dispose = (value as (...args: unknown[]) => unknown).apply(target, args)
+            return scope.track(typeof dispose === "function" ? (dispose as () => void) : undefined)
+          }
+        : (...args: unknown[]) => (value as (...args: unknown[]) => unknown).apply(target, args)
+      cache.set(prop, fn)
+      return fn
+    },
+  })
 }
 
 type CleanupResult = { type: "ok" } | { type: "error"; error: unknown } | { type: "timeout" }
@@ -327,14 +379,16 @@ function createPluginScope(load: PluginLoad, id: string) {
 
   const track = (fn: (() => void) | undefined) => {
     if (!fn) return () => {}
-    const off = onDispose(fn)
     let drop = false
-    return () => {
+    let off = () => {}
+    const wrapped = () => {
       if (drop) return
       drop = true
       off()
       fn()
     }
+    off = onDispose(wrapped)
+    return wrapped
   }
 
   const lifecycle: TuiPluginApi["lifecycle"] = {
@@ -395,7 +449,7 @@ function readPluginEnabledMap(value: unknown) {
   )
 }
 
-function pluginEnabledState(state: RuntimeState, config: TuiConfig.Info) {
+function pluginEnabledState(state: RuntimeState, config: TuiConfig.Resolved) {
   return {
     ...readPluginEnabledMap(config.plugin_enabled),
     ...readPluginEnabledMap(state.api.kv.get(KV_KEY, {})),
@@ -484,17 +538,6 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
   const api = runtime.api
   const host = runtime.slots
   const load = plugin.load
-  const command: TuiPluginApi["command"] = {
-    register(cb) {
-      return scope.track(api.command.register(cb))
-    },
-    trigger(value) {
-      api.command.trigger(value)
-    },
-    show() {
-      api.command.show()
-    },
-  }
 
   const route: TuiPluginApi["route"] = {
     register(list) {
@@ -518,6 +561,8 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     },
   }
 
+  const keymap = createScopedKeymap(api.keymap, scope)
+
   let count = 0
 
   const slots: TuiPluginApi["slots"] = {
@@ -531,10 +576,10 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
 
   return {
     app: api.app,
-    command,
+    keys: api.keys,
+    keymap,
     route,
     ui: api.ui,
-    keybind: api.keybind,
     tuiConfig: api.tuiConfig,
     kv: api.kv,
     state: api.state,
@@ -580,7 +625,7 @@ function addPluginEntry(state: RuntimeState, plugin: PluginEntry) {
   return true
 }
 
-function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.Info) {
+function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.Resolved) {
   const map = pluginEnabledState(state, config)
   for (const plugin of state.plugins) {
     const enabled = map[plugin.id]
@@ -923,7 +968,7 @@ let loaded: Promise<void> | undefined
 let runtime: RuntimeState | undefined
 export const Slot = View
 
-export async function init(input: { api: HostPluginApi; config: TuiConfig.Info }) {
+export async function init(input: { api: HostPluginApi; config: TuiConfig.Resolved }) {
   const cwd = process.cwd()
   if (loaded) {
     if (dir !== cwd) {
@@ -972,7 +1017,7 @@ export async function dispose() {
   }
 }
 
-async function load(input: { api: Api; config: TuiConfig.Info }) {
+async function load(input: { api: Api; config: TuiConfig.Resolved }) {
   const { api, config } = input
   const cwd = process.cwd()
   const slots = setupSlots(api)

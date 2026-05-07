@@ -71,6 +71,7 @@ export async function handler(
     modelList: "lite" | "full"
     parseApiKey: (headers: Headers) => string | undefined
     parseModel: (url: string, body: any) => string
+    parseVariant: (url: string, body: any) => string | undefined
     parseIsStream: (url: string, body: any) => boolean
   },
 ) {
@@ -93,6 +94,7 @@ export async function handler(
     const url = input.request.url
     const body = await input.request.json()
     const model = opts.parseModel(url, body)
+    const variant = opts.parseVariant(url, body)
     const isStream = opts.parseIsStream(url, body)
     const rawIp = input.request.headers.get("x-real-ip") ?? ""
     const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
@@ -109,6 +111,7 @@ export async function handler(
       request: requestId,
       client: ocClient,
       user_agent: userAgent,
+      "model.variant": variant,
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
@@ -162,6 +165,7 @@ export async function handler(
                   if (typeof v === "string") {
                     if (v === "$ip") return [[k, ip]]
                     if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v === "$session") return sessionId ? [[k, sessionId]] : []
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
                       return headerValue ? [[k, headerValue]] : []

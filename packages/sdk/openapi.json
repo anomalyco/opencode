@@ -9401,6 +9401,25 @@
               "message": {
                 "type": "string"
               },
+              "action": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "link": {
+                    "type": "string"
+                  }
+                },
+                "required": ["title", "message", "label"],
+                "additionalProperties": false
+              },
               "next": {
                 "type": "integer",
                 "minimum": 0

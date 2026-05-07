@@ -1,21 +1,19 @@
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "@tui/context/theme"
 import { useDialog } from "./dialog"
-import { useKeyboard } from "@opentui/solid"
-import { useKeybind } from "@tui/context/keybind"
+import { useBindings, useCommandShortcut } from "../keymap"
 
 export function DialogHelp() {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const keybind = useKeybind()
+  const commandShortcut = useCommandShortcut("command.palette.show")
 
-  useKeyboard((evt) => {
-    if (evt.name === "return" || evt.name === "escape") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      dialog.clear()
-    }
-  })
+  useBindings(() => ({
+    bindings: [
+      { key: "return", cmd: () => dialog.clear() },
+      { key: "escape", cmd: () => dialog.clear() },
+    ],
+  }))
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
@@ -29,7 +27,7 @@ export function DialogHelp() {
       </box>
       <box paddingBottom={1}>
         <text fg={theme.textMuted}>
-          Press {keybind.print("command_list")} to see all available actions and commands in any context.
+          Press {commandShortcut()} to see all available actions and commands in any context.
         </text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
