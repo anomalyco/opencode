@@ -9,7 +9,7 @@
     min-height: 0;
   }
 
-  .scroll-view__viewport {
+  [data-slot="scroll-view-viewport"] {
     display: flex;
     flex-direction: column;
   }

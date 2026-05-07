@@ -3,9 +3,32 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { useI18n } from "../context/i18n"
 
+/**
+ * ScrollView component with custom scrollbar thumb and keyboard navigation.
+ * 
+ * Features:
+ * - Custom scrollbar thumb (4px wide, only visible on hover/drag)
+ * - Hides native scrollbar completely
+ * - Keyboard navigation (PageUp/Down, Home/End, Arrow keys)
+ * - ResizeObserver for automatic thumb size/position updates
+ * - Drag-to-scroll support
+ * 
+ * Use cases:
+ * - When you need a custom-styled scrollbar (e.g., session-review diff panel)
+ * - When native scrollbar doesn't fit the design
+ * 
+ * NOT for:
+ * - Simple lists (use List component with native scrollbar instead)
+ * - When native scrollbar is acceptable (lighter weight)
+ * 
+ * Architecture:
+ * - Uses data-component/data-slot naming (not BEM classes)
+ * - Independent from List component (different scroll strategies)
+ */
+
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
-  orientation?: "vertical" | "horizontal" // currently only vertical is fully implemented for thumb
+  orientation?: "vertical" | "horizontal"
 }
 
 export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) => {
@@ -224,16 +247,16 @@ export function ScrollView(props: ScrollViewProps) {
   return (
     <div
       ref={rootRef}
-      class={`scroll-view ${local.class || ""}`}
+      data-component="scroll-view"
+      class={local.class}
       style={local.style}
       onPointerEnter={() => setState("isHovered", true)}
       onPointerLeave={() => setState("isHovered", false)}
       {...rest}
     >
-      {/* Viewport */}
       <div
         ref={viewportRef}
-        class="scroll-view__viewport"
+        data-slot="scroll-view-viewport"
         onScroll={(e) => {
           scheduleUpdateThumb()
           if (typeof events.onScroll === "function") events.onScroll(e as any)
@@ -256,18 +279,17 @@ export function ScrollView(props: ScrollViewProps) {
         {local.children}
       </div>
 
-      {/* Thumb Overlay */}
       <Show when={showThumb()}>
         <div
           ref={thumbRef}
           onPointerDown={onThumbPointerDown}
-          class="scroll-view__thumb"
+          data-slot="scroll-view-thumb"
           data-visible={isHovered() || isDragging()}
           data-dragging={isDragging()}
           style={{
             height: `${thumbHeight()}px`,
             transform: `translateY(${thumbTop()}px)`,
-            "z-index": 100, // ensure it displays over content
+            "z-index": 100,
           }}
         />
       </Show>

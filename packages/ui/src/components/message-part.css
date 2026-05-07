@@ -530,6 +530,33 @@
   }
 }
 
+[data-component="reasoning-part"][data-mode="preview"] {
+  max-height: calc(var(--line-height-large, 1.6) * 3 * var(--font-size-base, 14px) + 4px);
+  overflow: hidden;
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1.5em;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      var(--background-stronger)
+    );
+    pointer-events: none;
+  }
+
+  [data-component="markdown"] {
+    font-style: normal;
+    font-size: var(--font-size-base);
+    color: var(--text-weak);
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   [data-component="reasoning-part"] [data-component="markdown"] :not(pre) > code {
     opacity: 0.6;

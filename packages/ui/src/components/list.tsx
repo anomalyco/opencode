@@ -1,5 +1,5 @@
-import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, For, type JSX, on, Show } from "solid-js"
+import { type FilteredListProps, useFilteredList, useScrollContainer } from "@opencode-ai/ui/hooks"
+import { createEffect, For, onCleanup, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
@@ -7,12 +7,19 @@ import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextField } from "./text-field"
 
-function findByKey(container: HTMLElement, key: string) {
-  const nodes = container.querySelectorAll<HTMLElement>('[data-slot="list-item"][data-key]')
-  for (const node of nodes) {
-    if (node.getAttribute("data-key") === key) return node
-  }
-}
+/**
+ * List component for displaying filterable, searchable, and keyboard-navigable lists.
+ * 
+ * Architecture:
+ * - Uses `useScrollContainer` hook for scroll operations (scrollToElement, scrollToTop, findByKey)
+ * - Uses `useFilteredList` hook for data filtering and keyboard navigation
+ * - Scroll container uses native scrollbar with CSS customization (not ScrollView component)
+ * - ScrollView component is for custom thumb-based scrollbars (used in session-review)
+ * 
+ * Naming:
+ * - `data-slot="list-viewport"` is the scrollable container (renamed from "list-scroll")
+ * - Not to be confused with ScrollView's `data-slot="scroll-view-viewport"`
+ */
 
 export interface ListSearchProps {
   placeholder?: string
@@ -61,32 +68,12 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   let inputRef: HTMLInputElement | HTMLTextAreaElement | undefined
   const [store, setStore] = createStore({
     mouseActive: false,
-    scrollRef: undefined as HTMLDivElement | undefined,
     internalFilter: "",
   })
-  const scrollRef = () => store.scrollRef
-  const setScrollRef = (el: HTMLDivElement | undefined) => setStore("scrollRef", el)
   const internalFilter = () => store.internalFilter
   const setInternalFilter = (value: string) => setStore("internalFilter", value)
 
-  const scrollIntoView = (container: HTMLDivElement, node: HTMLElement, block: "center" | "nearest") => {
-    const containerRect = container.getBoundingClientRect()
-    const nodeRect = node.getBoundingClientRect()
-    const top = nodeRect.top - containerRect.top + container.scrollTop
-    const bottom = top + nodeRect.height
-    const viewTop = container.scrollTop
-    const viewBottom = viewTop + container.clientHeight
-    const target =
-      block === "center"
-        ? top - container.clientHeight / 2 + nodeRect.height / 2
-        : top < viewTop
-          ? top
-          : bottom > viewBottom
-            ? bottom - container.clientHeight
-            : viewTop
-    const max = Math.max(0, container.scrollHeight - container.clientHeight)
-    container.scrollTop = Math.max(0, Math.min(target, max))
-  }
+  const { setScrollRef, scrollRef, scrollToElement, scrollToTop, findByKey } = useScrollContainer()
 
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput, refetch } = useFilteredList<T>(props)
 
@@ -125,7 +112,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     on(
       filter,
       () => {
-        scrollRef()?.scrollTo(0, 0)
+        scrollToTop("auto")
       },
       { defer: true },
     ),
@@ -137,9 +124,9 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     if (!props.current) return
     const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = findByKey(scroll, key)
+      const element = findByKey(key)
       if (!element) return
-      scrollIntoView(scroll, element, "center")
+      scrollToElement(element, { block: "center", behavior: "auto" })
     })
   })
 
@@ -149,14 +136,14 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const scroll = scrollRef()
     if (!scroll) return
     if (active() === props.key(all[0])) {
-      scroll.scrollTo(0, 0)
+      scrollToTop("auto")
       return
     }
     const key = active()
     if (!key) return
-    const element = findByKey(scroll, key)
+    const element = findByKey(key)
     if (!element) return
-    scrollIntoView(scroll, element, "center")
+    scrollToElement(element, { block: "center", behavior: "auto" })
   })
 
   createEffect(() => {
@@ -316,7 +303,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           {searchAction()}
         </div>
       </Show>
-      <div ref={setScrollRef} data-slot="list-scroll">
+      <div ref={setScrollRef} data-slot="list-viewport">
         <Show
           when={flat().length > 0 || showAdd()}
           fallback={

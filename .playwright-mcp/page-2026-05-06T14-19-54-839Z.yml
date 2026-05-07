@@ -1,0 +1,231 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - button "Toggle menu" [ref=e7] [cursor=pointer]:
+        - img [ref=e9]
+      - generic [ref=e133]:
+        - button "Search files" [ref=e136]:
+          - generic [ref=e138]: Search opencode
+          - generic [ref=e139]: ⌘P
+        - button "Status" [ref=e143] [cursor=pointer]:
+          - img [ref=e147]
+      - generic [ref=e154]:
+        - button "Toggle terminal" [ref=e156] [cursor=pointer]:
+          - img [ref=e158]
+        - generic [ref=e160]:
+          - button "Toggle review" [expanded] [ref=e162] [cursor=pointer]:
+            - img [ref=e164]
+          - button "Toggle file tree" [expanded] [ref=e168] [cursor=pointer]:
+            - img [ref=e171]
+    - generic [ref=e11]:
+      - generic [ref=e13]:
+        - navigation "Projects and sessions" [ref=e14]:
+          - generic [ref=e15]:
+            - generic [ref=e16]:
+              - generic [ref=e18]:
+                - button "opencode" [ref=e176] [cursor=pointer]:
+                  - img [ref=e180]
+                - button "Open project" [ref=e21] [cursor=pointer]:
+                  - img [ref=e23]
+              - generic [ref=e25]:
+                - button "Config" [ref=e27] [cursor=pointer]:
+                  - img [ref=e29]
+                - button "Settings" [ref=e32] [cursor=pointer]:
+                  - img [ref=e34]
+                - button "Help" [ref=e38] [cursor=pointer]:
+                  - img [ref=e40]
+            - generic [ref=e43]:
+              - generic [ref=e182]:
+                - generic [ref=e183]:
+                  - generic [ref=e184]: opencode
+                  - generic [ref=e186]: ~/apps/opencode
+                - button "More options" [ref=e187] [cursor=pointer]:
+                  - img [ref=e189]
+              - generic [ref=e196]:
+                - generic [ref=e198]:
+                  - button "New session" [ref=e199] [cursor=pointer]:
+                    - img [ref=e201]
+                    - text: New session
+                  - generic [ref=e203]:
+                    - button "Tasks" [ref=e205] [cursor=pointer]:
+                      - img [ref=e207]
+                    - button "Clear notifications" [disabled] [ref=e210]:
+                      - img [ref=e212]
+                    - button "View archived sessions" [ref=e215] [cursor=pointer]:
+                      - img [ref=e217]
+                - generic [ref=e220]:
+                  - navigation
+        - main [ref=e54]:
+          - generic [ref=e221]:
+            - generic [ref=e222]:
+              - generic [ref=e223]:
+                - generic [ref=e228]:
+                  - generic [ref=e229]:
+                    - img [ref=e230]
+                    - generic [ref=e233]: Ship the idea
+                  - generic [ref=e234]:
+                    - generic [ref=e235]: opencode
+                    - generic [ref=e236]: /Users/lelouch/apps/opencode
+                    - generic [ref=e237]:
+                      - generic [ref=e238]:
+                        - generic [ref=e239]:
+                          - img [ref=e241]
+                          - generic [ref=e243]: Branch
+                        - generic [ref=e244]: dev
+                      - generic [ref=e245]:
+                        - generic [ref=e246]:
+                          - img [ref=e248]
+                          - generic [ref=e250]: Workspace
+                        - group [ref=e252]:
+                          - button "opencode" [ref=e253] [cursor=pointer]:
+                            - generic [ref=e254]: opencode
+                            - img [ref=e257]
+                - generic [ref=e261]:
+                  - generic [ref=e263]:
+                    - generic [ref=e264]:
+                      - textbox "Ask anything... \"Create a CLI command for...\"" [ref=e265]
+                      - generic: Ask anything... "Create a CLI command for..."
+                    - generic [ref=e267]:
+                      - button "Add files" [ref=e269] [cursor=pointer]:
+                        - img [ref=e271]
+                      - button "Send" [disabled] [ref=e273] [cursor=pointer]:
+                        - img [ref=e275]
+                  - generic [ref=e279]:
+                    - generic:
+                      - generic: Shell
+                    - generic [ref=e280]:
+                      - group [ref=e282]:
+                        - button "Sisyphus - Ultraworker" [ref=e283] [cursor=pointer]:
+                          - generic [ref=e284]: Sisyphus - Ultraworker
+                          - img [ref=e287]
+                      - button "glm-5.1" [ref=e290] [cursor=pointer]:
+                        - img [ref=e291]
+                        - generic [ref=e293]: glm-5.1
+                        - img [ref=e295]
+                      - group [ref=e298]:
+                        - button "Default" [ref=e299] [cursor=pointer]:
+                          - generic [ref=e300]: Default
+                          - img [ref=e303]
+                      - button "dev" [ref=e305] [cursor=pointer]:
+                        - generic [ref=e306]:
+                          - img [ref=e308]
+                          - generic [ref=e310]: dev
+                          - img [ref=e312]
+                      - button "Auto-accept permissions" [ref=e315] [cursor=pointer]:
+                        - img [ref=e317]
+                      - button "Read mode" [ref=e320] [cursor=pointer]:
+                        - img [ref=e322]
+              - complementary "Review and files" [ref=e327]:
+                - generic [ref=e328]:
+                  - generic [ref=e331]:
+                    - tablist [ref=e333]:
+                      - button "Open file" [ref=e336] [cursor=pointer]:
+                        - img [ref=e338]
+                    - tabpanel [ref=e340]:
+                      - generic [ref=e342]:
+                        - img [ref=e343]
+                        - generic [ref=e346]: Select a file to open
+                  - generic [ref=e349]:
+                    - tablist [ref=e350]:
+                      - tab "4 Changes" [selected] [ref=e352] [cursor=pointer]
+                      - tab "All files" [ref=e354] [cursor=pointer]
+                    - tabpanel "4 Changes" [ref=e355]:
+                      - generic [ref=e356]:
+                        - generic [ref=e357]:
+                          - button ".ace-tool" [expanded] [ref=e358] [cursor=pointer]:
+                            - generic [ref=e359]:
+                              - img [ref=e362]
+                              - generic [ref=e364]: .ace-tool
+                          - button "index.bin M" [ref=e368] [cursor=pointer]:
+                            - img [ref=e369]
+                            - generic [ref=e371]: index.bin
+                            - generic [ref=e372]: M
+                        - generic [ref=e373]:
+                          - button "packages" [expanded] [ref=e374] [cursor=pointer]:
+                            - generic [ref=e375]:
+                              - img [ref=e378]
+                              - generic [ref=e380]: packages
+                          - generic [ref=e383]:
+                            - generic [ref=e384]:
+                              - button "opencode" [expanded] [ref=e385] [cursor=pointer]:
+                                - generic [ref=e386]:
+                                  - img [ref=e389]
+                                  - generic [ref=e391]: opencode
+                              - generic [ref=e395]:
+                                - button "src" [expanded] [ref=e396] [cursor=pointer]:
+                                  - generic [ref=e397]:
+                                    - img [ref=e400]
+                                    - generic [ref=e402]: src
+                                - generic [ref=e406]:
+                                  - button "provider" [expanded] [ref=e407] [cursor=pointer]:
+                                    - generic [ref=e408]:
+                                      - img [ref=e411]
+                                      - generic [ref=e413]: provider
+                                  - button "models-snapshot.js M" [ref=e417] [cursor=pointer]:
+                                    - img [ref=e418]
+                                    - generic [ref=e420]: models-snapshot.js
+                                    - generic [ref=e421]: M
+                            - generic [ref=e422]:
+                              - button "ui" [expanded] [ref=e423] [cursor=pointer]:
+                                - generic [ref=e424]:
+                                  - img [ref=e427]
+                                  - generic [ref=e429]: ui
+                              - generic [ref=e433]:
+                                - button "src" [expanded] [ref=e434] [cursor=pointer]:
+                                  - generic [ref=e435]:
+                                    - img [ref=e438]
+                                    - generic [ref=e440]: src
+                                - generic [ref=e444]:
+                                  - button "styles" [expanded] [ref=e445] [cursor=pointer]:
+                                    - generic [ref=e446]:
+                                      - img [ref=e449]
+                                      - generic [ref=e451]: styles
+                                  - button "arc.css M" [ref=e455] [cursor=pointer]:
+                                    - img [ref=e456]
+                                    - generic [ref=e458]: arc.css
+                                    - generic [ref=e459]: M
+                        - button "bun.lock M" [ref=e460] [cursor=pointer]:
+                          - img [ref=e461]
+                          - generic [ref=e463]: bun.lock
+                          - generic [ref=e464]: M
+            - generic:
+              - generic:
+                - generic:
+                  - tablist:
+                    - generic:
+                      - generic:
+                        - button:
+                          - generic:
+                            - img
+      - complementary "Development performance diagnostics" [ref=e79]:
+        - generic [ref=e80]:
+          - generic [ref=e82]:
+            - generic [ref=e83]: NAV
+            - generic [ref=e84]: "976"
+          - generic [ref=e86]:
+            - generic [ref=e87]: FPS
+            - generic [ref=e88]: "106"
+          - generic [ref=e90]:
+            - generic [ref=e91]: FRAME
+            - generic [ref=e92]: "518"
+          - generic [ref=e94]:
+            - generic [ref=e95]: JANK
+            - generic [ref=e96]: "2"
+          - generic [ref=e98]:
+            - generic [ref=e99]: LONG
+            - generic [ref=e100]: 0/0
+          - generic [ref=e102]:
+            - generic [ref=e103]: DELAY
+            - generic [ref=e104]: "1"
+          - generic [ref=e106]:
+            - generic [ref=e107]: INP
+            - generic [ref=e108]: "552"
+          - generic [ref=e110]:
+            - generic [ref=e111]: CLS
+            - generic [ref=e112]: "0.00"
+          - generic [ref=e114]:
+            - generic [ref=e115]: MEM
+            - generic [ref=e116]: 2%
+  - generic:
+    - region "Notifications (alt+T)":
+      - list

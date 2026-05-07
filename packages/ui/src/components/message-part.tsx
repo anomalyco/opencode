@@ -5,7 +5,7 @@ import {
   createSignal,
   For,
   Match,
-  onMount,
+  on,
   Show,
   Switch,
   onCleanup,
@@ -1620,13 +1620,28 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const i18n = useI18n()
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
-  const [open, setOpen] = createSignal(true)
+  const [open, setOpen] = createSignal(false)
   const streaming = createMemo(() => {
     if (props.message.role !== "assistant") return false
     return typeof (props.message as AssistantMessage).time.completed !== "number"
   })
   const title = createMemo(() =>
     streaming() ? i18n.t("ui.messagePart.reasoning.thinking") : i18n.t("ui.messagePart.reasoning.thought"),
+  )
+
+  const previewText = createMemo(() => {
+    const content = text()
+    if (!content) return ""
+    const lines = content.split("\n")
+    return lines.slice(-3).join("\n")
+  })
+
+  createEffect(
+    on(streaming, (now, prev) => {
+      if (prev === true && now === false) {
+        setOpen(false)
+      }
+    }),
   )
 
   return (
@@ -1643,18 +1658,29 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
             <Collapsible.Arrow />
           </div>
         </Collapsible.Trigger>
-        <Collapsible.Content>
-          <div data-component="reasoning-part">
+        <Show when={streaming() && !open()}>
+          <div data-component="reasoning-part" data-mode="preview">
             <Markdown
-              text={text()}
-              cacheKey={part.id}
-              streaming={streaming()}
-              eager={props.markdownEager}
-              viewport={props.markdownViewport}
-              highlight={props.markdownHighlight}
-              math={props.markdownMath}
+              text={previewText()}
+              cacheKey={`${part.id}:preview`}
+              plain={true}
             />
           </div>
+        </Show>
+        <Collapsible.Content>
+          <Show when={open()}>
+            <div data-component="reasoning-part" data-mode="full">
+              <Markdown
+                text={text()}
+                cacheKey={part.id}
+                streaming={streaming()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                highlight={props.markdownHighlight}
+                math={streaming() ? "defer" : props.markdownMath}
+              />
+            </div>
+          </Show>
         </Collapsible.Content>
       </Collapsible>
     </Show>
