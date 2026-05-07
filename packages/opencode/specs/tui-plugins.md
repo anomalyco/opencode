@@ -228,6 +228,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - To surface a command in the host command palette, set `namespace: "palette"` and provide metadata such as `title`, `category`, `desc`, `suggested`, `hidden`, `enabled`, `slashName`, and `slashAliases` on the command.
 - Use `api.keymap.dispatchCommand(name)` for user-style execution semantics and `api.keymap.runCommand(name)` only for forced programmatic execution.
 - Disposers returned by `api.keymap` registrations and `acquireResource(...)` are automatically cleaned up when the plugin deactivates. You do not need to add those disposers to `api.lifecycle.onDispose(...)` yourself.
+- Built-in which-key shortcuts are resolved from `keymap.sections.which_key`, not plugin options.
 
 ### Keys
 

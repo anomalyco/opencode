@@ -1,26 +1,28 @@
 /** @jsxImportSource @opentui/solid */
 import { RGBA, TextAttributes, type KeyEvent, type Renderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { useKeymapSelector } from "@opentui/keymap/solid"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
-import type { ActiveKey } from "@opentui/keymap"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { useBindings, useKeymapSelector } from "../../keymap"
+import type { ActiveKey, Binding } from "@opentui/keymap"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 
 const command = {
   toggle: "tui-which-key.toggle",
   toggleLayout: "tui-which-key.layout.toggle",
+  scrollUp: "tui-which-key.scroll.up",
+  scrollDown: "tui-which-key.scroll.down",
+  pageUp: "tui-which-key.page.up",
+  pageDown: "tui-which-key.page.down",
+  home: "tui-which-key.home",
+  end: "tui-which-key.end",
 } as const
 
-const DEFAULT_KEY = "ctrl+alt+k"
-const DEFAULT_LAYOUT_KEY = "ctrl+alt+shift+k"
 const LAYER_PRIORITY = 900
+const toggleCommands = [command.toggle, command.toggleLayout] as const
+const scrollCommands = [command.scrollUp, command.scrollDown, command.pageUp, command.pageDown, command.home, command.end] as const
 
 type Layout = "dock" | "overlay"
-
-type WhichKeyOptions = {
-  key?: unknown
-}
 
 type Color = RGBA | string
 
@@ -46,13 +48,6 @@ type GroupHeader = {
 }
 
 type Item = Entry | GroupHeader
-
-function pickKey(options: WhichKeyOptions | undefined) {
-  if (typeof options?.key !== "string") return DEFAULT_KEY
-  const key = options.key.trim()
-  if (!key || key === "none") return DEFAULT_KEY
-  return key
-}
 
 function text(value: unknown) {
   if (typeof value !== "string") return undefined
@@ -123,13 +118,26 @@ function previousGroup(items: readonly Item[], index: number) {
   return item.group
 }
 
+function commandBindings(
+  bindings: readonly Binding<Renderable, KeyEvent>[],
+  commands: readonly string[],
+): Binding<Renderable, KeyEvent>[] {
+  return bindings.filter((binding) => typeof binding.cmd === "string" && commands.includes(binding.cmd))
+}
+
+function commandShortcut(api: TuiPluginApi, name: string) {
+  return useKeymapSelector((keymap) =>
+    api.keys.formatSequence(
+      keymap.getCommandBindings({ visibility: "registered", commands: [name] }).get(name)?.[0]?.sequence,
+    ),
+  )
+}
+
 function WhichKeyPanel(props: {
   api: TuiPluginApi
   layout: Layout
   mode: () => Layout
   pinned: () => boolean
-  trigger: string
-  modeTrigger: string
 }) {
   const dimensions = useTerminalDimensions()
   const [offset, setOffset] = createSignal(0)
@@ -179,25 +187,77 @@ function WhichKeyPanel(props: {
     return `page ${Math.floor(offset() / pageSize()) + 1}/${Math.max(1, Math.ceil(items().length / pageSize()))}  ${entries().length} bindings`
   })
   const prefix = createMemo(() => props.api.keys.formatSequence(pending()))
-  const trigger = createMemo(() => props.api.keys.formatSequence(props.api.keymap.parseKeySequence(props.trigger)))
-  const modeTrigger = createMemo(() => props.api.keys.formatSequence(props.api.keymap.parseKeySequence(props.modeTrigger)))
+  const trigger = commandShortcut(props.api, command.toggle)
+  const modeTrigger = commandShortcut(props.api, command.toggleLayout)
+  const scrollUpTrigger = commandShortcut(props.api, command.scrollUp)
+  const scrollDownTrigger = commandShortcut(props.api, command.scrollDown)
   const look = createMemo(() => skin(props.api))
-  const top = createMemo(() => Math.max(0, dimensions().height - visibleRows() - 3))
   const columnWidth = createMemo(() => Math.max(24, Math.floor((width() - 2 - (columns() - 1) * 2) / columns())))
   const keyWidth = createMemo(() => Math.min(18, Math.max(4, ...entries().map((entry) => entry.key.length))))
-  const matchers = {
-    up: ["ctrl+alt+up", "ctrl+alt+p"].map((key) => props.api.keymap.createKeyMatcher(key)),
-    down: ["ctrl+alt+down", "ctrl+alt+n"].map((key) => props.api.keymap.createKeyMatcher(key)),
-    pageUp: ["ctrl+alt+pageup"].map((key) => props.api.keymap.createKeyMatcher(key)),
-    pageDown: ["ctrl+alt+pagedown"].map((key) => props.api.keymap.createKeyMatcher(key)),
-    home: ["ctrl+alt+home"].map((key) => props.api.keymap.createKeyMatcher(key)),
-    end: ["ctrl+alt+end"].map((key) => props.api.keymap.createKeyMatcher(key)),
-  }
-
   const clamp = (value: number) => Math.max(0, Math.min(maxOffset(), value))
   const scroll = (delta: number) => setOffset((value) => clamp(value + delta))
-  const matches = (items: readonly ((input: KeyEvent) => boolean)[], event: KeyEvent) =>
-    items.some((match) => match(event))
+
+  useBindings(() => ({
+    priority: 1000,
+    enabled: visible(),
+    commands: [
+      {
+        name: command.scrollUp,
+        title: "Scroll key bindings up",
+        desc: "Scroll the which-key panel up",
+        category: "System",
+        run() {
+          scroll(-columns())
+        },
+      },
+      {
+        name: command.scrollDown,
+        title: "Scroll key bindings down",
+        desc: "Scroll the which-key panel down",
+        category: "System",
+        run() {
+          scroll(columns())
+        },
+      },
+      {
+        name: command.pageUp,
+        title: "Page key bindings up",
+        desc: "Page the which-key panel up",
+        category: "System",
+        run() {
+          scroll(-pageSize())
+        },
+      },
+      {
+        name: command.pageDown,
+        title: "Page key bindings down",
+        desc: "Page the which-key panel down",
+        category: "System",
+        run() {
+          scroll(pageSize())
+        },
+      },
+      {
+        name: command.home,
+        title: "First key binding",
+        desc: "Jump to the first which-key binding",
+        category: "System",
+        run() {
+          setOffset(0)
+        },
+      },
+      {
+        name: command.end,
+        title: "Last key binding",
+        desc: "Jump to the last which-key binding",
+        category: "System",
+        run() {
+          setOffset(maxOffset())
+        },
+      },
+    ],
+    bindings: commandBindings(props.api.tuiConfig.keymap.sections.which_key, scrollCommands),
+  }))
 
   createEffect(() => {
     if (!visible()) setOffset(0)
@@ -212,31 +272,13 @@ function WhichKeyPanel(props: {
     setOffset((value) => clamp(value))
   })
 
-  onCleanup(
-    props.api.keymap.intercept(
-      "key",
-      ({ event, consume }) => {
-        if (!visible()) return
-        if (matches(matchers.up, event)) scroll(-columns())
-        else if (matches(matchers.down, event)) scroll(columns())
-        else if (matches(matchers.pageUp, event)) scroll(-pageSize())
-        else if (matches(matchers.pageDown, event)) scroll(pageSize())
-        else if (matches(matchers.home, event)) setOffset(0)
-        else if (matches(matchers.end, event)) setOffset(maxOffset())
-        else return
-        consume()
-      },
-      { priority: 1000 },
-    ),
-  )
-
   return (
     <Show when={visible()}>
       <box
         position={props.layout === "overlay" ? "absolute" : "relative"}
         zIndex={3500}
         left={left}
-        top={props.layout === "overlay" ? top() : undefined}
+        bottom={props.layout === "overlay" ? 0 : undefined}
         width={dimensions().width}
         backgroundColor={look().panel}
         paddingLeft={1}
@@ -303,10 +345,12 @@ function WhichKeyPanel(props: {
         </Show>
         <box flexDirection="row" justifyContent="space-between" paddingTop={1}>
           <text fg={look().muted} wrapMode="none">
-            {props.pinned() ? `toggle ${trigger()}` : prefix() ? `pending ${prefix()}` : trigger()}
+            {props.pinned() ? `toggle ${trigger() || command.toggle}` : prefix() ? `pending ${prefix()}` : trigger()}
           </text>
           <text fg={look().muted} wrapMode="none">
-            {`${position()}  ${props.mode()} ${modeTrigger()}  scroll ctrl+alt+up/down`}
+            {`${position()}  ${props.mode()} ${modeTrigger() || command.toggleLayout}  scroll ${
+              scrollUpTrigger() || command.scrollUp
+            }/${scrollDownTrigger() || command.scrollDown}`}
           </text>
         </box>
       </box>
@@ -314,8 +358,7 @@ function WhichKeyPanel(props: {
   )
 }
 
-const tui: TuiPlugin = async (api, options) => {
-  const trigger = pickKey(options as WhichKeyOptions | undefined)
+const tui: TuiPlugin = async (api) => {
   const [pinned, setPinned] = createSignal(false)
   const [layout, setLayout] = createSignal<Layout>("dock")
 
@@ -341,10 +384,7 @@ const tui: TuiPlugin = async (api, options) => {
         },
       },
     ],
-    bindings: [
-      { key: trigger, cmd: command.toggle, desc: "Show key bindings", group: "Global" },
-      { key: DEFAULT_LAYOUT_KEY, cmd: command.toggleLayout, desc: "Toggle key bindings layout", group: "Global" },
-    ],
+    bindings: commandBindings(api.tuiConfig.keymap.sections.which_key, toggleCommands),
   })
 
   api.slots.register({
@@ -357,8 +397,6 @@ const tui: TuiPlugin = async (api, options) => {
               layout="overlay"
               mode={layout}
               pinned={pinned}
-              trigger={trigger}
-              modeTrigger={DEFAULT_LAYOUT_KEY}
             />
           </Show>
         )
@@ -371,8 +409,6 @@ const tui: TuiPlugin = async (api, options) => {
               layout="dock"
               mode={layout}
               pinned={pinned}
-              trigger={trigger}
-              modeTrigger={DEFAULT_LAYOUT_KEY}
             />
           </Show>
         )
