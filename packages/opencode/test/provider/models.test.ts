@@ -256,4 +256,38 @@ describe("ModelsDev Service", () => {
       expect(final.calls.length).toBeGreaterThanOrEqual(1)
     }),
   )
+
+  it.live("accepts model status 'active' in provider models", () =>
+    Effect.gen(function* () {
+      const fixtureWithActiveStatus: Record<string, ModelsDev.Provider> = {
+        acme: {
+          id: "acme",
+          name: "Acme",
+          env: ["ACME_API_KEY"],
+          models: {
+            "acme-1": {
+              id: "acme-1",
+              name: "Acme One",
+              release_date: "2026-01-01",
+              attachment: false,
+              reasoning: false,
+              temperature: true,
+              tool_call: true,
+              limit: { context: 128000, output: 8192 },
+              status: "active" as const,
+            },
+          },
+        },
+      }
+      yield* writeCache(fixtureWithActiveStatus)
+      const state = yield* Ref.make({ body: JSON.stringify(fixtureWithActiveStatus), status: 200, calls: [] })
+      const result = yield* provided(
+        state,
+        ModelsDev.Service.use((s) => s.get()),
+      )
+      expect(result["acme"]).toBeDefined()
+      expect(result["acme"].models["acme-1"]).toBeDefined()
+      expect(result["acme"].models["acme-1"].status).toBe("active")
+    }),
+  )
 })
