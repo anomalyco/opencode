@@ -83,9 +83,15 @@ export const useSessionHashScroll = (input: {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const sticky = root.querySelector("[data-session-title]")
-    const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
-    const scrollTopBefore = root.scrollTop
+    const raw = getComputedStyle(root).getPropertyValue("--session-title-inset").trim()
+    const cssInset = Number.parseFloat(raw) || 0
+    
+    const header = root.querySelector("[data-session-title]")
+    const headerVisible = header instanceof HTMLElement
+    // Prefer the CSS variable, but fall back to the header's actual height
+    // when the variable hasn't updated yet after a route transition.
+    const inset = headerVisible ? Math.max(cssInset, header.getBoundingClientRect().height) : cssInset
+    
     const top = targetTop({
       itemTop: a.top,
       rootTop: b.top,
@@ -93,16 +99,7 @@ export const useSessionHashScroll = (input: {
       inset,
     })
     
-    console.debug(
-      `[scrollToElement] scrolling: elementId=${el.id} scrollTopBefore=${scrollTopBefore} scrollTopTarget=${top} delta=${top - scrollTopBefore} behavior=${behavior}`
-    )
-    
     root.scrollTo({ top, behavior })
-    
-    console.debug(
-      `[scrollToElement] scrolled: scrollTopAfter=${root.scrollTop}`
-    )
-    
     return true
   }
 
