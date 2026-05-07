@@ -137,7 +137,7 @@ new honeycomb.Trigger("IncreasedProviderHttpErrorsGo", {
   description,
   queryJson: providerHttpErrorsQuery("go"),
   alertType: "on_change",
-  frequency: 300,
+  frequency: 600,
   thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
   recipients: [
     {
@@ -156,7 +156,7 @@ new honeycomb.Trigger("IncreasedProviderHttpErrorsZen", {
   description,
   queryJson: providerHttpErrorsQuery("zen"),
   alertType: "on_change",
-  frequency: 300,
+  frequency: 600,
   thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
   recipients: [
     {
@@ -164,6 +164,35 @@ new honeycomb.Trigger("IncreasedProviderHttpErrorsZen", {
       notificationDetails: [
         {
           variables: [{ name: "type", value: "provider_http_errors" }],
+        },
+      ],
+    },
+  ],
+})
+
+new honeycomb.Trigger("IncreasedFreeTierRequests", {
+  disabled: true,
+  name: "Increased Free Tier Requests",
+  description,
+  queryJson: honeycomb.getQuerySpecificationOutput({
+    calculations: [{ op: "COUNT" }],
+    filters: [
+      { column: "event_type", op: "=", value: "completions" },
+      { column: "user_agent", op: "contains", value: "opencode" },
+      { column: "isFreeTier", op: "=", value: "true" },
+    ],
+    timeRange: 3600,
+  }).json,
+  alertType: "on_change",
+  frequency: 900,
+  thresholds: [{ op: ">=", value: 50, exceededLimit: 1 }],
+  baselineDetails: [{ type: "percentage", offsetMinutes: 1440 }],
+  recipients: [
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "custom" }],
         },
       ],
     },
