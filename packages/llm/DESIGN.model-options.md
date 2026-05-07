@@ -281,14 +281,14 @@ Instead:
 
 Other former `policy` concepts map the same way:
 
-| Old policy idea | New home |
-| --- | --- |
-| Include streamed usage | Route/protocol default when safe; provider option only if genuinely configurable |
-| Include cost/accounting | `providerOptions.<provider>` because cost accounting is provider-specific |
-| Retention / store | `providerOptions.openai.store`, `providerOptions.openrouter.provider.dataCollection`, `providerOptions.gateway`, etc. |
-| Prompt cache | Message/content-part `providerOptions` for cache markers, or provider-specific call options |
-| Text verbosity | `generation` only if we decide it is common; otherwise `providerOptions.openai.textVerbosity` |
-| Reasoning | `providerOptions.<provider>`, not generic policy |
+| Old policy idea         | New home                                                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Include streamed usage  | Route/protocol default when safe; provider option only if genuinely configurable                                      |
+| Include cost/accounting | `providerOptions.<provider>` because cost accounting is provider-specific                                             |
+| Retention / store       | `providerOptions.openai.store`, `providerOptions.openrouter.provider.dataCollection`, `providerOptions.gateway`, etc. |
+| Prompt cache            | Message/content-part `providerOptions` for cache markers, or provider-specific call options                           |
+| Text verbosity          | `generation` only if we decide it is common; otherwise `providerOptions.openai.textVerbosity`                         |
+| Reasoning               | `providerOptions.<provider>`, not generic policy                                                                      |
 
 If a concept later proves both portable and semantically safe, add a typed standard field. Until then, prefer `generation` for shared generation controls and `providerOptions` for exact provider behavior.
 

@@ -3,15 +3,11 @@
   "metadata": {
     "name": "openai-chat/continues-after-tool-result",
     "recordedAt": "2026-05-06T01:33:31.878Z",
-    "tags": [
-      "prefix:openai-chat",
-      "provider:openai",
-      "protocol:openai-chat",
-      "tool"
-    ]
+    "tags": ["prefix:openai-chat", "provider:openai", "protocol:openai-chat", "tool"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.openai.com/v1/chat/completions",

@@ -190,7 +190,8 @@ const openAICompatibleReasoningContent = (native: unknown) =>
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (message: OpenAIChatRequestMessage) {
   const content: TextPart[] = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["text"])) return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text"])
+    if (!ProviderShared.supportsContent(part, ["text"]))
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text"])
     content.push(part)
   }
   return { role: "user" as const, content: ProviderShared.joinText(content) }
@@ -224,7 +225,8 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
 const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (message: OpenAIChatRequestMessage) {
   const messages: OpenAIChatMessage[] = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["tool-result"])) return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
+    if (!ProviderShared.supportsContent(part, ["tool-result"]))
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
     messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
   }
   return messages
@@ -376,12 +378,14 @@ export const protocol = Protocol.make({
   },
 })
 
-export const endpoint = (input: {
-  readonly defaultBaseURL?: string | false
-  readonly required?: string
-} = {}) =>
+export const endpoint = (
+  input: {
+    readonly defaultBaseURL?: string | false
+    readonly required?: string
+  } = {},
+) =>
   Endpoint.baseURL<OpenAIChatBody>({
-    default: input.defaultBaseURL === false ? undefined : input.defaultBaseURL ?? DEFAULT_BASE_URL,
+    default: input.defaultBaseURL === false ? undefined : (input.defaultBaseURL ?? DEFAULT_BASE_URL),
     path: PATH,
     required: input.required,
   })

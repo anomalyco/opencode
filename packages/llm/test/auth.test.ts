@@ -24,9 +24,10 @@ const withEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.l
 describe("Auth", () => {
   it.effect("renders a config credential as bearer auth", () =>
     Effect.gen(function* () {
-      const headers = yield* Auth.config("OPENAI_API_KEY").bearer().apply(input).pipe(
-        withEnv({ OPENAI_API_KEY: "sk-test" }),
-      )
+      const headers = yield* Auth.config("OPENAI_API_KEY")
+        .bearer()
+        .apply(input)
+        .pipe(withEnv({ OPENAI_API_KEY: "sk-test" }))
 
       expect(headers.authorization).toBe("Bearer sk-test")
       expect(headers["x-existing"]).toBe("yes")

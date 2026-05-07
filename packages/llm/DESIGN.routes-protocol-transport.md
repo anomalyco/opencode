@@ -409,7 +409,10 @@ export const azureResponses = openAIResponses.with({
   id: "azure-openai-responses",
   provider: "azure",
   transport: openAIResponses.transport.with({
-    endpoint: Endpoint.requiredBaseURL({ path: "/responses", message: "Azure OpenAI requires resourceName or baseURL" }),
+    endpoint: Endpoint.requiredBaseURL({
+      path: "/responses",
+      message: "Azure OpenAI requires resourceName or baseURL",
+    }),
     auth: azureAuth,
   }),
 })
@@ -442,7 +445,10 @@ export const azureResponses = responses.with({
   id: "azure-openai-responses",
   provider: "azure",
   transport: responses.transport.with({
-    endpoint: Endpoint.requiredBaseURL({ path: "/responses", message: "Azure OpenAI requires resourceName or baseURL" }),
+    endpoint: Endpoint.requiredBaseURL({
+      path: "/responses",
+      message: "Azure OpenAI requires resourceName or baseURL",
+    }),
     auth: azureAuth,
   }),
 })
@@ -590,9 +596,10 @@ The package-level constraint is simple: transport selection must be string-seria
 Bridge behavior can be:
 
 ```ts
-const model = options.transport === "websocket"
-  ? OpenAI.responses(id, { ...options, transport: "websocket" })
-  : OpenAI.responses(id, options)
+const model =
+  options.transport === "websocket"
+    ? OpenAI.responses(id, { ...options, transport: "websocket" })
+    : OpenAI.responses(id, options)
 ```
 
 or equivalently:

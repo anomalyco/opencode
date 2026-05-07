@@ -350,110 +350,134 @@ const hostedToolEvents = (item: OpenAIResponsesStreamItem & { id: string }): Rea
   ]
 }
 
-const step = (state: ParserState, event: OpenAIResponsesEvent) =>
-  Effect.gen(function* () {
-    if (event.type === "response.output_text.delta" && event.delta) {
-      return [
-        state,
-        [
-          {
-            type: "text-delta",
-            id: event.item_id,
-            text: event.delta,
-            ...(event.item_id ? { providerMetadata: openaiMetadata({ itemId: event.item_id }) } : {}),
-          },
-        ],
-      ] as const
-    }
+type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 
-    if (event.type === "response.output_item.added" && event.item?.type === "function_call" && event.item.id) {
-      return [
-        {
-          hasFunctionCall: state.hasFunctionCall,
-          tools: ToolStream.start(state.tools, event.item.id, {
-            id: event.item.call_id ?? event.item.id,
-            name: event.item.name ?? "",
-            input: event.item.arguments ?? "",
-            providerMetadata: openaiMetadata({ itemId: event.item.id }),
-          }),
-        },
-        [],
-      ] as const
-    }
+const NO_EVENTS: StepResult["1"] = []
 
-    if (event.type === "response.function_call_arguments.delta" && event.item_id && event.delta) {
-      const result = ToolStream.appendExisting(
-        ADAPTER,
-        state.tools,
-        event.item_id,
-        event.delta,
-        "OpenAI Responses tool argument delta is missing its tool call",
-      )
-      if (ToolStream.isError(result)) return yield* result
-      return [
-        { hasFunctionCall: state.hasFunctionCall, tools: result.tools },
-        result.event ? [result.event] : [],
-      ] as const
-    }
+// `response.completed` / `response.incomplete` are clean finishes that emit a
+// `request-finish` event; `response.failed` is a hard failure that emits a
+// `provider-error`. All three end the stream — kept in one set so `step` and
+// the protocol's `terminal` predicate stay in sync.
+const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])
 
-    if (event.type === "response.output_item.done" && event.item?.type === "function_call") {
-      if (!event.item.id || !event.item.call_id || !event.item.name) return [state, []] as const
-      const tools = state.tools[event.item.id]
-        ? state.tools
-        : ToolStream.start(state.tools, event.item.id, { id: event.item.call_id, name: event.item.name })
-      const result =
-        event.item.arguments === undefined
-          ? yield* ToolStream.finish(ADAPTER, tools, event.item.id)
-          : yield* ToolStream.finishWithInput(ADAPTER, tools, event.item.id, event.item.arguments)
-      return [
-        {
-          hasFunctionCall: result.event ? true : state.hasFunctionCall,
-          tools: result.tools,
-        },
-        result.event ? [result.event] : [],
-      ] as const
-    }
+const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  if (!event.delta) return [state, NO_EVENTS]
+  return [
+    state,
+    [
+      {
+        type: "text-delta",
+        id: event.item_id,
+        text: event.delta,
+        ...(event.item_id ? { providerMetadata: openaiMetadata({ itemId: event.item_id }) } : {}),
+      },
+    ],
+  ]
+}
 
-    if (event.type === "response.output_item.done" && event.item && isHostedToolItem(event.item)) {
-      return [state, hostedToolEvents(event.item)] as const
-    }
+const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  const item = event.item
+  if (item?.type !== "function_call" || !item.id) return [state, NO_EVENTS]
+  return [
+    {
+      hasFunctionCall: state.hasFunctionCall,
+      tools: ToolStream.start(state.tools, item.id, {
+        id: item.call_id ?? item.id,
+        name: item.name ?? "",
+        input: item.arguments ?? "",
+        providerMetadata: openaiMetadata({ itemId: item.id }),
+      }),
+    },
+    NO_EVENTS,
+  ]
+}
 
-    if (event.type === "response.completed" || event.type === "response.incomplete")
-      return [
-        state,
-        [
-          {
-            type: "request-finish" as const,
-            reason: mapFinishReason(event, state.hasFunctionCall),
-            usage: mapUsage(event.response?.usage),
-            ...(event.response?.id || event.response?.service_tier
-              ? {
-                  providerMetadata: openaiMetadata({
-                    responseId: event.response.id,
-                    serviceTier: event.response.service_tier,
-                  }),
-                }
-              : {}),
-          },
-        ],
-      ] as const
+const onFunctionCallArgumentsDelta = Effect.fn("OpenAIResponses.onFunctionCallArgumentsDelta")(function* (
+  state: ParserState,
+  event: OpenAIResponsesEvent,
+) {
+  if (!event.item_id || !event.delta) return [state, NO_EVENTS] satisfies StepResult
+  const result = ToolStream.appendExisting(
+    ADAPTER,
+    state.tools,
+    event.item_id,
+    event.delta,
+    "OpenAI Responses tool argument delta is missing its tool call",
+  )
+  if (ToolStream.isError(result)) return yield* result
+  return [
+    { hasFunctionCall: state.hasFunctionCall, tools: result.tools },
+    result.event ? [result.event] : NO_EVENTS,
+  ] satisfies StepResult
+})
 
-    if (event.type === "error") {
-      return [
-        state,
-        [{ type: "provider-error" as const, message: event.message ?? event.code ?? "OpenAI Responses stream error" }],
-      ] as const
-    }
+const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function* (
+  state: ParserState,
+  event: OpenAIResponsesEvent,
+) {
+  const item = event.item
+  if (!item) return [state, NO_EVENTS] satisfies StepResult
 
-    if (event.type === "response.failed") {
-      return [
-        state,
-        [{ type: "provider-error" as const, message: event.message ?? event.code ?? "OpenAI Responses response failed" }],
-      ] as const
-    }
+  if (item.type === "function_call") {
+    if (!item.id || !item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
+    const tools = state.tools[item.id]
+      ? state.tools
+      : ToolStream.start(state.tools, item.id, { id: item.call_id, name: item.name })
+    const result =
+      item.arguments === undefined
+        ? yield* ToolStream.finish(ADAPTER, tools, item.id)
+        : yield* ToolStream.finishWithInput(ADAPTER, tools, item.id, item.arguments)
+    return [
+      { hasFunctionCall: result.event ? true : state.hasFunctionCall, tools: result.tools },
+      result.event ? [result.event] : NO_EVENTS,
+    ] satisfies StepResult
+  }
 
-    return [state, []] as const
-  })
+  if (isHostedToolItem(item)) return [state, hostedToolEvents(item)] satisfies StepResult
+
+  return [state, NO_EVENTS] satisfies StepResult
+})
+
+const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
+  state,
+  [
+    {
+      type: "request-finish",
+      reason: mapFinishReason(event, state.hasFunctionCall),
+      usage: mapUsage(event.response?.usage),
+      ...(event.response?.id || event.response?.service_tier
+        ? {
+            providerMetadata: openaiMetadata({
+              responseId: event.response.id,
+              serviceTier: event.response.service_tier,
+            }),
+          }
+        : {}),
+    },
+  ],
+]
+
+const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
+  state,
+  [{ type: "provider-error", message: event.message ?? event.code ?? "OpenAI Responses response failed" }],
+]
+
+const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
+  state,
+  [{ type: "provider-error", message: event.message ?? event.code ?? "OpenAI Responses stream error" }],
+]
+
+const step = (state: ParserState, event: OpenAIResponsesEvent) => {
+  if (event.type === "response.output_text.delta") return Effect.succeed(onOutputTextDelta(state, event))
+  if (event.type === "response.output_item.added") return Effect.succeed(onOutputItemAdded(state, event))
+  if (event.type === "response.function_call_arguments.delta") return onFunctionCallArgumentsDelta(state, event)
+  if (event.type === "response.output_item.done") return onOutputItemDone(state, event)
+  if (event.type === "response.completed" || event.type === "response.incomplete")
+    return Effect.succeed(onResponseFinish(state, event))
+  if (event.type === "response.failed") return Effect.succeed(onResponseFailed(state, event))
+  if (event.type === "error") return Effect.succeed(onError(state, event))
+  return Effect.succeed<StepResult>([state, NO_EVENTS])
+}
 
 // =============================================================================
 // Protocol And OpenAI Route
@@ -473,8 +497,7 @@ export const protocol = Protocol.make({
     event: Protocol.jsonEvent(OpenAIResponsesEvent),
     initial: () => ({ hasFunctionCall: false, tools: ToolStream.empty<string>() }),
     step,
-    terminal: (event) =>
-      event.type === "response.completed" || event.type === "response.incomplete" || event.type === "response.failed",
+    terminal: (event) => TERMINAL_TYPES.has(event.type),
   },
 })
 

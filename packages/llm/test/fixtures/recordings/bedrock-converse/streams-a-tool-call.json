@@ -3,15 +3,11 @@
   "metadata": {
     "name": "bedrock-converse/streams-a-tool-call",
     "recordedAt": "2026-04-28T21:18:46.929Z",
-    "tags": [
-      "prefix:bedrock-converse",
-      "provider:amazon-bedrock",
-      "protocol:bedrock-converse",
-      "tool"
-    ]
+    "tags": ["prefix:bedrock-converse", "provider:amazon-bedrock", "protocol:bedrock-converse", "tool"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream",

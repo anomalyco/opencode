@@ -27,7 +27,8 @@ const mapInput = (input: CopilotModelInput) => withOpenAIOptions(input.id, input
 const chatModel = Route.model<CopilotModelInput>(OpenAIChat.route, { provider: id }, { mapInput })
 const responsesModel = Route.model<CopilotModelInput>(OpenAIResponses.route, { provider: id }, { mapInput })
 
-export const responses = (modelID: string | ModelID, options: ModelOptions = {}) => responsesModel({ ...options, id: modelID })
+export const responses = (modelID: string | ModelID, options: ModelOptions = {}) =>
+  responsesModel({ ...options, id: modelID })
 
 export const chat = (modelID: string | ModelID, options: ModelOptions = {}) => chatModel({ ...options, id: modelID })
 

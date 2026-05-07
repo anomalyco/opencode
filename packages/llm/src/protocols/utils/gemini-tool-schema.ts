@@ -32,9 +32,10 @@ const sanitizeNode = (schema: unknown): unknown => {
   if (!isRecord(schema)) return Array.isArray(schema) ? schema.map(sanitizeNode) : schema
 
   const result: Record<string, unknown> = Object.fromEntries(
-    Object.entries(schema).map(([key, value]) =>
-      [key, key === "enum" && Array.isArray(value) ? value.map(String) : sanitizeNode(value)],
-    ),
+    Object.entries(schema).map(([key, value]) => [
+      key,
+      key === "enum" && Array.isArray(value) ? value.map(String) : sanitizeNode(value),
+    ]),
   )
 
   if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) result.type = "string"
@@ -58,7 +59,8 @@ const sanitizeNode = (schema: unknown): unknown => {
 }
 
 const emptyObjectSchema = (schema: Record<string, unknown>) =>
-  schema.type === "object" && (!isRecord(schema.properties) || Object.keys(schema.properties).length === 0) &&
+  schema.type === "object" &&
+  (!isRecord(schema.properties) || Object.keys(schema.properties).length === 0) &&
   !schema.additionalProperties
 
 const projectNode = (schema: unknown): Record<string, unknown> | undefined => {
@@ -72,14 +74,20 @@ const projectNode = (schema: unknown): Record<string, unknown> | undefined => {
       ["type", Array.isArray(schema.type) ? schema.type.filter((type) => type !== "null")[0] : schema.type],
       ["nullable", Array.isArray(schema.type) && schema.type.includes("null") ? true : undefined],
       ["enum", schema.const !== undefined ? [schema.const] : schema.enum],
-      ["properties", isRecord(schema.properties)
-        ? Object.fromEntries(Object.entries(schema.properties).map(([key, value]) => [key, projectNode(value)]))
-        : undefined],
-      ["items", Array.isArray(schema.items)
-        ? schema.items.map(projectNode)
-        : schema.items === undefined
-        ? undefined
-        : projectNode(schema.items)],
+      [
+        "properties",
+        isRecord(schema.properties)
+          ? Object.fromEntries(Object.entries(schema.properties).map(([key, value]) => [key, projectNode(value)]))
+          : undefined,
+      ],
+      [
+        "items",
+        Array.isArray(schema.items)
+          ? schema.items.map(projectNode)
+          : schema.items === undefined
+            ? undefined
+            : projectNode(schema.items),
+      ],
       ["allOf", Array.isArray(schema.allOf) ? schema.allOf.map(projectNode) : undefined],
       ["anyOf", Array.isArray(schema.anyOf) ? schema.anyOf.map(projectNode) : undefined],
       ["oneOf", Array.isArray(schema.oneOf) ? schema.oneOf.map(projectNode) : undefined],

@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { ContentPart, LLMEvent, LLMRequest, ModelCapabilities, ModelID, ModelLimits, ModelRef, ProviderID } from "../src/schema"
+import {
+  ContentPart,
+  LLMEvent,
+  LLMRequest,
+  ModelCapabilities,
+  ModelID,
+  ModelLimits,
+  ModelRef,
+  ProviderID,
+} from "../src/schema"
 
 const capabilities = new ModelCapabilities({
   input: { text: true, image: false, audio: false, video: false, pdf: false },

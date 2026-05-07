@@ -2,7 +2,7 @@ import { Option } from "effect"
 import { Headers, HttpBody, HttpClientRequest, UrlParams } from "effect/unstable/http"
 import { decodeJson } from "./matching"
 import { REDACTED, redactUrl, secretFindings } from "./redaction"
-import type { Cassette, RequestSnapshot } from "./schema"
+import { isHttpInteraction, type Cassette, type RequestSnapshot } from "./schema"
 
 const safeText = (value: unknown) => {
   if (value === undefined) return "undefined"
@@ -64,27 +64,32 @@ export const requestDiff = (expected: RequestSnapshot, received: RequestSnapshot
   if (headers.length > 0) lines.push("headers:", ...headers.slice(0, 8))
   const expectedBody = jsonBody(expected.body)
   const receivedBody = jsonBody(received.body)
-  const body = expectedBody !== undefined && receivedBody !== undefined
-    ? valueDiffs(expectedBody, receivedBody).map((line) => `  ${line}`)
-    : expected.body === received.body
-      ? []
-      : [`  expected ${safeText(expected.body)}, received ${safeText(received.body)}`]
+  const body =
+    expectedBody !== undefined && receivedBody !== undefined
+      ? valueDiffs(expectedBody, receivedBody).map((line) => `  ${line}`)
+      : expected.body === received.body
+        ? []
+        : [`  expected ${safeText(expected.body)}, received ${safeText(received.body)}`]
   if (body.length > 0) lines.push("body:", ...body)
   return lines
 }
 
 export const mismatchDetail = (cassette: Cassette, incoming: RequestSnapshot) => {
-  if (cassette.interactions.length === 0) return "cassette has no recorded interactions"
-  const ranked = cassette.interactions
+  const interactions = cassette.interactions.filter(isHttpInteraction)
+  if (interactions.length === 0) return "cassette has no recorded HTTP interactions"
+  const ranked = interactions
     .map((interaction, index) => ({ index, lines: requestDiff(interaction.request, incoming) }))
     .toSorted((a, b) => a.lines.length - b.lines.length || a.index - b.index)
   const best = ranked[0]
-  return [
-    "no recorded interaction matched",
-    `closest interaction: #${best.index + 1}`,
-    ...best.lines,
-  ].join("\n")
+  return ["no recorded interaction matched", `closest interaction: #${best.index + 1}`, ...best.lines].join("\n")
 }
 
 export const redactedErrorRequest = (request: HttpClientRequest.HttpClientRequest) =>
-  HttpClientRequest.makeWith(request.method, redactUrl(request.url), UrlParams.empty, Option.none(), Headers.empty, HttpBody.empty)
+  HttpClientRequest.makeWith(
+    request.method,
+    redactUrl(request.url),
+    UrlParams.empty,
+    Option.none(),
+    Headers.empty,
+    HttpBody.empty,
+  )

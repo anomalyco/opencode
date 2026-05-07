@@ -179,9 +179,7 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
   })
 
 const lowerUserPart = (part: TextPart | MediaPart) =>
-  part.type === "text"
-    ? { text: part.text }
-    : { inlineData: { mimeType: part.mediaType, data: mediaData(part) } }
+  part.type === "text" ? { text: part.text } : { inlineData: { mimeType: part.mediaType, data: mediaData(part) } }
 
 const lowerToolCall = (part: ToolCallPart) => ({
   functionCall: { name: part.name, args: part.input },
@@ -226,7 +224,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 
     const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"])) return yield* ProviderShared.unsupportedContent("Gemini", "tool", ["tool-result"])
+      if (!ProviderShared.supportsContent(part, ["tool-result"]))
+        return yield* ProviderShared.unsupportedContent("Gemini", "tool", ["tool-result"])
       parts.push({
         functionResponse: {
           name: part.name,
@@ -269,10 +268,13 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 
   return {
     contents: yield* lowerMessages(request),
-    systemInstruction: request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
+    systemInstruction:
+      request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
     tools: toolsEnabled ? [{ functionDeclarations: request.tools.map(lowerTool) }] : undefined,
     toolConfig: toolsEnabled && request.toolChoice ? yield* lowerToolConfig(request.toolChoice) : undefined,
-    generationConfig: Object.values(generationConfig).some((value) => value !== undefined) ? generationConfig : undefined,
+    generationConfig: Object.values(generationConfig).some((value) => value !== undefined)
+      ? generationConfig
+      : undefined,
   }
 })
 
@@ -315,10 +317,14 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
 const step = (state: ParserState, event: GeminiEvent) => {
   const nextState = {
     ...state,
-    usage: event.usageMetadata ? mapUsage(event.usageMetadata) ?? state.usage : state.usage,
+    usage: event.usageMetadata ? (mapUsage(event.usageMetadata) ?? state.usage) : state.usage,
   }
   const candidate = event.candidates?.[0]
-  if (!candidate?.content) return Effect.succeed([{ ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason }, []] as const)
+  if (!candidate?.content)
+    return Effect.succeed([
+      { ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason },
+      [],
+    ] as const)
 
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
@@ -338,12 +344,15 @@ const step = (state: ParserState, event: GeminiEvent) => {
     }
   }
 
-  return Effect.succeed([{
-    ...nextState,
-    hasToolCalls,
-    nextToolCallId,
-    finishReason: candidate.finishReason ?? nextState.finishReason,
-  }, events] as const)
+  return Effect.succeed([
+    {
+      ...nextState,
+      hasToolCalls,
+      nextToolCallId,
+      finishReason: candidate.finishReason ?? nextState.finishReason,
+    },
+    events,
+  ] as const)
 }
 
 // =============================================================================

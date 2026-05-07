@@ -2,6 +2,7 @@
   "version": 1,
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://example.test/poll",
@@ -19,6 +20,7 @@
       }
     },
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://example.test/poll",

@@ -4,7 +4,9 @@ import { JsonSchema, ModelID, ProviderID, ReasoningEffort, RouteID } from "./ids
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-export const mergeJsonRecords = (...items: ReadonlyArray<Record<string, unknown> | undefined>): Record<string, unknown> | undefined => {
+export const mergeJsonRecords = (
+  ...items: ReadonlyArray<Record<string, unknown> | undefined>
+): Record<string, unknown> | undefined => {
   const defined = items.filter((item): item is Record<string, unknown> => item !== undefined)
   if (defined.length === 0) return undefined
   if (defined.length === 1 && Object.values(defined[0]).every((value) => value !== undefined)) return defined[0]
@@ -18,12 +20,16 @@ export const mergeJsonRecords = (...items: ReadonlyArray<Record<string, unknown>
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-const mergeStringRecords = (...items: ReadonlyArray<Record<string, string> | undefined>): Record<string, string> | undefined => {
+const mergeStringRecords = (
+  ...items: ReadonlyArray<Record<string, string> | undefined>
+): Record<string, string> | undefined => {
   const defined = items.filter((item): item is Record<string, string> => item !== undefined)
   if (defined.length === 0) return undefined
   if (defined.length === 1) return defined[0]
   const result = Object.fromEntries(
-    defined.flatMap((item) => Object.entries(item).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    defined.flatMap((item) =>
+      Object.entries(item).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    ),
   )
   return Object.keys(result).length === 0 ? undefined : result
 }
@@ -31,7 +37,9 @@ const mergeStringRecords = (...items: ReadonlyArray<Record<string, string> | und
 export const ProviderOptions = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
 export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
 
-export const mergeProviderOptions = (...items: ReadonlyArray<ProviderOptions | undefined>): ProviderOptions | undefined => {
+export const mergeProviderOptions = (
+  ...items: ReadonlyArray<ProviderOptions | undefined>
+): ProviderOptions | undefined => {
   const result: Record<string, Record<string, unknown>> = {}
   for (const item of items) {
     if (!item) continue
@@ -53,7 +61,7 @@ export namespace HttpOptions {
   export type Input = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
 
   /** Normalize HTTP option input into the canonical `HttpOptions` class. */
-  export const make = (input: Input) => input instanceof HttpOptions ? input : new HttpOptions(input)
+  export const make = (input: Input) => (input instanceof HttpOptions ? input : new HttpOptions(input))
 }
 
 export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined>): HttpOptions | undefined => {
@@ -79,7 +87,7 @@ export namespace GenerationOptions {
   export type Input = GenerationOptions | ConstructorParameters<typeof GenerationOptions>[0]
 
   /** Normalize generation option input into the canonical `GenerationOptions` class. */
-  export const make = (input: Input = {}) => input instanceof GenerationOptions ? input : new GenerationOptions(input)
+  export const make = (input: Input = {}) => (input instanceof GenerationOptions ? input : new GenerationOptions(input))
 }
 
 export type GenerationOptionsFields = {
@@ -144,15 +152,17 @@ export class ModelCapabilities extends Schema.Class<ModelCapabilities>("LLM.Mode
 }) {}
 
 export namespace ModelCapabilities {
-  export type Input = ModelCapabilities | {
-    readonly input?: Partial<ModelCapabilities["input"]>
-    readonly output?: Partial<ModelCapabilities["output"]>
-    readonly tools?: Partial<ModelCapabilities["tools"]>
-    readonly cache?: Partial<ModelCapabilities["cache"]>
-    readonly reasoning?: Partial<Omit<ModelCapabilities["reasoning"], "efforts">> & {
-      readonly efforts?: ReadonlyArray<ModelCapabilities["reasoning"]["efforts"][number]>
-    }
-  }
+  export type Input =
+    | ModelCapabilities
+    | {
+        readonly input?: Partial<ModelCapabilities["input"]>
+        readonly output?: Partial<ModelCapabilities["output"]>
+        readonly tools?: Partial<ModelCapabilities["tools"]>
+        readonly cache?: Partial<ModelCapabilities["cache"]>
+        readonly reasoning?: Partial<Omit<ModelCapabilities["reasoning"], "efforts">> & {
+          readonly efforts?: ReadonlyArray<ModelCapabilities["reasoning"]["efforts"][number]>
+        }
+      }
 
   /** Normalize partial capability input into the canonical capability set. */
   export const make = (input: Input | undefined) => {
@@ -176,7 +186,8 @@ export namespace ModelLimits {
   export type Input = ModelLimits | ConstructorParameters<typeof ModelLimits>[0]
 
   /** Normalize model limit input into the canonical `ModelLimits` class. */
-  export const make = (input: Input | undefined) => input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
+  export const make = (input: Input | undefined) =>
+    input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
 }
 
 export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({

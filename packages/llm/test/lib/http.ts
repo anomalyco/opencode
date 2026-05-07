@@ -7,7 +7,10 @@ import type { Service as RequestExecutorService } from "../../src/route/executor
 export type HandlerInput = {
   readonly request: HttpClientRequest.HttpClientRequest
   readonly text: string
-  readonly respond: (body: ConstructorParameters<typeof Response>[0], init?: ResponseInit) => HttpClientResponse.HttpClientResponse
+  readonly respond: (
+    body: ConstructorParameters<typeof Response>[0],
+    init?: ResponseInit,
+  ) => HttpClientResponse.HttpClientResponse
 }
 
 export type Handler = (input: HandlerInput) => Effect.Effect<HttpClientResponse.HttpClientResponse>

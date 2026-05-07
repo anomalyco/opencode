@@ -1,144 +1,157 @@
 import { expect } from "bun:test"
+import {
+  Cassette,
+  redactHeaders,
+  redactUrl,
+  isWebSocketInteraction,
+  type WebSocketFrame,
+  type WebSocketInteraction,
+} from "@opencode-ai/http-recorder"
 import { Effect, Layer, Stream } from "effect"
-import * as fs from "node:fs"
-import * as path from "node:path"
-import { fileURLToPath } from "node:url"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "../src/route"
-import type { Service as LLMClientService } from "../src/route/client"
-import type { Service as RequestExecutorService } from "../src/route/executor"
-import type { Service as WebSocketExecutorService } from "../src/route/transport/websocket"
-import { recordedEffectGroup, type RecordedCaseOptions as RunnerCaseOptions, type RecordedGroupOptions } from "./recorded-runner"
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings-websocket")
-
-type RecordedWebSocketEnv = RequestExecutorService | WebSocketExecutorService | LLMClientService
-
-type Cassette = {
-  readonly schemaVersion: 1
-  readonly recordedAt: string
-  readonly metadata?: Record<string, unknown>
-  readonly interactions: ReadonlyArray<{
-    readonly url: string
-    readonly sent: ReadonlyArray<string>
-    readonly received: ReadonlyArray<string>
-  }>
-}
-
-const cassettePath = (cassette: string) => path.join(FIXTURES_DIR, `${cassette}.json`)
-
-const readCassette = async (cassette: string): Promise<Cassette> => Bun.file(cassettePath(cassette)).json()
-
-const writeCassette = (cassette: string, value: Cassette) =>
-  Effect.promise(async () => {
-    await fs.promises.mkdir(path.dirname(cassettePath(cassette)), { recursive: true })
-    await Bun.write(cassettePath(cassette), `${JSON.stringify(value, null, 2)}\n`)
-  })
+import type { Headers } from "effect/unstable/http"
+import { WebSocketExecutor } from "../src/route"
+import type { Service as WebSocketExecutorService, WebSocketRequest } from "../src/route/transport/websocket"
 
 const liveWebSocket = WebSocketExecutor.open
+const WEBSOCKET_REQUEST_HEADERS = ["content-type", "accept", "openai-beta"]
 
-const http = Layer.succeed(RequestExecutor.Service, RequestExecutor.Service.of({
-  execute: () => Effect.die("unexpected HTTP request in WebSocket recording"),
-}))
+const headersRecord = (headers: Headers.Headers) =>
+  Object.fromEntries(
+    Object.entries(headers as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+      .toSorted(([a], [b]) => a.localeCompare(b)),
+  )
 
-const layerFromCassette = (cassette: string, input: Cassette): Layer.Layer<RecordedWebSocketEnv> => {
+const openSnapshot = (request: WebSocketRequest) => {
+  const headers = headersRecord(request.headers)
+  return {
+    url: redactUrl(request.url),
+    headers: redactHeaders(headers, WEBSOCKET_REQUEST_HEADERS),
+  }
+}
+
+const textFrame = (body: string): WebSocketFrame => ({ kind: "text", body })
+
+const frameText = (frame: WebSocketFrame) => {
+  if (frame.kind === "text") return frame.body
+  return new TextDecoder().decode(Buffer.from(frame.body, "base64"))
+}
+
+const frameMessage = (frame: WebSocketFrame) =>
+  frame.kind === "text" ? frame.body : new Uint8Array(Buffer.from(frame.body, "base64"))
+
+const receivedFrame = (message: string | Uint8Array): WebSocketFrame =>
+  typeof message === "string"
+    ? textFrame(message)
+    : { kind: "binary", body: Buffer.from(message).toString("base64"), bodyEncoding: "base64" }
+
+const unsafeCassette = (
+  cassette: string,
+  findings: ReadonlyArray<{ readonly path: string; readonly reason: string }>,
+) =>
+  new Error(
+    `Refusing to write WebSocket cassette "${cassette}" because it contains possible secrets: ${findings
+      .map((item) => `${item.path} (${item.reason})`)
+      .join(", ")}`,
+  )
+
+export const webSocketCassetteLayer = (
+  cassette: string,
+  input: { readonly metadata?: Record<string, unknown>; readonly recording: boolean },
+): Layer.Layer<WebSocketExecutorService, never, Cassette.Service> =>
+  input.recording ? recordingLayer(cassette, input.metadata) : replayLayer(cassette)
+
+const replayLayer = (cassette: string): Layer.Layer<WebSocketExecutorService, never, Cassette.Service> => {
+  let input: { readonly interactions: ReadonlyArray<WebSocketInteraction> } | undefined
   let interactionIndex = 0
-  const webSocket = Layer.effect(
+  return Layer.effect(
     WebSocketExecutor.Service,
     Effect.gen(function* () {
-      yield* Effect.addFinalizer(() => Effect.sync(() => {
-        expect(interactionIndex, `Unused recorded WebSocket interactions in ${cassette}`).toBe(input.interactions.length)
-      }))
+      const cassetteService = yield* Cassette.Service
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (!input) return
+          expect(interactionIndex, `Unused recorded WebSocket interactions in ${cassette}`).toBe(
+            input.interactions.length,
+          )
+        }),
+      )
       return WebSocketExecutor.Service.of({
         open: (request) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
+            input = input ?? {
+              interactions: (yield* cassetteService.read(cassette).pipe(Effect.orDie)).interactions.filter(
+                isWebSocketInteraction,
+              ),
+            }
             const interaction = input.interactions[interactionIndex]
             interactionIndex++
             if (!interaction) throw new Error(`No recorded WebSocket interaction for ${request.url}`)
-            expect(request.url).toBe(interaction.url)
+            expect(openSnapshot(request)).toEqual(interaction.open)
             let index = 0
             return {
               sendText: (message: string) =>
                 Effect.sync(() => {
-                  expect(JSON.parse(message)).toEqual(JSON.parse(interaction.sent[index] ?? "null"))
+                  expect(JSON.parse(message)).toEqual(
+                    JSON.parse(frameText(interaction.client[index] ?? textFrame("null"))),
+                  )
                   index++
                 }),
-              messages: Stream.fromArray(interaction.received),
+              messages: Stream.fromIterable(interaction.server).pipe(Stream.map(frameMessage)),
               close: Effect.sync(() => {
-                expect(index).toBe(interaction.sent.length)
+                expect(index).toBe(interaction.client.length)
               }),
             }
           }),
       })
     }),
   )
-  const deps = Layer.mergeAll(http, webSocket)
-  return Layer.mergeAll(deps, LLMClient.layerWithWebSocket.pipe(Layer.provide(deps)))
 }
 
-const recordingLayer = (cassette: string, metadata: Record<string, unknown> | undefined): Layer.Layer<RecordedWebSocketEnv> => {
+const recordingLayer = (
+  cassette: string,
+  metadata: Record<string, unknown> | undefined,
+): Layer.Layer<WebSocketExecutorService, never, Cassette.Service> => {
   const webSocket = Layer.effect(
     WebSocketExecutor.Service,
     Effect.gen(function* () {
-      const interactions: Cassette["interactions"][number][] = []
-      let dirty = false
-      yield* Effect.addFinalizer(() =>
-        dirty
-          ? writeCassette(cassette, {
-            schemaVersion: 1,
-            recordedAt: new Date().toISOString(),
-            metadata,
-            interactions,
-          })
-          : Effect.void,
-      )
+      const cassetteService = yield* Cassette.Service
       return WebSocketExecutor.Service.of({
         open: (request) =>
           Effect.gen(function* () {
-            const sent: string[] = []
-            const received: string[] = []
+            const client: WebSocketFrame[] = []
+            const server: WebSocketFrame[] = []
             const connection = yield* liveWebSocket(request)
             const decoder = new TextDecoder()
             return {
-              sendText: (message: string) => connection.sendText(message).pipe(Effect.tap(() => Effect.sync(() => sent.push(message)))),
-              messages: connection.messages.pipe(Stream.map((message) => {
-                const text = WebSocketExecutor.messageText(message, decoder)
-                received.push(text)
-                return text
-              })),
+              sendText: (message: string) =>
+                connection.sendText(message).pipe(Effect.tap(() => Effect.sync(() => client.push(textFrame(message))))),
+              messages: connection.messages.pipe(
+                Stream.map((message) => {
+                  const text = WebSocketExecutor.messageText(message, decoder)
+                  server.push(receivedFrame(message))
+                  return text
+                }),
+              ),
               close: connection.close.pipe(
-                Effect.tap(() => Effect.sync(() => {
-                  interactions.push({ url: request.url, sent, received })
-                  dirty = true
-                })),
+                Effect.andThen(
+                  Effect.gen(function* () {
+                    const result = yield* cassetteService
+                      .append(
+                        cassette,
+                        { transport: "websocket", open: openSnapshot(request), client, server },
+                        metadata,
+                      )
+                      .pipe(Effect.orDie)
+                    if (result.findings.length > 0) return yield* Effect.die(unsafeCassette(cassette, result.findings))
+                    return yield* Effect.void
+                  }),
+                ),
               ),
             }
           }),
       })
     }),
   )
-  const deps = Layer.mergeAll(http, webSocket)
-  return Layer.mergeAll(deps, LLMClient.layerWithWebSocket.pipe(Layer.provide(deps)))
+  return webSocket
 }
-
-const replayLayer = (cassette: string) =>
-  Layer.unwrap(Effect.promise(() => readCassette(cassette)).pipe(Effect.map((input) => layerFromCassette(cassette, input))))
-
-type RecordedWebSocketTestsOptions = RecordedGroupOptions & {
-  readonly metadata?: Record<string, unknown>
-}
-
-type RecordedWebSocketCaseOptions = RunnerCaseOptions & {
-  readonly metadata?: Record<string, unknown>
-}
-
-export const recordedWebSocketTests = (options: RecordedWebSocketTestsOptions) =>
-  recordedEffectGroup<RecordedWebSocketEnv, never, RecordedWebSocketTestsOptions, RecordedWebSocketCaseOptions>({
-    duplicateLabel: "recorded WebSocket cassette",
-    options,
-    cassetteExists: (cassette) => fs.existsSync(cassettePath(cassette)),
-    layer: ({ cassette, metadata, recording }) =>
-      recording
-        ? recordingLayer(cassette, metadata)
-        : replayLayer(cassette),
-  })

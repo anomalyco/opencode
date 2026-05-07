@@ -159,10 +159,16 @@ type Env = Record<string, string>
 const envNames = Array.from(new Set(PROVIDERS.flatMap((provider) => provider.vars.map((item) => item.name))))
 
 const providersForOption = (value: string | undefined) => {
-  if (!value || value === "recommended") return PROVIDERS.filter((provider) => provider.tier === "core" || provider.tier === "canary")
+  if (!value || value === "recommended")
+    return PROVIDERS.filter((provider) => provider.tier === "core" || provider.tier === "canary")
   if (value === "recorded") return PROVIDERS.filter((provider) => provider.tier !== "optional")
   if (value === "all") return PROVIDERS
-  const ids = new Set(value.split(",").map((item) => item.trim()).filter(Boolean))
+  const ids = new Set(
+    value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  )
   return PROVIDERS.filter((provider) => ids.has(provider.id))
 }
 
@@ -182,18 +188,21 @@ const readEnvFile = Effect.fn("RecordingEnv.readFile")(function* () {
 })
 
 const readConfigString = (provider: ConfigProvider.ConfigProvider, name: string) =>
-  Config.string(name).parse(provider).pipe(
-    Effect.match({
-      onFailure: () => undefined,
-      onSuccess: (value) => value,
-    }),
-  )
+  Config.string(name)
+    .parse(provider)
+    .pipe(
+      Effect.match({
+        onFailure: () => undefined,
+        onSuccess: (value) => value,
+      }),
+    )
 
 const parseEnv = Effect.fn("RecordingEnv.parseEnv")(function* (contents: string) {
   const provider = ConfigProvider.fromDotEnvContents(contents)
   return Object.fromEntries(
-    (yield* Effect.forEach(envNames, (name) => readConfigString(provider, name).pipe(Effect.map((value) => [name, value] as const))))
-      .filter((entry): entry is readonly [string, string] => entry[1] !== undefined),
+    (yield* Effect.forEach(envNames, (name) =>
+      readConfigString(provider, name).pipe(Effect.map((value) => [name, value] as const)),
+    )).filter((entry): entry is readonly [string, string] => entry[1] !== undefined),
   )
 })
 
@@ -238,7 +247,11 @@ const upsertEnv = (contents: string, values: Env) => {
   const missing = names.filter((name) => !seen.has(name))
   if (missing.length === 0) return lines.join("\n").replace(/\n*$/, "\n")
   const prefix = lines.join("\n").trimEnd()
-  const block = ["", "# Added by bun run setup:recording-env", ...missing.map((name) => `${name}=${quote(values[name])}`)].join("\n")
+  const block = [
+    "",
+    "# Added by bun run setup:recording-env",
+    ...missing.map((name) => `${name}=${quote(values[name])}`),
+  ].join("\n")
   return `${prefix}${block}\n`
 }
 
@@ -258,13 +271,17 @@ const envWithValues = (fileEnv: Env, values: Env): Env => ({
   ...values,
 })
 
-const responseError = Effect.fn("RecordingEnv.responseError")(function* (response: HttpClientResponse.HttpClientResponse) {
+const responseError = Effect.fn("RecordingEnv.responseError")(function* (
+  response: HttpClientResponse.HttpClientResponse,
+) {
   if (response.status >= 200 && response.status < 300) return undefined
   const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
   return `${response.status}${body ? `: ${body.slice(0, 180)}` : ""}`
 })
 
-const executeRequest = Effect.fn("RecordingEnv.executeRequest")(function* (request: HttpClientRequest.HttpClientRequest) {
+const executeRequest = Effect.fn("RecordingEnv.executeRequest")(function* (
+  request: HttpClientRequest.HttpClientRequest,
+) {
   const http = yield* HttpClient.HttpClient
   return yield* http.execute(request).pipe(Effect.flatMap(responseError))
 })
@@ -275,7 +292,11 @@ const validateBearer = (url: string, token: Redacted.Redacted<string>, headers: 
     executeRequest,
   )
 
-const validateChat = (input: { readonly url: string; readonly token: Redacted.Redacted<string>; readonly model: string }) =>
+const validateChat = (input: {
+  readonly url: string
+  readonly token: Redacted.Redacted<string>
+  readonly model: string
+}) =>
   ProviderShared.jsonPost({
     url: input.url,
     headers: { authorization: `Bearer ${Redacted.value(input.token)}` },
@@ -289,32 +310,41 @@ const validateChat = (input: { readonly url: string; readonly token: Redacted.Re
 
 const validateProvider = Effect.fn("RecordingEnv.validateProvider")(function* (provider: Provider, env: Env) {
   const check = Effect.gen(function* () {
-    if (provider.id === "openai") return yield* validateBearer("https://api.openai.com/v1/models", Redacted.make(env.OPENAI_API_KEY))
+    if (provider.id === "openai")
+      return yield* validateBearer("https://api.openai.com/v1/models", Redacted.make(env.OPENAI_API_KEY))
     if (provider.id === "anthropic") {
       return yield* HttpClientRequest.get("https://api.anthropic.com/v1/models").pipe(
-        HttpClientRequest.setHeaders({ "anthropic-version": "2023-06-01", "x-api-key": Redacted.value(Redacted.make(env.ANTHROPIC_API_KEY)) }),
+        HttpClientRequest.setHeaders({
+          "anthropic-version": "2023-06-01",
+          "x-api-key": Redacted.value(Redacted.make(env.ANTHROPIC_API_KEY)),
+        }),
         executeRequest,
       )
     }
     if (provider.id === "google") {
-      return yield* HttpClientRequest.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(env.GOOGLE_GENERATIVE_AI_API_KEY)}`).pipe(executeRequest)
+      return yield* HttpClientRequest.get(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(env.GOOGLE_GENERATIVE_AI_API_KEY)}`,
+      ).pipe(executeRequest)
     }
     if (provider.id === "bedrock") {
-      const request = yield* Effect.promise(() => new AwsV4Signer({
-        url: `https://bedrock.${env.BEDROCK_RECORDING_REGION || "us-east-1"}.amazonaws.com/foundation-models`,
-        method: "GET",
-        service: "bedrock",
-        region: env.BEDROCK_RECORDING_REGION || "us-east-1",
-        accessKeyId: env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-        sessionToken: env.AWS_SESSION_TOKEN || undefined,
-      }).sign())
+      const request = yield* Effect.promise(() =>
+        new AwsV4Signer({
+          url: `https://bedrock.${env.BEDROCK_RECORDING_REGION || "us-east-1"}.amazonaws.com/foundation-models`,
+          method: "GET",
+          service: "bedrock",
+          region: env.BEDROCK_RECORDING_REGION || "us-east-1",
+          accessKeyId: env.AWS_ACCESS_KEY_ID,
+          secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+          sessionToken: env.AWS_SESSION_TOKEN || undefined,
+        }).sign(),
+      )
       return yield* HttpClientRequest.get(request.url.toString()).pipe(
         HttpClientRequest.setHeaders(Object.fromEntries(request.headers.entries())),
         executeRequest,
       )
     }
-    if (provider.id === "groq") return yield* validateBearer("https://api.groq.com/openai/v1/models", Redacted.make(env.GROQ_API_KEY))
+    if (provider.id === "groq")
+      return yield* validateBearer("https://api.groq.com/openai/v1/models", Redacted.make(env.GROQ_API_KEY))
     if (provider.id === "openrouter") {
       return yield* validateChat({
         url: "https://openrouter.ai/api/v1/chat/completions",
@@ -322,33 +352,53 @@ const validateProvider = Effect.fn("RecordingEnv.validateProvider")(function* (p
         model: "openai/gpt-4o-mini",
       })
     }
-    if (provider.id === "xai") return yield* validateBearer("https://api.x.ai/v1/models", Redacted.make(env.XAI_API_KEY))
-    if (provider.id === "deepseek") return yield* validateBearer("https://api.deepseek.com/models", Redacted.make(env.DEEPSEEK_API_KEY))
-    if (provider.id === "togetherai") return yield* validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_AI_API_KEY))
-    if (provider.id === "mistral") return yield* validateBearer("https://api.mistral.ai/v1/models", Redacted.make(env.MISTRAL_API_KEY))
-    if (provider.id === "perplexity") return yield* validateBearer("https://api.perplexity.ai/models", Redacted.make(env.PERPLEXITY_API_KEY))
-    if (provider.id === "venice") return yield* validateBearer("https://api.venice.ai/api/v1/models", Redacted.make(env.VENICE_API_KEY))
-    if (provider.id === "cerebras") return yield* validateBearer("https://api.cerebras.ai/v1/models", Redacted.make(env.CEREBRAS_API_KEY))
-    if (provider.id === "deepinfra") return yield* validateBearer("https://api.deepinfra.com/v1/openai/models", Redacted.make(env.DEEPINFRA_API_KEY))
-    if (provider.id === "fireworks") return yield* validateBearer("https://api.fireworks.ai/inference/v1/models", Redacted.make(env.FIREWORKS_API_KEY))
+    if (provider.id === "xai")
+      return yield* validateBearer("https://api.x.ai/v1/models", Redacted.make(env.XAI_API_KEY))
+    if (provider.id === "deepseek")
+      return yield* validateBearer("https://api.deepseek.com/models", Redacted.make(env.DEEPSEEK_API_KEY))
+    if (provider.id === "togetherai")
+      return yield* validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_AI_API_KEY))
+    if (provider.id === "mistral")
+      return yield* validateBearer("https://api.mistral.ai/v1/models", Redacted.make(env.MISTRAL_API_KEY))
+    if (provider.id === "perplexity")
+      return yield* validateBearer("https://api.perplexity.ai/models", Redacted.make(env.PERPLEXITY_API_KEY))
+    if (provider.id === "venice")
+      return yield* validateBearer("https://api.venice.ai/api/v1/models", Redacted.make(env.VENICE_API_KEY))
+    if (provider.id === "cerebras")
+      return yield* validateBearer("https://api.cerebras.ai/v1/models", Redacted.make(env.CEREBRAS_API_KEY))
+    if (provider.id === "deepinfra")
+      return yield* validateBearer("https://api.deepinfra.com/v1/openai/models", Redacted.make(env.DEEPINFRA_API_KEY))
+    if (provider.id === "fireworks")
+      return yield* validateBearer("https://api.fireworks.ai/inference/v1/models", Redacted.make(env.FIREWORKS_API_KEY))
     return "no lightweight validator"
   })
-  return yield* check.pipe(Effect.catch((error) => {
-    if (error instanceof Error) return Effect.succeed(error.message)
-    return Effect.succeed(String(error))
-  }))
+  return yield* check.pipe(
+    Effect.catch((error) => {
+      if (error instanceof Error) return Effect.succeed(error.message)
+      return Effect.succeed(String(error))
+    }),
+  )
 })
 
-const validateProviders = Effect.fn("RecordingEnv.validateProviders")(function* (providers: ReadonlyArray<Provider>, env: Env) {
+const validateProviders = Effect.fn("RecordingEnv.validateProviders")(function* (
+  providers: ReadonlyArray<Provider>,
+  env: Env,
+) {
   const spinner = prompts.spinner()
   spinner.start("Validating credentials")
-  const results = yield* Effect.forEach(providers, (provider) =>
-    validateProvider(provider, env).pipe(Effect.map((error) => ({ provider, error }))),
+  const results = yield* Effect.forEach(
+    providers,
+    (provider) => validateProvider(provider, env).pipe(Effect.map((error) => ({ provider, error }))),
     { concurrency: 4 },
   )
   spinner.stop("Validation complete")
   prompts.note(
-    results.map((result) => `${result.error ? "failed" : "ok"} ${result.provider.label}${result.error ? ` - ${result.error}` : ""}`).join("\n"),
+    results
+      .map(
+        (result) =>
+          `${result.error ? "failed" : "ok"} ${result.provider.label}${result.error ? ` - ${result.error}` : ""}`,
+      )
+      .join("\n"),
     "Credential validation",
   )
 })
@@ -379,26 +429,34 @@ const main = Effect.fn("RecordingEnv.main")(function* () {
   const values: Env = {}
   const configurableProviders = providers.filter((provider) => provider.vars.some((item) => !item.optional))
 
-  const selected = yield* prompt<ReadonlyArray<string>>(() => prompts.multiselect({
-    message: "Select provider credentials to add or override",
-    options: configurableProviders.map((provider) => ({
-      value: provider.id,
-      label: provider.label,
-      hint: `${providerRequiredStatus(provider, fileEnv)} - ${provider.vars.filter((item) => !item.optional).map((item) => item.name).join(", ")}`,
-    })),
-    initialValues: configurableProviders
-      .filter((provider) => providerRequiredStatus(provider, fileEnv) === "missing")
-      .map((provider) => provider.id),
-  }))
+  const selected = yield* prompt<ReadonlyArray<string>>(() =>
+    prompts.multiselect({
+      message: "Select provider credentials to add or override",
+      options: configurableProviders.map((provider) => ({
+        value: provider.id,
+        label: provider.label,
+        hint: `${providerRequiredStatus(provider, fileEnv)} - ${provider.vars
+          .filter((item) => !item.optional)
+          .map((item) => item.name)
+          .join(", ")}`,
+      })),
+      initialValues: configurableProviders
+        .filter((provider) => providerRequiredStatus(provider, fileEnv) === "missing")
+        .map((provider) => provider.id),
+    }),
+  )
 
   const selectedProviders = configurableProviders.filter((provider) => selected.includes(provider.id))
   for (const provider of selectedProviders) {
     prompts.log.info(`${provider.label}: ${provider.note}`)
     for (const item of provider.vars.filter((item) => !item.optional)) {
-      const value = yield* prompt<string>(() => prompts.password({
-        message: item.label ?? item.name,
-        validate: (input) => !input || input.length === 0 ? "Leave blank by pressing Esc/cancel, or paste a value" : undefined,
-      }))
+      const value = yield* prompt<string>(() =>
+        prompts.password({
+          message: item.label ?? item.name,
+          validate: (input) =>
+            !input || input.length === 0 ? "Leave blank by pressing Esc/cancel, or paste a value" : undefined,
+        }),
+      )
       if (value !== "") values[item.name] = value
     }
   }
@@ -408,12 +466,17 @@ const main = Effect.fn("RecordingEnv.main")(function* () {
     return
   }
 
-  if (interactive && (yield* prompt(() => prompts.confirm({ message: "Validate credentials before saving?", initialValue: true })))) {
+  if (
+    interactive &&
+    (yield* prompt(() => prompts.confirm({ message: "Validate credentials before saving?", initialValue: true })))
+  ) {
     yield* validateProviders(selectedProviders, envWithValues(fileEnv, values))
   }
 
   yield* writeEnvFile(upsertEnv(contents, values))
-  prompts.log.success(`Saved ${Object.keys(values).length} value${Object.keys(values).length === 1 ? "" : "s"} to ${envPath}`)
+  prompts.log.success(
+    `Saved ${Object.keys(values).length} value${Object.keys(values).length === 1 ? "" : "s"} to ${envPath}`,
+  )
   prompts.outro("Keep .env.local local. Store shared team credentials in a password manager or vault.")
 })
 

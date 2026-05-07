@@ -3,16 +3,11 @@
   "metadata": {
     "name": "openai-responses/gpt-5-5-streams-tool-call",
     "recordedAt": "2026-05-06T00:26:12.011Z",
-    "tags": [
-      "prefix:openai-responses",
-      "provider:openai",
-      "protocol:openai-responses",
-      "tool",
-      "flagship"
-    ]
+    "tags": ["prefix:openai-responses", "provider:openai", "protocol:openai-responses", "tool", "flagship"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.openai.com/v1/responses",

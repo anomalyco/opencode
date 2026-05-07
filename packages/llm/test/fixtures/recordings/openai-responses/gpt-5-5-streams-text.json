@@ -3,15 +3,11 @@
   "metadata": {
     "name": "openai-responses/gpt-5-5-streams-text",
     "recordedAt": "2026-05-06T00:26:10.447Z",
-    "tags": [
-      "prefix:openai-responses",
-      "provider:openai",
-      "protocol:openai-responses",
-      "flagship"
-    ]
+    "tags": ["prefix:openai-responses", "provider:openai", "protocol:openai-responses", "flagship"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.openai.com/v1/responses",

@@ -49,7 +49,10 @@ OpenAI.responses("gpt-4.1-mini", {})
 OpenAI.responses("gpt-4.1-mini", { apiKey: "sk-test" })
 OpenAI.responses("gpt-4.1-mini", { apiKey: configApiKey })
 OpenAI.responses("gpt-4.1-mini", { auth: RuntimeAuth.bearer("oauth-token") })
-OpenAI.responses("gpt-4.1-mini", { auth: RuntimeAuth.headers({ authorization: "Bearer gateway" }), baseURL: "https://gateway.example.com/v1" })
+OpenAI.responses("gpt-4.1-mini", {
+  auth: RuntimeAuth.headers({ authorization: "Bearer gateway" }),
+  baseURL: "https://gateway.example.com/v1",
+})
 OpenAI.responses("gpt-4.1-mini", {
   generation: { maxTokens: 100 },
   providerOptions: { openai: { store: false } },

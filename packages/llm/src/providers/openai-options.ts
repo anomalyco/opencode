@@ -19,14 +19,16 @@ const definedEntries = (input: Record<string, unknown>) =>
   Object.entries(input).filter((entry) => entry[1] !== undefined)
 
 const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): ProviderOptions | undefined => {
-  const openai = Object.fromEntries(definedEntries({
-    store: options?.store,
-    promptCacheKey: options?.promptCacheKey,
-    reasoningEffort: options?.reasoningEffort,
-    reasoningSummary: options?.reasoningSummary,
-    includeEncryptedReasoning: options?.includeEncryptedReasoning,
-    textVerbosity: options?.textVerbosity,
-  }))
+  const openai = Object.fromEntries(
+    definedEntries({
+      store: options?.store,
+      promptCacheKey: options?.promptCacheKey,
+      reasoningEffort: options?.reasoningEffort,
+      reasoningSummary: options?.reasoningSummary,
+      includeEncryptedReasoning: options?.includeEncryptedReasoning,
+      textVerbosity: options?.textVerbosity,
+    }),
+  )
   if (Object.keys(openai).length === 0) return undefined
   return { openai }
 }
@@ -40,9 +42,10 @@ export const gpt5DefaultOptions = (
   return openAIProviderOptions({
     reasoningEffort: "medium",
     reasoningSummary: "auto",
-    textVerbosity: options.textVerbosity === true && id.includes("gpt-5.") && !id.includes("codex") && !id.includes("-chat")
-      ? "low"
-      : undefined,
+    textVerbosity:
+      options.textVerbosity === true && id.includes("gpt-5.") && !id.includes("codex") && !id.includes("-chat")
+        ? "low"
+        : undefined,
   })
 }
 

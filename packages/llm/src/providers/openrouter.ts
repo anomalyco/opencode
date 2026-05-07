@@ -39,12 +39,16 @@ export const protocol = Protocol.make({
   id: "openrouter-chat",
   body: {
     schema: OpenRouterBody,
-    from: (request) => OpenAIChat.protocol.body.from(request).pipe(
-      Effect.map((body) => ({
-        ...body,
-        ...bodyOptions(request.providerOptions?.openrouter),
-      }) as OpenRouterBody),
-    ),
+    from: (request) =>
+      OpenAIChat.protocol.body.from(request).pipe(
+        Effect.map(
+          (body) =>
+            ({
+              ...body,
+              ...bodyOptions(request.providerOptions?.openrouter),
+            }) as OpenRouterBody,
+        ),
+      ),
   },
   stream: OpenAIChat.protocol.stream,
 })
@@ -52,7 +56,11 @@ export const protocol = Protocol.make({
 const bodyOptions = (input: unknown) => {
   const openrouter = isRecord(input) ? input : {}
   return {
-    ...(openrouter.usage === true ? { usage: { include: true } } : isRecord(openrouter.usage) ? { usage: openrouter.usage } : {}),
+    ...(openrouter.usage === true
+      ? { usage: { include: true } }
+      : isRecord(openrouter.usage)
+        ? { usage: openrouter.usage }
+        : {}),
     ...(isRecord(openrouter.reasoning) ? { reasoning: openrouter.reasoning } : {}),
     ...(typeof openrouter.promptCacheKey === "string" ? { prompt_cache_key: openrouter.promptCacheKey } : {}),
   }
@@ -67,14 +75,11 @@ export const route = Route.make({
 
 export const routes = [route]
 
-const modelRef = Route.model<ModelInput>(
-  route,
-  {
-    provider: profile.provider,
-    baseURL: profile.baseURL,
-    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-  },
-)
+const modelRef = Route.model<ModelInput>(route, {
+  provider: profile.provider,
+  baseURL: profile.baseURL,
+  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+})
 
 export const model = (id: string | ModelID, options: ModelOptions = {}) => modelRef({ ...options, id })
 

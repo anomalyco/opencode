@@ -3,16 +3,11 @@
   "metadata": {
     "name": "openai-chat/drives-a-tool-loop-end-to-end",
     "recordedAt": "2026-05-06T01:33:29.747Z",
-    "tags": [
-      "prefix:openai-chat",
-      "provider:openai",
-      "protocol:openai-chat",
-      "tool",
-      "tool-loop"
-    ]
+    "tags": ["prefix:openai-chat", "provider:openai", "protocol:openai-chat", "tool", "tool-loop"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.openai.com/v1/chat/completions",
@@ -30,6 +25,7 @@
       }
     },
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.openai.com/v1/chat/completions",

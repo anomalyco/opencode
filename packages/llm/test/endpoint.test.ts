@@ -3,10 +3,12 @@ import { Effect } from "effect"
 import { LLM, LLMError } from "../src"
 import { Endpoint } from "../src/route"
 
-const request = (input: {
-  readonly baseURL?: string
-  readonly queryParams?: Record<string, string>
-} = {}) =>
+const request = (
+  input: {
+    readonly baseURL?: string
+    readonly queryParams?: Record<string, string>
+  } = {},
+) =>
   LLM.request({
     model: LLM.model({
       id: "model-1",
@@ -58,7 +60,9 @@ describe("Endpoint", () => {
       ),
     )
 
-    expect(url.toString()).toBe("https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream")
+    expect(url.toString()).toBe(
+      "https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream",
+    )
   })
 
   test("fails when no model or route baseURL is available", async () => {

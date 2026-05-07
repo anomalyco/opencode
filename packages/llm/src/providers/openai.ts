@@ -27,9 +27,14 @@ export const responses = (id: string | ModelID, options: OpenAIModelInput<Omit<R
   return OpenAIResponses.model(withOpenAIOptions(id, { ...rest, auth: auth(options) }, { textVerbosity: true }))
 }
 
-export const responsesWebSocket = (id: string | ModelID, options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {}) => {
+export const responsesWebSocket = (
+  id: string | ModelID,
+  options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {},
+) => {
   const { apiKey: _, ...rest } = options
-  return OpenAIResponses.webSocketModel(withOpenAIOptions(id, { ...rest, auth: auth(options) }, { textVerbosity: true }))
+  return OpenAIResponses.webSocketModel(
+    withOpenAIOptions(id, { ...rest, auth: auth(options) }, { textVerbosity: true }),
+  )
 }
 
 export const chat = (id: string | ModelID, options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {}) => {

@@ -28,10 +28,7 @@ export type ModelArgs<Base, Mode extends ApiKeyMode> = Mode extends "optional"
   ? readonly [options?: ModelOptions<Base, Mode>]
   : readonly [options: ModelOptions<Base, Mode>]
 
-export type ModelFactory<Base, Mode extends ApiKeyMode, Model> = (
-  id: string,
-  ...args: ModelArgs<Base, Mode>
-) => Model
+export type ModelFactory<Base, Mode extends ApiKeyMode, Model> = (id: string, ...args: ModelArgs<Base, Mode>) => Model
 
 /**
  * Standard bearer-auth resolution for providers: honor an explicit `auth`

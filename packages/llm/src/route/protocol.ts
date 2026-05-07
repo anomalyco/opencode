@@ -55,10 +55,7 @@ export interface ProtocolStream<Frame, Event, State> {
   /** Initial parser state. Called once per response. */
   readonly initial: () => State
   /** Translate one event into emitted `LLMEvent`s plus the next state. */
-  readonly step: (
-    state: State,
-    event: Event,
-  ) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], LLMError>
+  readonly step: (state: State, event: Event) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], LLMError>
   /** Optional request-completion signal for transports that do not end naturally. */
   readonly terminal?: (event: Event) => boolean
   /** Optional flush emitted when the framed stream ends. */

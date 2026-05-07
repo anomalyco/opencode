@@ -30,10 +30,12 @@ const decodeNativeCredentials = Schema.decodeUnknownOption(NativeCredentials)
 export const region = (request: LLMRequest) => {
   const fromNative = request.model.native?.aws_region
   if (typeof fromNative === "string" && fromNative !== "") return fromNative
-  return decodeNativeCredentials(request.model.native?.aws_credentials).pipe(
-    Option.map((credentials) => credentials.region),
-    Option.getOrUndefined,
-  ) ?? "us-east-1"
+  return (
+    decodeNativeCredentials(request.model.native?.aws_credentials).pipe(
+      Option.map((credentials) => credentials.region),
+      Option.getOrUndefined,
+    ) ?? "us-east-1"
+  )
 }
 
 const credentialsFromInput = (request: LLMRequest): Credentials | undefined =>

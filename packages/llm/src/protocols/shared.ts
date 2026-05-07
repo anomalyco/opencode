@@ -2,7 +2,15 @@ import { Buffer } from "node:buffer"
 import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { InvalidProviderOutputReason, InvalidRequestReason, LLMError, type ContentPart, type LLMRequest, type MediaPart, type ToolResultPart } from "../schema"
+import {
+  InvalidProviderOutputReason,
+  InvalidRequestReason,
+  LLMError,
+  type ContentPart,
+  type LLMRequest,
+  type MediaPart,
+  type ToolResultPart,
+} from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -64,8 +72,7 @@ export const parseJson = (route: string, input: string, message: string) =>
  * (OpenAI Chat `system` content, OpenAI Responses `system` content, Gemini
  * `systemInstruction.parts[].text`).
  */
-export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) =>
-  parts.map((part) => part.text).join("\n")
+export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) => parts.map((part) => part.text).join("\n")
 
 /**
  * Parse the streamed JSON input of a tool call. Treats an empty string as
@@ -109,9 +116,7 @@ export const errorText = (error: unknown) => {
  * implement client-driven retries) so the public error channel stays
  * `LLMError`.
  */
-export const sseFraming = (
-  bytes: Stream.Stream<Uint8Array, LLMError>,
-): Stream.Stream<string, LLMError> =>
+export const sseFraming = (bytes: Stream.Stream<Uint8Array, LLMError>): Stream.Stream<string, LLMError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
@@ -163,15 +168,13 @@ const formatContentTypes = (types: ReadonlyArray<ContentType>) => {
 export const supportsContent = <const Type extends ContentType>(
   part: ContentPart,
   types: ReadonlyArray<Type>,
-): part is Extract<ContentPart, { readonly type: Type }> =>
-  (types as ReadonlyArray<ContentType>).includes(part.type)
+): part is Extract<ContentPart, { readonly type: Type }> => (types as ReadonlyArray<ContentType>).includes(part.type)
 
 export const unsupportedContent = (
   route: string,
   role: LLMRequest["messages"][number]["role"],
   types: ReadonlyArray<ContentType>,
-) =>
-  invalidRequest(`${route} ${role} messages only support ${formatContentTypes(types)} content for now`)
+) => invalidRequest(`${route} ${role} messages only support ${formatContentTypes(types)} content for now`)
 
 /**
  * Build a `validate` step from a Schema decoder. Replaces the per-route
@@ -191,11 +194,7 @@ export const validateWith =
  * routes can choose between
  * `Schema.encodeSync(payload)` and `ProviderShared.encodeJson(payload)`.
  */
-export const jsonPost = (input: {
-  readonly url: string
-  readonly body: string
-  readonly headers?: Headers.Input
-}) =>
+export const jsonPost = (input: { readonly url: string; readonly body: string; readonly headers?: Headers.Input }) =>
   HttpClientRequest.post(input.url).pipe(
     HttpClientRequest.setHeaders(Headers.set(Headers.fromInput(input.headers), "content-type", "application/json")),
     HttpClientRequest.bodyText(input.body, "application/json"),

@@ -67,11 +67,13 @@ const model = OpenAI.model("gpt-4o-mini", {
   providerOptions: { openai: { store: false } },
 })
 
-const response = yield * LLM.generate({
-  model,
-  prompt: "Say hello.",
-  generation: { maxTokens: 80, temperature: 0 },
-})
+const response =
+  yield *
+  LLM.generate({
+    model,
+    prompt: "Say hello.",
+    generation: { maxTokens: 80, temperature: 0 },
+  })
 ```
 
 The interesting part is that the boring use site can route through OpenAI Responses, OpenAI Chat, Anthropic Messages, Gemini, Bedrock Converse, OpenRouter, Azure, or an arbitrary OpenAI-compatible server without changing the caller's mental model.

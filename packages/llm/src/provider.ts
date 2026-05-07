@@ -24,6 +24,8 @@ type DefinitionShape = {
 
 type NoExtraFields<Input, Shape> = Input & Record<Exclude<keyof Input, keyof Shape>, never>
 
-export const make = <DefinitionType extends DefinitionShape>(definition: NoExtraFields<DefinitionType, DefinitionShape>) => definition
+export const make = <DefinitionType extends DefinitionShape>(
+  definition: NoExtraFields<DefinitionType, DefinitionShape>,
+) => definition
 
 export * as Provider from "./provider"

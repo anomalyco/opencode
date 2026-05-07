@@ -24,9 +24,9 @@ const model = OpenAI.responsesWebSocket("gpt-4.1-mini", { apiKey })
 Existing constructors keep their current behavior:
 
 ```ts
-OpenAI.model("gpt-4.1-mini")       // OpenAI Responses over HTTP SSE
-OpenAI.responses("gpt-4.1-mini")   // OpenAI Responses over HTTP SSE
-OpenAI.chat("gpt-4o-mini")         // OpenAI Chat over HTTP SSE
+OpenAI.model("gpt-4.1-mini") // OpenAI Responses over HTTP SSE
+OpenAI.responses("gpt-4.1-mini") // OpenAI Responses over HTTP SSE
+OpenAI.chat("gpt-4o-mini") // OpenAI Chat over HTTP SSE
 ```
 
 ## Current State
@@ -110,10 +110,7 @@ export interface TransportRuntime {
 
 export interface Transport<Payload, Prepared, Frame> {
   readonly id: string
-  readonly prepare: (
-    payload: Payload,
-    context: TransportContext,
-  ) => Effect.Effect<Prepared, LLMError>
+  readonly prepare: (payload: Payload, context: TransportContext) => Effect.Effect<Prepared, LLMError>
   readonly frames: (
     prepared: Prepared,
     context: TransportContext,
@@ -189,7 +186,9 @@ This preserves the public `LLMClient.prepare`, `LLMClient.stream`, and `LLMClien
 `PreparedRequest.metadata` can record the transport id for debugging:
 
 ```ts
-metadata: { transport: "websocket" }
+metadata: {
+  transport: "websocket"
+}
 ```
 
 That is additive and optional.
@@ -276,9 +275,7 @@ For OpenAI Responses:
 
 ```ts
 terminal: (chunk) =>
-  chunk.type === "response.completed" ||
-  chunk.type === "response.incomplete" ||
-  chunk.type === "response.failed"
+  chunk.type === "response.completed" || chunk.type === "response.incomplete" || chunk.type === "response.failed"
 ```
 
 The terminal signal is protocol knowledge. The transport should not need to know OpenAI event names.
@@ -328,9 +325,9 @@ Browser WebSocket constructors cannot set arbitrary `Authorization` headers and 
 Layer wiring options:
 
 ```ts
-LLMClient.layer                 // HTTP only, current default
-LLMClient.layerWithWebSocket    // HTTP + WebSocketExecutor.Service
-WebSocketExecutor.Service       // exported for explicit app/test wiring
+LLMClient.layer // HTTP only, current default
+LLMClient.layerWithWebSocket // HTTP + WebSocketExecutor.Service
+WebSocketExecutor.Service // exported for explicit app/test wiring
 ```
 
 `LLMClient.layer` should remain enough for all existing routes. It captures a `TransportRuntime` with `http` only. `LLMClient.layerWithWebSocket` captures both `http` and `webSocket`. If a caller selects `openai-responses-websocket` without the WebSocket-capable layer, the WebSocket transport should fail with a typed transport error that says the selected route requires `WebSocketExecutor.Service`.
@@ -340,12 +337,8 @@ WebSocketExecutor.Service       // exported for explicit app/test wiring
 Expose the route explicitly from `src/providers/openai.ts`:
 
 ```ts
-export const responsesWebSocket = (
-  id: string | ModelID,
-  options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {},
-) => OpenAIResponses.webSocketModel(
-  withOpenAIOptions(id, { ...options, auth: auth(options) }, { textVerbosity: true }),
-)
+export const responsesWebSocket = (id: string | ModelID, options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {}) =>
+  OpenAIResponses.webSocketModel(withOpenAIOptions(id, { ...options, auth: auth(options) }, { textVerbosity: true }))
 
 export const provider = Provider.make({
   id,
@@ -357,7 +350,7 @@ export const provider = Provider.make({
 This makes transport choice visible in the model ref:
 
 ```ts
-model.route  // "openai-responses-websocket"
+model.route // "openai-responses-websocket"
 route.protocol // "openai-responses"
 ```
 

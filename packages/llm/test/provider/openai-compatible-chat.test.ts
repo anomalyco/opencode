@@ -74,7 +74,12 @@ describe("OpenAI-compatible Chat route", () => {
           { role: "system", content: "You are concise." },
           { role: "user", content: "Say hello." },
         ],
-        tools: [{ type: "function", function: { name: "lookup", description: "Lookup data", parameters: { type: "object" } } }],
+        tools: [
+          {
+            type: "function",
+            function: { name: "lookup", description: "Lookup data", parameters: { type: "object" } },
+          },
+        ],
         tool_choice: "required",
         stream: true,
         stream_options: { include_usage: true },
@@ -93,7 +98,7 @@ describe("OpenAI-compatible Chat route", () => {
             id: String(model.id),
             provider: String(model.provider),
             route: model.route,
-                        baseURL: model.baseURL,
+            baseURL: model.baseURL,
             apiKey: model.apiKey,
           }
         }),
@@ -143,11 +148,13 @@ describe("OpenAI-compatible Chat route", () => {
         LLM.request({
           id: "req_tool_parity",
           model,
-          tools: [{
-            name: "lookup",
-            description: "Lookup data",
-            inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
-          }],
+          tools: [
+            {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+            },
+          ],
           toolChoice: "lookup",
           messages: [
             LLM.user("What is the weather?"),
@@ -164,22 +171,26 @@ describe("OpenAI-compatible Chat route", () => {
           {
             role: "assistant",
             content: null,
-            tool_calls: [{
-              id: "call_1",
-              type: "function",
-              function: { name: "lookup", arguments: '{"query":"weather"}' },
-            }],
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function",
+                function: { name: "lookup", arguments: '{"query":"weather"}' },
+              },
+            ],
           },
           { role: "tool", tool_call_id: "call_1", content: '{"forecast":"sunny"}' },
         ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "lookup",
-            description: "Lookup data",
-            parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "lookup",
+              description: "Lookup data",
+              parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+            },
           },
-        }],
+        ],
         tool_choice: { type: "function", function: { name: "lookup" } },
         stream: true,
         stream_options: { include_usage: true },
@@ -189,35 +200,34 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request)
-        .pipe(
-          Effect.provide(
-            dynamicResponse((input) =>
-              Effect.gen(function* () {
-                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-                expect(web.url).toBe("https://api.deepseek.test/v1/chat/completions?api-version=2026-01-01")
-                expect(web.headers.get("authorization")).toBe("Bearer test-key")
-                expect(decodeJson(input.text)).toMatchObject({
-                  model: "deepseek-chat",
-                  stream: true,
-                  messages: [
-                    { role: "system", content: "You are concise." },
-                    { role: "user", content: "Say hello." },
-                  ],
-                })
-                return input.respond(
-                  sseEvents(
-                    deltaChunk({ role: "assistant", content: "Hello" }),
-                    deltaChunk({ content: "!" }),
-                    deltaChunk({}, "stop"),
-                    usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
-                  ),
-                  { headers: { "content-type": "text/event-stream" } },
-                )
-              }),
-            ),
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(web.url).toBe("https://api.deepseek.test/v1/chat/completions?api-version=2026-01-01")
+              expect(web.headers.get("authorization")).toBe("Bearer test-key")
+              expect(decodeJson(input.text)).toMatchObject({
+                model: "deepseek-chat",
+                stream: true,
+                messages: [
+                  { role: "system", content: "You are concise." },
+                  { role: "user", content: "Say hello." },
+                ],
+              })
+              return input.respond(
+                sseEvents(
+                  deltaChunk({ role: "assistant", content: "Hello" }),
+                  deltaChunk({ content: "!" }),
+                  deltaChunk({}, "stop"),
+                  usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
           ),
-        )
+        ),
+      )
 
       expect(response.text).toBe("Hello!")
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })

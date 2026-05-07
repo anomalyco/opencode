@@ -1,8 +1,8 @@
-import { Context, Effect, FileSystem, Layer, PlatformError } from "effect"
+import { Context, Effect, FileSystem, Layer, PlatformError, Ref } from "effect"
 import * as path from "node:path"
 import { cassetteSecretFindings, type SecretFinding } from "./redaction"
-import type { Cassette } from "./schema"
-import { cassettePath, DEFAULT_RECORDINGS_DIR, formatCassette, parseCassette } from "./storage"
+import type { Cassette, CassetteMetadata, Interaction } from "./schema"
+import { cassetteFor, cassettePath, DEFAULT_RECORDINGS_DIR, formatCassette, parseCassette } from "./storage"
 
 export interface Entry {
   readonly name: string
@@ -13,6 +13,17 @@ export interface Interface {
   readonly path: (name: string) => string
   readonly read: (name: string) => Effect.Effect<Cassette, PlatformError.PlatformError>
   readonly write: (name: string, cassette: Cassette) => Effect.Effect<void, PlatformError.PlatformError>
+  readonly append: (
+    name: string,
+    interaction: Interaction,
+    metadata: CassetteMetadata | undefined,
+  ) => Effect.Effect<
+    {
+      readonly cassette: Cassette
+      readonly findings: ReadonlyArray<SecretFinding>
+    },
+    PlatformError.PlatformError
+  >
   readonly exists: (name: string) => Effect.Effect<boolean>
   readonly list: () => Effect.Effect<ReadonlyArray<Entry>, PlatformError.PlatformError>
   readonly scan: (cassette: Cassette) => ReadonlyArray<SecretFinding>
@@ -42,6 +53,7 @@ export const layer = (options: { readonly directory?: string } = {}) =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem
       const directory = options.directory ?? DEFAULT_RECORDINGS_DIR
+      const recorded = yield* Ref.make(new Map<string, ReadonlyArray<Interaction>>())
 
       const pathFor = (name: string) => cassettePath(name, directory)
 
@@ -52,6 +64,20 @@ export const layer = (options: { readonly directory?: string } = {}) =>
       const write = Effect.fn("Cassette.write")(function* (name: string, cassette: Cassette) {
         yield* fileSystem.makeDirectory(path.dirname(pathFor(name)), { recursive: true })
         yield* fileSystem.writeFileString(pathFor(name), formatCassette(cassette))
+      })
+
+      const append = Effect.fn("Cassette.append")(function* (
+        name: string,
+        interaction: Interaction,
+        metadata: CassetteMetadata | undefined,
+      ) {
+        const interactions = yield* Ref.updateAndGet(recorded, (previous) =>
+          new Map(previous).set(name, [...(previous.get(name) ?? []), interaction]),
+        )
+        const cassette = cassetteFor(name, interactions.get(name) ?? [], metadata)
+        const findings = cassetteSecretFindings(cassette)
+        if (findings.length === 0) yield* write(name, cassette)
+        return { cassette, findings }
       })
 
       const exists = Effect.fn("Cassette.exists")(function* (name: string) {
@@ -71,7 +97,7 @@ export const layer = (options: { readonly directory?: string } = {}) =>
           .toSorted((a, b) => a.name.localeCompare(b.name))
       })
 
-      return Service.of({ path: pathFor, read, write, exists, list, scan: cassetteSecretFindings })
+      return Service.of({ path: pathFor, read, write, append, exists, list, scan: cassetteSecretFindings })
     }),
   )
 

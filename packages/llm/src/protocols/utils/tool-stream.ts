@@ -59,28 +59,34 @@ const inputDelta = (tool: PendingTool, text: string): ToolInputDelta => ({
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) =>
   parseToolInput(route, tool.name, inputOverride ?? tool.input).pipe(
-    Effect.map((input): ToolCall =>
-      tool.providerExecuted
-        ? {
-          type: "tool-call",
-          id: tool.id,
-          name: tool.name,
-          input,
-          providerExecuted: true,
-          ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
-        }
-        : {
-          type: "tool-call",
-          id: tool.id,
-          name: tool.name,
-          input,
-          ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
-        },
+    Effect.map(
+      (input): ToolCall =>
+        tool.providerExecuted
+          ? {
+              type: "tool-call",
+              id: tool.id,
+              name: tool.name,
+              input,
+              providerExecuted: true,
+              ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
+            }
+          : {
+              type: "tool-call",
+              id: tool.id,
+              name: tool.name,
+              input,
+              ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
+            },
     ),
   )
 
 /** Store the updated tool and produce the optional public delta event. */
-const appendTool = <K extends StreamKey>(tools: State<K>, key: K, tool: PendingTool, text: string): AppendOutcome<K> => ({
+const appendTool = <K extends StreamKey>(
+  tools: State<K>,
+  key: K,
+  tool: PendingTool,
+  text: string,
+): AppendOutcome<K> => ({
   tools: withTool(tools, key, tool),
   tool,
   event: text.length === 0 ? undefined : inputDelta(tool, text),
@@ -98,8 +104,7 @@ export const start = <K extends StreamKey>(
   tools: State<K>,
   key: K,
   tool: Omit<PendingTool, "input"> & { readonly input?: string },
-) =>
-  withTool(tools, key, { ...tool, input: tool.input ?? "" })
+) => withTool(tools, key, { ...tool, input: tool.input ?? "" })
 
 /**
  * Append a streamed argument delta, starting the tool if this provider encodes
@@ -179,7 +184,9 @@ export const finishWithInput = <K extends StreamKey>(route: string, tools: State
  */
 export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =>
   Effect.gen(function* () {
-    const pending = Object.values<PendingTool | undefined>(tools).filter((tool): tool is PendingTool => tool !== undefined)
+    const pending = Object.values<PendingTool | undefined>(tools).filter(
+      (tool): tool is PendingTool => tool !== undefined,
+    )
     return {
       tools: empty<K>(),
       events: yield* Effect.forEach(pending, (tool) => toolCall(route, tool)),

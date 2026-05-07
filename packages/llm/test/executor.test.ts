@@ -70,7 +70,7 @@ const expectLLMError = (error: unknown) => {
   return error
 }
 
-const errorHttp = (error: LLMError) => "http" in error.reason ? error.reason.http : undefined
+const errorHttp = (error: LLMError) => ("http" in error.reason ? error.reason.http : undefined)
 
 describe("RequestExecutor", () => {
   it.effect("returns redacted diagnostics for retryable rate limits", () =>
@@ -107,10 +107,14 @@ describe("RequestExecutor", () => {
     }).pipe(
       Effect.provide(
         responsesLayer([
-          ...Array.from({ length: 3 }, () => new Response("rate limited", {
-            status: 429,
-            headers: { "retry-after-ms": "0", "x-request-id": "req_123", "x-api-key": "secret" },
-          })),
+          ...Array.from(
+            { length: 3 },
+            () =>
+              new Response("rate limited", {
+                status: 429,
+                headers: { "retry-after-ms": "0", "x-request-id": "req_123", "x-api-key": "secret" },
+              }),
+          ),
         ]),
       ),
     ),
@@ -125,11 +129,7 @@ describe("RequestExecutor", () => {
       expect(errorHttp(error)?.request.headers["x-safe"]).toBe("<redacted>")
       expect(errorHttp(error)?.response?.headers["x-safe"]).toBe("<redacted>")
     }).pipe(
-      Effect.provide(
-        responsesLayer([
-          new Response("bad", { status: 400, headers: { "x-safe": "response-secret" } }),
-        ]),
-      ),
+      Effect.provide(responsesLayer([new Response("bad", { status: 400, headers: { "x-safe": "response-secret" } })])),
       Effect.provideService(Headers.CurrentRedactedNames, ["x-safe"]),
     ),
   )
@@ -149,18 +149,24 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer(Array.from({ length: 3 }, () => new Response("rate limited", {
-          status: 429,
-          headers: {
-            "retry-after-ms": "0",
-            "x-ratelimit-limit-requests": "500",
-            "x-ratelimit-limit-tokens": "30000",
-            "x-ratelimit-remaining-requests": "499",
-            "x-ratelimit-remaining-tokens": "29900",
-            "x-ratelimit-reset-requests": "1s",
-            "x-ratelimit-reset-tokens": "10s",
-          },
-        }))),
+        responsesLayer(
+          Array.from(
+            { length: 3 },
+            () =>
+              new Response("rate limited", {
+                status: 429,
+                headers: {
+                  "retry-after-ms": "0",
+                  "x-ratelimit-limit-requests": "500",
+                  "x-ratelimit-limit-tokens": "30000",
+                  "x-ratelimit-remaining-requests": "499",
+                  "x-ratelimit-remaining-tokens": "29900",
+                  "x-ratelimit-reset-requests": "1s",
+                  "x-ratelimit-reset-tokens": "10s",
+                },
+              }),
+          ),
+        ),
       ),
     ),
   )
@@ -180,18 +186,24 @@ describe("RequestExecutor", () => {
       })
     }).pipe(
       Effect.provide(
-        responsesLayer(Array.from({ length: 3 }, () => new Response("overloaded", {
-          status: 529,
-          headers: {
-            "retry-after-ms": "0",
-            "anthropic-ratelimit-requests-limit": "100",
-            "anthropic-ratelimit-requests-remaining": "12",
-            "anthropic-ratelimit-requests-reset": "2026-05-06T12:00:00Z",
-            "anthropic-ratelimit-input-tokens-limit": "10000",
-            "anthropic-ratelimit-input-tokens-remaining": "9000",
-            "anthropic-ratelimit-input-tokens-reset": "2026-05-06T12:00:10Z",
-          },
-        }))),
+        responsesLayer(
+          Array.from(
+            { length: 3 },
+            () =>
+              new Response("overloaded", {
+                status: 529,
+                headers: {
+                  "retry-after-ms": "0",
+                  "anthropic-ratelimit-requests-limit": "100",
+                  "anthropic-ratelimit-requests-remaining": "12",
+                  "anthropic-ratelimit-requests-reset": "2026-05-06T12:00:00Z",
+                  "anthropic-ratelimit-input-tokens-limit": "10000",
+                  "anthropic-ratelimit-input-tokens-remaining": "9000",
+                  "anthropic-ratelimit-input-tokens-reset": "2026-05-06T12:00:10Z",
+                },
+              }),
+          ),
+        ),
       ),
     ),
   )
@@ -225,10 +237,16 @@ describe("RequestExecutor", () => {
           expect(error.retryable).toBe(true)
         }).pipe(
           Effect.provide(
-            responsesLayer(Array.from({ length: 3 }, () => new Response("retry", {
-              status,
-              headers: { "retry-after-ms": "0" },
-            }))),
+            responsesLayer(
+              Array.from(
+                { length: 3 },
+                () =>
+                  new Response("retry", {
+                    status,
+                    headers: { "retry-after-ms": "0" },
+                  }),
+              ),
+            ),
           ),
         )
 
@@ -264,7 +282,7 @@ describe("RequestExecutor", () => {
 
       expectLLMError(error)
       expect(errorHttp(error)?.body).toContain('"key":"<redacted>"')
-      expect(errorHttp(error)?.body).toContain('api_key=<redacted>')
+      expect(errorHttp(error)?.body).toContain("api_key=<redacted>")
       expect(errorHttp(error)?.body).not.toContain("body-secret")
       expect(errorHttp(error)?.body).not.toContain("query-secret")
     }).pipe(

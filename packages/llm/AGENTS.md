@@ -30,7 +30,7 @@ const request = LLM.request({
   prompt: "Say hello.",
 })
 
-const response = yield* LLMClient.generate(request)
+const response = yield * LLMClient.generate(request)
 ```
 
 `LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` selects a registered route by `request.model.route`, prepares a typed provider payload, asks the route for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.

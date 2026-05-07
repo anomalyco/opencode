@@ -18,9 +18,7 @@ import type { LLMError } from "../schema"
  */
 export interface Framing<Frame> {
   readonly id: string
-  readonly frame: (
-    bytes: Stream.Stream<Uint8Array, LLMError>,
-  ) => Stream.Stream<Frame, LLMError>
+  readonly frame: (bytes: Stream.Stream<Uint8Array, LLMError>) => Stream.Stream<Frame, LLMError>
 }
 
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */

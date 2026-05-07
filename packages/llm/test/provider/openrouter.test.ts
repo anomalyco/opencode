@@ -18,9 +18,7 @@ describe("OpenRouter", () => {
         apiKey: "test-key",
       })
 
-      const prepared = yield* LLMClient.prepare(
-        LLM.request({ model, prompt: "Say hello." }),
-      )
+      const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
 
       expect(prepared.route).toBe("openrouter")
       expect(prepared.body).toMatchObject({

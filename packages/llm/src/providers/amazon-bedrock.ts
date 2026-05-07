@@ -32,7 +32,8 @@ const converseModel = Route.model<ModelInput>(
   },
 )
 
-export const model = (modelID: string | ModelID, options: ModelOptions = {}) => converseModel({ ...options, id: modelID })
+export const model = (modelID: string | ModelID, options: ModelOptions = {}) =>
+  converseModel({ ...options, id: modelID })
 
 export const provider = Provider.make({
   id,

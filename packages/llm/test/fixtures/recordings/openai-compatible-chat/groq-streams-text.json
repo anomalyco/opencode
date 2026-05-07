@@ -3,14 +3,11 @@
   "metadata": {
     "name": "openai-compatible-chat/groq-streams-text",
     "recordedAt": "2026-05-06T01:35:05.532Z",
-    "tags": [
-      "prefix:openai-compatible-chat",
-      "protocol:openai-compatible-chat",
-      "provider:groq"
-    ]
+    "tags": ["prefix:openai-compatible-chat", "protocol:openai-compatible-chat", "provider:groq"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",

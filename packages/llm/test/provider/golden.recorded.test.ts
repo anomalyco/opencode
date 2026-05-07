@@ -10,18 +10,30 @@ import { describeRecordedGoldenScenarios } from "../recorded-golden"
 
 const openAIChat = OpenAIChat.model({ id: "gpt-4o-mini", apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
 const openAIResponses = OpenAIResponses.model({ id: "gpt-5.5", apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
-const openAIResponsesWebSocket = OpenAI.responsesWebSocket("gpt-4.1-mini", { apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
-const anthropicHaiku = AnthropicMessages.model({ id: "claude-haiku-4-5-20251001", apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" })
-const anthropicOpus = AnthropicMessages.model({ id: "claude-opus-4-7", apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" })
+const openAIResponsesWebSocket = OpenAI.responsesWebSocket("gpt-4.1-mini", {
+  apiKey: process.env.OPENAI_API_KEY ?? "fixture",
+})
+const anthropicHaiku = AnthropicMessages.model({
+  id: "claude-haiku-4-5-20251001",
+  apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
+})
+const anthropicOpus = AnthropicMessages.model({
+  id: "claude-opus-4-7",
+  apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
+})
 const gemini = Gemini.model({ id: "gemini-2.5-flash", apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
 const xaiBasic = XAI.model("grok-3-mini", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
 const xaiFlagship = XAI.model("grok-4.3", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
 const deepseek = OpenAICompatible.deepseek.model("deepseek-chat", { apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" })
-const together = OpenAICompatible.togetherai.model("meta-llama/Llama-3.3-70B-Instruct-Turbo", { apiKey: process.env.TOGETHER_AI_API_KEY ?? "fixture" })
+const together = OpenAICompatible.togetherai.model("meta-llama/Llama-3.3-70B-Instruct-Turbo", {
+  apiKey: process.env.TOGETHER_AI_API_KEY ?? "fixture",
+})
 const groq = OpenAICompatible.groq.model("llama-3.3-70b-versatile", { apiKey: process.env.GROQ_API_KEY ?? "fixture" })
 const openrouter = OpenRouter.model("openai/gpt-4o-mini", { apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
 const openrouterGpt55 = OpenRouter.model("openai/gpt-5.5", { apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
-const openrouterOpus = OpenRouter.model("anthropic/claude-opus-4.7", { apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
+const openrouterOpus = OpenRouter.model("anthropic/claude-opus-4.7", {
+  apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
+})
 
 describeRecordedGoldenScenarios([
   {

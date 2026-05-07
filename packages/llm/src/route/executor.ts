@@ -130,7 +130,13 @@ const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | 
     return addRateLimitValue(reset, anthropic[1], value)
   })
 
-  if (retryAfter === undefined && Object.keys(limit).length === 0 && Object.keys(remaining).length === 0 && Object.keys(reset).length === 0) return undefined
+  if (
+    retryAfter === undefined &&
+    Object.keys(limit).length === 0 &&
+    Object.keys(remaining).length === 0 &&
+    Object.keys(reset).length === 0
+  )
+    return undefined
 
   return new HttpRateLimitDetails({
     retryAfterMs: retryAfter,
@@ -147,7 +153,10 @@ const requestDetails = (request: HttpClientRequest.HttpClientRequest, redactedNa
     headers: redactHeaders(request.headers, redactedNames),
   })
 
-const responseDetails = (response: HttpClientResponse.HttpClientResponse, redactedNames: ReadonlyArray<string | RegExp>) =>
+const responseDetails = (
+  response: HttpClientResponse.HttpClientResponse,
+  redactedNames: ReadonlyArray<string | RegExp>,
+) =>
   new HttpResponseDetails({
     status: response.status,
     headers: redactHeaders(response.headers, redactedNames),
@@ -181,9 +190,7 @@ const secretValues = (request: HttpClientRequest.HttpClientRequest) => {
 const redactBody = (body: string, request: HttpClientRequest.HttpClientRequest) =>
   Array.from(secretValues(request)).reduce(
     (text, secret) => text.split(secret).join(REDACTED),
-    body
-      .replace(REDACT_JSON_FIELD, `$1"${REDACTED}"`)
-      .replace(REDACT_QUERY_FIELD, `$1${REDACTED}`),
+    body.replace(REDACT_JSON_FIELD, `$1"${REDACTED}"`).replace(REDACT_QUERY_FIELD, `$1${REDACTED}`),
   )
 
 const responseBody = (body: string | void, request: HttpClientRequest.HttpClientRequest) => {
@@ -299,9 +306,7 @@ const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: u
         message: input.message,
         kind: input.kind,
         url: input.request ? redactUrl(input.request.url) : undefined,
-        http: input.request
-          ? new HttpContext({ request: requestDetails(input.request, redactedNames) })
-          : undefined,
+        http: input.request ? new HttpContext({ request: requestDetails(input.request, redactedNames) }) : undefined,
       }),
     })
 
@@ -354,10 +359,9 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
     const executeOnce = (request: HttpClientRequest.HttpClientRequest) =>
       Effect.gen(function* () {
         const redactedNames = yield* Headers.CurrentRedactedNames
-        return yield* http.execute(request).pipe(
-          Effect.mapError(toHttpError(redactedNames)),
-          Effect.flatMap(statusError(request, redactedNames)),
-        )
+        return yield* http
+          .execute(request)
+          .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
       })
     return Service.of({
       execute: (request) => retryStatusFailures(executeOnce(request)),

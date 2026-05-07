@@ -15,6 +15,7 @@
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.openai.com/v1/responses",
@@ -32,6 +33,7 @@
       }
     },
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.openai.com/v1/responses",

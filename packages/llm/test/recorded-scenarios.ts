@@ -23,9 +23,7 @@ export const weatherRuntimeTool = tool({
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.succeed(
-      city === "Paris"
-        ? { temperature: 22, condition: "sunny" }
-        : { temperature: 0, condition: "unknown" },
+      city === "Paris" ? { temperature: 22, condition: "sunny" } : { temperature: 0, condition: "unknown" },
     ),
 })
 
@@ -41,9 +39,10 @@ export const textRequest = (input: {
     model: input.model,
     system: "You are concise.",
     prompt: input.prompt ?? "Reply with exactly: Hello!",
-    generation: input.temperature === false
-      ? { maxTokens: input.maxTokens ?? 20 }
-      : { maxTokens: input.maxTokens ?? 20, temperature: input.temperature ?? 0 },
+    generation:
+      input.temperature === false
+        ? { maxTokens: input.maxTokens ?? 20 }
+        : { maxTokens: input.maxTokens ?? 20, temperature: input.temperature ?? 0 },
   })
 
 export const weatherToolRequest = (input: {
@@ -59,9 +58,10 @@ export const weatherToolRequest = (input: {
     prompt: "Call get_weather with city exactly Paris.",
     tools: [weatherTool],
     toolChoice: LLM.toolChoice(weatherTool),
-    generation: input.temperature === false
-      ? { maxTokens: input.maxTokens ?? 80 }
-      : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
+    generation:
+      input.temperature === false
+        ? { maxTokens: input.maxTokens ?? 80 }
+        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
   })
 
 export const weatherToolLoopRequest = (input: {
@@ -76,9 +76,10 @@ export const weatherToolLoopRequest = (input: {
     model: input.model,
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
     prompt: "What is the weather in Paris?",
-    generation: input.temperature === false
-      ? { maxTokens: input.maxTokens ?? 80 }
-      : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
+    generation:
+      input.temperature === false
+        ? { maxTokens: input.maxTokens ?? 80 }
+        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
   })
 
 export const goldenWeatherToolLoopRequest = (input: {
@@ -160,36 +161,44 @@ export const goldenScenarioTags = (id: GoldenScenarioID) => {
 export const runGoldenScenario = (id: GoldenScenarioID, context: GoldenScenarioContext) =>
   Effect.gen(function* () {
     if (id === "text") {
-      const response = yield* generate(textRequest({
-        id: context.id,
-        model: context.model,
-        prompt: "Reply exactly with: Hello!",
-        maxTokens: context.maxTokens ?? 40,
-        temperature: context.temperature,
-      }))
+      const response = yield* generate(
+        textRequest({
+          id: context.id,
+          model: context.model,
+          prompt: "Reply exactly with: Hello!",
+          maxTokens: context.maxTokens ?? 40,
+          temperature: context.temperature,
+        }),
+      )
       expect(response.text.trim()).toMatch(/^Hello!?$/)
       expectFinish(response.events, "stop")
       return
     }
 
     if (id === "tool-call") {
-      const response = yield* generate(weatherToolRequest({
-        id: context.id,
-        model: context.model,
-        maxTokens: context.maxTokens ?? 80,
-        temperature: context.temperature,
-      }))
+      const response = yield* generate(
+        weatherToolRequest({
+          id: context.id,
+          model: context.model,
+          maxTokens: context.maxTokens ?? 80,
+          temperature: context.temperature,
+        }),
+      )
       expectWeatherToolCall(response)
       expectFinish(response.events, "tool-calls")
       return
     }
 
-    expectGoldenWeatherToolLoop(yield* runWeatherToolLoop(goldenWeatherToolLoopRequest({
-      id: context.id,
-      model: context.model,
-      maxTokens: context.maxTokens ?? 80,
-      temperature: context.temperature,
-    })))
+    expectGoldenWeatherToolLoop(
+      yield* runWeatherToolLoop(
+        goldenWeatherToolLoopRequest({
+          id: context.id,
+          model: context.model,
+          maxTokens: context.maxTokens ?? 80,
+          temperature: context.temperature,
+        }),
+      ),
+    )
   })
 
 const usageSummary = (usage: LLMResponse["usage"] | undefined) => {

@@ -169,9 +169,7 @@ const BedrockEvent = Schema.Struct({
       contentBlockIndex: Schema.Number,
       start: Schema.optional(
         Schema.Struct({
-          toolUse: Schema.optional(
-            Schema.Struct({ toolUseId: Schema.String, name: Schema.String }),
-          ),
+          toolUse: Schema.optional(Schema.Struct({ toolUseId: Schema.String, name: Schema.String })),
         }),
       ),
     }),
@@ -227,7 +225,10 @@ const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   },
 })
 
-const textWithCache = (text: string, cache: CacheHint | undefined): Array<BedrockTextBlock | BedrockCache.CachePointBlock> => {
+const textWithCache = (
+  text: string,
+  cache: CacheHint | undefined,
+): Array<BedrockTextBlock | BedrockCache.CachePointBlock> => {
   const cachePoint = BedrockCache.block(cache)
   return cachePoint ? [{ text }, cachePoint] : [{ text }]
 }
@@ -285,7 +286,11 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
       const content: BedrockAssistantBlock[] = []
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
-          return yield* ProviderShared.unsupportedContent("Bedrock Converse", "assistant", ["text", "reasoning", "tool-call"])
+          return yield* ProviderShared.unsupportedContent("Bedrock Converse", "assistant", [
+            "text",
+            "reasoning",
+            "tool-call",
+          ])
         if (part.type === "text") {
           content.push(...textWithCache(part.text, part.cache))
           continue
@@ -418,10 +423,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
         "Bedrock Converse tool delta is missing its tool call",
       )
       if (ToolStream.isError(result)) return yield* result
-      return [
-        { ...state, tools: result.tools },
-        result.event ? [result.event] : [],
-      ] as const
+      return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
     }
 
     if (event.contentBlockStop) {
@@ -441,10 +443,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
 
     if (event.metadata) {
       const usage = mapUsage(event.metadata.usage)
-      return [
-        { ...state, pendingFinish: { reason: state.pendingFinish?.reason ?? "stop", usage } },
-        [],
-      ] as const
+      return [{ ...state, pendingFinish: { reason: state.pendingFinish?.reason ?? "stop", usage } }, []] as const
     }
 
     if (event.internalServerException || event.modelStreamErrorException || event.serviceUnavailableException) {

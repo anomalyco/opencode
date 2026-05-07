@@ -7,7 +7,14 @@ import { LLMClient } from "../../src/route"
 import * as BedrockConverse from "../../src/protocols/bedrock-converse"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
-import { eventSummary, expectWeatherToolLoop, runWeatherToolLoop, weatherTool, weatherToolLoopRequest, weatherToolName } from "../recorded-scenarios"
+import {
+  eventSummary,
+  expectWeatherToolLoop,
+  runWeatherToolLoop,
+  weatherTool,
+  weatherToolLoopRequest,
+  weatherToolName,
+} from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const codec = new EventStreamCodec(toUtf8, fromUtf8)
@@ -155,8 +162,7 @@ describe("Bedrock Converse route", () => {
         ["messageStop", { stopReason: "end_turn" }],
         ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
       )
-      const response = yield* LLMClient.generate(baseRequest)
-        .pipe(Effect.provide(fixedBytes(body)))
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.text).toBe("Hello!")
       const finishes = response.events.filter((event) => event.type === "request-finish")
@@ -190,11 +196,10 @@ describe("Bedrock Converse route", () => {
         ["messageStop", { stopReason: "tool_use" }],
       )
       const response = yield* LLMClient.generate(
-          LLM.updateRequest(baseRequest, {
-            tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
-          }),
-        )
-        .pipe(Effect.provide(fixedBytes(body)))
+        LLM.updateRequest(baseRequest, {
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.toolCalls).toEqual([
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "weather" } },
@@ -212,15 +217,11 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStart", { role: "assistant" }],
-        [
-          "contentBlockDelta",
-          { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } },
-        ],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } }],
         ["contentBlockStop", { contentBlockIndex: 0 }],
         ["messageStop", { stopReason: "end_turn" }],
       )
-      const response = yield* LLMClient.generate(baseRequest)
-        .pipe(Effect.provide(fixedBytes(body)))
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.reasoning).toBe("Let me think.")
     }),
@@ -232,8 +233,7 @@ describe("Bedrock Converse route", () => {
         ["messageStart", { role: "assistant" }],
         ["throttlingException", { message: "Slow down" }],
       )
-      const response = yield* LLMClient.generate(baseRequest)
-        .pipe(Effect.provide(fixedBytes(body)))
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.events.find((event) => event.type === "provider-error")).toEqual({
         type: "provider-error",
@@ -249,8 +249,10 @@ describe("Bedrock Converse route", () => {
         id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
         baseURL: "https://bedrock-runtime.test",
       })
-      const error = yield* LLMClient.generate(LLM.updateRequest(baseRequest, { model: unsignedModel }))
-        .pipe(Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))), Effect.flip)
+      const error = yield* LLMClient.generate(LLM.updateRequest(baseRequest, { model: unsignedModel })).pipe(
+        Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))),
+        Effect.flip,
+      )
 
       expect(error.message).toContain("Bedrock Converse requires either model.apiKey")
     }),
@@ -267,9 +269,7 @@ describe("Bedrock Converse route", () => {
           secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         },
       })
-      const prepared = yield* LLMClient.prepare(
-        LLM.updateRequest(baseRequest, { model: signed }),
-      )
+      const prepared = yield* LLMClient.prepare(LLM.updateRequest(baseRequest, { model: signed }))
 
       expect(prepared.route).toBe("bedrock-converse")
       // The prepare phase doesn't sign — toHttp does. We assert the credential
@@ -366,11 +366,7 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_image_bytes",
           model,
-          messages: [
-            LLM.user([
-              { type: "media", mediaType: "image/png", data: new Uint8Array([1, 2, 3, 4, 5]) },
-            ]),
-          ],
+          messages: [LLM.user([{ type: "media", mediaType: "image/png", data: new Uint8Array([1, 2, 3, 4, 5]) }])],
         }),
       )
 
@@ -420,13 +416,12 @@ describe("Bedrock Converse route", () => {
   it.effect("rejects unsupported image media types", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
-          LLM.request({
-            id: "req_bad_image",
-            model,
-            messages: [LLM.user([{ type: "media", mediaType: "image/svg+xml", data: "x" }])],
-          }),
-        )
-        .pipe(Effect.flip)
+        LLM.request({
+          id: "req_bad_image",
+          model,
+          messages: [LLM.user([{ type: "media", mediaType: "image/svg+xml", data: "x" }])],
+        }),
+      ).pipe(Effect.flip)
 
       expect(error.message).toContain("Bedrock Converse does not support image media type image/svg+xml")
     }),
@@ -435,15 +430,12 @@ describe("Bedrock Converse route", () => {
   it.effect("rejects unsupported document media types", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
-          LLM.request({
-            id: "req_bad_doc",
-            model,
-            messages: [
-              LLM.user([{ type: "media", mediaType: "application/x-tar", data: "x", filename: "a.tar" }]),
-            ],
-          }),
-        )
-        .pipe(Effect.flip)
+        LLM.request({
+          id: "req_bad_doc",
+          model,
+          messages: [LLM.user([{ type: "media", mediaType: "application/x-tar", data: "x", filename: "a.tar" }])],
+        }),
+      ).pipe(Effect.flip)
 
       expect(error.message).toContain("Bedrock Converse does not support media type application/x-tar")
     }),
@@ -528,10 +520,14 @@ describe("Bedrock Converse recorded", () => {
   recorded.effect.with("drives a tool loop", { tags: ["tool", "tool-loop", "golden"] }, () =>
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
-      expectWeatherToolLoop(yield* runWeatherToolLoop(weatherToolLoopRequest({
-        id: "recorded_bedrock_tool_loop",
-        model: recordedModel(),
-      })))
+      expectWeatherToolLoop(
+        yield* runWeatherToolLoop(
+          weatherToolLoopRequest({
+            id: "recorded_bedrock_tool_loop",
+            model: recordedModel(),
+          }),
+        ),
+      )
     }),
   )
 })

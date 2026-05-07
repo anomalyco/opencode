@@ -15,6 +15,7 @@
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.anthropic.com/v1/messages",
@@ -33,6 +34,7 @@
       }
     },
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.anthropic.com/v1/messages",

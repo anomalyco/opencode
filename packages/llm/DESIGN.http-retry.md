@@ -111,9 +111,7 @@ Header redaction:
 
 ```ts
 const redactHeaders = (headers: Record<string, string>) =>
-  Object.fromEntries(
-    Object.entries(headers).map(([name, value]) => [name, sensitiveName(name) ? "<redacted>" : value]),
-  )
+  Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, sensitiveName(name) ? "<redacted>" : value]))
 ```
 
 URL redaction:
@@ -142,8 +140,8 @@ Response body handling:
 Use a closure:
 
 ```ts
-const statusError = (request: HttpClientRequest.HttpClientRequest) =>
-  (response: HttpClientResponse.HttpClientResponse) =>
+const statusError =
+  (request: HttpClientRequest.HttpClientRequest) => (response: HttpClientResponse.HttpClientResponse) =>
     Effect.gen(function* () {
       if (response.status < 400) return response
       // construct ProviderRequestError with request + response diagnostics
@@ -164,12 +162,14 @@ Request ID extraction should be conservative and provider-agnostic:
 ```ts
 const requestId = (headers: Record<string, string>) => {
   const normalized = normalizedHeaders(headers)
-  return normalized["x-request-id"] ??
+  return (
+    normalized["x-request-id"] ??
     normalized["request-id"] ??
     normalized["x-amzn-requestid"] ??
     normalized["x-amz-request-id"] ??
     normalized["x-goog-request-id"] ??
     normalized["cf-ray"]
+  )
 }
 ```
 
@@ -193,8 +193,7 @@ Do not automatically retry transport timeouts / connection resets in the first p
 Implementation helper:
 
 ```ts
-const retryableStatus = (status: number) =>
-  status === 429 || status === 503 || status === 504 || status === 529
+const retryableStatus = (status: number) => status === 429 || status === 503 || status === 504 || status === 529
 ```
 
 Potential future additions after provider evidence:
@@ -260,10 +259,7 @@ The shape should be similar to:
 
 ```ts
 const executeOnce = (request: HttpClientRequest.HttpClientRequest) =>
-  http.execute(request).pipe(
-    Effect.mapError(toHttpError),
-    Effect.flatMap(statusError(request)),
-  )
+  http.execute(request).pipe(Effect.mapError(toHttpError), Effect.flatMap(statusError(request)))
 
 execute: (request) => executeOnce(request).pipe(retryStatusFailures(defaultRetryPolicy))
 ```
@@ -279,19 +275,15 @@ Do not add `HttpOptions.retry` in the first patch.
 Per-request retry configuration requires one of these changes first:
 
 ```ts
-execute: (input: {
-  readonly http: HttpClientRequest.HttpClientRequest
-  readonly request: LLMRequest
-}) => Effect.Effect<HttpClientResponse.HttpClientResponse, LLMError>
+execute: (input: { readonly http: HttpClientRequest.HttpClientRequest; readonly request: LLMRequest }) =>
+  Effect.Effect<HttpClientResponse.HttpClientResponse, LLMError>
 ```
 
 or:
 
 ```ts
-execute: (
-  http: HttpClientRequest.HttpClientRequest,
-  context: RequestExecutor.Context,
-) => Effect.Effect<HttpClientResponse.HttpClientResponse, LLMError>
+execute: (http: HttpClientRequest.HttpClientRequest, context: RequestExecutor.Context) =>
+  Effect.Effect<HttpClientResponse.HttpClientResponse, LLMError>
 ```
 
 Defer that API change until default diagnostics and conservative status retry are proven useful.

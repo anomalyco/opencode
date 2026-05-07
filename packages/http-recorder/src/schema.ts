@@ -16,14 +16,41 @@ export const ResponseSnapshotSchema = Schema.Struct({
 })
 export type ResponseSnapshot = Schema.Schema.Type<typeof ResponseSnapshotSchema>
 
-export const InteractionSchema = Schema.Struct({
+export const CassetteMetadataSchema = Schema.Record(Schema.String, Schema.Unknown)
+export type CassetteMetadata = Schema.Schema.Type<typeof CassetteMetadataSchema>
+
+export const HttpInteractionSchema = Schema.Struct({
+  transport: Schema.Literal("http"),
   request: RequestSnapshotSchema,
   response: ResponseSnapshotSchema,
 })
-export type Interaction = Schema.Schema.Type<typeof InteractionSchema>
+export type HttpInteraction = Schema.Schema.Type<typeof HttpInteractionSchema>
 
-export const CassetteMetadataSchema = Schema.Record(Schema.String, Schema.Unknown)
-export type CassetteMetadata = Schema.Schema.Type<typeof CassetteMetadataSchema>
+export const WebSocketFrameSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("text"), body: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("binary"), body: Schema.String, bodyEncoding: Schema.Literal("base64") }),
+])
+export type WebSocketFrame = Schema.Schema.Type<typeof WebSocketFrameSchema>
+
+export const WebSocketInteractionSchema = Schema.Struct({
+  transport: Schema.Literal("websocket"),
+  open: Schema.Struct({
+    url: Schema.String,
+    headers: Schema.Record(Schema.String, Schema.String),
+  }),
+  client: Schema.Array(WebSocketFrameSchema),
+  server: Schema.Array(WebSocketFrameSchema),
+})
+export type WebSocketInteraction = Schema.Schema.Type<typeof WebSocketInteractionSchema>
+
+export const InteractionSchema = Schema.Union([HttpInteractionSchema, WebSocketInteractionSchema])
+export type Interaction = HttpInteraction | WebSocketInteraction
+
+export const isHttpInteraction = (interaction: Interaction): interaction is HttpInteraction =>
+  interaction.transport === "http"
+
+export const isWebSocketInteraction = (interaction: Interaction): interaction is WebSocketInteraction =>
+  interaction.transport === "websocket"
 
 export const CassetteSchema = Schema.Struct({
   version: Schema.Literal(1),

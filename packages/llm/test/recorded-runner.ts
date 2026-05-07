@@ -24,7 +24,12 @@ export type RecordedCaseOptions = {
   readonly metadata?: Record<string, unknown>
 }
 
-export const recordedEffectGroup = <R, E, Options extends RecordedGroupOptions, CaseOptions extends RecordedCaseOptions>(input: {
+export const recordedEffectGroup = <
+  R,
+  E,
+  Options extends RecordedGroupOptions,
+  CaseOptions extends RecordedCaseOptions,
+>(input: {
   readonly duplicateLabel: string
   readonly options: Options
   readonly cassetteExists: (cassette: string) => boolean
@@ -57,7 +62,8 @@ export const recordedEffectGroup = <R, E, Options extends RecordedGroupOptions, 
       }),
     ])
 
-    if (!matchesSelected({ prefix: input.options.prefix, name, cassette, tags })) return test.skip(name, () => {}, testOptions)
+    if (!matchesSelected({ prefix: input.options.prefix, name, cassette, tags }))
+      return test.skip(name, () => {}, testOptions)
 
     const recording = process.env.RECORD === "true"
     if (recording) {
@@ -68,21 +74,20 @@ export const recordedEffectGroup = <R, E, Options extends RecordedGroupOptions, 
       return test.skip(name, () => {}, testOptions)
     }
 
-    return testEffect(input.layer({
-      cassette,
-      tags,
-      metadata: { ...input.options.metadata, ...caseOptions.metadata, tags },
-      recording,
-      options: input.options,
-      caseOptions,
-    })).live(name, body, testOptions)
+    return testEffect(
+      input.layer({
+        cassette,
+        tags,
+        metadata: { ...input.options.metadata, ...caseOptions.metadata, tags },
+        recording,
+        options: input.options,
+        caseOptions,
+      }),
+    ).live(name, body, testOptions)
   }
 
-  const effect = <A, E2>(
-    name: string,
-    body: RecordedBody<A, E2, R>,
-    testOptions?: number | TestOptions,
-  ) => run(name, {} as CaseOptions, body, testOptions)
+  const effect = <A, E2>(name: string, body: RecordedBody<A, E2, R>, testOptions?: number | TestOptions) =>
+    run(name, {} as CaseOptions, body, testOptions)
 
   effect.with = <A, E2>(
     name: string,

@@ -5,19 +5,20 @@ import type { ModelRef } from "../src"
 import { goldenScenarioTags, runGoldenScenario, type GoldenScenarioID } from "./recorded-scenarios"
 import { recordedTests } from "./recorded-test"
 import { kebab } from "./recorded-utils"
-import { recordedWebSocketTests } from "./recorded-websocket"
 
 type Transport = "http" | "websocket"
 
-type ScenarioInput = GoldenScenarioID | {
-  readonly id: GoldenScenarioID
-  readonly name?: string
-  readonly cassette?: string
-  readonly tags?: ReadonlyArray<string>
-  readonly maxTokens?: number
-  readonly temperature?: number | false
-  readonly timeout?: number | TestOptions
-}
+type ScenarioInput =
+  | GoldenScenarioID
+  | {
+      readonly id: GoldenScenarioID
+      readonly name?: string
+      readonly cassette?: string
+      readonly tags?: ReadonlyArray<string>
+      readonly maxTokens?: number
+      readonly temperature?: number | false
+      readonly timeout?: number | TestOptions
+    }
 
 type TargetInput = {
   readonly name: string
@@ -32,7 +33,7 @@ type TargetInput = {
   readonly scenarios: ReadonlyArray<ScenarioInput>
 }
 
-const scenarioInput = (input: ScenarioInput) => typeof input === "string" ? { id: input } : input
+const scenarioInput = (input: ScenarioInput) => (typeof input === "string" ? { id: input } : input)
 
 const scenarioTitle = (id: GoldenScenarioID) => {
   if (id === "text") return "streams text"
@@ -61,23 +62,15 @@ const tags = (target: TargetInput) => [
 ]
 
 const runTarget = (target: TargetInput) => {
-  const recorded = target.transport === "websocket"
-    ? recordedWebSocketTests({
-      prefix: defaultPrefix(target),
-      provider: target.model.provider,
-      protocol: target.protocol,
-      requires: target.requires,
-      tags: tags(target),
-      metadata: metadata(target),
-    })
-    : recordedTests({
-      prefix: defaultPrefix(target),
-      provider: target.model.provider,
-      protocol: target.protocol,
-      requires: target.requires,
-      tags: tags(target),
-      options: { ...target.options, metadata: { ...target.options?.metadata, ...metadata(target) } },
-    })
+  const recorded = recordedTests({
+    prefix: defaultPrefix(target),
+    provider: target.model.provider,
+    protocol: target.protocol,
+    requires: target.requires,
+    tags: tags(target),
+    metadata: metadata(target),
+    options: target.options,
+  })
 
   describe(`${target.name} recorded`, () => {
     target.scenarios.forEach((raw) => {

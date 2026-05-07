@@ -14,6 +14,7 @@
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream",
@@ -32,6 +33,7 @@
       }
     },
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream",

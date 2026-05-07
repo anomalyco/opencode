@@ -7,7 +7,7 @@ export const DEFAULT_RECORDINGS_DIR = path.resolve(process.cwd(), "test", "fixtu
 
 export const cassettePath = (name: string, directory = DEFAULT_RECORDINGS_DIR) => path.join(directory, `${name}.json`)
 
-const metadataFor = (name: string, metadata: CassetteMetadata | undefined): CassetteMetadata => ({
+export const metadataFor = (name: string, metadata: CassetteMetadata | undefined): CassetteMetadata => ({
   name,
   recordedAt: new Date().toISOString(),
   ...(metadata ?? {}),

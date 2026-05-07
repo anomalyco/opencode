@@ -34,7 +34,11 @@ const profileBaseURL = (profile: OpenAICompatibleProfile, options: FamilyModelOp
   throw new Error(`OpenAI-compatible profile ${profile.provider} requires a baseURL`)
 }
 
-export const profileModel = (profile: OpenAICompatibleProfile, id: string | ModelID, options: FamilyModelOptions = {}) =>
+export const profileModel = (
+  profile: OpenAICompatibleProfile,
+  id: string | ModelID,
+  options: FamilyModelOptions = {},
+) =>
   OpenAICompatibleChat.model({
     ...options,
     id,
@@ -43,14 +47,16 @@ export const profileModel = (profile: OpenAICompatibleProfile, id: string | Mode
     capabilities: options.capabilities ?? profile.capabilities,
   })
 
-const define = (profile: OpenAICompatibleProfile) => Provider.make({
-  id: ProviderID.make(profile.provider),
-  model: (id: string | ModelID, options: FamilyModelOptions = {}) => profileModel(profile, id, options),
-})
+const define = (profile: OpenAICompatibleProfile) =>
+  Provider.make({
+    id: ProviderID.make(profile.provider),
+    model: (id: string | ModelID, options: FamilyModelOptions = {}) => profileModel(profile, id, options),
+  })
 
 export const provider = Provider.make({
   id,
-  model: (id: string | ModelID, options: GenericModelOptions) => model(id, { ...options, provider: options.provider ?? "openai-compatible" }),
+  model: (id: string | ModelID, options: GenericModelOptions) =>
+    model(id, { ...options, provider: options.provider ?? "openai-compatible" }),
 })
 
 export const baseten = define(profiles.baseten)

@@ -3,14 +3,11 @@
   "metadata": {
     "name": "openai-chat/streams-text",
     "recordedAt": "2026-05-06T01:33:30.542Z",
-    "tags": [
-      "prefix:openai-chat",
-      "provider:openai",
-      "protocol:openai-chat"
-    ]
+    "tags": ["prefix:openai-chat", "provider:openai", "protocol:openai-chat"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.openai.com/v1/chat/completions",

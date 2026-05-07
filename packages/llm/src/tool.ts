@@ -40,7 +40,10 @@ export interface Tool<Parameters extends ToolSchema<any>, Success extends ToolSc
 
 export type AnyTool = Tool<ToolSchema<any>, ToolSchema<any>>
 
-export type ExecutableTool<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = Tool<Parameters, Success> & {
+export type ExecutableTool<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = Tool<
+  Parameters,
+  Success
+> & {
   readonly execute: ToolExecute<Parameters, Success>
 }
 
@@ -81,17 +84,17 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
   readonly execute?: ToolExecute<Parameters, Success>
 }): Tool<Parameters, Success> {
   return {
-  description: config.description,
-  parameters: config.parameters,
-  success: config.success,
-  execute: config.execute,
-  _decode: Schema.decodeUnknownEffect(config.parameters),
-  _encode: Schema.encodeEffect(config.success),
-  _definition: new ToolDefinition({
-    name: "",
     description: config.description,
-    inputSchema: toJsonSchema(config.parameters),
-  }),
+    parameters: config.parameters,
+    success: config.success,
+    execute: config.execute,
+    _decode: Schema.decodeUnknownEffect(config.parameters),
+    _encode: Schema.encodeEffect(config.success),
+    _definition: new ToolDefinition({
+      name: "",
+      description: config.description,
+      inputSchema: toJsonSchema(config.parameters),
+    }),
   }
 }
 
@@ -112,12 +115,13 @@ export type Tools = Record<string, AnyTool>
  * is reused.
  */
 export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> =>
-  Object.entries(tools).map(([name, item]) =>
-    new ToolDefinition({
-      name,
-      description: item._definition.description,
-      inputSchema: item._definition.inputSchema,
-    }),
+  Object.entries(tools).map(
+    ([name, item]) =>
+      new ToolDefinition({
+        name,
+        description: item._definition.description,
+        inputSchema: item._definition.inputSchema,
+      }),
   )
 
 const toJsonSchema = (schema: Schema.Top): Record<string, unknown> => {

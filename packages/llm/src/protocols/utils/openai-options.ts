@@ -5,7 +5,7 @@ import { ReasoningEfforts, TextVerbosity } from "../../schema"
 export const OpenAIReasoningEfforts = ReasoningEfforts.filter(
   (effort): effort is Exclude<ReasoningEffort, "max"> => effort !== "max",
 )
-export type OpenAIReasoningEffort = typeof OpenAIReasoningEfforts[number]
+export type OpenAIReasoningEffort = (typeof OpenAIReasoningEfforts)[number]
 
 const REASONING_EFFORTS = new Set<string>(ReasoningEfforts)
 const OPENAI_REASONING_EFFORTS = new Set<string>(OpenAIReasoningEfforts)

@@ -11,12 +11,7 @@ import type { Protocol } from "./protocol"
 import * as ProviderShared from "../protocols/shared"
 import * as ToolRuntime from "../tool-runtime"
 import type { Tools } from "../tool"
-import type {
-  LLMError,
-  LLMEvent,
-  PreparedRequestOf,
-  ProtocolID,
-} from "../schema"
+import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID } from "../schema"
 import {
   GenerationOptions,
   HttpOptions,
@@ -52,10 +47,7 @@ export interface Route<Body, Prepared = unknown> {
   readonly body: RouteBody<Body>
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
   readonly model: <Input extends RouteModelInput = RouteModelInput>(input: Input) => ModelRef
-  readonly prepareTransport: (
-    body: Body,
-    request: LLMRequest,
-  ) => Effect.Effect<Prepared, LLMError>
+  readonly prepareTransport: (body: Body, request: LLMRequest) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
     prepared: Prepared,
     request: LLMRequest,
@@ -120,7 +112,10 @@ export interface RoutePatch<Body, Prepared> extends RouteDefaults {
 
 type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
 
-export interface RouteModelOptions<Input extends RouteMappedModelInput, Output extends RouteMappedModelInput = RouteMappedModelInput> {
+export interface RouteModelOptions<
+  Input extends RouteMappedModelInput,
+  Output extends RouteMappedModelInput = RouteMappedModelInput,
+> {
   readonly mapInput?: (input: Input) => Output
 }
 
@@ -128,13 +123,14 @@ export interface RouteMappedModelOptions<Input, Output extends RouteMappedModelI
   readonly mapInput: (input: Input) => Output
 }
 
-const modelWithDefaults = <Input>(
-  route: AnyRoute,
-  defaults: Partial<Omit<ModelRefInput, "id" | "route">>,
-  options: { readonly mapInput?: (input: Input) => RouteMappedModelInput },
-) =>
+const modelWithDefaults =
+  <Input>(
+    route: AnyRoute,
+    defaults: Partial<Omit<ModelRefInput, "id" | "route">>,
+    options: { readonly mapInput?: (input: Input) => RouteMappedModelInput },
+  ) =>
   (input: Input) => {
-    const mapped = options.mapInput === undefined ? input as RouteMappedModelInput : options.mapInput(input)
+    const mapped = options.mapInput === undefined ? (input as RouteMappedModelInput) : options.mapInput(input)
     const provider = defaults.provider ?? route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
     if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
     const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
@@ -330,10 +326,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       prepareTransport: routeInput.transport.prepare,
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
         const route = `${request.model.provider}/${request.model.route}`
-        const events = routeInput.transport.frames(prepared, request, runtime).pipe(
-          Stream.mapEffect(decodeEvent(route)),
-          protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
-        )
+        const events = routeInput.transport
+          .frames(prepared, request, runtime)
+          .pipe(
+            Stream.mapEffect(decodeEvent(route)),
+            protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
+          )
         return events.pipe(
           Stream.mapAccumEffect(
             protocol.stream.initial,
@@ -400,9 +398,9 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   const route = registeredRoute(resolved.model.route)
   if (!route) return yield* noRoute(resolved.model)
 
-  const body = yield* route.body.from(resolved).pipe(
-    Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))),
-  )
+  const body = yield* route.body
+    .from(resolved)
+    .pipe(Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))))
   const prepared = yield* route.prepareTransport(body, resolved)
 
   return {
@@ -443,20 +441,21 @@ const streamWith = (streamRequest: (request: LLMRequest) => Stream.Stream<LLMEve
     return streamRequest(input)
   }) as StreamMethod
 
-const generateWith = (stream: Interface["stream"]) => Effect.fn("LLM.generate")(function* (input: LLMRequest | ToolRuntime.RunOptions<Tools>) {
-  return new LLMResponse(
-    yield* stream(input as never).pipe(
-      Stream.runFold(
-        () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
-        (acc, event) => {
-          acc.events.push(event)
-          if ("usage" in event && event.usage !== undefined) acc.usage = event.usage
-          return acc
-        },
+const generateWith = (stream: Interface["stream"]) =>
+  Effect.fn("LLM.generate")(function* (input: LLMRequest | ToolRuntime.RunOptions<Tools>) {
+    return new LLMResponse(
+      yield* stream(input as never).pipe(
+        Stream.runFold(
+          () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
+          (acc, event) => {
+            acc.events.push(event)
+            if ("usage" in event && event.usage !== undefined) acc.usage = event.usage
+            return acc
+          },
+        ),
       ),
-    ),
-  )
-})
+    )
+  })
 
 export const prepare = <Body = unknown>(request: LLMRequest) =>
   prepareWith(request) as Effect.Effect<PreparedRequestOf<Body>, LLMError>
@@ -464,9 +463,11 @@ export const prepare = <Body = unknown>(request: LLMRequest) =>
 export function stream(request: LLMRequest): Stream.Stream<LLMEvent, LLMError>
 export function stream<T extends Tools>(options: ToolRuntime.RunOptions<T>): Stream.Stream<LLMEvent, LLMError>
 export function stream(input: LLMRequest | ToolRuntime.RunOptions<Tools>) {
-  return Stream.unwrap(Effect.gen(function* () {
-    return (yield* Service).stream(input as never)
-  }))
+  return Stream.unwrap(
+    Effect.gen(function* () {
+      return (yield* Service).stream(input as never)
+    }),
+  )
 }
 
 export function generate(request: LLMRequest): Effect.Effect<LLMResponse, LLMError>
@@ -478,9 +479,11 @@ export function generate(input: LLMRequest | ToolRuntime.RunOptions<Tools>) {
 }
 
 export const streamRequest = (request: LLMRequest) =>
-  Stream.unwrap(Effect.gen(function* () {
-    return (yield* Service).stream(request)
-  }))
+  Stream.unwrap(
+    Effect.gen(function* () {
+      return (yield* Service).stream(request)
+    }),
+  )
 
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,
@@ -490,16 +493,19 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
   }),
 )
 
-export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutorService> = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const stream = streamWith(streamRequestWith({
-      http: yield* RequestExecutor.Service,
-      webSocket: yield* WebSocketExecutor.Service,
-    }))
-    return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
-  }),
-)
+export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutorService> =
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const stream = streamWith(
+        streamRequestWith({
+          http: yield* RequestExecutor.Service,
+          webSocket: yield* WebSocketExecutor.Service,
+        }),
+      )
+      return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
+    }),
+  )
 
 export const Route = { make, model } as const
 

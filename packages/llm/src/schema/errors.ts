@@ -127,7 +127,9 @@ export class TransportReason extends Schema.Class<TransportReason>("LLM.Error.Tr
   }
 }
 
-export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOutputReason>("LLM.Error.InvalidProviderOutput")({
+export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOutputReason>(
+  "LLM.Error.InvalidProviderOutput",
+)({
   _tag: Schema.tag("InvalidProviderOutput"),
   message: Schema.String,
   route: Schema.optional(Schema.String),

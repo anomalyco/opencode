@@ -45,7 +45,9 @@ const schema_only_weather = tool({
 describe("LLMClient tools", () => {
   it.effect("uses the registered model route when adding runtime tools", () =>
     Effect.gen(function* () {
-      const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
+      const layer = scriptedResponses([
+        sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
+      ])
 
       const events = Array.from(
         yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
@@ -158,10 +160,11 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* LLMClient.stream({ request: baseRequest, tools: { get_weather: schema_only_weather }, toolExecution: "none" }).pipe(
-          Stream.runCollect,
-          Effect.provide(layer),
-        ),
+        yield* LLMClient.stream({
+          request: baseRequest,
+          tools: { get_weather: schema_only_weather },
+          toolExecution: "none",
+        }).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
       expect(events.find(LLMEvent.is.toolCall)).toMatchObject({ type: "tool-call", id: "call_1" })
@@ -178,30 +181,40 @@ describe("LLMClient tools", () => {
           return input.respond(
             bodies.length === 1
               ? sseEvents(
-                { type: "message_start", message: { usage: { input_tokens: 5 } } },
-                { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
-                { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "thinking" } },
-                { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_1" } },
-                { type: "content_block_stop", index: 0 },
-                { type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "call_1", name: "get_weather" } },
-                { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: '{"city":"Paris"}' } },
-                { type: "content_block_stop", index: 1 },
-                { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 5 } },
-              )
+                  { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                  { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
+                  { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "thinking" } },
+                  { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_1" } },
+                  { type: "content_block_stop", index: 0 },
+                  {
+                    type: "content_block_start",
+                    index: 1,
+                    content_block: { type: "tool_use", id: "call_1", name: "get_weather" },
+                  },
+                  {
+                    type: "content_block_delta",
+                    index: 1,
+                    delta: { type: "input_json_delta", partial_json: '{"city":"Paris"}' },
+                  },
+                  { type: "content_block_stop", index: 1 },
+                  { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 5 } },
+                )
               : sseEvents(
-                { type: "message_start", message: { usage: { input_tokens: 5 } } },
-                { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-                { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Done." } },
-                { type: "content_block_stop", index: 0 },
-                { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
-              ),
+                  { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                  { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+                  { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Done." } },
+                  { type: "content_block_stop", index: 0 },
+                  { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+                ),
             { headers: { "content-type": "text/event-stream" } },
           )
         }),
       )
 
       yield* TestToolRuntime.runTools({
-        request: LLM.updateRequest(baseRequest, { model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }) }),
+        request: LLM.updateRequest(baseRequest, {
+          model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+        }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
@@ -289,7 +302,9 @@ describe("LLMClient tools", () => {
 
   it.effect("stops when the model finishes without requesting more tools", () =>
     Effect.gen(function* () {
-      const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
+      const layer = scriptedResponses([
+        sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
+      ])
 
       const events = Array.from(
         yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
@@ -308,7 +323,10 @@ describe("LLMClient tools", () => {
       // Every script entry asks for another tool call. With maxSteps: 2 the
       // runtime should run at most two model rounds and then exit even though
       // the model still wants to keep going.
-      const toolCallStep = sseEvents(toolCallChunk("call_x", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls"))
+      const toolCallStep = sseEvents(
+        toolCallChunk("call_x", "get_weather", '{"city":"Paris"}'),
+        finishChunk("tool_calls"),
+      )
       const layer = scriptedResponses([toolCallStep, toolCallStep, toolCallStep])
 
       const events = Array.from(
@@ -351,8 +369,16 @@ describe("LLMClient tools", () => {
           return input.respond(
             sseEvents(
               { type: "message_start", message: { usage: { input_tokens: 5 } } },
-              { type: "content_block_start", index: 0, content_block: { type: "server_tool_use", id: "srvtoolu_abc", name: "web_search" } },
-              { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":"x"}' } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "server_tool_use", id: "srvtoolu_abc", name: "web_search" },
+              },
+              {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "input_json_delta", partial_json: '{"query":"x"}' },
+              },
               { type: "content_block_stop", index: 0 },
               {
                 type: "content_block_start",
@@ -375,12 +401,11 @@ describe("LLMClient tools", () => {
       )
       const events = Array.from(
         yield* TestToolRuntime.runTools({
-          request: LLM.updateRequest(baseRequest, { model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }) }),
+          request: LLM.updateRequest(baseRequest, {
+            model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+          }),
           tools: {},
-        }).pipe(
-          Stream.runCollect,
-          Effect.provide(layer),
-        ),
+        }).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
       expect(streams).toBe(1)

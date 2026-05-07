@@ -47,9 +47,11 @@ describe("OpenAI Responses route", () => {
 
   it.effect("prepares OpenAI Responses WebSocket target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(LLM.updateRequest(request, {
-        model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
-      }))
+      const prepared = yield* LLMClient.prepare(
+        LLM.updateRequest(request, {
+          model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
+        }),
+      )
 
       expect(prepared.route).toBe("openai-responses-websocket")
       expect(prepared.protocol).toBe("openai-responses")
@@ -64,30 +66,39 @@ describe("OpenAI Responses route", () => {
       const opened: Array<{ readonly url: string; readonly authorization: string | undefined }> = []
       let closed = false
       const deps = Layer.mergeAll(
-        Layer.succeed(RequestExecutor.Service, RequestExecutor.Service.of({
-          execute: () => Effect.die("unexpected HTTP request"),
-        })),
-        Layer.succeed(WebSocketExecutor.Service, WebSocketExecutor.Service.of({
-          open: (input) =>
-            Effect.succeed({
-              sendText: (message) => Effect.sync(() => {
-                opened.push({ url: input.url, authorization: input.headers.authorization })
-                sent.push(message)
+        Layer.succeed(
+          RequestExecutor.Service,
+          RequestExecutor.Service.of({
+            execute: () => Effect.die("unexpected HTTP request"),
+          }),
+        ),
+        Layer.succeed(
+          WebSocketExecutor.Service,
+          WebSocketExecutor.Service.of({
+            open: (input) =>
+              Effect.succeed({
+                sendText: (message) =>
+                  Effect.sync(() => {
+                    opened.push({ url: input.url, authorization: input.headers.authorization })
+                    sent.push(message)
+                  }),
+                messages: Stream.fromArray([
+                  ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
+                  ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_ws" } }),
+                ]),
+                close: Effect.sync(() => {
+                  closed = true
+                }),
               }),
-              messages: Stream.fromArray([
-                ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
-                ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_ws" } }),
-              ]),
-              close: Effect.sync(() => {
-                closed = true
-              }),
-            }),
-        })),
+          }),
+        ),
       )
-      const response = yield* LLMClient.generate(LLM.request({
-        model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
-        prompt: "Say hello.",
-      })).pipe(Effect.provide(LLMClient.layerWithWebSocket.pipe(Layer.provide(deps))))
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
+          prompt: "Say hello.",
+        }),
+      ).pipe(Effect.provide(LLMClient.layerWithWebSocket.pipe(Layer.provide(deps))))
 
       expect(response.text).toBe("Hi")
       expect(opened).toEqual([{ url: "wss://api.openai.test/v1/responses", authorization: "Bearer test" }])
@@ -104,13 +115,24 @@ describe("OpenAI Responses route", () => {
 
   it.effect("requires WebSocket runtime for OpenAI Responses WebSocket", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.generate(LLM.request({
-        model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
-        prompt: "Say hello.",
-      })).pipe(
-        Effect.provide(LLMClient.layer.pipe(Layer.provide(Layer.succeed(RequestExecutor.Service, RequestExecutor.Service.of({
-          execute: () => Effect.die("unexpected HTTP request"),
-        }))))),
+      const error = yield* LLMClient.generate(
+        LLM.request({
+          model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
+          prompt: "Say hello.",
+        }),
+      ).pipe(
+        Effect.provide(
+          LLMClient.layer.pipe(
+            Layer.provide(
+              Layer.succeed(
+                RequestExecutor.Service,
+                RequestExecutor.Service.of({
+                  execute: () => Effect.die("unexpected HTTP request"),
+                }),
+              ),
+            ),
+          ),
+        ),
         Effect.flip,
       )
 
@@ -131,95 +153,95 @@ describe("OpenAI Responses route", () => {
 
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
-      yield* LLMClient.generate(LLM.updateRequest(request, { model: OpenAIResponses.model({ ...model, queryParams: { "api-version": "v1" } }) }))
-        .pipe(
-          Effect.provide(
-            dynamicResponse((input) =>
-              Effect.gen(function* () {
-                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-                expect(web.url).toBe("https://api.openai.test/v1/responses?api-version=v1")
-                return input.respond(sseEvents({ type: "response.completed", response: {} }), {
-                  headers: { "content-type": "text/event-stream" },
-                })
-              }),
-            ),
+      yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          model: OpenAIResponses.model({ ...model, queryParams: { "api-version": "v1" } }),
+        }),
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(web.url).toBe("https://api.openai.test/v1/responses?api-version=v1")
+              return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }),
           ),
-        )
+        ),
+      )
     }),
   )
 
   it.effect("uses Azure api-key header for static OpenAI Responses keys", () =>
     Effect.gen(function* () {
       yield* LLMClient.generate(
-          LLM.updateRequest(request, {
-            model: Azure.responses("gpt-4.1-mini", {
-              baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
-              apiKey: "azure-key",
-              headers: { authorization: "Bearer stale" },
-            }),
+        LLM.updateRequest(request, {
+          model: Azure.responses("gpt-4.1-mini", {
+            baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+            apiKey: "azure-key",
+            headers: { authorization: "Bearer stale" },
           }),
-        )
-        .pipe(
-          Effect.provide(
-            dynamicResponse((input) =>
-              Effect.gen(function* () {
-                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-                expect(web.headers.get("api-key")).toBe("azure-key")
-                expect(web.headers.get("authorization")).toBeNull()
-                return input.respond(sseEvents({ type: "response.completed", response: {} }), {
-                  headers: { "content-type": "text/event-stream" },
-                })
-              }),
-            ),
+        }),
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(web.headers.get("api-key")).toBe("azure-key")
+              expect(web.headers.get("authorization")).toBeNull()
+              return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }),
           ),
-        )
+        ),
+      )
     }),
   )
 
   it.effect("loads OpenAI default auth from Effect Config", () =>
     LLMClient.generate(
-        LLM.updateRequest(request, {
-          model: OpenAI.responses("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/" }),
-        }),
-      )
-      .pipe(
-        configEnv({ OPENAI_API_KEY: "env-key" }),
-        Effect.provide(
-          dynamicResponse((input) =>
-            Effect.gen(function* () {
-              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-              expect(web.headers.get("authorization")).toBe("Bearer env-key")
-              return input.respond(sseEvents({ type: "response.completed", response: {} }), {
-                headers: { "content-type": "text/event-stream" },
-              })
-            }),
-          ),
+      LLM.updateRequest(request, {
+        model: OpenAI.responses("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/" }),
+      }),
+    ).pipe(
+      configEnv({ OPENAI_API_KEY: "env-key" }),
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(web.headers.get("authorization")).toBe("Bearer env-key")
+            return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
         ),
       ),
+    ),
   )
 
   it.effect("lets explicit auth override OpenAI default API key auth", () =>
     LLMClient.generate(
-        LLM.updateRequest(request, {
-          model: OpenAI.responses("gpt-4.1-mini", {
-            baseURL: "https://api.openai.test/v1/",
-            auth: Auth.bearer("oauth-token"),
-          }),
+      LLM.updateRequest(request, {
+        model: OpenAI.responses("gpt-4.1-mini", {
+          baseURL: "https://api.openai.test/v1/",
+          auth: Auth.bearer("oauth-token"),
         }),
-      )
-      .pipe(
-        Effect.provide(
-          dynamicResponse((input) =>
-            Effect.gen(function* () {
-              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-              expect(web.headers.get("authorization")).toBe("Bearer oauth-token")
-              return input.respond(sseEvents({ type: "response.completed", response: {} }), {
-                headers: { "content-type": "text/event-stream" },
-              })
-            }),
-          ),
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(web.headers.get("authorization")).toBe("Bearer oauth-token")
+            return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
         ),
       ),
+    ),
   )
 
   it.effect("prepares function call and function output input items", () =>
@@ -310,8 +332,7 @@ describe("OpenAI Responses route", () => {
           },
         },
       )
-      const response = yield* LLMClient.generate(request)
-        .pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
@@ -362,16 +383,33 @@ describe("OpenAI Responses route", () => {
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
       const response = yield* LLMClient.generate(
-          LLM.updateRequest(request, {
-            tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
-          }),
-        )
-        .pipe(Effect.provide(fixedResponse(body)))
+        LLM.updateRequest(request, {
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.events).toEqual([
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', providerMetadata: { openai: { itemId: "item_1" } } },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}', providerMetadata: { openai: { itemId: "item_1" } } },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" }, providerMetadata: { openai: { itemId: "item_1" } } },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: '{"query"',
+          providerMetadata: { openai: { itemId: "item_1" } },
+        },
+        {
+          type: "tool-input-delta",
+          id: "call_1",
+          name: "lookup",
+          text: ':"weather"}',
+          providerMetadata: { openai: { itemId: "item_1" } },
+        },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerMetadata: { openai: { itemId: "item_1" } },
+        },
         {
           type: "request-finish",
           reason: "tool-calls",
@@ -394,10 +432,11 @@ describe("OpenAI Responses route", () => {
         { type: "response.output_item.done", item },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.generate(request)
-        .pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
 
-      const callsAndResults = response.events.filter((event) => event.type === "tool-call" || event.type === "tool-result")
+      const callsAndResults = response.events.filter(
+        (event) => event.type === "tool-call" || event.type === "tool-result",
+      )
       expect(callsAndResults).toEqual([
         {
           type: "tool-call",
@@ -433,8 +472,7 @@ describe("OpenAI Responses route", () => {
         { type: "response.output_item.done", item },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.generate(request)
-        .pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
 
       const toolCall = response.events.find((event) => event.type === "tool-call")
       expect(toolCall).toEqual({
@@ -460,13 +498,12 @@ describe("OpenAI Responses route", () => {
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
-          LLM.request({
-            id: "req_media",
-            model,
-            messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
-          }),
-        )
-        .pipe(Effect.flip)
+        LLM.request({
+          id: "req_media",
+          model,
+          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+        }),
+      ).pipe(Effect.flip)
 
       expect(error.message).toContain("OpenAI Responses user messages only support text content for now")
     }),
@@ -474,12 +511,9 @@ describe("OpenAI Responses route", () => {
 
   it.effect("emits provider-error events for mid-stream provider errors", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request)
-        .pipe(
-          Effect.provide(
-            fixedResponse(sseEvents({ type: "error", code: "rate_limit_exceeded", message: "Slow down" })),
-          ),
-        )
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", code: "rate_limit_exceeded", message: "Slow down" }))),
+      )
 
       expect(response.events).toEqual([{ type: "provider-error", message: "Slow down" }])
     }),
@@ -487,8 +521,9 @@ describe("OpenAI Responses route", () => {
 
   it.effect("falls back to error code when no message is present", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request)
-        .pipe(Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error" }))))
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error" }))),
+      )
 
       expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
     }),
@@ -496,16 +531,15 @@ describe("OpenAI Responses route", () => {
 
   it.effect("fails HTTP provider errors before stream parsing", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.generate(request)
-        .pipe(
-          Effect.provide(
-            fixedResponse('{"error":{"type":"invalid_request_error","message":"Bad request"}}', {
-              status: 400,
-              headers: { "content-type": "application/json" },
-            }),
-          ),
-          Effect.flip,
-        )
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse('{"error":{"type":"invalid_request_error","message":"Bad request"}}', {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+        Effect.flip,
+      )
 
       expect(error).toBeInstanceOf(LLMError)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })

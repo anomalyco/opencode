@@ -3,15 +3,11 @@
   "metadata": {
     "name": "openai-compatible-chat/openrouter-streams-tool-call",
     "recordedAt": "2026-05-06T01:35:07.466Z",
-    "tags": [
-      "prefix:openai-compatible-chat",
-      "protocol:openai-compatible-chat",
-      "provider:openrouter",
-      "tool"
-    ]
+    "tags": ["prefix:openai-compatible-chat", "protocol:openai-compatible-chat", "provider:openrouter", "tool"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://openrouter.ai/api/v1/chat/completions",

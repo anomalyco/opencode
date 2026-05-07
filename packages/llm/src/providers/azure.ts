@@ -12,12 +12,13 @@ export const id = ProviderID.make("azure")
 const MISSING_BASE_URL = "Azure OpenAI requires resourceName or baseURL"
 const routeAuth = Auth.remove("authorization").andThen(Auth.apiKeyHeader("api-key"))
 
-export type ModelOptions = Omit<ModelInput, "id" | "provider" | "route" | "apiKey" | "auth"> & ProviderAuthOption<"optional"> & {
-  readonly resourceName?: string
-  readonly apiVersion?: string
-  readonly useCompletionUrls?: boolean
-  readonly providerOptions?: OpenAIProviderOptionsInput
-}
+export type ModelOptions = Omit<ModelInput, "id" | "provider" | "route" | "apiKey" | "auth"> &
+  ProviderAuthOption<"optional"> & {
+    readonly resourceName?: string
+    readonly apiVersion?: string
+    readonly useCompletionUrls?: boolean
+    readonly providerOptions?: OpenAIProviderOptionsInput
+  }
 type AzureModelInput = ModelOptions & Pick<ModelInput, "id">
 
 const resourceBaseURL = (resourceName: string | undefined) => {
@@ -50,13 +51,14 @@ const mapInput = (input: AzureModelInput) => {
   const { apiKey: _, apiVersion, resourceName, useCompletionUrls, ...rest } = input
   return {
     ...withOpenAIOptions(input.id, rest),
-    auth: "auth" in input && input.auth
-      ? input.auth
-      : Auth.remove("authorization").andThen(
-        Auth.optional("apiKey" in input ? input.apiKey : undefined, "apiKey")
-          .orElse(Auth.config("AZURE_OPENAI_API_KEY"))
-          .pipe(Auth.header("api-key")),
-      ),
+    auth:
+      "auth" in input && input.auth
+        ? input.auth
+        : Auth.remove("authorization").andThen(
+            Auth.optional("apiKey" in input ? input.apiKey : undefined, "apiKey")
+              .orElse(Auth.config("AZURE_OPENAI_API_KEY"))
+              .pipe(Auth.header("api-key")),
+          ),
     baseURL: rest.baseURL ?? resourceBaseURL(resourceName),
     queryParams: {
       ...rest.queryParams,
@@ -68,7 +70,8 @@ const mapInput = (input: AzureModelInput) => {
 const chatModel = Route.model<AzureModelInput>(chatRoute, {}, { mapInput })
 const responsesModel = Route.model<AzureModelInput>(responsesRoute, {}, { mapInput })
 
-export const responses = (modelID: string | ModelID, options: ModelOptions = {}) => responsesModel({ ...options, id: modelID })
+export const responses = (modelID: string | ModelID, options: ModelOptions = {}) =>
+  responsesModel({ ...options, id: modelID })
 
 export const chat = (modelID: string | ModelID, options: ModelOptions = {}) => chatModel({ ...options, id: modelID })
 

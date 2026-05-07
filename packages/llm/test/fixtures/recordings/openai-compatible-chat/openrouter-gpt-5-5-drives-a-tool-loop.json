@@ -15,6 +15,7 @@
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://openrouter.ai/api/v1/chat/completions",
@@ -32,6 +33,7 @@
       }
     },
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://openrouter.ai/api/v1/chat/completions",

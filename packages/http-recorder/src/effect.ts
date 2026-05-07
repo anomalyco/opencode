@@ -10,9 +10,14 @@ import {
 import { redactedErrorRequest, mismatchDetail, requestDiff } from "./diff"
 import { defaultMatcher, decodeJson, type RequestMatcher } from "./matching"
 import { redactHeaders, redactUrl, type SecretFinding } from "./redaction"
-import type { Cassette, CassetteMetadata, Interaction, ResponseSnapshot } from "./schema"
+import {
+  isHttpInteraction,
+  type Cassette,
+  type CassetteMetadata,
+  type HttpInteraction,
+  type ResponseSnapshot,
+} from "./schema"
 import * as CassetteService from "./cassette"
-import { cassetteFor } from "./storage"
 
 export const DEFAULT_REQUEST_HEADERS: ReadonlyArray<string> = ["content-type", "accept", "openai-beta"]
 const DEFAULT_RESPONSE_HEADERS: ReadonlyArray<string> = ["content-type"]
@@ -92,7 +97,10 @@ const unsafeCassette = (
     }),
   })
 
-export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): Layer.Layer<HttpClient.HttpClient> =>
+export const recordingLayer = (
+  name: string,
+  options: Omit<RecordReplayOptions, "directory"> = {},
+): Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient | CassetteService.Service> =>
   Layer.effect(
     HttpClient.HttpClient,
     Effect.gen(function* () {
@@ -103,7 +111,6 @@ export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): 
       const match = options.match ?? defaultMatcher
       const mode = options.mode ?? "replay"
       const sequential = options.dispatch === "sequential"
-      const recorded = yield* Ref.make<ReadonlyArray<Interaction>>([])
       const replay = yield* Ref.make<Cassette | undefined>(undefined)
       const cursor = yield* Ref.make(0)
 
@@ -129,20 +136,21 @@ export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): 
           }
         })
 
-      const selectInteraction = (cassette: Cassette, incoming: Interaction["request"]) =>
+      const selectInteraction = (cassette: Cassette, incoming: HttpInteraction["request"]) =>
         Effect.gen(function* () {
+          const interactions = cassette.interactions.filter(isHttpInteraction)
           if (sequential) {
             const index = yield* Ref.get(cursor)
-            const interaction = cassette.interactions[index]
+            const interaction = interactions[index]
             if (!interaction)
-              return { interaction, detail: `interaction ${index + 1} of ${cassette.interactions.length} not recorded` }
+              return { interaction, detail: `interaction ${index + 1} of ${interactions.length} not recorded` }
             if (!match(incoming, interaction.request)) {
               return { interaction: undefined, detail: requestDiff(interaction.request, incoming).join("\n") }
             }
             yield* Ref.update(cursor, (n) => n + 1)
             return { interaction, detail: "" }
           }
-          const interaction = cassette.interactions.find((candidate) => match(incoming, candidate.request))
+          const interaction = interactions.find((candidate) => match(incoming, candidate.request))
           return { interaction, detail: interaction ? "" : mismatchDetail(cassette, incoming) }
         })
 
@@ -164,15 +172,14 @@ export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): 
             const response = yield* upstream.execute(request)
             const headers = responseHeaders(response, responseHeadersAllow, options.redact?.headers)
             const captured = yield* captureResponseBody(response, headers["content-type"])
-            const interaction: Interaction = {
+            const interaction: HttpInteraction = {
+              transport: "http",
               request: currentRequest,
               response: { status: response.status, headers, ...captured },
             }
-            const interactions = yield* Ref.updateAndGet(recorded, (prev) => [...prev, interaction])
-            const cassette = cassetteFor(name, interactions, options.metadata)
-            const findings = cassetteService.scan(cassette)
+            const result = yield* cassetteService.append(name, interaction, options.metadata).pipe(Effect.orDie)
+            const findings = result.findings
             if (findings.length > 0) return yield* unsafeCassette(request, name, findings)
-            yield* cassetteService.write(name, cassette).pipe(Effect.orDie)
             return HttpClientResponse.fromWeb(
               request,
               new Response(decodeResponseBody(interaction.response), interaction.response),
@@ -193,7 +200,10 @@ export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): 
         })
       })
     }),
-  ).pipe(
+  )
+
+export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): Layer.Layer<HttpClient.HttpClient> =>
+  recordingLayer(name, options).pipe(
     Layer.provide(CassetteService.layer({ directory: options.directory })),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(NodeFileSystem.layer),

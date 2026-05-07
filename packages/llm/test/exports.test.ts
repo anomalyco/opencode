@@ -49,5 +49,4 @@ describe("public exports", () => {
     expect(OpenAIResponses.webSocketRoute.id).toBe("openai-responses-websocket")
     expect(AnthropicMessages.route.id).toBe("anthropic-messages")
   })
-
 })

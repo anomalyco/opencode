@@ -49,7 +49,10 @@ export type StreamOptions<T extends Tools> = RunOptions<T> & {
   readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
 }
 
-export const stepCountIs = (count: number): StopCondition => (state) => state.step + 1 >= count
+export const stepCountIs =
+  (count: number): StopCondition =>
+  (state) =>
+    state.step + 1 >= count
 
 /**
  * Run a model with typed tools. This helper owns tool orchestration, while the
@@ -62,23 +65,21 @@ export const stream = <T extends Tools>(options: StreamOptions<T>): Stream.Strea
   const tools = options.tools as Tools
   const runtimeTools = toDefinitions(tools)
   const runtimeToolNames = new Set(runtimeTools.map((tool) => tool.name))
-  const initialRequest = runtimeTools.length === 0
-    ? options.request
-    : LLMRequest.update(options.request, {
-        tools: [
-          ...options.request.tools.filter((tool) => !runtimeToolNames.has(tool.name)),
-          ...runtimeTools,
-        ],
-      })
+  const initialRequest =
+    runtimeTools.length === 0
+      ? options.request
+      : LLMRequest.update(options.request, {
+          tools: [...options.request.tools.filter((tool) => !runtimeToolNames.has(tool.name)), ...runtimeTools],
+        })
 
   const loop = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError> =>
     Stream.unwrap(
       Effect.gen(function* () {
         const state: StepState = { assistantContent: [], toolCalls: [], finishReason: undefined }
 
-        const modelStream = options.stream(request).pipe(
-          Stream.tap((event) => Effect.sync(() => accumulate(state, event))),
-        )
+        const modelStream = options
+          .stream(request)
+          .pipe(Stream.tap((event) => Effect.sync(() => accumulate(state, event))))
 
         const continuation = Stream.unwrap(
           Effect.gen(function* () {
@@ -134,13 +135,15 @@ const accumulate = (state: StepState, event: LLMEvent) => {
     return
   }
   if (event.type === "tool-result" && event.providerExecuted) {
-    state.assistantContent.push(ToolResultPart.make({
-      id: event.id,
-      name: event.name,
-      result: event.result,
-      providerExecuted: true,
-      providerMetadata: event.providerMetadata,
-    }))
+    state.assistantContent.push(
+      ToolResultPart.make({
+        id: event.id,
+        name: event.name,
+        result: event.result,
+        providerExecuted: true,
+        providerMetadata: event.providerMetadata,
+      }),
+    )
     return
   }
   if (event.type === "request-finish") {
@@ -162,7 +165,12 @@ const mergeProviderMetadata = (left: ProviderMetadata | undefined, right: Provid
   )
 }
 
-const appendStreamingText = (state: StepState, type: "text" | "reasoning", text: string, providerMetadata: ProviderMetadata | undefined) => {
+const appendStreamingText = (
+  state: StepState,
+  type: "text" | "reasoning",
+  text: string,
+  providerMetadata: ProviderMetadata | undefined,
+) => {
   const last = state.assistantContent.at(-1)
   if (last?.type === type && text.length === 0) {
     state.assistantContent[state.assistantContent.length - 1] = {
@@ -181,7 +189,8 @@ const appendStreamingText = (state: StepState, type: "text" | "reasoning", text:
 const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<ToolResultValue> => {
   const tool = tools[call.name]
   if (!tool) return Effect.succeed({ type: "error" as const, value: `Unknown tool: ${call.name}` })
-  if (!tool.execute) return Effect.succeed({ type: "error" as const, value: `Tool has no execute handler: ${call.name}` })
+  if (!tool.execute)
+    return Effect.succeed({ type: "error" as const, value: `Tool has no execute handler: ${call.name}` })
 
   return decodeAndExecute(tool, call.input).pipe(
     Effect.catchTag("LLM.ToolFailure", (failure) =>

@@ -3,14 +3,11 @@
   "metadata": {
     "name": "bedrock-converse/streams-text",
     "recordedAt": "2026-04-28T21:18:46.553Z",
-    "tags": [
-      "prefix:bedrock-converse",
-      "provider:amazon-bedrock",
-      "protocol:bedrock-converse"
-    ]
+    "tags": ["prefix:bedrock-converse", "provider:amazon-bedrock", "protocol:bedrock-converse"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream",

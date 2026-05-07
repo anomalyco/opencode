@@ -28,7 +28,11 @@ type WebSocketConstructorWithHeaders = new (
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM/WebSocketExecutor") {}
 
-const transportError = (method: string, message: string, input: { readonly url?: string; readonly kind?: string } = {}) =>
+const transportError = (
+  method: string,
+  message: string,
+  input: { readonly url?: string; readonly kind?: string } = {},
+) =>
   new LLMError({
     module: "WebSocketExecutor",
     method,
@@ -50,7 +54,12 @@ const binaryMessage = (data: unknown) => {
 const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
   if (ws.readyState === globalThis.WebSocket.OPEN) return Effect.void
   if (ws.readyState === globalThis.WebSocket.CLOSING || ws.readyState === globalThis.WebSocket.CLOSED) {
-    return Effect.fail(transportError("open", `WebSocket closed before opening (state ${ws.readyState})`, { url: input.url, kind: "open" }))
+    return Effect.fail(
+      transportError("open", `WebSocket closed before opening (state ${ws.readyState})`, {
+        url: input.url,
+        kind: "open",
+      }),
+    )
   }
   return Effect.callback<void, LLMError>((resume, signal) => {
     const cleanup = () => {
@@ -61,7 +70,8 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
     }
     const onAbort = () => {
       cleanup()
-      if (ws.readyState !== globalThis.WebSocket.CLOSED && ws.readyState !== globalThis.WebSocket.CLOSING) ws.close(1000)
+      if (ws.readyState !== globalThis.WebSocket.CLOSED && ws.readyState !== globalThis.WebSocket.CLOSING)
+        ws.close(1000)
     }
     const onOpen = () => {
       cleanup()
@@ -69,11 +79,22 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
     }
     const onError = (event: Event) => {
       cleanup()
-      resume(Effect.fail(transportError("open", `Failed to open WebSocket: ${eventMessage(event)}`, { url: input.url, kind: "open" })))
+      resume(
+        Effect.fail(
+          transportError("open", `Failed to open WebSocket: ${eventMessage(event)}`, { url: input.url, kind: "open" }),
+        ),
+      )
     }
     const onClose = (event: CloseEvent) => {
       cleanup()
-      resume(Effect.fail(transportError("open", `WebSocket closed before opening with code ${event.code}`, { url: input.url, kind: "open" })))
+      resume(
+        Effect.fail(
+          transportError("open", `WebSocket closed before opening with code ${event.code}`, {
+            url: input.url,
+            kind: "open",
+          }),
+        ),
+      )
     }
     ws.addEventListener("open", onOpen, { once: true })
     ws.addEventListener("error", onError, { once: true })
@@ -96,16 +117,28 @@ const webSocketUrl = (value: string) =>
       }
       throw new Error(`Unsupported WebSocket URL protocol ${url.protocol}`)
     },
-    catch: (error) => transportError("prepare", error instanceof Error ? error.message : "Invalid WebSocket URL", { url: value, kind: "websocket" }),
+    catch: (error) =>
+      transportError("prepare", error instanceof Error ? error.message : "Invalid WebSocket URL", {
+        url: value,
+        kind: "websocket",
+      }),
   })
 
 export const open = (input: WebSocketRequest) =>
   Effect.try({
-    try: () => new (globalThis.WebSocket as unknown as WebSocketConstructorWithHeaders)(input.url, { headers: input.headers }),
-    catch: (error) => transportError("open", error instanceof Error ? error.message : "Failed to construct WebSocket", { url: input.url, kind: "open" }),
+    try: () =>
+      new (globalThis.WebSocket as unknown as WebSocketConstructorWithHeaders)(input.url, { headers: input.headers }),
+    catch: (error) =>
+      transportError("open", error instanceof Error ? error.message : "Failed to construct WebSocket", {
+        url: input.url,
+        kind: "open",
+      }),
   }).pipe(Effect.flatMap((ws) => fromWebSocket(ws, input)))
 
-export const fromWebSocket = (ws: globalThis.WebSocket, input: WebSocketRequest): Effect.Effect<WebSocketConnection, LLMError> =>
+export const fromWebSocket = (
+  ws: globalThis.WebSocket,
+  input: WebSocketRequest,
+): Effect.Effect<WebSocketConnection, LLMError> =>
   Effect.gen(function* () {
     yield* waitOpen(ws, input)
     const messages = yield* Queue.bounded<string | Uint8Array, LLMError | Cause.Done<void>>(128)
@@ -114,14 +147,29 @@ export const fromWebSocket = (ws: globalThis.WebSocket, input: WebSocketRequest)
       if (typeof event.data === "string") return Queue.offerUnsafe(messages, event.data)
       const binary = binaryMessage(event.data)
       if (binary) return Queue.offerUnsafe(messages, binary)
-      Queue.failCauseUnsafe(messages, Cause.fail(transportError("message", "Unsupported WebSocket message payload", { url: input.url, kind: "message" })))
+      Queue.failCauseUnsafe(
+        messages,
+        Cause.fail(
+          transportError("message", "Unsupported WebSocket message payload", { url: input.url, kind: "message" }),
+        ),
+      )
     }
     const onError = (event: Event) => {
-      Queue.failCauseUnsafe(messages, Cause.fail(transportError("message", `WebSocket error: ${eventMessage(event)}`, { url: input.url, kind: "message" })))
+      Queue.failCauseUnsafe(
+        messages,
+        Cause.fail(
+          transportError("message", `WebSocket error: ${eventMessage(event)}`, { url: input.url, kind: "message" }),
+        ),
+      )
     }
     const onClose = (event: CloseEvent) => {
       if (event.code === 1000 || event.code === 1005) return Queue.endUnsafe(messages)
-      Queue.failCauseUnsafe(messages, Cause.fail(transportError("message", `WebSocket closed with code ${event.code}`, { url: input.url, kind: "close" })))
+      Queue.failCauseUnsafe(
+        messages,
+        Cause.fail(
+          transportError("message", `WebSocket closed with code ${event.code}`, { url: input.url, kind: "close" }),
+        ),
+      )
     }
     const cleanup = Effect.sync(() => {
       ws.removeEventListener("message", onMessage)
@@ -138,13 +186,20 @@ export const fromWebSocket = (ws: globalThis.WebSocket, input: WebSocketRequest)
         Effect.try({
           try: () => ws.send(message),
           catch: (error) =>
-            transportError("sendText", error instanceof Error ? error.message : "Failed to send WebSocket message", { url: input.url, kind: "write" }),
+            transportError("sendText", error instanceof Error ? error.message : "Failed to send WebSocket message", {
+              url: input.url,
+              kind: "write",
+            }),
         }),
       messages: Stream.fromQueue(messages),
-      close: cleanup.pipe(Effect.andThen(Effect.sync(() => {
-        if (ws.readyState === globalThis.WebSocket.CLOSED || ws.readyState === globalThis.WebSocket.CLOSING) return
-        ws.close(1000)
-      }))),
+      close: cleanup.pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            if (ws.readyState === globalThis.WebSocket.CLOSED || ws.readyState === globalThis.WebSocket.CLOSING) return
+            ws.close(1000)
+          }),
+        ),
+      ),
     }
   })
 
@@ -194,10 +249,12 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
   frames: (prepared, _request, runtime) => {
     const webSocket = runtime.webSocket
     if (!webSocket) {
-      return Stream.fail(transportError("json", "WebSocket JSON transport requires WebSocketExecutor.Service", {
-        url: prepared.url,
-        kind: "websocket",
-      }))
+      return Stream.fail(
+        transportError("json", "WebSocket JSON transport requires WebSocketExecutor.Service", {
+          url: prepared.url,
+          kind: "websocket",
+        }),
+      )
     }
     const decoder = new TextDecoder()
     return Stream.unwrap(
@@ -207,9 +264,7 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
           (connection) => connection.close,
         )
         yield* connection.sendText(prepared.message)
-        return connection.messages.pipe(
-          Stream.map((message) => messageText(message, decoder)),
-        )
+        return connection.messages.pipe(Stream.map((message) => messageText(message, decoder)))
       }),
     )
   },

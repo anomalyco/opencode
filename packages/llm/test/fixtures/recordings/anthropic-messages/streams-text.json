@@ -3,14 +3,11 @@
   "metadata": {
     "name": "anthropic-messages/streams-text",
     "recordedAt": "2026-04-28T21:18:45.535Z",
-    "tags": [
-      "prefix:anthropic-messages",
-      "provider:anthropic",
-      "protocol:anthropic-messages"
-    ]
+    "tags": ["prefix:anthropic-messages", "provider:anthropic", "protocol:anthropic-messages"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.anthropic.com/v1/messages",

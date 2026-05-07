@@ -3,16 +3,11 @@
   "metadata": {
     "name": "anthropic-messages/rejects-malformed-assistant-tool-order-without-patch",
     "recordedAt": "2026-05-05T20:08:42.597Z",
-    "tags": [
-      "prefix:anthropic-messages",
-      "provider:anthropic",
-      "protocol:anthropic-messages",
-      "tool",
-      "sad-path"
-    ]
+    "tags": ["prefix:anthropic-messages", "provider:anthropic", "protocol:anthropic-messages", "tool", "sad-path"]
   },
   "interactions": [
     {
+      "transport": "http",
       "request": {
         "method": "POST",
         "url": "https://api.anthropic.com/v1/messages",

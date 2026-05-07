@@ -35,14 +35,15 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   return next.toString()
 }
 
-const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (body: Body) => string) => Effect.gen(function* () {
-  if (request.http?.body === undefined) return { jsonBody: body, bodyText: encodeBody(body) }
-  if (ProviderShared.isRecord(body)) {
-    const overlaid = mergeJsonRecords(body, request.http.body) ?? {}
-    return { jsonBody: overlaid, bodyText: ProviderShared.encodeJson(overlaid) }
-  }
-  return yield* ProviderShared.invalidRequest("http.body can only overlay JSON object request bodies")
-})
+const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (body: Body) => string) =>
+  Effect.gen(function* () {
+    if (request.http?.body === undefined) return { jsonBody: body, bodyText: encodeBody(body) }
+    if (ProviderShared.isRecord(body)) {
+      const overlaid = mergeJsonRecords(body, request.http.body) ?? {}
+      return { jsonBody: overlaid, bodyText: ProviderShared.encodeJson(overlaid) }
+    }
+    return yield* ProviderShared.invalidRequest("http.body can only overlay JSON object request bodies")
+  })
 
 export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
   Effect.gen(function* () {
@@ -51,17 +52,19 @@ export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
       input.request.http?.query,
     )
     const body = yield* bodyWithOverlay(input.body, input.request, input.encodeBody)
-    const headers = yield* Auth.toEffect(Auth.isAuth(input.request.model.auth) ? input.request.model.auth : input.auth)({
-      request: input.request,
-      method: "POST",
-      url,
-      body: body.bodyText,
-      headers: Headers.fromInput({
-        ...(input.headers?.({ request: input.request }) ?? {}),
-        ...input.request.model.headers,
-        ...input.request.http?.headers,
-      }),
-    })
+    const headers = yield* Auth.toEffect(Auth.isAuth(input.request.model.auth) ? input.request.model.auth : input.auth)(
+      {
+        request: input.request,
+        method: "POST",
+        url,
+        body: body.bodyText,
+        headers: Headers.fromInput({
+          ...(input.headers?.({ request: input.request }) ?? {}),
+          ...input.request.model.headers,
+          ...input.request.http?.headers,
+        }),
+      },
+    )
     return { url, jsonBody: body.jsonBody, bodyText: body.bodyText, headers }
   })
 
@@ -98,20 +101,22 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
     ),
   frames: (prepared, request, runtime) =>
     Stream.unwrap(
-      runtime.http.execute(prepared.request).pipe(
-        Effect.map((response) =>
-          prepared.framing.frame(
-            response.stream.pipe(
-              Stream.mapError((error) =>
-                ProviderShared.eventError(
-                  `${request.model.provider}/${request.model.route}`,
-                  `Failed to read ${request.model.provider}/${request.model.route} stream`,
-                  ProviderShared.errorText(error),
-                )
+      runtime.http
+        .execute(prepared.request)
+        .pipe(
+          Effect.map((response) =>
+            prepared.framing.frame(
+              response.stream.pipe(
+                Stream.mapError((error) =>
+                  ProviderShared.eventError(
+                    `${request.model.provider}/${request.model.route}`,
+                    `Failed to read ${request.model.provider}/${request.model.route} stream`,
+                    ProviderShared.errorText(error),
+                  ),
+                ),
               ),
             ),
-          )
+          ),
         ),
-      ),
     ),
 })

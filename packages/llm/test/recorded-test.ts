@@ -1,14 +1,24 @@
+import { NodeFileSystem } from "@effect/platform-node"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
-import * as fs from "node:fs"
+import { Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
-import { runtimeLayer, type RuntimeEnv } from "./lib/http"
-import { recordedEffectGroup, type RecordedCaseOptions as RunnerCaseOptions, type RecordedGroupOptions } from "./recorded-runner"
+import { LLMClient, RequestExecutor } from "../src/route"
+import type { Service as LLMClientService } from "../src/route/client"
+import type { Service as RequestExecutorService } from "../src/route/executor"
+import type { Service as WebSocketExecutorService } from "../src/route/transport/websocket"
+import {
+  recordedEffectGroup,
+  type RecordedCaseOptions as RunnerCaseOptions,
+  type RecordedGroupOptions,
+} from "./recorded-runner"
+import { webSocketCassetteLayer } from "./recorded-websocket"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
 
-type RecordedEnv = RuntimeEnv
+type RecordedEnv = RequestExecutorService | WebSocketExecutorService | LLMClientService
 
 type RecordedTestsOptions = RecordedGroupOptions & {
   readonly options?: HttpRecorder.RecordReplayOptions
@@ -27,7 +37,7 @@ const mergeOptions = (
   return {
     ...base,
     ...override,
-    metadata: base.metadata || override.metadata ? { ...(base.metadata ?? {}), ...(override.metadata ?? {}) } : undefined,
+    metadata: base.metadata || override.metadata ? { ...base.metadata, ...override.metadata } : undefined,
   }
 }
 
@@ -35,16 +45,30 @@ export const recordedTests = (options: RecordedTestsOptions) =>
   recordedEffectGroup<RecordedEnv, never, RecordedTestsOptions, RecordedCaseOptions>({
     duplicateLabel: "recorded cassette",
     options,
-    cassetteExists: (cassette) => fs.existsSync(HttpRecorder.cassettePath(cassette, FIXTURES_DIR)),
-    layer: ({ cassette, metadata, options, caseOptions }) => {
+    cassetteExists: (cassette) => HttpRecorder.hasCassetteSync(cassette, { directory: FIXTURES_DIR }),
+    layer: ({ cassette, metadata, options, caseOptions, recording }) => {
       const recorderOptions = mergeOptions(options.options, caseOptions.options)
-      return runtimeLayer(HttpRecorder.cassetteLayer(cassette, {
-        directory: FIXTURES_DIR,
-        ...recorderOptions,
-        metadata: {
-          ...recorderOptions?.metadata,
-          ...metadata,
-        },
-      }))
+      const recorderMetadata = {
+        ...recorderOptions?.metadata,
+        ...metadata,
+      }
+      const cassetteService = HttpRecorder.Cassette.layer({ directory: FIXTURES_DIR }).pipe(
+        Layer.provide(NodeFileSystem.layer),
+      )
+      const requestExecutor = RequestExecutor.layer.pipe(
+        Layer.provide(
+          HttpRecorder.recordingLayer(cassette, {
+            ...recorderOptions,
+            metadata: recorderMetadata,
+          }).pipe(Layer.provide(FetchHttpClient.layer)),
+        ),
+      )
+      const deps = Layer.mergeAll(
+        requestExecutor,
+        webSocketCassetteLayer(cassette, { metadata: recorderMetadata, recording }),
+      )
+      return Layer.mergeAll(deps, LLMClient.layerWithWebSocket.pipe(Layer.provide(deps))).pipe(
+        Layer.provide(cassetteService),
+      )
     },
   })

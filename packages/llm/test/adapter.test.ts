@@ -28,7 +28,10 @@ const fakeFraming: FramingDef<FakeEvent> = {
     Stream.fromEffect(
       bytes.pipe(
         Stream.decodeText(),
-        Stream.runFold(() => "", (text, event) => text + event),
+        Stream.runFold(
+          () => "",
+          (text, event) => text + event,
+        ),
         Effect.flatMap(decodeFakeEvents),
         Effect.orDie,
       ),
@@ -46,9 +49,7 @@ const request = LLM.request({
 })
 
 const raiseEvent = (event: FakeEvent): import("../src/schema").LLMEvent =>
-  event.type === "finish"
-    ? { type: "request-finish", reason: event.reason }
-    : { type: "text-delta", text: event.text }
+  event.type === "finish" ? { type: "request-finish", reason: event.reason } : { type: "text-delta", text: event.text }
 
 const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
   id: "fake",
@@ -155,7 +156,7 @@ describe("llm route", () => {
           }),
           endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
           framing: fakeFraming,
-        })
+        }),
       ).toThrow('Duplicate LLM route id "fake"')
     }),
   )
@@ -164,9 +165,7 @@ describe("llm route", () => {
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
       const error = yield* llm
-        .prepare(
-          LLM.updateRequest(request, { model: updateModel(request.model, { route: "missing" }) }),
-        )
+        .prepare(LLM.updateRequest(request, { model: updateModel(request.model, { route: "missing" }) }))
         .pipe(Effect.flip)
 
       expect(error.message).toContain("No LLM route")

@@ -18,8 +18,11 @@ const post = (url: string, body: object) =>
 const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
   Effect.runPromise(effect.pipe(Effect.provide(HttpRecorder.cassetteLayer("record-replay/multi-step"))))
 
-const runWith = <A, E>(name: string, options: HttpRecorder.RecordReplayOptions, effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(HttpRecorder.cassetteLayer(name, options))))
+const runWith = <A, E>(
+  name: string,
+  options: HttpRecorder.RecordReplayOptions,
+  effect: Effect.Effect<A, E, HttpClient.HttpClient>,
+) => Effect.runPromise(effect.pipe(Effect.provide(HttpRecorder.cassetteLayer(name, options))))
 
 const failureText = (exit: Exit.Exit<unknown, unknown>) => {
   if (Exit.isSuccess(exit)) return ""
@@ -85,6 +88,7 @@ describe("http-recorder", () => {
         version: 1,
         interactions: [
           {
+            transport: "http",
             request: {
               method: "POST",
               url: "https://example.test/path?key=sk-123456789012345678901234",
@@ -114,6 +118,24 @@ describe("http-recorder", () => {
         interactions: [],
       }),
     ).toEqual([{ path: "metadata.token", reason: "API key" }])
+  })
+
+  test("formats websocket cassettes with shared metadata", () => {
+    const cassette = HttpRecorder.cassetteFor(
+      "websocket/basic",
+      [
+        {
+          transport: "websocket",
+          open: { url: "wss://example.test/realtime", headers: { "content-type": "application/json" } },
+          client: [{ kind: "text", body: JSON.stringify({ type: "response.create" }) }],
+          server: [{ kind: "text", body: JSON.stringify({ type: "response.completed" }) }],
+        },
+      ],
+      { provider: "openai" },
+    )
+
+    expect(cassette.metadata).toMatchObject({ name: "websocket/basic", provider: "openai" })
+    expect(HttpRecorder.parseCassette(HttpRecorder.formatCassette(cassette))).toEqual(cassette)
   })
 
   test("default matcher dispatches multi-interaction cassettes by request shape", async () => {
@@ -185,7 +207,7 @@ describe("http-recorder", () => {
         expect(message).toContain("url:")
         expect(message).toContain("https://example.test/echo?api_key=%5BREDACTED%5D")
         expect(message).toContain("body:")
-        expect(message).toContain('$.step expected 1, received 3')
+        expect(message).toContain("$.step expected 1, received 3")
         expect(message).toContain('$.token expected undefined, received "[REDACTED]"')
         expect(message).not.toContain("sk-123456789012345678901234")
       }),

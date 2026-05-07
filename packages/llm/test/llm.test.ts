@@ -102,11 +102,13 @@ describe("llm constructors", () => {
     expect(LLM.toolChoice("auto")).toEqual(new ToolChoice({ type: "auto" }))
     expect(LLM.toolChoice("none")).toEqual(new ToolChoice({ type: "none" }))
     expect(LLM.toolChoice("required")).toEqual(new ToolChoice({ type: "required" }))
-    expect(LLM.request({
-      model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat" }),
-      prompt: "Use tools if needed.",
-      toolChoice: "required",
-    }).toolChoice).toEqual(new ToolChoice({ type: "required" }))
+    expect(
+      LLM.request({
+        model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat" }),
+        prompt: "Use tools if needed.",
+        toolChoice: "required",
+      }).toolChoice,
+    ).toEqual(new ToolChoice({ type: "required" }))
   })
 
   test("builds assistant tool calls and tool result messages", () => {
@@ -120,8 +122,13 @@ describe("llm constructors", () => {
   })
 
   test("extracts output text from response events", () => {
-    expect(LLMResponse.text({
-      events: [{ type: "text-delta", text: "hi" }, { type: "request-finish", reason: "stop" }],
-    })).toBe("hi")
+    expect(
+      LLMResponse.text({
+        events: [
+          { type: "text-delta", text: "hi" },
+          { type: "request-finish", reason: "stop" },
+        ],
+      }),
+    ).toBe("hi")
   })
 })

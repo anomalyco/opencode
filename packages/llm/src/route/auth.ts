@@ -124,8 +124,12 @@ const credentialInput = (
     : source
 
 export function bearer(): Auth
-export function bearer(source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential): Auth
-export function bearer(source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) {
+export function bearer(
+  source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
+): Auth
+export function bearer(
+  source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
+) {
   if (source === undefined) return fromModelApiKey((key) => ({ authorization: `Bearer ${key}` }))
   return credentialInput(source).bearer()
 }
@@ -134,12 +138,21 @@ export const apiKey = bearer
 
 export const apiKeyHeader = (name: string) => fromModelApiKey((key) => ({ [name]: key }))
 
-export function header(name: string): (source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) => Auth
-export function header(name: string, source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential): Auth
-export function header(name: string, source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) {
+export function header(
+  name: string,
+): (source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) => Auth
+export function header(
+  name: string,
+  source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
+): Auth
+export function header(
+  name: string,
+  source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
+) {
   if (source === undefined) {
-    return (next: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) =>
-      credentialInput(next).header(name)
+    return (
+      next: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
+    ) => credentialInput(next).header(name)
   }
   return credentialInput(source).header(name)
 }

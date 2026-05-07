@@ -49,5 +49,8 @@ export const matchesSelected = (input: {
   return true
 }
 
-export const cassetteName = (prefix: string, name: string, options: { readonly cassette?: string; readonly id?: string }) =>
-  options.cassette ?? `${prefix}/${options.id ?? kebab(name)}`
+export const cassetteName = (
+  prefix: string,
+  name: string,
+  options: { readonly cassette?: string; readonly id?: string },
+) => options.cassette ?? `${prefix}/${options.id ?? kebab(name)}`
