@@ -194,8 +194,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     if (message.role === "user") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {
-        if (part.type !== "text" && part.type !== "media")
-          return yield* invalid("Gemini user messages only support text and media content for now")
+        if (!ProviderShared.supportsContent(part, ["text", "media"]))
+          return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
         parts.push(lowerUserPart(part))
       }
       contents.push({ role: "user", parts })
@@ -205,6 +205,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     if (message.role === "assistant") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {
+        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
+          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
         if (part.type === "text") {
           parts.push({ text: part.text })
           continue
@@ -217,7 +219,6 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           parts.push(lowerToolCall(part))
           continue
         }
-        return yield* invalid("Gemini assistant messages only support text, reasoning, and tool-call content for now")
       }
       contents.push({ role: "model", parts })
       continue
@@ -225,7 +226,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 
     const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
     for (const part of message.content) {
-      if (part.type !== "tool-result") return yield* invalid("Gemini tool messages only support tool-result content")
+      if (!ProviderShared.supportsContent(part, ["tool-result"])) return yield* ProviderShared.unsupportedContent("Gemini", "tool", ["tool-result"])
       parts.push({
         functionResponse: {
           name: part.name,

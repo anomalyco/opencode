@@ -266,6 +266,8 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
     if (message.role === "user") {
       const content: BedrockUserBlock[] = []
       for (const part of message.content) {
+        if (!ProviderShared.supportsContent(part, ["text", "media"]))
+          return yield* ProviderShared.unsupportedContent("Bedrock Converse", "user", ["text", "media"])
         if (part.type === "text") {
           content.push(...textWithCache(part.text, part.cache))
           continue
@@ -274,7 +276,6 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
           content.push(yield* BedrockMedia.lower(part))
           continue
         }
-        return yield* invalid("Bedrock Converse user messages only support text and media content for now")
       }
       messages.push({ role: "user", content })
       continue
@@ -283,6 +284,8 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
     if (message.role === "assistant") {
       const content: BedrockAssistantBlock[] = []
       for (const part of message.content) {
+        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
+          return yield* ProviderShared.unsupportedContent("Bedrock Converse", "assistant", ["text", "reasoning", "tool-call"])
         if (part.type === "text") {
           content.push(...textWithCache(part.text, part.cache))
           continue
@@ -299,7 +302,6 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
           content.push(lowerToolCall(part))
           continue
         }
-        return yield* invalid("Bedrock Converse assistant messages only support text, reasoning, and tool-call content for now")
       }
       messages.push({ role: "assistant", content })
       continue
@@ -307,8 +309,8 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
 
     const content: BedrockToolResultBlock[] = []
     for (const part of message.content) {
-      if (part.type !== "tool-result")
-        return yield* invalid("Bedrock Converse tool messages only support tool-result content")
+      if (!ProviderShared.supportsContent(part, ["tool-result"]))
+        return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
       content.push(lowerToolResult(part))
     }
     messages.push({ role: "user", content })

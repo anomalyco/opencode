@@ -182,7 +182,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     if (message.role === "user") {
       const content: TextPart[] = []
       for (const part of message.content) {
-        if (part.type !== "text") return yield* invalid(`OpenAI Responses user messages only support text content for now`)
+        if (!ProviderShared.supportsContent(part, ["text"])) return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text"])
         content.push(part)
       }
       input.push({ role: "user", content: content.map((part) => ({ type: "input_text", text: part.text })) })
@@ -192,6 +192,8 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     if (message.role === "assistant") {
       const content: TextPart[] = []
       for (const part of message.content) {
+        if (!ProviderShared.supportsContent(part, ["text", "tool-call"]))
+          return yield* ProviderShared.unsupportedContent("OpenAI Responses", "assistant", ["text", "tool-call"])
         if (part.type === "text") {
           content.push(part)
           continue
@@ -200,7 +202,6 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           input.push(lowerToolCall(part))
           continue
         }
-        return yield* invalid(`OpenAI Responses assistant messages only support text and tool-call content for now`)
       }
       if (content.length > 0)
         input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
@@ -208,8 +209,8 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     }
 
     for (const part of message.content) {
-      if (part.type !== "tool-result")
-        return yield* invalid(`OpenAI Responses tool messages only support tool-result content`)
+      if (!ProviderShared.supportsContent(part, ["tool-result"]))
+        return yield* ProviderShared.unsupportedContent("OpenAI Responses", "tool", ["tool-result"])
       input.push({ type: "function_call_output", call_id: part.id, output: ProviderShared.toolResultText(part) })
     }
   }

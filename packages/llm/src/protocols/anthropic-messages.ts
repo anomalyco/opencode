@@ -254,7 +254,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (re
     if (message.role === "user") {
       const content: AnthropicTextBlock[] = []
       for (const part of message.content) {
-        if (part.type !== "text") return yield* invalid(`Anthropic Messages user messages only support text content for now`)
+        if (!ProviderShared.supportsContent(part, ["text"])) return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text"])
         content.push({ type: "text", text: part.text, cache_control: cacheControl(part.cache) })
       }
       messages.push({ role: "user", content })
@@ -288,7 +288,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (re
 
     const content: AnthropicToolResultBlock[] = []
     for (const part of message.content) {
-      if (part.type !== "tool-result") return yield* invalid(`Anthropic Messages tool messages only support tool-result content`)
+      if (!ProviderShared.supportsContent(part, ["tool-result"])) return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
       content.push({
         type: "tool_result",
         tool_use_id: part.id,

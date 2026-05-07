@@ -189,7 +189,7 @@ const openAICompatibleReasoningContent = (native: unknown) =>
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (message: OpenAIChatRequestMessage) {
   const content: TextPart[] = []
   for (const part of message.content) {
-    if (part.type !== "text") return yield* invalid(`OpenAI Chat user messages only support text content for now`)
+    if (!ProviderShared.supportsContent(part, ["text"])) return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text"])
     content.push(part)
   }
   return { role: "user" as const, content: ProviderShared.joinText(content) }
@@ -201,6 +201,8 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   const content: TextPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
+    if (!ProviderShared.supportsContent(part, ["text", "tool-call"]))
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "tool-call"])
     if (part.type === "text") {
       content.push(part)
       continue
@@ -209,7 +211,6 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
       toolCalls.push(lowerToolCall(part))
       continue
     }
-    return yield* invalid(`OpenAI Chat assistant messages only support text and tool-call content for now`)
   }
   return {
     role: "assistant" as const,
@@ -222,7 +223,7 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
 const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (message: OpenAIChatRequestMessage) {
   const messages: OpenAIChatMessage[] = []
   for (const part of message.content) {
-    if (part.type !== "tool-result") return yield* invalid(`OpenAI Chat tool messages only support tool-result content`)
+    if (!ProviderShared.supportsContent(part, ["tool-result"])) return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
     messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
   }
   return messages

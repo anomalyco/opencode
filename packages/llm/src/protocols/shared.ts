@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer"
 import { Cause, Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import { InvalidProviderOutputReason, InvalidRequestReason, LLMError, type LLMRequest, type MediaPart, type ToolResultPart } from "../schema"
+import { InvalidProviderOutputReason, InvalidRequestReason, LLMError, type ContentPart, type LLMRequest, type MediaPart, type ToolResultPart } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -194,6 +194,27 @@ export const matchToolChoice = <Auto, None, Required, Tool>(
     if (!toolChoice.name) return yield* invalidRequest(`${adapter} tool choice requires a tool name`)
     return cases.tool(toolChoice.name)
   })
+
+type ContentType = ContentPart["type"]
+
+const formatContentTypes = (types: ReadonlyArray<ContentType>) => {
+  if (types.length <= 1) return types[0] ?? ""
+  if (types.length === 2) return `${types[0]} and ${types[1]}`
+  return `${types.slice(0, -1).join(", ")}, and ${types.at(-1)}`
+}
+
+export const supportsContent = <const Type extends ContentType>(
+  part: ContentPart,
+  types: ReadonlyArray<Type>,
+): part is Extract<ContentPart, { readonly type: Type }> =>
+  (types as ReadonlyArray<ContentType>).includes(part.type)
+
+export const unsupportedContent = (
+  adapter: string,
+  role: LLMRequest["messages"][number]["role"],
+  types: ReadonlyArray<ContentType>,
+) =>
+  invalidRequest(`${adapter} ${role} messages only support ${formatContentTypes(types)} content for now`)
 
 /**
  * Build a `validate` step from a Schema decoder. Replaces the per-adapter
