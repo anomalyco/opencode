@@ -9,6 +9,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message, MessageDivider, Part, PART_MAPPING, type UserActions } from "./message-part"
+import type { MarkdownStage } from "./markdown"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -184,6 +185,8 @@ export function SessionTurn(
     markdownViewport?: HTMLDivElement
     markdownHighlight?: "full" | "defer"
     markdownMath?: "full" | "defer"
+    markdownStage?: MarkdownStage
+    onMarkdownStage?: (key: string, stage: MarkdownStage | undefined) => void
     active?: boolean
     status?: SessionStatus
     onUserInteracted?: () => void
@@ -487,12 +490,14 @@ export function SessionTurn(
                     actions={props.actions}
                     interrupted={interrupted()}
                     showReasoningSummaries={showReasoningSummaries()}
-                  showCustomHookParts={props.showCustomHookParts}
-                  markdownEager={props.markdownEager}
-                  markdownViewport={props.markdownViewport}
-                  markdownHighlight={props.markdownHighlight}
-                  markdownMath={props.markdownMath}
-                />
+                    showCustomHookParts={props.showCustomHookParts}
+                    markdownEager={props.markdownEager}
+                    markdownViewport={props.markdownViewport}
+                    markdownHighlight={props.markdownHighlight}
+                    markdownMath={props.markdownMath}
+                    markdownStage={props.markdownStage}
+                    onMarkdownStage={props.onMarkdownStage}
+                  />
                 </div>
                 <Show when={divider()}>
                   <div data-slot="session-turn-compaction">
@@ -510,6 +515,8 @@ export function SessionTurn(
                         markdownViewport={props.markdownViewport}
                         markdownHighlight={props.markdownHighlight}
                         markdownMath={props.markdownMath}
+                        markdownStage={props.markdownStage}
+                        onMarkdownStage={props.onMarkdownStage}
                       />
                     </div>
                   )}
@@ -529,6 +536,8 @@ export function SessionTurn(
                       markdownViewport={props.markdownViewport}
                       markdownHighlight={props.markdownHighlight}
                       markdownMath={props.markdownMath}
+                      markdownStage={props.markdownStage}
+                      onMarkdownStage={props.onMarkdownStage}
                     />
                   </div>
                 </Show>
