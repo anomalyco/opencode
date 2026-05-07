@@ -7,19 +7,29 @@ interface Props {
   lang?: string
   flush?: boolean
 }
+const htmlCache = new Map<string, string>();
+
 export function ContentCode(props: Props) {
   const [html] = createResource(
     () => [props.code, props.lang],
     async ([code, lang]) => {
-      // TODO: For testing delays
-      // await new Promise((resolve) => setTimeout(resolve, 3000))
-      return (await codeToHtml(code || "", {
+      const cacheKey = `${lang}:${code}`;
+      if (htmlCache.has(cacheKey)) {
+        return htmlCache.get(cacheKey)!;
+      }
+      const result = (await codeToHtml(code || "", {
         lang: lang && lang in bundledLanguages ? lang : "text",
         themes: {
           light: "github-light",
           dark: "github-dark",
         },
-      })) as string
+      }));
+      if (htmlCache.size > 1000) {
+        const firstKey = htmlCache.keys().next().value;
+        htmlCache.delete(firstKey);
+      }
+      htmlCache.set(cacheKey, result);
+      return result;
     },
   )
   return (

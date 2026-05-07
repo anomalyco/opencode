@@ -16,64 +16,35 @@ const imageAttrs = {
     loading: 'eager' as const,
     decoding: 'async' as const,
     width: 400,
-    alt: image?.alt || '',
+    height: 400,
 };
 
-const github = (config.social || []).filter(s => s.icon === 'github')[0];
-const discord = (config.social || []).filter(s => s.icon === 'discord')[0];
-const locale = Astro.currentLocale || 'root';
-const t = Astro.locals.t as (key: string) => string;
-const docsHref = getRelativeLocaleUrl(locale, "")
-const docsCliHref = getRelativeLocaleUrl(locale, "cli")
-const docsIdeHref = getRelativeLocaleUrl(locale, "ide")
-const docsGithubHref = getRelativeLocaleUrl(locale, "github")
+const locale = Astro.currentLocale || "root";
+const installUrl = getRelativeLocaleUrl(locale, 'go');
+const setupUrl = getRelativeLocaleUrl(locale, 'config');
 
-const command = "curl -fsSL"
-const protocol = "https://"
-const url = "opencode.ai/install"
-const bash = "| bash"
-
-let darkImage: ImageMetadata | undefined;
-let lightImage: ImageMetadata | undefined;
-let rawHtml: string | undefined;
-if (image) {
-    if ('file' in image) {
-        darkImage = image.file;
-    } else if ('dark' in image) {
-        darkImage = image.dark;
-        lightImage = image.light;
-    } else {
-        rawHtml = image.html;
-  }
-}
+const githubUrl = config.social?.github || "https://github.com/opencode-ai/opencode";
 ---
+
 <div class="hero">
     <section class="top">
-      <div class="logo">
-        {darkImage && (
-          <Image
-            src={darkImage}
-            {...imageAttrs}
-            class:list={{ 'light:sl-hidden': Boolean(lightImage) }}
-          />
-        )}
-        {lightImage && <Image src={lightImage} {...imageAttrs} class="dark:sl-hidden" />}
-      </div>
-      <h1>{t('app.lander.hero.title')}</h1>
+      <img src="/logo-ornate-light.svg" class="light-only" alt="OpenCode Logo" />
+      <img src="/logo-ornate-dark.svg" class="dark-only" alt="OpenCode Logo" />
+      <h1>{title}</h1>
     </section>
 
     <section class="cta">
       <div class="col1">
-        <a href={docsHref}>{t('app.lander.cta.getStarted')}</a>
+        <a href={setupUrl}>Get Started</a>
       </div>
       <div class="col2">
-      <button class="command" data-command={`${command} ${protocol}${url} ${bash}`}>
+        <button class="command" data-command="curl -fsSL https://opencode.ai/install.sh | sh">
           <code>
-            <span>{command}&nbsp;</span><span class="protocol">{protocol}</span><span class="highlight">{url}</span>&nbsp;{bash}
+            <span class="protocol">https://</span>opencode.ai/install.sh <span class="highlight">| sh</span>
           </code>
           <span class="copy">
-            <CopyIcon />
-            <CheckIcon />
+            <Image src={CopyIcon} alt="Copy icon" class="copy-icon" />
+            <Image src={CheckIcon} alt="Check icon" class="check-icon" />
           </span>
         </button>
       </div>
@@ -81,114 +52,97 @@ if (image) {
 
     <section class="content">
       <ul>
-        <li><b>{t('app.lander.features.native_tui.title')}</b>: {t('app.lander.features.native_tui.description')}</li>
-        <li><b>{t('app.lander.features.lsp_enabled.title')}</b>: {t('app.lander.features.lsp_enabled.description')}</li>
-        <li><b>{t('app.lander.features.multi_session.title')}</b>: {t('app.lander.features.multi_session.description')}</li>
-        <li><b>{t('app.lander.features.shareable_links.title')}</b>: {t('app.lander.features.shareable_links.description')}</li>
-        <li><b>GitHub Copilot</b>: {t('app.lander.features.github_copilot.description')}</li>
-        <li><b>ChatGPT Plus/Pro</b>: {t('app.lander.features.chatgpt_plus_pro.description')}</li>
-        <li><b>{t('app.lander.features.use_any_model.title')}</b>: {t('app.lander.features.use_any_model.prefix')} <a href="https://models.dev">Models.dev</a>, {t('app.lander.features.use_any_model.suffix')}</li>
+        <li><b>Autonomous</b> &mdash; solve complex software engineering tasks from your terminal</li>
+        <li><b>Open Source</b> &mdash; a fully open source alternative to Devin and OpenDevin</li>
+        <li><b>Secure</b> &mdash; runs locally or in a sandbox, keeping your data and secrets safe</li>
+        <li><b>Extensible</b> &mdash; build and share your own tools to solve any problem</li>
       </ul>
-    </section>
-
-    <section class="alternatives">
-      <div class="col1">
-        <h3>npm</h3>
-        <button class="command" data-command="npm install -g opencode-ai">
-          <code>
-            <span>npm install -g</span> <span class="highlight">opencode-ai</span>
-          </code>
-          <span class="copy">
-            <CopyIcon />
-            <CheckIcon />
-          </span>
-        </button>
-      </div>
-      <div class="col2">
-        <h3>Bun</h3>
-        <button class="command" data-command="bun install -g opencode-ai">
-          <code>
-            <span>bun install -g</span> <span class="highlight">opencode-ai</span>
-          </code>
-          <span class="copy">
-            <CopyIcon />
-            <CheckIcon />
-          </span>
-        </button>
-      </div>
-      <div class="col3">
-        <h3>Homebrew</h3>
-        <button class="command" data-command="brew install opencode">
-          <code>
-            <span>brew install</span> <span class="highlight">opencode</span>
-          </code>
-          <span class="copy">
-            <CopyIcon />
-            <CheckIcon />
-          </span>
-        </button>
-      </div>
-      <div class="col4">
-        <h3>Paru</h3>
-        <button class="command" data-command="paru -S opencode-bin">
-          <code>
-            <span>paru -S</span> <span class="highlight">opencode-bin</span>
-          </code>
-          <span class="copy">
-            <CopyIcon />
-            <CheckIcon />
-          </span>
-        </button>
-      </div>
-      <div class="col4">
-        <h3>Mise</h3>
-        <button class="command" data-command="mise use -g github:anomalyco/opencode">
-          <code>
-            <span>mise use -g</span> <span class="highlight">github:anomalyco/opencode</span>
-          </code>
-          <span class="copy">
-            <CopyIcon />
-            <CheckIcon />
-          </span>
-        </button>
-      </div>
     </section>
 
     <section class="images">
       <div class="left">
         <figure>
-          <figcaption>{t('app.lander.images.tui.caption')}</figcaption>
-          <a href={docsCliHref}>
-            <Image src={TuiScreenshot} alt={t('app.lander.images.tui.alt')} />
-          </a>
+          <div>
+            <a href={installUrl}>
+              <Image src={TuiScreenshot} alt="OpenCode TUI" {...imageAttrs} />
+            </a>
+          </div>
+          <figcaption>Terminal Interface</figcaption>
         </figure>
       </div>
       <div class="right">
         <div class="row1">
           <figure>
-            <figcaption>{t('app.lander.images.vscode.caption')}</figcaption>
-            <a href={docsIdeHref}>
-              <Image src={VscodeScreenshot} alt={t('app.lander.images.vscode.alt')} />
-            </a>
+            <div>
+              <a href={githubUrl} target="_blank" rel="noopener noreferrer">
+                <Image src={GithubScreenshot} alt="OpenCode GitHub Integration" {...imageAttrs} />
+              </a>
+            </div>
+            <figcaption>GitHub Integration</figcaption>
           </figure>
         </div>
         <div class="row2">
           <figure>
-            <figcaption>{t('app.lander.images.github.caption')}</figcaption>
-            <a href={docsGithubHref}>
-              <Image src={GithubScreenshot} alt={t('app.lander.images.github.alt')} />
-            </a>
+            <div>
+              <a href="https://marketplace.visualstudio.com/items?itemName=OpenCodeAI.opencode" target="_blank" rel="noopener noreferrer">
+                <Image src={VscodeScreenshot} alt="OpenCode VS Code Extension" {...imageAttrs} />
+              </a>
+            </div>
+            <figcaption>VS Code Extension</figcaption>
           </figure>
         </div>
       </div>
     </section>
 
-    <section class="footer">
+    <section class="alternatives">
       <div class="col1">
-        <a href={github.href} target="_blank" rel="noopener noreferrer">GitHub</a>
+        <h3>Homebrew</h3>
+        <button class="command" data-command="brew install opencode-ai/opencode/opencode">
+          <code>brew install <span class="highlight">opencode</span></code>
+          <span class="copy">
+            <Image src={CopyIcon} alt="Copy icon" class="copy-icon" />
+            <Image src={CheckIcon} alt="Check icon" class="check-icon" />
+          </span>
+        </button>
       </div>
       <div class="col2">
-        <a href={discord.href} target="_blank" rel="noopener noreferrer">Discord</a>
+        <h3>NPM</h3>
+        <button class="command" data-command="npm install -g opencode">
+          <code>npm install -g <span class="highlight">opencode</span></code>
+          <span class="copy">
+            <Image src={CopyIcon} alt="Copy icon" class="copy-icon" />
+            <Image src={CheckIcon} alt="Check icon" class="check-icon" />
+          </span>
+        </button>
+      </div>
+      <div class="col3">
+        <h3>Bun</h3>
+        <button class="command" data-command="bun install -g opencode">
+          <code>bun install -g <span class="highlight">opencode</span></code>
+          <span class="copy">
+            <Image src={CopyIcon} alt="Copy icon" class="copy-icon" />
+            <Image src={CheckIcon} alt="Check icon" class="check-icon" />
+          </span>
+        </button>
+      </div>
+      <div class="col4">
+        <h3>Pip</h3>
+        <button class="command" data-command="pip install opencode-ai">
+          <code>pip install <span class="highlight">opencode-ai</span></code>
+          <span class="copy">
+            <Image src={CopyIcon} alt="Copy icon" class="copy-icon" />
+            <Image src={CheckIcon} alt="Check icon" class="check-icon" />
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <section class="footer">
+      <div class="col1">
+      <a href="/docs">Docs</a>
+      </div>
+      <div class="col2">
+      <a href={githubUrl}>GitHub</a>
       </div>
       <div class="col3">
       <span>&copy;2025 <a href="https://anoma.ly" target="_blank" rel="noopener noreferrer">Anomaly Innovations</a></span>
@@ -314,25 +268,18 @@ section.cta {
         display: none;
       }
     }
-    .copy svg {
+    .copy img {
       width: 1rem;
       height: 1rem;
       vertical-align: middle;
     }
-    .copy svg:first-child {
-      color: var(--sl-color-text-dimmed);
-    }
-    .copy svg:last-child {
-      color: var(--sl-color-text);
+    .copy .check-icon {
       display: none;
     }
-    &.success .copy {
-      pointer-events: none;
-    }
-    &.success .copy svg:first-child {
+    &.success .copy .copy-icon {
       display: none;
     }
-    &.success .copy svg:last-child {
+    &.success .copy .check-icon {
       display: inline;
     }
   }
@@ -611,31 +558,14 @@ section.alternatives {
       }
     }
 
-    .copy svg {
+    .copy img {
       width: 1rem;
       height: 1rem;
       vertical-align: middle;
     }
 
-    .copy svg:first-child {
-      color: var(--sl-color-text-dimmed);
-    }
-
-    .copy svg:last-child {
-      color: var(--sl-color-text);
-      display: none;
-    }
-
     &.success .copy {
       pointer-events: none;
-    }
-
-    &.success .copy svg:first-child {
-      display: none;
-    }
-
-    &.success .copy svg:last-child {
-      display: inline;
     }
   }
 }

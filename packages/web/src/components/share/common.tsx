@@ -77,6 +77,18 @@ export function AnchorIcon(props: AnchorProps) {
   )
 }
 
+
+function throttle(func: (...args: any[]) => void, limit: number) {
+  let inThrottle: boolean;
+  return function(this: any, ...args: any[]) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  }
+}
+
 export function createOverflow() {
   const [overflow, setOverflow] = createSignal(false)
   return {
@@ -84,9 +96,9 @@ export function createOverflow() {
       return overflow()
     },
     ref(el: HTMLElement) {
-      const sync = () => {
+      const sync = throttle(() => {
         setOverflow(el.scrollHeight > el.clientHeight + 1)
-      }
+      }, 100)
 
       const obs = makeResizeObserver(sync)
       obs.observe(el)

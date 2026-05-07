@@ -236,35 +236,35 @@ h6 a {
 }
 
 h1 {
-  font-size: 26px !important;
+  font-size: 26px;
   text-transform: none !important;
-  font-weight: 500 !important;
+  font-weight: 500;
   color: var(--color-text-strong) !important;
 }
 
 h2 {
-  font-size: 22px !important;
+  font-size: 22px;
   text-transform: none !important;
-  font-weight: 500 !important;
+  font-weight: 500;
   color: var(--color-text-strong) !important;
 }
 
 h3 {
-  font-size: 18px !important;
+  font-size: 18px;
   text-transform: none !important;
-  font-weight: 500 !important;
+  font-weight: 500;
   color: var(--color-text-strong) !important;
 }
 
 h4 {
-  font-size: 16px !important;
+  font-size: 16px;
   text-transform: none !important;
-  font-weight: 500 !important;
+  font-weight: 500;
   color: var(--color-text-strong) !important;
 }
 
 strong {
-  font-weight: 500 !important;
+  font-weight: 500;
 }
 
 ul,
@@ -347,7 +347,7 @@ h2#starlight__on-this-page {
 
 #starlight__on-this-page ul {
   color: var(--color-text-strong) !important;
-  font-size: 16px !important;
+  font-size: 16px;
 }
 
 .middle-group .links {
@@ -368,7 +368,7 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
   margin-top: 24px !important;
   color: var(--color-text-strong) !important;
   text-transform: none !important;
-  font-weight: 500 !important;
+  font-weight: 500;
 }
 
 .content-panel {
