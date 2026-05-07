@@ -17,15 +17,13 @@ OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models
 
 ### 認証情報
 
-`/connect` コマンドを使用してプロバイダーの API キーを追加すると、それらは保存されます
-`~/.local/share/opencode/auth.json`で。
+`/connect` コマンドを使用してプロバイダーの API キーを追加すると、それらは `~/.local/share/opencode/auth.json` に保存されます。
 
 ---
 
 ### 設定
 
-OpenCode の `provider` セクションを通じてプロバイダーをカスタマイズできます。
-config.
+OpenCode 設定 の `provider` セクションを通じてプロバイダーをカスタマイズできます。
 
 ---
 
@@ -121,7 +119,7 @@ OpenCode Go は、OpenCode チームによって提供される、人気のあ�
 リストにある場合は、お気軽に PR を開いてください。
 
 :::note
-ここにプロバイダーが表示されない場合は、 PRを送信してください。
+ここでプロバイダーが見つからない場合は、 PRを送信してください。
 :::
 
 ---
@@ -293,20 +291,18 @@ OpenCode で Amazon Bedrock を使用するには:
 
 ### Anthropic
 
-1. サインアップしたら、`/connect` コマンドを実行し、[Anthropic] を選択します。
+1. サインアップしたら、`/connect` コマンドを実行し、Anthropic を選択します。
 
    ```txt
    /connect
    ```
 
-2. ここで **Claude Pro/Max** オプションを選択すると、ブラウザが開きます
+2. ここで **Claude Pro/Max** オプションを選択すると、ブラウザが開き、
    そして認証を求められます。
 
    ```txt
    ┌ Select auth method
    │
-   │ Claude Pro/Max
-   │ Create an API Key
    │ Manually enter API Key
    └
    ```
@@ -318,14 +314,16 @@ OpenCode で Amazon Bedrock を使用するには:
    ```
 
 :::info
-OpenCode での Claude Pro/Max サブスクリプションの使用は、[Anthropic](https://anthropic.com) によって正式に許可されていませんが、一般的に機能します。
+OpenCode で Claude Pro/Max モデルを使用できるようにするプラグインがありますが、Anthropic はこれらを明確に禁止しています。
+
+以前のバージョンの OpenCode にはこれらのプラグインが同梱されていましたが、1.3.0 以降は同梱されなくなりました。
+
+他の企業は開発ツールにおける自由な選択を認めており、OpenCode では以下のサブスクリプションをセットアップ不要で使用できます:
+
+- ChatGPT Plus
+- Github Copilot
+- Gitlab Duo
 :::
-
-##### APIキーの使用
-
-Pro/Max サブスクリプションをお持ちでない場合は、[**API キーの作成**] を選択することもできます。また、ブラウザが開き、Anthropic にログインするよう求められ、ターミナルに貼り付けるコードが表示されます。
-
-または、すでに API キーをお持ちの場合は、[**API キーを手動で入力**] を選択してターミナルに貼り付けることができます。
 
 ---
 
