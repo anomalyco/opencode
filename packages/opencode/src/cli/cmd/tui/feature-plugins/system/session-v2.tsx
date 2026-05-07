@@ -4,8 +4,9 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
-import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
+import { useBindings } from "../../keymap"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import path from "path"
@@ -53,12 +54,16 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
     void sync.session.message.sync(props.sessionID)
   })
 
-  useKeyboard((event) => {
-    if (event.name !== "escape") return
-    event.preventDefault()
-    event.stopPropagation()
-    props.api.route.navigate("session", { sessionID: props.sessionID })
-  })
+  useBindings(() => ({
+    bindings: [
+      {
+        key: "escape",
+        cmd() {
+          props.api.route.navigate("session", { sessionID: props.sessionID })
+        },
+      },
+    ],
+  }))
 
   return (
     <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background}>
@@ -1113,21 +1118,24 @@ const tui: TuiPlugin = async (api) => {
     },
   ])
 
-  api.command.register(() => [
-    {
-      title: "View v2 session messages",
-      value: route,
-      category: "Debug",
-      suggested: api.route.current.name === "session",
-      enabled: api.route.current.name === "session",
-      onSelect() {
-        const sessionID = currentSessionID(api)
-        if (!sessionID) return
-        api.route.navigate(route, { sessionID })
-        api.ui.dialog.clear()
+  api.keymap.registerLayer({
+    commands: [
+      {
+        name: route,
+        title: "View v2 session messages",
+        category: "Debug",
+        namespace: "palette",
+        suggested: () => api.route.current.name === "session",
+        enabled: () => api.route.current.name === "session",
+        run() {
+          const sessionID = currentSessionID(api)
+          if (!sessionID) return
+          api.route.navigate(route, { sessionID })
+          api.ui.dialog.clear()
+        },
       },
-    },
-  ])
+    ],
+  })
 }
 
 const plugin: TuiPluginModule & { id: string } = {

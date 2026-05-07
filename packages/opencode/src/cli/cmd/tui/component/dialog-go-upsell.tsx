@@ -1,5 +1,4 @@
 import { BoxRenderable, RGBA, TextAttributes } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
 import open from "open"
 import { createSignal, onCleanup, onMount } from "solid-js"
 import { selectedForeground, useTheme } from "@tui/context/theme"
@@ -7,6 +6,7 @@ import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { Link } from "@tui/ui/link"
 import { GoLogo } from "./logo"
 import { BgPulse, type BgPulseMask } from "./bg-pulse"
+import { useBindings } from "../keymap"
 
 const GO_URL = "https://opencode.ai/go"
 const PAD_X = 3
@@ -71,18 +71,29 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
     for (const b of [content, logoBox, headingBox, descBox, buttonsBox]) b?.off("resize", sync)
   })
 
-  useKeyboard((evt) => {
-    if (evt.name === "left" || evt.name === "right" || evt.name === "tab") {
-      setSelected((s) => (s === "subscribe" ? "dismiss" : "subscribe"))
-      return
-    }
-    if (evt.name === "return") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      if (selected() === "subscribe") subscribe(props, dialog)
-      else dismiss(props, dialog)
-    }
-  })
+  useBindings(() => ({
+    bindings: [
+      {
+        key: "left",
+        cmd: () => setSelected((value) => (value === "subscribe" ? "dismiss" : "subscribe")),
+      },
+      {
+        key: "right",
+        cmd: () => setSelected((value) => (value === "subscribe" ? "dismiss" : "subscribe")),
+      },
+      {
+        key: "tab",
+        cmd: () => setSelected((value) => (value === "subscribe" ? "dismiss" : "subscribe")),
+      },
+      {
+        key: "return",
+        cmd: () => {
+          if (selected() === "subscribe") subscribe(props, dialog)
+          else dismiss(props, dialog)
+        },
+      },
+    ],
+  }))
 
   return (
     <box ref={(item: BoxRenderable) => (content = item)}>
