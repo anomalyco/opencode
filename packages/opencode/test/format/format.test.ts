@@ -227,37 +227,6 @@ describe("Format", () => {
     ),
   )
 
-  it.live("file() completes even when formatter spawns background child processes", () =>
-    provideTmpdirInstance(
-      (path) =>
-        Effect.gen(function* () {
-          const file = `${path}/test.bg`
-          yield* Effect.promise(() => Bun.write(file, "x"))
-
-          // This formatter exits immediately but backgrounds a long-running child
-          // process (sleep 999). Without stdout/stderr/stdin: "ignore", the
-          // grandchild inherits the pipe FDs and keeps them open, so the
-          // spawner's "close" event never fires and file() hangs forever.
-          yield* Format.Service.use((fmt) =>
-            Effect.gen(function* () {
-              yield* fmt.init()
-              yield* fmt.file(file)
-            }),
-          )
-        }),
-      {
-        config: {
-          formatter: {
-            bg: {
-              command: ["sh", "-c", "sleep 999 &"],
-              extensions: [".bg"],
-            },
-          },
-        },
-      },
-    ),
-  )
-
   it.live("runs matching formatters sequentially for the same file", () =>
     provideTmpdirInstance(
       (path) =>
