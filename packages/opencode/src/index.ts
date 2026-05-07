@@ -22,8 +22,13 @@ import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
-import { AttachCommand } from "./cli/cmd/tui/attach"
-import { TuiThreadCommand } from "./cli/cmd/tui/thread"
+// TUI subcommands (Attach, TuiThread) are dropped from this build of opencode.
+// The bench harness (`packages/opencode/src/bench/cli.ts`) only invokes the
+// `run` command via subprocess, never the TUI; loading them eagerly here drags
+// in `cli/cmd/tui/app.tsx` at startup, which JSX-compiles against
+// `@opentui/solid` and trips Bun's runtime JSX resolver into looking for
+// `react/jsx-dev-runtime` (a bug we hit when running the un-bundled .ts).
+// Removed entirely rather than lazy-loaded — bench has no use for them.
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
@@ -156,8 +161,6 @@ const cli = yargs(args)
   .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)
-  .command(TuiThreadCommand)
-  .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
