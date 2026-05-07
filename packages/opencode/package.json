@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.14.31",
+  "version": "1.14.40",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -37,6 +37,11 @@
       "bun": "./src/server/adapter.bun.ts",
       "node": "./src/server/adapter.node.ts",
       "default": "./src/server/adapter.bun.ts"
+    },
+    "#httpapi-server": {
+      "bun": "./src/server/httpapi-server.node.ts",
+      "node": "./src/server/httpapi-server.node.ts",
+      "default": "./src/server/httpapi-server.node.ts"
     }
   },
   "devDependencies": {
@@ -75,7 +80,7 @@
   "dependencies": {
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
-    "@agentclientprotocol/sdk": "0.16.1",
+    "@agentclientprotocol/sdk": "0.21.0",
     "@ai-sdk/alibaba": "1.0.17",
     "@ai-sdk/amazon-bedrock": "4.0.96",
     "@ai-sdk/anthropic": "3.0.71",
