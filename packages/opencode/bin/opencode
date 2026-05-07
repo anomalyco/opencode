@@ -17,6 +17,55 @@ function run(target) {
   process.exit(code)
 }
 
+// Linux-only workaround for noexec /tmp.
+// On hardened Linux (CIS / STIG / Lynis baselines mount /tmp with noexec),
+// dlopen() of Bun's extracted libopentui.so fails with "failed to map
+// segment from shared object" and the TUI hangs silently. Detect a noexec
+// mount covering the temp dir and redirect Bun's extraction to a writable,
+// exec-allowed dir under the user's home.
+// Refs: #5175, #3765, #4605, #6080
+function ensureExecutableTmpdir() {
+  if (process.platform !== "linux") return
+  if (process.env.BUN_TMPDIR) return
+
+  const candidate = process.env.TMPDIR || "/tmp"
+  let mounts
+  try {
+    mounts = fs.readFileSync("/proc/self/mounts", "utf8")
+  } catch {
+    return
+  }
+
+  let best = null
+  for (const line of mounts.split("\n")) {
+    const parts = line.split(/\s+/)
+    if (parts.length < 4) continue
+    const mountPoint = parts[1]
+    const options = parts[3]
+    if (
+      candidate === mountPoint ||
+      candidate.startsWith(mountPoint === "/" ? "/" : mountPoint + "/")
+    ) {
+      if (!best || mountPoint.length > best.mountPoint.length) {
+        best = { mountPoint, options }
+      }
+    }
+  }
+
+  if (!best) return
+  if (!best.options.split(",").includes("noexec")) return
+
+  const fallback = path.join(os.homedir(), ".cache", "opencode", "tmp")
+  try {
+    fs.mkdirSync(fallback, { recursive: true })
+    process.env.BUN_TMPDIR = fallback
+  } catch {
+    // best effort; if we can't create the fallback, the original error surfaces
+  }
+}
+
+ensureExecutableTmpdir()
+
 const envPath = process.env.OPENCODE_BIN_PATH
 if (envPath) {
   run(envPath)
