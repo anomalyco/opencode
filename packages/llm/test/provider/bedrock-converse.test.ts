@@ -445,7 +445,7 @@ describe("Bedrock Converse route", () => {
         )
         .pipe(Effect.flip)
 
-      expect(error.message).toContain("Bedrock Converse does not support document media type application/x-tar")
+      expect(error.message).toContain("Bedrock Converse does not support media type application/x-tar")
     }),
   )
 })

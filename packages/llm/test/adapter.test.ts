@@ -124,17 +124,6 @@ describe("llm route", () => {
     }),
   )
 
-  it.effect("uses registered routes by model route id", () =>
-    Effect.gen(function* () {
-      const llm = yield* LLMClient.Service
-      const prepared = yield* llm.prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { route: "gemini-fake" }) }),
-      )
-
-      expect(prepared.route).toBe("gemini-fake")
-    }),
-  )
-
   it.effect("maps model input before building refs", () =>
     Effect.gen(function* () {
       const mapped = Route.model<RouteModelInput & { readonly region?: string }>(
@@ -152,25 +141,22 @@ describe("llm route", () => {
     }),
   )
 
-  it.effect("keeps the first registered route as the default", () =>
+  it.effect("rejects duplicate route ids", () =>
     Effect.gen(function* () {
-      Route.make({
-        id: "fake",
-        protocol: Protocol.make({
-          ...fakeProtocol,
-          body: {
-            ...fakeProtocol.body,
-            from: () => Effect.succeed({ body: "late-default" }),
-          },
-        }),
-        endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
-        framing: fakeFraming,
-      })
-
-      const llm = yield* LLMClient.Service
-      const response = yield* llm.generate(request)
-
-      expect(response.text).toBe('echo:{"body":"hello"}')
+      expect(() =>
+        Route.make({
+          id: "fake",
+          protocol: Protocol.make({
+            ...fakeProtocol,
+            body: {
+              ...fakeProtocol.body,
+              from: () => Effect.succeed({ body: "late-default" }),
+            },
+          }),
+          endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
+          framing: fakeFraming,
+        })
+      ).toThrow('Duplicate LLM route id "fake"')
     }),
   )
 

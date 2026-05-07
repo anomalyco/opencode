@@ -196,11 +196,10 @@ const cacheControl = (cache: CacheHint | undefined) => cache?.type === "ephemera
 
 const anthropicMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ anthropic: metadata })
 
-const anthropicString = (metadata: ProviderMetadata | undefined, key: string) => {
+const signatureFromMetadata = (metadata: ProviderMetadata | undefined): string | undefined => {
   const anthropic = metadata?.anthropic
   if (!ProviderShared.isRecord(anthropic)) return undefined
-  const value = anthropic[key]
-  return typeof value === "string" ? value : undefined
+  return typeof anthropic.signature === "string" ? anthropic.signature : undefined
 }
 
 const lowerTool = (tool: ToolDefinition): AnthropicTool => ({
@@ -269,7 +268,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (re
           continue
         }
         if (part.type === "reasoning") {
-          content.push({ type: "thinking", thinking: part.text, signature: part.encrypted ?? anthropicString(part.providerMetadata, "signature") })
+          content.push({ type: "thinking", thinking: part.text, signature: part.encrypted ?? signatureFromMetadata(part.providerMetadata) })
           continue
         }
         if (part.type === "tool-call") {
@@ -412,91 +411,111 @@ const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"
   }
 }
 
-const step = (state: ParserState, event: AnthropicEvent) =>
-  Effect.gen(function* () {
-    if (event.type === "message_start") {
-      const usage = mapUsage(event.message?.usage)
-      return [usage ? { ...state, usage: mergeUsage(state.usage, usage) } : state, []] as const
-    }
+type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 
-    if (
-      event.type === "content_block_start" &&
-      event.index !== undefined &&
-      (event.content_block?.type === "tool_use" || event.content_block?.type === "server_tool_use")
-    ) {
-      return [{
-        ...state,
-        tools: ToolStream.start(state.tools, event.index, {
-          id: event.content_block.id ?? String(event.index),
-          name: event.content_block.name ?? "",
-          providerExecuted: event.content_block.type === "server_tool_use",
-        }),
-      }, []] as const
-    }
+const NO_EVENTS: StepResult["1"] = []
 
-    if (event.type === "content_block_start" && event.content_block?.type === "text" && event.content_block.text) {
-      return [state, [{ type: "text-delta", text: event.content_block.text }]] as const
-    }
+const onMessageStart = (state: ParserState, event: AnthropicEvent): StepResult => {
+  const usage = mapUsage(event.message?.usage)
+  return [usage ? { ...state, usage: mergeUsage(state.usage, usage) } : state, NO_EVENTS]
+}
 
-    if (event.type === "content_block_start" && event.content_block?.type === "thinking" && event.content_block.thinking) {
-      return [state, [{
-        type: "reasoning-delta",
-        text: event.content_block.thinking,
-        ...(event.content_block.signature ? { providerMetadata: anthropicMetadata({ signature: event.content_block.signature }) } : {}),
-      }]] as const
-    }
+const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepResult => {
+  const block = event.content_block
+  if (!block) return [state, NO_EVENTS]
 
-    if (event.type === "content_block_start" && event.content_block) {
-      const result = serverToolResultEvent(event.content_block)
-      if (result) return [state, [result]] as const
-    }
+  if ((block.type === "tool_use" || block.type === "server_tool_use") && event.index !== undefined) {
+    return [{
+      ...state,
+      tools: ToolStream.start(state.tools, event.index, {
+        id: block.id ?? String(event.index),
+        name: block.name ?? "",
+        providerExecuted: block.type === "server_tool_use",
+      }),
+    }, NO_EVENTS]
+  }
 
-    if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
-      return [state, [{ type: "text-delta", text: event.delta.text }]] as const
-    }
+  if (block.type === "text" && block.text) {
+    return [state, [{ type: "text-delta", text: block.text }]]
+  }
 
-    if (event.type === "content_block_delta" && event.delta?.type === "thinking_delta" && event.delta.thinking) {
-      return [state, [{ type: "reasoning-delta", text: event.delta.thinking }]] as const
-    }
+  if (block.type === "thinking" && block.thinking) {
+    return [state, [{
+      type: "reasoning-delta",
+      text: block.thinking,
+      ...(block.signature ? { providerMetadata: anthropicMetadata({ signature: block.signature }) } : {}),
+    }]]
+  }
 
-    if (event.type === "content_block_delta" && event.delta?.type === "signature_delta" && event.delta.signature) {
-      return [state, [{ type: "reasoning-delta", text: "", providerMetadata: anthropicMetadata({ signature: event.delta.signature }) }]] as const
-    }
+  const result = serverToolResultEvent(block)
+  return [state, result ? [result] : NO_EVENTS]
+}
 
-    if (event.type === "content_block_delta" && event.delta?.type === "input_json_delta" && event.index !== undefined) {
-      if (!event.delta.partial_json) return [state, []] as const
-      const result = ToolStream.appendExisting(
-        ADAPTER,
-        state.tools,
-        event.index,
-        event.delta.partial_json,
-        "Anthropic Messages tool argument delta is missing its tool call",
-      )
-      if (ToolStream.isError(result)) return yield* result
-      return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
-    }
+const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(function* (
+  state: ParserState,
+  event: AnthropicEvent,
+) {
+  const delta = event.delta
 
-    if (event.type === "content_block_stop" && event.index !== undefined) {
-      const result = yield* ToolStream.finish(ADAPTER, state.tools, event.index)
-      return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
-    }
+  if (delta?.type === "text_delta" && delta.text) {
+    return [state, [{ type: "text-delta", text: delta.text }]] satisfies StepResult
+  }
 
-    if (event.type === "message_delta") {
-      const usage = mergeUsage(state.usage, mapUsage(event.usage))
-      return [{ ...state, usage }, [{
-        type: "request-finish" as const,
-        reason: mapFinishReason(event.delta?.stop_reason),
-        usage,
-        ...(event.delta?.stop_sequence ? { providerMetadata: anthropicMetadata({ stopSequence: event.delta.stop_sequence }) } : {}),
-      }]] as const
-    }
+  if (delta?.type === "thinking_delta" && delta.thinking) {
+    return [state, [{ type: "reasoning-delta", text: delta.thinking }]] satisfies StepResult
+  }
 
-    if (event.type === "error") {
-      return [state, [{ type: "provider-error" as const, message: event.error?.message ?? "Anthropic Messages stream error" }]] as const
-    }
+  if (delta?.type === "signature_delta" && delta.signature) {
+    return [state, [{ type: "reasoning-delta", text: "", providerMetadata: anthropicMetadata({ signature: delta.signature }) }]] satisfies StepResult
+  }
 
-    return [state, []] as const
-  })
+  if (delta?.type === "input_json_delta" && event.index !== undefined) {
+    if (!delta.partial_json) return [state, NO_EVENTS] satisfies StepResult
+    const result = ToolStream.appendExisting(
+      ADAPTER,
+      state.tools,
+      event.index,
+      delta.partial_json,
+      "Anthropic Messages tool argument delta is missing its tool call",
+    )
+    if (ToolStream.isError(result)) return yield* result
+    return [{ ...state, tools: result.tools }, result.event ? [result.event] : NO_EVENTS] satisfies StepResult
+  }
+
+  return [state, NO_EVENTS] satisfies StepResult
+})
+
+const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(function* (
+  state: ParserState,
+  event: AnthropicEvent,
+) {
+  if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
+  const result = yield* ToolStream.finish(ADAPTER, state.tools, event.index)
+  return [{ ...state, tools: result.tools }, result.event ? [result.event] : NO_EVENTS] satisfies StepResult
+})
+
+const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult => {
+  const usage = mergeUsage(state.usage, mapUsage(event.usage))
+  return [{ ...state, usage }, [{
+    type: "request-finish",
+    reason: mapFinishReason(event.delta?.stop_reason),
+    usage,
+    ...(event.delta?.stop_sequence ? { providerMetadata: anthropicMetadata({ stopSequence: event.delta.stop_sequence }) } : {}),
+  }]]
+}
+
+const onError = (state: ParserState, event: AnthropicEvent): StepResult =>
+  [state, [{ type: "provider-error", message: event.error?.message ?? "Anthropic Messages stream error" }]]
+
+const step = (state: ParserState, event: AnthropicEvent) => {
+  if (event.type === "message_start") return Effect.succeed(onMessageStart(state, event))
+  if (event.type === "content_block_start") return Effect.succeed(onContentBlockStart(state, event))
+  if (event.type === "content_block_delta") return onContentBlockDelta(state, event)
+  if (event.type === "content_block_stop") return onContentBlockStop(state, event)
+  if (event.type === "message_delta") return Effect.succeed(onMessageDelta(state, event))
+  if (event.type === "error") return Effect.succeed(onError(state, event))
+  return Effect.succeed<StepResult>([state, NO_EVENTS])
+}
 
 // =============================================================================
 // Protocol And Anthropic Route

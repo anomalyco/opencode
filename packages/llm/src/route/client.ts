@@ -6,6 +6,7 @@ import type { Framing } from "./framing"
 import { HttpTransport } from "./transport"
 import type { Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
+import type { Service as WebSocketExecutorService } from "./transport/websocket"
 import type { Protocol } from "./protocol"
 import * as ProviderShared from "../protocols/shared"
 import * as ToolRuntime from "../tool-runtime"
@@ -35,10 +36,6 @@ import {
   mergeProviderOptions,
 } from "../schema"
 
-export interface RouteContext {
-  readonly request: LLMRequest
-}
-
 export interface RouteBody<Body> {
   /** Schema for the validated provider-native body sent as the JSON request. */
   readonly schema: Schema.Codec<Body, unknown>
@@ -57,11 +54,11 @@ export interface Route<Body, Prepared = unknown> {
   readonly model: <Input extends RouteModelInput = RouteModelInput>(input: Input) => ModelRef
   readonly prepareTransport: (
     body: Body,
-    context: RouteContext,
+    request: LLMRequest,
   ) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
     prepared: Prepared,
-    context: RouteContext,
+    request: LLMRequest,
     runtime: TransportRuntime,
   ) => Stream.Stream<LLMEvent, LLMError>
 }
@@ -74,11 +71,14 @@ export type AnyRoute = Route<any, any>
 
 const routeRegistry = new Map<string, AnyRoute>()
 
-// The first route registered for an id is the package default. Route lookup is
-// intentionally global: model refs name a route id, and importing the
-// provider/protocol/custom-route module registers the runnable implementation.
+// Route lookup is intentionally global: model refs name a route id, and
+// importing the provider/protocol/custom-route module registers the runnable
+// implementation. Duplicate ids are bugs because model refs cannot disambiguate
+// them.
 const register = <R extends AnyRoute>(route: R): R => {
-  if (!routeRegistry.has(route.id)) routeRegistry.set(route.id, route)
+  const existing = routeRegistry.get(route.id)
+  if (existing && existing !== route) throw new Error(`Duplicate LLM route id "${route.id}"`)
+  routeRegistry.set(route.id, route)
   return route
 }
 
@@ -113,7 +113,7 @@ export type RouteRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provi
 export type RouteDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "route">>
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaults {
-  readonly id?: string
+  readonly id: string
   readonly provider?: string | ProviderID
   readonly transport?: Transport<Body, Prepared, unknown>
 }
@@ -153,6 +153,16 @@ const modelWithDefaults = <Input>(
       http: mergeHttpOptions(http, httpOptions(mapped.http)),
     })
   }
+
+const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaults): RouteDefaults => ({
+  ...base,
+  ...patch,
+  capabilities: patch.capabilities ?? base?.capabilities,
+  limits: patch.limits ?? base?.limits,
+  generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
+  providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
+  http: mergeHttpOptions(httpOptions(base?.http), httpOptions(patch.http)),
+})
 
 export const modelCapabilities = ModelCapabilities.make
 
@@ -307,22 +317,20 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { id, provider, transport, ...defaults } = patch
+        if (!id || id === routeInput.id) throw new Error(`Route.with(${routeInput.id}) requires a new route id`)
         return build({
           ...routeInput,
-          id: id ?? routeInput.id,
+          id,
           provider: provider ?? routeInput.provider,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
-          defaults: {
-            ...routeInput.defaults,
-            ...defaults,
-          },
+          defaults: mergeRouteDefaults(routeInput.defaults, defaults),
         })
       },
       model: (input: RouteModelInput): ModelRef => modelWithDefaults<RouteModelInput>(route, {}, {})(input),
       prepareTransport: routeInput.transport.prepare,
-      streamPrepared: (prepared: Prepared, ctx: RouteContext, runtime: TransportRuntime) => {
-        const route = `${ctx.request.model.provider}/${ctx.request.model.route}`
-        const events = routeInput.transport.frames(prepared, ctx, runtime).pipe(
+      streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
+        const route = `${request.model.provider}/${request.model.route}`
+        const events = routeInput.transport.frames(prepared, request, runtime).pipe(
           Stream.mapEffect(decodeEvent(route)),
           protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
         )
@@ -395,9 +403,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   const body = yield* route.body.from(resolved).pipe(
     Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))),
   )
-  const prepared = yield* route.prepareTransport(body, {
-    request: resolved,
-  })
+  const prepared = yield* route.prepareTransport(body, resolved)
 
   return {
     request: resolved,
@@ -424,7 +430,7 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request)
-      return compiled.route.streamPrepared(compiled.prepared, { request: compiled.request }, runtime)
+      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime)
     }),
   )
 
@@ -484,7 +490,7 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
   }),
 )
 
-export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutor.Service> = Layer.effect(
+export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutorService> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const stream = streamWith(streamRequestWith({

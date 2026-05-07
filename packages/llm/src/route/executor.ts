@@ -36,15 +36,29 @@ const MAX_RETRIES = 2
 const BASE_DELAY_MS = 500
 const MAX_DELAY_MS = 10_000
 const REDACTED = "<redacted>"
-const sensitiveHeaderPattern = /authorization|api[-_]?key|token|secret|credential|signature|x-amz-signature/i
 
-const sensitiveHeaderName = (name: string) => sensitiveHeaderPattern.test(name)
+// One source of truth for what counts as a sensitive name across headers,
+// URL query keys, and field names embedded inside request/response bodies.
+//
+// `SENSITIVE_NAME` is used as both a substring matcher (for free-form header
+// names like `Authorization` / `X-API-Key`) and as the body-field alternation
+// list. `SHORT_QUERY_NAME` covers anchored short keys like `?key=…` / `?sig=…`
+// that are too generic to redact substring-style without false positives.
+const SENSITIVE_NAME_SOURCE =
+  "authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|credential|signature|x-amz-signature"
+const SENSITIVE_NAME = new RegExp(SENSITIVE_NAME_SOURCE, "i")
+const SHORT_QUERY_NAME = /^(key|sig)$/i
+const SENSITIVE_BODY_FIELD = new RegExp(`(?:${SENSITIVE_NAME_SOURCE}|key)`, "i")
+const REDACT_JSON_FIELD = new RegExp(`("(?:${SENSITIVE_BODY_FIELD.source})"\\s*:\\s*)"[^"]*"`, "gi")
+const REDACT_QUERY_FIELD = new RegExp(`((?:${SENSITIVE_BODY_FIELD.source})=)[^&\\s"]+`, "gi")
 
-const sensitiveQueryName = (name: string) => sensitiveHeaderName(name) || /^(key|sig)$/i.test(name)
+const isSensitiveHeaderName = (name: string) => SENSITIVE_NAME.test(name)
+
+const isSensitiveQueryName = (name: string) => isSensitiveHeaderName(name) || SHORT_QUERY_NAME.test(name)
 
 const redactHeaders = (headers: Headers.Headers, redactedNames: ReadonlyArray<string | RegExp>) =>
   Object.fromEntries(
-    Object.entries(Headers.redact(headers, [...redactedNames, sensitiveHeaderPattern])).map(([name, value]) => [
+    Object.entries(Headers.redact(headers, [...redactedNames, SENSITIVE_NAME])).map(([name, value]) => [
       name,
       String(value),
     ]),
@@ -54,7 +68,7 @@ const redactUrl = (value: string) => {
   if (!URL.canParse(value)) return REDACTED
   const url = new URL(value)
   url.searchParams.forEach((_, key) => {
-    if (sensitiveQueryName(key)) url.searchParams.set(key, REDACTED)
+    if (isSensitiveQueryName(key)) url.searchParams.set(key, REDACTED)
   })
   return url.toString()
 }
@@ -148,7 +162,7 @@ const secretValues = (request: HttpClientRequest.HttpClientRequest) => {
   }
 
   Object.entries(request.headers).forEach(([name, value]) => {
-    if (!sensitiveHeaderName(name)) return
+    if (!isSensitiveHeaderName(name)) return
     add(value)
     const bearer = /^Bearer\s+(.+)$/i.exec(value)?.[1]
     if (bearer) add(bearer)
@@ -156,23 +170,20 @@ const secretValues = (request: HttpClientRequest.HttpClientRequest) => {
 
   if (!URL.canParse(request.url)) return values
   new URL(request.url).searchParams.forEach((value, key) => {
-    if (sensitiveQueryName(key)) add(value)
+    if (isSensitiveQueryName(key)) add(value)
   })
   return values
 }
 
+// Two passes: structural (redact `"name": "value"` and `name=value` patterns
+// for any field name that looks sensitive) plus literal (replace any actual
+// secret values we sent in the request, in case the response echoes one back).
 const redactBody = (body: string, request: HttpClientRequest.HttpClientRequest) =>
   Array.from(secretValues(request)).reduce(
     (text, secret) => text.split(secret).join(REDACTED),
     body
-      .replace(
-        /("(?:api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|authorization|credential|signature|key)"\s*:\s*)"[^"]*"/gi,
-        `$1"${REDACTED}"`,
-      )
-      .replace(
-        /((?:api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|signature|key)=)[^&\s"]+/gi,
-        `$1${REDACTED}`,
-      ),
+      .replace(REDACT_JSON_FIELD, `$1"${REDACTED}"`)
+      .replace(REDACT_QUERY_FIELD, `$1${REDACTED}`),
   )
 
 const responseBody = (body: string | void, request: HttpClientRequest.HttpClientRequest) => {

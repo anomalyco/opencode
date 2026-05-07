@@ -1,15 +1,12 @@
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import { Route } from "../route/client"
-import { Auth, type Auth as AuthDef } from "../route/auth"
-import { Endpoint, type Endpoint as EndpointConfig } from "../route/endpoint"
+import { Auth } from "../route/auth"
+import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
-import { HttpTransport } from "../route/transport"
-import type { Transport } from "../route/transport"
+import { HttpTransport, WebSocketTransport } from "../route/transport"
 import { capabilities } from "../llm"
 import { Protocol } from "../route/protocol"
 import {
-  LLMError,
-  TransportReason,
   Usage,
   type FinishReason,
   type LLMEvent,
@@ -448,6 +445,13 @@ const step = (state: ParserState, event: OpenAIResponsesEvent) =>
       ] as const
     }
 
+    if (event.type === "response.failed") {
+      return [
+        state,
+        [{ type: "provider-error" as const, message: event.message ?? event.code ?? "OpenAI Responses response failed" }],
+      ] as const
+    }
+
     return [state, []] as const
   })
 
@@ -487,12 +491,18 @@ export const endpoint = (
   })
 
 const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesBody))
-
-export const httpTransport = HttpTransport.httpJson({
+const transportBase = {
   endpoint: endpoint(),
   auth: Auth.bearer(),
-  framing: Framing.sse,
   encodeBody,
+}
+const routeDefaults = {
+  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+}
+
+export const httpTransport = HttpTransport.httpJson({
+  ...transportBase,
+  framing: Framing.sse,
 })
 
 export const route = Route.make({
@@ -500,110 +510,31 @@ export const route = Route.make({
   provider: "openai",
   protocol,
   transport: httpTransport,
-  defaults: {
-    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-  },
+  defaults: routeDefaults,
 })
 
-type WebSocketPrepared = {
-  readonly url: string
-  readonly headers: HttpTransport.JsonRequestParts["headers"]
-  readonly message: string
-}
+const decodeWebSocketMessage = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesWebSocketMessage))
 
-const webSocketUrl = (value: string) =>
+const webSocketMessage = (body: OpenAIResponsesBody | Record<string, unknown>) =>
   Effect.gen(function* () {
-    const url = new URL(value)
-    if (url.protocol === "https:") {
-      url.protocol = "wss:"
-      return url.toString()
-    }
-    if (url.protocol === "http:") {
-      url.protocol = "ws:"
-      return url.toString()
-    }
-    return yield* Effect.fail(webSocketTransportError(`Unsupported WebSocket URL protocol ${url.protocol}`, value))
+    if (!ProviderShared.isRecord(body))
+      return yield* ProviderShared.invalidRequest("OpenAI Responses WebSocket body must be a JSON object")
+    const { stream: _stream, ...message } = body
+    return yield* decodeWebSocketMessage({ ...message, type: "response.create" })
   })
 
-const webSocketTransportError = (message: string, url?: string) =>
-  new LLMError({
-    module: "OpenAIResponses",
-    method: "websocket",
-    reason: new TransportReason({ message, url, kind: "websocket" }),
-  })
-
-const webSocketMessage = (body: string) =>
-  ProviderShared.parseJson(ADAPTER, body, "Invalid OpenAI Responses WebSocket request body").pipe(
-    Effect.flatMap((parsed) =>
-      Effect.gen(function* () {
-        if (!ProviderShared.isRecord(parsed))
-          return yield* ProviderShared.invalidRequest("OpenAI Responses WebSocket body must be a JSON object")
-        return Object.fromEntries(
-          Object.entries({ ...parsed, type: "response.create" }).filter(([key]) => key !== "stream"),
-        )
-      }),
-    ),
-  )
-
-interface WebSocketTransportInput {
-  readonly auth?: AuthDef
-  readonly endpoint?: EndpointConfig<OpenAIResponsesBody>
-}
-
-interface WebSocketTransport extends Transport<OpenAIResponsesBody, WebSocketPrepared, string> {
-  readonly with: (patch: WebSocketTransportInput) => WebSocketTransport
-}
-
-const makeWebSocketTransport = (input: WebSocketTransportInput = {}): WebSocketTransport => ({
-  id: "websocket-json",
-  with: (patch) => makeWebSocketTransport({ ...input, ...patch }),
-  prepare: (body, context) =>
-    Effect.gen(function* () {
-      const parts = yield* HttpTransport.jsonRequestParts({
-        body,
-        context,
-        endpoint: input.endpoint ?? endpoint(),
-        auth: input.auth ?? Auth.bearer(),
-        encodeBody,
-      })
-      const message = yield* webSocketMessage(parts.body)
-      return {
-        url: yield* webSocketUrl(parts.url),
-        headers: parts.headers,
-        message: encodeWebSocketMessage(message as OpenAIResponsesWebSocketMessage),
-      }
-    }),
-  frames: (prepared, _context, runtime) =>
-    Stream.unwrap(
-      Effect.gen(function* () {
-        if (!runtime.webSocket)
-          return yield* webSocketTransportError(
-            "OpenAI Responses WebSocket route requires WebSocketExecutor.Service",
-            prepared.url,
-          )
-        const connection = yield* runtime.webSocket.open({ url: prepared.url, headers: prepared.headers })
-        yield* connection
-          .sendText(prepared.message)
-          .pipe(Effect.catch((error: LLMError) => connection.close.pipe(Effect.andThen(Effect.fail(error)))))
-        const decoder = new TextDecoder()
-        return connection.messages.pipe(
-          Stream.map((message) => (typeof message === "string" ? message : decoder.decode(message))),
-          Stream.ensuring(connection.close),
-        )
-      }),
-    ),
+export const webSocketTransport = WebSocketTransport.json({
+  ...transportBase,
+  toMessage: webSocketMessage,
+  encodeMessage: encodeWebSocketMessage,
 })
-
-export const webSocketTransport = makeWebSocketTransport()
 
 export const webSocketRoute = Route.make({
   id: `${ADAPTER}-websocket`,
   provider: "openai",
   protocol,
   transport: webSocketTransport,
-  defaults: {
-    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-  },
+  defaults: routeDefaults,
 })
 
 // =============================================================================
