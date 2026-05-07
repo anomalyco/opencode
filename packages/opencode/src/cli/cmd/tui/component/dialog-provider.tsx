@@ -26,6 +26,7 @@ const PROVIDER_PRIORITY: Record<string, number> = {
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
+const CUSTOM_PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 
 type ProviderOptionBase = {
   title: string
@@ -74,7 +75,7 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
 
 export function normalizeCustomProviderID(value: string) {
   const providerID = value.trim().replace(/^@ai-sdk\//, "")
-  if (!providerID.match(/^[0-9a-z-]+$/)) return
+  if (!CUSTOM_PROVIDER_ID.test(providerID)) return
   return providerID
 }
 
@@ -102,7 +103,7 @@ export function createDialogProviderOptions() {
 
     toast.show({
       variant: "error",
-      message: "Provider ids must use lowercase letters, numbers, and hyphens only",
+      message: "Provider ids must start with a lowercase letter or number and only use lowercase letters, numbers, hyphens, and underscores",
     })
     return promptCustomProviderID()
   }
