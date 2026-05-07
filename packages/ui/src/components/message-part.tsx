@@ -325,8 +325,7 @@ function webSearchProviderLabel(provider: unknown) {
 
 function fallbackWebSearchProvider(sessionID: unknown) {
   if (typeof sessionID !== "string") return undefined
-  const hash = [...sessionID].reduce((acc, char) => Math.imul(acc ^ char.charCodeAt(0), 16777619), 2166136261)
-  return (hash >>> 0) % 2 === 0 ? "exa" : "parallel"
+  return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
 }
 
 function webSearchToolLabel(provider: unknown, sessionID?: string) {

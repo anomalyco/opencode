@@ -4,6 +4,7 @@ import * as Tool from "./tool"
 import * as McpWebSearch from "./mcp-websearch"
 import DESCRIPTION from "./websearch.txt"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { checksum } from "@opencode-ai/core/util/encode"
 
 export const Parameters = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
@@ -34,8 +35,7 @@ export function selectWebSearchProvider(
   if (flags.parallel) return "parallel"
   if (flags.exa) return "exa"
 
-  const hash = [...sessionID].reduce((acc, char) => Math.imul(acc ^ char.charCodeAt(0), 16777619), 2166136261)
-  return (hash >>> 0) % 2 === 0 ? "exa" : "parallel"
+  return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
 }
 
 export function webSearchProviderLabel(provider: unknown) {
