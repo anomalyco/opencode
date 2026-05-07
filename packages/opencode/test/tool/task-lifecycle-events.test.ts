@@ -133,6 +133,7 @@ describe("tool.task lifecycle events", () => {
           },
         )
 
+        yield* Effect.sleep("10 millis")
         offA()
         offB()
 
