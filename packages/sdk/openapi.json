@@ -1897,6 +1897,54 @@
         ]
       }
     },
+    "/vcs/status": {
+      "get": {
+        "tags": ["instance"],
+        "operationId": "vcs.status",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "VCS status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VcsFileStatus"
+                  },
+                  "description": "VCS status"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve changed files in the current working tree without patches.",
+        "summary": "Get VCS status",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/vcs/diff": {
       "get": {
         "tags": ["instance"],
@@ -1950,6 +1998,128 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.diff({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/vcs/diff/raw": {
+      "get": {
+        "tags": ["instance"],
+        "operationId": "vcs.diff.raw",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Raw VCS diff",
+            "content": {
+              "text/x-diff; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve a raw patch for current uncommitted changes.",
+        "summary": "Get raw VCS diff",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.diff.raw({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/vcs/apply": {
+      "post": {
+        "tags": ["instance"],
+        "operationId": "vcs.apply",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "VCS patch applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "applied": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["applied"],
+                  "additionalProperties": false,
+                  "description": "VCS patch applied"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VcsApplyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VcsApplyError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Apply a raw patch to the current working tree.",
+        "summary": "Apply VCS patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "patch": {
+                    "type": "string"
+                  }
+                },
+                "required": ["patch"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.apply({\n  ...\n})"
           }
         ]
       }
@@ -3241,7 +3411,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -3394,7 +3564,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -3410,6 +3580,91 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.pty.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/pty/{ptyID}/connect-token": {
+      "post": {
+        "tags": ["pty"],
+        "operationId": "pty.connectToken",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty.*"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WebSocket connect token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "type": "string"
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": ["ticket", "expires_in"],
+                  "additionalProperties": false,
+                  "description": "WebSocket connect token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Forbidden"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a short-lived ticket for opening a PTY WebSocket connection.",
+        "summary": "Create PTY WebSocket token",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.pty.connectToken({\n  ...\n})"
           }
         ]
       }
@@ -4369,7 +4624,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -4441,7 +4696,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -4512,7 +4767,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -4867,7 +5122,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -5115,7 +5370,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -5254,6 +5509,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
@@ -5507,7 +5772,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -5578,7 +5843,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -5652,7 +5917,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6700,6 +6965,84 @@
         ]
       }
     },
+    "/sync/steal": {
+      "post": {
+        "tags": ["sync"],
+        "operationId": "sync.steal",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session stolen into workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionID": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["sessionID"],
+                  "additionalProperties": false,
+                  "description": "Session stolen into workspace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update a session to belong to the current workspace through the sync event system.",
+        "summary": "Steal session into workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["sessionID"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sync.steal({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/sync/history": {
       "post": {
         "tags": ["sync"],
@@ -7734,7 +8077,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -8196,10 +8539,10 @@
         ]
       }
     },
-    "/experimental/workspace/{id}/session-restore": {
+    "/experimental/workspace/warp": {
       "post": {
         "tags": ["workspace"],
-        "operationId": "experimental.workspace.sessionRestore",
+        "operationId": "experimental.workspace.warp",
         "parameters": [
           {
             "name": "directory",
@@ -8216,61 +8559,56 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^wrk.*"
-            },
-            "required": true
           }
         ],
         "responses": {
-          "200": {
-            "description": "Session replay started",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "total": {
-                      "type": "integer",
-                      "minimum": 0
-                    }
-                  },
-                  "required": ["total"],
-                  "additionalProperties": false,
-                  "description": "Session replay started"
-                }
-              }
-            }
+          "204": {
+            "description": "Session warped"
           },
           "400": {
-            "description": "Bad request",
+            "description": "WorkspaceWarpError | VcsApplyError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkspaceWarpError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/VcsApplyError"
+                    }
+                  ]
                 }
               }
             }
           }
         },
-        "description": "Replay a session's sync events into the target workspace in batches.",
-        "summary": "Restore session into workspace",
+        "description": "Move a session's sync history into the target workspace, or detach it to the local project.",
+        "summary": "Warp session into workspace",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "sessionID": {
                     "type": "string"
+                  },
+                  "copyChanges": {
+                    "type": "boolean"
                   }
                 },
-                "required": ["sessionID"],
+                "required": ["id", "sessionID"],
                 "additionalProperties": false
               }
             }
@@ -8279,7 +8617,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.sessionRestore({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.warp({\n  ...\n})"
           }
         ]
       }
@@ -8323,6 +8661,16 @@
                 "schema": {
                   "type": "boolean",
                   "description": "Connected session"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Forbidden"
                 }
               }
             }
@@ -8442,9 +8790,6 @@
           },
           {
             "$ref": "#/components/schemas/EventWorkspaceFailed"
-          },
-          {
-            "$ref": "#/components/schemas/EventWorkspaceRestore"
           },
           {
             "$ref": "#/components/schemas/EventWorkspaceStatus"
@@ -10643,9 +10988,6 @@
                 "$ref": "#/components/schemas/EventWorkspaceFailed"
               },
               {
-                "$ref": "#/components/schemas/EventWorkspaceRestore"
-              },
-              {
                 "$ref": "#/components/schemas/EventWorkspaceStatus"
               },
               {
@@ -12503,6 +12845,28 @@
         },
         "additionalProperties": false
       },
+      "VcsFileStatus": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "additions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deletions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "deleted", "modified"]
+          }
+        },
+        "required": ["file", "additions", "deletions", "status"],
+        "additionalProperties": false
+      },
       "VcsFileDiff": {
         "type": "object",
         "properties": {
@@ -12526,6 +12890,31 @@
           }
         },
         "required": ["file", "patch", "additions", "deletions"],
+        "additionalProperties": false
+      },
+      "VcsApplyError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["VcsApplyError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["non-git", "not-clean"]
+              }
+            },
+            "required": ["message", "reason"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "Command": {
@@ -12750,6 +13139,36 @@
           }
         },
         "required": ["error"],
+        "additionalProperties": false
+      },
+      "NotFoundError": {
+        "type": "object",
+        "required": ["name", "data"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["NotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "effect_HttpApiError_Forbidden": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["Forbidden"]
+          }
+        },
+        "required": ["_tag"],
         "additionalProperties": false
       },
       "ProviderAuthMethod": {
@@ -13237,6 +13656,27 @@
           }
         },
         "required": ["id", "type", "name", "branch", "directory", "extra", "projectID"],
+        "additionalProperties": false
+      },
+      "WorkspaceWarpError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["WorkspaceWarpError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "SyncEventMessageUpdated": {
@@ -13842,17 +14282,24 @@
               "sessionID": {
                 "type": "string"
               },
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "providerID", "variant"],
+                "additionalProperties": false
               }
             },
-            "required": ["timestamp", "sessionID", "id", "providerID"],
+            "required": ["timestamp", "sessionID", "model"],
             "additionalProperties": false
           }
         },
@@ -14075,7 +14522,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID"],
+                "required": ["id", "providerID", "variant"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -14201,17 +14648,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               }
             },
             "required": ["timestamp", "sessionID", "error"],
@@ -14823,17 +15260,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               },
               "provider": {
                 "type": "object",
@@ -15687,41 +16114,6 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventWorkspaceRestore": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["workspace.restore"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "workspaceID": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string"
-              },
-              "total": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "step": {
-                "type": "integer",
-                "minimum": 0
-              }
-            },
-            "required": ["workspaceID", "sessionID", "total", "step"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventWorkspaceStatus": {
         "type": "object",
         "properties": {
@@ -16146,17 +16538,24 @@
               "sessionID": {
                 "type": "string"
               },
-              "id": {
-                "type": "string"
-              },
-              "providerID": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string"
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "providerID", "variant"],
+                "additionalProperties": false
               }
             },
-            "required": ["timestamp", "sessionID", "id", "providerID"],
+            "required": ["timestamp", "sessionID", "model"],
             "additionalProperties": false
           }
         },
@@ -16375,7 +16774,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID"],
+                "required": ["id", "providerID", "variant"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -16459,6 +16858,20 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "SessionErrorUnknown": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["unknown"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "message"],
+        "additionalProperties": false
+      },
       "EventSessionNextStepFailed": {
         "type": "object",
         "properties": {
@@ -16479,17 +16892,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               }
             },
             "required": ["timestamp", "sessionID", "error"],
@@ -16992,17 +17395,7 @@
                 "type": "string"
               },
               "error": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "message"],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/SessionErrorUnknown"
               },
               "provider": {
                 "type": "object",
@@ -17255,7 +17648,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           },
           "time": {
@@ -17351,7 +17744,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           }
         },
@@ -17610,17 +18003,7 @@
             "type": "object"
           },
           "error": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["type", "message"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/SessionErrorUnknown"
           }
         },
         "required": ["status", "input", "content", "structured", "error"],
@@ -17733,7 +18116,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID"],
+            "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           },
           "content": {
@@ -17800,17 +18183,7 @@
             "additionalProperties": false
           },
           "error": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["type", "message"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/SessionErrorUnknown"
           }
         },
         "required": ["id", "time", "type", "agent", "model", "content"],
@@ -17928,25 +18301,6 @@
           "success": {
             "type": "boolean",
             "enum": [false]
-          }
-        }
-      },
-      "NotFoundError": {
-        "type": "object",
-        "required": ["name", "data"],
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["NotFoundError"]
-          },
-          "data": {
-            "type": "object",
-            "required": ["message"],
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            }
           }
         }
       }

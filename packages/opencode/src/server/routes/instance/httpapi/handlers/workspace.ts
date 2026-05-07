@@ -1,10 +1,12 @@
 import { listAdapters } from "@/control-plane/adapters"
 import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
+import { Vcs } from "@/project/vcs"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { CreatePayload, SessionRestorePayload } from "../groups/workspace"
+import { ApiVcsApplyError } from "../groups/instance"
+import { ApiWorkspaceWarpError, CreatePayload, WarpPayload } from "../groups/workspace"
 
 export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspace", (handlers) =>
   Effect.gen(function* () {
@@ -39,16 +41,32 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
       return yield* workspace.remove(ctx.params.id)
     })
 
-    const sessionRestore = Effect.fn("WorkspaceHttpApi.sessionRestore")(function* (ctx: {
-      params: { id: Workspace.Info["id"] }
-      payload: typeof SessionRestorePayload.Type
-    }) {
-      return yield* workspace
-        .sessionRestore({
-          workspaceID: ctx.params.id,
+    const warp = Effect.fn("WorkspaceHttpApi.warp")(function* (ctx: { payload: typeof WarpPayload.Type }) {
+      yield* workspace
+        .sessionWarp({
+          workspaceID: ctx.payload.id,
           sessionID: ctx.payload.sessionID,
+          copyChanges: ctx.payload.copyChanges,
         })
-        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+        .pipe(
+          Effect.mapError((error) => {
+            if (error instanceof Vcs.PatchApplyError) {
+              return new ApiVcsApplyError({
+                name: "VcsApplyError",
+                data: {
+                  message: error.message,
+                  reason: error.reason,
+                },
+              })
+            }
+            return new ApiWorkspaceWarpError({
+              name: "WorkspaceWarpError",
+              data: {
+                message: error.message,
+              },
+            })
+          }),
+        )
     })
 
     return handlers
@@ -57,6 +75,6 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
       .handle("create", create)
       .handle("status", status)
       .handle("remove", remove)
-      .handle("sessionRestore", sessionRestore)
+      .handle("warp", warp)
   }),
 )

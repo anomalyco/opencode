@@ -63,6 +63,11 @@ export function truncate(str: string, len: number): string {
   return str.slice(0, len - 1) + "…"
 }
 
+export function truncateLeft(str: string, len: number): string {
+  if (str.length <= len) return str
+  return "…" + str.slice(-(len - 1))
+}
+
 export function truncateMiddle(str: string, maxLength: number = 35): string {
   if (str.length <= maxLength) return str
 

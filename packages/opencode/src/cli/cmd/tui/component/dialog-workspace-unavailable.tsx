@@ -1,9 +1,9 @@
 import { TextAttributes } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
+import { useBindings } from "../keymap"
 
 export function DialogWorkspaceUnavailable(props: { onRestore?: () => boolean | void | Promise<boolean | void> }) {
   const dialog = useDialog()
@@ -23,25 +23,13 @@ export function DialogWorkspaceUnavailable(props: { onRestore?: () => boolean | 
     if (result === false) return
   }
 
-  useKeyboard((evt) => {
-    if (evt.name === "return") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      void confirm()
-      return
-    }
-    if (evt.name === "left") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      setStore("active", "cancel")
-      return
-    }
-    if (evt.name === "right") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      setStore("active", "restore")
-    }
-  })
+  useBindings(() => ({
+    bindings: [
+      { key: "return", cmd: () => void confirm() },
+      { key: "left", cmd: () => setStore("active", "cancel") },
+      { key: "right", cmd: () => setStore("active", "restore") },
+    ],
+  }))
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
