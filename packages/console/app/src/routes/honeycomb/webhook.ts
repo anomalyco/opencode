@@ -23,15 +23,19 @@ const honeycombWebhookPayload = z.discriminatedUnion("type", [
     type: z.literal("provider_http_errors"),
     groups,
   }),
+  basePayload.extend({
+    type: z.literal("custom"),
+  }),
 ])
 
 const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayload>) => {
-  const group = payload.type === "model_http_errors" ? "model" : "provider"
-  const names = (payload.groups ?? []).flatMap((item) => item.group.map((g) => g.value))
+  const group =
+    payload.type === "model_http_errors" ? "model" : payload.type === "provider_http_errors" ? "provider" : undefined
+  const names = payload.type === "custom" ? [] : payload.groups.flatMap((item) => item.group.map((g) => g.value))
 
   const content = [
     `[**${payload.isTest ? "[TEST] " : ""}${payload.name ?? "Honeycomb alert"}**](${payload.url})`,
-    names.length > 0 ? `Affected ${group}s:` : undefined,
+    group && names.length > 0 ? `Affected ${group}s:` : undefined,
     ...names.map((name) => `- ${name}`),
     "",
     `<@&${DISCORD_ALERT_ROLE_ID}>`,
