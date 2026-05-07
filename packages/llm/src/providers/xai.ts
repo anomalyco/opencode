@@ -1,5 +1,4 @@
-import { Auth } from "../route/auth"
-import type { ProviderAuthOption } from "../route/auth-options"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import { Route } from "../route/client"
 import type { RouteModelInput } from "../route/client"
 import { Provider } from "../provider"
@@ -17,12 +16,7 @@ export const routes = [OpenAIResponses.route, OpenAICompatibleChat.route]
 const responsesModel = Route.model(OpenAIResponses.route, { provider: id })
 const chatModel = OpenAICompatibleChat.model
 
-const auth = (options: ProviderAuthOption<"optional">) => {
-  if ("auth" in options && options.auth) return options.auth
-  return Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey")
-    .orElse(Auth.config("XAI_API_KEY"))
-    .bearer()
-}
+const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "XAI_API_KEY")
 
 export const responses = (modelID: string | ModelID, options: ModelOptions = {}) => {
   const { apiKey: _, ...rest } = options

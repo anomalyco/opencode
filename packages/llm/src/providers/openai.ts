@@ -1,5 +1,4 @@
-import { Auth } from "../route/auth"
-import type { ProviderAuthOption } from "../route/auth-options"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import type { RouteModelInput } from "../route/client"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
@@ -21,12 +20,7 @@ type OpenAIModelInput<ModelInput> = Omit<ModelInput, "apiKey" | "auth"> &
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
-const auth = (options: ProviderAuthOption<"optional">) => {
-  if ("auth" in options && options.auth) return options.auth
-  return Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey")
-    .orElse(Auth.config("OPENAI_API_KEY"))
-    .bearer()
-}
+const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "OPENAI_API_KEY")
 
 export const responses = (id: string | ModelID, options: OpenAIModelInput<Omit<RouteModelInput, "id">> = {}) => {
   const { apiKey: _, ...rest } = options

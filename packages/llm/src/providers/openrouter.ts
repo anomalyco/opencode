@@ -36,7 +36,6 @@ const OpenRouterBody = Schema.StructWithRest(Schema.Struct(OpenAIChat.bodyFields
 export type OpenRouterBody = Schema.Schema.Type<typeof OpenRouterBody>
 
 export const protocol = Protocol.make({
-  ...OpenAIChat.protocol,
   id: "openrouter-chat",
   body: {
     schema: OpenRouterBody,
@@ -47,6 +46,7 @@ export const protocol = Protocol.make({
       }) as OpenRouterBody),
     ),
   },
+  stream: OpenAIChat.protocol.stream,
 })
 
 const bodyOptions = (input: unknown) => {

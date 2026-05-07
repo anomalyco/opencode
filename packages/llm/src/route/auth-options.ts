@@ -1,5 +1,5 @@
 import type { Config, Redacted } from "effect"
-import type { Auth } from "./auth"
+import { Auth } from "./auth"
 
 export type ApiKeyMode = "optional" | "required"
 
@@ -32,5 +32,17 @@ export type ModelFactory<Base, Mode extends ApiKeyMode, Model> = (
   id: string,
   ...args: ModelArgs<Base, Mode>
 ) => Model
+
+/**
+ * Standard bearer-auth resolution for providers: honor an explicit `auth`
+ * override, otherwise resolve `apiKey` (option > config var) and apply it as
+ * a bearer token.
+ */
+export const bearer = (options: ProviderAuthOption<"optional">, envVar: string): Auth =>
+  "auth" in options && options.auth
+    ? options.auth
+    : Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey")
+        .orElse(Auth.config(envVar))
+        .bearer()
 
 export * as AuthOptions from "./auth-options"
