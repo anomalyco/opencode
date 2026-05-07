@@ -70,7 +70,7 @@ function prepareServerEnv(password: string) {
     OPENCODE_CLIENT: "desktop",
     OPENCODE_SERVER_USERNAME: "opencode",
     OPENCODE_SERVER_PASSWORD: password,
-    XDG_STATE_HOME: app.getPath("userData"),
+    XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? app.getPath("userData"),
   }
   Object.assign(process.env, env)
 }

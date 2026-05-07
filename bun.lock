@@ -29,7 +29,7 @@
     },
     "packages/app": {
       "name": "@opencode-ai/app",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -85,7 +85,7 @@
     },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -120,7 +120,7 @@
     },
     "packages/console/core": {
       "name": "@opencode-ai/console-core",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -147,7 +147,7 @@
     },
     "packages/console/function": {
       "name": "@opencode-ai/console-function",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@ai-sdk/anthropic": "3.0.64",
         "@ai-sdk/openai": "3.0.48",
@@ -171,7 +171,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode-ai/console-mail",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -195,7 +195,7 @@
     },
     "packages/core": {
       "name": "@opencode-ai/core",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -229,7 +229,7 @@
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
@@ -271,11 +271,19 @@
         "@lydell/node-pty-linux-x64": "1.2.0-beta.10",
         "@lydell/node-pty-win32-arm64": "1.2.0-beta.10",
         "@lydell/node-pty-win32-x64": "1.2.0-beta.10",
+        "@parcel/watcher-darwin-arm64": "2.5.1",
+        "@parcel/watcher-darwin-x64": "2.5.1",
+        "@parcel/watcher-linux-arm64-glibc": "2.5.1",
+        "@parcel/watcher-linux-arm64-musl": "2.5.1",
+        "@parcel/watcher-linux-x64-glibc": "2.5.1",
+        "@parcel/watcher-linux-x64-musl": "2.5.1",
+        "@parcel/watcher-win32-arm64": "2.5.1",
+        "@parcel/watcher-win32-x64": "2.5.1",
       },
     },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
@@ -304,7 +312,7 @@
     },
     "packages/function": {
       "name": "@opencode-ai/function",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -320,14 +328,14 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "bin": {
         "opencode": "./bin/opencode",
       },
       "dependencies": {
         "@actions/core": "1.11.1",
         "@actions/github": "6.0.1",
-        "@agentclientprotocol/sdk": "0.16.1",
+        "@agentclientprotocol/sdk": "0.21.0",
         "@ai-sdk/alibaba": "1.0.17",
         "@ai-sdk/amazon-bedrock": "4.0.96",
         "@ai-sdk/anthropic": "3.0.71",
@@ -462,7 +470,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "effect": "catalog:",
@@ -497,7 +505,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "cross-spawn": "catalog:",
       },
@@ -512,7 +520,7 @@
     },
     "packages/slack": {
       "name": "@opencode-ai/slack",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "@slack/bolt": "^3.17.1",
@@ -547,7 +555,7 @@
     },
     "packages/ui": {
       "name": "@opencode-ai/ui",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -596,7 +604,7 @@
     },
     "packages/web": {
       "name": "@opencode-ai/web",
-      "version": "1.14.39",
+      "version": "1.14.40",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -720,7 +728,7 @@
 
     "@adobe/css-tools": ["@adobe/css-tools@4.4.4", "", {}, "sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg=="],
 
-    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@0.16.1", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-1ad+Sc/0sCtZGHthxxvgEUo5Wsbw16I+aF+YwdiLnPwkZG8KAGUEAPK6LM6Pf69lCyJPt1Aomk1d+8oE3C4ZEw=="],
+    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@0.21.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-ONj+Q8qOdNQp5XbH5jnMwzT9IKZJsSN0p0lkceS4GtUtNOPVLpNzSS8gqQdGMKfBvA0ESbkL8BTaSN1Rc9miEw=="],
 
     "@ai-sdk/alibaba": ["@ai-sdk/alibaba@1.0.17", "", { "dependencies": { "@ai-sdk/openai-compatible": "2.0.41", "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.23" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-ZbE+U5bWz2JBc5DERLowx5+TKbjGBE93LqKZAWvuEn7HOSQMraxFMZuc0ST335QZJAyfBOzh7m1mPQ+y7EaaoA=="],
 

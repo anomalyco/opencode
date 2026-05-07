@@ -33,6 +33,28 @@ export type WorkspaceSelection =
 type WorkspaceSelectValue = WorkspaceSelection | { type: "existing-list" }
 type ExistingWorkspaceSelectValue = { workspace: Workspace }
 
+export function recentConnectedWorkspaces<WorkspaceInfo extends { id: string }>(input: {
+  sessions: readonly { workspaceID?: string; time: { updated: number } }[]
+  get: (workspaceID: string) => WorkspaceInfo | undefined
+  status: (workspaceID: string) => string | undefined
+  limit?: number
+}) {
+  const workspaces = input.sessions
+    .toSorted((a, b) => b.time.updated - a.time.updated)
+    .flatMap((session) => {
+      const workspace = session.workspaceID ? input.get(session.workspaceID) : undefined
+      return workspace && input.status(workspace.id) === "connected" ? [workspace] : []
+    })
+    .filter((workspace, index, list) => list.findIndex((item) => item.id === workspace.id) === index)
+  const recent = workspaces.slice(0, input.limit ?? 3)
+
+  return { recent, hasMore: recent.length < workspaces.length }
+}
+
+export function warpReminderText(dir: string) {
+  return `<system-reminder>The user has changed the current working directory to "${dir}". This is still the same project but at a possibly new location; take this into account when working with any files from now on.</system-reminder>`
+}
+
 async function loadWorkspaceAdapters(input: {
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
@@ -77,7 +99,7 @@ export async function warpWorkspaceSession(input: {
 }): Promise<boolean> {
   const result = await input.sdk.client.experimental.workspace
     .warp({
-      id: input.workspaceID ?? undefined,
+      id: input.workspaceID,
       sessionID: input.sessionID,
     })
     .catch(() => undefined)
@@ -93,10 +115,30 @@ export async function warpWorkspaceSession(input: {
 
   await input.sync.bootstrap({ fatal: false }).catch(() => undefined)
 
+  const dir = input.project.instance.directory() || input.sync.path.directory
+  if (dir) {
+    await input.sdk.client.session
+      .promptAsync({
+        sessionID: input.sessionID,
+        workspace: input.workspaceID ?? undefined,
+        noReply: true,
+        parts: [
+          {
+            type: "text",
+            text: warpReminderText(dir),
+            synthetic: true,
+          },
+        ],
+      })
+      .catch(() => undefined)
+  }
+
   await Promise.all([input.project.workspace.sync(), input.sync.session.refresh()])
 
-  input.done?.()
-  if (input.done) return true
+  if (input.done) {
+    input.done()
+    return true
+  }
   input.dialog.clear()
   return true
 }
@@ -125,15 +167,11 @@ export function DialogWorkspaceSelect(props: {
   const options = createMemo<DialogSelectOption<WorkspaceSelectValue>[]>(() => {
     const list = adapters()
     if (!list) return []
-    const recent = sync.data.session
-      .toSorted((a, b) => b.time.updated - a.time.updated)
-      .flatMap((session) => (session.workspaceID ? [session.workspaceID] : []))
-      .filter((workspaceID, index, list) => list.indexOf(workspaceID) === index)
-      .flatMap((workspaceID) => {
-        const workspace = project.workspace.get(workspaceID)
-        return workspace && project.workspace.status(workspace.id) === "connected" ? [workspace] : []
-      })
-      .slice(0, 3)
+    const { recent, hasMore } = recentConnectedWorkspaces({
+      sessions: sync.data.session,
+      get: project.workspace.get,
+      status: project.workspace.status,
+    })
     return [
       ...list.map((adapter) => ({
         title: adapter.name,
@@ -158,12 +196,16 @@ export function DialogWorkspaceSelect(props: {
         },
         category: "Choose workspace",
       })),
-      {
-        title: "View all workspaces",
-        value: { type: "existing-list" as const },
-        description: "Choose from all workspaces",
-        category: "Choose workspace",
-      },
+      ...(hasMore
+        ? [
+            {
+              title: "View all workspaces",
+              value: { type: "existing-list" as const },
+              description: "Choose from all workspaces",
+              category: "Choose workspace",
+            },
+          ]
+        : []),
     ]
   })
 
