@@ -13,6 +13,12 @@
 
 
 
+
+## [macOS] 2026.5.7.1 — 2026-05-07 14:18
+
+(to be filled: commits / plugin / installer path after ship)
+
+---
 ## [Windows] 2026.5.6.2 - 2026-05-06 15:25
 
 (待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
