@@ -8,6 +8,8 @@ import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { File } from "@/file"
+import { FileWatcher } from "@/file/watcher"
 import { Plugin } from "@/plugin"
 import { Question } from "@/question"
 import { Todo } from "@/session/todo"
@@ -23,6 +25,7 @@ import { Format } from "@/format"
 import { Ripgrep } from "@/file/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
+import { MessageID, SessionID } from "@/session/schema"
 
 const node = CrossSpawnSpawner.defaultLayer
 const configLayer = TestConfig.layer({
@@ -183,6 +186,74 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("cowsay")
+    }),
+  )
+
+  it.instance("plugin tools can publish file change notifications", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const opencode = path.join(test.directory, ".opencode")
+      const toolDir = path.join(opencode, "tool")
+      const fileName = "refresh.txt"
+      const file = path.join(test.directory, fileName)
+      const toolFile = path.join(toolDir, "notify.ts")
+
+      yield* Effect.promise(() => fs.mkdir(toolDir, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          toolFile,
+          [
+            "import path from \"path\"",
+            "export default {",
+            "  description: 'notify file changes',",
+            "  args: {},",
+            "  execute: async (_args, context) => {",
+            `    const file = path.join(context.directory, ${JSON.stringify(fileName)})`,
+            '    await Bun.write(file, "fresh")',
+            `    await context.notifyFileChanged({ filePath: ${JSON.stringify(fileName)}, event: "change" })`,
+            '    return "done"',
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const tool = (yield* registry.all()).find((tool) => tool.id === "notify")
+      if (!tool) throw new Error("notify tool not found")
+
+      const events: string[] = []
+      const offEdited = Bus.subscribe(File.Event.Edited, (evt) => {
+        if (evt.properties.file === file) events.push("edited")
+      })
+      const offUpdated = Bus.subscribe(FileWatcher.Event.Updated, (evt) => {
+        if (evt.properties.file === file) events.push(`watch:${evt.properties.event}`)
+      })
+
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          offEdited()
+          offUpdated()
+        }),
+      )
+
+      const result = yield* tool.execute({}, {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: "build",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
+
+      yield* Effect.promise(() => Bun.sleep(10))
+      const content = yield* Effect.promise(() => fs.readFile(file, "utf8"))
+
+      expect(result.output).toBe("done")
+      expect(content).toBe("fresh")
+      expect(events).toEqual(["edited", "watch:change"])
     }),
   )
 })

@@ -18,6 +18,12 @@ export type ToolContext = {
   abort: AbortSignal
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
   ask(input: AskInput): Effect.Effect<void>
+  /**
+   * Tell OpenCode that a file changed after the plugin updated it on disk.
+   * OpenCode uses this to publish the same file and file-watcher events that
+   * native write/edit tools emit.
+   */
+  notifyFileChanged(input: { filePath: string; event?: "add" | "change" }): Promise<void>
 }
 
 type AskInput = {

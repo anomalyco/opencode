@@ -43,6 +43,9 @@ import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Bus } from "../bus"
+import { File } from "../file"
+import { FileWatcher } from "../file/watcher"
+import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
@@ -139,6 +142,14 @@ export const layer: Layer.Layer<
                   ask: (req) => toolCtx.ask(req),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
+                  notifyFileChanged: async ({ filePath, event = "change" }) =>
+                    // Restore the instance ALS so the async bus publishes still see
+                    // the active project context after the plugin awaits.
+                    Instance.restore(ctx, async () => {
+                      const file = path.isAbsolute(filePath) ? filePath : path.join(ctx.directory, filePath)
+                      await Bus.publish(File.Event.Edited, { file })
+                      await Bus.publish(FileWatcher.Event.Updated, { file, event })
+                    }),
                 }
                 const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
