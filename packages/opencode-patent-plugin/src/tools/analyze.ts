@@ -1,12 +1,12 @@
 /**
  * Patent Analyze Tools
-import { loadYunPatModule } from "../utils/yunpat-loader.js"
  *
  * 封装 YunPat 专利分析能力为 OpenCode Plugin Tools
  */
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
+import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
 
 /**
  * 注册专利分析工具集
@@ -38,11 +38,20 @@ export async function registerAnalyzeTools(pluginContext: PatentPluginContext) {
       async execute(args, ctx) {
         const { action, target, reference = "", context: extraContext = "" } = args
 
-        // 分析操作无需审批
         ctx.metadata({
           title: `专利分析: ${action}`,
           metadata: { action },
         })
+
+        // 尝试使用 YunPat ComparisonAnalyzerAgent（对比分析）
+        if (action === "compare" || action === "novelty" || action === "creativity") {
+          try {
+            const result = await runComparisonAnalyzer(action, target, reference, extraContext, pluginContext)
+            if (result) return result
+          } catch (error: any) {
+            console.warn("[YunPat] ComparisonAnalyzerAgent error, falling back to LLM:", error?.message)
+          }
+        }
 
         const response = await pluginContext.llm.chat({
           messages: [
@@ -57,6 +66,41 @@ export async function registerAnalyzeTools(pluginContext: PatentPluginContext) {
   }
 }
 
+async function runComparisonAnalyzer(
+  action: string,
+  target: string,
+  reference: string,
+  extraContext: string,
+  pluginContext: PatentPluginContext,
+): Promise<string | null> {
+  const mod = await loadYunPatModule("agents/patent-analyzer")
+  if (!mod?.ComparisonAnalyzerAgent) return null
+
+  const context = await createAgentContext()
+  if (!context) return null
+
+  const agent = new mod.ComparisonAnalyzerAgent({
+    llm: pluginContext.llm,
+    eventBus: context.eventBus,
+    memory: context.memory,
+    tools: context.tools,
+  })
+
+  const result = await agent.run(
+    {
+      targetPatent: target,
+      referencePatents: reference ? [reference] : [],
+      analysisType: action,
+      context: extraContext,
+    },
+    context,
+  )
+
+  if (!result.success) return null
+
+  return `## ${action === "compare" ? "特征对比分析" : action === "novelty" ? "新颖性分析" : "创造性分析"} ✅\n\n${result.data?.report || result.data?.content || JSON.stringify(result.data, null, 2)}`
+}
+
 function buildAnalyzeSystemPrompt(action: string): string {
   const prompts: Record<string, string> = {
     novelty: "你是专利新颖性分析专家。严格遵循单独对比原则（A22.2），逐特征比对。",
@@ -67,7 +111,6 @@ function buildAnalyzeSystemPrompt(action: string): string {
     claim_interpretation: "你是权利要求解释专家。运用最宽合理解释原则（BRI）。",
     infringement: "你是专利侵权分析专家。运用全面覆盖原则和等同原则。",
   }
-
   return prompts[action] ?? "你是专利技术分析专家。"
 }
 

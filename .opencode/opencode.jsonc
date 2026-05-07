@@ -9,7 +9,7 @@
   "mcp": {
     "yunpat-patent": {
       "type": "local",
-      "command": ["node", "/Users/xujian/projects/YunPat/packages/mcp-server/dist/index.js"],
+      "command": ["bun", "/Users/xujian/projects/YunPat/packages/mcp-server/src/index.ts"],
       "environment": {
         "DEEPSEEK_API_KEY": "${env:DEEPSEEK_API_KEY}",
         "YUNPAT_PATH": "/Users/xujian/projects/YunPat"

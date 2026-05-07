@@ -6,7 +6,7 @@
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
-import { loadYunPatModule } from "../utils/yunpat-loader.js"
+import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
 
 /**
  * 注册规则研究工具集
@@ -38,37 +38,39 @@ export async function registerResearchTools(pluginContext: PatentPluginContext) 
       async execute(args, ctx) {
         const { topic, scope = "全部", depth = "详细" } = args
 
+        // 尝试使用 YunPat ResearcherAgent
         try {
-          // 尝试动态加载 YunPat ResearcherAgent
           const yunpat = await loadYunPatModule("agents/researcher")
-
           if (yunpat?.ResearcherAgent) {
-            // 使用真实的 YunPat Agent
-            const agent = new yunpat.ResearcherAgent({
-              llm: pluginContext.llm,
-              name: "ResearcherAgent",
-              description: "知识产权法规研究专家",
-            })
+            const context = await createAgentContext()
+            if (context) {
+              const agent = new yunpat.ResearcherAgent({
+                llm: pluginContext.llm,
+                name: "ResearcherAgent",
+                description: "知识产权法规研究专家",
+                eventBus: context.eventBus,
+                memory: context.memory,
+                tools: context.tools,
+              })
 
-            const result = await agent.run({
-              question: topic,
-              depth: mapDepth(depth),
-              sources: ["database"],
-              maxResults: 10,
-            })
+              const result = await agent.run(
+                { question: topic, depth: mapDepth(depth), sources: ["database"], maxResults: 10 },
+                context,
+              )
 
-            ctx.metadata({
-              title: `规则研究: ${topic}`,
-              metadata: { scope, depth, sources: result.data?.sources?.length ?? 0 },
-            })
+              ctx.metadata({
+                title: `规则研究: ${topic}`,
+                metadata: { scope, depth, sources: result.data?.sources?.length ?? 0, mode: "yunpat-agent" },
+              })
 
-            return formatResearchResult(result.data)
+              return formatResearchResult(result.data)
+            }
           }
-        } catch (error) {
-          console.warn("[YunPat] ResearcherAgent not available, falling back to LLM:", error)
+        } catch (error: any) {
+          console.warn("[YunPat] ResearcherAgent error, falling back to LLM:", error?.message)
         }
 
-        // 降级：直接调用 LLM 进行知识研究
+        // 降级：直接调用 LLM
         const prompt = buildResearchPrompt(topic, scope, depth)
         const response = await pluginContext.llm.chat({
           messages: [
@@ -109,9 +111,6 @@ export async function registerResearchTools(pluginContext: PatentPluginContext) 
   }
 }
 
-/**
- * 映射深度参数
- */
 function mapDepth(depth: string): "quick" | "standard" | "comprehensive" {
   const map: Record<string, "quick" | "standard" | "comprehensive"> = {
     "概述": "quick",
@@ -121,9 +120,6 @@ function mapDepth(depth: string): "quick" | "standard" | "comprehensive" {
   return map[depth] ?? "standard"
 }
 
-/**
- * 格式化研究结果
- */
 function formatResearchResult(data: any): string {
   if (!data) return "研究完成，但未返回有效数据。"
 
@@ -153,9 +149,6 @@ function formatResearchResult(data: any): string {
   return output
 }
 
-/**
- * 构建研究提示词
- */
 function buildResearchPrompt(topic: string, scope: string, depth: string): string {
   return `请对以下知识产权主题进行深入研究：
 

@@ -1,12 +1,12 @@
 /**
  * OA Response Tools
-import { loadYunPatModule } from "../utils/yunpat-loader.js"
  *
  * 封装 YunPat 审查意见答辩能力为 OpenCode Plugin Tools
  */
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
+import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
 
 /**
  * 注册审查意见答辩工具集
@@ -35,7 +35,6 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
         context: tool.schema.string().optional().describe("额外上下文（如对比文件、审查历史）"),
       },
       async execute(args, ctx) {
-        // 答辩操作需要审批
         await ctx.ask({
           permission: "oa_response",
           patterns: [args.action],
@@ -45,26 +44,75 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
 
         const { action, office_action, application_claims = "", context: extraContext = "" } = args
 
+        // 尝试使用 YunPat PatentResponderAgent
+        if (action === "respond" || action === "revise_claims") {
+          try {
+            const result = await runPatentResponder(action, office_action, application_claims, extraContext, pluginContext)
+            if (result) return result
+          } catch (error: any) {
+            console.warn("[YunPat] PatentResponderAgent error, falling back to LLM:", error?.message)
+          }
+        }
+
         switch (action) {
-          case "parse":
-            return await oaParse(office_action, pluginContext)
-          case "analyze":
-            return await oaAnalyze(office_action, application_claims, pluginContext)
-          case "simulate":
-            return await oaSimulate(office_action, application_claims, pluginContext)
-          case "respond":
-            return await oaRespond(office_action, application_claims, pluginContext)
-          case "revise_claims":
-            return await oaReviseClaims(office_action, application_claims, pluginContext)
-          case "validate":
-            return await oaValidate(office_action, application_claims, pluginContext)
-          default:
-            return `未知的答辩动作: ${action}`
+          case "parse": return await oaParse(office_action, pluginContext)
+          case "analyze": return await oaAnalyze(office_action, application_claims, pluginContext)
+          case "simulate": return await oaSimulate(office_action, application_claims, pluginContext)
+          case "respond": return await oaRespond(office_action, application_claims, pluginContext)
+          case "revise_claims": return await oaReviseClaims(office_action, application_claims, pluginContext)
+          case "validate": return await oaValidate(office_action, application_claims, pluginContext)
+          default: return `未知的答辩动作: ${action}`
         }
       },
     }),
   }
 }
+
+async function runPatentResponder(
+  action: string,
+  officeAction: string,
+  claims: string,
+  extraContext: string,
+  pluginContext: PatentPluginContext,
+): Promise<string | null> {
+  const mod = await loadYunPatModule("agents/patent-responder")
+  if (!mod?.PatentResponderAgentV5 && !mod?.PatentResponderAgent) return null
+
+  const AgentClass = mod.PatentResponderAgentV5 || mod.PatentResponderAgent
+  const context = await createAgentContext()
+  if (!context) return null
+
+  const agent = new AgentClass({
+    llm: pluginContext.llm,
+    eventBus: context.eventBus,
+    memory: context.memory,
+    tools: context.tools,
+  })
+
+  const result = await agent.run(
+    {
+      officeAction,
+      originalClaims: claims,
+      context: extraContext,
+      enablePrecedentSearch: false,
+    },
+    context,
+  )
+
+  if (!result.success) return null
+
+  if (action === "respond") {
+    return `## 答辩策略与意见陈述书 ✅\n\n${result.data?.responseText || result.data?.content || JSON.stringify(result.data, null, 2)}`
+  }
+
+  if (action === "revise_claims") {
+    return `## 权利要求修改建议 ✅\n\n${result.data?.revisedClaims || result.data?.content || JSON.stringify(result.data, null, 2)}`
+  }
+
+  return null
+}
+
+// LLM fallback implementations
 
 async function oaParse(officeAction: string, pluginContext: PatentPluginContext) {
   const response = await pluginContext.llm.chat({
@@ -73,7 +121,6 @@ async function oaParse(officeAction: string, pluginContext: PatentPluginContext)
       { role: "user", content: `请解析以下审查意见通知书：\n\n${officeAction}\n\n请提取：\n1. OA 编号、申请号\n2. 驳回类型（新颖性/创造性/公开不充分/不清楚/超范围）\n3. 引用的对比文件列表\n4. 被驳回的权利要求\n5. 审查员论点摘要\n6. 答复期限` },
     ],
   })
-
   return `## 步骤 1/5：审查意见解析 ✅\n\n${response.content}\n\n---\n\n*请确认解析是否完整准确。确认后将继续步骤 2：深度分析。*`
 }
 
@@ -84,7 +131,6 @@ async function oaAnalyze(officeAction: string, claims: string, pluginContext: Pa
       { role: "user", content: `请对以下审查意见进行深度技术分析：\n\n**审查意见**：\n${officeAction}\n\n**当前权利要求**：\n${claims}\n\n请按驳回类型逐一分析：\n1. 新颖性（A22.2）：单独对比原则，逐特征比对\n2. 创造性（A22.3）：三步法（最接近现有技术→区别特征→技术启示）\n3. 其他驳回理由（如适用）` },
     ],
   })
-
   return `## 步骤 2/5：深度分析 ✅\n\n${response.content}\n\n---\n\n*请确认技术分析。确认后将继续步骤 3：答辩策略。*`
 }
 
@@ -95,7 +141,6 @@ async function oaSimulate(officeAction: string, claims: string, pluginContext: P
       { role: "user", content: `请从审查员角度分析以下案件：\n\n**审查意见**：\n${officeAction}\n\n**权利要求**：\n${claims}\n\n请输出：\n1. 审查员可能的反驳论点\n2. 申请方答辩的薄弱环节\n3. 建议的答辩策略方向` },
     ],
   })
-
   return `## 审查员视角模拟\n\n${response.content}\n\n---\n\n*以上模拟结果仅供参考。*`
 }
 
@@ -106,7 +151,6 @@ async function oaRespond(officeAction: string, claims: string, pluginContext: Pa
       { role: "user", content: `请基于以下审查意见和权利要求，撰写意见陈述书草案：\n\n**审查意见**：\n${officeAction}\n\n**权利要求**：\n${claims}\n\n请按以下结构撰写：\n一、关于驳回理由N（类型）\n  1. 审查员观点概述\n  2. 申请人的意见（逐条回应）\n  3. 技术对比分析（详细对比表）\n  4. 法律依据（法条和审查指南引用）\n  5. 结论（明确请求）\n二、权利要求修改说明（如修改）\n  修改依据 + 修改内容标注 + 修改后文本` },
     ],
   })
-
   return `## 步骤 4/5：答辩文本撰写 ✅\n\n${response.content}\n\n---\n\n*请逐条审阅修改。确认后将继续步骤 5：验证打包。*`
 }
 
@@ -117,7 +161,6 @@ async function oaReviseClaims(officeAction: string, claims: string, pluginContex
       { role: "user", content: `请基于审查意见修改以下权利要求，生成修改对照表：\n\n**审查意见**：\n${officeAction}\n\n**原权利要求**：\n${claims}\n\n请输出：\n1. 修改对照表（原文 vs 修改后 + 修改依据）\n2. 修改后的完整权利要求书\n3. 修改如何克服驳回理由的说明` },
     ],
   })
-
   return `## 权利要求修改建议\n\n${response.content}\n\n---\n\n*请逐条审阅修改。权利要求修改必须经用户逐条批准。*`
 }
 
