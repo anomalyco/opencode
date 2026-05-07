@@ -44,6 +44,8 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
               )
               .map((x) => x.obj.target) as T[]
           }
+          if (!props.filterKeys) return x
+
           // Normalize the values referenced by `filterKeys` to NFC so the comparison
           // sees the same Unicode form as the (already NFC) needle. Without this,
           // fuzzysort reads raw item strings and an NFD path returned by file search

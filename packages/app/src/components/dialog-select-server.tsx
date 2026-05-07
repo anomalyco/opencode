@@ -535,6 +535,7 @@ export function DialogSelectServer() {
             emptyMessage={language.t("dialog.server.empty")}
             items={sortedItems}
             key={(x) => x.http.url}
+            filterKeys={["displayName", "http.url"]}
             onSelect={(x) => {
               if (x) void select(x)
             }}
