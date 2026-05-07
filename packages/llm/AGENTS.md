@@ -15,9 +15,7 @@
 
 ## Architecture
 
-This package is an Effect Schema-first LLM core. The Schema classes in `src/schema.ts` are the canonical runtime data model. Convenience functions in `src/llm.ts` are thin constructors that return those same Schema class instances; they should improve callsites without creating a second model.
-
-Protocol implementation style lives in `HOUSE_STYLE.md`. Keep new protocol work self-similar with that template before adding provider-specific exceptions.
+This package is an Effect Schema-first LLM core. The Schema classes in `src/schema/` are the canonical runtime data model. Convenience functions in `src/llm.ts` are thin constructors that return those same Schema class instances; they should improve callsites without creating a second model.
 
 ### Request Flow
 
@@ -30,22 +28,22 @@ const request = LLM.request({
   prompt: "Say hello.",
 })
 
-const response = yield * LLMClient.generate(request)
+const response = yield* LLMClient.generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` selects a registered route by `request.model.route`, prepares a typed provider payload, asks the route for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` selects a registered route by `request.model.route`, builds the provider-native body, asks the route's transport for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
-Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.prepare<Payload>(request)` to compile a request through the route pipeline without sending it — the optional `Payload` type argument narrows `.payload` to the route's native shape (e.g. `prepare<OpenAIChatPayload>(...)` returns a `PreparedRequestOf<OpenAIChatPayload>`). The runtime payload is identical; the generic is a type-level assertion.
+Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.prepare<Body>(request)` to compile a request through the route pipeline without sending it — the optional `Body` type argument narrows `.body` to the route's native shape (e.g. `prepare<OpenAIChatBody>(...)` returns a `PreparedRequestOf<OpenAIChatBody>`). The runtime body is identical; the generic is a type-level assertion.
 
 Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g. `events.filter(LLMEvent.is.toolCall)`). The kebab-case `LLMEvent.guards["tool-call"]` form also works but prefer `is.*` in new code.
 
-### Adapters
+### Routes
 
-An route is the registered, runnable composition of four orthogonal pieces:
+A route is the registered, runnable composition of four orthogonal pieces:
 
-- **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request lowering, the payload schema, the chunk schema, and the streaming chunk-to-event state machine. `Route.make(...)` validates and JSON-encodes the payload from the payload schema and decodes frames with the chunk schema. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
-- **`Endpoint`** (`src/route/endpoint.ts`) — URL construction. Receives the request and the validated payload so it can read `model.id`, `model.baseURL`, `model.queryParams`, and any payload field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
-- **`Auth`** (`src/route/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Route.make` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
+- **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request body construction (`body.from`), the body schema (`body.schema`), the streaming-event schema (`stream.event`), and the event-to-`LLMEvent` state machine (`stream.step`). `Route.make(...)` validates and JSON-encodes the body from `body.schema` and decodes frames with `stream.event`. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Endpoint`** (`src/route/endpoint.ts`) — path construction. The host always lives on `model.baseURL`; the endpoint just supplies the path. `Endpoint.path("/chat/completions")` is the common case; pass a function for paths that embed the model id or a body field (e.g. `Endpoint.path(({ body }) => `/model/${body.modelId}/converse-stream`)`).
+- **`Auth`** (`src/route/auth.ts`) — per-request transport authentication. Routes read `model.apiKey` at request time via `Auth.bearer` (the default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Routes that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
 - **`Framing`** (`src/route/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
 
 Compose them via `Route.make(...)`:
@@ -53,17 +51,30 @@ Compose them via `Route.make(...)`:
 ```ts
 export const route = Route.make({
   id: "openai-chat",
+  provider: "openai",
   protocol: OpenAIChat.protocol,
-  endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/chat/completions" }),
-  framing: Framing.sse,
+  transport: HttpTransport.httpJson({
+    endpoint: Endpoint.path("/chat/completions"),
+    auth: Auth.bearer(),
+    framing: Framing.sse,
+    encodeBody,
+  }),
+  defaults: {
+    baseURL: "https://api.openai.com/v1",
+    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  },
 })
 ```
 
 The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
-New routes should start with `Route.make(...)`. If a future provider genuinely cannot fit the four-axis model, add a purpose-built constructor for that case rather than widening the public surface preemptively.
+When a provider ships a non-HTTP transport (OpenAI's WebSocket Responses backend, hypothetical bidirectional streaming APIs), the seam is `Transport` — `WebSocketTransport.json(...)` constructs a transport whose `prepare` builds a WebSocket URL and message and whose `frames` yields decoded text from the socket. Same protocol, different transport.
 
-When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), the seam is `Framing` plus a parallel `Endpoint` / `Auth` interpretation — not a fork of the route contract.
+### URL Construction
+
+`model.baseURL` is required; `Endpoint` only carries the path. Each protocol's `Route.make` includes a canonical URL in `defaults.baseURL` (e.g. `https://api.openai.com/v1`); provider helpers can override by passing `baseURL` in their input. Routes that have no canonical URL (OpenAI-compatible Chat, GitHub Copilot) set `baseURL: string` (required) on their input type so TypeScript catches a missing host at the call site.
+
+For providers where the URL is derived from typed inputs (Azure resource name, Bedrock region), the provider helper computes `baseURL` at model construction time. Use `AtLeastOne<T>` from `route/auth-options.ts` for inputs that accept either of two derivation paths (Azure: `resourceName` or `baseURL`).
 
 ### Provider Definitions
 
@@ -88,6 +99,7 @@ Keep provider definitions small and explicit:
 - Do not add author-facing `kind`, `version`, or `routes` fields.
 - Export lower-level `routes` arrays separately only when advanced internal wiring needs them.
 - Prefer `apiKey` as provider-specific sugar and `auth` as the explicit override; keep them mutually exclusive in provider option types with `ProviderAuthOption`.
+- Resolve `apiKey` → `Auth` with `AuthOptions.bearer(options, "<PROVIDER>_API_KEY")` (it honors an explicit `auth` override and falls back to `Auth.config(envVar)` so missing keys surface a typed `Authentication` error rather than a runtime crash).
 
 Built-in providers are namespace modules from `src/providers/index.ts`, so aliases like `OpenAI.model(...)`, `OpenAI.responses(...)`, and `OpenAI.apis.chat(...)` are fine. External provider packages should default-export the `Provider.make(...)` result and may add named aliases if useful.
 
@@ -95,47 +107,57 @@ Built-in providers are namespace modules from `src/providers/index.ts`, so alias
 
 ```
 packages/llm/src/
-  schema.ts             // LLMRequest, LLMEvent, errors — canonical Schema model
-  llm.ts                // request constructors and convenience helpers
+  schema/                   canonical Schema model, split by concern
+    ids.ts                  branded IDs, literal types, ProviderMetadata
+    options.ts              Generation/Provider/Http options, Capabilities, Limits, ModelRef
+    messages.ts             content parts, Message, ToolDefinition, LLMRequest
+    events.ts               Usage, individual events, LLMEvent, PreparedRequest, LLMResponse
+    errors.ts               error reasons, LLMError, ToolFailure
+    index.ts                barrel
+  llm.ts                    request constructors and convenience helpers
   route/
-    index.ts            // @opencode-ai/llm/route advanced barrel
-    client.ts           // Route.make + LLMClient.prepare/stream/generate
-    executor.ts         // RequestExecutor service + transport error mapping
-    protocol.ts         // Protocol type + Protocol.define
-    endpoint.ts         // Endpoint type + Endpoint.baseURL
-    auth.ts             // Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
-    framing.ts          // Framing type + Framing.sse
+    index.ts                @opencode-ai/llm/route advanced barrel
+    client.ts               Route.make + LLMClient.prepare/stream/generate
+    executor.ts             RequestExecutor service + transport error mapping
+    protocol.ts             Protocol type + Protocol.make
+    endpoint.ts             Endpoint type + Endpoint.path
+    auth.ts                 Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
+    auth-options.ts         ProviderAuthOption shape, AuthOptions.bearer, AtLeastOne helper
+    framing.ts              Framing type + Framing.sse
+    transport/              transport implementations
+      index.ts              Transport type + HttpTransport / WebSocketTransport namespaces
+      http.ts               HttpTransport.httpJson — POST + framing
+      websocket.ts          WebSocketTransport.json + WebSocketExecutor service
   protocols/
-    shared.ts           // ProviderShared toolkit used inside protocol impls
-    openai-chat.ts      // protocol + route (compose OpenAIChat.protocol)
+    shared.ts               ProviderShared toolkit used inside protocol impls
+    openai-chat.ts          protocol + route (compose OpenAIChat.protocol)
     openai-responses.ts
     anthropic-messages.ts
     gemini.ts
     bedrock-converse.ts
-    openai-compatible-chat.ts  // route that reuses OpenAIChat.protocol
-
+    bedrock-event-stream.ts framing for AWS event-stream binary frames
+    openai-compatible-chat.ts route that reuses OpenAIChat.protocol, no canonical URL
+    utils/                  per-protocol helpers (auth, cache, media, tool-stream, ...)
   providers/
-    openai-compatible.ts // generic compatible helper + family model helpers
-    openai-compatible-profile.ts // family defaults (deepseek, togetherai, ...)
-    azure.ts / amazon-bedrock.ts / github-copilot.ts / google.ts / xai.ts / ...  // provider model helpers
-
-  tool.ts               // typed tool() helper
-  tool-runtime.ts       // implementation helpers for LLMClient tool execution
+    openai-compatible.ts    generic compatible helper + family model helpers
+    openai-compatible-profile.ts family defaults (deepseek, togetherai, ...)
+    azure.ts / amazon-bedrock.ts / github-copilot.ts / google.ts / xai.ts / openai.ts / anthropic.ts / openrouter.ts
+  tool.ts                   typed tool() helper
+  tool-runtime.ts           implementation helpers for LLMClient tool execution
 ```
 
 The dependency arrow points down: `providers/*.ts` files import `protocols`, `endpoint`, `auth`, and `framing`; protocols do not import provider metadata. Lower-level modules know nothing about specific providers.
 
-### Shared route helpers
+### Shared protocol helpers
 
 `ProviderShared` exports a small toolkit used inside protocol implementations to keep them focused on provider-native shapes:
 
-- `framed({ route, response, readError, framing, decodeChunk, initial, process, onHalt? })` — the canonical streaming pipeline used by `Route.make(...)`. You rarely call this directly anymore.
-- `sseFraming` — the SSE-specific framing step. Already wired through `Framing.sse`; reach for it directly only when wrapping or composing.
 - `joinText(parts)` — joins an array of `TextPart` (or anything with a `.text`) with newlines. Use this anywhere a protocol flattens text content into a single string for a provider field.
-- `parseToolInput(route, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<route>` tool call `<name>`" error message. Treats empty input as `{}`. Use this in `finishToolCall` / `finalizeToolCalls`; do not roll a fresh `parseJson` callsite.
-- `parseJson(route, raw, message)` — generic JSON-via-Schema decode for non-tool payloads.
-- `chunkError(route, message, ...)` — typed `ProviderChunkError` constructor for stream-time failures.
-- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequestError`. `Route.make(...)` uses this for payload validation; lower-level routes can reuse it.
+- `parseToolInput(route, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<route>` tool call `<name>`" error message. Treats empty input as `{}`.
+- `parseJson(route, raw, message)` — generic JSON-via-Schema decode for non-tool bodies.
+- `eventError(route, message, ...)` — typed `InvalidProviderOutput` constructor for stream-time decode failures.
+- `validateWith(decoder)` — maps Schema decode errors to `InvalidRequest`. `Route.make(...)` uses this for body validation; lower-level routes can reuse it.
+- `matchToolChoice(provider, choice, branches)` — branches over `LLMRequest["toolChoice"]` for provider-specific lowering.
 
 If you find yourself copying a 3-to-5-line snippet between two protocols, lift it into `ProviderShared` next to these helpers rather than duplicating.
 
@@ -153,7 +175,7 @@ const followUp = LLM.request({
 })
 ```
 
-Adapters lower this into provider-native assistant tool-call messages and tool-result messages. Streaming providers should emit `tool-input-delta` events while arguments arrive, then a final `tool-call` event with parsed input.
+Routes lower these into provider-native assistant tool-call messages and tool-result messages. Streaming providers should emit `tool-input-delta` events while arguments arrive, then a final `tool-call` event with parsed input.
 
 ### Tool runtime
 
@@ -188,24 +210,7 @@ The runtime:
 - Emits local `tool-result` events in the same step by default.
 - Loops only when `stopWhen` is provided and the step finishes with `tool-calls`, appending the assistant + tool messages.
 
-Handler dependencies (services, permissions, plugin hooks, abort handling) are closed over by the consumer at tool-construction time. The runtime's only environment requirement is `RequestExecutor.Service`. Build the tools record inside an `Effect.gen` once and reuse it across many runs:
-
-```ts
-const tools = Effect.gen(function* () {
-  const fs = yield* FileSystem
-  const permission = yield* Permission
-  return {
-    read_file: tool({
-      ...
-      execute: ({ path }) =>
-        Effect.gen(function* () {
-          yield* permission.ask({ tool: "read_file", path })
-          return { content: yield* fs.readFile(path) }
-        }),
-    }),
-  }
-})
-```
+Handler dependencies (services, permissions, plugin hooks, abort handling) are closed over by the consumer at tool-construction time. The runtime's only environment requirement is `RequestExecutor.Service`. Build the tools record inside an `Effect.gen` once and reuse it across many runs.
 
 Errors must be expressed as `ToolFailure`. The runtime catches it and emits a `tool-error` event, then a `tool-result` of `type: "error"`, so the model can self-correct on the next step. Anything that is not a `ToolFailure` is treated as a defect and fails the stream. Three recoverable error paths produce `tool-error` events:
 
@@ -213,15 +218,51 @@ Errors must be expressed as `ToolFailure`. The runtime catches it and emits a `t
 - Input failed the `parameters` Schema.
 - The handler returned a `ToolFailure`.
 
-Provider-defined / hosted tools (e.g. Anthropic `web_search` / `code_execution` / `web_fetch`, OpenAI Responses `web_search_call` / `file_search_call` / `code_interpreter_call` / `mcp_call` / `local_shell_call` / `image_generation_call` / `computer_use_call`) pass through the runtime untouched:
+Provider-defined / hosted tools (Anthropic `web_search` / `code_execution` / `web_fetch`, OpenAI Responses `web_search_call` / `file_search_call` / `code_interpreter_call` / `mcp_call` / `local_shell_call` / `image_generation_call` / `computer_use_call`) pass through the runtime untouched:
 
-- Adapters surface the model's call as a `tool-call` event with `providerExecuted: true`, and the provider's result as a matching `tool-result` event with `providerExecuted: true`.
+- Routes surface the model's call as a `tool-call` event with `providerExecuted: true`, and the provider's result as a matching `tool-result` event with `providerExecuted: true`.
 - The runtime detects `providerExecuted` on `tool-call` and **skips client dispatch** — no handler is invoked and no `tool-error` is raised for "unknown tool". The provider already executed it.
 - Both events are appended to the assistant message in `assistantContent` so the next round's history carries the call + result for context. Anthropic encodes them back as `server_tool_use` + `web_search_tool_result` (or `code_execution_tool_result` / `web_fetch_tool_result`) blocks; OpenAI Responses callers typically use `previous_response_id` instead of resending hosted-tool items.
 
 Add provider-defined tools to `request.tools` (no runtime entry needed). The matching route must know how to lower the tool definition into the provider-native shape; right now Anthropic accepts `web_search` / `code_execution` / `web_fetch` and OpenAI Responses accepts the hosted tool names listed above.
 
-### Recording Tests
+## Protocol File Style
+
+Protocol files should look self-similar. Provider quirks belong behind named helpers so a new route can be reviewed by comparing the same sections across files.
+
+### Section order
+
+Use this order for every protocol module:
+
+1. Public model input
+2. Request body schema
+3. Streaming event schema
+4. Parser state
+5. Request body construction (`fromRequest`)
+6. Stream parsing (`step` and per-event handlers)
+7. Protocol and route
+8. Model helper
+
+### Rules
+
+- Keep protocol files focused on the protocol. Move provider-specific projection, signing, media normalization, or other bulky transformations into `src/protocols/utils/*`.
+- Use `Effect.fn("Provider.fromRequest")` for request body construction entrypoints. Use `Effect.fn(...)` for event handlers that yield effects; keep purely synchronous handlers as plain functions returning a `StepResult` that the dispatcher lifts via `Effect.succeed(...)`.
+- Parser state owns terminal information. The state machine records finish reason, usage, and pending tool calls; emit one terminal `request-finish` (or `provider-error`) when a `terminal` event arrives. If a provider splits reason and usage across events, merge them in parser state before flushing.
+- Emit exactly one terminal `request-finish` event for a completed response. Use `stream.terminal` to signal the run is over and have `step` emit the final event.
+- Use shared helpers for repeated protocol policy such as text joining, usage totals, JSON parsing, and tool-call accumulation. `ToolStream` (`protocols/utils/tool-stream.ts`) accumulates streamed tool-call arguments uniformly.
+- Make intentional provider differences explicit in helper names or comments. If two protocol files differ visually, the reason should be obvious from the names.
+- Prefer dispatched per-event handlers (`onMessageStart`, `onContentBlockDelta`, ...) called from a small top-level `step` switch over a long if-chain. The dispatcher keeps the event surface visible at a glance.
+- Keep tests in the same conceptual order as the protocol: basic prepare, tools prepare, unsupported lowering, text/usage parsing, tool streaming, finish reasons, provider errors.
+
+### Review checklist
+
+- Can the file be skimmed side-by-side with `openai-chat.ts` without hunting for equivalent sections?
+- Are provider quirks named, isolated, and covered by focused tests?
+- Does request body construction validate unsupported common content at the protocol boundary?
+- Does stream parsing emit stable common events without leaking provider event order to callers?
+- Does `toolChoice: "none"` behavior read as intentional?
+
+## Recording Tests
 
 Recorded tests use one cassette file per scenario. A cassette holds an ordered array of `{ request, response }` interactions, so multi-step flows (tool loops, retries, polling) record into a single file. Use `recordedTests({ prefix, requires })` and let the helper derive cassette names from test names:
 
@@ -251,89 +292,3 @@ Filters apply in replay and record mode. Combine them with `RECORD=true` when re
 **Matching strategies.** Replay defaults to structural matching, which finds an interaction by comparing method, URL, allow-listed headers, and the canonical JSON body. This is the right choice for tool loops because each round's request differs (the message history grows). For scenarios where successive requests are byte-identical and expect different responses (retries, polling), pass `dispatch: "sequential"` in `RecordReplayOptions` — replay then walks the cassette in record order via an internal cursor. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 
 Do not blanket re-record an entire test file when adding one cassette. `RECORD=true` rewrites every recorded case that runs, and provider streams contain volatile IDs, timestamps, fingerprints, and obfuscation fields. Prefer deleting the one cassette you intend to refresh, or run a focused test pattern that only registers the scenario you want to record. Keep stable existing cassettes unchanged unless their request shape or expected behavior changed.
-
-## TODO
-
-### Completed Foundation
-
-- [x] Add an route registry so `LLMClient` can choose an route by provider/protocol instead of requiring a single route.
-- [x] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
-- [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
-- [x] Add OpenAI Chat recorded tests for tool-result follow-up and usage chunks.
-- [x] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
-- [x] Add an OpenAI Responses route once the Chat route shape feels stable.
-- [x] Add Anthropic Messages route coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
-- [x] Add Gemini route coverage for text, media input, tool calls, reasoning deltas, finish reasons, usage, and recorded cassettes.
-- [x] Port Gemini schema sanitizer behavior into the Gemini protocol; do not keep a divergent generic helper long term.
-
-### Provider Coverage
-
-- [x] Add a generic OpenAI-compatible Chat route for non-OpenAI providers that expose `/chat/completions`.
-- [x] Keep OpenAI Responses as a separate first-class protocol for providers that actually implement `/responses`; do not treat generic OpenAI-compatible providers as Responses-capable by default.
-- [x] Cover OpenAI-compatible provider families that can share the generic route first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
-- [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, Perplexity, and Cohere. xAI already has a thin model helper that routes to OpenAI Responses.
-- [x] Add Bedrock Converse support: wire format (messages / system / inferenceConfig / toolConfig), AWS event stream binary framing via `@smithy/eventstream-codec`, SigV4 signing via `aws4fetch` (or Bearer API key path), text/reasoning/tool/usage/finish decoding, cache hints, image/document content, deterministic tests, and recorded basic text/tool cassettes. Additional model-specific fields are still TODO.
-- [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini vs Vertex Anthropic protocol/provider wrappers.
-- [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible route and provider option model are stable.
-
-### OpenCode Parity Patches
-
-- [ ] Port Anthropic tool-use ordering into Anthropic request lowering.
-- [ ] Finish Mistral/OpenAI-compatible cleanup, including message sequence repair after tool messages.
-- [ ] Port DeepSeek reasoning handling and interleaved reasoning field mapping.
-- [ ] Add unsupported attachment fallback keyed by model capabilities.
-- [ ] Add cache hint lowering for Anthropic, OpenRouter, Bedrock, OpenAI-compatible, Copilot, and Alibaba-style providers.
-- [ ] Add provider option namespacing for Gateway, OpenRouter, OpenAI-compatible wrappers, and other provider-specific option bags. Azure already has model-helper support for base URL, `api-version`, and Chat-vs-Responses routing; future Azure work should cover any remaining provider-specific option mapping.
-- [ ] Add model-specific reasoning option lowering for providers that need effort, summary, or native reasoning fields.
-- [ ] Add provider-specific metadata extraction only where OpenCode needs returned reasoning, citations, usage details, or provider-native fields.
-
-### OpenCode Bridge
-
-- [x] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, native provider metadata, and OpenAI-compatible provider family detection.
-- [x] Build a pure `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tool definitions, tool choice, generation options, reasoning variants, cache hints, and attachments.
-- [x] Add typed tool execution through `LLM.stream({ request, tools })` with Schema-typed parameters/success, single-`ToolFailure` error channel, `toolExecution: "none"`, and opt-in looping via `stopWhen`.
-- [x] Provider-defined tool pass-through: `providerExecuted` flag on `tool-call`/`tool-result` events; Anthropic `server_tool_use` / `web_search_tool_result` / `code_execution_tool_result` / `web_fetch_tool_result` round-trip; OpenAI Responses hosted-tool items decoded as `tool-call` + `tool-result` pairs; runtime skips client dispatch when `providerExecuted: true`.
-- [ ] Keep auth and deployment concerns in the OpenCode bridge where possible: Bedrock credentials/region/profile, Vertex project/location/token, remaining Azure deployment concerns, and Gateway/OpenRouter routing headers. Azure model helper support already derives the resource base URL and `api-version` from provider options.
-- [ ] Keep initial OpenCode integration behind a local flag/path until request payload parity and stream event parity are proven against the existing `session/llm.test.ts` cases.
-
-### Native OpenCode Rollout
-
-- [x] Add a native event bridge that maps `LLMEvent` streams into the existing `SessionProcessor` event contract without creating a second processor.
-- [ ] Extract runtime-neutral OpenCode tool resolution from `SessionPrompt.resolveTools`, then build both existing-stream and native `@opencode-ai/llm` tool routes from the same resolved shape.
-- [ ] Map `Permission.RejectedError`, `Permission.CorrectedError`, validation failures, thrown tool failures, and aborts into model-visible native tool error/results.
-- [ ] Wire a native stream producer behind an explicit local flag and provider allowlist; the producer should consume `nativeMessages`, call `LLMNative.request(...)`, stream through `LLMClient.stream(...)`, and feed `LLMNativeEvents.mapper()` into `SessionProcessor`.
-- [ ] Add end-to-end native stream tests through the actual session loop for text, reasoning, tool-call streaming, tool success, rejected permission, corrected permission, thrown tool error, abort, and provider-executed tool history.
-- [ ] Dogfood native streaming with the flag enabled for OpenAI first, then Anthropic, Gemini, OpenAI-compatible providers, Bedrock, and Copilot provider-by-provider.
-- [ ] Flip native streaming to default only after request parity, stream parity, tool execution, typecheck, focused provider tests, recorded cassettes, and manual dogfood pass for the enabled provider set.
-- [ ] Keep the existing stream path as an opt-out fallback during soak; remove it only after native default has proven stable.
-
-### Test And Recording Gaps
-
-- [x] Harden the generic HTTP recorder before adding more live cassettes: secret scanning before writes, sensitive header/query redaction, response/body secret scanning, and clear failure messages that identify the unsafe field without printing the secret.
-- [x] Refactor the recorder toward extractable library boundaries: core HTTP cassette schema/matching/redaction/diffing should stay LLM-agnostic; LLM tests should supply metadata and semantic assertions from a thin wrapper.
-- [x] Add cassette metadata support: recorder schema version, recorded timestamp, scenario name, tags, and caller-provided subject metadata such as provider/protocol/model/capabilities without making the core recorder depend on LLM concepts.
-- [x] Improve replay mismatch diagnostics: show method/URL/header/body diffs and closest recorded interaction while keeping secrets redacted. Unused-interaction reporting is still TODO if a test needs it.
-- [ ] Add semantic replay assertions for LLM cassettes: replay raw HTTP, parse provider streams, and compare normalized `LLMEvent[]` or `LLMResponse` snapshots in addition to request matching.
-- [ ] Add stream chunk-boundary fuzzing for text/SSE cassettes so parser tests prove correctness independent of provider chunk boundaries.
-- [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.
-- [x] Cover provider-error and HTTP-status sad paths with deterministic fixtures across routes (Anthropic mid-stream + 4xx; OpenAI Responses mid-stream + 4xx; OpenAI Chat 4xx). Live recordings of provider errors are still TODO when stable cassettes can be captured.
-- [x] Improve cassette ergonomics for multi-interaction flows: pretty-printed JSON for diff-friendly cassettes, explicit sequential dispatch, and a recorded tool-loop scaffold (`openai-chat-tool-loop.recorded.test.ts`).
-- [x] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
-- [x] Add route parity fixtures for generic OpenAI-compatible Chat before adding provider-specific wrappers.
-
-### Recorded Cassette Backlog
-
-- [x] DeepSeek OpenAI-compatible Chat basic streaming text.
-- [ ] DeepSeek OpenAI-compatible Chat tool call and tool-result follow-up.
-- [ ] DeepSeek reasoning output, including any interleaved reasoning fields the live API emits.
-- [x] TogetherAI OpenAI-compatible Chat basic streaming text and tool-call flow.
-- [ ] Cerebras OpenAI-compatible Chat basic streaming text and tool-call flow.
-- [ ] Baseten OpenAI-compatible Chat basic streaming text and deployed-model request shape.
-- [ ] Fireworks OpenAI-compatible Chat basic streaming text and tool-call flow.
-- [ ] DeepInfra OpenAI-compatible Chat basic streaming text and tool-call flow.
-- [ ] Provider-error cassettes for stable, non-secret error bodies where the provider returns deterministic 4xx/5xx payloads.
-- [ ] Mistral, Groq, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
-- [ ] xAI basic/tool cassettes for its OpenAI Responses model helper path.
-- [x] Bedrock Converse basic text and tool-call cassettes (recorded against `us.amazon.nova-micro-v1:0` in us-east-1). Cache-hint cassettes still TODO.
-- [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex route shape is decided.
-- [ ] Gateway/OpenRouter routing-header cassettes after routing support lands.
