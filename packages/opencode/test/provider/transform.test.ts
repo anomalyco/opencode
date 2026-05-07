@@ -310,6 +310,75 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   })
 })
 
+describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (apiId: string) =>
+    ({
+      id: `azure/${apiId}`,
+      providerID: "azure",
+      api: {
+        id: apiId,
+        url: "https://azure.com",
+        npm: "@ai-sdk/azure",
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: {
+          text: true,
+          audio: false,
+          image: true,
+          video: false,
+          pdf: false,
+        },
+        output: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.03,
+        output: 0.06,
+        cache: { read: 0.001, write: 0.002 },
+      },
+      limit: {
+        context: 128000,
+        output: 4096,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test('gpt-5-chat should NOT set reasoningEffort', () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5-chat"),
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
+
+  test("gpt-5.5 should NOT set reasoningEffort", () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5.5"),
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - gateway", () => {
   const sessionID = "test-session-123"
 
