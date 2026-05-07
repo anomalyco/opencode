@@ -103,7 +103,7 @@ type BedrockAssistantBlock = Schema.Schema.Type<typeof BedrockAssistantBlock>
 const BedrockMessage = Schema.Union([
   Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(BedrockUserBlock) }),
   Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(BedrockAssistantBlock) }),
-])
+]).pipe(Schema.toTaggedUnion("role"))
 type BedrockMessage = Schema.Schema.Type<typeof BedrockMessage>
 
 const BedrockSystemBlock = Schema.Union([BedrockTextBlock, BedrockCache.CachePointBlock])
@@ -211,8 +211,6 @@ const BedrockEvent = Schema.Struct({
   serviceUnavailableException: Schema.optional(Schema.Struct({ message: Schema.String })),
 })
 type BedrockEvent = Schema.Schema.Type<typeof BedrockEvent>
-
-const invalid = ProviderShared.invalidRequest
 
 // =============================================================================
 // Request Lowering
@@ -502,7 +500,9 @@ export const route = Route.make({
   // the provider helper from credentials) and the validated modelId in the
   // path. We read the validated body so the URL matches the body that gets
   // signed.
-  endpoint: Endpoint.path<BedrockConverseBody>(({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`),
+  endpoint: Endpoint.path<BedrockConverseBody>(
+    ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
+  ),
   auth: BedrockAuth.auth,
   framing,
 })

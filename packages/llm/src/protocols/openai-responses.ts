@@ -69,12 +69,15 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.Literal("function"), name: Schema.String }),
 ])
 
-const OpenAIResponsesBodyFields = {
+// Fields shared between the HTTP body and the WebSocket `response.create`
+// message. The HTTP body adds `stream: true`; the WebSocket message adds
+// `type: "response.create"`. Defining the shared shape once keeps the two
+// transports in sync without a destructure-and-strip dance.
+const OpenAIResponsesCoreFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
-  stream: Schema.Literal(true),
   store: Schema.optional(Schema.Boolean),
   prompt_cache_key: Schema.optional(Schema.String),
   include: optionalArray(Schema.Literal("reasoning.encrypted_content")),
@@ -93,14 +96,17 @@ const OpenAIResponsesBodyFields = {
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
 }
-const OpenAIResponsesBody = Schema.Struct(OpenAIResponsesBodyFields)
+
+const OpenAIResponsesBody = Schema.Struct({
+  ...OpenAIResponsesCoreFields,
+  stream: Schema.Literal(true),
+})
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
-const { stream: _stream, ...OpenAIResponsesWebSocketMessageFields } = OpenAIResponsesBodyFields
 const OpenAIResponsesWebSocketMessage = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.Literal("response.create"),
-    ...OpenAIResponsesWebSocketMessageFields,
+    ...OpenAIResponsesCoreFields,
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -293,39 +299,39 @@ const mapFinishReason = (event: OpenAIResponsesEvent, hasFunctionCall: boolean):
 
 const openaiMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ openai: metadata })
 
-// Hosted tool items (provider-executed) ship their typed input + status + result
-// fields all in one item. We expose them as a `tool-call` + `tool-result` pair
-// so consumers can treat them uniformly with client tools, only differentiated
-// by `providerExecuted: true`.
+// Hosted tool items (provider-executed) ship their typed input + status +
+// result fields all in one item. We expose them as a `tool-call` +
+// `tool-result` pair so consumers can treat them uniformly with client tools,
+// only differentiated by `providerExecuted: true`.
 //
-// item.type → tool name. Each entry is the OpenAI Responses item type that
-// represents a hosted (provider-executed) tool call.
-const HOSTED_TOOL_NAMES: Record<string, string> = {
-  web_search_call: "web_search",
-  web_search_preview_call: "web_search_preview",
-  file_search_call: "file_search",
-  code_interpreter_call: "code_interpreter",
-  computer_use_call: "computer_use",
-  image_generation_call: "image_generation",
-  mcp_call: "mcp",
-  local_shell_call: "local_shell",
-}
+// One record per OpenAI Responses item type that represents a hosted
+// (provider-executed) tool call: the common name we surface, plus an `input`
+// extractor that picks the fields the model actually populated for that tool.
+// Falling back to `{}` when an entry isn't fully typed keeps unknown tools
+// observable without rolling a per-tool schema.
+const HOSTED_TOOLS = {
+  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
+  web_search_preview_call: { name: "web_search_preview", input: (item) => item.action ?? {} },
+  file_search_call: { name: "file_search", input: (item) => ({ queries: item.queries ?? [] }) },
+  code_interpreter_call: {
+    name: "code_interpreter",
+    input: (item) => ({ code: item.code, container_id: item.container_id }),
+  },
+  computer_use_call: { name: "computer_use", input: (item) => item.action ?? {} },
+  image_generation_call: { name: "image_generation", input: () => ({}) },
+  mcp_call: {
+    name: "mcp",
+    input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
+  },
+  local_shell_call: { name: "local_shell", input: (item) => item.action ?? {} },
+} as const satisfies Record<string, { readonly name: string; readonly input: (item: OpenAIResponsesStreamItem) => unknown }>
 
-const isHostedToolItem = (item: OpenAIResponsesStreamItem): item is OpenAIResponsesStreamItem & { id: string } =>
-  item.type in HOSTED_TOOL_NAMES && typeof item.id === "string" && item.id.length > 0
+type HostedToolType = keyof typeof HOSTED_TOOLS
 
-// Pick the input fields the model actually populated when invoking the tool.
-// The shape is tool-specific. Keep this list explicit so each tool's input is
-// reviewable at a glance — fall back to `{}` for tools we haven't typed yet.
-const hostedToolInput = (item: OpenAIResponsesStreamItem): unknown => {
-  if (item.type === "web_search_call" || item.type === "web_search_preview_call") return item.action ?? {}
-  if (item.type === "file_search_call") return { queries: item.queries ?? [] }
-  if (item.type === "code_interpreter_call") return { code: item.code, container_id: item.container_id }
-  if (item.type === "computer_use_call") return item.action ?? {}
-  if (item.type === "local_shell_call") return item.action ?? {}
-  if (item.type === "mcp_call") return { server_label: item.server_label, name: item.name, arguments: item.arguments }
-  return {}
-}
+const isHostedToolItem = (
+  item: OpenAIResponsesStreamItem,
+): item is OpenAIResponsesStreamItem & { type: HostedToolType; id: string } =>
+  item.type in HOSTED_TOOLS && typeof item.id === "string" && item.id.length > 0
 
 // Round-trip the full item as the structured result so consumers can extract
 // outputs / sources / status without re-decoding.
@@ -334,15 +340,17 @@ const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
   return isError ? { type: "error" as const, value: item.error } : { type: "json" as const, value: item }
 }
 
-const hostedToolEvents = (item: OpenAIResponsesStreamItem & { id: string }): ReadonlyArray<LLMEvent> => {
-  const name = HOSTED_TOOL_NAMES[item.type]
+const hostedToolEvents = (
+  item: OpenAIResponsesStreamItem & { type: HostedToolType; id: string },
+): ReadonlyArray<LLMEvent> => {
+  const tool = HOSTED_TOOLS[item.type]
   const providerMetadata = openaiMetadata({ itemId: item.id })
   return [
-    { type: "tool-call", id: item.id, name, input: hostedToolInput(item), providerExecuted: true, providerMetadata },
+    { type: "tool-call", id: item.id, name: tool.name, input: tool.input(item), providerExecuted: true, providerMetadata },
     {
       type: "tool-result",
       id: item.id,
-      name,
+      name: tool.name,
       result: hostedToolResult(item),
       providerExecuted: true,
       providerMetadata,
