@@ -64,6 +64,11 @@ const ref = {
   modelID: ModelID.make("test-model"),
 }
 
+const commandModel = {
+  providerID: ProviderID.make("test"),
+  modelID: ModelID.make("command-model"),
+}
+
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
   const promise = new Promise<T>((done) => {
@@ -893,6 +898,107 @@ it.live(
       { git: true, config: providerCfg },
     ),
   10_000,
+)
+
+it.live(
+  "command subtask model overrides target subagent configured model",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+        yield* llm.text("done")
+
+        yield* prompt.command({
+          sessionID: chat.id,
+          command: "cheap-review",
+          arguments: "check routing",
+        })
+
+        const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+        const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+        expect(taskMsg?.info.role).toBe("assistant")
+        if (!taskMsg || taskMsg.info.role !== "assistant") return
+
+        expect(taskMsg.info.modelID).toBe(commandModel.modelID)
+        expect(taskMsg.info.providerID).toBe(commandModel.providerID)
+
+        const tool = completedTool(taskMsg.parts)
+        expect(tool?.state.metadata?.model).toEqual(commandModel)
+        const childSessionID = tool?.state.metadata?.sessionId
+        expect(typeof childSessionID).toBe("string")
+        if (typeof childSessionID !== "string") return
+
+        const childMsgs = yield* sessions.messages({ sessionID: SessionID.make(childSessionID) })
+        const childUser = childMsgs.find((item) => item.info.role === "user")?.info
+        expect(childUser?.role).toBe("user")
+        if (childUser?.role !== "user") return
+        expect(childUser.model).toEqual(commandModel)
+      }),
+      {
+        git: true,
+        config: (url) => ({
+          ...providerCfg(url),
+          provider: {
+            test: {
+              ...providerCfg(url).provider.test,
+              models: {
+                ...providerCfg(url).provider.test.models,
+                "command-model": {
+                  ...providerCfg(url).provider.test.models["test-model"],
+                  id: "command-model",
+                  name: "Command Model",
+                },
+                "agent-model": {
+                  ...providerCfg(url).provider.test.models["test-model"],
+                  id: "agent-model",
+                  name: "Agent Model",
+                },
+              },
+            },
+          },
+          agent: {
+            general: {
+              model: "test/agent-model",
+            },
+          },
+          command: {
+            "cheap-review": {
+              agent: "general",
+              model: "test/command-model",
+              template: "Review: $ARGUMENTS",
+            },
+          },
+        }),
+      },
+    ),
+  10_000,
+)
+
+it.live("session create model metadata does not control prompt model", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        model: { id: ModelID.make("session-model"), providerID: ProviderID.make("test") },
+      })
+
+      const result = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      expect(result.info.role).toBe("user")
+      if (result.info.role !== "user") return
+      expect(result.info.model).toEqual(ref)
+    }),
+    { git: true, config: providerCfg },
+  ),
 )
 
 it.live(

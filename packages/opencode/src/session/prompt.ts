@@ -621,7 +621,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID,
           abort: taskAbort.signal,
           callID: part.callID,
-          extra: { bypassAgentCheck: true, promptOps },
+          extra: {
+            bypassAgentCheck: true,
+            promptOps,
+            ...(task.command ? { taskModel: { providerID: taskModel.providerID, modelID: taskModel.id } } : {}),
+          },
           messages: msgs,
           metadata: (val: { title?: string; metadata?: Record<string, any> }) =>
             Effect.gen(function* () {

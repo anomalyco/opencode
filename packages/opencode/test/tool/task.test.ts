@@ -23,6 +23,16 @@ const ref = {
   modelID: ModelID.make("test-model"),
 }
 
+const commandModel = {
+  providerID: ProviderID.make("test"),
+  modelID: ModelID.make("command-model"),
+}
+
+const agentModel = {
+  providerID: ProviderID.make("test"),
+  modelID: ModelID.make("agent-model"),
+}
+
 const it = testEffect(
   Layer.mergeAll(
     Agent.defaultLayer,
@@ -360,6 +370,96 @@ describe("tool.task", () => {
       expect(result.output).toContain(`task_id: ${result.metadata.sessionId}`)
       expect(seen?.sessionID).toBe(result.metadata.sessionId)
     }),
+  )
+
+  it.instance(
+    "execute treats internal task model as authoritative for subtasks",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps, taskModel: commandModel },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const child = yield* sessions.get(result.metadata.sessionId)
+        expect(seen?.agent).toBe("general")
+        expect(seen?.model).toEqual(commandModel)
+        expect(child.agent).toBeUndefined()
+        expect(child.model).toBeUndefined()
+      }),
+    {
+      config: {
+        agent: {
+          general: {
+            model: "test/agent-model",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "execute falls back to agent model then parent model without stale internal task model",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const seen: SessionPrompt.PromptInput[] = []
+        const promptOps = stubOps({ onPrompt: (input) => seen.push(input) })
+
+        const ctx = (extra?: Record<string, unknown>) => ({
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps, ...extra },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+
+        yield* def.execute(
+          { description: "first", prompt: "use command model", subagent_type: "reviewer" },
+          ctx({ taskModel: commandModel }),
+        )
+        yield* def.execute({ description: "second", prompt: "use agent model", subagent_type: "reviewer" }, ctx())
+        yield* def.execute({ description: "third", prompt: "use parent model", subagent_type: "general" }, ctx())
+
+        expect(seen[0]?.model).toEqual(commandModel)
+        expect(seen[1]?.model).toEqual(agentModel)
+        expect(seen[2]?.model).toEqual(ref)
+      }),
+    {
+      config: {
+        agent: {
+          reviewer: {
+            mode: "subagent",
+            model: "test/agent-model",
+          },
+        },
+      },
+    },
   )
 
   it.instance(

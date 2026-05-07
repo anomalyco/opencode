@@ -8,11 +8,28 @@ import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Effect, Exit, Schema } from "effect"
 import { EffectBridge } from "@/effect/bridge"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
+}
+
+type TaskModel = {
+  providerID: ProviderID
+  modelID: ModelID
+}
+
+function internalTaskModel(value: unknown): TaskModel | undefined {
+  if (typeof value !== "object" || value === null) return undefined
+  if (!("providerID" in value) || !("modelID" in value)) return undefined
+  if (typeof value.providerID !== "string" || typeof value.modelID !== "string") return undefined
+  return { providerID: ProviderID.make(value.providerID), modelID: ModelID.make(value.modelID) }
+}
+
+function resolveTaskModel(input: { internal?: TaskModel; agent?: TaskModel; parent: TaskModel }) {
+  return input.internal ?? input.agent ?? input.parent
 }
 
 const id = "task"
@@ -61,11 +78,23 @@ export const TaskTool = Tool.define(
       const canTask = next.permission.some((rule) => rule.permission === id)
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
 
+      const parent = yield* sessions.get(ctx.sessionID)
+      const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
+      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+
+      const model = resolveTaskModel({
+        internal: internalTaskModel(ctx.extra?.taskModel),
+        agent: next.model,
+        parent: {
+          modelID: msg.info.modelID,
+          providerID: msg.info.providerID,
+        },
+      })
+
       const taskID = params.task_id
       const session = taskID
         ? yield* sessions.get(SessionID.make(taskID)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
-      const parent = yield* sessions.get(ctx.sessionID)
       const nextSession =
         session ??
         (yield* sessions.create({
@@ -100,14 +129,6 @@ export const TaskTool = Tool.define(
             })) ?? []),
           ],
         }))
-
-      const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
-      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-
-      const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
 
       yield* ctx.metadata({
         title: params.description,
