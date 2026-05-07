@@ -26,6 +26,15 @@
       "dependsOn": ["^build"],
       "outputs": [".artifacts/unit/junit.xml"],
       "passThroughEnv": ["*"]
+    },
+    "@opencode-ai/ui#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode-ai/ui#test:ci": {
+      "dependsOn": ["^build"],
+      "outputs": [".artifacts/unit/junit.xml"],
+      "passThroughEnv": ["*"]
     }
   }
 }

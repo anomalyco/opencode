@@ -210,7 +210,7 @@ export const dict = {
   "common.saving": "Enregistrement...",
   "common.default": "Défaut",
   "common.attachment": "pièce jointe",
-  "prompt.placeholder.shell": "Entrez une commande shell...",
+  "prompt.placeholder.shell": "Entrez une commande shell... {{example}}",
   "prompt.placeholder.normal": 'Demandez n\'importe quoi... "{{example}}"',
   "prompt.placeholder.simple": "Demandez n'importe quoi...",
   "prompt.placeholder.summarizeComments": "Résumer les commentaires…",
@@ -406,6 +406,8 @@ export const dict = {
   "error.page.description": "Une erreur s'est produite lors du chargement de l'application.",
   "error.page.details.label": "Détails de l'erreur",
   "error.page.action.restart": "Redémarrer",
+  "error.page.action.report": "Signaler l'erreur",
+  "error.page.action.reported": "Erreur signalée",
   "error.page.action.checking": "Vérification...",
   "error.page.action.checkUpdates": "Vérifier les mises à jour",
   "error.page.action.updateTo": "Mettre à jour vers {{version}}",
@@ -598,6 +600,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Développer les parties de l'outil edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Afficher les parties des outils edit, write et patch développées par défaut dans la chronologie",
+  "settings.general.row.showSessionProgressBar.title": "Afficher la barre de progression de la session",
+  "settings.general.row.showSessionProgressBar.description":
+    "Afficher la barre de progression animée en haut de la session lorsque l'agent travaille",
   "settings.general.row.wayland.title": "Utiliser Wayland natif",
   "settings.general.row.wayland.description": "Désactiver le repli X11 sur Wayland. Nécessite un redémarrage.",
   "settings.general.row.wayland.tooltip":
@@ -738,8 +743,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Récupérer le contenu d'une URL",
   "settings.permissions.tool.websearch.title": "Recherche Web",
   "settings.permissions.tool.websearch.description": "Rechercher sur le web",
-  "settings.permissions.tool.codesearch.title": "Recherche de code",
-  "settings.permissions.tool.codesearch.description": "Rechercher du code sur le web",
   "settings.permissions.tool.external_directory.title": "Répertoire externe",
   "settings.permissions.tool.external_directory.description": "Accéder aux fichiers en dehors du répertoire du projet",
   "settings.permissions.tool.doom_loop.title": "Boucle infernale",

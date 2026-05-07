@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Context } from "effect"
+import { Cause, Effect, Layer, Context, Schema } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
@@ -7,15 +7,14 @@ import path from "path"
 import z from "zod"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect"
-import { Flag } from "@/flag/flag"
+import { InstanceState } from "@/effect/instance-state"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Git } from "@/git"
-import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { FileIgnore } from "./ignore"
 import { Protected } from "./protected"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -25,9 +24,9 @@ const SUBSCRIBE_TIMEOUT_MS = 10_000
 export const Event = {
   Updated: BusEvent.define(
     "file.watcher.updated",
-    z.object({
-      file: z.string(),
-      event: z.union([z.literal("add"), z.literal("change"), z.literal("unlink")]),
+    Schema.Struct({
+      file: Schema.String,
+      event: Schema.Literals(["add", "change", "unlink"]),
     }),
   ),
 }
@@ -76,25 +75,27 @@ export const layer = Layer.effect(
         function* () {
           if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return
 
-          log.info("init", { directory: Instance.directory })
+          const ctx = yield* InstanceState.context
+
+          log.info("init", { directory: ctx.directory })
 
           const backend = getBackend()
           if (!backend) {
-            log.error("watcher backend not supported", { directory: Instance.directory, platform: process.platform })
+            log.error("watcher backend not supported", { directory: ctx.directory, platform: process.platform })
             return
           }
 
           const w = watcher()
           if (!w) return
 
-          log.info("watcher backend", { directory: Instance.directory, platform: process.platform, backend })
+          log.info("watcher backend", { directory: ctx.directory, platform: process.platform, backend })
 
           const subs: ParcelWatcher.AsyncSubscription[] = []
           yield* Effect.addFinalizer(() =>
             Effect.promise(() => Promise.allSettled(subs.map((sub) => sub.unsubscribe()))),
           )
 
-          const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
+          const cb: ParcelWatcher.SubscribeCallback = InstanceState.bind((err, evts) => {
             if (err) return
             for (const evt of evts) {
               if (evt.type === "create") void Bus.publish(Event.Updated, { file: evt.path, event: "add" })
@@ -122,24 +123,21 @@ export const layer = Layer.effect(
           const cfgIgnores = cfg.watcher?.ignore ?? []
 
           if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-            yield* subscribe(Instance.directory, [
-              ...FileIgnore.PATTERNS,
-              ...cfgIgnores,
-              ...protecteds(Instance.directory),
-            ])
+            yield* Effect.forkScoped(
+              subscribe(ctx.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(ctx.directory)]),
+            )
           }
 
-          if (Instance.project.vcs === "git") {
+          if (ctx.project.vcs === "git") {
             const result = yield* git.run(["rev-parse", "--git-dir"], {
-              cwd: Instance.project.worktree,
+              cwd: ctx.worktree,
             })
-            const vcsDir =
-              result.exitCode === 0 ? path.resolve(Instance.project.worktree, result.text().trim()) : undefined
+            const vcsDir = result.exitCode === 0 ? path.resolve(ctx.worktree, result.text().trim()) : undefined
             if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                 (entry) => entry !== "HEAD",
               )
-              yield* subscribe(vcsDir, ignore)
+              yield* Effect.forkScoped(subscribe(vcsDir, ignore))
             }
           }
         },

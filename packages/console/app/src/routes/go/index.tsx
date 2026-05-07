@@ -12,7 +12,7 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconMiniMax, IconMiMo, IconZai, IconAlibaba } from "~/component/icon"
+import { IconMiniMax, IconMiMo, IconZai, IconAlibaba, IconDeepSeek } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -23,15 +23,18 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
-  { name: "GLM-5.1", provider: "DeepInfra, Z.ai" },
-  { name: "GLM-5", provider: "DeepInfra, Z.ai" },
+  { name: "GLM-5.1", provider: "DeepInfra, Fireworks AI, Z.ai" },
+  { name: "GLM-5", provider: "DeepInfra, Fireworks AI, Z.ai" },
   { name: "Kimi K2.5", provider: "Moonshot AI" },
-  { name: "MiMo-V2-Pro", provider: "Xiaomi MiMo" },
-  { name: "MiMo-V2-Omni", provider: "Xiaomi MiMo" },
+  { name: "Kimi K2.6", provider: "Moonshot AI" },
+  { name: "MiMo-V2.5-Pro", provider: "Xiaomi MiMo" },
+  { name: "MiMo-V2.5", provider: "Xiaomi MiMo" },
   { name: "Qwen3.5 Plus", provider: "Alibaba Cloud Model Studio" },
   { name: "Qwen3.6 Plus", provider: "Alibaba Cloud Model Studio" },
   { name: "MiniMax M2.7", provider: "MiniMax" },
   { name: "MiniMax M2.5", provider: "MiniMax" },
+  { name: "DeepSeek V4 Pro", provider: "DeepSeek" },
+  { name: "DeepSeek V4 Flash", provider: "DeepSeek" },
 ]
 
 function LimitsGraph(props: { href: string }) {
@@ -58,15 +61,17 @@ function LimitsGraph(props: { href: string }) {
   const free = 200
   const graph = [
     { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
-    { id: "mimo-v2-pro", name: "MiMo-V2-Pro", req: 1290, d: "150ms" },
-    { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
+    { id: "kimi-k2.6", name: "Kimi K2.6", req: 1150, d: "150ms" },
+    { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 1290, d: "150ms" },
     { id: "qwen3.6-plus", name: "Qwen3.6 Plus", req: 3300, d: "280ms" },
     { id: "minimax-m2.7", name: "MiniMax M2.7", req: 3400, d: "300ms" },
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "200ms" },
     { id: "qwen3.5-plus", name: "Qwen3.5 Plus", req: 10200, d: "360ms" },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
   ]
 
   const w = 720
-  const h = 270
+  const h = 330
   const left = 40
   const right = 60
   const top = 18
@@ -77,7 +82,7 @@ function LimitsGraph(props: { href: string }) {
   const rmax = Math.max(1, ...graph.map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
   const base = 24
-  const p = 1.8
+  const p = 2.2
   const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
   const start = (x(1) / w) * 100
 
@@ -100,7 +105,7 @@ function LimitsGraph(props: { href: string }) {
   })()
   const shown = ticks.filter((t) => labels.has(t))
   const bh = 8
-  const gap = 16
+  const gap = 20
   const step = bh + gap
   const sep = bh + 40
   const fy = top + 22
@@ -316,6 +321,9 @@ export default function Home() {
                   <IconAlibaba width="24" height="24" />
                 </div>
                 <div>
+                  <IconDeepSeek width="24" height="24" />
+                </div>
+                <div>
                   <IconMiMo width="24" height="24" />
                 </div>
                 {/*
@@ -437,28 +445,26 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("go.faq.q2")}>
                   {i18n.t("go.faq.a2")}
-                  {language.locale() === "en" && (
-                    <div data-slot="faq-models">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>{i18n.t("workspace.models.table.model")}</th>
-                            <th>{i18n.t("workspace.providers.table.provider")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <For each={models}>
-                            {(m) => (
-                              <tr>
-                                <td>{m.name}</td>
-                                <td>{m.provider}</td>
-                              </tr>
-                            )}
-                          </For>
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  <div data-slot="faq-models">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{i18n.t("workspace.models.table.model")}</th>
+                          <th>{i18n.t("workspace.providers.table.provider")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={models}>
+                          {(m) => (
+                            <tr>
+                              <td>{m.name}</td>
+                              <td>{m.provider}</td>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
+                  </div>
                 </Faq>
               </li>
               <li>

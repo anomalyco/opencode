@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ProviderTransform } from "../../src/provider"
+import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 
 describe("ProviderTransform.options - setCacheKey", () => {
@@ -101,7 +101,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.store).toBe(false)
   })
 
-  test("should set store=true for azure provider by default", () => {
+  test("should set store=false for azure provider by default", () => {
     const azureModel = {
       ...mockModel,
       providerID: "azure",
@@ -116,7 +116,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
       sessionID,
       providerOptions: {},
     })
-    expect(result.store).toBe(true)
+    expect(result.store).toBe(false)
   })
 })
 
@@ -855,6 +855,150 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - moonshot $ref siblings", () => {
+  const moonshotModel = {
+    providerID: "moonshotai",
+    api: {
+      id: "kimi-k2",
+    },
+  } as any
+
+  test("removes sibling descriptions from referenced tool parameter schemas", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        deviceType: {
+          description: "Optional. The type of device that captured the screenshot, e.g. mobile or desktop.",
+          enum: ["DEVICE_TYPE_UNSPECIFIED", "MOBILE", "DESKTOP", "TABLET", "AGNOSTIC"],
+          type: "string",
+        },
+        modelId: {
+          description: "Optional. The model to use for generation.",
+          enum: ["MODEL_ID_UNSPECIFIED", "GEMINI_3_PRO", "GEMINI_3_FLASH", "GEMINI_3_1_PRO"],
+          type: "string",
+        },
+        projectId: {
+          description: "Required. The project ID of screens to generate variants for.",
+          type: "string",
+        },
+        prompt: {
+          description: "Required. The input text used to generate the variants.",
+          type: "string",
+        },
+        selectedScreenIds: {
+          description: "Required. The screen ids of screen to generate variants for.",
+          items: {
+            type: "string",
+          },
+          type: "array",
+        },
+        variantOptions: {
+          $ref: "#/$defs/VariantOptions",
+          description:
+            "Required. The variant options for generation, including the number of variants, creative range, and aspects to focus on.",
+        },
+      },
+      required: ["projectId", "selectedScreenIds", "prompt", "variantOptions"],
+      $defs: {
+        VariantOptions: {
+          description:
+            "Configuration options for design variant generation. This message captures all parameters used to generate variants, allowing the configuration to be stored, replayed, or analyzed.",
+          properties: {
+            aspects: {
+              description: "Optional. Specific aspects to focus on. If empty, all aspects may be varied.",
+              items: {
+                enum: ["VARIANT_ASPECT_UNSPECIFIED", "LAYOUT", "COLOR_SCHEME", "IMAGES", "TEXT_FONT", "TEXT_CONTENT"],
+                type: "string",
+              },
+              type: "array",
+            },
+            creativeRange: {
+              description: "Optional. Creative range for variations. Default: EXPLORE",
+              enum: ["CREATIVE_RANGE_UNSPECIFIED", "REFINE", "EXPLORE", "REIMAGINE"],
+              type: "string",
+            },
+            variantCount: {
+              description: "Optional. Number of variants to generate (1-5). Default: 3",
+              format: "int32",
+              type: "integer",
+            },
+          },
+          type: "object",
+        },
+      },
+      description: "Request message for GenerateVariants.",
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(moonshotModel, schema) as any
+
+    expect(result.properties.variantOptions).toEqual({
+      $ref: "#/$defs/VariantOptions",
+    })
+    expect(result.$defs.VariantOptions.description).toBe(schema.$defs.VariantOptions.description)
+  })
+
+  test("also runs for kimi models outside the moonshot provider", () => {
+    const result = ProviderTransform.schema(
+      {
+        providerID: "openrouter",
+        name: "Kimi K2",
+        api: {
+          id: "moonshotai/kimi-k2",
+        },
+      } as any,
+      {
+        type: "object",
+        properties: {
+          value: {
+            $ref: "#/$defs/Value",
+            description: "Moonshot rejects this sibling after ref expansion.",
+          },
+        },
+        $defs: {
+          Value: {
+            description: "Referenced schema description stays here.",
+            type: "object",
+          },
+        },
+      } as any,
+    ) as any
+
+    expect(result.properties.value).toEqual({
+      $ref: "#/$defs/Value",
+    })
+  })
+
+  test("converts tuple-style array items to a single item schema", () => {
+    const result = ProviderTransform.schema(moonshotModel, {
+      type: "object",
+      properties: {
+        codeSpec: {
+          type: "object",
+          properties: {
+            accessibility: {
+              type: "object",
+              properties: {
+                renderedSize: {
+                  description: "Rendered size [width, height] in px",
+                  type: "array",
+                  items: [{ type: "number" }, { type: "number" }],
+                  minItems: 2,
+                  maxItems: 2,
+                },
+              },
+            },
+          },
+        },
+      },
+    } as any) as any
+
+    expect(result.properties.codeSpec.properties.accessibility.properties.renderedSize.items).toEqual({
+      type: "number",
+    })
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
@@ -976,6 +1120,118 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       { type: "text", text: "Answer" },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.message - surrogate sanitization", () => {
+  const model = {
+    id: "test/test-model",
+    providerID: "test",
+    api: {
+      id: "test-model",
+      url: "https://api.test.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Test Model",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+    limit: { context: 128000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("replaces lone surrogates in model-visible text", () => {
+    const lone = "\uD83D"
+    const valid = "🚀"
+    const sanitized = "�"
+    const text = (label: string) => `${label} ${lone} and ${valid}`
+    const expected = (label: string) => `${label} ${sanitized} and ${valid}`
+    const msgs = [
+      { role: "system", content: text("system") },
+      { role: "user", content: text("user string") },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: text("user text") },
+          { type: "image", image: "data:image/png;base64,abcd" },
+        ],
+      },
+      { role: "assistant", content: text("assistant string") },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: text("assistant text") },
+          { type: "reasoning", text: text("assistant reasoning") },
+          { type: "tool-call", toolCallId: "call-1", toolName: "Read", input: { filePath: ".opencode/tool/emoji.ts" } },
+          {
+            type: "tool-result",
+            toolCallId: "call-2",
+            toolName: "Read",
+            output: { type: "text", value: text("assistant tool text") },
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call-3",
+            toolName: "Read",
+            output: { type: "error-text", value: text("assistant tool error") },
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call-4",
+            toolName: "Read",
+            output: { type: "content", value: [{ type: "text", text: text("assistant tool content") }] },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-5",
+            toolName: "Read",
+            output: { type: "text", value: text("tool text") },
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call-6",
+            toolName: "Read",
+            output: { type: "error-text", value: text("tool error") },
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call-7",
+            toolName: "Read",
+            output: { type: "content", value: [{ type: "text", text: text("tool content") }] },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].content).toBe(expected("system"))
+    expect(result[1].content).toBe(expected("user string"))
+    expect(result[2].content[0].text).toBe(expected("user text"))
+    expect(result[3].content).toBe(expected("assistant string"))
+    expect(result[4].content[0].text).toBe(expected("assistant text"))
+    expect(result[4].content[1].text).toBe(expected("assistant reasoning"))
+    expect(result[4].content[3].output.value).toBe(expected("assistant tool text"))
+    expect(result[4].content[4].output.value).toBe(expected("assistant tool error"))
+    expect(result[4].content[5].output.value[0].text).toBe(expected("assistant tool content"))
+    expect(result[5].content[0].output.value).toBe(expected("tool text"))
+    expect(result[5].content[1].output.value).toBe(expected("tool error"))
+    expect(result[5].content[2].output.value[0].text).toBe(expected("tool content"))
+    expect(result[2].content[1]).toEqual({ type: "image", image: "data:image/png;base64,abcd" })
   })
 })
 
@@ -1849,7 +2105,7 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
     const msgs = [
       {
         role: "system",
-        content: [{ type: "text", text: "You are a helpful assistant" }],
+        content: "You are a helpful assistant",
       },
       {
         role: "user",
@@ -1863,7 +2119,7 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
     expect(result[0].providerOptions?.bedrock).toEqual({
       cachePoint: { type: "default" },
     })
-    expect(result[0].content[0].providerOptions?.bedrock).toBeUndefined()
+    expect(result[0].content).toBe("You are a helpful assistant")
   })
 })
 
@@ -1900,7 +2156,7 @@ describe("ProviderTransform.message - cache control on gateway", () => {
     const msgs = [
       {
         role: "system",
-        content: [{ type: "text", text: "You are a helpful assistant" }],
+        content: "You are a helpful assistant",
       },
       {
         role: "user",
@@ -1910,7 +2166,7 @@ describe("ProviderTransform.message - cache control on gateway", () => {
 
     const result = ProviderTransform.message(msgs, model, {}) as any[]
 
-    expect(result[0].content[0].providerOptions).toBeUndefined()
+    expect(result[0].content).toBe("You are a helpful assistant")
     expect(result[0].providerOptions).toBeUndefined()
   })
 
@@ -2113,7 +2369,41 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("mistral returns empty object", () => {
+  test("mistral models with reasoning support return variants", () => {
+    const model = createMockModel({
+      id: "mistral/mistral-small-latest",
+      providerID: "mistral",
+      api: {
+        id: "mistral-small-latest",
+        url: "https://api.mistral.com",
+        npm: "@ai-sdk/mistral",
+      },
+      capabilities: { reasoning: true },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      high: { reasoningEffort: "high" },
+    })
+  })
+
+  test("mistral-medium-3.5 with reasoning returns variants", () => {
+    const model = createMockModel({
+      id: "mistral/mistral-medium-3.5",
+      providerID: "mistral",
+      api: {
+        id: "mistral-medium-3.5",
+        url: "https://api.mistral.com",
+        npm: "@ai-sdk/mistral",
+      },
+      capabilities: { reasoning: true },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      high: { reasoningEffort: "high" },
+    })
+  })
+
+  test("mistral without reasoning returns empty object", () => {
     const model = createMockModel({
       id: "mistral/mistral-large",
       providerID: "mistral",
@@ -2122,6 +2412,22 @@ describe("ProviderTransform.variants", () => {
         url: "https://api.mistral.com",
         npm: "@ai-sdk/mistral",
       },
+      capabilities: { reasoning: false },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({})
+  })
+
+  test("mistral large with reasoning returns empty object (only small supports reasoning)", () => {
+    const model = createMockModel({
+      id: "mistral/mistral-large",
+      providerID: "mistral",
+      api: {
+        id: "mistral-large-latest",
+        url: "https://api.mistral.com",
+        npm: "@ai-sdk/mistral",
+      },
+      capabilities: { reasoning: true },
     })
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({})
@@ -2689,6 +2995,36 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
     })
+
+    test("dotted gpt-5.x ids include 'minimal' (regression: matcher used to miss gpt-5.4)", () => {
+      const model = createMockModel({
+        id: "gpt-5.4",
+        providerID: "openai",
+        api: {
+          id: "gpt-5.4",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2026-03-05",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-50 (lookalike) does not get gpt-5 family treatment", () => {
+      const model = createMockModel({
+        id: "gpt-50",
+        providerID: "openai",
+        api: {
+          id: "gpt-50",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2024-01-01",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
   })
 
   describe("@ai-sdk/anthropic", () => {
@@ -2737,6 +3073,28 @@ describe("ProviderTransform.variants", () => {
           display: "summarized",
         },
         effort: "max",
+      })
+    })
+
+    test("github copilot opus 4.7 returns only medium reasoning effort", () => {
+      const model = createMockModel({
+        id: "claude-opus-4.7",
+        providerID: "github-copilot",
+        api: {
+          id: "claude-opus-4.7",
+          url: "https://api.githubcopilot.com/v1",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({
+        medium: {
+          thinking: {
+            type: "adaptive",
+            display: "summarized",
+          },
+          effort: "medium",
+        },
       })
     })
 
@@ -3113,5 +3471,84 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+  })
+
+  describe("ai-gateway-provider (cloudflare-ai-gateway)", () => {
+    const cfModel = (apiId: string, releaseDate = "2024-01-01") =>
+      createMockModel({
+        id: `cloudflare-ai-gateway/${apiId}`,
+        providerID: "cloudflare-ai-gateway",
+        api: {
+          id: apiId,
+          url: "https://gateway.ai.cloudflare.com/v1/compat",
+          npm: "ai-gateway-provider",
+        },
+        release_date: releaseDate,
+      })
+
+    test("openai gpt-5.4 includes xhigh effort (regression: variant=xhigh used to be silently ignored)", () => {
+      const result = ProviderTransform.variants(cfModel("openai/gpt-5.4", "2026-03-05"))
+      expect(result.xhigh).toEqual({ reasoningEffort: "xhigh" })
+      expect(result.high).toEqual({ reasoningEffort: "high" })
+      expect(Object.keys(result)).toContain("minimal")
+    })
+
+    test("openai gpt-5.2-codex includes xhigh", () => {
+      const result = ProviderTransform.variants(cfModel("openai/gpt-5.2-codex", "2025-12-11"))
+      expect(result.xhigh).toEqual({ reasoningEffort: "xhigh" })
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
+    })
+
+    test("openai gpt-4o (no reasoning) returns empty", () => {
+      const model = cfModel("openai/gpt-4o")
+      model.capabilities.reasoning = false
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+
+    test("non-openai upstream falls back to widely-supported OAI efforts", () => {
+      const result = ProviderTransform.variants(cfModel("anthropic/claude-sonnet-4-6"))
+      expect(result).toEqual({
+        low: { reasoningEffort: "low" },
+        medium: { reasoningEffort: "medium" },
+        high: { reasoningEffort: "high" },
+      })
+    })
+  })
+})
+
+describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
+  const createModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "cloudflare-ai-gateway/openai/gpt-5.4",
+      providerID: "cloudflare-ai-gateway",
+      api: {
+        id: "openai/gpt-5.4",
+        url: "https://gateway.ai.cloudflare.com/v1/compat",
+        npm: "ai-gateway-provider",
+      },
+      capabilities: {
+        temperature: false,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+      limit: { context: 1_000_000, output: 128_000 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-03-05",
+      ...overrides,
+    }) as any
+
+  test("routes options under openaiCompatible (the key @ai-sdk/openai-compatible reads)", () => {
+    // Regression: previously fell back to providerID="cloudflare-ai-gateway",
+    // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
+    const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
+    expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
