@@ -25,15 +25,23 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   google: 5,
 }
 
-const CUSTOM_PROVIDER_VALUE = "__opencode_custom_provider__"
+const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
 
-type ProviderOption = {
+type ProviderOptionBase = {
   title: string
   value: string
   description?: string
   category: string
-  providerID?: string
 }
+
+type ProviderOption =
+  | (ProviderOptionBase & {
+      type: "provider"
+      providerID: string
+    })
+  | (ProviderOptionBase & {
+      type: "custom"
+    })
 
 export function providerOptions(list: { id: string; name: string }[]): ProviderOption[] {
   return [
@@ -41,6 +49,7 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
       list,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => ({
+        type: "provider" as const,
         title: provider.name,
         value: provider.id,
         providerID: provider.id,
@@ -54,8 +63,9 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
       })),
     ),
     {
+      type: "custom",
       title: "Other",
-      value: CUSTOM_PROVIDER_VALUE,
+      value: CUSTOM_PROVIDER_OPTION_VALUE,
       description: "Custom provider",
       category: "Providers",
     },
@@ -101,10 +111,23 @@ export function createDialogProviderOptions() {
     return pipe(
       providerOptions(sync.data.provider_next.all),
       map((provider) => {
-        const consoleManaged = provider.providerID
-          ? isConsoleManagedProvider(sync.data.console_state.consoleManagedProviders, provider.providerID)
-          : false
-        const connected = provider.providerID ? sync.data.provider_next.connected.includes(provider.providerID) : false
+        if (provider.type === "custom") {
+          return {
+            title: provider.title,
+            value: provider.value,
+            description: provider.description,
+            category: provider.category,
+            async onSelect() {
+              const providerID = await promptCustomProviderID()
+              if (!providerID) return
+              return dialog.replace(() => <ApiMethod providerID={providerID} title="API key" custom />)
+            },
+          }
+        }
+
+        const providerID = provider.providerID
+        const consoleManaged = isConsoleManagedProvider(sync.data.console_state.consoleManagedProviders, providerID)
+        const connected = sync.data.provider_next.connected.includes(providerID)
 
         return {
           title: provider.title,
@@ -116,13 +139,7 @@ export function createDialogProviderOptions() {
           async onSelect() {
             if (consoleManaged) return
 
-            if (provider.value === CUSTOM_PROVIDER_VALUE) {
-              const providerID = await promptCustomProviderID()
-              if (!providerID) return
-              return dialog.replace(() => <ApiMethod providerID={providerID} title="API key" custom />)
-            }
-
-            const methods = sync.data.provider_auth[provider.value] ?? [
+            const methods = sync.data.provider_auth[providerID] ?? [
               {
                 type: "api",
                 label: "API key",
@@ -160,7 +177,7 @@ export function createDialogProviderOptions() {
               }
 
               const result = await sdk.client.provider.oauth.authorize({
-                providerID: provider.value,
+                providerID,
                 method: index,
                 inputs,
               })
@@ -175,7 +192,7 @@ export function createDialogProviderOptions() {
               if (result.data?.method === "code") {
                 dialog.replace(() => (
                   <CodeMethod
-                    providerID={provider.value}
+                    providerID={providerID}
                     title={method.label}
                     index={index}
                     authorization={result.data!}
@@ -185,7 +202,7 @@ export function createDialogProviderOptions() {
               if (result.data?.method === "auto") {
                 dialog.replace(() => (
                   <AutoMethod
-                    providerID={provider.value}
+                    providerID={providerID}
                     title={method.label}
                     index={index}
                     authorization={result.data!}
@@ -201,7 +218,7 @@ export function createDialogProviderOptions() {
                 metadata = value
               }
               return dialog.replace(() => (
-                <ApiMethod providerID={provider.value} title={method.label} metadata={metadata} />
+                <ApiMethod providerID={providerID} title={method.label} metadata={metadata} />
               ))
             }
           },
