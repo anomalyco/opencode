@@ -16,6 +16,7 @@ export const useSessionHashScroll = (input: {
   currentMessageId: () => string | undefined
   pendingMessage: () => string | undefined
   setPendingMessage: (value: string | undefined) => void
+  setSeekingMessage: (value: string | undefined) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   enterLive: () => void
   enterAnchored: (id?: string) => void
@@ -52,12 +53,14 @@ export const useSessionHashScroll = (input: {
     frames.add(id)
   }
   const cancel = () => {
+    console.debug(`[seek] cancelling ${frames.size} pending frames`)
     for (const id of frames) cancelAnimationFrame(id)
     frames.clear()
   }
 
   const clearMessageHash = () => {
     cancel()
+    input.setSeekingMessage(undefined)
     input.consumePendingMessage(input.sessionKey())
     if (input.pendingMessage()) input.setPendingMessage(undefined)
     if (!location.hash) return
@@ -82,13 +85,24 @@ export const useSessionHashScroll = (input: {
     const b = root.getBoundingClientRect()
     const sticky = root.querySelector("[data-session-title]")
     const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
+    const scrollTopBefore = root.scrollTop
     const top = targetTop({
       itemTop: a.top,
       rootTop: b.top,
       scrollTop: root.scrollTop,
       inset,
     })
+    
+    console.debug(
+      `[scrollToElement] scrolling: elementId=${el.id} scrollTopBefore=${scrollTopBefore} scrollTopTarget=${top} delta=${top - scrollTopBefore} behavior=${behavior}`
+    )
+    
     root.scrollTo({ top, behavior })
+    
+    console.debug(
+      `[scrollToElement] scrolled: scrollTopAfter=${root.scrollTop}`
+    )
+    
     return true
   }
 
@@ -104,16 +118,26 @@ export const useSessionHashScroll = (input: {
   const seek = (id: string, behavior: ScrollBehavior, left = 4): boolean => {
     const anchorId = input.anchor(id)
     const el = document.getElementById(anchorId)
+    const elByQuery = document.querySelector(`[id="${anchorId}"]`)
+    const elByDataAttr = document.querySelector(`[data-message-id="${id}"]`)
+    
+    console.debug(
+      `[seek] attempt: messageId=${id} anchorId=${anchorId} retriesLeft=${left} foundById=${!!el} foundByQuery=${!!elByQuery} foundByDataAttr=${!!elByDataAttr} currentMessageId=${input.currentMessageId() || "none"}`
+    )
+    
     if (el) {
       console.debug(`[seek] found element: messageId=${id} anchorId=${anchorId} behavior=${behavior}`)
-      return scrollToElement(el, behavior)
+      const result = scrollToElement(el, behavior)
+      console.debug(`[seek] scrollToElement returned: ${result}`)
+      return result
     }
     if (left <= 0) {
       console.warn(`[seek] element not found after retries: messageId=${id} anchorId=${anchorId}`)
       return false
     }
-    console.debug(`[seek] element not found, retrying: messageId=${id} anchorId=${anchorId} retriesLeft=${left}`)
+    console.debug(`[seek] scheduling retry in rAF: messageId=${id} retriesLeft=${left - 1}`)
     queue(() => {
+      console.debug(`[seek] retry executing: messageId=${id} retriesLeft=${left - 1}`)
       seek(id, behavior, left - 1)
     })
     return false
@@ -121,9 +145,10 @@ export const useSessionHashScroll = (input: {
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     console.debug(
-      `[scrollToMessage] called: messageId=${message.id} behavior=${behavior} currentMessageId=${input.currentMessageId()}`,
+      `[scrollToMessage] called: messageId=${message.id} behavior=${behavior} currentMessageId=${input.currentMessageId() || "none"}`
     )
     cancel()
+    input.setSeekingMessage(message.id)
     input.enterAnchored(message.id)
     if (input.currentMessageId() !== message.id) {
       console.debug(`[scrollToMessage] setting active message: messageId=${message.id}`)
@@ -134,6 +159,8 @@ export const useSessionHashScroll = (input: {
 
     if (seek(message.id, behavior)) {
       updateHash(message.id)
+      settle(message.id)
+      queue(() => input.setSeekingMessage(undefined))
       return
     }
 
@@ -183,7 +210,17 @@ export const useSessionHashScroll = (input: {
     const hash = location.hash
     if (!hash) clearing = false
     if (!input.sessionID() || !input.messagesReady()) return
-    cancel()
+    
+    // Don't cancel if hash matches currentMessageId - let seek() retries continue
+    const messageId = messageIdFromHash(hash.slice(1))
+    const skipCancel = messageId && messageId === input.currentMessageId()
+    
+    if (!skipCancel) {
+      cancel()
+    } else {
+      console.debug(`[hash effect] skipping cancel: hash matches currentMessageId=${messageId}`)
+    }
+    
     queue(() => applyHash("auto"))
   })
 

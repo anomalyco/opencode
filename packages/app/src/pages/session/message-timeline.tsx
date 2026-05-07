@@ -247,6 +247,7 @@ export function MessageTimeline(props: {
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
   currentMessageId?: string
+  seekingMessageId?: string
   onJumpToMessage: (message: UserMessage) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
@@ -383,9 +384,19 @@ export function MessageTimeline(props: {
     const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
     if (!node) return
     const box = root.getBoundingClientRect()
+    const anchorTop = node.getBoundingClientRect().top - box.top
+    
+    const abnormalThreshold = root.clientHeight * 10
+    if (Math.abs(anchorTop) > abnormalThreshold) {
+      console.warn(
+        `[captureMessageAnchor] ABNORMAL anchor position: id=${id} top=${anchorTop.toFixed(2)} threshold=${abnormalThreshold.toFixed(2)} - DOM may not be ready, skipping anchor`,
+      )
+      return undefined
+    }
+    
     return {
       id,
-      top: node.getBoundingClientRect().top - box.top,
+      top: anchorTop,
     }
   }
 
@@ -454,6 +465,18 @@ export function MessageTimeline(props: {
       if (tail >= max) break
     }
 
+    if (start >= ids.length) {
+      console.warn(
+        `[buildWindow] scrollTop exceeded estimated range: scrollTop=${scrollTop.toFixed(2)} totalEstimate=${offset.toFixed(2)} actualHeight=${scrollHeight.toFixed(2)} - preserving current window`,
+      )
+      return {
+        start: windowed.start,
+        end: windowed.end,
+        top: windowed.top,
+        bottom: windowed.bottom,
+      }
+    }
+
     const clampedStart = Math.max(0, Math.min(start, ids.length - 1))
     const clampedEnd = Math.max(clampedStart + 1, Math.min(end, ids.length))
 
@@ -467,6 +490,64 @@ export function MessageTimeline(props: {
       start: clampedStart,
       end: clampedEnd,
       top: offset,
+      bottom: Math.max(0, totalHeight() - tail),
+    }
+  }
+
+  const buildTargetWindow = (id: string) => {
+    const root = viewport
+    const ids = rendered()
+    const index = renderedIndex().get(id)
+
+    if (!root || index === undefined || ids.length <= windowThreshold) {
+      return {
+        start: 0,
+        end: ids.length,
+        top: 0,
+        bottom: 0,
+      }
+    }
+
+    const span = root.clientHeight + windowOverscan * 2
+    let start = index
+    let end = index + 1
+    let covered = estimateTurnHeight(ids[index]!)
+
+    while (covered < span && (start > 0 || end < ids.length)) {
+      const a = start > 0 ? estimateTurnHeight(ids[start - 1]!) : -1
+      const b = end < ids.length ? estimateTurnHeight(ids[end]!) : -1
+
+      if (a >= b && start > 0) {
+        start -= 1
+        covered += a
+        continue
+      }
+
+      if (end < ids.length) {
+        covered += b
+        end += 1
+        continue
+      }
+
+      if (start > 0) {
+        start -= 1
+        covered += a
+      }
+    }
+
+    let top = 0
+    for (let i = 0; i < start; i++) top += estimateTurnHeight(ids[i]!)
+    let tail = top
+    for (let i = start; i < end; i++) tail += estimateTurnHeight(ids[i]!)
+
+    console.debug(
+      `[buildTargetWindow] built window around target: id=${id} index=${index} window=[${start},${end}] top=${top} bottom=${Math.max(0, totalHeight() - tail)}`,
+    )
+
+    return {
+      start,
+      end,
+      top,
       bottom: Math.max(0, totalHeight() - tail),
     }
   }
@@ -510,10 +591,16 @@ export function MessageTimeline(props: {
 
   const applyWindow = () => {
     const viewportAnchor = captureWindowAnchor()
-    const targetId = activeMessageID() ?? viewportAnchor?.id
+    const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
     const targetAnchor = captureMessageAnchor(targetId)
-    const scrollAnchor = props.currentMessageId ? (targetAnchor ?? viewportAnchor) : viewportAnchor
-    const next = syncWindow(buildWindow(), targetId)
+    const scrollAnchor = props.currentMessageId ? targetAnchor : viewportAnchor
+    
+    console.debug(
+      `[applyWindow] entry: currentMessageId=${props.currentMessageId || "none"} seekingMessageId=${props.seekingMessageId || "none"} targetId=${targetId || "none"} hasTargetAnchor=${!!targetAnchor} hasViewportAnchor=${!!viewportAnchor} scrollAnchorId=${scrollAnchor?.id || "none"} scrollAnchorTop=${scrollAnchor?.top ?? "none"}`
+    )
+    
+    const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
+    const next = syncWindow(base, targetId)
     const same = sameWindow(next)
     if (same) return
 
@@ -524,6 +611,7 @@ export function MessageTimeline(props: {
     setWindowed(next)
     const adjustVersion = ++windowAdjustVersion
     if (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId) {
+      console.debug("[applyWindow] bottom-anchored scroll path")
       requestAnimationFrame(() => {
         if (adjustVersion !== windowAdjustVersion) return
         const root = viewport
@@ -534,8 +622,15 @@ export function MessageTimeline(props: {
       })
       return
     }
-    if (!scrollAnchor) return
+    if (!scrollAnchor) {
+      console.debug("[applyWindow] skipping anchor scroll: scrollAnchor is undefined")
+      return
+    }
 
+    console.debug(
+      `[applyWindow] scheduling anchor scroll: anchorId=${scrollAnchor.id} anchorTop=${scrollAnchor.top}`
+    )
+    
     requestAnimationFrame(() => {
       if (adjustVersion !== windowAdjustVersion) return
       const root = viewport
@@ -544,28 +639,31 @@ export function MessageTimeline(props: {
       const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
       if (!node) {
         console.warn(
-          `[applyWindow] anchor node not found in DOM: id=${scrollAnchor.id} windowStart=${windowed.start} windowEnd=${windowed.end}`,
+          `[applyWindow] anchor node not found: id=${scrollAnchor.id} windowStart=${windowed.start} windowEnd=${windowed.end}`,
         )
         return
       }
       const box = root.getBoundingClientRect()
       const top = node.getBoundingClientRect().top - box.top
       const delta = top - scrollAnchor.top
+      
+      console.debug(
+        `[applyWindow] anchor scroll adjustment: anchorId=${scrollAnchor.id} prevTop=${scrollAnchor.top} currentTop=${top} delta=${delta} scrollTopBefore=${root.scrollTop}`
+      )
+      
       if (Math.abs(delta) <= 1) return
       const prevTop = root.scrollTop
       root.scrollTop += delta
       const after = snap(root)
+      
+      console.debug(
+        `[applyWindow] anchor scroll applied: scrollTopAfter=${root.scrollTop} deltaApplied=${delta}`
+      )
+      
       if (Math.abs(delta) > 24 || after.top < prevTop - 24) {
-        console.warn("[timeline] anchor scroll write", {
-          delta: Math.round(delta),
-          before,
-          after,
-          prev,
-          next,
-          anchor: scrollAnchor,
-          target: targetId,
-          current: props.currentMessageId,
-        })
+        console.warn(
+          `[timeline] anchor scroll write: delta=${Math.round(delta)} scrollTopBefore=${prevTop} scrollTopAfter=${root.scrollTop} anchorId=${scrollAnchor.id} targetId=${targetId} currentMessageId=${props.currentMessageId || "none"}`
+        )
       }
       props.onScheduleScrollState(root)
     })
@@ -622,21 +720,9 @@ export function MessageTimeline(props: {
         ) {
           return
         }
-        console.debug("[timeline] rendered slice", {
-          first,
-          last,
-          size,
-          top: Math.round(top),
-          bottom: Math.round(bottom),
-          active: activeID,
-          working: busy,
-          activeVisible: !!activeID && visibleRendered().includes(activeID),
-          prevFirst: prev[0],
-          prevLast: prev[1],
-          prevSize: prev[2],
-          prevTop: Math.round(prev[3]),
-          prevBottom: Math.round(prev[4]),
-        })
+        console.debug(
+          `[timeline] rendered slice: first=${first} last=${last} size=${size} top=${Math.round(top)} bottom=${Math.round(bottom)} active=${activeID || "none"} working=${busy} activeVisible=${!!activeID && visibleRendered().includes(activeID)} prevFirst=${prev[0]} prevLast=${prev[1]} prevSize=${prev[2]} prevTop=${Math.round(prev[3])} prevBottom=${Math.round(prev[4])}`
+        )
       },
       { defer: true },
     ),
@@ -683,11 +769,9 @@ export function MessageTimeline(props: {
       props.onScheduleScrollState(root)
       const took = performance.now() - time
       if (took > SCROLL_WARN_MS) {
-        console.warn("[timeline] slow scroll lock", {
-          height: Math.round(root.scrollHeight),
-          top: Math.round(root.scrollTop),
-          took: Math.round(took),
-        })
+        console.warn(
+          `[timeline] slow scroll lock: height=${Math.round(root.scrollHeight)} top=${Math.round(root.scrollTop)} took=${Math.round(took)}ms`
+        )
       }
       bottomFrame = requestAnimationFrame(step)
     }
@@ -725,11 +809,9 @@ export function MessageTimeline(props: {
       props.onScheduleScrollState(root)
       const took = performance.now() - time
       if (took > SCROLL_WARN_MS) {
-        console.warn("[timeline] slow mutation scroll", {
-          height: Math.round(root.scrollHeight),
-          top: Math.round(root.scrollTop),
-          took: Math.round(took),
-        })
+        console.warn(
+          `[timeline] slow mutation scroll: height=${Math.round(root.scrollHeight)} top=${Math.round(root.scrollTop)} took=${Math.round(took)}ms`
+        )
       }
     }
     const schedule = () => {
@@ -799,13 +881,9 @@ export function MessageTimeline(props: {
   createEffect(
     on(activeMessageID, (id, prev) => {
       if (id === prev) return
-      console.debug("[timeline] active message", {
-        prev,
-        next: id,
-        rendered: props.renderedUserMessages.length,
-        live: props.live,
-        bottom: props.scroll.bottom,
-      })
+      console.debug(
+        `[timeline] active message changed: prev=${prev || "none"} next=${id || "none"} rendered=${props.renderedUserMessages.length} live=${props.live} bottom=${props.scroll.bottom}`
+      )
       windowAdjustVersion += 1
       scheduleWindow()
     }),
@@ -842,16 +920,9 @@ export function MessageTimeline(props: {
       ([can, start, end, size], prev) => {
         if (prev && prev[0] === can && prev[1] === start && prev[2] === end && prev[3] === size) return
         if (!prev) return
-        console.debug("[timeline] window state", {
-          can,
-          start,
-          end,
-          size,
-          prevCan: prev[0],
-          prevStart: prev[1],
-          prevEnd: prev[2],
-          prevSize: prev[3],
-        })
+        console.debug(
+          `[timeline] window state changed: can=${can} start=${start} end=${end} size=${size} prevCan=${prev[0]} prevStart=${prev[1]} prevEnd=${prev[2]} prevSize=${prev[3]}`
+        )
       },
       { defer: true },
     ),
@@ -2220,12 +2291,9 @@ export function MessageTimeline(props: {
       scheduleWindow()
       const took = performance.now() - time
       if (took > MEASURE_WARN_MS) {
-        console.warn("[timeline] slow measure", {
-          msg: item.messageID,
-          height: Math.round(next),
-          prev: prev === undefined ? undefined : Math.round(prev),
-          took: Math.round(took),
-        })
+        console.warn(
+          `[timeline] slow measure: msg=${item.messageID} height=${Math.round(next)} prev=${prev === undefined ? "none" : Math.round(prev)} took=${Math.round(took)}ms`
+        )
       }
     }
 
@@ -2254,26 +2322,17 @@ export function MessageTimeline(props: {
     createEffect(() => {
       if (!active()) return
       if (!isWorking()) return
-      console.debug("[timeline] active item mounted", {
-        msg: item.messageID,
-        index: item.index,
-        visible: visibleRendered().includes(item.messageID),
-      })
+      console.debug(
+        `[timeline] active item mounted: msg=${item.messageID} index=${item.index} visible=${visibleRendered().includes(item.messageID)}`
+      )
     })
 
     onCleanup(() => stop?.())
     onCleanup(() => {
       if (!active()) return
-      console.warn("[timeline] active item unmounted", {
-        msg: item.messageID,
-        index: item.index,
-        working: isWorking(),
-        visibleSize: visibleRendered().length,
-        first: visibleRendered().at(0),
-        last: visibleRendered().at(-1),
-        top: Math.round(windowed.top),
-        bottom: Math.round(windowed.bottom),
-      })
+      console.warn(
+        `[timeline] active item unmounted: msg=${item.messageID} index=${item.index} working=${isWorking()} visibleSize=${visibleRendered().length} first=${visibleRendered().at(0) || "none"} last=${visibleRendered().at(-1) || "none"} top=${Math.round(windowed.top)} bottom=${Math.round(windowed.bottom)}`
+      )
     })
 
     return (

@@ -122,6 +122,7 @@ export default function Page() {
 
   const [ui, setUi] = createStore({
     pendingMessage: undefined as string | undefined,
+    seekingMessageId: undefined as string | undefined,
     reviewSnap: false,
     scrollGesture: 0,
     mode: "live" as ScrollMode,
@@ -1659,6 +1660,7 @@ export default function Page() {
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
+    setUi("seekingMessageId", undefined)
     enterLive()
     autoScroll.forceScrollToBottom()
     clearMessageHash()
@@ -2094,6 +2096,7 @@ export default function Page() {
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
+    setSeekingMessage: (value) => setUi("seekingMessageId", value),
     setActiveMessage,
     enterLive,
     enterAnchored,
@@ -2275,6 +2278,7 @@ export default function Page() {
                     }}
                     renderedUserMessages={visibleUserMessages()}
                     currentMessageId={store.messageId}
+                    seekingMessageId={ui.seekingMessageId}
                     onJumpToMessage={(message) => {
                       autoScroll.pause()
                       scrollToMessage(message, "auto")
