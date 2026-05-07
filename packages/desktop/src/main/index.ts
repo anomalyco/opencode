@@ -444,7 +444,7 @@ async function installUpdate() {
     version: downloadedUpdateVersion,
   })
   await killSidecar()
-  autoUpdater.quitAndInstall()
+  autoUpdater.quitAndInstall(true, true)
 }
 
 async function checkForUpdates(alertOnFail: boolean) {
