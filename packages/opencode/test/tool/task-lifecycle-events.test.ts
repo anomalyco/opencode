@@ -1,16 +1,16 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { Instance } from "../../src/project/instance"
-import { Session } from "../../src/session"
+import { Session } from "../../src/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import * as Truncate from "../../src/tool/truncate"
 import { ToolRegistry } from "../../src/tool/registry"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -20,11 +20,12 @@ const ref = { providerID: ProviderID.make("test"), modelID: ModelID.make("test-m
 const it = testEffect(
   Layer.mergeAll(
     Agent.defaultLayer,
+    Bus.layer,
     Config.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Session.defaultLayer,
     ToolRegistry.defaultLayer,
-    Bus.layer,
+    Truncate.defaultLayer,
   ),
 )
 
@@ -57,7 +58,7 @@ const seed = Effect.fn("seed")(function* (title = "Pinned") {
   return { chat, assistant }
 })
 
-function reply(input: Parameters<typeof SessionPrompt.prompt>[0], text: string): MessageV2.WithParts {
+function reply(input: Parameters<SessionPrompt.Interface["prompt"]>[0], text: string): MessageV2.WithParts {
   const id = MessageID.ascending()
   return {
     info: {
@@ -89,7 +90,9 @@ function reply(input: Parameters<typeof SessionPrompt.prompt>[0], text: string):
 
 function stubOps(opts?: { text?: string; fail?: Error; abort?: AbortController }): TaskPromptOps {
   return {
-    cancel() {},
+    cancel(_sessionID) {
+      return Effect.void
+    },
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
       Effect.gen(function* () {
@@ -114,7 +117,7 @@ describe("tool.task lifecycle events", () => {
         const offB = yield* bus.subscribeCallback(Session.Event.SubagentStopped, (e) => seen.push(e))
 
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
 
         yield* def.execute(
           { description: "Run subagent", prompt: "do work", subagent_type: "general" },
@@ -155,7 +158,7 @@ describe("tool.task lifecycle events", () => {
         const offB = yield* bus.subscribeCallback(Session.Event.SubagentStopped, (e) => seen.push(e))
 
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
 
         yield* def
           .execute(
@@ -197,7 +200,7 @@ describe("tool.task lifecycle events", () => {
         const ctrl = new AbortController()
 
         const tool = yield* TaskTool
-        const def = yield* Effect.promise(() => tool.init())
+        const def = yield* tool.init()
 
         yield* def
           .execute(

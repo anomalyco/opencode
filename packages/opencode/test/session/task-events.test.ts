@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Instance } from "../../src/project/instance"
+import { Exit, Schema } from "effect"
 import { Bus } from "../../src/bus"
-import { Session } from "../../src/session"
+import { Session } from "../../src/session/session"
 import { SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { tmpdir } from "../fixture/fixture"
+import { WithInstance } from "../../src/project/with-instance"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const sessionID = SessionID.descending()
@@ -15,9 +16,12 @@ const parentID = SessionID.descending()
 const modelID = ModelID.make("claude-3-5-sonnet")
 const providerID = ProviderID.make("anthropic")
 
+const decodeStarted = Schema.decodeUnknownExit(Session.Event.SubagentStarted.properties)
+const decodeStopped = Schema.decodeUnknownExit(Session.Event.SubagentStopped.properties)
+
 describe("subagent lifecycle events", () => {
   test("SubagentStarted schema validates correct payload", () => {
-    const result = Session.Event.SubagentStarted.properties.safeParse({
+    const result = decodeStarted({
       sessionID,
       parentID,
       agent: "general",
@@ -25,11 +29,11 @@ describe("subagent lifecycle events", () => {
       model: { modelID, providerID },
       time: { start: Date.now() },
     })
-    expect(result.success).toBe(true)
+    expect(Exit.isSuccess(result)).toBe(true)
   })
 
   test("SubagentStopped schema validates completed payload", () => {
-    const result = Session.Event.SubagentStopped.properties.safeParse({
+    const result = decodeStopped({
       sessionID,
       parentID,
       agent: "general",
@@ -40,15 +44,15 @@ describe("subagent lifecycle events", () => {
       cost: 0.002,
       status: "completed" as const,
     })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.status).toBe("completed")
-      expect(result.data.error).toBeUndefined()
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (Exit.isSuccess(result)) {
+      expect(result.value.status).toBe("completed")
+      expect(result.value.error).toBeUndefined()
     }
   })
 
   test("SubagentStopped schema validates failed payload with error field", () => {
-    const result = Session.Event.SubagentStopped.properties.safeParse({
+    const result = decodeStopped({
       sessionID,
       parentID,
       agent: "general",
@@ -60,15 +64,15 @@ describe("subagent lifecycle events", () => {
       status: "failed" as const,
       error: "context limit exceeded",
     })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.status).toBe("failed")
-      expect(result.data.error).toBe("context limit exceeded")
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (Exit.isSuccess(result)) {
+      expect(result.value.status).toBe("failed")
+      expect(result.value.error).toBe("context limit exceeded")
     }
   })
 
   test("SubagentStopped schema rejects invalid status", () => {
-    const result = Session.Event.SubagentStopped.properties.safeParse({
+    const result = decodeStopped({
       sessionID,
       parentID,
       agent: "general",
@@ -79,14 +83,14 @@ describe("subagent lifecycle events", () => {
       cost: 0,
       status: "error", // invalid — not in enum
     })
-    expect(result.success).toBe(false)
+    expect(Exit.isFailure(result)).toBe(true)
   })
 
   test("Bus publish/subscribe round-trip for SubagentStarted", async () => {
     await using tmp = await tmpdir()
-    const evts: Array<ReturnType<typeof Session.Event.SubagentStarted.properties.parse>> = []
+    const evts: Array<Schema.Schema.Type<typeof Session.Event.SubagentStarted.properties>> = []
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         Bus.subscribe(Session.Event.SubagentStarted, (evt) => {
@@ -113,9 +117,9 @@ describe("subagent lifecycle events", () => {
 
   test("Bus publish/subscribe round-trip for SubagentStopped", async () => {
     await using tmp = await tmpdir()
-    const evts: Array<ReturnType<typeof Session.Event.SubagentStopped.properties.parse>> = []
+    const evts: Array<Schema.Schema.Type<typeof Session.Event.SubagentStopped.properties>> = []
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         Bus.subscribe(Session.Event.SubagentStopped, (evt) => {

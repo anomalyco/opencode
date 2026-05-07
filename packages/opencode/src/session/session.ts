@@ -374,7 +374,7 @@ export const Event = {
         cache: Schema.Struct({ read: Schema.Number, write: Schema.Number }),
       }),
       cost: Schema.Number,
-      status: Schema.Literal("completed", "cancelled", "failed"),
+      status: Schema.Literals(["completed", "cancelled", "failed"]),
       error: Schema.optional(Schema.String),
     }),
   ),
