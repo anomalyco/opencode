@@ -62,6 +62,34 @@ describe("Npm.add", () => {
 
     expect(Option.isSome(entry.entrypoint)).toBe(true)
   })
+
+  test("cleans up npm temp residues after install", async () => {
+    await using tmp = await tmpdir()
+    await fs.mkdir(path.join(tmp.path, "fixture-provider"))
+    await writePackage(path.join(tmp.path, "fixture-provider"), {
+      name: "fixture-provider",
+      main: "index.js",
+    })
+    await Bun.write(path.join(tmp.path, "fixture-provider", "index.js"), "export const fixture = true\n")
+
+    const spec = `fixture-provider@file:${path.join(tmp.path, "fixture-provider")}`
+    const cacheDir = path.join(tmp.path, "cache", "packages", Npm.sanitize(spec))
+    const nodeModulesDir = path.join(cacheDir, "node_modules")
+    await fs.mkdir(nodeModulesDir, { recursive: true })
+
+    // Create fake temp directories that match npm's temp naming pattern
+    await fs.mkdir(path.join(nodeModulesDir, ".tmp-abc12345678"))
+    await fs.mkdir(path.join(nodeModulesDir, ".tmp-def98765432"))
+
+    await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    const entries = await fs.readdir(nodeModulesDir)
+    expect(entries).not.toContain(".tmp-abc12345678")
+    expect(entries).not.toContain(".tmp-def98765432")
+  })
 })
 
 describe("Npm.install", () => {
