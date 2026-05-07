@@ -17,9 +17,10 @@ import { readFile, readdir, stat } from "fs/promises"
 import { resolve, join, relative, extname } from "path"
 import { quickSearch } from "./obsidian-index.js"
 
-const KNOWLEDGE_BASE_PATH =
-  process.env.OBSIDIAN_KB_PATH ||
-  "/Users/xujian/Library/Mobile Documents/iCloud~md~obsidian/Documents/宝宸知识库"
+/**
+ * Obsidian 知识库路径。必须通过环境变量 OBSIDIAN_KB_PATH 指定。
+ */
+const KNOWLEDGE_BASE_PATH = process.env.OBSIDIAN_KB_PATH ?? ""
 
 /**
  * Markdown 文件信息
@@ -56,8 +57,13 @@ export async function scanMarkdownFiles(
   if (!existsSync(basePath)) return []
 
   const files: MarkdownFile[] = []
+  const visited = new Set<string>()
 
   async function scan(dir: string) {
+    const resolved = resolve(dir)
+    if (visited.has(resolved)) return // 防止 symlink 循环
+    visited.add(resolved)
+
     const entries = await readdir(dir, { withFileTypes: true })
     for (const entry of entries) {
       const fullPath = join(dir, entry.name)
@@ -84,9 +90,22 @@ export async function scanMarkdownFiles(
 
 /**
  * 读取 Markdown 文件内容
+ *
+ * 安全约束：只能读取知识库路径内的文件，防止路径遍历攻击。
  */
 export async function readMarkdownFile(filePath: string): Promise<string> {
-  const fullPath = filePath.startsWith("/") ? filePath : join(KNOWLEDGE_BASE_PATH, filePath)
+  if (!KNOWLEDGE_BASE_PATH) {
+    throw new Error("Knowledge base path not configured (OBSIDIAN_KB_PATH)")
+  }
+
+  const resolvedBase = resolve(KNOWLEDGE_BASE_PATH)
+  const fullPath = resolve(resolvedBase, filePath)
+
+  // 防止路径遍历：确保最终路径在知识库目录内
+  if (!fullPath.startsWith(resolvedBase + "/") && fullPath !== resolvedBase) {
+    throw new Error(`Access denied: path escapes knowledge base (${filePath})`)
+  }
+
   if (!existsSync(fullPath)) throw new Error(`File not found: ${fullPath}`)
   return readFile(fullPath, "utf-8")
 }

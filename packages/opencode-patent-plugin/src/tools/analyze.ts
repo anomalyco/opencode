@@ -6,7 +6,8 @@
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
-import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
+import { createSharedAgentContext } from "../utils/agent-factory.js"
 
 /**
  * 注册专利分析工具集
@@ -76,7 +77,7 @@ async function runComparisonAnalyzer(
   const mod = await loadYunPatModule("agents/patent-analyzer")
   if (!mod?.ComparisonAnalyzerAgent) return null
 
-  const context = await createAgentContext()
+  const context = await createSharedAgentContext()
   if (!context) return null
 
   const agent = new mod.ComparisonAnalyzerAgent({

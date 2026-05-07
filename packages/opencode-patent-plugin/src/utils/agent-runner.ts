@@ -8,7 +8,8 @@
  * - 执行指标记录
  */
 
-import { loadYunPatModule, createAgentContext } from "./yunpat-loader.js"
+import { loadYunPatModule } from "./yunpat-loader.js"
+import { createSharedAgentContext } from "./agent-factory.js"
 import type { PatentPluginContext } from "../types.js"
 
 export interface AgentRunResult<T = any> {
@@ -50,8 +51,8 @@ export async function runAgentSafely<T = any>(
       }
     }
 
-    // 创建上下文
-    const context = await createAgentContext()
+    // 创建共享上下文
+    const context = await createSharedAgentContext()
     if (!context) {
       return {
         success: false,

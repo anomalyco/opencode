@@ -7,9 +7,12 @@
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
-import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
+import { safeAsk } from "../types.js"
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
+import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchPatentJudgments, searchLegalRules } from "../utils/db.js"
 import { queryInvalidationFromKB, queryJudgmentFromKB } from "../utils/obsidian-kb.js"
+import { extractPatentKeywords } from "../utils/patent-keywords.js"
 
 /**
  * 注册审查意见答辩工具集
@@ -38,7 +41,7 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
         context: tool.schema.string().optional().describe("额外上下文（如对比文件、审查历史）"),
       },
       async execute(args, ctx) {
-        await ctx.ask({
+        await safeAsk(ctx, {
           permission: "oa_response",
           patterns: [args.action],
           always: [],
@@ -112,17 +115,9 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
   }
 }
 
+// 关键词提取使用共享工具
 function extractKeywords(text: string): string[] {
-  const keywords: string[] = []
-  const patterns = [
-    /创造性/g, /新颖性/g, /实用性/g, /公开不充分/g, /不清楚/g, /超范围/g,
-    /独立权利要求/g, /从属权利要求/g, /技术特征/g, /区别特征/g,
-  ]
-  patterns.forEach(p => {
-    if (p.test(text)) keywords.push(p.source)
-  })
-  // 去重并限制数量
-  return [...new Set(keywords)].slice(0, 5)
+  return extractPatentKeywords(text)
 }
 
 async function runPatentResponder(
@@ -136,7 +131,7 @@ async function runPatentResponder(
   if (!mod?.PatentResponderAgentV5 && !mod?.PatentResponderAgent) return null
 
   const AgentClass = mod.PatentResponderAgentV5 || mod.PatentResponderAgent
-  const context = await createAgentContext()
+  const context = await createSharedAgentContext()
   if (!context) return null
 
   const agent = new AgentClass({
@@ -258,6 +253,119 @@ async function oaReviseClaims(officeAction: string, claims: string, pluginContex
   return `## 权利要求修改建议\n\n${response.content}\n\n---\n\n*请逐条审阅修改。权利要求修改必须经用户逐条批准。*`
 }
 
+/**
+ * OA 答辩完整性验证
+ *
+ * 使用 LLM 对答辩文件进行结构化完整性检查，
+ * 确保所有驳回理由均已回应、修改不超范围、格式合规。
+ */
 async function oaValidate(officeAction: string, claims: string, pluginContext: PatentPluginContext) {
-  return `## 步骤 5/5：验证与打包 ✅\n\n验证项目：\n- [ ] 所有驳回理由均已回应\n- [ ] 权利要求修改不超范围（A33）\n- [ ] 格式符合国知局要求\n- [ ] 法律依据引用完整\n\n> 注：完整验证功能需要接入 YunPat PatentResponderAgent（@yunpat/agent-patent-responder V5）的验证模块。`
+  // 先解析审查意见中的驳回理由
+  const parseResponse = await pluginContext.llm.chat({
+    messages: [
+      { role: "system", content: "你是审查意见解析专家。提取审查意见中的所有驳回理由列表，只返回 JSON。" },
+      { role: "user", content: `从以下审查意见中提取所有驳回理由（每条一个条目）：\n\n${officeAction}\n\n返回 JSON：{"rejections": [{"id": 1, "type": "创造性", "claims": ["1-3"], "citations": ["D1", "D2"]}]}` },
+    ],
+    temperature: 0.1,
+  })
+
+  let rejections: Array<{ id: number; type: string; claims: string[]; citations: string[] }> = []
+  try {
+    const jsonMatch = parseResponse.content.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      rejections = parsed.rejections || []
+    }
+  } catch {
+    // 解析失败，设置默认值
+    rejections = [{ id: 1, type: "未知", claims: ["全部"], citations: [] }]
+  }
+
+  // 让 LLM 执行完整性验证
+  const validateResponse = await pluginContext.llm.chat({
+    messages: [
+      { role: "system", content: "你是审查意见答辩验证专家。逐项检查答辩文件的完整性。" },
+      {
+        role: "user",
+        content: `请对以下 OA 答辩进行完整性验证。
+
+**审查意见**：
+${officeAction.slice(0, 3000)}
+
+**当前权利要求**：
+${claims.slice(0, 2000)}
+
+**已识别的驳回理由**：
+${rejections.map(r => `${r.id}. ${r.type}（权利要求 ${r.claims.join(", ")}，引用 ${r.citations.join(", ")}）`).join("\n")}
+
+请逐项验证以下检查清单：
+
+1. **驳回理由覆盖**：每个驳回理由是否都有对应的回应？
+2. **权利要求修改合规**（A33）：修改是否超范围？是否基于原始申请文件？
+3. **法律依据引用**：是否引用了正确的法条和审查指南段落？
+4. **技术对比完整性**：每个区别特征是否有充分的技术对比分析？
+5. **格式合规**：是否符合国知局 OA 答复格式要求？
+6. **权利要求引用基础**：修改后的权利要求在说明书中是否有支持？
+
+返回 JSON：
+{
+  "checks": [
+    {"item": "检查项", "status": "pass/warn/fail", "detail": "具体说明"}
+  ],
+  "overall": "pass/warn/fail",
+  "summary": "总结"
+}`,
+      },
+    ],
+    temperature: 0.1,
+  })
+
+  // 解析验证结果
+  let checks: Array<{ item: string; status: string; detail: string }> = []
+  let overall = "warn"
+  let summary = ""
+
+  try {
+    const jsonMatch = validateResponse.content.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      checks = parsed.checks || []
+      overall = parsed.overall || "warn"
+      summary = parsed.summary || ""
+    }
+  } catch {
+    summary = validateResponse.content
+  }
+
+  // 格式化输出
+  const statusIcon = (s: string) => s === "pass" ? "✅" : s === "fail" ? "❌" : "⚠️"
+
+  let output = `## 步骤 5/5：验证与打包 ${statusIcon(overall)}\n\n`
+  output += `**驳回理由数**：${rejections.length}\n`
+  output += `**验证结论**：${overall === "pass" ? "通过，可以提交" : overall === "fail" ? "不通过，需修改" : "有警告项，请确认"}\n\n`
+
+  if (checks.length > 0) {
+    output += `| # | 检查项 | 状态 | 说明 |\n`
+    output += `|---|--------|------|------|\n`
+    checks.forEach((c, i) => {
+      output += `| ${i + 1} | ${c.item} | ${statusIcon(c.status)} ${c.status} | ${c.detail} |\n`
+    })
+    output += `\n`
+  }
+
+  if (summary) {
+    output += `### 验证总结\n\n${summary}\n\n`
+  }
+
+  const failedChecks = checks.filter(c => c.status === "fail")
+  if (failedChecks.length > 0) {
+    output += `### ⚠️ 需要修改的项\n\n`
+    failedChecks.forEach(c => {
+      output += `- **${c.item}**：${c.detail}\n`
+    })
+    output += `\n`
+  }
+
+  output += `---\n\n*验证完成。如有不合格项，请返回修改后重新验证。*`
+  return output
 }

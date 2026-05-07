@@ -6,9 +6,11 @@
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
-import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
+import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchLegalRules } from "../utils/db.js"
 import { queryGuidelinesFromKB } from "../utils/obsidian-kb.js"
+import { qualityLoop, formatQualityReport, type QualityLoopOptions } from "../utils/quality-loop.js"
 
 /**
  * 注册质量检查工具集
@@ -68,7 +70,7 @@ export async function registerCheckTools(pluginContext: PatentPluginContext) {
           console.warn("[Check] Guidelines query error:", error?.message)
         }
 
-        if (action === "quality") return await checkQuality(document, document_type, pluginContext, guidelinesData)
+        if (action === "quality") return await checkQualityWithLoop(document, document_type, pluginContext, guidelinesData)
         if (action === "subject_matter") return await checkSubjectMatter(document, pluginContext, guidelinesData)
         if (action === "unity") return await checkUnity(document, pluginContext, guidelinesData)
         if (action === "formality") return await checkFormality(document, document_type, pluginContext)
@@ -89,7 +91,7 @@ async function runQualityCheck(
   if (!mod?.EnhancedQualityCheckerAgent && !mod?.QualityCheckerAgent) return null
 
   const AgentClass = mod.EnhancedQualityCheckerAgent || mod.QualityCheckerAgent
-  const context = await createAgentContext()
+  const context = await createSharedAgentContext()
   if (!context) return null
 
   const agent = new AgentClass({
@@ -113,36 +115,44 @@ async function runQualityCheck(
   return `## 7 维度质量评估（YunPat Agent）✅\n\n${result.data?.report || result.data?.content || JSON.stringify(result.data, null, 2)}`
 }
 
-async function checkQuality(document: string, docType: string, pluginContext: PatentPluginContext, guidelines: string = "") {
-  const prompt = `请对以下${docType}进行质量评估：
+/**
+ * 质量迭代闭环评估（替代原 checkQuality）
+ *
+ * 使用 7 维度评分 + 自动迭代修复引擎，替代原来的单次 LLM 调用。
+ * - 得分 < 7.5 自动识别问题并修复
+ * - 最多 3 轮迭代，超出转人工
+ */
+/**
+ * 质量迭代闭环评估（替代原 checkQuality）
+ *
+ * 使用 7 维度评分 + 自动迭代修复引擎，替代原来的单次 LLM 调用。
+ * - 得分 < 7.5 自动识别问题并修复
+ * - 最多 3 轮迭代，超出转人工
+ */
+async function checkQualityWithLoop(document: string, docType: string, pluginContext: PatentPluginContext, guidelines: string = "") {
+  // 输入验证
+  if (!document || document.trim().length === 0) {
+    return `## 质量检查 ❌\n\n错误：待检查文档为空，请提供有效的专利文件内容。`
+  }
 
-${document}
+  const validDocTypes: QualityLoopOptions["documentType"][] = ["specification", "claims", "response", "reexamination", "invalidation"]
+  if (!validDocTypes.includes(docType as QualityLoopOptions["documentType"])) {
+    return `## 质量检查 ❌\n\n错误：不支持的文件类型 "${docType}"，支持的类型：${validDocTypes.join(", ")}`
+  }
 
-${guidelines ? `**审查指南参考**：\n${guidelines}\n\n` : ""}
+  const options: QualityLoopOptions = {
+    documentType: docType as QualityLoopOptions["documentType"],
+    maxIterations: 3,
+    threshold: 7.5,
+    context: guidelines || undefined,
+  }
 
-请按以下维度评分（0-10分，≥7.5为合格）：
-
-| 维度 | 权重 | 得分 | 说明 |
-|------|------|------|------|
-| completeness（完整性） | 15% | ? | 必要技术特征齐全 |
-| clarity（清晰性） | 15% | ? | 无歧义用语 |
-| accuracy（准确性） | 15% | ? | 技术描述准确 |
-| sufficiency（充分性 A26.3） | 20% | ? | 公开充分 |
-| consistency（一致性） | 10% | ? | 权利要求与说明书一致 |
-| compliance（规范性） | 10% | ? | 格式符合要求 |
-| support（支持性 A26.4） | 15% | ? | 权利要求有说明书支持 |
-
-综合得分 = Σ(维度得分 × 权重)
-
-如有不合格项（<7.5），请给出具体修改建议。`
-
-  const response = await pluginContext.llm.chat({
-    messages: [
-      { role: "system", content: "你是专利质量评估专家。使用 7 维度评估体系进行评分。参考审查指南的具体要求。" },
-      { role: "user", content: prompt },
-    ],
-  })
-  return `## 7 维度质量评估\n\n${response.content}\n\n---\n\n> 注：完整质量检查需要接入 YunPat QualityCheckerAgent（@yunpat/agent-quality）的增强版评估逻辑。`
+  try {
+    const report = await qualityLoop(document, options, pluginContext.llm)
+    return formatQualityReport(report)
+  } catch (error: any) {
+    return `## 质量检查 ❌\n\n评估过程中出错：${error?.message}\n\n请检查文档内容后重试，或使用人工审核。`
+  }
 }
 
 async function checkSubjectMatter(document: string, pluginContext: PatentPluginContext, guidelines: string = "") {

@@ -9,7 +9,7 @@ import type { OpenCodeLLMAdapter } from "./adapters/llm.js"
  */
 export interface PatentPluginContext {
   /** OpenCode SDK 客户端 */
-  client: any
+  client: unknown
   /** YunPat LLM 适配器 */
   llm: OpenCodeLLMAdapter
   /** 当前工作目录 */
@@ -100,5 +100,28 @@ export interface ResearchResult {
         type: string
       }>
     }>
+  }
+}
+
+/**
+ * 安全执行 ctx.ask() — 处理 Effect.Effect 和 Promise 两种返回类型
+ *
+ * OpenCode 框架中 ToolContext.ask() 返回 Effect.Effect<void>，
+ * 但 Plugin execute 函数运行在 Effect.promise() 包装的 async 上下文中。
+ * 此函数统一处理两种情况。
+ */
+export async function safeAsk(
+  ctx: { ask: (input: any) => any },
+  input: {
+    permission: string
+    patterns: string[]
+    always: string[]
+    metadata: Record<string, unknown>
+  },
+): Promise<void> {
+  const result = ctx.ask(input)
+  // Effect.Effect 是 thenable（有 then 方法），或直接是 Promise
+  if (result && typeof result === "object" && "then" in result) {
+    await result
   }
 }

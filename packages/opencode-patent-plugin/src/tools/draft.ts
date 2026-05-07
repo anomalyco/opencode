@@ -6,7 +6,10 @@
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
-import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
+import { safeAsk } from "../types.js"
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
+import { createSharedAgentContext } from "../utils/agent-factory.js"
+import { searchPatents, type PatentRecord } from "../utils/db.js"
 
 /**
  * 注册专利撰写工具集
@@ -36,7 +39,7 @@ export async function registerDraftTools(pluginContext: PatentPluginContext) {
         context: tool.schema.string().optional().describe("额外上下文（如检索结果、用户修改意见）"),
       },
       async execute(args, ctx) {
-        await ctx.ask({
+        await safeAsk(ctx, {
           permission: "patent_draft",
           patterns: [args.action, args.patent_type],
           always: [],
@@ -84,7 +87,7 @@ async function loadYunPatDraftAgent(action: string, pluginContext: PatentPluginC
     const mod = await loadYunPatModule(config.module)
     if (!mod?.[config.className]) return null
 
-    const context = await createAgentContext()
+    const context = await createSharedAgentContext()
     if (!context) return null
 
     const agent = new mod[config.className]({
@@ -121,8 +124,78 @@ async function draftUnderstand(disclosure: string, patentType: string, invention
   return `## 步骤 1/5：发明理解 ✅\n\n${response.content}\n\n---\n\n*请确认以上理解是否准确。确认后将继续步骤 2：现有技术检索。*`
 }
 
+/**
+ * 现有技术检索
+ *
+ * 从交底书提取关键词，在专利数据库中检索相关现有技术。
+ * 先尝试 patent_db（7500万 CN 专利），失败则用 LLM 提取关键词后返回提示。
+ */
 async function draftSearch(disclosure: string, pluginContext: PatentPluginContext) {
-  return `## 步骤 2/5：现有技术检索 ✅\n\n> 注：此步骤需要接入 YunPat PatentSearchAgent（@yunpat/agent-search V3）和专利数据库（7500万 CN 专利）才能提供真实检索结果。\n\n---\n\n*请确认检索结果。确认后将继续步骤 3：说明书撰写。*`
+  // 用 LLM 提取检索关键词
+  const kwResponse = await pluginContext.llm.chat({
+    messages: [
+      { role: "system", content: "你是专利检索专家。从技术交底书中提取用于现有技术检索的关键词。只返回 JSON。" },
+      { role: "user", content: `从以下技术交底书中提取 3-5 个检索关键词（中英文各一组），用于在专利数据库中检索相关现有技术：\n\n${disclosure.slice(0, 2000)}\n\n请返回 JSON 格式：{"keywords_cn": ["关键词1", ...], "keywords_en": ["keyword1", ...], "ipc_hint": "可能的IPC分类号"}` },
+    ],
+    temperature: 0.2,
+  })
+
+  let keywords: string[] = []
+  let ipcHint = ""
+  try {
+    const jsonMatch = kwResponse.content.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      keywords = [...(parsed.keywords_cn || []), ...(parsed.keywords_en || [])]
+      ipcHint = parsed.ipc_hint || ""
+    }
+  } catch {
+    // JSON 解析失败，用原始文本作为关键词
+    keywords = disclosure.slice(0, 100).split(/[,，、\s]+/).filter(w => w.length >= 2).slice(0, 5)
+  }
+
+  if (keywords.length === 0) {
+    return `## 步骤 2/5：现有技术检索 ⚠️\n\n无法从交底书提取有效检索关键词，请手动提供检索词。`
+  }
+
+  // 尝试在 patent_db 中检索
+  let patents: PatentRecord[] = []
+  try {
+    patents = await searchPatents(keywords[0], {
+      limit: 10,
+      ...(ipcHint ? { ipcClass: ipcHint } : {}),
+    })
+  } catch (error: any) {
+    console.warn("[Draft] Patent DB search failed:", error?.message)
+  }
+
+  let output = `## 步骤 2/5：现有技术检索 ✅\n\n`
+  output += `**检索关键词**：${keywords.join("、")}\n`
+  if (ipcHint) output += `**IPC 分类提示**：${ipcHint}\n`
+  output += `\n`
+
+  if (patents.length > 0) {
+    output += `### 检索结果（${patents.length} 篇相关专利）\n\n`
+    output += `| # | 专利名称 | 申请号 | 申请人 | 申请日 | 相关度 |\n`
+    output += `|---|---------|--------|--------|--------|--------|\n`
+    patents.forEach((p, i) => {
+      const name = p.patent_name?.slice(0, 30) || "—"
+      output += `| ${i + 1} | ${name} | ${p.application_number || "—"} | ${p.applicant?.slice(0, 15) || "—"} | ${p.application_date || "—"} | ${(p.relevance || 0).toFixed(2)} |\n`
+    })
+    output += `\n### 最相关专利摘要\n\n`
+    for (const p of patents.slice(0, 3)) {
+      output += `**${p.patent_name}**（${p.application_number}）\n\n`
+      output += `${p.abstract?.slice(0, 300) || "无摘要"}...\n\n---\n\n`
+    }
+  } else {
+    output += `> 专利数据库未返回结果（可能未连接或无匹配专利）。建议手动在 CNIPA/Google Patents 中检索。\n\n`
+    output += `**建议检索式**：\n`
+    output += `- 中文：${keywords.filter(k => /[\u4e00-\u9fff]/.test(k)).join(" AND ")}\n`
+    output += `- 英文：${keywords.filter(k => /[a-zA-Z]/.test(k)).join(" AND ")}\n`
+  }
+
+  output += `\n---\n\n*请确认检索结果。确认后将继续步骤 3：说明书撰写。*`
+  return output
 }
 
 async function draftSpecification(disclosure: string, patentType: string, inventionType: string, pluginContext: PatentPluginContext) {
@@ -155,6 +228,51 @@ async function draftAbstract(disclosure: string, pluginContext: PatentPluginCont
   return `## 步骤 5/5：摘要撰写 ✅\n\n${response.content}\n\n---\n\n*专利申请文件撰写完成。以上为草案，请经专业审校后提交。*`
 }
 
+/**
+ * 全文整合
+ *
+ * 将分步产出的说明书、权利要求、摘要整合为完整专利申请文件，
+ * 进行一致性校验后输出。
+ */
 async function draftIntegrate(disclosure: string, pluginContext: PatentPluginContext) {
-  return `## 专利申请文件（完整版）\n\n> 注：全文整合功能需要接入 YunPat PatentWriterAgent（@yunpat/agent-patent-writer）实现自动整合和格式校验。`
+  const response = await pluginContext.llm.chat({
+    messages: [
+      { role: "system", content: "你是专利文件整合专家。将提供的专利文件各部分整合为完整的专利申请文件，确保格式规范、术语一致、附图标记统一。" },
+      {
+        role: "user",
+        content: `请将以下内容整合为完整的专利申请文件。确保：
+1. 各部分之间术语一致
+2. 附图标记统一
+3. 权利要求与说明书对应
+4. 格式符合国知局标准
+
+**待整合内容**：
+${disclosure}
+
+请按以下结构输出完整文件：
+---
+**专利申请文件**
+
+【发明名称】
+
+【技术领域】
+
+【背景技术】
+
+【发明内容】
+
+【附图说明】
+
+【具体实施方式】
+
+【权利要求书】
+
+【摘要】
+---`,
+      },
+    ],
+    maxTokens: 8192,
+  })
+
+  return `## 专利申请文件（完整版）✅\n\n${response.content}\n\n---\n\n⚠️ 以上为草案，请经专业审校后提交。建议使用 \`patent_check\` 工具进行质量检查。`
 }

@@ -13,11 +13,9 @@
 import { Database } from "bun:sqlite"
 import { existsSync, statSync } from "fs"
 import { readFile, readdir, stat } from "fs/promises"
-import { join, relative, extname, dirname } from "path"
+import { join, relative, extname, dirname, resolve } from "path"
 
-const KNOWLEDGE_BASE_PATH =
-  process.env.OBSIDIAN_KB_PATH ||
-  "/Users/xujian/Library/Mobile Documents/iCloud~md~obsidian/Documents/宝宸知识库"
+const KNOWLEDGE_BASE_PATH = process.env.OBSIDIAN_KB_PATH ?? ""
 
 const INDEX_DB_PATH = join(KNOWLEDGE_BASE_PATH, ".opencode-patent-index.sqlite")
 
@@ -122,8 +120,13 @@ export class ObsidianSearchIndex {
     if (!existsSync(basePath)) return []
 
     const files: Array<{ path: string; title: string; folder: string; mtime: number }> = []
+    const visited = new Set<string>()
 
     async function scan(dir: string) {
+      const resolved = resolve(dir)
+      if (visited.has(resolved)) return // 防止 symlink 循环
+      visited.add(resolved)
+
       const entries = await readdir(dir, { withFileTypes: true })
       for (const entry of entries) {
         const fullPath = join(dir, entry.name)
@@ -189,13 +192,13 @@ export class ObsidianSearchIndex {
    * 构建完整索引
    */
   async buildIndex(options: { folders?: string[] } = {}): Promise<{ filesIndexed: number; chunksIndexed: number }> {
+    if (!this.kbPath) {
+      console.warn("[ObsidianIndex] No knowledge base path configured, skipping index build")
+      return { filesIndexed: 0, chunksIndexed: 0 }
+    }
+
     console.log("[ObsidianIndex] Building full-text index...")
     const start = Date.now()
-
-    // 清空现有索引
-    this.db.exec("DELETE FROM chunks")
-    this.db.exec("DELETE FROM files")
-    this.db.exec("DELETE FROM chunks_fts")
 
     const files = await this.scanFiles()
     let filesIndexed = 0
@@ -204,25 +207,39 @@ export class ObsidianSearchIndex {
     const insertFile = this.db.prepare("INSERT OR REPLACE INTO files (path, title, folder, modified_time) VALUES (?, ?, ?, ?)")
     const insertChunk = this.db.prepare("INSERT INTO chunks (file_path, heading, content, chunk_index) VALUES (?, ?, ?, ?)")
 
-    for (const file of files) {
-      if (options.folders && !options.folders.some(f => file.folder.includes(f))) continue
+    // 使用事务保护：先插入新数据，成功后再清空旧数据
+    this.db.exec("BEGIN TRANSACTION")
+    // 清空现有索引（在事务内，失败会回滚）
+    this.db.exec("DELETE FROM chunks")
+    this.db.exec("DELETE FROM files")
 
-      try {
-        const fullPath = join(this.kbPath, file.path)
-        const content = await readFile(fullPath, "utf-8")
-        const chunks = this.splitIntoChunks(content)
+    try {
+      for (const file of files) {
+        if (options.folders && !options.folders.some(f => file.folder.includes(f))) continue
 
-        insertFile.run(file.path, file.title, file.folder, file.mtime)
+        try {
+          const fullPath = join(this.kbPath, file.path)
+          const content = await readFile(fullPath, "utf-8")
+          const chunks = this.splitIntoChunks(content)
 
-        chunks.forEach((chunk, idx) => {
-          insertChunk.run(file.path, chunk.heading, chunk.content, idx)
-          chunksIndexed++
-        })
+          insertFile.run(file.path, file.title, file.folder, file.mtime)
 
-        filesIndexed++
-      } catch {
-        // 忽略读取失败的文件
+          for (const [idx, chunk] of chunks.entries()) {
+            insertChunk.run(file.path, chunk.heading, chunk.content, idx)
+            chunksIndexed++
+          }
+
+          filesIndexed++
+        } catch (err: any) {
+          console.warn(`[ObsidianIndex] Failed to index file: ${err?.message}`)
+        }
       }
+
+      this.db.exec("COMMIT")
+    } catch (error: any) {
+      this.db.exec("ROLLBACK")
+      console.error(`[ObsidianIndex] Index build failed, rolled back: ${error?.message}`)
+      throw error
     }
 
     console.log(`[ObsidianIndex] Indexed ${filesIndexed} files, ${chunksIndexed} chunks in ${Date.now() - start}ms`)
@@ -258,7 +275,7 @@ export class ObsidianSearchIndex {
           insertFile.run(file.path, file.title, file.folder, file.mtime)
           chunks.forEach((chunk, idx) => insertChunk.run(file.path, chunk.heading, chunk.content, idx))
           filesAdded++
-        } catch {}
+        } catch (err: any) { console.warn(`[ObsidianIndex] Index error: ${err?.message}`) }
       } else if (dbMtime < file.mtime) {
         // 已修改
         try {
@@ -270,7 +287,7 @@ export class ObsidianSearchIndex {
           insertFile.run(file.path, file.title, file.folder, file.mtime)
           chunks.forEach((chunk, idx) => insertChunk.run(file.path, chunk.heading, chunk.content, idx))
           filesUpdated++
-        } catch {}
+        } catch (err: any) { console.warn(`[ObsidianIndex] Index error: ${err?.message}`) }
       }
 
       dbFileMap.delete(file.path)
@@ -288,10 +305,35 @@ export class ObsidianSearchIndex {
   }
 
   /**
+   * 转义 FTS5 查询中的特殊字符
+   *
+   * FTS5 的 MATCH 语法中，AND/OR/NOT/""/* 等是运算符，
+   * 用户输入需要转义以避免解析错误或意外行为。
+   */
+  private escapeFTS5Query(query: string): string {
+    // 移除可能导致 FTS5 语法错误的特殊字符
+    let escaped = query
+      .replace(/"/g, "")       // 移除引号（短语运算符）
+      .replace(/\*/g, "")      // 移除通配符
+      .replace(/(^|\s)(AND|OR|NOT)(\s|$)/gi, " ")  // 移除布尔运算符
+      .replace(/[{}()[]^~]/g, "")  // 移除其他特殊字符
+      .trim()
+
+    // 如果清理后为空，使用原始查询作为简单的词语匹配
+    if (!escaped) {
+      escaped = query.replace(/[^\w\u4e00-\u9fff]/g, " ").trim()
+    }
+
+    return escaped || query
+  }
+
+  /**
    * 全文搜索
    */
   search(query: string, limit: number = 10): IndexSearchResult[] {
     const start = Date.now()
+
+    const safeQuery = this.escapeFTS5Query(query)
 
     // 使用 FTS5 MATCH 查询 + bm25 排序
     const stmt = this.db.prepare(`
@@ -310,7 +352,7 @@ export class ObsidianSearchIndex {
       LIMIT ?
     `)
 
-    const results = stmt.all(query, limit) as Array<{
+    const results = stmt.all(safeQuery, limit) as Array<{
       file_path: string
       heading: string
       content: string

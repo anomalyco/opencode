@@ -7,7 +7,8 @@
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
-import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
+import { loadYunPatModule } from "../utils/yunpat-loader.js"
+import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchPatents, type PatentRecord } from "../utils/db.js"
 
 /**
@@ -65,7 +66,7 @@ export async function registerSearchTools(pluginContext: PatentPluginContext) {
         try {
           const yunpat = await loadYunPatModule("agents/search")
           if (yunpat?.PatentSearchAgent) {
-            const context = await createAgentContext()
+            const context = await createSharedAgentContext()
             if (context) {
               const agent = new yunpat.PatentSearchAgent({
                 llm: pluginContext.llm,

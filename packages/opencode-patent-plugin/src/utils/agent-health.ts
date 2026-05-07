@@ -4,7 +4,8 @@
  * 诊断所有 YunPat Agent 的加载、实例化和运行状态。
  */
 
-import { loadYunPatModule, createAgentContext } from "./yunpat-loader.js"
+import { loadYunPatModule } from "./yunpat-loader.js"
+import { createSharedAgentContext } from "./agent-factory.js"
 
 export interface AgentHealthReport {
   module: string
@@ -61,7 +62,7 @@ export async function checkAgentHealth(
     report.loadable = true
 
     // Step 2: 创建上下文
-    const context = await createAgentContext()
+    const context = await createSharedAgentContext()
     if (!context) {
       report.error = "Failed to create agent context"
       report.duration = Date.now() - start

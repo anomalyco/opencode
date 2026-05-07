@@ -7,7 +7,6 @@
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
-import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
 import { runAgentSafely } from "../utils/agent-runner.js"
 import { searchLegalRules, searchPatentJudgments, searchLegalArticlesSemantic, searchKnowledgeGraphNodes } from "../utils/db.js"
 import { queryLawFromKB, queryGuidelinesFromKB, queryInvalidationFromKB, searchKnowledgeBase } from "../utils/obsidian-kb.js"

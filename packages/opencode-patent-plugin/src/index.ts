@@ -5,7 +5,6 @@
  */
 
 import type { Plugin } from "@opencode-ai/plugin"
-import { tool } from "@opencode-ai/plugin/tool"
 import { createDefaultLLM } from "./adapters/llm.js"
 import { registerResearchTools } from "./tools/research.js"
 import { registerDraftTools } from "./tools/draft.js"
@@ -13,6 +12,8 @@ import { registerOATools } from "./tools/oa.js"
 import { registerSearchTools } from "./tools/search.js"
 import { registerAnalyzeTools } from "./tools/analyze.js"
 import { registerCheckTools } from "./tools/check.js"
+import { registerReexamTools } from "./tools/reexam.js"
+import { registerInvalidationTools } from "./tools/invalidation.js"
 
 /**
  * YunPat Patent Plugin 入口
@@ -22,12 +23,8 @@ import { registerCheckTools } from "./tools/check.js"
 const PatentPlugin: Plugin = async (input, options) => {
   const { client, directory, worktree } = input
 
-  // 初始化 LLM 适配器（桥接 OpenCode → YunPat）
-  const llm = createDefaultLLM(client, {
-    modelId: (options?.model as string) ?? undefined,
-    providerId: (options?.provider as string) ?? undefined,
-    temperature: (options?.temperature as number) ?? 0.3,
-  })
+  // 初始化 LLM 适配器（使用 fetch 调用 OpenAI-compatible API）
+  const llm = createDefaultLLM(client, options)
 
   // 初始化共享上下文
   const context = {
@@ -38,13 +35,21 @@ const PatentPlugin: Plugin = async (input, options) => {
     options,
   }
 
-  // 注册所有 Patent Tools
-  const researchTools = await registerResearchTools(context)
-  const draftTools = await registerDraftTools(context)
-  const oaTools = await registerOATools(context)
-  const searchTools = await registerSearchTools(context)
-  const analyzeTools = await registerAnalyzeTools(context)
-  const checkTools = await registerCheckTools(context)
+  // 注册所有 Patent Tools（每个注册独立 try/catch，单个工具失败不影响其他）
+  const failedRegistrations: string[] = []
+
+  const researchTools = await registerResearchTools(context).catch(e => { console.error("[YunPat] Research tools failed:", e); failedRegistrations.push("research"); return {} })
+  const draftTools = await registerDraftTools(context).catch(e => { console.error("[YunPat] Draft tools failed:", e); failedRegistrations.push("draft"); return {} })
+  const oaTools = await registerOATools(context).catch(e => { console.error("[YunPat] OA tools failed:", e); failedRegistrations.push("oa"); return {} })
+  const searchTools = await registerSearchTools(context).catch(e => { console.error("[YunPat] Search tools failed:", e); failedRegistrations.push("search"); return {} })
+  const analyzeTools = await registerAnalyzeTools(context).catch(e => { console.error("[YunPat] Analyze tools failed:", e); failedRegistrations.push("analyze"); return {} })
+  const checkTools = await registerCheckTools(context).catch(e => { console.error("[YunPat] Check tools failed:", e); failedRegistrations.push("check"); return {} })
+  const reexamTools = await registerReexamTools(context).catch(e => { console.error("[YunPat] Reexam tools failed:", e); failedRegistrations.push("reexam"); return {} })
+  const invalidationTools = await registerInvalidationTools(context).catch(e => { console.error("[YunPat] Invalidation tools failed:", e); failedRegistrations.push("invalidation"); return {} })
+
+  if (failedRegistrations.length > 0) {
+    console.warn(`[YunPat] ⚠️ 以下工具注册失败，相关功能不可用: ${failedRegistrations.join(", ")}`)
+  }
 
   return {
     // 注册专利工具集
@@ -55,6 +60,8 @@ const PatentPlugin: Plugin = async (input, options) => {
       ...searchTools,
       ...analyzeTools,
       ...checkTools,
+      ...reexamTools,
+      ...invalidationTools,
     },
 
     // 注入专利领域系统提示词

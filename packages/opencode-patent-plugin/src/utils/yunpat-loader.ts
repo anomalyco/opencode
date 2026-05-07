@@ -8,12 +8,19 @@
 import { existsSync, statSync, readFileSync } from "fs"
 import { resolve, join } from "path"
 
-const YUNPAT_BASE_PATH = process.env.YUNPAT_PATH ?? "/Users/xujian/projects/YunPat/packages"
+/**
+ * YunPat 基础路径。必须通过环境变量 YUNPAT_PATH 指定。
+ */
+const YUNPAT_BASE_PATH = process.env.YUNPAT_PATH ?? ""
 
 /**
  * YunPat 模块缓存
  */
 const moduleCache = new Map<string, any>()
+/**
+ * 模块加载 Promise 缓存（防止并发重复加载）
+ */
+const loadingPromises = new Map<string, Promise<any>>()
 
 /**
  * 解析 YunPat 模块路径
@@ -66,29 +73,44 @@ function resolveYunPatPath(moduleName: string): string {
 }
 
 /**
- * 动态加载 YunPat 模块
+ * 动态加载 YunPat 模块（并发安全）
  */
 export async function loadYunPatModule<T = any>(moduleName: string): Promise<T | null> {
+  if (!YUNPAT_BASE_PATH) return null
+
+  // 检查已完成的缓存
   if (moduleCache.has(moduleName)) {
     return moduleCache.get(moduleName)
   }
 
-  const modulePath = resolveYunPatPath(moduleName)
-
-  if (!existsSync(modulePath)) {
-    console.warn(`[YunPat] Module not found: ${modulePath}`)
-    return null
+  // 检查正在加载的 Promise（防止并发重复加载）
+  if (loadingPromises.has(moduleName)) {
+    return loadingPromises.get(moduleName)!
   }
 
-  try {
-    const mod = await import(modulePath)
-    moduleCache.set(moduleName, mod)
-    console.log(`[YunPat] Loaded module: ${moduleName}`)
-    return mod
-  } catch (error: any) {
-    console.warn(`[YunPat] Failed to load module ${moduleName}:`, error?.message || error)
-    return null
-  }
+  const loadPromise = (async () => {
+    const modulePath = resolveYunPatPath(moduleName)
+
+    if (!existsSync(modulePath)) {
+      console.warn(`[YunPat] Module not found: ${modulePath}`)
+      return null
+    }
+
+    try {
+      const mod = await import(modulePath)
+      moduleCache.set(moduleName, mod)
+      console.log(`[YunPat] Loaded module: ${moduleName}`)
+      return mod
+    } catch (error: any) {
+      console.warn(`[YunPat] Failed to load module ${moduleName}:`, error?.message || error)
+      return null
+    } finally {
+      loadingPromises.delete(moduleName)
+    }
+  })()
+
+  loadingPromises.set(moduleName, loadPromise)
+  return loadPromise
 }
 
 /**

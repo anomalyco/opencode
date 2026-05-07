@@ -1,12 +1,12 @@
 /**
  * PostgreSQL 数据库连接工具
  *
- * 连接本地 PostgreSQL 实例：
+ * 使用连接池连接 PostgreSQL 实例：
  * - patent_db: 7500万+ 中国专利数据
  * - legal_world_model: 法律世界模型（法规、规则、判决）
  */
 
-import { Client } from "pg"
+import { Pool } from "pg"
 
 export interface DBConfig {
   host: string
@@ -19,34 +19,51 @@ export interface DBConfig {
 const DEFAULT_CONFIG: DBConfig = {
   host: process.env.PATENT_DB_HOST || "localhost",
   port: Number(process.env.PATENT_DB_PORT) || 5432,
-  user: process.env.PATENT_DB_USER || "xujian",
+  user: process.env.PATENT_DB_USER || "postgres",
   password: process.env.PATENT_DB_PASSWORD || "",
   database: "patent_db",
 }
 
 /**
- * 创建数据库客户端
+ * 连接池缓存（按数据库名分组）
  */
-export function createClient(config?: Partial<DBConfig>): Client {
-  return new Client({ ...DEFAULT_CONFIG, ...config })
+const poolCache = new Map<string, Pool>()
+
+/**
+ * 获取或创建连接池
+ */
+function getPool(config?: Partial<DBConfig>): Pool {
+  const fullConfig = { ...DEFAULT_CONFIG, ...config }
+  const key = `${fullConfig.host}:${fullConfig.port}/${fullConfig.database}`
+
+  let pool = poolCache.get(key)
+  if (!pool || pool.ended) {
+    pool = new Pool({
+      host: fullConfig.host,
+      port: fullConfig.port,
+      user: fullConfig.user,
+      password: fullConfig.password,
+      database: fullConfig.database,
+      max: 5,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
+    })
+    poolCache.set(key, pool)
+  }
+  return pool
 }
 
 /**
- * 执行查询并自动关闭连接
+ * 执行查询（使用连接池）
  */
 export async function query<T = any>(
   sql: string,
   params?: any[],
   config?: Partial<DBConfig>,
 ): Promise<T[]> {
-  const client = createClient(config)
-  try {
-    await client.connect()
-    const result = await client.query(sql, params)
-    return result.rows as T[]
-  } finally {
-    await client.end()
-  }
+  const pool = getPool(config)
+  const result = await pool.query(sql, params)
+  return result.rows as T[]
 }
 
 /**
@@ -290,6 +307,8 @@ export async function getLegalRule(articleNumber: string): Promise<LegalRule | n
  * 注意：patent_db 的 embedding 列需要预先生成向量。
  * 当前策略：先用全文搜索缩小范围，再对 Top-K 做向量重排序。
  */
+const ALLOWED_VECTOR_COLUMNS = ["embedding_title", "embedding_abstract", "embedding_claims", "embedding_combined"] as const
+
 export async function searchPatentsSemantic(
   keyword: string,
   options: {
@@ -298,6 +317,11 @@ export async function searchPatentsSemantic(
   } = {},
 ): Promise<Array<PatentRecord & { vector_distance: number }>> {
   const { limit = 10, vectorColumn = "embedding_combined" } = options
+
+  // 运行时白名单验证（防止 SQL 注入）
+  if (!ALLOWED_VECTOR_COLUMNS.includes(vectorColumn)) {
+    throw new Error(`Invalid vectorColumn: ${vectorColumn}`)
+  }
 
   // 先用全文搜索获取候选集（避免全表扫描）
   const candidates = await searchPatents(keyword, { limit: limit * 3 })
