@@ -101,19 +101,41 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 // Mock UnauthorizedError in the auth module so instanceof checks work
 void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
+  auth: async (
+    provider: {
+      state?: () => Promise<string>
+      redirectToAuthorization?: (url: URL) => Promise<void>
+      saveCodeVerifier?: (v: string) => Promise<void>
+      tokens?: () => Promise<unknown>
+      clientInformation?: () => Promise<unknown>
+      clientMetadata?: unknown
+      redirectUrl?: string
+    },
+    _options?: { serverUrl?: URL },
+  ) => {
+    if (simulateAuthFlow && provider.redirectToAuthorization) {
+      if (provider.state) await provider.state()
+      if (provider.saveCodeVerifier) await provider.saveCodeVerifier("test-verifier")
+      await provider.redirectToAuthorization(new URL("https://auth.example.com/authorize?state=test"))
+      return "REDIRECT"
+    }
+    throw new MockUnauthorizedError()
+  },
 }))
-
-beforeEach(() => {
-  transportCalls.length = 0
-  simulateAuthFlow = true
-  connectSucceedsImmediately = false
-})
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
 const { Instance } = await import("../../src/project/instance")
 const { WithInstance } = await import("../../src/project/with-instance")
 const { tmpdir } = await import("../fixture/fixture")
+const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
+
+beforeEach(async () => {
+  transportCalls.length = 0
+  simulateAuthFlow = true
+  connectSucceedsImmediately = false
+  await McpOAuthCallback.stop()
+})
 
 test("first connect to OAuth server shows needs_auth instead of failed", async () => {
   await using tmp = await tmpdir({
@@ -274,6 +296,125 @@ test("authenticate() stores a connected client when auth completes without redir
 
             const after = yield* mcp.status()
             expect(after["test-oauth-connect"]?.status).toBe("connected")
+          }),
+        ).pipe(Effect.provide(MCP.defaultLayer)),
+      )
+    },
+  })
+})
+
+test("startAuth() forces OAuth redirect when server accepts connection without auth and OAuth is configured", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/opencode.json`,
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            gdrive: {
+              type: "remote",
+              url: "https://drivemcp.googleapis.com/mcp/v1",
+              oauth: {
+                clientId: "test-client-id",
+                clientSecret: "test-secret",
+                scope: "https://www.googleapis.com/auth/drive.readonly",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Effect.runPromise(
+        MCP.Service.use((mcp) =>
+          Effect.gen(function* () {
+            yield* mcp.add("gdrive", {
+              type: "remote",
+              url: "https://drivemcp.googleapis.com/mcp/v1",
+              oauth: {
+                clientId: "test-client-id",
+                clientSecret: "test-secret",
+                scope: "https://www.googleapis.com/auth/drive.readonly",
+              },
+            })
+
+            simulateAuthFlow = true
+            connectSucceedsImmediately = true
+
+            const result = yield* mcp.startAuth("gdrive")
+            expect(result.authorizationUrl).toBeTruthy()
+            expect(result.authorizationUrl).toContain("https://auth.example.com/authorize")
+          }),
+        ).pipe(Effect.provide(MCP.defaultLayer)),
+      )
+    },
+  })
+})
+
+test("authenticate() succeeds when server accepts connection without OAuth and tokens already exist", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/opencode.json`,
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            "with-tokens": {
+              type: "remote",
+              url: "https://example.com/mcp",
+              oauth: {
+                clientId: "test-client-id",
+                scope: "read",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const { McpAuth } = await import("../../src/mcp/auth")
+      await Effect.runPromise(
+        McpAuth.Service.use((auth) =>
+          auth.updateTokens(
+            "with-tokens",
+            {
+              accessToken: "existing-access-token",
+              refreshToken: "existing-refresh-token",
+              expiresAt: Date.now() / 1000 + 3600,
+              scope: "read",
+            },
+            "https://example.com/mcp",
+          ),
+        ).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
+
+      await Effect.runPromise(
+        MCP.Service.use((mcp) =>
+          Effect.gen(function* () {
+            const added = yield* mcp.add("with-tokens", {
+              type: "remote",
+              url: "https://example.com/mcp",
+              oauth: {
+                clientId: "test-client-id",
+                scope: "read",
+              },
+            })
+            const before = added.status as Record<string, { status: string; error?: string }>
+            expect(before["with-tokens"]?.status).toBe("needs_auth")
+
+            simulateAuthFlow = false
+            connectSucceedsImmediately = true
+
+            const result = yield* mcp.authenticate("with-tokens")
+            expect(result.status).toBe("connected")
           }),
         ).pipe(Effect.provide(MCP.defaultLayer)),
       )

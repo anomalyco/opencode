@@ -92,6 +92,7 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 // Mock UnauthorizedError in the auth module
 void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
+  auth: async () => "REDIRECT",
 }))
 
 beforeEach(() => {

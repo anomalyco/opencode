@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { UnauthorizedError, auth as sdkAuth } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
   type Tool as MCPToolDef,
@@ -25,7 +25,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
+import { Effect, Exit, Layer, Option, Context, Schema, Stream, Cause } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -767,29 +767,81 @@ export const layer = Layer.effect(
 
       const transport = new StreamableHTTPClientTransport(url, { authProvider })
 
-      return yield* Effect.tryPromise({
+      const result: AuthResult = yield* Effect.tryPromise({
         try: () => {
           const client = new Client({ name: "opencode", version: InstallationVersion })
           return client
             .connect(transport)
-            .then(() => ({ authorizationUrl: "", oauthState, client }) satisfies AuthResult)
+            .then((): AuthResult => ({ authorizationUrl: "", oauthState, client }))
         },
         catch: (error) => error,
       }).pipe(
         Effect.catch((error) => {
           if (error instanceof UnauthorizedError && capturedUrl) {
             pendingOAuthTransports.set(mcpName, transport)
-            return Effect.succeed({ authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult)
+            return Effect.succeed({ authorizationUrl: capturedUrl.toString(), oauthState } as AuthResult)
           }
           return Effect.die(error)
         }),
       )
+
+      if (
+        !result.authorizationUrl &&
+        oauthConfig &&
+        !(yield* auth.get(mcpName))?.tokens
+      ) {
+        log.info("server accepted connection without auth but oauth was configured, forcing oauth flow", { mcpName })
+        yield* Effect.tryPromise(() => result.client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
+
+        const forceCapturedUrl: URL[] = []
+        const forceAuthProvider = new McpOAuthProvider(
+          mcpName,
+          mcpConfig.url,
+          {
+            clientId: oauthConfig.clientId,
+            clientSecret: oauthConfig.clientSecret,
+            scope: oauthConfig.scope,
+            redirectUri: oauthConfig.redirectUri,
+          },
+          {
+            onRedirect: async (url) => {
+              forceCapturedUrl.push(url)
+            },
+          },
+          auth,
+        )
+
+        const forceTransport = new StreamableHTTPClientTransport(url, { authProvider: forceAuthProvider })
+
+        const forceAuthResult = yield* Effect.tryPromise(() => sdkAuth(forceAuthProvider, { serverUrl: url })).pipe(
+          Effect.catchCause((cause) => {
+            const error = Cause.squash(cause)
+            if (error instanceof UnauthorizedError && forceCapturedUrl.length > 0) {
+              pendingOAuthTransports.set(mcpName, forceTransport)
+              return Effect.succeed("REDIRECT" as const)
+            }
+            log.error("forced oauth flow failed", { mcpName, error })
+            return Effect.succeed("AUTHORIZED" as const)
+          }),
+        )
+
+        if (forceAuthResult === "REDIRECT" && forceCapturedUrl.length > 0) {
+          return {
+            authorizationUrl: forceCapturedUrl[0].toString(),
+            oauthState,
+          } as AuthResult
+        }
+
+        return { authorizationUrl: "", oauthState } as AuthResult
+      }
+
+      return result
     })
 
     const authenticate = Effect.fn("MCP.authenticate")(function* (mcpName: string) {
       const result = yield* startAuth(mcpName)
       if (!result.authorizationUrl) {
-        const client = "client" in result ? result.client : undefined
+        const client = result.client
         const mcpConfig = yield* getMcpConfig(mcpName)
         if (!mcpConfig) {
           yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
@@ -800,6 +852,17 @@ export const layer = Layer.effect(
         if (!client || !listed) {
           yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
           return { status: "failed", error: "Failed to get tools" } as Status
+        }
+
+        const hasOAuthConfig = mcpConfig.type === "remote" && typeof mcpConfig.oauth === "object"
+        const savedEntry = yield* auth.get(mcpName)
+        if (hasOAuthConfig && !savedEntry?.tokens) {
+          yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+          return {
+            status: "failed",
+            error:
+              "Server accepted the connection without OAuth, but no tokens were obtained. The server may require authentication for operations.",
+          } as Status
         }
 
         const s = yield* InstanceState.get(state)
