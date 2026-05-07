@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "opencode-patent-plugin",
+  "version": "0.1.0",
+  "description": "YunPat Patent Intelligence Plugin for OpenCode - 知识产权智能体插件",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*",
+    "effect": "catalog:",
+    "zod": "catalog:",
+    "@yunpat/core": "file:/Users/xujian/projects/YunPat/packages/core",
+    "@yunpat/agent-researcher": "file:/Users/xujian/projects/YunPat/packages/agents/researcher",
+    "@yunpat/agent-patent-writer": "file:/Users/xujian/projects/YunPat/packages/agents/patent-writer",
+    "@yunpat/agent-patent-responder": "file:/Users/xujian/projects/YunPat/packages/agents/patent-responder",
+    "@yunpat/agent-patent-analyzer": "file:/Users/xujian/projects/YunPat/packages/agents/patent-analyzer",
+    "@yunpat/agent-search": "file:/Users/xujian/projects/YunPat/packages/agents/search",
+    "@yunpat/agent-quality": "file:/Users/xujian/projects/YunPat/packages/agents/quality",
+    "@yunpat/agent-invention": "file:/Users/xujian/projects/YunPat/packages/agents/invention",
+    "@yunpat/agent-claims": "file:/Users/xujian/projects/YunPat/packages/agents/claims",
+    "@yunpat/agent-specification": "file:/Users/xujian/projects/YunPat/packages/agents/specification-drafter",
+    "@yunpat/patent-tools": "file:/Users/xujian/projects/YunPat/packages/patent-tools",
+    "@yunpat/patent-knowledge": "file:/Users/xujian/projects/YunPat/packages/patent-knowledge",
+    "@yunpat/patent-database": "file:/Users/xujian/projects/YunPat/packages/patent-database",
+    "@yunpat/skills": "file:/Users/xujian/projects/YunPat/packages/skills",
+    "@yunpat/builtin-tools": "file:/Users/xujian/projects/YunPat/packages/builtin-tools"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "opencode": ">=1.14.0"
+  },
+  "engines": {
+    "opencode": ">=1.14.0"
+  }
+}
