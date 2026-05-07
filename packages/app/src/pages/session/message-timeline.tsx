@@ -1365,6 +1365,7 @@ export function MessageTimeline(props: {
                   >
                     <List
                       class="p-0"
+                      style={{ "max-height": "min(600px, 80vh)" }}
                       items={props.renderedUserMessages}
                       key={(message) => message.id}
                       current={currentMessage()}

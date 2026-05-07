@@ -135,10 +135,24 @@
     animation: scroll;
     animation-timeline: --scroll;
     scroll-timeline: --scroll y;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    
     &::-webkit-scrollbar {
-      display: none;
+      width: 8px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+      }
     }
 
     [data-slot="list-empty-state"] {
