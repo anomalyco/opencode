@@ -207,7 +207,7 @@ export function createDialogProviderOptions() {
               }
             }
             if (method.type === "api") {
-              if (provider.id === "litellm") {
+              if (provider.providerID === "litellm") {
                 return dialog.replace(() => <LiteLLMMethod />)
               }
               let metadata: Record<string, string> | undefined
