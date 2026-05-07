@@ -23,7 +23,7 @@ describe("Endpoint", () => {
     const url = await Effect.runPromise(
       Endpoint.render(Endpoint.baseURL({ default: "https://api.example.test/v1/", path: "/chat" }), {
         request: request(),
-        payload: {},
+        body: {},
       }),
     )
 
@@ -37,7 +37,7 @@ describe("Endpoint", () => {
           baseURL: "https://custom.example.test/root/",
           queryParams: { "api-version": "2026-01-01", alt: "json" },
         }),
-        payload: {},
+        body: {},
       }),
     )
 
@@ -49,11 +49,11 @@ describe("Endpoint", () => {
       Endpoint.render(
         Endpoint.baseURL<{ readonly modelId: string }>({
           default: () => "https://bedrock-runtime.us-east-1.amazonaws.com",
-          path: ({ payload }) => `/model/${encodeURIComponent(payload.modelId)}/converse-stream`,
+          path: ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
         }),
         {
           request: request(),
-          payload: { modelId: "us.amazon.nova-micro-v1:0" },
+          body: { modelId: "us.amazon.nova-micro-v1:0" },
         },
       ),
     )
@@ -65,7 +65,7 @@ describe("Endpoint", () => {
     const error = await Effect.runPromise(
       Endpoint.render(Endpoint.baseURL({ path: "/chat", required: "test endpoint requires a baseURL" }), {
         request: request(),
-        payload: {},
+        body: {},
       }).pipe(Effect.flip),
     )
 

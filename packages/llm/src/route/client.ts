@@ -39,18 +39,24 @@ export interface RouteContext {
   readonly request: LLMRequest
 }
 
-export interface Route<Payload, Prepared = unknown> {
+export interface RouteBody<Body> {
+  /** Schema for the validated provider-native body sent as the JSON request. */
+  readonly schema: Schema.Codec<Body, unknown>
+  /** Build the provider-native body from a common `LLMRequest`. */
+  readonly from: (request: LLMRequest) => Effect.Effect<Body, LLMError>
+}
+
+export interface Route<Body, Prepared = unknown> {
   readonly id: string
   readonly provider?: ProviderID
   readonly protocol: ProtocolID
-  readonly transport: Transport<Payload, Prepared, unknown>
+  readonly transport: Transport<Body, Prepared, unknown>
   readonly defaults: RouteDefaults
-  readonly payloadSchema: Schema.Codec<Payload, unknown>
-  readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
-  readonly with: (patch: RoutePatch<Payload, Prepared>) => Route<Payload, Prepared>
+  readonly body: RouteBody<Body>
+  readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
   readonly model: <Input extends RouteModelInput = RouteModelInput>(input: Input) => ModelRef
   readonly prepareTransport: (
-    payload: Payload,
+    body: Body,
     context: RouteContext,
   ) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
@@ -60,8 +66,8 @@ export interface Route<Payload, Prepared = unknown> {
   ) => Stream.Stream<LLMEvent, LLMError>
 }
 
-// Route registries intentionally erase payload generics after construction.
-// Normal call sites use `OpenAIChat.route`; callers only need payload types
+// Route registries intentionally erase body generics after construction.
+// Normal call sites use `OpenAIChat.route`; callers only need body types
 // when preparing a request with a protocol-specific type assertion.
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
 export type AnyRoute = Route<any, any>
@@ -106,10 +112,10 @@ export type RouteRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provi
 
 export type RouteDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "route">>
 
-export interface RoutePatch<Payload, Prepared> extends RouteDefaults {
+export interface RoutePatch<Body, Prepared> extends RouteDefaults {
   readonly id?: string
   readonly provider?: string | ProviderID
-  readonly transport?: Transport<Payload, Prepared, unknown>
+  readonly transport?: Transport<Body, Prepared, unknown>
 }
 
 type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
@@ -197,16 +203,16 @@ function model<Input>(
 
 export interface Interface {
   /**
-   * Compile a request through protocol payload lowering, validation, and HTTP
-   * construction without sending it. Returns the prepared request including the
-   * provider-native payload.
+   * Compile a request through protocol body construction, validation, and HTTP
+   * preparation without sending it. Returns the prepared request including the
+   * provider-native body.
    *
-   * Pass a `Payload` type argument to statically expose the route's payload
-    * shape (e.g. `prepare<OpenAIChatPayload>(...)`) — the runtime payload is
+   * Pass a `Body` type argument to statically expose the route's body
+   * shape (e.g. `prepare<OpenAIChatBody>(...)`) — the runtime body is
    * identical, so this is a type-level assertion the caller makes about which
    * route the request will resolve to.
    */
-  readonly prepare: <Payload = unknown>(request: LLMRequest) => Effect.Effect<PreparedRequestOf<Payload>, LLMError>
+  readonly prepare: <Body = unknown>(request: LLMRequest) => Effect.Effect<PreparedRequestOf<Body>, LLMError>
   readonly stream: StreamMethod
   readonly generate: GenerateMethod
 }
@@ -237,18 +243,18 @@ const resolveRequestOptions = (request: LLMRequest) =>
     http: mergeHttpOptions(request.model.http, request.http),
   })
 
-export interface MakeInput<Payload, Frame, Chunk, State> {
+export interface MakeInput<Body, Frame, Event, State> {
   /** Route id used in registry lookup and error messages. */
   readonly id: string
   /** Provider identity for route-owned model construction. */
   readonly provider?: string | ProviderID
-  /** Semantic API contract — owns lowering, payload schema, and parsing. */
-  readonly protocol: Protocol<Payload, Frame, Chunk, State>
+  /** Semantic API contract — owns body construction, body schema, and parsing. */
+  readonly protocol: Protocol<Body, Frame, Event, State>
   /** Where the request is sent. */
-  readonly endpoint: Endpoint<Payload>
+  readonly endpoint: Endpoint<Body>
   /** Per-request transport auth. Model-level `Auth` overrides this. */
   readonly auth?: AuthDef
-  /** Stream framing — bytes -> frames before `protocol.chunk` decoding. */
+  /** Stream framing — bytes -> frames before `protocol.stream.event` decoding. */
   readonly framing: Framing<Frame>
   /** Static / per-request headers added before `auth` runs. */
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
@@ -256,15 +262,15 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
   readonly defaults?: RouteDefaults
 }
 
-export interface MakeTransportInput<Payload, Prepared, Frame, Chunk, State> {
+export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
   /** Route id used in registry lookup and error messages. */
   readonly id: string
   /** Provider identity for route-owned model construction. */
   readonly provider?: string | ProviderID
-  /** Semantic API contract — owns lowering, payload schema, and parsing. */
-  readonly protocol: Protocol<Payload, Frame, Chunk, State>
+  /** Semantic API contract — owns body construction, body schema, and parsing. */
+  readonly protocol: Protocol<Body, Frame, Event, State>
   /** Runnable transport route. */
-  readonly transport: Transport<Payload, Prepared, Frame>
+  readonly transport: Transport<Body, Prepared, Frame>
   /** Provider/model defaults used by the route's `.model(...)` helper. */
   readonly defaults?: RouteDefaults
 }
@@ -272,41 +278,40 @@ export interface MakeTransportInput<Payload, Prepared, Frame, Chunk, State> {
 const streamError = (route: string, message: string, cause: Cause.Cause<unknown>) => {
   const failed = cause.reasons.find(Cause.isFailReason)?.error
   if (failed instanceof LLMErrorClass) return failed
-  return ProviderShared.chunkError(route, message, Cause.pretty(cause))
+  return ProviderShared.eventError(route, message, Cause.pretty(cause))
 }
 
-function makeFromTransport<Payload, Prepared, Frame, Chunk, State>(
-  input: MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
-): Route<Payload, Prepared> {
+function makeFromTransport<Body, Prepared, Frame, Event, State>(
+  input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
+): Route<Body, Prepared> {
   const protocol = input.protocol
-  const decodeChunkEffect = Schema.decodeUnknownEffect(protocol.chunk)
-  const decodeChunk = (route: string) => (frame: Frame) =>
-    decodeChunkEffect(frame).pipe(
+  const decodeEventEffect = Schema.decodeUnknownEffect(protocol.stream.event)
+  const decodeEvent = (route: string) => (frame: Frame) =>
+    decodeEventEffect(frame).pipe(
       Effect.mapError(() =>
-        ProviderShared.chunkError(
+        ProviderShared.eventError(
           input.id,
-          `Invalid ${route} stream chunk`,
+          `Invalid ${route} stream event`,
           typeof frame === "string" ? frame : ProviderShared.encodeJson(frame),
         ),
       ),
     )
 
-  const build = (routeInput: MakeTransportInput<Payload, Prepared, Frame, Chunk, State>): Route<Payload, Prepared> => {
-    const route: Route<Payload, Prepared> = {
+  const build = (routeInput: MakeTransportInput<Body, Prepared, Frame, Event, State>): Route<Body, Prepared> => {
+    const route: Route<Body, Prepared> = {
       id: routeInput.id,
       provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
       protocol: protocol.id,
       transport: routeInput.transport,
       defaults: routeInput.defaults ?? {},
-      payloadSchema: protocol.payload,
-      toPayload: protocol.toPayload,
-      with: (patch: RoutePatch<Payload, Prepared>) => {
+      body: protocol.body,
+      with: (patch: RoutePatch<Body, Prepared>) => {
         const { id, provider, transport, ...defaults } = patch
         return build({
           ...routeInput,
           id: id ?? routeInput.id,
           provider: provider ?? routeInput.provider,
-          transport: (transport as Transport<Payload, Prepared, Frame> | undefined) ?? routeInput.transport,
+          transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
           defaults: {
             ...routeInput.defaults,
             ...defaults,
@@ -317,25 +322,29 @@ function makeFromTransport<Payload, Prepared, Frame, Chunk, State>(
       prepareTransport: routeInput.transport.prepare,
       streamPrepared: (prepared: Prepared, ctx: RouteContext, runtime: TransportRuntime) => {
         const route = `${ctx.request.model.provider}/${ctx.request.model.route}`
-        const chunks = routeInput.transport.frames(prepared, ctx, runtime).pipe(
-          Stream.mapEffect(decodeChunk(route)),
-          protocol.terminal ? Stream.takeUntil(protocol.terminal) : (stream) => stream,
+        const events = routeInput.transport.frames(prepared, ctx, runtime).pipe(
+          Stream.mapEffect(decodeEvent(route)),
+          protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
         )
-        return chunks.pipe(
-          Stream.mapAccumEffect(protocol.initial, protocol.process, protocol.onHalt ? { onHalt: protocol.onHalt } : undefined),
+        return events.pipe(
+          Stream.mapAccumEffect(
+            protocol.stream.initial,
+            protocol.stream.step,
+            protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
+          ),
           Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
         )
       },
-    } satisfies Route<Payload, Prepared>
+    } satisfies Route<Body, Prepared>
     return register(route)
   }
 
   return build(input)
 }
 
-export function make<Payload, Prepared, Frame, Chunk, State>(
-  input: MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
-): Route<Payload, Prepared>
+export function make<Body, Prepared, Frame, Event, State>(
+  input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
+): Route<Body, Prepared>
 /**
  * Build a `Route` by composing the four orthogonal pieces of a deployment:
  *
@@ -351,15 +360,15 @@ export function make<Payload, Prepared, Frame, Chunk, State>(
  * this four-axis model, add a purpose-built constructor rather than widening
  * the public surface preemptively.
  */
-export function make<Payload, Frame, Chunk, State>(
-  input: MakeInput<Payload, Frame, Chunk, State>,
-): Route<Payload, HttpTransport.HttpPrepared<Frame>>
-export function make<Payload, Prepared, Frame, Chunk, State>(
-  input: MakeInput<Payload, Frame, Chunk, State> | MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
-): Route<Payload, Prepared> | Route<Payload, HttpTransport.HttpPrepared<Frame>> {
+export function make<Body, Frame, Event, State>(
+  input: MakeInput<Body, Frame, Event, State>,
+): Route<Body, HttpTransport.HttpPrepared<Frame>>
+export function make<Body, Prepared, Frame, Event, State>(
+  input: MakeInput<Body, Frame, Event, State> | MakeTransportInput<Body, Prepared, Frame, Event, State>,
+): Route<Body, Prepared> | Route<Body, HttpTransport.HttpPrepared<Frame>> {
   if ("transport" in input) return makeFromTransport(input)
   const protocol = input.protocol
-  const encodePayload = Schema.encodeSync(Schema.fromJsonString(protocol.payload))
+  const encodeBody = Schema.encodeSync(Schema.fromJsonString(protocol.body.schema))
   return makeFromTransport({
     id: input.id,
     provider: input.provider,
@@ -368,7 +377,7 @@ export function make<Payload, Prepared, Frame, Chunk, State>(
       endpoint: input.endpoint,
       auth: input.auth,
       framing: input.framing,
-      encodePayload,
+      encodeBody,
       headers: input.headers,
     }),
     defaults: input.defaults,
@@ -376,24 +385,24 @@ export function make<Payload, Prepared, Frame, Chunk, State>(
 }
 
 // `compile` is the important boundary: it turns a common `LLMRequest` into a
-// validated provider payload plus transport-private prepared data, but does not
+// validated provider body plus transport-private prepared data, but does not
 // execute transport.
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   const resolved = resolveRequestOptions(request)
   const route = registeredRoute(resolved.model.route)
   if (!route) return yield* noRoute(resolved.model)
 
-  const payload = yield* route.toPayload(resolved).pipe(
-    Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.payloadSchema))),
+  const body = yield* route.body.from(resolved).pipe(
+    Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))),
   )
-  const prepared = yield* route.prepareTransport(payload, {
+  const prepared = yield* route.prepareTransport(body, {
     request: resolved,
   })
 
   return {
     request: resolved,
     route,
-    payload,
+    body,
     prepared,
   }
 })
@@ -406,7 +415,7 @@ const prepareWith = Effect.fn("LLMClient.prepare")(function* (request: LLMReques
     route: compiled.route.id,
     protocol: compiled.route.protocol,
     model: compiled.request.model,
-    payload: compiled.payload,
+    body: compiled.body,
     metadata: { transport: compiled.route.transport.id },
   })
 })
@@ -443,8 +452,8 @@ const generateWith = (stream: Interface["stream"]) => Effect.fn("LLM.generate")(
   )
 })
 
-export const prepare = <Payload = unknown>(request: LLMRequest) =>
-  prepareWith(request) as Effect.Effect<PreparedRequestOf<Payload>, LLMError>
+export const prepare = <Body = unknown>(request: LLMRequest) =>
+  prepareWith(request) as Effect.Effect<PreparedRequestOf<Body>, LLMError>
 
 export function stream(request: LLMRequest): Stream.Stream<LLMEvent, LLMError>
 export function stream<T extends Tools>(options: ToolRuntime.RunOptions<T>): Stream.Stream<LLMEvent, LLMError>

@@ -2,23 +2,23 @@ import { Effect } from "effect"
 import * as ProviderShared from "../protocols/shared"
 import type { LLMError, LLMRequest } from "../schema"
 
-export interface EndpointInput<Payload> {
+export interface EndpointInput<Body> {
   readonly request: LLMRequest
-  readonly payload: Payload
+  readonly body: Body
 }
 
-export type EndpointPart<Payload> = string | ((input: EndpointInput<Payload>) => string)
+export type EndpointPart<Body> = string | ((input: EndpointInput<Body>) => string)
 
 /**
  * Declarative URL construction for one route.
  *
  * `Endpoint` is the deployment-side answer to "where does this request go?".
- * `render(...)` interprets this data after protocol lowering, so dynamic pieces
- * can read the final `LLMRequest` and validated provider payload.
+ * `render(...)` interprets this data after protocol body construction, so
+ * dynamic pieces can read the final `LLMRequest` and validated provider body.
  */
-export interface Endpoint<Payload> {
-  readonly baseURL?: EndpointPart<Payload>
-  readonly path: EndpointPart<Payload>
+export interface Endpoint<Body> {
+  readonly baseURL?: EndpointPart<Body>
+  readonly path: EndpointPart<Body>
   /** Error message used when neither `model.baseURL` nor `baseURL` is set. */
   readonly required?: string
 }
@@ -30,22 +30,22 @@ export interface Endpoint<Payload> {
  *
  * Both `default` and `path` may be strings or functions of the
  * `EndpointInput`, for routes whose URL embeds the model id, region, or
- * another payload field.
+ * another body field.
  */
-export const baseURL = <Payload>(input: {
-  readonly default?: string | ((input: EndpointInput<Payload>) => string)
-  readonly path: string | ((input: EndpointInput<Payload>) => string)
+export const baseURL = <Body>(input: {
+  readonly default?: string | ((input: EndpointInput<Body>) => string)
+  readonly path: string | ((input: EndpointInput<Body>) => string)
   readonly required?: string
-}): Endpoint<Payload> => ({
+}): Endpoint<Body> => ({
   baseURL: input.default,
   path: input.path,
   required: input.required,
 })
 
-const renderPart = <Payload>(part: EndpointPart<Payload> | undefined, input: EndpointInput<Payload>) =>
+const renderPart = <Body>(part: EndpointPart<Body> | undefined, input: EndpointInput<Body>) =>
   typeof part === "function" ? part(input) : part
 
-export const render = <Payload>(endpoint: Endpoint<Payload>, input: EndpointInput<Payload>) =>
+export const render = <Body>(endpoint: Endpoint<Body>, input: EndpointInput<Body>) =>
   Effect.gen(function* () {
     const base = input.request.model.baseURL ?? renderPart(endpoint.baseURL, input)
     if (!base) return yield* ProviderShared.invalidRequest(endpoint.required ?? "Missing baseURL")

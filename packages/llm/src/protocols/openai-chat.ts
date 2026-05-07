@@ -24,9 +24,9 @@ const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 const PATH = "/chat/completions"
 
 // =============================================================================
-// Request Payload Schema
+// Request Body Schema
 // =============================================================================
-// The payload schema is the provider-native JSON body. `toPayload` below builds
+// The body schema is the provider-native JSON body. `fromRequest` below builds
 // this shape from the common `LLMRequest`, then `Route.make` validates and
 // JSON-encodes it before transport.
 const OpenAIChatFunction = Schema.Struct({
@@ -72,7 +72,7 @@ const OpenAIChatToolChoice = Schema.Union([
   }),
 ])
 
-export const payloadFields = {
+export const bodyFields = {
   model: Schema.String,
   messages: Schema.Array(OpenAIChatMessage),
   tools: optionalArray(OpenAIChatTool),
@@ -89,15 +89,15 @@ export const payloadFields = {
   seed: Schema.optional(Schema.Number),
   stop: optionalArray(Schema.String),
 }
-const OpenAIChatPayload = Schema.Struct(payloadFields)
-export type OpenAIChatPayload = Schema.Schema.Type<typeof OpenAIChatPayload>
+const OpenAIChatBody = Schema.Struct(bodyFields)
+export type OpenAIChatBody = Schema.Schema.Type<typeof OpenAIChatBody>
 
 // =============================================================================
-// Streaming Chunk Schema
+// Streaming Event Schema
 // =============================================================================
-// The chunk schema is one decoded SSE `data:` payload. `Framing.sse` splits the
-// byte stream into strings, then `Protocol.jsonChunk` decodes each string into
-// this provider-native chunk shape.
+// The event schema is one decoded SSE `data:` payload. `Framing.sse` splits the
+// byte stream into strings, then `Protocol.jsonEvent` decodes each string into
+// this provider-native event shape.
 const OpenAIChatUsage = Schema.Struct({
   prompt_tokens: Schema.optional(Schema.Number),
   completion_tokens: Schema.optional(Schema.Number),
@@ -136,11 +136,11 @@ const OpenAIChatChoice = Schema.Struct({
   finish_reason: optionalNull(Schema.String),
 })
 
-const OpenAIChatChunk = Schema.Struct({
+const OpenAIChatEvent = Schema.Struct({
   choices: Schema.Array(OpenAIChatChoice),
   usage: optionalNull(OpenAIChatUsage),
 })
-type OpenAIChatChunk = Schema.Schema.Type<typeof OpenAIChatChunk>
+type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
 
 interface ParserState {
@@ -253,8 +253,8 @@ const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LL
   }
 })
 
-const toPayload = Effect.fn("OpenAIChat.toPayload")(function* (request: LLMRequest) {
-  // `toPayload` returns the provider payload only. Endpoint, auth, framing,
+const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMRequest) {
+  // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
   const generation = request.generation
   return {
@@ -278,8 +278,8 @@ const toPayload = Effect.fn("OpenAIChat.toPayload")(function* (request: LLMReque
 // =============================================================================
 // Stream Parsing
 // =============================================================================
-// Streaming parsers are small state machines: every chunk returns a new state
-// plus the common `LLMEvent`s produced by that chunk. Tool calls are accumulated
+// Streaming parsers are small state machines: every event returns a new state
+// plus the common `LLMEvent`s produced by that event. Tool calls are accumulated
 // because OpenAI streams JSON arguments across multiple deltas.
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "stop") return "stop"
@@ -289,7 +289,7 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   return "unknown"
 }
 
-const mapUsage = (usage: OpenAIChatChunk["usage"]): Usage | undefined => {
+const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
   return new Usage({
     inputTokens: usage.prompt_tokens,
@@ -301,11 +301,11 @@ const mapUsage = (usage: OpenAIChatChunk["usage"]): Usage | undefined => {
   })
 }
 
-const processChunk = (state: ParserState, chunk: OpenAIChatChunk) =>
+const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
     const events: LLMEvent[] = []
-    const usage = mapUsage(chunk.usage) ?? state.usage
-    const choice = chunk.choices[0]
+    const usage = mapUsage(event.usage) ?? state.usage
+    const choice = event.choices[0]
     const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
@@ -357,38 +357,42 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
 // Protocol And OpenAI Route
 // =============================================================================
 /**
- * The OpenAI Chat protocol — request lowering, payload schema, and the
- * streaming-chunk state machine. Reused by every route
- * that speaks OpenAI Chat over HTTP+SSE: native OpenAI, DeepSeek, TogetherAI,
- * Cerebras, Baseten, Fireworks, DeepInfra, and (once added) Azure OpenAI Chat.
+ * The OpenAI Chat protocol — request body construction, body schema, and the
+ * streaming-event state machine. Reused by every route that speaks OpenAI Chat
+ * over HTTP+SSE: native OpenAI, DeepSeek, TogetherAI, Cerebras, Baseten,
+ * Fireworks, DeepInfra, and (once added) Azure OpenAI Chat.
  */
-export const protocol = Protocol.define({
+export const protocol = Protocol.make({
   id: ADAPTER,
-  payload: OpenAIChatPayload,
-  toPayload,
-  chunk: Protocol.jsonChunk(OpenAIChatChunk),
-  initial: () => ({ tools: ToolStream.empty<number>(), toolCallEvents: [] }),
-  process: processChunk,
-  onHalt: finishEvents,
+  body: {
+    schema: OpenAIChatBody,
+    from: fromRequest,
+  },
+  stream: {
+    event: Protocol.jsonEvent(OpenAIChatEvent),
+    initial: () => ({ tools: ToolStream.empty<number>(), toolCallEvents: [] }),
+    step,
+    onHalt: finishEvents,
+  },
 })
 
 export const endpoint = (input: {
   readonly defaultBaseURL?: string | false
   readonly required?: string
 } = {}) =>
-  Endpoint.baseURL<OpenAIChatPayload>({
+  Endpoint.baseURL<OpenAIChatBody>({
     default: input.defaultBaseURL === false ? undefined : input.defaultBaseURL ?? DEFAULT_BASE_URL,
     path: PATH,
     required: input.required,
   })
 
-const encodePayload = Schema.encodeSync(Schema.fromJsonString(OpenAIChatPayload))
+const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIChatBody))
 
 export const httpTransport = HttpTransport.httpJson({
   endpoint: endpoint(),
   auth: Auth.bearer(),
   framing: Framing.sse,
-  encodePayload,
+  encodeBody,
 })
 
 export const route = Route.make({

@@ -26,7 +26,7 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(request)
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "claude-sonnet-4-5",
         system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [{ type: "text", text: "Say hello." }] }],
@@ -51,7 +51,7 @@ describe("Anthropic Messages route", () => {
         }),
       )
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "claude-sonnet-4-5",
         messages: [
           { role: "user", content: [{ type: "text", text: "What is the weather?" }] },
@@ -75,7 +75,7 @@ describe("Anthropic Messages route", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         messages: [{ role: "assistant", content: [{ type: "thinking", thinking: "thinking", signature: "sig_1" }] }],
       })
     }),
@@ -299,7 +299,7 @@ describe("Anthropic Messages route", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         messages: [
           { role: "user", content: [{ type: "text", text: "Search for something." }] },
           {

@@ -45,7 +45,7 @@ export const totalTokens = (
   return (inputTokens ?? 0) + (outputTokens ?? 0)
 }
 
-export const chunkError = (route: string, message: string, raw?: string) =>
+export const eventError = (route: string, message: string, raw?: string) =>
   new LLMError({
     module: "ProviderShared",
     method: "stream",
@@ -55,7 +55,7 @@ export const chunkError = (route: string, message: string, raw?: string) =>
 export const parseJson = (route: string, input: string, message: string) =>
   Effect.try({
     try: () => decodeJson(input),
-    catch: () => chunkError(route, message, input),
+    catch: () => eventError(route, message, input),
   })
 
 /**

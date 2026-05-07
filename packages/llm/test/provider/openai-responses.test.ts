@@ -32,7 +32,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(request)
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "gpt-4.1-mini",
         input: [
           { role: "system", content: "You are concise." },
@@ -54,7 +54,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.route).toBe("openai-responses-websocket")
       expect(prepared.protocol).toBe("openai-responses")
       expect(prepared.metadata).toEqual({ transport: "websocket-json" })
-      expect(prepared.payload).toMatchObject({ model: "gpt-4.1-mini", stream: true })
+      expect(prepared.body).toMatchObject({ model: "gpt-4.1-mini", stream: true })
     }),
   )
 
@@ -236,7 +236,7 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "gpt-4.1-mini",
         input: [
           { role: "user", content: [{ type: "input_text", text: "What is the weather?" }] },
@@ -250,7 +250,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("maps OpenAI provider options to Responses options", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesPayload>(
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
         LLM.request({
           model: OpenAI.model("gpt-5.2", { baseURL: "https://api.openai.test/v1/" }),
           prompt: "think",
@@ -265,17 +265,17 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
-      expect(prepared.payload.store).toBe(false)
-      expect(prepared.payload.prompt_cache_key).toBe("session_123")
-      expect(prepared.payload.include).toEqual(["reasoning.encrypted_content"])
-      expect(prepared.payload.reasoning).toEqual({ effort: "high", summary: "auto" })
-      expect(prepared.payload.text).toEqual({ verbosity: "low" })
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+      expect(prepared.body.reasoning).toEqual({ effort: "high", summary: "auto" })
+      expect(prepared.body.text).toEqual({ verbosity: "low" })
     }),
   )
 
   it.effect("request OpenAI provider options override model defaults", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesPayload>(
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
         LLM.request({
           model: OpenAI.model("gpt-4.1-mini", {
             baseURL: "https://api.openai.test/v1/",
@@ -286,7 +286,7 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
-      expect(prepared.payload.prompt_cache_key).toBe("request_cache")
+      expect(prepared.body.prompt_cache_key).toBe("request_cache")
     }),
   )
 

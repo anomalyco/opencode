@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { LLMError, type ProviderMetadata, type ToolCall, type ToolInputDelta } from "../../schema"
-import { chunkError, parseToolInput, type ToolAccumulator } from "../shared"
+import { eventError, parseToolInput, type ToolAccumulator } from "../shared"
 
 type StreamKey = string | number
 
@@ -117,7 +117,7 @@ export const appendOrStart = <K extends StreamKey>(
   const current = tools[key]
   const id = delta.id ?? current?.id
   const name = delta.name ?? current?.name
-  if (!id || !name) return chunkError(route, missingToolMessage)
+  if (!id || !name) return eventError(route, missingToolMessage)
 
   const tool = {
     id,
@@ -143,7 +143,7 @@ export const appendExisting = <K extends StreamKey>(
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
   const current = tools[key]
-  if (!current) return chunkError(route, missingToolMessage)
+  if (!current) return eventError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current }
   return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
 }

@@ -11,25 +11,25 @@ const updateModel = (model: ModelRef, patch: Partial<ModelRef.Input>) => ModelRe
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
 
-type FakePayload = {
+type FakeBody = {
   readonly body: string
 }
 
-const FakeChunk = Schema.Union([
+const FakeEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("finish"), reason: Schema.Literal("stop") }),
 ])
-type FakeChunk = Schema.Schema.Type<typeof FakeChunk>
-const decodeFakeChunks = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(FakeChunk)))
+type FakeEvent = Schema.Schema.Type<typeof FakeEvent>
+const decodeFakeEvents = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(FakeEvent)))
 
-const fakeFraming: FramingDef<FakeChunk> = {
+const fakeFraming: FramingDef<FakeEvent> = {
   id: "fake-json-array",
   frame: (bytes) =>
     Stream.fromEffect(
       bytes.pipe(
         Stream.decodeText(),
-        Stream.runFold(() => "", (text, chunk) => text + chunk),
-        Effect.flatMap(decodeFakeChunks),
+        Stream.runFold(() => "", (text, event) => text + event),
+        Effect.flatMap(decodeFakeEvents),
         Effect.orDie,
       ),
     ).pipe(Stream.flatMap(Stream.fromIterable)),
@@ -45,29 +45,33 @@ const request = LLM.request({
   prompt: "hello",
 })
 
-const raiseChunk = (chunk: FakeChunk): import("../src/schema").LLMEvent =>
-  chunk.type === "finish"
-    ? { type: "request-finish", reason: chunk.reason }
-    : { type: "text-delta", text: chunk.text }
+const raiseEvent = (event: FakeEvent): import("../src/schema").LLMEvent =>
+  event.type === "finish"
+    ? { type: "request-finish", reason: event.reason }
+    : { type: "text-delta", text: event.text }
 
-const fakeProtocol = Protocol.define<FakePayload, FakeChunk, FakeChunk, void>({
+const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
   id: "fake",
-  payload: Schema.Struct({
-    body: Schema.String,
-  }),
-  chunk: FakeChunk,
-  toPayload: (request) =>
-    Effect.succeed({
-      body: [
-        ...request.messages
-          .flatMap((message) => message.content)
-          .filter((part) => part.type === "text")
-          .map((part) => part.text),
-        ...request.tools.map((tool) => `tool:${tool.name}:${tool.description}`),
-      ].join("\n"),
+  body: {
+    schema: Schema.Struct({
+      body: Schema.String,
     }),
-  initial: () => undefined,
-  process: (state, chunk) => Effect.succeed([state, [raiseChunk(chunk)]] as const),
+    from: (request) =>
+      Effect.succeed({
+        body: [
+          ...request.messages
+            .flatMap((message) => message.content)
+            .filter((part) => part.type === "text")
+            .map((part) => part.text),
+          ...request.tools.map((tool) => `tool:${tool.name}:${tool.description}`),
+        ].join("\n"),
+      }),
+  },
+  stream: {
+    event: FakeEvent,
+    initial: () => undefined,
+    step: (state, event) => Effect.succeed([state, [raiseEvent(event)]] as const),
+  },
 })
 
 const fake = Route.make({
@@ -152,9 +156,12 @@ describe("llm route", () => {
     Effect.gen(function* () {
       Route.make({
         id: "fake",
-        protocol: Protocol.define({
+        protocol: Protocol.make({
           ...fakeProtocol,
-          toPayload: () => Effect.succeed({ body: "late-default" }),
+          body: {
+            ...fakeProtocol.body,
+            from: () => Effect.succeed({ body: "late-default" }),
+          },
         }),
         endpoint: Endpoint.baseURL({ default: "https://fake.local", path: "/chat" }),
         framing: fakeFraming,

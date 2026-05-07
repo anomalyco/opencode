@@ -22,7 +22,7 @@ import { ToolStream } from "./utils/tool-stream"
 const ADAPTER = "anthropic-messages"
 
 // =============================================================================
-// Request Payload Schema
+// Request Body Schema
 // =============================================================================
 const AnthropicCacheControl = Schema.Struct({ type: Schema.Literal("ephemeral") })
 
@@ -121,7 +121,7 @@ const AnthropicThinking = Schema.Struct({
   budget_tokens: Schema.Number,
 })
 
-const AnthropicPayloadFields = {
+const AnthropicBodyFields = {
   model: Schema.String,
   system: optionalArray(AnthropicTextBlock),
   messages: Schema.Array(AnthropicMessage),
@@ -135,8 +135,8 @@ const AnthropicPayloadFields = {
   stop_sequences: optionalArray(Schema.String),
   thinking: Schema.optional(AnthropicThinking),
 }
-const AnthropicMessagesPayload = Schema.Struct(AnthropicPayloadFields)
-export type AnthropicMessagesPayload = Schema.Schema.Type<typeof AnthropicMessagesPayload>
+const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
+export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesBody>
 
 const AnthropicUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
@@ -171,7 +171,7 @@ const AnthropicStreamDelta = Schema.Struct({
   stop_sequence: optionalNull(Schema.String),
 })
 
-const AnthropicChunk = Schema.Struct({
+const AnthropicEvent = Schema.Struct({
   type: Schema.String,
   index: Schema.optional(Schema.Number),
   message: Schema.optional(Schema.Struct({ usage: Schema.optional(AnthropicUsage) })),
@@ -180,7 +180,7 @@ const AnthropicChunk = Schema.Struct({
   usage: Schema.optional(AnthropicUsage),
   error: Schema.optional(Schema.Struct({ type: Schema.String, message: Schema.String })),
 })
-type AnthropicChunk = Schema.Schema.Type<typeof AnthropicChunk>
+type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 
 interface ParserState {
   readonly tools: ToolStream.State<number>
@@ -316,7 +316,7 @@ const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (re
   return { type: "enabled" as const, budget_tokens: budget }
 })
 
-const toPayload = Effect.fn("AnthropicMessages.toPayload")(function* (request: LLMRequest) {
+const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const generation = request.generation
   return {
@@ -393,7 +393,7 @@ const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = 
 const isServerToolResultType = (type: string): type is AnthropicServerToolResultType =>
   type in SERVER_TOOL_RESULT_NAMES
 
-const serverToolResultEvent = (block: NonNullable<AnthropicChunk["content_block"]>): LLMEvent | undefined => {
+const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"]>): LLMEvent | undefined => {
   if (!block.type || !isServerToolResultType(block.type)) return undefined
   const errorPayload =
     typeof block.content === "object" && block.content !== null && "type" in block.content
@@ -412,87 +412,87 @@ const serverToolResultEvent = (block: NonNullable<AnthropicChunk["content_block"
   }
 }
 
-const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
+const step = (state: ParserState, event: AnthropicEvent) =>
   Effect.gen(function* () {
-    if (chunk.type === "message_start") {
-      const usage = mapUsage(chunk.message?.usage)
+    if (event.type === "message_start") {
+      const usage = mapUsage(event.message?.usage)
       return [usage ? { ...state, usage: mergeUsage(state.usage, usage) } : state, []] as const
     }
 
     if (
-      chunk.type === "content_block_start" &&
-      chunk.index !== undefined &&
-      (chunk.content_block?.type === "tool_use" || chunk.content_block?.type === "server_tool_use")
+      event.type === "content_block_start" &&
+      event.index !== undefined &&
+      (event.content_block?.type === "tool_use" || event.content_block?.type === "server_tool_use")
     ) {
       return [{
         ...state,
-        tools: ToolStream.start(state.tools, chunk.index, {
-          id: chunk.content_block.id ?? String(chunk.index),
-          name: chunk.content_block.name ?? "",
-          providerExecuted: chunk.content_block.type === "server_tool_use",
+        tools: ToolStream.start(state.tools, event.index, {
+          id: event.content_block.id ?? String(event.index),
+          name: event.content_block.name ?? "",
+          providerExecuted: event.content_block.type === "server_tool_use",
         }),
       }, []] as const
     }
 
-    if (chunk.type === "content_block_start" && chunk.content_block?.type === "text" && chunk.content_block.text) {
-      return [state, [{ type: "text-delta", text: chunk.content_block.text }]] as const
+    if (event.type === "content_block_start" && event.content_block?.type === "text" && event.content_block.text) {
+      return [state, [{ type: "text-delta", text: event.content_block.text }]] as const
     }
 
-    if (chunk.type === "content_block_start" && chunk.content_block?.type === "thinking" && chunk.content_block.thinking) {
+    if (event.type === "content_block_start" && event.content_block?.type === "thinking" && event.content_block.thinking) {
       return [state, [{
         type: "reasoning-delta",
-        text: chunk.content_block.thinking,
-        ...(chunk.content_block.signature ? { providerMetadata: anthropicMetadata({ signature: chunk.content_block.signature }) } : {}),
+        text: event.content_block.thinking,
+        ...(event.content_block.signature ? { providerMetadata: anthropicMetadata({ signature: event.content_block.signature }) } : {}),
       }]] as const
     }
 
-    if (chunk.type === "content_block_start" && chunk.content_block) {
-      const event = serverToolResultEvent(chunk.content_block)
-      if (event) return [state, [event]] as const
+    if (event.type === "content_block_start" && event.content_block) {
+      const result = serverToolResultEvent(event.content_block)
+      if (result) return [state, [result]] as const
     }
 
-    if (chunk.type === "content_block_delta" && chunk.delta?.type === "text_delta" && chunk.delta.text) {
-      return [state, [{ type: "text-delta", text: chunk.delta.text }]] as const
+    if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
+      return [state, [{ type: "text-delta", text: event.delta.text }]] as const
     }
 
-    if (chunk.type === "content_block_delta" && chunk.delta?.type === "thinking_delta" && chunk.delta.thinking) {
-      return [state, [{ type: "reasoning-delta", text: chunk.delta.thinking }]] as const
+    if (event.type === "content_block_delta" && event.delta?.type === "thinking_delta" && event.delta.thinking) {
+      return [state, [{ type: "reasoning-delta", text: event.delta.thinking }]] as const
     }
 
-    if (chunk.type === "content_block_delta" && chunk.delta?.type === "signature_delta" && chunk.delta.signature) {
-      return [state, [{ type: "reasoning-delta", text: "", providerMetadata: anthropicMetadata({ signature: chunk.delta.signature }) }]] as const
+    if (event.type === "content_block_delta" && event.delta?.type === "signature_delta" && event.delta.signature) {
+      return [state, [{ type: "reasoning-delta", text: "", providerMetadata: anthropicMetadata({ signature: event.delta.signature }) }]] as const
     }
 
-    if (chunk.type === "content_block_delta" && chunk.delta?.type === "input_json_delta" && chunk.index !== undefined) {
-      if (!chunk.delta.partial_json) return [state, []] as const
+    if (event.type === "content_block_delta" && event.delta?.type === "input_json_delta" && event.index !== undefined) {
+      if (!event.delta.partial_json) return [state, []] as const
       const result = ToolStream.appendExisting(
         ADAPTER,
         state.tools,
-        chunk.index,
-        chunk.delta.partial_json,
+        event.index,
+        event.delta.partial_json,
         "Anthropic Messages tool argument delta is missing its tool call",
       )
       if (ToolStream.isError(result)) return yield* result
       return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
     }
 
-    if (chunk.type === "content_block_stop" && chunk.index !== undefined) {
-      const result = yield* ToolStream.finish(ADAPTER, state.tools, chunk.index)
+    if (event.type === "content_block_stop" && event.index !== undefined) {
+      const result = yield* ToolStream.finish(ADAPTER, state.tools, event.index)
       return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
     }
 
-    if (chunk.type === "message_delta") {
-      const usage = mergeUsage(state.usage, mapUsage(chunk.usage))
+    if (event.type === "message_delta") {
+      const usage = mergeUsage(state.usage, mapUsage(event.usage))
       return [{ ...state, usage }, [{
         type: "request-finish" as const,
-        reason: mapFinishReason(chunk.delta?.stop_reason),
+        reason: mapFinishReason(event.delta?.stop_reason),
         usage,
-        ...(chunk.delta?.stop_sequence ? { providerMetadata: anthropicMetadata({ stopSequence: chunk.delta.stop_sequence }) } : {}),
+        ...(event.delta?.stop_sequence ? { providerMetadata: anthropicMetadata({ stopSequence: event.delta.stop_sequence }) } : {}),
       }]] as const
     }
 
-    if (chunk.type === "error") {
-      return [state, [{ type: "provider-error" as const, message: chunk.error?.message ?? "Anthropic Messages stream error" }]] as const
+    if (event.type === "error") {
+      return [state, [{ type: "provider-error" as const, message: event.error?.message ?? "Anthropic Messages stream error" }]] as const
     }
 
     return [state, []] as const
@@ -502,18 +502,21 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
 // Protocol And Anthropic Route
 // =============================================================================
 /**
- * The Anthropic Messages protocol — request lowering, payload schema, and the
- * streaming-chunk state machine. Used by native
- * Anthropic Cloud and (once registered) Vertex Anthropic / Bedrock-hosted
- * Anthropic passthrough.
+ * The Anthropic Messages protocol — request body construction, body schema,
+ * and the streaming-event state machine. Used by native Anthropic Cloud and
+ * (once registered) Vertex Anthropic / Bedrock-hosted Anthropic passthrough.
  */
-export const protocol = Protocol.define({
+export const protocol = Protocol.make({
   id: ADAPTER,
-  payload: AnthropicMessagesPayload,
-  toPayload,
-  chunk: Protocol.jsonChunk(AnthropicChunk),
-  initial: () => ({ tools: ToolStream.empty<number>() }),
-  process: processChunk,
+  body: {
+    schema: AnthropicMessagesBody,
+    from: fromRequest,
+  },
+  stream: {
+    event: Protocol.jsonEvent(AnthropicEvent),
+    initial: () => ({ tools: ToolStream.empty<number>() }),
+    step,
+  },
 })
 
 export const route = Route.make({

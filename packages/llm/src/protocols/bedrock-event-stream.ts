@@ -44,7 +44,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
       const decoded = yield* Effect.try({
         try: () => eventCodec.decode(view.subarray(0, totalLength)),
         catch: (error) =>
-          ProviderShared.chunkError(
+          ProviderShared.eventError(
             route,
             `Failed to decode Bedrock Converse event-stream frame: ${
               error instanceof Error ? error.message : String(error)

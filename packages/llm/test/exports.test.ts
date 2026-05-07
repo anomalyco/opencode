@@ -18,7 +18,7 @@ describe("public exports", () => {
 
   test("route barrel exposes route-authoring APIs", () => {
     expect(Route.make).toBeFunction()
-    expect(Protocol.define).toBeFunction()
+    expect(Protocol.make).toBeFunction()
   })
 
   test("provider barrels expose user-facing facades", () => {

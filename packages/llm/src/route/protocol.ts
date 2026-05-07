@@ -4,10 +4,10 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
 /**
  * The semantic API contract of one model server family.
  *
- * A `Protocol` owns the parts of an route that are intrinsic to "what does
- * this API look like": how a common `LLMRequest` lowers into a provider-native
- * shape, what payload Schema that shape must satisfy before it is JSON-encoded,
- * and how the streaming response decodes back into common `LLMEvent`s.
+ * A `Protocol` owns the parts of a route that are intrinsic to "what does
+ * this API look like": how a common `LLMRequest` becomes a provider-native
+ * body, what schema that body must satisfy before it is JSON-encoded, and
+ * how the streaming response decodes back into common `LLMEvent`s.
  *
  * Examples:
  *
@@ -25,53 +25,63 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
  *
  * The four type parameters reflect the pipeline:
  *
- * - `Payload` — provider-native request payload candidate. `Route.make(...)`
- *   validates and JSON-encodes it with `payload`.
+ * - `Body` — provider-native request body candidate. `Route.make(...)`
+ *   validates and JSON-encodes it with `body.schema`.
  * - `Frame` — one unit of the framed response stream. SSE: a JSON data
  *   string. AWS event stream: a parsed binary frame.
- * - `Chunk` — schema-decoded provider chunk produced from one frame.
- * - `State` — accumulator threaded through `process` to translate chunk
+ * - `Event` — schema-decoded provider event produced from one frame.
+ * - `State` — accumulator threaded through `stream.step` to translate event
  *   sequences into `LLMEvent` sequences.
  */
-export interface Protocol<Payload, Frame, Chunk, State> {
+export interface Protocol<Body, Frame, Event, State> {
   /** Stable id for the wire protocol implementation. */
   readonly id: ProtocolID
-  /** Schema for the validated provider-native payload sent as the JSON body. */
-  readonly payload: Schema.Codec<Payload, unknown>
-  /** Convert a common request into this protocol's provider-native payload shape. */
-  readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
-  /** Schema for one framed response unit. */
-  readonly chunk: Schema.Codec<Chunk, Frame>
+  /** Request side: schema for the provider-native body and how to build it. */
+  readonly body: ProtocolBody<Body>
+  /** Response side: streaming state machine. */
+  readonly stream: ProtocolStream<Frame, Event, State>
+}
+
+export interface ProtocolBody<Body> {
+  /** Schema for the validated provider-native body sent as the JSON request. */
+  readonly schema: Schema.Codec<Body, unknown>
+  /** Build the provider-native body from a common `LLMRequest`. */
+  readonly from: (request: LLMRequest) => Effect.Effect<Body, LLMError>
+}
+
+export interface ProtocolStream<Frame, Event, State> {
+  /** Schema for one decoded streaming event, decoded from a transport frame. */
+  readonly event: Schema.Codec<Event, Frame>
   /** Initial parser state. Called once per response. */
   readonly initial: () => State
-  /** Translate one chunk into emitted events plus the next state. */
-  readonly process: (
+  /** Translate one event into emitted `LLMEvent`s plus the next state. */
+  readonly step: (
     state: State,
-    chunk: Chunk,
+    event: Event,
   ) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], LLMError>
   /** Optional request-completion signal for transports that do not end naturally. */
-  readonly terminal?: (chunk: Chunk) => boolean
+  readonly terminal?: (event: Event) => boolean
   /** Optional flush emitted when the framed stream ends. */
   readonly onHalt?: (state: State) => ReadonlyArray<LLMEvent>
 }
 
 /**
- * Construct a `Protocol` from the four protocol-local pieces:
+ * Construct a `Protocol` from its body and stream pieces:
  *
- * - `payload` infers the provider-native request body shape.
- * - `chunk` infers the framed response item and decoded chunk shape.
- * - `initial`, `process`, and `onHalt` infer the parser state shape.
- * - `toPayload` ties the common `LLMRequest` to the provider payload.
+ * - `body.schema` infers the provider-native request body shape.
+ * - `body.from` ties the common `LLMRequest` to the provider body.
+ * - `stream.event` infers the decoded streaming event and the wire frame.
+ * - `stream.initial`, `stream.step`, and `stream.onHalt` infer the parser state.
  *
- * Provider implementations should usually call `Protocol.define({ ... })`
+ * Provider implementations should usually call `Protocol.make({ ... })`
  * without explicit type arguments; the schemas and parser functions are the
  * source of truth. The constructor remains as the public seam for future
  * cross-cutting concerns such as tracing or instrumentation.
  */
-export const define = <Payload, Frame, Chunk, State>(
-  input: Protocol<Payload, Frame, Chunk, State>,
-): Protocol<Payload, Frame, Chunk, State> => input
+export const make = <Body, Frame, Event, State>(
+  input: Protocol<Body, Frame, Event, State>,
+): Protocol<Body, Frame, Event, State> => input
 
-export const jsonChunk = <const S extends Schema.Top>(schema: S) => Schema.fromJsonString(schema)
+export const jsonEvent = <const S extends Schema.Top>(schema: S) => Schema.fromJsonString(schema)
 
 export * as Protocol from "./protocol"

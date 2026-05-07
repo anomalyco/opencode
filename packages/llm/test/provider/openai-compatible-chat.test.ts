@@ -68,7 +68,7 @@ describe("OpenAI-compatible Chat route", () => {
         apiKey: "test-key",
         queryParams: { "api-version": "2026-01-01" },
       })
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -123,7 +123,7 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(request)
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "deepseek-chat",
         messages: [
           { role: "system", content: "You are concise." },
@@ -157,7 +157,7 @@ describe("OpenAI-compatible Chat route", () => {
         }),
       )
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "deepseek-chat",
         messages: [
           { role: "user", content: "What is the weather?" },

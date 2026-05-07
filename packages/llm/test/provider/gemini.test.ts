@@ -26,7 +26,7 @@ describe("Gemini route", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(request)
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
         systemInstruction: { parts: [{ text: "You are concise." }] },
         generationConfig: { maxOutputTokens: 20, temperature: 0 },
@@ -59,7 +59,7 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         contents: [
           {
             role: "user",
@@ -104,7 +104,7 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
       })
     }),
@@ -135,7 +135,7 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         tools: [
           {
             functionDeclarations: [
@@ -329,7 +329,7 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("fails invalid stream chunks", () =>
+  it.effect("fails invalid stream events", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(fixedResponse(sseRaw("data: {not json}"))),
@@ -338,7 +338,7 @@ describe("Gemini route", () => {
 
       expect(error).toBeInstanceOf(LLMError)
       expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
-      expect(error.message).toContain("Invalid google/gemini stream chunk")
+      expect(error.message).toContain("Invalid google/gemini stream event")
     }),
   )
 

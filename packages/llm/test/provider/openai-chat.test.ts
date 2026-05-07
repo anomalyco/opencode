@@ -32,13 +32,13 @@ const request = LLM.request({
 describe("OpenAI Chat route", () => {
   it.effect("prepares OpenAI Chat payload", () =>
     Effect.gen(function* () {
-      // Pass the OpenAIChat payload type so `prepared.payload` is statically
+      // Pass the OpenAIChat payload type so `prepared.body` is statically
       // typed to the route's native shape — the assertions below read field
       // names without `unknown` casts.
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatPayload>(request)
-      const _typed: { readonly model: string; readonly stream: true } = prepared.payload
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(request)
+      const _typed: { readonly model: string; readonly stream: true } = prepared.body
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: "You are concise." },
@@ -54,7 +54,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("maps OpenAI provider options to Chat options", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatPayload>(
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({
           model: OpenAI.chat("gpt-4o-mini", { baseURL: "https://api.openai.test/v1/" }),
           prompt: "think",
@@ -62,8 +62,8 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      expect(prepared.payload.store).toBe(false)
-      expect(prepared.payload.reasoning_effort).toBe("low")
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.reasoning_effort).toBe("low")
     }),
   )
 
@@ -157,7 +157,7 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         model: "gpt-4o-mini",
         messages: [
           { role: "user", content: "What is the weather?" },
@@ -303,13 +303,13 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("fails on malformed stream chunks", () =>
+  it.effect("fails on malformed stream events", () =>
     Effect.gen(function* () {
       const body = sseEvents(deltaChunk({ content: 123 }))
       const error = yield* LLMClient.generate(request)
         .pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
-      expect(error.message).toContain("Invalid openai/openai-chat stream chunk")
+      expect(error.message).toContain("Invalid openai/openai-chat stream event")
     }),
   )
 

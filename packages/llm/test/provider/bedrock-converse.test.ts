@@ -64,7 +64,7 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(baseRequest)
 
-      expect(prepared.payload).toEqual({
+      expect(prepared.body).toEqual({
         modelId: "anthropic.claude-3-5-sonnet-20240620-v1:0",
         system: [{ text: "You are concise." }],
         messages: [{ role: "user", content: [{ text: "Say hello." }] }],
@@ -88,7 +88,7 @@ describe("Bedrock Converse route", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         toolConfig: {
           tools: [
             {
@@ -121,7 +121,7 @@ describe("Bedrock Converse route", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         messages: [
           { role: "user", content: [{ text: "What is the weather?" }] },
           {
@@ -297,7 +297,7 @@ describe("Bedrock Converse route", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         // System: text block followed by cachePoint marker.
         system: [{ text: "System prefix." }, { cachePoint: { type: "default" } }],
         messages: [
@@ -317,7 +317,7 @@ describe("Bedrock Converse route", () => {
   it.effect("does not emit cachePoint when no cache hint is set", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(baseRequest)
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         system: [{ text: "You are concise." }],
         messages: [{ role: "user", content: [{ text: "Say hello." }] }],
       })
@@ -342,7 +342,7 @@ describe("Bedrock Converse route", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         messages: [
           {
             role: "user",
@@ -375,7 +375,7 @@ describe("Bedrock Converse route", () => {
       )
 
       // Buffer.from([1,2,3,4,5]).toString("base64") === "AQIDBAU="
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         messages: [
           {
             role: "user",
@@ -401,7 +401,7 @@ describe("Bedrock Converse route", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         messages: [
           {
             role: "user",

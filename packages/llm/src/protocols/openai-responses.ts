@@ -28,7 +28,7 @@ const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 const PATH = "/responses"
 
 // =============================================================================
-// Request Payload Schema
+// Request Body Schema
 // =============================================================================
 const OpenAIResponsesInputText = Schema.Struct({
   type: Schema.Literal("input_text"),
@@ -72,7 +72,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.Literal("function"), name: Schema.String }),
 ])
 
-const OpenAIResponsesPayloadFields = {
+const OpenAIResponsesBodyFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTool),
@@ -96,10 +96,10 @@ const OpenAIResponsesPayloadFields = {
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
 }
-const OpenAIResponsesPayload = Schema.Struct(OpenAIResponsesPayloadFields)
-export type OpenAIResponsesPayload = Schema.Schema.Type<typeof OpenAIResponsesPayload>
+const OpenAIResponsesBody = Schema.Struct(OpenAIResponsesBodyFields)
+export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
-const { stream: _stream, ...OpenAIResponsesWebSocketMessageFields } = OpenAIResponsesPayloadFields
+const { stream: _stream, ...OpenAIResponsesWebSocketMessageFields } = OpenAIResponsesBodyFields
 const OpenAIResponsesWebSocketMessage = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.Literal("response.create"),
@@ -142,7 +142,7 @@ const OpenAIResponsesStreamItem = Schema.Struct({
 })
 type OpenAIResponsesStreamItem = Schema.Schema.Type<typeof OpenAIResponsesStreamItem>
 
-const OpenAIResponsesChunk = Schema.Struct({
+const OpenAIResponsesEvent = Schema.Struct({
   type: Schema.String,
   delta: Schema.optional(Schema.String),
   item_id: Schema.optional(Schema.String),
@@ -158,7 +158,7 @@ const OpenAIResponsesChunk = Schema.Struct({
   code: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
 })
-type OpenAIResponsesChunk = Schema.Schema.Type<typeof OpenAIResponsesChunk>
+type OpenAIResponsesEvent = Schema.Schema.Type<typeof OpenAIResponsesEvent>
 
 interface ParserState {
   readonly tools: ToolStream.State<string>
@@ -256,7 +256,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   }
 })
 
-const toPayload = Effect.fn("OpenAIResponses.toPayload")(function* (request: LLMRequest) {
+const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   return {
     model: request.model.id,
@@ -286,8 +286,8 @@ const mapUsage = (usage: OpenAIResponsesUsage | null | undefined) => {
   })
 }
 
-const mapFinishReason = (chunk: OpenAIResponsesChunk, hasFunctionCall: boolean): FinishReason => {
-  const reason = chunk.response?.incomplete_details?.reason
+const mapFinishReason = (event: OpenAIResponsesEvent, hasFunctionCall: boolean): FinishReason => {
+  const reason = event.response?.incomplete_details?.reason
   if (reason === undefined || reason === null) return hasFunctionCall ? "tool-calls" : "stop"
   if (reason === "max_output_tokens") return "length"
   if (reason === "content_filter") return "content-filter"
@@ -353,43 +353,43 @@ const hostedToolEvents = (item: OpenAIResponsesStreamItem & { id: string }): Rea
   ]
 }
 
-const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
+const step = (state: ParserState, event: OpenAIResponsesEvent) =>
   Effect.gen(function* () {
-    if (chunk.type === "response.output_text.delta" && chunk.delta) {
+    if (event.type === "response.output_text.delta" && event.delta) {
       return [
         state,
         [
           {
             type: "text-delta",
-            id: chunk.item_id,
-            text: chunk.delta,
-            ...(chunk.item_id ? { providerMetadata: openaiMetadata({ itemId: chunk.item_id }) } : {}),
+            id: event.item_id,
+            text: event.delta,
+            ...(event.item_id ? { providerMetadata: openaiMetadata({ itemId: event.item_id }) } : {}),
           },
         ],
       ] as const
     }
 
-    if (chunk.type === "response.output_item.added" && chunk.item?.type === "function_call" && chunk.item.id) {
+    if (event.type === "response.output_item.added" && event.item?.type === "function_call" && event.item.id) {
       return [
         {
           hasFunctionCall: state.hasFunctionCall,
-          tools: ToolStream.start(state.tools, chunk.item.id, {
-            id: chunk.item.call_id ?? chunk.item.id,
-            name: chunk.item.name ?? "",
-            input: chunk.item.arguments ?? "",
-            providerMetadata: openaiMetadata({ itemId: chunk.item.id }),
+          tools: ToolStream.start(state.tools, event.item.id, {
+            id: event.item.call_id ?? event.item.id,
+            name: event.item.name ?? "",
+            input: event.item.arguments ?? "",
+            providerMetadata: openaiMetadata({ itemId: event.item.id }),
           }),
         },
         [],
       ] as const
     }
 
-    if (chunk.type === "response.function_call_arguments.delta" && chunk.item_id && chunk.delta) {
+    if (event.type === "response.function_call_arguments.delta" && event.item_id && event.delta) {
       const result = ToolStream.appendExisting(
         ADAPTER,
         state.tools,
-        chunk.item_id,
-        chunk.delta,
+        event.item_id,
+        event.delta,
         "OpenAI Responses tool argument delta is missing its tool call",
       )
       if (ToolStream.isError(result)) return yield* result
@@ -399,15 +399,15 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
       ] as const
     }
 
-    if (chunk.type === "response.output_item.done" && chunk.item?.type === "function_call") {
-      if (!chunk.item.id || !chunk.item.call_id || !chunk.item.name) return [state, []] as const
-      const tools = state.tools[chunk.item.id]
+    if (event.type === "response.output_item.done" && event.item?.type === "function_call") {
+      if (!event.item.id || !event.item.call_id || !event.item.name) return [state, []] as const
+      const tools = state.tools[event.item.id]
         ? state.tools
-        : ToolStream.start(state.tools, chunk.item.id, { id: chunk.item.call_id, name: chunk.item.name })
+        : ToolStream.start(state.tools, event.item.id, { id: event.item.call_id, name: event.item.name })
       const result =
-        chunk.item.arguments === undefined
-          ? yield* ToolStream.finish(ADAPTER, tools, chunk.item.id)
-          : yield* ToolStream.finishWithInput(ADAPTER, tools, chunk.item.id, chunk.item.arguments)
+        event.item.arguments === undefined
+          ? yield* ToolStream.finish(ADAPTER, tools, event.item.id)
+          : yield* ToolStream.finishWithInput(ADAPTER, tools, event.item.id, event.item.arguments)
       return [
         {
           hasFunctionCall: result.event ? true : state.hasFunctionCall,
@@ -417,23 +417,23 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
       ] as const
     }
 
-    if (chunk.type === "response.output_item.done" && chunk.item && isHostedToolItem(chunk.item)) {
-      return [state, hostedToolEvents(chunk.item)] as const
+    if (event.type === "response.output_item.done" && event.item && isHostedToolItem(event.item)) {
+      return [state, hostedToolEvents(event.item)] as const
     }
 
-    if (chunk.type === "response.completed" || chunk.type === "response.incomplete")
+    if (event.type === "response.completed" || event.type === "response.incomplete")
       return [
         state,
         [
           {
             type: "request-finish" as const,
-            reason: mapFinishReason(chunk, state.hasFunctionCall),
-            usage: mapUsage(chunk.response?.usage),
-            ...(chunk.response?.id || chunk.response?.service_tier
+            reason: mapFinishReason(event, state.hasFunctionCall),
+            usage: mapUsage(event.response?.usage),
+            ...(event.response?.id || event.response?.service_tier
               ? {
                   providerMetadata: openaiMetadata({
-                    responseId: chunk.response.id,
-                    serviceTier: chunk.response.service_tier,
+                    responseId: event.response.id,
+                    serviceTier: event.response.service_tier,
                   }),
                 }
               : {}),
@@ -441,10 +441,10 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
         ],
       ] as const
 
-    if (chunk.type === "error") {
+    if (event.type === "error") {
       return [
         state,
-        [{ type: "provider-error" as const, message: chunk.message ?? chunk.code ?? "OpenAI Responses stream error" }],
+        [{ type: "provider-error" as const, message: event.message ?? event.code ?? "OpenAI Responses stream error" }],
       ] as const
     }
 
@@ -455,19 +455,23 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
 // Protocol And OpenAI Route
 // =============================================================================
 /**
- * The OpenAI Responses protocol — request lowering, payload schema, and the
- * streaming-chunk state machine. Used by native OpenAI and
- * (once registered) Azure OpenAI Responses.
+ * The OpenAI Responses protocol — request body construction, body schema, and
+ * the streaming-event state machine. Used by native OpenAI and (once
+ * registered) Azure OpenAI Responses.
  */
-export const protocol = Protocol.define({
+export const protocol = Protocol.make({
   id: ADAPTER,
-  payload: OpenAIResponsesPayload,
-  toPayload,
-  chunk: Protocol.jsonChunk(OpenAIResponsesChunk),
-  initial: () => ({ hasFunctionCall: false, tools: ToolStream.empty<string>() }),
-  process: processChunk,
-  terminal: (chunk) =>
-    chunk.type === "response.completed" || chunk.type === "response.incomplete" || chunk.type === "response.failed",
+  body: {
+    schema: OpenAIResponsesBody,
+    from: fromRequest,
+  },
+  stream: {
+    event: Protocol.jsonEvent(OpenAIResponsesEvent),
+    initial: () => ({ hasFunctionCall: false, tools: ToolStream.empty<string>() }),
+    step,
+    terminal: (event) =>
+      event.type === "response.completed" || event.type === "response.incomplete" || event.type === "response.failed",
+  },
 })
 
 export const endpoint = (
@@ -476,19 +480,19 @@ export const endpoint = (
     readonly required?: string
   } = {},
 ) =>
-  Endpoint.baseURL<OpenAIResponsesPayload>({
+  Endpoint.baseURL<OpenAIResponsesBody>({
     default: input.defaultBaseURL === false ? undefined : (input.defaultBaseURL ?? DEFAULT_BASE_URL),
     path: PATH,
     required: input.required,
   })
 
-const encodePayload = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesPayload))
+const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesBody))
 
 export const httpTransport = HttpTransport.httpJson({
   endpoint: endpoint(),
   auth: Auth.bearer(),
   framing: Framing.sse,
-  encodePayload,
+  encodeBody,
 })
 
 export const route = Route.make({
@@ -528,12 +532,12 @@ const webSocketTransportError = (message: string, url?: string) =>
     reason: new TransportReason({ message, url, kind: "websocket" }),
   })
 
-const webSocketPayload = (body: string) =>
+const webSocketMessage = (body: string) =>
   ProviderShared.parseJson(ADAPTER, body, "Invalid OpenAI Responses WebSocket request body").pipe(
     Effect.flatMap((parsed) =>
       Effect.gen(function* () {
         if (!ProviderShared.isRecord(parsed))
-          return yield* ProviderShared.invalidRequest("OpenAI Responses WebSocket payload must be a JSON object")
+          return yield* ProviderShared.invalidRequest("OpenAI Responses WebSocket body must be a JSON object")
         return Object.fromEntries(
           Object.entries({ ...parsed, type: "response.create" }).filter(([key]) => key !== "stream"),
         )
@@ -543,26 +547,26 @@ const webSocketPayload = (body: string) =>
 
 interface WebSocketTransportInput {
   readonly auth?: AuthDef
-  readonly endpoint?: EndpointConfig<OpenAIResponsesPayload>
+  readonly endpoint?: EndpointConfig<OpenAIResponsesBody>
 }
 
-interface WebSocketTransport extends Transport<OpenAIResponsesPayload, WebSocketPrepared, string> {
+interface WebSocketTransport extends Transport<OpenAIResponsesBody, WebSocketPrepared, string> {
   readonly with: (patch: WebSocketTransportInput) => WebSocketTransport
 }
 
 const makeWebSocketTransport = (input: WebSocketTransportInput = {}): WebSocketTransport => ({
   id: "websocket-json",
   with: (patch) => makeWebSocketTransport({ ...input, ...patch }),
-  prepare: (payload, context) =>
+  prepare: (body, context) =>
     Effect.gen(function* () {
       const parts = yield* HttpTransport.jsonRequestParts({
-        payload,
+        body,
         context,
         endpoint: input.endpoint ?? endpoint(),
         auth: input.auth ?? Auth.bearer(),
-        encodePayload,
+        encodeBody,
       })
-      const message = yield* webSocketPayload(parts.body)
+      const message = yield* webSocketMessage(parts.body)
       return {
         url: yield* webSocketUrl(parts.url),
         headers: parts.headers,

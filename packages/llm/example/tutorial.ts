@@ -119,33 +119,37 @@ const streamWithTools = LLM.stream({
 // Part 2: provider composition with a fake provider
 // -----------------------------------------------------------------------------
 
-// A protocol is the provider-native API shape: common request -> payload,
-// response frames -> common events. This fake one turns text prompts into a JSON
-// body and treats every SSE frame as output text.
-const FakePayload = Schema.Struct({
+// A protocol is the provider-native API shape: common request -> body, response
+// frames -> common events. This fake one turns text prompts into a JSON body
+// and treats every SSE frame as output text.
+const FakeBody = Schema.Struct({
   model: Schema.String,
   input: Schema.String,
 })
-type FakePayload = Schema.Schema.Type<typeof FakePayload>
+type FakeBody = Schema.Schema.Type<typeof FakeBody>
 
-const FakeProtocol = Protocol.define<FakePayload, string, string, void>({
+const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
   // Protocol ids are open strings, so external packages can define their own
   // protocols without changing this package.
   id: "fake-echo",
-  payload: FakePayload,
-  toPayload: (request) =>
-    Effect.succeed({
-      model: request.model.id,
-      input: request.messages
-        .flatMap((message) => message.content)
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("\n"),
-    }),
-  chunk: Schema.String,
-  initial: () => undefined,
-  process: (_, frame) => Effect.succeed([undefined, [{ type: "text-delta", text: frame }]] as const),
-  onHalt: () => [{ type: "request-finish", reason: "stop" }],
+  body: {
+    schema: FakeBody,
+    from: (request) =>
+      Effect.succeed({
+        model: request.model.id,
+        input: request.messages
+          .flatMap((message) => message.content)
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n"),
+      }),
+  },
+  stream: {
+    event: Schema.String,
+    initial: () => undefined,
+    step: (_, frame) => Effect.succeed([undefined, [{ type: "text-delta", text: frame }]] as const),
+    onHalt: () => [{ type: "request-finish", reason: "stop" }],
+  },
 })
 
 // An route is the runnable binding for that protocol. It adds the deployment
@@ -170,7 +174,7 @@ const FakeEcho = Provider.make({
 })
 
 // `LLMClient.prepare` is the lower-level inspection hook: it compiles through
-// payload conversion, validation, endpoint, auth, and HTTP construction without
+// body conversion, validation, endpoint, auth, and HTTP construction without
 // sending anything over the network.
 const inspectFakeProvider = Effect.gen(function* () {
   const prepared = yield* LLMClient.prepare(
@@ -182,7 +186,7 @@ const inspectFakeProvider = Effect.gen(function* () {
 
   console.log("\n== fake provider prepare ==")
   console.log("route:", prepared.route)
-  console.log("payload:", Formatter.formatJson(prepared.payload, { space: 2 }))
+  console.log("body:", Formatter.formatJson(prepared.body, { space: 2 }))
 })
 
 // Provide the LLM runtime and the HTTP request executor once. Keep one path
@@ -194,7 +198,7 @@ const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
 const program = Effect.gen(function* () {
   // yield* generateOnce
   // yield* inspectFakeProvider
-  // yield* LLMClient.prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.payload))))
+  // yield* LLMClient.prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.body))))
   // yield* streamText
   yield* streamWithTools
 }).pipe(Effect.provide(Layer.mergeAll(requestExecutorLayer, llmClientLayer)))

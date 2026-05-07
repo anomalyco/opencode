@@ -658,22 +658,22 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
   route: RouteID,
   protocol: ProtocolID,
   model: ModelRef,
-  payload: Schema.Unknown,
+  body: Schema.Unknown,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
 /**
- * A `PreparedRequest` whose `payload` is typed as `Payload`. Use with the
- * generic on `LLMClient.prepare<Payload>(...)` when the caller knows which
- * route their request will resolve to and wants its native shape statically
- * exposed (debug UIs, request previews, plan rendering).
+ * A `PreparedRequest` whose `body` is typed as `Body`. Use with the generic
+ * on `LLMClient.prepare<Body>(...)` when the caller knows which route their
+ * request will resolve to and wants its native shape statically exposed
+ * (debug UIs, request previews, plan rendering).
  *
- * The runtime payload is identical — the route still emits `payload: unknown`
- * — so this is a type-level assertion the caller makes about what they expect
- * to find. The prepare runtime does not validate the assertion.
+ * The runtime body is identical — the route still emits `body: unknown` — so
+ * this is a type-level assertion the caller makes about what they expect to
+ * find. The prepare runtime does not validate the assertion.
  */
-export type PreparedRequestOf<Payload> = Omit<PreparedRequest, "payload"> & {
-  readonly payload: Payload
+export type PreparedRequestOf<Body> = Omit<PreparedRequest, "body"> & {
+  readonly body: Body
 }
 
 const responseText = (events: ReadonlyArray<LLMEvent>) =>

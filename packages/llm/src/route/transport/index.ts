@@ -12,9 +12,9 @@ export interface TransportRuntime {
   readonly webSocket?: WebSocketExecutorInterface
 }
 
-export interface Transport<Payload, Prepared, Frame> {
+export interface Transport<Body, Prepared, Frame> {
   readonly id: string
-  readonly prepare: (payload: Payload, context: TransportContext) => Effect.Effect<Prepared, LLMError>
+  readonly prepare: (body: Body, context: TransportContext) => Effect.Effect<Prepared, LLMError>
   readonly frames: (
     prepared: Prepared,
     context: TransportContext,

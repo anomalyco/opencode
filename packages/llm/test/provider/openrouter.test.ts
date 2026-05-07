@@ -13,7 +13,7 @@ describe("OpenRouter", () => {
       expect(model).toMatchObject({
         id: "openai/gpt-4o-mini",
         provider: "openrouter",
-        protocol: "openrouter-chat",
+        route: "openrouter",
         baseURL: "https://openrouter.ai/api/v1",
         apiKey: "test-key",
       })
@@ -23,7 +23,7 @@ describe("OpenRouter", () => {
       )
 
       expect(prepared.route).toBe("openrouter")
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         model: "openai/gpt-4o-mini",
         messages: [{ role: "user", content: "Say hello." }],
         stream: true,
@@ -48,7 +48,7 @@ describe("OpenRouter", () => {
         }),
       )
 
-      expect(prepared.payload).toMatchObject({
+      expect(prepared.body).toMatchObject({
         usage: { include: true },
         reasoning: { effort: "high" },
         prompt_cache_key: "session_123",

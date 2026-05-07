@@ -30,24 +30,26 @@ export type ModelOptions = Omit<RouteModelInput, "id" | "providerOptions"> & {
 }
 type ModelInput = ModelOptions & Pick<RouteModelInput, "id">
 
-const OpenRouterPayload = Schema.StructWithRest(Schema.Struct(OpenAIChat.payloadFields), [
+const OpenRouterBody = Schema.StructWithRest(Schema.Struct(OpenAIChat.bodyFields), [
   Schema.Record(Schema.String, Schema.Any),
 ])
-export type OpenRouterPayload = Schema.Schema.Type<typeof OpenRouterPayload>
+export type OpenRouterBody = Schema.Schema.Type<typeof OpenRouterBody>
 
-export const protocol = Protocol.define({
+export const protocol = Protocol.make({
   ...OpenAIChat.protocol,
   id: "openrouter-chat",
-  payload: OpenRouterPayload,
-  toPayload: (request) => OpenAIChat.protocol.toPayload(request).pipe(
-    Effect.map((payload) => ({
-      ...payload,
-      ...payloadOptions(request.providerOptions?.openrouter),
-    }) as OpenRouterPayload),
-  ),
+  body: {
+    schema: OpenRouterBody,
+    from: (request) => OpenAIChat.protocol.body.from(request).pipe(
+      Effect.map((body) => ({
+        ...body,
+        ...bodyOptions(request.providerOptions?.openrouter),
+      }) as OpenRouterBody),
+    ),
+  },
 })
 
-const payloadOptions = (input: unknown) => {
+const bodyOptions = (input: unknown) => {
   const openrouter = isRecord(input) ? input : {}
   return {
     ...(openrouter.usage === true ? { usage: { include: true } } : isRecord(openrouter.usage) ? { usage: openrouter.usage } : {}),

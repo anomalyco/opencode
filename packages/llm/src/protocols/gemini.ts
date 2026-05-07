@@ -21,7 +21,7 @@ import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 const ADAPTER = "gemini"
 
 // =============================================================================
-// Request Payload Schema
+// Request Body Schema
 // =============================================================================
 const GeminiTextPart = Schema.Struct({
   text: Schema.String,
@@ -99,15 +99,15 @@ const GeminiGenerationConfig = Schema.Struct({
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
 
-const GeminiPayloadFields = {
+const GeminiBodyFields = {
   contents: Schema.Array(GeminiContent),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
   tools: optionalArray(GeminiTool),
   toolConfig: Schema.optional(GeminiToolConfig),
   generationConfig: Schema.optional(GeminiGenerationConfig),
 }
-const GeminiPayload = Schema.Struct(GeminiPayloadFields)
-export type GeminiPayload = Schema.Schema.Type<typeof GeminiPayload>
+const GeminiBody = Schema.Struct(GeminiBodyFields)
+export type GeminiBody = Schema.Schema.Type<typeof GeminiBody>
 
 const GeminiUsage = Schema.Struct({
   cachedContentTokenCount: Schema.optional(Schema.Number),
@@ -123,11 +123,11 @@ const GeminiCandidate = Schema.Struct({
   finishReason: Schema.optional(Schema.String),
 })
 
-const GeminiChunk = Schema.Struct({
+const GeminiEvent = Schema.Struct({
   candidates: optionalArray(GeminiCandidate),
   usageMetadata: Schema.optional(GeminiUsage),
 })
-type GeminiChunk = Schema.Schema.Type<typeof GeminiChunk>
+type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
 interface ParserState {
   readonly finishReason?: string
@@ -255,7 +255,7 @@ const thinkingConfig = (request: LLMRequest) => {
   return Object.values(result).some((item) => item !== undefined) ? result : undefined
 }
 
-const toPayload = Effect.fn("Gemini.toPayload")(function* (request: LLMRequest) {
+const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const toolsEnabled = request.tools.length > 0 && request.toolChoice?.type !== "none"
   const generation = request.generation
   const generationConfig = {
@@ -312,12 +312,12 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
     ? [{ type: "request-finish", reason: mapFinishReason(state.finishReason, state.hasToolCalls), usage: state.usage }]
     : []
 
-const processChunk = (state: ParserState, chunk: GeminiChunk) => {
+const step = (state: ParserState, event: GeminiEvent) => {
   const nextState = {
     ...state,
-    usage: chunk.usageMetadata ? mapUsage(chunk.usageMetadata) ?? state.usage : state.usage,
+    usage: event.usageMetadata ? mapUsage(event.usageMetadata) ?? state.usage : state.usage,
   }
-  const candidate = chunk.candidates?.[0]
+  const candidate = event.candidates?.[0]
   if (!candidate?.content) return Effect.succeed([{ ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason }, []] as const)
 
   const events: LLMEvent[] = []
@@ -350,18 +350,22 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
 // Protocol And Gemini Route
 // =============================================================================
 /**
- * The Gemini protocol — request lowering, payload schema, and the streaming-
- * chunk state machine. Used by Google AI Studio Gemini and
- * (once registered) Vertex Gemini.
+ * The Gemini protocol — request body construction, body schema, and the
+ * streaming-event state machine. Used by Google AI Studio Gemini and (once
+ * registered) Vertex Gemini.
  */
-export const protocol = Protocol.define({
+export const protocol = Protocol.make({
   id: ADAPTER,
-  payload: GeminiPayload,
-  toPayload,
-  chunk: Protocol.jsonChunk(GeminiChunk),
-  initial: () => ({ hasToolCalls: false, nextToolCallId: 0 }),
-  process: processChunk,
-  onHalt: finish,
+  body: {
+    schema: GeminiBody,
+    from: fromRequest,
+  },
+  stream: {
+    event: Protocol.jsonEvent(GeminiEvent),
+    initial: () => ({ hasToolCalls: false, nextToolCallId: 0 }),
+    step,
+    onHalt: finish,
+  },
 })
 
 export const route = Route.make({

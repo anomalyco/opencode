@@ -42,7 +42,7 @@ export type BedrockConverseModelInput = RouteModelInput & {
 }
 
 // =============================================================================
-// Request Payload Schema
+// Request Body Schema
 // =============================================================================
 const BedrockTextBlock = Schema.Struct({
   text: Schema.String,
@@ -126,7 +126,7 @@ const BedrockToolChoice = Schema.Union([
   Schema.Struct({ tool: Schema.Struct({ name: Schema.String }) }),
 ])
 
-const BedrockPayloadFields = {
+const BedrockBodyFields = {
   modelId: Schema.String,
   messages: Schema.Array(BedrockMessage),
   system: optionalArray(BedrockSystemBlock),
@@ -146,8 +146,8 @@ const BedrockPayloadFields = {
   ),
   additionalModelRequestFields: Schema.optional(JsonObject),
 }
-const BedrockConversePayload = Schema.Struct(BedrockPayloadFields)
-export type BedrockConversePayload = Schema.Schema.Type<typeof BedrockConversePayload>
+const BedrockConverseBody = Schema.Struct(BedrockBodyFields)
+export type BedrockConverseBody = Schema.Schema.Type<typeof BedrockConverseBody>
 
 const BedrockUsageSchema = Schema.Struct({
   inputTokens: Schema.optional(Schema.Number),
@@ -158,11 +158,11 @@ const BedrockUsageSchema = Schema.Struct({
 })
 type BedrockUsageSchema = Schema.Schema.Type<typeof BedrockUsageSchema>
 
-// Streaming chunk shape — the AWS event stream wraps each JSON payload by its
+// Streaming event shape — the AWS event stream wraps each JSON payload by its
 // `:event-type` header (e.g. `messageStart`, `contentBlockDelta`). We
-// reconstruct that wrapping in `decodeFrames` below so the chunk schema can
+// reconstruct that wrapping in `decodeFrames` below so the event schema can
 // stay a plain discriminated record.
-const BedrockChunk = Schema.Struct({
+const BedrockEvent = Schema.Struct({
   messageStart: Schema.optional(Schema.Struct({ role: Schema.String })),
   contentBlockStart: Schema.optional(
     Schema.Struct({
@@ -212,7 +212,7 @@ const BedrockChunk = Schema.Struct({
   throttlingException: Schema.optional(Schema.Struct({ message: Schema.String })),
   serviceUnavailableException: Schema.optional(Schema.Struct({ message: Schema.String })),
 })
-type BedrockChunk = Schema.Schema.Type<typeof BedrockChunk>
+type BedrockEvent = Schema.Schema.Type<typeof BedrockEvent>
 
 const invalid = ProviderShared.invalidRequest
 
@@ -324,7 +324,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
 const lowerSystem = (system: ReadonlyArray<LLMRequest["system"][number]>): BedrockSystemBlock[] =>
   system.flatMap((part) => textWithCache(part.text, part.cache))
 
-const toPayload = Effect.fn("BedrockConverse.toPayload")(function* (request: LLMRequest) {
+const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const generation = request.generation
   return {
@@ -381,40 +381,40 @@ interface ParserState {
   readonly pendingFinish: { readonly reason: FinishReason; readonly usage?: Usage } | undefined
 }
 
-const processChunk = (state: ParserState, chunk: BedrockChunk) =>
+const step = (state: ParserState, event: BedrockEvent) =>
   Effect.gen(function* () {
-    if (chunk.contentBlockStart?.start?.toolUse) {
-      const index = chunk.contentBlockStart.contentBlockIndex
+    if (event.contentBlockStart?.start?.toolUse) {
+      const index = event.contentBlockStart.contentBlockIndex
       return [
         {
           ...state,
           tools: ToolStream.start(state.tools, index, {
-            id: chunk.contentBlockStart.start.toolUse.toolUseId,
-            name: chunk.contentBlockStart.start.toolUse.name,
+            id: event.contentBlockStart.start.toolUse.toolUseId,
+            name: event.contentBlockStart.start.toolUse.name,
           }),
         },
         [],
       ] as const
     }
 
-    if (chunk.contentBlockDelta?.delta?.text) {
-      return [state, [{ type: "text-delta" as const, text: chunk.contentBlockDelta.delta.text }]] as const
+    if (event.contentBlockDelta?.delta?.text) {
+      return [state, [{ type: "text-delta" as const, text: event.contentBlockDelta.delta.text }]] as const
     }
 
-    if (chunk.contentBlockDelta?.delta?.reasoningContent?.text) {
+    if (event.contentBlockDelta?.delta?.reasoningContent?.text) {
       return [
         state,
-        [{ type: "reasoning-delta" as const, text: chunk.contentBlockDelta.delta.reasoningContent.text }],
+        [{ type: "reasoning-delta" as const, text: event.contentBlockDelta.delta.reasoningContent.text }],
       ] as const
     }
 
-    if (chunk.contentBlockDelta?.delta?.toolUse) {
-      const index = chunk.contentBlockDelta.contentBlockIndex
+    if (event.contentBlockDelta?.delta?.toolUse) {
+      const index = event.contentBlockDelta.contentBlockIndex
       const result = ToolStream.appendExisting(
         ADAPTER,
         state.tools,
         index,
-        chunk.contentBlockDelta.delta.toolUse.input,
+        event.contentBlockDelta.delta.toolUse.input,
         "Bedrock Converse tool delta is missing its tool call",
       )
       if (ToolStream.isError(result)) return yield* result
@@ -424,44 +424,44 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
       ] as const
     }
 
-    if (chunk.contentBlockStop) {
-      const result = yield* ToolStream.finish(ADAPTER, state.tools, chunk.contentBlockStop.contentBlockIndex)
+    if (event.contentBlockStop) {
+      const result = yield* ToolStream.finish(ADAPTER, state.tools, event.contentBlockStop.contentBlockIndex)
       return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
     }
 
-    if (chunk.messageStop) {
+    if (event.messageStop) {
       return [
         {
           ...state,
-          pendingFinish: { reason: mapFinishReason(chunk.messageStop.stopReason), usage: state.pendingFinish?.usage },
+          pendingFinish: { reason: mapFinishReason(event.messageStop.stopReason), usage: state.pendingFinish?.usage },
         },
         [],
       ] as const
     }
 
-    if (chunk.metadata) {
-      const usage = mapUsage(chunk.metadata.usage)
+    if (event.metadata) {
+      const usage = mapUsage(event.metadata.usage)
       return [
         { ...state, pendingFinish: { reason: state.pendingFinish?.reason ?? "stop", usage } },
         [],
       ] as const
     }
 
-    if (chunk.internalServerException || chunk.modelStreamErrorException || chunk.serviceUnavailableException) {
+    if (event.internalServerException || event.modelStreamErrorException || event.serviceUnavailableException) {
       const message =
-        chunk.internalServerException?.message ??
-        chunk.modelStreamErrorException?.message ??
-        chunk.serviceUnavailableException?.message ??
+        event.internalServerException?.message ??
+        event.modelStreamErrorException?.message ??
+        event.serviceUnavailableException?.message ??
         "Bedrock Converse stream error"
       return [state, [{ type: "provider-error" as const, message, retryable: true }]] as const
     }
 
-    if (chunk.validationException || chunk.throttlingException) {
+    if (event.validationException || event.throttlingException) {
       const message =
-        chunk.validationException?.message ?? chunk.throttlingException?.message ?? "Bedrock Converse error"
+        event.validationException?.message ?? event.throttlingException?.message ?? "Bedrock Converse error"
       return [
         state,
-        [{ type: "provider-error" as const, message, retryable: chunk.throttlingException !== undefined }],
+        [{ type: "provider-error" as const, message, retryable: event.throttlingException !== undefined }],
       ] as const
     }
 
@@ -479,28 +479,32 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
 // Protocol And Bedrock Route
 // =============================================================================
 /**
- * The Bedrock Converse protocol — request lowering, payload schema, and the
- * streaming-chunk state machine.
+ * The Bedrock Converse protocol — request body construction, body schema, and
+ * the streaming-event state machine.
  */
-export const protocol = Protocol.define({
+export const protocol = Protocol.make({
   id: ADAPTER,
-  payload: BedrockConversePayload,
-  toPayload,
-  chunk: BedrockChunk,
-  initial: () => ({ tools: ToolStream.empty<number>(), pendingFinish: undefined }),
-  process: processChunk,
-  onHalt,
+  body: {
+    schema: BedrockConverseBody,
+    from: fromRequest,
+  },
+  stream: {
+    event: BedrockEvent,
+    initial: () => ({ tools: ToolStream.empty<number>(), pendingFinish: undefined }),
+    step,
+    onHalt,
+  },
 })
 
 export const route = Route.make({
   id: ADAPTER,
   protocol,
-  endpoint: Endpoint.baseURL<BedrockConversePayload>({
+  endpoint: Endpoint.baseURL<BedrockConverseBody>({
     // Bedrock's URL embeds the region in the host and the validated modelId
-    // in the path. We reach into the validated payload so the URL
+    // in the path. We reach into the validated body so the URL
     // matches the body that gets signed.
     default: ({ request }) => `https://bedrock-runtime.${BedrockAuth.region(request)}.amazonaws.com`,
-    path: ({ payload }) => `/model/${encodeURIComponent(payload.modelId)}/converse-stream`,
+    path: ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
   }),
   auth: BedrockAuth.auth,
   framing,
