@@ -31,7 +31,12 @@ export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
   token: Schema.String,
 }) {}
 
-export const Info = Schema.Union([Oauth, Api, WellKnown]).annotate({ discriminator: "type", identifier: "Auth" })
+export class DatabricksProfile extends Schema.Class<DatabricksProfile>("DatabricksProfileAuth")({
+  type: Schema.Literal("databricks-profile"),
+  profile: Schema.String,
+}) {}
+
+export const Info = Schema.Union([Oauth, Api, WellKnown, DatabricksProfile]).annotate({ discriminator: "type", identifier: "Auth" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError", {
