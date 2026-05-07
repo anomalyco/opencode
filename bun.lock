@@ -479,9 +479,11 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@opentui/solid": "0.2.4",
         "@tsconfig/node22": "catalog:",
         "@types/node": "catalog:",
         "@types/pg": "8.20.0",
+        "solid-js": "1.9.12",
         "typescript": "catalog:",
       },
       "peerDependencies": {
@@ -6044,6 +6046,10 @@
 
     "opencode-gitlab-auth/open": ["open@10.2.0", "https://registry.npmmirror.com/open/-/open-10.2.0.tgz", { "dependencies": { "default-browser": "^5.2.1", "define-lazy-prop": "^3.0.0", "is-inside-container": "^1.0.0", "wsl-utils": "^0.1.0" } }, "sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA=="],
 
+    "opencode-patent-plugin/@opentui/solid": ["@opentui/solid@0.2.4", "https://registry.npmmirror.com/@opentui/solid/-/solid-0.2.4.tgz", { "dependencies": { "@babel/core": "7.28.0", "@babel/preset-typescript": "7.27.1", "@opentui/core": "0.2.4", "babel-plugin-module-resolver": "5.0.2", "babel-preset-solid": "1.9.12", "entities": "7.0.1", "s-js": "^0.4.9" }, "peerDependencies": { "solid-js": "1.9.12" } }, "sha512-EKuUwcTElRW0jKrXNJrTiWVOBvok78wk8viVwsyy3h8sD9qcLyCQA+XGmOINapADNGvgBohW9dKOSTFsqjZlvA=="],
+
+    "opencode-patent-plugin/solid-js": ["solid-js@1.9.12", "https://registry.npmmirror.com/solid-js/-/solid-js-1.9.12.tgz", { "dependencies": { "csstype": "^3.1.0", "seroval": "~1.5.0", "seroval-plugins": "~1.5.0" } }, "sha512-QzKaSJq2/iDrWR1As6MHZQ8fQkdOBf8GReYb7L5iKwMGceg7HxDcaOHk0at66tNgn9U2U7dXo8ZZpLIAmGMzgw=="],
+
     "opencode-poe-auth/open": ["open@10.2.0", "https://registry.npmmirror.com/open/-/open-10.2.0.tgz", { "dependencies": { "default-browser": "^5.2.1", "define-lazy-prop": "^3.0.0", "is-inside-container": "^1.0.0", "wsl-utils": "^0.1.0" } }, "sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA=="],
 
     "opencontrol/@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.6.1", "https://registry.npmmirror.com/@modelcontextprotocol/sdk/-/sdk-1.6.1.tgz", { "dependencies": { "content-type": "^1.0.5", "cors": "^2.8.5", "eventsource": "^3.0.2", "express": "^5.0.1", "express-rate-limit": "^7.5.0", "pkce-challenge": "^4.1.0", "raw-body": "^3.0.0", "zod": "^3.23.8", "zod-to-json-schema": "^3.24.1" } }, "sha512-oxzMzYCkZHMntzuyerehK3fV6A2Kwh5BD6CGEJSVDU2QNEhfLOptf2X7esQgaHZXHZY0oHmMsOtIDLP71UJXgA=="],
@@ -6910,6 +6916,14 @@
 
     "opencode-gitlab-auth/open/wsl-utils": ["wsl-utils@0.1.0", "https://registry.npmmirror.com/wsl-utils/-/wsl-utils-0.1.0.tgz", { "dependencies": { "is-wsl": "^3.1.0" } }, "sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw=="],
 
+    "opencode-patent-plugin/@opentui/solid/@babel/core": ["@babel/core@7.28.0", "https://registry.npmmirror.com/@babel/core/-/core-7.28.0.tgz", { "dependencies": { "@ampproject/remapping": "^2.2.0", "@babel/code-frame": "^7.27.1", "@babel/generator": "^7.28.0", "@babel/helper-compilation-targets": "^7.27.2", "@babel/helper-module-transforms": "^7.27.3", "@babel/helpers": "^7.27.6", "@babel/parser": "^7.28.0", "@babel/template": "^7.27.2", "@babel/traverse": "^7.28.0", "@babel/types": "^7.28.0", "convert-source-map": "^2.0.0", "debug": "^4.1.0", "gensync": "^1.0.0-beta.2", "json5": "^2.2.3", "semver": "^6.3.1" } }, "sha512-UlLAnTPrFdNGoFtbSXwcGFQBtQZJCNjaN6hQNP3UPvuNXT1i82N26KL3dZeIpNalWywr9IuQuncaAfUaS1g6sQ=="],
+
+    "opencode-patent-plugin/@opentui/solid/@opentui/core": ["@opentui/core@0.2.4", "https://registry.npmmirror.com/@opentui/core/-/core-0.2.4.tgz", { "dependencies": { "bun-ffi-structs": "0.2.2", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0", "strip-ansi": "7.1.2", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.2.4", "@opentui/core-darwin-x64": "0.2.4", "@opentui/core-linux-arm64": "0.2.4", "@opentui/core-linux-x64": "0.2.4", "@opentui/core-win32-arm64": "0.2.4", "@opentui/core-win32-x64": "0.2.4" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-6xRdxmSgCFsEIwUwv7Pr+XKS1gBOwYF0tS/DE4KxTNzuH39VQDot7blzm8UKl6okdurFAxkt2+1HJJStl+rICw=="],
+
+    "opencode-patent-plugin/solid-js/seroval": ["seroval@1.5.4", "https://registry.npmmirror.com/seroval/-/seroval-1.5.4.tgz", {}, "sha512-46uFvgrXTVxZcUorgSSRZ4y+ieqLLQRMlG4bnCZKW3qI6BZm7Rg4ntMW4p1mILEEBZWrFlcpp0AyIIlM6jD9iw=="],
+
+    "opencode-patent-plugin/solid-js/seroval-plugins": ["seroval-plugins@1.5.4", "https://registry.npmmirror.com/seroval-plugins/-/seroval-plugins-1.5.4.tgz", { "peerDependencies": { "seroval": "^1.0" } }, "sha512-S0xQPhUTefAhNvNWFg0c1J8qJArHt5KdtJ/cFAofo06KD1MVSeFWyl4iiu+ApDIuw0WhjpOfCdgConOfAnLgkw=="],
+
     "opencode-poe-auth/open/wsl-utils": ["wsl-utils@0.1.0", "https://registry.npmmirror.com/wsl-utils/-/wsl-utils-0.1.0.tgz", { "dependencies": { "is-wsl": "^3.1.0" } }, "sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw=="],
 
     "opencontrol/@modelcontextprotocol/sdk/express": ["express@5.2.1", "https://registry.npmmirror.com/express/-/express-5.2.1.tgz", { "dependencies": { "accepts": "^2.0.0", "body-parser": "^2.2.1", "content-disposition": "^1.0.0", "content-type": "^1.0.5", "cookie": "^0.7.1", "cookie-signature": "^1.2.1", "debug": "^4.4.0", "depd": "^2.0.0", "encodeurl": "^2.0.0", "escape-html": "^1.0.3", "etag": "^1.8.1", "finalhandler": "^2.1.0", "fresh": "^2.0.0", "http-errors": "^2.0.0", "merge-descriptors": "^2.0.0", "mime-types": "^3.0.0", "on-finished": "^2.4.1", "once": "^1.4.0", "parseurl": "^1.3.3", "proxy-addr": "^2.0.7", "qs": "^6.14.0", "range-parser": "^1.2.1", "router": "^2.2.0", "send": "^1.1.0", "serve-static": "^2.2.0", "statuses": "^2.0.1", "type-is": "^2.0.1", "vary": "^1.1.2" } }, "sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw=="],
@@ -7281,6 +7295,22 @@
     "js-beautify/glob/path-scurry/lru-cache": ["lru-cache@10.4.3", "https://registry.npmmirror.com/lru-cache/-/lru-cache-10.4.3.tgz", {}, "sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ=="],
 
     "mssql/tedious/@types/node/undici-types": ["undici-types@6.20.0", "https://registry.npmmirror.com/undici-types/-/undici-types-6.20.0.tgz", {}, "sha512-Ny6QZ2Nju20vw1SRHe3d9jVu6gJ+4e3+MMpqu7pqE5HT6WsTSlce++GQmK5UXS8mzV8DSYHrQH+Xrf2jVcuKNg=="],
+
+    "opencode-patent-plugin/@opentui/solid/@babel/core/semver": ["semver@6.3.1", "https://registry.npmmirror.com/semver/-/semver-6.3.1.tgz", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
+
+    "opencode-patent-plugin/@opentui/solid/@opentui/core/@opentui/core-darwin-arm64": ["@opentui/core-darwin-arm64@0.2.4", "https://registry.npmmirror.com/@opentui/core-darwin-arm64/-/core-darwin-arm64-0.2.4.tgz", { "os": "darwin", "cpu": "arm64" }, "sha512-2GlEndoBQkA8qSxr9RQEOgprdheCBRZvbUIfui5AUUmREZfgIQP+w399cJwmhlwSoNVNtfzLQGHxUFGfPhzMrQ=="],
+
+    "opencode-patent-plugin/@opentui/solid/@opentui/core/@opentui/core-darwin-x64": ["@opentui/core-darwin-x64@0.2.4", "https://registry.npmmirror.com/@opentui/core-darwin-x64/-/core-darwin-x64-0.2.4.tgz", { "os": "darwin", "cpu": "x64" }, "sha512-5V/Fcwg1rYTeKH9/bj3pMG1837APMIaYPfNWz0Ha87m5wcUKjodQOMf/xTzz2NJuLE/m5rydSuvY9uh5EJx3QA=="],
+
+    "opencode-patent-plugin/@opentui/solid/@opentui/core/@opentui/core-linux-arm64": ["@opentui/core-linux-arm64@0.2.4", "https://registry.npmmirror.com/@opentui/core-linux-arm64/-/core-linux-arm64-0.2.4.tgz", { "os": "linux", "cpu": "arm64" }, "sha512-yQoWlEH9sQ/OfpCYcoGxzV4mbPaMCbYIl3thD/vcvIqOSa386vjKZFdTeU5Lu1PHiz3MMU/8Fzej5pJ6ZFJFZA=="],
+
+    "opencode-patent-plugin/@opentui/solid/@opentui/core/@opentui/core-linux-x64": ["@opentui/core-linux-x64@0.2.4", "https://registry.npmmirror.com/@opentui/core-linux-x64/-/core-linux-x64-0.2.4.tgz", { "os": "linux", "cpu": "x64" }, "sha512-OxhBUqFHNcIhiKzon3+HYo4T2Me0ooRJQJW8bDVfEc7gtcWGm3ix/+8o7feQAdcbQW63Chwzed2glvbrOrDCzg=="],
+
+    "opencode-patent-plugin/@opentui/solid/@opentui/core/@opentui/core-win32-arm64": ["@opentui/core-win32-arm64@0.2.4", "https://registry.npmmirror.com/@opentui/core-win32-arm64/-/core-win32-arm64-0.2.4.tgz", { "os": "win32", "cpu": "arm64" }, "sha512-UWECe8y9vzdcotRf1ljOvWFOjNiGqAnmeC/SyylhvvoNhh/TqvbZawHVFifw/GZUlBEBdZcXF0f3XGGsW4M5Nw=="],
+
+    "opencode-patent-plugin/@opentui/solid/@opentui/core/@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.2.4", "https://registry.npmmirror.com/@opentui/core-win32-x64/-/core-win32-x64-0.2.4.tgz", { "os": "win32", "cpu": "x64" }, "sha512-P7yBRAWwiMZXDnVzzXCNksjkCzAvQ5b2X32JzL3gACf+yobs4bvA9F47Ud+XgKZiqILf/c7fa0cud2E0cfWxlA=="],
+
+    "opencode-patent-plugin/@opentui/solid/@opentui/core/diff": ["diff@9.0.0", "https://registry.npmmirror.com/diff/-/diff-9.0.0.tgz", {}, "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="],
 
     "opencontrol/@modelcontextprotocol/sdk/express/accepts": ["accepts@2.0.0", "https://registry.npmmirror.com/accepts/-/accepts-2.0.0.tgz", { "dependencies": { "mime-types": "^3.0.0", "negotiator": "^1.0.0" } }, "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng=="],
 

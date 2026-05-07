@@ -12,6 +12,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./tui": "./src/tui/index.tsx",
     "./package.json": "./package.json"
   },
   "dependencies": {
@@ -22,9 +23,11 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@opentui/solid": "0.2.4",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "@types/pg": "8.20.0",
+    "solid-js": "1.9.12",
     "typescript": "catalog:"
   },
   "peerDependencies": {
