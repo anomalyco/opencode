@@ -14,6 +14,8 @@ import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { WorkspaceRef } from "../../src/effect/instance-ref"
@@ -23,9 +25,11 @@ void Log.init({ print: false })
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const it = testEffect(
-  Layer.mergeAll(NodeServices.layer, Project.defaultLayer, Session.defaultLayer, Workspace.defaultLayer),
+const workspaceLayer = Workspace.defaultLayer.pipe(
+  Layer.provide(InstanceStore.defaultLayer),
+  Layer.provide(InstanceBootstrap.defaultLayer),
 )
+const it = testEffect(Layer.mergeAll(NodeServices.layer, Project.defaultLayer, Session.defaultLayer, workspaceLayer))
 
 function request(path: string, directory: string, init: RequestInit = {}, httpApi = true) {
   return Effect.promise(() => {
