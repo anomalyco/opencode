@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { shouldRouteToShell } from "../../plugin/shell-mode/command-check"
 import { detectNaturalLanguage } from "../../plugin/shell-mode/natural-language"
+import { determineRouting } from "../../plugin/tui-integration/hooks"
+import { getModeController, ExecutionMode } from "../../plugin/shell-mode/mode"
 
 describe("shouldRouteToShell", () => {
   test("routes real commands to shell", async () => {
@@ -173,5 +175,127 @@ describe("detectNaturalLanguage", () => {
   test("returns undefined for real command with non-matching error", () => {
     // exit code 1 but output doesn't match error patterns
     expect(detectNaturalLanguage("cat file.txt bar.txt baz.txt", "some other output", 1)).toBeUndefined()
+  })
+})
+
+// LAC-163 regression: natural language heuristics route input correctly
+describe("detectNaturalLanguage — LAC-163 regression", () => {
+  test("detects conversational queries as natural language", () => {
+    expect(
+      detectNaturalLanguage("What does this function do?", "What: command not found", 127),
+    ).toBe(true)
+
+    expect(
+      detectNaturalLanguage("Explain the auth flow", "Explain: command not found", 127),
+    ).toBe(true)
+
+    expect(
+      detectNaturalLanguage("Help me fix this bug", "Help: command not found", 127),
+    ).toBe(true)
+
+    expect(
+      detectNaturalLanguage(
+        "How do I run the tests",
+        "How: command not found",
+        127,
+      ),
+    ).toBe(true)
+
+    expect(
+      detectNaturalLanguage(
+        "Can you refactor this module",
+        "Can: command not found",
+        127,
+      ),
+    ).toBe(true)
+
+    expect(
+      detectNaturalLanguage(
+        "Why is the build failing",
+        "Why: command not found",
+        127,
+      ),
+    ).toBe(true)
+  })
+
+  test("does not flag real shell commands that fail with legitimate errors", () => {
+    expect(
+      detectNaturalLanguage("ls -la /nonexistent", "ls: /nonexistent: No such file or directory", 1),
+    ).toBeUndefined()
+
+    expect(
+      detectNaturalLanguage("git log --oneline", "fatal: not a git repository", 128),
+    ).toBeUndefined()
+
+    expect(
+      detectNaturalLanguage("npm install", "npm ERR! code ENOENT", 1),
+    ).toBeUndefined()
+
+    expect(
+      detectNaturalLanguage("cd /tmp", "cd: too many arguments", 1),
+    ).toBeUndefined()
+  })
+
+  test("does not flag successful commands", () => {
+    expect(detectNaturalLanguage("ls -la", "total 0\ndrwxr-xr-x  2 user  staff  64 Jan  1 00:00 .", 0)).toBeUndefined()
+    expect(detectNaturalLanguage("git log --oneline", "abc1234 initial commit", 0)).toBeUndefined()
+    expect(detectNaturalLanguage("npm install", "added 100 packages in 5s", 0)).toBeUndefined()
+  })
+})
+
+describe("shouldRouteToShell — LAC-163 regression", () => {
+  test("routes shell commands to shell in auto mode", async () => {
+    expect(await shouldRouteToShell("ls -la")).toBe(true)
+    expect(await shouldRouteToShell("git log --oneline")).toBe(true)
+    expect(await shouldRouteToShell("cd /tmp")).toBe(true)
+    expect(await shouldRouteToShell("npm install")).toBe(true)
+    expect(await shouldRouteToShell("cat README.md")).toBe(true)
+    expect(await shouldRouteToShell("mkdir -p src/test")).toBe(true)
+    expect(await shouldRouteToShell("grep -r TODO .")).toBe(true)
+  })
+
+  test("routes natural language to agent in auto mode", async () => {
+    expect(await shouldRouteToShell("What does this function do?")).toBe(false)
+    expect(await shouldRouteToShell("Explain the auth flow")).toBe(false)
+    expect(await shouldRouteToShell("Help me fix this bug")).toBe(false)
+    expect(await shouldRouteToShell("How do I run the tests")).toBe(false)
+    expect(await shouldRouteToShell("Can you refactor this module")).toBe(false)
+    expect(await shouldRouteToShell("Why is the build failing")).toBe(false)
+  })
+})
+
+describe("determineRouting — LAC-163 regression", () => {
+  test("shell mode always returns shell", async () => {
+    const ctrl = getModeController()
+    ctrl.setMode(ExecutionMode.Shell)
+    expect(await determineRouting("What does this function do?")).toBe("shell")
+    expect(await determineRouting("ls -la")).toBe("shell")
+  })
+
+  test("agent mode always returns agent", async () => {
+    const ctrl = getModeController()
+    ctrl.setMode(ExecutionMode.Agent)
+    expect(await determineRouting("ls -la")).toBe("agent")
+    expect(await determineRouting("git status")).toBe("agent")
+  })
+
+  test("auto mode routes shell commands to shell", async () => {
+    const ctrl = getModeController()
+    ctrl.setMode(ExecutionMode.Auto)
+    expect(await determineRouting("ls -la")).toBe("shell")
+    expect(await determineRouting("git log --oneline")).toBe("shell")
+    expect(await determineRouting("cd /tmp")).toBe("shell")
+    expect(await determineRouting("npm install")).toBe("shell")
+  })
+
+  test("auto mode routes natural language to agent", async () => {
+    const ctrl = getModeController()
+    ctrl.setMode(ExecutionMode.Auto)
+    expect(await determineRouting("What does this function do?")).toBe("agent")
+    expect(await determineRouting("Explain the auth flow")).toBe("agent")
+    expect(await determineRouting("Help me fix this bug")).toBe("agent")
+    expect(await determineRouting("How do I run the tests")).toBe("agent")
+    expect(await determineRouting("Can you refactor this module")).toBe("agent")
+    expect(await determineRouting("Why is the build failing")).toBe("agent")
   })
 })
