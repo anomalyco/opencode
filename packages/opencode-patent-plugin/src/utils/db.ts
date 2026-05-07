@@ -19,7 +19,7 @@ export interface DBConfig {
 const DEFAULT_CONFIG: DBConfig = {
   host: process.env.PATENT_DB_HOST || "localhost",
   port: Number(process.env.PATENT_DB_PORT) || 5432,
-  user: process.env.PATENT_DB_USER || "postgres",
+  user: process.env.PATENT_DB_USER || "xujian",
   password: process.env.PATENT_DB_PASSWORD || "",
   database: "patent_db",
 }

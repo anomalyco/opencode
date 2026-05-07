@@ -21,7 +21,10 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "effect": "catalog:",
+    "mammoth": "1.12.0",
+    "pdf-parse": "2.4.5",
     "pg": "8.20.0",
+    "turndown": "7.2.4",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -30,6 +33,7 @@
     "@types/bun": "1.3.12",
     "@types/node": "catalog:",
     "@types/pg": "8.20.0",
+    "@types/turndown": "5.0.6",
     "solid-js": "1.9.12",
     "typescript": "catalog:"
   },

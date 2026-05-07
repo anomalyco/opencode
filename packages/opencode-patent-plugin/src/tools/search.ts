@@ -10,6 +10,7 @@ import type { PatentPluginContext } from "../types.js"
 import { loadYunPatModule } from "../utils/yunpat-loader.js"
 import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchPatents, type PatentRecord } from "../utils/db.js"
+import { searchGooglePatents, searchSemanticScholar } from "../utils/patent-search-ext.js"
 
 /**
  * 注册专利检索工具集
@@ -127,6 +128,104 @@ export async function registerSearchTools(pluginContext: PatentPluginContext) {
         return `## ${type.toUpperCase()} 分类查询\n\n**查询**：${query}\n\n> 注：完整分类查询需要接入 YunPat patent-core（Rust CLI bridge）的 IPC 分类模块。`
       },
     }),
+
+    /**
+     * Google Patents 全球专利检索
+     */
+    patent_search_google: tool({
+      description: `
+        Google Patents 在线专利检索。检索全球专利文献。
+
+        适用场景：
+        - 需要检索非中国专利（美国、欧洲、日本、PCT 等）
+        - 需要英文专利文献
+        - 跨国专利族检索
+
+        注：CNIPA 中国专利请使用 patent_search 工具。
+      `,
+      args: {
+        query: tool.schema.string().describe("检索查询（英文关键词或专利号）"),
+        max_results: tool.schema.number().default(10).describe("最大结果数"),
+      },
+      async execute(args, ctx) {
+        const { query, max_results = 10 } = args
+
+        ctx.metadata({
+          title: `Google Patents 检索: ${query}`,
+          metadata: { source: "google_patents", maxResults: max_results },
+        })
+
+        const results = await searchGooglePatents(query, max_results)
+
+        if (results.length > 0) {
+          return formatGoogleResults(results, query)
+        }
+
+        // API 不可用时降级
+        const response = await pluginContext.llm.chat({
+          messages: [
+            { role: "system", content: "你是专利检索专家。提供 Google Patents 检索建议。" },
+            {
+              role: "user",
+              content: `请为以下主题提供 Google Patents 检索策略和可能的专利方向：\n\n${query}`,
+            },
+          ],
+        })
+        return `## Google Patents 检索\n\n**查询**：${query}\n\n> ⚠️ Google Patents API 暂时不可用，以下为 LLM 生成的检索建议。\n\n${response.content}\n\n🔗 [直接搜索 Google Patents](https://patents.google.com/?q=${encodeURIComponent(query)})`
+      },
+    }),
+
+    /**
+     * 学术论文检索
+     */
+    academic_search: tool({
+      description: `
+        学术论文检索（Semantic Scholar）。检索科技论文、会议论文、预印本。
+
+        适用场景：
+        - 现有技术检索需涵盖学术文献
+        - 技术背景研究
+        - 寻找技术领域前沿论文
+
+        数据源：Semantic Scholar（2亿+学术论文）
+      `,
+      args: {
+        query: tool.schema.string().describe("检索查询（中英文关键词）"),
+        max_results: tool.schema.number().default(10).describe("最大结果数"),
+        year_from: tool.schema.number().optional().describe("起始年份"),
+        year_to: tool.schema.number().optional().describe("截止年份"),
+      },
+      async execute(args, ctx) {
+        const { query, max_results = 10, year_from, year_to } = args
+
+        ctx.metadata({
+          title: `学术论文检索: ${query}`,
+          metadata: { source: "semantic_scholar", maxResults: max_results },
+        })
+
+        const results = await searchSemanticScholar(query, {
+          limit: max_results,
+          yearFrom: year_from,
+          yearTo: year_to,
+        })
+
+        if (results.length > 0) {
+          return formatAcademicResults(results, query)
+        }
+
+        // API 不可用时降级
+        const response = await pluginContext.llm.chat({
+          messages: [
+            { role: "system", content: "你是学术研究专家。基于知识推荐相关论文方向。" },
+            {
+              role: "user",
+              content: `请为以下主题推荐学术论文方向和关键文献：\n\n${query}`,
+            },
+          ],
+        })
+        return `## 学术论文检索\n\n**查询**：${query}\n\n> ⚠️ Semantic Scholar API 暂时不可用，以下为 LLM 生成的检索建议。\n\n${response.content}\n\n🔗 [直接搜索 Semantic Scholar](https://www.semanticscholar.org/search?q=${encodeURIComponent(query)})`
+      },
+    }),
   }
 }
 
@@ -174,6 +273,42 @@ function formatSearchResult(data: any, query: string, database: string): string 
   if (data.dataSource) {
     output += `\n*数据源：${data.dataSource}*\n`
   }
+
+  return output
+}
+
+function formatGoogleResults(results: any[], query: string): string {
+  let output = `## Google Patents 检索结果\n\n**查询**：${query}\n**命中**：${results.length} 条\n\n`
+
+  results.forEach((r, i) => {
+    output += `### ${i + 1}. ${r.title || "未知"}\n`
+    output += `- **专利号**：${r.patentId || "N/A"}\n`
+    output += `- **申请人**：${r.assignee || "N/A"}\n`
+    output += `- **公开日**：${r.publicationDate || "N/A"}\n`
+    if (r.abstract) {
+      output += `- **摘要**：${r.abstract.slice(0, 300)}${r.abstract.length > 300 ? "..." : ""}\n`
+    }
+    if (r.url) output += `- **链接**：${r.url}\n`
+    output += `\n`
+  })
+
+  return output
+}
+
+function formatAcademicResults(results: any[], query: string): string {
+  let output = `## 学术论文检索结果（Semantic Scholar）\n\n**查询**：${query}\n**命中**：${results.length} 条\n\n`
+
+  results.forEach((r, i) => {
+    output += `### ${i + 1}. ${r.title || "未知"}\n`
+    output += `- **作者**：${r.authors?.join(", ") || "N/A"}\n`
+    output += `- **年份**：${r.year || "N/A"}\n`
+    output += `- **引用数**：${r.citationCount ?? "N/A"}\n`
+    if (r.abstract) {
+      output += `- **摘要**：${r.abstract.slice(0, 300)}${r.abstract.length > 300 ? "..." : ""}\n`
+    }
+    if (r.url) output += `- **链接**：${r.url}\n`
+    output += `\n`
+  })
 
   return output
 }

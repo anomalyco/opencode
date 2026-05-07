@@ -45,7 +45,7 @@ export type DocType =
   | "other"             // 其他
 
 /** 任务类型 */
-export type TaskType = "research" | "draft" | "oa" | "reexam" | "invalidation" | "analyze" | "check"
+export type TaskType = "research" | "draft" | "oa" | "reexam" | "invalidation" | "analyze" | "check" | "trademark"
 
 /** 任务状态 */
 export type TaskStatus = "pending" | "in_progress" | "completed" | "failed"
@@ -84,6 +84,9 @@ export interface PatentTask {
   tool_name: string | null
   action: string | null
   output_summary: string | null
+  input_data: string | null
+  output_data: string | null
+  parent_task_id: string | null
   created_at: number
   completed_at: number | null
 }
@@ -148,6 +151,9 @@ export class CaseStore {
         tool_name TEXT,
         action TEXT,
         output_summary TEXT,
+        input_data TEXT,
+        output_data TEXT,
+        parent_task_id TEXT,
         created_at INTEGER NOT NULL DEFAULT (unixepoch()),
         completed_at INTEGER
       )
@@ -158,6 +164,9 @@ export class CaseStore {
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_docs_case ON patent_documents(case_id)")
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_case ON patent_tasks(case_id)")
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_session ON patent_tasks(session_id)")
+
+    // 向后兼容：为旧表添加新字段
+    this.migrateTasksTable()
   }
 
   // ========== 案件 CRUD ==========
@@ -268,7 +277,7 @@ export class CaseStore {
       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
     `).run(id, data.caseId || null, data.sessionId || null, data.taskType, data.toolName || null, data.action || null, now)
 
-    return { id, case_id: data.caseId || null, session_id: data.sessionId || null, task_type: data.taskType, status: "pending", tool_name: data.toolName || null, action: data.action || null, output_summary: null, created_at: now, completed_at: null }
+    return { id, case_id: data.caseId || null, session_id: data.sessionId || null, task_type: data.taskType, status: "pending", tool_name: data.toolName || null, action: data.action || null, output_summary: null, input_data: null, output_data: null, parent_task_id: null, created_at: now, completed_at: null }
   }
 
   completeTask(id: string, outputSummary?: string): PatentTask | null {
@@ -308,6 +317,68 @@ export class CaseStore {
     const documents = (this.db.prepare("SELECT COUNT(*) as c FROM patent_documents").get() as any).c
     const tasks = (this.db.prepare("SELECT COUNT(*) as c FROM patent_tasks").get() as any).c
     return { cases, documents, tasks }
+  }
+
+  // ========== 任务历史查询 ==========
+
+  /** 获取案件的所有任务历史 */
+  getTaskHistory(caseId: string): PatentTask[] {
+    return this.db.prepare(
+      "SELECT * FROM patent_tasks WHERE case_id = ? ORDER BY created_at ASC",
+    ).all(caseId) as PatentTask[]
+  }
+
+  /** 按 session 获取任务链 */
+  getSessionTasks(sessionId: string): PatentTask[] {
+    return this.db.prepare(
+      "SELECT * FROM patent_tasks WHERE session_id = ? ORDER BY created_at ASC",
+    ).all(sessionId) as PatentTask[]
+  }
+
+  /** 查找相似历史任务（按类型和关键词匹配） */
+  findSimilarTasks(taskType: TaskType, keyword?: string, limit = 10): PatentTask[] {
+    if (keyword) {
+      return this.db.prepare(
+        "SELECT * FROM patent_tasks WHERE task_type = ? AND (input_data LIKE ? OR output_data LIKE ?) AND status = 'completed' ORDER BY created_at DESC LIMIT ?",
+      ).all(taskType, `%${keyword}%`, `%${keyword}%`, limit) as PatentTask[]
+    }
+    return this.db.prepare(
+      "SELECT * FROM patent_tasks WHERE task_type = ? AND status = 'completed' ORDER BY created_at DESC LIMIT ?",
+    ).all(taskType, limit) as PatentTask[]
+  }
+
+  /** 记录任务输入输出（在 execute.after 中调用） */
+  recordTaskIO(taskId: string, inputData: string, outputData: string): void {
+    // 截断避免数据库膨胀
+    const truncatedOutput = outputData.length > 5000 ? outputData.slice(0, 5000) + "..." : outputData
+    this.db.prepare(
+      "UPDATE patent_tasks SET input_data = ?, output_data = ? WHERE id = ?",
+    ).run(inputData, truncatedOutput, taskId)
+  }
+
+  /** 按 session + tool 查找最近的 taskId */
+  findRecentTaskId(sessionId: string, toolName: string): string | null {
+    const row = this.db.prepare(
+      "SELECT id FROM patent_tasks WHERE session_id = ? AND tool_name = ? ORDER BY created_at DESC LIMIT 1",
+    ).get(sessionId, toolName) as any
+    return row?.id || null
+  }
+
+  // ========== 向后兼容迁移 ==========
+
+  private migrateTasksTable() {
+    const columns = this.db.prepare("PRAGMA table_info(patent_tasks)").all() as any[]
+    const columnNames = new Set(columns.map(c => c.name))
+
+    if (!columnNames.has("input_data")) {
+      this.db.exec("ALTER TABLE patent_tasks ADD COLUMN input_data TEXT")
+    }
+    if (!columnNames.has("output_data")) {
+      this.db.exec("ALTER TABLE patent_tasks ADD COLUMN output_data TEXT")
+    }
+    if (!columnNames.has("parent_task_id")) {
+      this.db.exec("ALTER TABLE patent_tasks ADD COLUMN parent_task_id TEXT")
+    }
   }
 
   close() {

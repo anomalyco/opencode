@@ -407,3 +407,96 @@ async function queryJudgmentFromKBInternal(
   }
   return output
 }
+
+/**
+ * 查询商标法规（带缓存）
+ */
+export async function queryTrademarkLaw(
+  keyword: string,
+): Promise<string> {
+  const cacheKey = `tm:law:${keyword}`
+  const cached = kbCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  const result = await queryTrademarkLawInternal(keyword)
+  kbCache.set(cacheKey, result)
+  return result
+}
+
+async function queryTrademarkLawInternal(keyword: string): Promise<string> {
+  const folders = ["Wiki/法律法规/商标"]
+  const results = await searchKnowledgeBase(keyword, { limit: 10, folders })
+
+  if (results.length === 0) {
+    return `未在商标知识库中找到 "${keyword}" 的相关内容。`
+  }
+
+  let output = `## 商标法规查询：${keyword}\n\n`
+  for (const result of results.slice(0, 5)) {
+    output += `### ${result.file.title}\n\n`
+    for (const match of result.matches.slice(0, 3)) {
+      output += `${match.context}\n\n`
+    }
+    output += "---\n\n"
+  }
+  return output
+}
+
+/**
+ * 查询商标审查实例（带缓存）
+ */
+export async function queryTrademarkExamGuide(
+  keyword: string,
+): Promise<string> {
+  const cacheKey = `tm:exam:${keyword}`
+  const cached = kbCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  const result = await queryTrademarkExamGuideInternal(keyword)
+  kbCache.set(cacheKey, result)
+  return result
+}
+
+async function queryTrademarkExamGuideInternal(keyword: string): Promise<string> {
+  const folders = ["Wiki/法律法规/商标/实务", "商标审查审理指南_全本"]
+  const results = await searchKnowledgeBase(keyword, { limit: 10, folders })
+
+  if (results.length === 0) {
+    return `未在商标审查指南中找到 "${keyword}" 的相关实例。`
+  }
+
+  let output = `## 商标审查实例：${keyword}\n\n`
+  for (const result of results.slice(0, 5)) {
+    output += `### ${result.file.title}\n\n`
+    for (const match of result.matches.slice(0, 2)) {
+      output += `${match.lineText}\n`
+    }
+    output += "\n"
+  }
+  return output
+}
+
+/**
+ * 查询商标实务指南（带缓存）
+ */
+export async function queryTrademarkPractice(
+  keyword: string,
+): Promise<string> {
+  const cacheKey = `tm:practice:${keyword}`
+  const cached = kbCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  const folders = ["Wiki/法律法规/商标/实务"]
+  const results = await searchKnowledgeBase(keyword, { limit: 10, folders })
+
+  if (results.length === 0) {
+    return `未在商标实务指南中找到 "${keyword}" 的相关内容。`
+  }
+
+  let output = `## 商标实务：${keyword}\n\n`
+  for (const result of results.slice(0, 3)) {
+    const content = await readMarkdownFile(result.file.path)
+    output += `### ${result.file.title}\n\n${content.slice(0, 2000)}${content.length > 2000 ? "\n\n..." : ""}\n\n---\n\n`
+  }
+  return output
+}
