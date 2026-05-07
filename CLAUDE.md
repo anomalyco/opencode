@@ -37,6 +37,18 @@
 改黑名单文件需:① commit message 标 `[override-blacklist: <理由>]` ② 改动日志逐文件论证"为什么 wrapper 替代不可行" ③ 二次确认:**团队场景**第二人 review;**single-person 场景**实施 agent commit 前出复核报告(wrapper 不可行性 / 风险评估 / 改动日志论证 三项)→ user 审 → 点头 commit。无冷却期,复核嵌在测试通过 → commit 间隙。
 **配额按 commit 笔数算**:一笔 commit 触动多个黑名单文件、同时挂多个 override 标都算 1 笔。
 
+### R5. 测试纪律(2026-05-07 立,渐进生效)
+
+- **新 feat 必须含至少 1 个测试**(Medium ≥ 1 e2e 或 3 unit;Large ≥ 2 e2e + 5 unit)
+- **修 bug 必须先写复现测试**,fix + 测试**同一 commit**,message 标 `[bug-repro: <一句话>]`
+- **Tiny 改动 < 50 行 / docs / 配置 / 品牌资源 / R3 override / 上游 sync merge** 不强制(详见例外清单)
+- **关键模块覆盖率 ≥ 80%**(初版清单 4 个文件,加入 / 移出靠 user 拍板)
+- **测试 fail 绝不 retry / skip 一键掩盖** — flaky 测试 48 小时内修或移除
+- **第 1 期实施时机由 user 单独决定**,本规则现在落地但 pre-push hook 守门待第 1 期接入
+
+完整规范:[`docs/governance/自动化测试规范.md`](docs/governance/自动化测试规范.md)
+长期规划(5 期分级 + KPI):[需求池](file:../OPENCODE-PLAN/需求池/自动化测试-长期规划.md)
+
 ## 五条设计原则(背后逻辑)
 
 - **P1 隔离**:新功能尽量放新文件,改上游是例外
@@ -156,5 +168,6 @@ grep `[feat: <id>]` 能反查到对应文档。
 
 ## 规范修订记录
 
+- **v3(2026-05-07)**:R5 测试纪律新增(决策 1/2/3/4/5 一次性固化)。新 feat 必带测试 + 修 bug 必先写复现测试 + 关键模块覆盖率 ≥ 80% + 70/20/10 金字塔比例 + Claude 自审起步。详见 `docs/governance/自动化测试规范.md`。**只定纪律不启动开发**,第 1 期实施时机由 user 单独决定。
 - **v2(2026-04-27)**:三文档分离(spec/plan/changelog 各自独立) + diff 阈值 200→500 + sprite/types 出黑名单 + commit message 加 `[feat: <feat-id>]` tag。理由见 `docs/features/规范-v2/1-spec.md`(略,首笔 v2 commit 同时落地)。
 - **v1(2026-04-15)**:R1-R4 / P1-P5 / 健康指标基线建立(见 09-改动规则.md)。
