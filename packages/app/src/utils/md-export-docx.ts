@@ -31,7 +31,8 @@ const FULL_BORDER =
   `<w:right w:val="single" w:color="E1E4E8" w:sz="1" w:space="8"/>` +
   `</w:pBdr>`
 
-function mergeCodeBlockParagraphs(docXml: string): string {
+// FORK: export for unit tests(R5 测试纪律 / 关键模块清单)2026-05-07
+export function mergeCodeBlockParagraphs(docXml: string): string {
   const pPattern = /<w:p\b[^>]*>[\s\S]*?<\/w:p>/g
   const paragraphs = [...docXml.matchAll(pPattern)]
   if (paragraphs.length === 0) return docXml
@@ -88,7 +89,8 @@ function mergeCodeBlockParagraphs(docXml: string): string {
 }
 
 /** base64 → Uint8Array(浏览器 atob)*/
-function base64ToBytes(b64: string): Uint8Array {
+// FORK: export for unit tests 2026-05-07
+export function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64)
   const out = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
@@ -96,7 +98,8 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 /** Uint8Array → base64(分块避免 String.fromCharCode 栈溢出)*/
-function bytesToBase64(bytes: Uint8Array): string {
+// FORK: export for unit tests 2026-05-07
+export function bytesToBase64(bytes: Uint8Array): string {
   let bstr = ""
   const chunk = 0x8000
   for (let i = 0; i < bytes.length; i += chunk) {
@@ -115,7 +118,8 @@ const EMOJI_RFONTS =
   '<w:rFonts w:ascii="Segoe UI Emoji" w:hAnsi="Segoe UI Emoji" w:cs="Segoe UI Emoji" w:eastAsia="Segoe UI Emoji"/>'
 
 /** 把含 emoji 的 run 按"emoji vs 非 emoji"切分,emoji 段单独成 run + emoji 字体覆盖 */
-function splitRunsForEmoji(docXml: string): string {
+// FORK: export for unit tests 2026-05-07
+export function splitRunsForEmoji(docXml: string): string {
   return docXml.replace(/(<w:r\b[^>]*>)([\s\S]*?)(<\/w:r>)/g, (full, open, inner, close) => {
     const tMatch = inner.match(/(<w:t[^>]*>)([\s\S]*?)<\/w:t>/)
     if (!tMatch) return full
@@ -165,7 +169,8 @@ function splitRunsForEmoji(docXml: string): string {
  *  导出用 SVG text(WKWebView 转 image 时 foreignObject 会触发 tainted canvas / "operation is insecure")。
  *  保留 viewer 显示效果不变,只对导出 clone 做替换。
  */
-function patchForeignObjects(svgEl: SVGElement): void {
+// FORK: export for unit tests 2026-05-07
+export function patchForeignObjects(svgEl: SVGElement): void {
   const fos = Array.from(svgEl.querySelectorAll("foreignObject"))
   for (const fo of fos) {
     const x = parseFloat(fo.getAttribute("x") || "0")
