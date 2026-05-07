@@ -3,7 +3,8 @@ import { Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { WithInstance } from "../../src/project/with-instance"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 const TestEvent = {
   Ping: BusEvent.define("test.ping", Schema.Struct({ value: Schema.Number })),
@@ -11,11 +12,11 @@ const TestEvent = {
 }
 
 function withInstance(directory: string, fn: () => Promise<void>) {
-  return Instance.provide({ directory, fn })
+  return WithInstance.provide({ directory, fn })
 }
 
 describe("Bus", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(() => disposeAllInstances())
 
   describe("publish + subscribe", () => {
     test("subscriber is live immediately after subscribe returns", async () => {
@@ -208,8 +209,8 @@ describe("Bus", () => {
         await Bun.sleep(10)
       })
 
-      // Instance.disposeAll triggers the finalizer which publishes InstanceDisposed
-      await Instance.disposeAll()
+      // disposeAllInstances triggers the finalizer which publishes InstanceDisposed
+      await disposeAllInstances()
       await Bun.sleep(50)
 
       expect(received).toContain("test.ping")

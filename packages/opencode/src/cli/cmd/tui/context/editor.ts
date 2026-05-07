@@ -4,7 +4,9 @@ import path from "node:path"
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import z from "zod"
+import { isRecord } from "@/util/record"
 import { createSimpleContext } from "./helper"
+import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -26,14 +28,45 @@ const PositionSchema = z.object({
   character: z.number(),
 })
 
-const EditorSelectionSchema = z.object({
+const EditorSelectionRangeSchema = z.object({
   text: z.string(),
-  filePath: z.string(),
   selection: z.object({
     start: PositionSchema,
     end: PositionSchema,
   }),
 })
+
+const EditorSelectionSchema = z
+  .union([
+    z.object({
+      filePath: z.string(),
+      source: z.enum(["websocket", "zed"]).optional(),
+      ranges: z.array(EditorSelectionRangeSchema).min(1),
+    }),
+    z.object({
+      text: z.string(),
+      filePath: z.string(),
+      source: z.enum(["websocket", "zed"]).optional(),
+      selection: z.object({
+        start: PositionSchema,
+        end: PositionSchema,
+      }),
+    }),
+  ])
+  .transform((value) =>
+    "ranges" in value
+      ? value
+      : {
+          filePath: value.filePath,
+          source: value.source,
+          ranges: [
+            {
+              text: value.text,
+              selection: value.selection,
+            },
+          ],
+        },
+  )
 
 const EditorMentionSchema = z.object({
   filePath: z.string(),
@@ -54,6 +87,7 @@ const EditorServerInfoSchema = z.object({
 type JsonRpcMessage = z.infer<typeof JsonRpcMessageSchema>
 export type EditorSelection = z.infer<typeof EditorSelectionSchema>
 export type EditorMention = z.infer<typeof EditorMentionSchema>
+export type EditorLabelState = "pending" | "sent" | "none"
 type EditorServerInfo = z.infer<typeof EditorServerInfoSchema>
 
 type EditorConnection = {
@@ -72,120 +106,192 @@ type EditorLockFile = {
 
 export const { use: useEditorContext, provider: EditorContextProvider } = createSimpleContext({
   name: "EditorContext",
-  init: () => {
+  init: (props: { WebSocketImpl?: typeof WebSocket }) => {
     const mentionListeners = new Set<(mention: EditorMention) => void>()
+    const WebSocketImpl = props.WebSocketImpl ?? WebSocket
     const [store, setStore] = createStore<{
       status: "disabled" | "connecting" | "connected"
       selection: EditorSelection | undefined
+      selectionSent: boolean
       server: EditorServerInfo | undefined
     }>({
       status: "disabled",
       selection: undefined,
+      selectionSent: false,
       server: undefined,
     })
 
-    onMount(() => {
-      let socket: WebSocket | undefined
-      let closed = false
-      let reconnect: ReturnType<typeof setTimeout> | undefined
-      let attempt = 0
-      let requestID = 0
-      const pending = new Map<number, string>()
+    let socket: WebSocket | undefined
+    let closed = false
+    let reconnect: ReturnType<typeof setTimeout> | undefined
+    let attempt = 0
+    let requestID = 0
+    let zedSelection: Promise<void> | undefined
+    let lastZedSelectionKey: string | undefined
+    let directory = process.cwd()
+    let preserveSelectionOnReconnect = false
+    const pending = new Map<number, string>()
 
-      const send = (payload: JsonRpcMessage) => {
-        if (!socket || socket.readyState !== WebSocket.OPEN) return
-        socket.send(JSON.stringify({ jsonrpc: "2.0", ...payload }))
+    const setSelection = (selection: EditorSelection | undefined) => {
+      const changed = editorSelectionKey(selection) !== editorSelectionKey(store.selection)
+      setStore("selection", selection)
+      if (changed) setStore("selectionSent", false)
+    }
+
+    const clearSelectionForReconnect = (options?: { resetZedSelectionKey?: boolean }) => {
+      if (preserveSelectionOnReconnect) {
+        preserveSelectionOnReconnect = false
+        return
       }
+      if (options?.resetZedSelectionKey) lastZedSelectionKey = undefined
+      setSelection(undefined)
+    }
 
-      const request = (method: string, params?: unknown) => {
-        requestID += 1
-        pending.set(requestID, method)
-        send({ id: requestID, method, params })
-      }
+    const send = (payload: JsonRpcMessage) => {
+      if (!socket || socket.readyState !== 1) return
+      socket.send(JSON.stringify({ jsonrpc: "2.0", ...payload }))
+    }
 
-      const scheduleReconnect = (delay: number) => {
-        if (closed) return
-        if (reconnect) clearTimeout(reconnect)
-        reconnect = setTimeout(connect, delay)
-      }
+    const request = (method: string, params?: unknown) => {
+      requestID += 1
+      pending.set(requestID, method)
+      send({ id: requestID, method, params })
+    }
 
-      const connect = () => {
-        if (closed) return
+    const connect = () => {
+      if (closed) return
 
-        const connection = resolveEditorConnection()
-        if (!connection) {
+      const connection = resolveEditorConnection(directory)
+      if (!connection) {
+        const dbPath = resolveZedDbPath()
+        if (!dbPath) {
           setStore("status", "disabled")
-          scheduleReconnect(1000)
+          scheduleReconnect()
+          return
+        }
+        zedSelection ??= resolveZedSelection(dbPath, directory)
+          .then((result) => {
+            if (closed || socket) return
+            if (result.type === "unavailable") return
+            const selection = result.type === "selection" ? result.selection : undefined
+            const key = editorSelectionKey(selection)
+            if (key !== lastZedSelectionKey) {
+              lastZedSelectionKey = key
+              setSelection(selection)
+              setStore("status", selection ? "connected" : "disabled")
+            }
+          })
+          .catch(() => {
+            // Keep the last known Zed selection for transient polling failures.
+          })
+          .finally(() => {
+            zedSelection = undefined
+          })
+        scheduleZedPoll()
+        return
+      }
+
+      setStore("status", "connecting")
+      const current = openEditorSocket(connection, WebSocketImpl)
+      socket = current
+
+      current.addEventListener("open", () => {
+        if (socket !== current) {
+          current.close()
           return
         }
 
+        attempt = 0
+        setStore("status", "connected")
+        request("initialize", {
+          protocolVersion: MCP_PROTOCOL_VERSION,
+          capabilities: {},
+          clientInfo: { name: "opencode", version: "0.0.0" },
+        })
+      })
+
+      current.addEventListener("message", (event) => {
+        const message = parseMessage(event.data)
+        if (!message) return
+
+        const selection =
+          message.method === "selection_changed" ? EditorSelectionSchema.safeParse(message.params) : undefined
+        if (selection?.success) {
+          setSelection({ ...selection.data, source: "websocket" })
+          return
+        }
+
+        const mention = message.method === "at_mentioned" ? EditorMentionSchema.safeParse(message.params) : undefined
+        if (mention?.success) {
+          mentionListeners.forEach((listener) => listener(mention.data))
+          return
+        }
+
+        if (typeof message.id !== "number") return
+
+        const method = pending.get(message.id)
+        if (!method) return
+
+        pending.delete(message.id)
+        if (message.error) return
+
+        const initialize = method === "initialize" ? EditorServerInfoSchema.safeParse(message.result) : undefined
+        if (initialize?.success) {
+          setStore("server", initialize.data)
+          send({ method: "notifications/initialized" })
+          return
+        }
+      })
+
+      current.addEventListener("close", () => {
+        if (socket !== current) return
+
+        socket = undefined
+        pending.clear()
+        if (closed) return
+
         setStore("status", "connecting")
-        const current = openEditorSocket(connection)
-        socket = current
+        scheduleReconnect()
+      })
+    }
 
-        current.addEventListener("open", () => {
-          if (socket !== current) {
-            current.close()
-            return
-          }
+    const scheduleReconnect = () => {
+      if (closed) return
+      if (reconnect) clearTimeout(reconnect)
+      attempt += 1
+      const delay = Math.min(1000 * 2 ** (attempt - 1), 10_000)
+      reconnect = setTimeout(connect, delay)
+    }
 
-          attempt = 0
-          setStore("status", "connected")
-          request("initialize", {
-            protocolVersion: MCP_PROTOCOL_VERSION,
-            capabilities: {},
-            clientInfo: { name: "opencode", version: "0.0.0" },
-          })
-        })
+    const scheduleZedPoll = () => {
+      if (closed) return
+      if (reconnect) clearTimeout(reconnect)
+      reconnect = setTimeout(connect, 1000)
+    }
 
-        current.addEventListener("message", (event) => {
-          const message = parseMessage(event.data)
-          if (!message) return
+    const reconnectWithDirectory = (nextDirectory?: string) => {
+      const resolved = nextDirectory || process.cwd()
+      const sameDirectory = directory === resolved
+      clearSelectionForReconnect({ resetZedSelectionKey: !sameDirectory })
+      if (sameDirectory) return
 
-          const selection =
-            message.method === "selection_changed" ? EditorSelectionSchema.safeParse(message.params) : undefined
-          if (selection?.success) {
-            setStore("selection", selection.data)
-            return
-          }
-
-          const mention = message.method === "at_mentioned" ? EditorMentionSchema.safeParse(message.params) : undefined
-          if (mention?.success) {
-            mentionListeners.forEach((listener) => listener(mention.data))
-            return
-          }
-
-          if (typeof message.id !== "number") return
-
-          const method = pending.get(message.id)
-          if (!method) return
-
-          pending.delete(message.id)
-          if (message.error) return
-
-          const initialize = method === "initialize" ? EditorServerInfoSchema.safeParse(message.result) : undefined
-          if (initialize?.success) {
-            setStore("server", initialize.data)
-            send({ method: "notifications/initialized" })
-            return
-          }
-        })
-
-        current.addEventListener("close", () => {
-          if (socket !== current) return
-
-          socket = undefined
-          pending.clear()
-          if (closed) return
-
-          setStore("status", "connecting")
-          attempt += 1
-          const delay = Math.min(1000 * 2 ** (attempt - 1), 30000)
-          scheduleReconnect(delay)
-        })
+      directory = resolved
+      attempt = 0
+      pending.clear()
+      if (reconnect) clearTimeout(reconnect)
+      reconnect = undefined
+      if (socket) {
+        const current = socket
+        socket = undefined
+        current.close()
       }
+      setStore("status", "disabled")
+      setStore("server", undefined)
+      connect()
+    }
 
-      scheduleReconnect(0)
+    onMount(() => {
+      connect()
 
       onCleanup(() => {
         closed = true
@@ -196,7 +302,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection())
+        return Boolean(resolveEditorConnection(directory) || resolveZedDbPath())
       },
       connected() {
         return store.status === "connected"
@@ -204,12 +310,31 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       selection() {
         return store.selection
       },
+      clearSelection() {
+        lastZedSelectionKey = undefined
+        zedSelection = undefined
+        setSelection(undefined)
+      },
+      preserveSelectionFromNewSession() {
+        preserveSelectionOnReconnect = true
+      },
+      markSelectionSent() {
+        if (!store.selection) return
+        setStore("selectionSent", true)
+      },
+      labelState(): EditorLabelState {
+        if (!store.selection) return "none"
+        return store.selectionSent ? "sent" : "pending"
+      },
       onMention(listener: (mention: EditorMention) => void) {
         mentionListeners.add(listener)
         return () => mentionListeners.delete(listener)
       },
       server() {
         return store.server
+      },
+      reconnect(directory?: string) {
+        reconnectWithDirectory(directory)
       },
     }
   },
@@ -223,8 +348,16 @@ function parsePort(value: string | undefined) {
   return parsed
 }
 
-function resolveEditorConnection(): EditorConnection | undefined {
-  const lock = resolveEditorLockFile()
+function resolveEditorConnection(directory: string): EditorConnection | undefined {
+  const port = parsePort(process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT)
+  if (port) {
+    return {
+      url: `ws://127.0.0.1:${port}`,
+      source: `env:${port}`,
+    }
+  }
+
+  const lock = resolveEditorLockFile(directory)
   if (lock) {
     return {
       url: `ws://127.0.0.1:${lock.port}`,
@@ -232,16 +365,9 @@ function resolveEditorConnection(): EditorConnection | undefined {
       source: `lock:${lock.port}`,
     }
   }
-
-  const port = parsePort(process.env.CLAUDE_CODE_SSE_PORT || process.env.OPENCODE_EDITOR_SSE_PORT)
-  if (!port) return
-  return {
-    url: `ws://127.0.0.1:${port}`,
-    source: `env:${port}`,
-  }
 }
 
-function resolveEditorLockFile() {
+function resolveEditorLockFile(activeDirectory: string) {
   const directory = path.join(os.homedir(), ".claude", "ide")
   let entries: string[]
 
@@ -251,13 +377,16 @@ function resolveEditorLockFile() {
     return
   }
 
-  const cwd = process.cwd()
+  // longest workspace folder that contains the active session directory; 0 if none match
+  const bestMatchLength = (lock: EditorLockFile) =>
+    Math.max(0, ...lock.workspaceFolders.map((folder) => pathContainsLength(folder, activeDirectory)))
   const locks = entries
     .filter((entry) => entry.endsWith(".lock"))
     .map((entry) => readEditorLockFile(path.join(directory, entry)))
     .filter((entry): entry is EditorLockFile => Boolean(entry))
-    .sort((left, right) => scoreEditorLock(right, cwd) - scoreEditorLock(left, cwd))
-
+    .filter((entry) => bestMatchLength(entry) > 0)
+    // prefer locks with longer matching workspace folders, then more recent ones
+    .sort((left, right) => bestMatchLength(right) - bestMatchLength(left) || right.mtimeMs - left.mtimeMs)
   return locks[0]
 }
 
@@ -284,20 +413,30 @@ function readEditorLockFile(filePath: string): EditorLockFile | undefined {
   }
 }
 
-function scoreEditorLock(lock: EditorLockFile, cwd: string) {
-  const workspaceMatch = lock.workspaceFolders.some((folder) => pathContains(folder, cwd)) ? 1 : 0
-  return workspaceMatch * 1_000_000_000_000 + lock.mtimeMs
+export function editorSelectionKey(selection: EditorSelection | undefined) {
+  if (!selection) return ""
+  return [
+    selection.filePath,
+    ...selection.ranges.flatMap((range) => [
+      range.selection.start.line,
+      range.selection.start.character,
+      range.selection.end.line,
+      range.selection.end.character,
+      range.text,
+    ]),
+  ].join("\0")
 }
 
-function pathContains(parent: string, child: string) {
-  const relative = path.relative(path.resolve(parent), path.resolve(child))
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+function pathContainsLength(parent: string, child: string) {
+  const resolved = path.resolve(parent)
+  const relative = path.relative(resolved, path.resolve(child))
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)) ? resolved.length : 0
 }
 
-function openEditorSocket(connection: EditorConnection) {
-  if (!connection.authToken) return new WebSocket(connection.url)
+function openEditorSocket(connection: EditorConnection, WebSocketImpl: typeof WebSocket) {
+  if (!connection.authToken) return new WebSocketImpl(connection.url)
 
-  return new WebSocket(connection.url, {
+  return new WebSocketImpl(connection.url, {
     headers: {
       "x-claude-code-ide-authorization": connection.authToken,
     },
@@ -312,8 +451,4 @@ function parseMessage(value: unknown) {
   } catch {
     return
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

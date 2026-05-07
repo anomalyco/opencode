@@ -78,6 +78,7 @@ See `specs/effect/migration.md` for the compact pattern reference and examples.
 - Use `Effect.fn("Domain.method")` for named/traced effects and `Effect.fnUntraced` for internal helpers.
 - `Effect.fn` / `Effect.fnUntraced` accept pipeable operators as extra arguments, so avoid unnecessary outer `.pipe()` wrappers.
 - Use `Effect.callback` for callback-based APIs.
+- Use `Effect.void` instead of `Effect.succeed(undefined)` or `Effect.succeed(void 0)`.
 - Prefer `DateTime.nowAsDate` over `new Date(yield* Clock.currentTimeMillis)` when you need a `Date`.
 
 ## Module conventions

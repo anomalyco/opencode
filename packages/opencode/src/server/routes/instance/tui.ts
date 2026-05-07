@@ -3,32 +3,28 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { Schema } from "effect"
 import z from "zod"
 import { Bus } from "@/bus"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { zodObject } from "@/util/effect-zod"
-import { AsyncQueue } from "@/util/queue"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { runRequest } from "./trace"
-
-const TuiRequest = z.object({
-  path: z.string(),
-  body: z.any(),
-})
-
-type TuiRequest = z.infer<typeof TuiRequest>
-
-const request = new AsyncQueue<TuiRequest>()
-const response = new AsyncQueue<any>()
+import {
+  TuiRequest,
+  nextTuiRequest,
+  nextTuiResponse,
+  submitTuiRequest,
+  submitTuiResponse,
+} from "@/server/shared/tui-control"
 
 export async function callTui(ctx: Context) {
   const body = await ctx.req.json()
-  request.push({
+  submitTuiRequest({
     path: ctx.req.path,
     body,
   })
-  return response.next()
+  return nextTuiResponse()
 }
 
 const TuiControlRoutes = new Hono()
@@ -50,7 +46,7 @@ const TuiControlRoutes = new Hono()
       },
     }),
     async (c) => {
-      const req = await request.next()
+      const req = await nextTuiRequest()
       return c.json(req)
     },
   )
@@ -74,7 +70,7 @@ const TuiControlRoutes = new Hono()
     validator("json", z.any()),
     async (c) => {
       const body = c.req.valid("json")
-      response.push(body)
+      submitTuiResponse(body)
       return c.json(true)
     },
   )
