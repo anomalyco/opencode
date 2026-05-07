@@ -482,24 +482,24 @@ export const endpoint = (
     required: input.required,
   })
 
-export const makeRoute = (
-  input: {
-    readonly id?: string
-    readonly auth?: AuthDef
-    readonly endpoint?: EndpointConfig<OpenAIResponsesPayload>
-    readonly defaultBaseURL?: string | false
-    readonly endpointRequired?: string
-  } = {},
-) =>
-  Route.make({
-    id: input.id ?? ADAPTER,
-    protocol,
-    endpoint: input.endpoint ?? endpoint({ defaultBaseURL: input.defaultBaseURL, required: input.endpointRequired }),
-    auth: input.auth,
-    framing: Framing.sse,
-  })
+const encodePayload = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesPayload))
 
-export const route = makeRoute()
+export const httpTransport = HttpTransport.httpJson({
+  endpoint: endpoint(),
+  auth: Auth.bearer(),
+  framing: Framing.sse,
+  encodePayload,
+})
+
+export const route = Route.make({
+  id: ADAPTER,
+  provider: "openai",
+  protocol,
+  transport: httpTransport,
+  defaults: {
+    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  },
+})
 
 type WebSocketPrepared = {
   readonly url: string
@@ -541,24 +541,26 @@ const webSocketPayload = (body: string) =>
     ),
   )
 
-const webSocketTransport = (
-  input: {
-    readonly auth?: AuthDef
-    readonly endpoint?: EndpointConfig<OpenAIResponsesPayload>
-    readonly defaultBaseURL?: string | false
-    readonly endpointRequired?: string
-  } = {},
-): Transport<OpenAIResponsesPayload, WebSocketPrepared, string> => ({
+interface WebSocketTransportInput {
+  readonly auth?: AuthDef
+  readonly endpoint?: EndpointConfig<OpenAIResponsesPayload>
+}
+
+interface WebSocketTransport extends Transport<OpenAIResponsesPayload, WebSocketPrepared, string> {
+  readonly with: (patch: WebSocketTransportInput) => WebSocketTransport
+}
+
+const makeWebSocketTransport = (input: WebSocketTransportInput = {}): WebSocketTransport => ({
   id: "websocket-json",
+  with: (patch) => makeWebSocketTransport({ ...input, ...patch }),
   prepare: (payload, context) =>
     Effect.gen(function* () {
       const parts = yield* HttpTransport.jsonRequestParts({
         payload,
         context,
-        endpoint:
-          input.endpoint ?? endpoint({ defaultBaseURL: input.defaultBaseURL, required: input.endpointRequired }),
+        endpoint: input.endpoint ?? endpoint(),
         auth: input.auth ?? Auth.bearer(),
-        encodePayload: Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesPayload)),
+        encodePayload,
       })
       const message = yield* webSocketPayload(parts.body)
       return {
@@ -588,34 +590,23 @@ const webSocketTransport = (
     ),
 })
 
-export const makeWebSocketRoute = (
-  input: {
-    readonly id?: string
-    readonly auth?: AuthDef
-    readonly endpoint?: EndpointConfig<OpenAIResponsesPayload>
-    readonly defaultBaseURL?: string | false
-    readonly endpointRequired?: string
-  } = {},
-) =>
-  Route.make({
-    id: input.id ?? `${ADAPTER}-websocket`,
-    protocol,
-    transport: webSocketTransport(input),
-  })
+export const webSocketTransport = makeWebSocketTransport()
 
-export const webSocketRoute = makeWebSocketRoute()
+export const webSocketRoute = Route.make({
+  id: `${ADAPTER}-websocket`,
+  provider: "openai",
+  protocol,
+  transport: webSocketTransport,
+  defaults: {
+    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  },
+})
 
 // =============================================================================
 // Model Helper
 // =============================================================================
-export const model = Route.model(route, {
-  provider: "openai",
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-})
+export const model = route.model
 
-export const webSocketModel = Route.model(webSocketRoute, {
-  provider: "openai",
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-})
+export const webSocketModel = webSocketRoute.model
 
 export * as OpenAIResponses from "./openai-responses"

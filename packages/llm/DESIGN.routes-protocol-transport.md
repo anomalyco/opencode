@@ -253,29 +253,22 @@ Route.make({
 })
 ```
 
-Raw routes should stay reusable: they are protocol + transport mechanics. Provider identity, capabilities, limits, and generation defaults are model-factory defaults layered onto a route.
+Routes carry provider identity directly, plus capabilities, limits, and generation defaults. Reuse happens by deriving a new route with `.with(...)`, not by layering "configuration" onto a separate raw route.
 
-The ideal authoring shape is a configured route value:
+The authoring shape is a single route value:
 
 ```ts
-const responsesHttp = responsesHttpRoute.with({
-  provider: "openai",
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-})
-
-const model = responsesHttp.model("gpt-4.1-mini", { apiKey })
+const model = openAIResponses.model("gpt-4.1-mini", { apiKey })
 ```
 
-This is better than `Provider.model(...)`: a provider is the catalog namespace, while route configuration means "from this runnable route, make a model-ref constructor with these provider/model defaults."
+`route.model(...)` is better than `Provider.model(...)`: a provider is the catalog namespace, while a provider-bound route owns route-backed model-ref construction. Capabilities live as route defaults and on the final `ModelRef`, and remain overridable because capabilities and limits can vary by concrete model id.
 
-Capabilities belong in this configured-route/default layer and on the final `ModelRef`, not on the raw route. The defaults are close to route selection because they are provider API defaults, but they must remain overridable because capabilities and limits can vary by concrete model id.
-
-Provider helpers should then map user options to concrete route-backed model factories:
+Provider helpers map user options to concrete provider-bound routes:
 
 ```ts
 const responsesRoutes = {
-  http: responsesHttpRoute.with(openaiResponsesDefaults),
-  websocket: responsesWebSocketRoute.with(openaiResponsesDefaults),
+  http: openAIResponses,
+  websocket: openAIResponsesWebSocket,
 } as const
 ```
 
@@ -328,13 +321,13 @@ The current code still has several related smells:
 - Protocol files expose hand-written `makeRoute(...)` factories.
 - Provider files derive variants by passing knobs like `defaultBaseURL: false` and `endpointRequired` into those factories.
 - Provider identity and capabilities are added later through `Route.model(route, defaults)` rather than being visibly attached to a provider-bound route.
-- The same reusable route shape sometimes acts like a template and sometimes acts like a user-facing provider route.
+- The same reusable route shape sometimes acts like a base and sometimes acts like a user-facing provider route.
 
 These are all symptoms of the same missing concept: route derivation.
 
 ### Endpoint Policy Smell
 
-`defaultBaseURL: false` means "do not use the route template's default URL; require the model/provider options to supply one."
+`defaultBaseURL: false` means "do not use the route's default URL; require the model/provider options to supply one."
 
 `endpointRequired` is the custom error message used when no base URL is available.
 
@@ -395,42 +388,40 @@ export const makeRoute = (input = {}) =>
 
 It exists only because route values are not yet easy to copy and modify.
 
-The target is immutable derivation:
+The target is immutable derivation on a single `Route` value:
 
 ```ts
-export const responsesTemplate = Route.template({
+export const openAIResponses = Route.make({
+  id: "openai-responses",
+  provider: "openai",
   protocol: OpenAIResponses.protocol,
   transport: Transport.httpJson({
     endpoint: Endpoint.baseURL({ path: "/responses", base: { type: "default", url: DEFAULT_BASE_URL } }),
     auth: Auth.bearer(),
     framing: Framing.sse,
   }),
-})
-
-export const openAIResponses = responsesTemplate.route({
-  id: "openai-responses",
-  provider: "openai",
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  defaults: {
+    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  },
 })
 
 export const azureResponses = openAIResponses.with({
   id: "azure-openai-responses",
   provider: "azure",
-  transport: Transport.httpJson({
+  transport: openAIResponses.transport.with({
     endpoint: Endpoint.requiredBaseURL({ path: "/responses", message: "Azure OpenAI requires resourceName or baseURL" }),
     auth: azureAuth,
-    framing: Framing.sse,
   }),
 })
 ```
 
-This preserves reuse without hiding variant behavior behind protocol-specific factory parameters.
+This preserves reuse without hiding variant behavior behind protocol-specific factory parameters, and without a second route concept.
 
 ### One Route Concept
 
-Prefer one `Route` concept, not `RouteTemplate` plus `Route`.
+There is one `Route` concept. No `RouteTemplate`, no separate base/derived split.
 
-Every route used by a provider helper should have a provider. Reuse can still happen by immutably deriving one provider route from another:
+Every route used by a provider helper should have a provider. Reuse happens by immutably deriving one provider route from another:
 
 ```ts
 export const responses = Route.make({
@@ -442,7 +433,9 @@ export const responses = Route.make({
     auth: Auth.bearer(),
     framing: Framing.sse,
   }),
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  defaults: {
+    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  },
 })
 
 export const azureResponses = responses.with({
@@ -460,7 +453,7 @@ The risk is inherited provider/default leakage. Mitigate that with API shape:
 - `.with(...)` is immutable and returns a new route.
 - deriving a provider route should require `id` and `provider` when either changes.
 - duplicate route ids should fail or be explicit.
-- provider/capabilities/limits/generation are route defaults and remain overridable by model options.
+- provider is route identity; capabilities/limits/generation are route defaults and remain overridable by model options.
 - `.model(...)` uses the route defaults and returns a concrete `ModelRef` with `route` set.
 
 ### Typed Transport Derivation
@@ -532,7 +525,7 @@ The smallest coherent target that addresses all these smells:
 - Treat provider/capabilities/limits/generation as route defaults that can be overridden by model options.
 - Keep one `Route` concept; reuse happens through immutable `.with(...)` derivation.
 - Make transports immutable/copyable so provider variants can override endpoint/auth without restating framing or unrelated transport internals.
-- Let provider modules export provider-bound routes and model helpers, not protocol-template internals as the primary API.
+- Let provider modules export provider-bound routes and model helpers as the primary API.
 
 ## Registry Semantics
 
@@ -637,16 +630,15 @@ Derive protocol from route metadata after route resolution. If missing-route err
 
 Temporary compatibility aliases are acceptable only if they are clearly deprecated and not used in new code/docs.
 
-### Step 2: Move Toward Configured Routes
+### Step 2: Move `.model(...)` Onto The Route
 
-Current implementation can keep `Route.model(route, defaults)` while the rename lands. The cleaner target is:
+Current implementation can keep `Route.model(route, defaults)` while the rename lands. The cleaner target is `route.model(id, options)` directly on the provider-bound route — provider, capabilities, limits, and generation already live on the route, and `.with(...)` covers any per-derivation overrides.
 
 ```ts
-const configured = route.with(defaults)
-const model = configured.model(id, options)
+const model = openAIResponses.model("gpt-4.1-mini", { apiKey })
 ```
 
-Do not move this to `Provider.model(...)`. A provider is the catalog namespace; configured routes own route-backed model-ref construction.
+Do not move this to `Provider.model(...)`. A provider is the catalog namespace; routes own route-backed model-ref construction.
 
 ### Step 3: Keep Runtime Behavior Stable
 

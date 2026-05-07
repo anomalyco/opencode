@@ -61,14 +61,23 @@ export const jsonRequestParts = <Payload>(input: JsonRequestInput<Payload>) =>
     return { url, body, headers }
   })
 
-export const httpJson = <Payload, Frame>(input: {
+export interface HttpJsonInput<Payload, Frame> {
   readonly endpoint: Endpoint<Payload>
   readonly auth?: AuthDef
   readonly framing: Framing<Frame>
   readonly encodePayload: (payload: Payload) => string
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
-}): Transport<Payload, HttpPrepared<Frame>, Frame> => ({
+}
+
+export type HttpJsonPatch<Payload, Frame> = Partial<HttpJsonInput<Payload, Frame>>
+
+export interface HttpJsonTransport<Payload, Frame> extends Transport<Payload, HttpPrepared<Frame>, Frame> {
+  readonly with: (patch: HttpJsonPatch<Payload, Frame>) => HttpJsonTransport<Payload, Frame>
+}
+
+export const httpJson = <Payload, Frame>(input: HttpJsonInput<Payload, Frame>): HttpJsonTransport<Payload, Frame> => ({
   id: "http-json",
+  with: (patch) => httpJson({ ...input, ...patch }),
   prepare: (payload, context) =>
     jsonRequestParts({
       payload,

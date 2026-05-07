@@ -1,8 +1,9 @@
 import { Array as Arr, Effect, Schema } from "effect"
 import { Route } from "../route/client"
-import type { Auth } from "../route/auth"
-import { Endpoint, type Endpoint as EndpointConfig } from "../route/endpoint"
+import { Auth } from "../route/auth"
+import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
+import { HttpTransport } from "../route/transport"
 import { capabilities } from "../llm"
 import { Protocol } from "../route/protocol"
 import {
@@ -381,35 +382,28 @@ export const endpoint = (input: {
     required: input.required,
   })
 
-export const makeRoute = (input: {
-  readonly id?: string
-  readonly auth?: Auth
-  readonly endpoint?: EndpointConfig<OpenAIChatPayload>
-  readonly defaultBaseURL?: string | false
-  readonly endpointRequired?: string
-} = {}) =>
-  Route.make({
-    id: input.id ?? ADAPTER,
-    protocol,
-    // The route supplies deployment concerns around the protocol: URL, auth,
-    // and response framing. Other providers can reuse `protocol` with different
-    // endpoint/auth choices instead of cloning this whole file.
-    endpoint: input.endpoint ?? endpoint({ defaultBaseURL: input.defaultBaseURL, required: input.endpointRequired }),
-    auth: input.auth,
-    framing: Framing.sse,
-  })
+const encodePayload = Schema.encodeSync(Schema.fromJsonString(OpenAIChatPayload))
 
-export const route = makeRoute()
+export const httpTransport = HttpTransport.httpJson({
+  endpoint: endpoint(),
+  auth: Auth.bearer(),
+  framing: Framing.sse,
+  encodePayload,
+})
+
+export const route = Route.make({
+  id: ADAPTER,
+  provider: "openai",
+  protocol,
+  transport: httpTransport,
+  defaults: {
+    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
+  },
+})
 
 // =============================================================================
 // Model Helper
 // =============================================================================
-export const model = Route.model(route, {
-  // `Route.model` creates a user-facing model factory bound to this route.
-  // The model route is derived from the route, so
-  // provider authors only specify provider identity and defaults here.
-  provider: "openai",
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-})
+export const model = route.model
 
 export * as OpenAIChat from "./openai-chat"

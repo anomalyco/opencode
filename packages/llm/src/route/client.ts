@@ -41,10 +41,14 @@ export interface RouteContext {
 
 export interface Route<Payload, Prepared = unknown> {
   readonly id: string
+  readonly provider?: ProviderID
   readonly protocol: ProtocolID
-  readonly transport: string
+  readonly transport: Transport<Payload, Prepared, unknown>
+  readonly defaults: RouteDefaults
   readonly payloadSchema: Schema.Codec<Payload, unknown>
   readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
+  readonly with: (patch: RoutePatch<Payload, Prepared>) => Route<Payload, Prepared>
+  readonly model: <Input extends RouteModelInput = RouteModelInput>(input: Input) => ModelRef
   readonly prepareTransport: (
     payload: Payload,
     context: RouteContext,
@@ -100,6 +104,14 @@ export type RouteRoutedModelInput = Omit<ModelRefInput, "route">
 
 export type RouteRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "route">>
 
+export type RouteDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "route">>
+
+export interface RoutePatch<Payload, Prepared> extends RouteDefaults {
+  readonly id?: string
+  readonly provider?: string | ProviderID
+  readonly transport?: Transport<Payload, Prepared, unknown>
+}
+
 type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
 
 export interface RouteModelOptions<Input extends RouteMappedModelInput, Output extends RouteMappedModelInput = RouteMappedModelInput> {
@@ -109,6 +121,32 @@ export interface RouteModelOptions<Input extends RouteMappedModelInput, Output e
 export interface RouteMappedModelOptions<Input, Output extends RouteMappedModelInput = RouteMappedModelInput> {
   readonly mapInput: (input: Input) => Output
 }
+
+const modelWithDefaults = <Input>(
+  route: AnyRoute,
+  defaults: Partial<Omit<ModelRefInput, "id" | "route">>,
+  options: { readonly mapInput?: (input: Input) => RouteMappedModelInput },
+) =>
+  (input: Input) => {
+    const mapped = options.mapInput === undefined ? input as RouteMappedModelInput : options.mapInput(input)
+    const provider = defaults.provider ?? route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
+    if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
+    const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
+    const providerOptions = mergeProviderOptions(route.defaults.providerOptions, defaults.providerOptions)
+    const http = mergeHttpOptions(httpOptions(route.defaults.http), httpOptions(defaults.http))
+    return modelRef({
+      ...route.defaults,
+      ...defaults,
+      ...mapped,
+      provider,
+      route: route.id,
+      capabilities: mapped.capabilities ?? defaults.capabilities ?? route.defaults.capabilities,
+      limits: mapped.limits ?? defaults.limits ?? route.defaults.limits,
+      generation: mergeGenerationOptions(generation, mapped.generation),
+      providerOptions: mergeProviderOptions(providerOptions, mapped.providerOptions),
+      http: mergeHttpOptions(http, httpOptions(mapped.http)),
+    })
+  }
 
 export const modelCapabilities = ModelCapabilities.make
 
@@ -154,23 +192,7 @@ function model<Input>(
   defaults: Partial<Omit<ModelRefInput, "id" | "route">> = {},
   options: { readonly mapInput?: (input: Input) => RouteMappedModelInput } = {},
 ) {
-  return (input: Input) => {
-    const mapped = options.mapInput === undefined ? input as RouteMappedModelInput : options.mapInput(input)
-    const provider = defaults.provider ?? ("provider" in mapped ? mapped.provider : undefined)
-    if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
-    register(route)
-    return modelRef({
-      ...defaults,
-      ...mapped,
-      provider,
-      route: route.id,
-      capabilities: mapped.capabilities ?? defaults.capabilities,
-      limits: mapped.limits ?? defaults.limits,
-      generation: mergeGenerationOptions(defaults.generation, mapped.generation),
-      providerOptions: mergeProviderOptions(defaults.providerOptions, mapped.providerOptions),
-      http: mergeHttpOptions(httpOptions(defaults.http), httpOptions(mapped.http)),
-    })
-  }
+  return modelWithDefaults(route, defaults, options)
 }
 
 export interface Interface {
@@ -218,6 +240,8 @@ const resolveRequestOptions = (request: LLMRequest) =>
 export interface MakeInput<Payload, Frame, Chunk, State> {
   /** Route id used in registry lookup and error messages. */
   readonly id: string
+  /** Provider identity for route-owned model construction. */
+  readonly provider?: string | ProviderID
   /** Semantic API contract — owns lowering, payload schema, and parsing. */
   readonly protocol: Protocol<Payload, Frame, Chunk, State>
   /** Where the request is sent. */
@@ -228,15 +252,21 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
   readonly framing: Framing<Frame>
   /** Static / per-request headers added before `auth` runs. */
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
+  /** Model defaults used by the route's `.model(...)` helper. */
+  readonly defaults?: RouteDefaults
 }
 
 export interface MakeTransportInput<Payload, Prepared, Frame, Chunk, State> {
   /** Route id used in registry lookup and error messages. */
   readonly id: string
+  /** Provider identity for route-owned model construction. */
+  readonly provider?: string | ProviderID
   /** Semantic API contract — owns lowering, payload schema, and parsing. */
   readonly protocol: Protocol<Payload, Frame, Chunk, State>
   /** Runnable transport route. */
   readonly transport: Transport<Payload, Prepared, Frame>
+  /** Provider/model defaults used by the route's `.model(...)` helper. */
+  readonly defaults?: RouteDefaults
 }
 
 const streamError = (route: string, message: string, cause: Cause.Cause<unknown>) => {
@@ -261,25 +291,46 @@ function makeFromTransport<Payload, Prepared, Frame, Chunk, State>(
       ),
     )
 
-  return register({
-    id: input.id,
-    protocol: protocol.id,
-    transport: input.transport.id,
-    payloadSchema: protocol.payload,
-    toPayload: protocol.toPayload,
-    prepareTransport: input.transport.prepare,
-    streamPrepared: (prepared, ctx, runtime) => {
-      const route = `${ctx.request.model.provider}/${ctx.request.model.route}`
-      const chunks = input.transport.frames(prepared, ctx, runtime).pipe(
-        Stream.mapEffect(decodeChunk(route)),
-        protocol.terminal ? Stream.takeUntil(protocol.terminal) : (stream) => stream,
-      )
-      return chunks.pipe(
-        Stream.mapAccumEffect(protocol.initial, protocol.process, protocol.onHalt ? { onHalt: protocol.onHalt } : undefined),
-        Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
-      )
-    },
-  })
+  const build = (routeInput: MakeTransportInput<Payload, Prepared, Frame, Chunk, State>): Route<Payload, Prepared> => {
+    const route: Route<Payload, Prepared> = {
+      id: routeInput.id,
+      provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
+      protocol: protocol.id,
+      transport: routeInput.transport,
+      defaults: routeInput.defaults ?? {},
+      payloadSchema: protocol.payload,
+      toPayload: protocol.toPayload,
+      with: (patch: RoutePatch<Payload, Prepared>) => {
+        const { id, provider, transport, ...defaults } = patch
+        return build({
+          ...routeInput,
+          id: id ?? routeInput.id,
+          provider: provider ?? routeInput.provider,
+          transport: (transport as Transport<Payload, Prepared, Frame> | undefined) ?? routeInput.transport,
+          defaults: {
+            ...routeInput.defaults,
+            ...defaults,
+          },
+        })
+      },
+      model: (input: RouteModelInput): ModelRef => modelWithDefaults<RouteModelInput>(route, {}, {})(input),
+      prepareTransport: routeInput.transport.prepare,
+      streamPrepared: (prepared: Prepared, ctx: RouteContext, runtime: TransportRuntime) => {
+        const route = `${ctx.request.model.provider}/${ctx.request.model.route}`
+        const chunks = routeInput.transport.frames(prepared, ctx, runtime).pipe(
+          Stream.mapEffect(decodeChunk(route)),
+          protocol.terminal ? Stream.takeUntil(protocol.terminal) : (stream) => stream,
+        )
+        return chunks.pipe(
+          Stream.mapAccumEffect(protocol.initial, protocol.process, protocol.onHalt ? { onHalt: protocol.onHalt } : undefined),
+          Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
+        )
+      },
+    } satisfies Route<Payload, Prepared>
+    return register(route)
+  }
+
+  return build(input)
 }
 
 export function make<Payload, Prepared, Frame, Chunk, State>(
@@ -311,6 +362,7 @@ export function make<Payload, Prepared, Frame, Chunk, State>(
   const encodePayload = Schema.encodeSync(Schema.fromJsonString(protocol.payload))
   return makeFromTransport({
     id: input.id,
+    provider: input.provider,
     protocol,
     transport: HttpTransport.httpJson({
       endpoint: input.endpoint,
@@ -319,6 +371,7 @@ export function make<Payload, Prepared, Frame, Chunk, State>(
       encodePayload,
       headers: input.headers,
     }),
+    defaults: input.defaults,
   })
 }
 
@@ -354,7 +407,7 @@ const prepareWith = Effect.fn("LLMClient.prepare")(function* (request: LLMReques
     protocol: compiled.route.protocol,
     model: compiled.request.model,
     payload: compiled.payload,
-    metadata: { transport: compiled.route.transport },
+    metadata: { transport: compiled.route.transport.id },
   })
 })
 

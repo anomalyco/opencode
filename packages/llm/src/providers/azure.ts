@@ -26,21 +26,25 @@ const resourceBaseURL = (resourceName: string | undefined) => {
   return `https://${resource}.openai.azure.com/openai/v1`
 }
 
-const responsesAdapter = OpenAIResponses.makeRoute({
+const responsesRoute = OpenAIResponses.route.with({
   id: "azure-openai-responses",
+  provider: id,
+  transport: OpenAIResponses.httpTransport.with({
     auth: routeAuth,
-  defaultBaseURL: false,
-  endpointRequired: MISSING_BASE_URL,
+    endpoint: OpenAIResponses.endpoint({ defaultBaseURL: false, required: MISSING_BASE_URL }),
+  }),
 })
 
-const chatAdapter = OpenAIChat.makeRoute({
+const chatRoute = OpenAIChat.route.with({
   id: "azure-openai-chat",
+  provider: id,
+  transport: OpenAIChat.httpTransport.with({
     auth: routeAuth,
-  defaultBaseURL: false,
-  endpointRequired: MISSING_BASE_URL,
+    endpoint: OpenAIChat.endpoint({ defaultBaseURL: false, required: MISSING_BASE_URL }),
+  }),
 })
 
-export const routes = [responsesAdapter, chatAdapter]
+export const routes = [responsesRoute, chatRoute]
 
 const mapInput = (input: AzureModelInput) => {
   const { apiKey: _, apiVersion, resourceName, useCompletionUrls, ...rest } = input
@@ -61,8 +65,8 @@ const mapInput = (input: AzureModelInput) => {
   }
 }
 
-const chatModel = Route.model<AzureModelInput>(chatAdapter, { provider: id }, { mapInput })
-const responsesModel = Route.model<AzureModelInput>(responsesAdapter, { provider: id }, { mapInput })
+const chatModel = Route.model<AzureModelInput>(chatRoute, {}, { mapInput })
+const responsesModel = Route.model<AzureModelInput>(responsesRoute, {}, { mapInput })
 
 export const responses = (modelID: string | ModelID, options: ModelOptions = {}) => responsesModel({ ...options, id: modelID })
 
