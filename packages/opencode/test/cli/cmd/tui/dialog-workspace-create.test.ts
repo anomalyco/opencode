@@ -35,4 +35,29 @@ describe("recentConnectedWorkspaces", () => {
 
     expect(recent.map((workspace) => workspace.id)).toEqual(["wrk_a", "wrk_d", "wrk_e"])
   })
+
+  test("omits the active workspace before limiting recent workspaces", () => {
+    const workspaces = [
+      { id: "wrk_a", name: "alpha" },
+      { id: "wrk_b", name: "beta" },
+      { id: "wrk_c", name: "gamma" },
+      { id: "wrk_d", name: "delta" },
+    ]
+
+    const { recent, hasMore } = recentConnectedWorkspaces({
+      sessions: [
+        { workspaceID: "wrk_a", time: { updated: 400 } },
+        { workspaceID: "wrk_b", time: { updated: 300 } },
+        { workspaceID: "wrk_c", time: { updated: 200 } },
+        { workspaceID: "wrk_d", time: { updated: 100 } },
+      ],
+      get: (workspaceID) => workspaces.find((workspace) => workspace.id === workspaceID),
+      status: () => "connected",
+      limit: 3,
+      omitWorkspaceID: "wrk_a",
+    })
+
+    expect(recent.map((workspace) => workspace.id)).toEqual(["wrk_b", "wrk_c", "wrk_d"])
+    expect(hasMore).toBe(false)
+  })
 })

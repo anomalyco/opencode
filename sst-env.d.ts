@@ -114,8 +114,8 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "HoneycombWebhookSecret": {
-      "type": "random.index/randomPassword.RandomPassword"
+    "INCIDENT_WEBHOOK_SIGNING_SECRET": {
+      "type": "sst.sst.Secret"
       "value": string
     }
     "LogProcessor": {

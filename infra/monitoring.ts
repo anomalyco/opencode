@@ -100,7 +100,7 @@ new honeycomb.Trigger("IncreasedModelHttpErrorsGo", {
   queryJson: modelHttpErrorsQuery("go"),
   alertType: "on_change",
   frequency: 300,
-  thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
+  thresholds: [{ op: ">=", value: 0.9, exceededLimit: 1 }],
   recipients: [
     {
       id: webhookRecipient.id,
@@ -119,7 +119,7 @@ new honeycomb.Trigger("IncreasedModelHttpErrorsZen", {
   queryJson: modelHttpErrorsQuery("zen"),
   alertType: "on_change",
   frequency: 300,
-  thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
+  thresholds: [{ op: ">=", value: 0.9, exceededLimit: 1 }],
   recipients: [
     {
       id: webhookRecipient.id,
@@ -138,7 +138,7 @@ new honeycomb.Trigger("IncreasedProviderHttpErrorsGo", {
   queryJson: providerHttpErrorsQuery("go"),
   alertType: "on_change",
   frequency: 600,
-  thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
+  thresholds: [{ op: ">=", value: 0.9, exceededLimit: 1 }],
   recipients: [
     {
       id: webhookRecipient.id,
@@ -157,7 +157,7 @@ new honeycomb.Trigger("IncreasedProviderHttpErrorsZen", {
   queryJson: providerHttpErrorsQuery("zen"),
   alertType: "on_change",
   frequency: 600,
-  thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
+  thresholds: [{ op: ">=", value: 0.9, exceededLimit: 1 }],
   recipients: [
     {
       id: webhookRecipient.id,

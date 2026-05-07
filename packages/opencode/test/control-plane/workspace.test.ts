@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
+import { $ } from "bun"
 import fs from "node:fs/promises"
 import Http from "node:http"
 import path from "node:path"
@@ -29,12 +30,17 @@ import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 import type { Target, WorkspaceAdapter, WorkspaceInfo } from "../../src/control-plane/types"
 import * as WorkspaceOld from "../../src/control-plane/workspace"
 import { AppRuntime } from "@/effect/app-runtime"
+import { InstanceStore } from "@/project/instance-store"
+import { InstanceBootstrap } from "@/project/bootstrap"
 
 void Log.init({ print: false })
 
 const testServerLayer = Layer.mergeAll(
   NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
-  WorkspaceOld.defaultLayer,
+  WorkspaceOld.defaultLayer.pipe(
+    Layer.provide(InstanceStore.defaultLayer),
+    Layer.provide(InstanceBootstrap.defaultLayer),
+  ),
   SessionNs.defaultLayer,
 )
 const it = testEffect(testServerLayer)
@@ -105,6 +111,18 @@ async function withInstance<T>(fn: (dir: string) => T | Promise<T>) {
     directory: tmp.path,
     fn: () => fn(tmp.path),
   })
+}
+
+async function initGitRepo(dir: string) {
+  await fs.mkdir(dir, { recursive: true })
+  await $`git init`.cwd(dir).quiet()
+  await $`git config core.fsmonitor false`.cwd(dir).quiet()
+  await $`git config commit.gpgsign false`.cwd(dir).quiet()
+  await $`git config user.email "test@opencode.test"`.cwd(dir).quiet()
+  await $`git config user.name "Test"`.cwd(dir).quiet()
+  await fs.writeFile(path.join(dir, "tracked.txt"), "base\n")
+  await $`git add tracked.txt`.cwd(dir).quiet()
+  await $`git commit -m "base"`.cwd(dir).quiet()
 }
 
 const runWorkspace = <A, E>(effect: Effect.Effect<A, E, WorkspaceOld.Service>) => AppRuntime.runPromise(effect)
@@ -644,6 +662,33 @@ describe("workspace-old CRUD", () => {
     })
   })
 
+  test("sessionWarp applies source workspace patch to local target workspace", async () => {
+    await withInstance(async (dir) => {
+      const previousType = unique("warp-patch-prev-local")
+      const targetType = unique("warp-patch-target-local")
+      const previousDir = path.join(dir, "warp-patch-prev-local")
+      const targetDir = path.join(dir, "warp-patch-target-local")
+      await initGitRepo(previousDir)
+      await initGitRepo(targetDir)
+      await fs.writeFile(path.join(previousDir, "tracked.txt"), "changed\n")
+      await fs.writeFile(path.join(previousDir, "new.txt"), "new\n")
+
+      const previous = workspaceInfo(Instance.project.id, previousType)
+      const target = workspaceInfo(Instance.project.id, targetType)
+      insertWorkspace(previous)
+      insertWorkspace(target)
+      registerAdapter(Instance.project.id, previousType, localAdapter(previousDir, { createDir: false }).adapter)
+      registerAdapter(Instance.project.id, targetType, localAdapter(targetDir, { createDir: false }).adapter)
+      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
+      attachSessionToWorkspace(session.id, previous.id)
+
+      await warpWorkspaceSession({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
+
+      expect(await fs.readFile(path.join(targetDir, "tracked.txt"), "utf8")).toBe("changed\n")
+      expect(await fs.readFile(path.join(targetDir, "new.txt"), "utf8")).toBe("new\n")
+    })
+  })
+
   test("sessionWarp detaches a session to the local project and claims project ownership", async () => {
     await withInstance(async (dir) => {
       const previousType = unique("warp-detach-local")
@@ -696,10 +741,12 @@ describe("workspace-old CRUD", () => {
               },
             ])
           }
+          if (call.url.pathname === "/warp-source/vcs/diff/raw") return HttpServerResponse.text("remote patch")
           if (call.url.pathname === "/warp-target/sync/replay")
             return yield* HttpServerResponse.json({ sessionID: "ok" })
           if (call.url.pathname === "/warp-target/sync/steal")
             return yield* HttpServerResponse.json({ sessionID: "ok" })
+          if (call.url.pathname === "/warp-target/vcs/apply") return yield* HttpServerResponse.json({ applied: true })
           return HttpServerResponse.text("unexpected", { status: 500 })
         }),
       )
@@ -722,15 +769,18 @@ describe("workspace-old CRUD", () => {
             historySessionID = session.id
             historyNextSeq = (sessionSequence(session.id) ?? -1) + 1
 
-            yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id })
+            yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
 
             expect(calls.map((call) => `${call.method} ${call.url.pathname}`)).toEqual([
               "POST /warp-source/sync/history",
+              "GET /warp-source/vcs/diff/raw",
+              "POST /warp-target/vcs/apply",
               "POST /warp-target/sync/replay",
               "POST /warp-target/sync/steal",
             ])
             expect(calls[0].json).toEqual({ [session.id]: historyNextSeq - 1 })
-            expect(calls[1].json).toMatchObject({
+            expect(calls[2].json).toEqual({ patch: "remote patch" })
+            expect(calls[3].json).toMatchObject({
               directory: "remote-target-dir",
               events: [
                 {
@@ -745,7 +795,7 @@ describe("workspace-old CRUD", () => {
                 },
               ],
             })
-            expect(calls[2].json).toEqual({ sessionID: session.id })
+            expect(calls[4].json).toEqual({ sessionID: session.id })
             expect((yield* sessionSvc.get(session.id)).title).toBe("from source history")
             expect(sessionSequenceOwner(session.id)).toBe(target.id)
           }),
