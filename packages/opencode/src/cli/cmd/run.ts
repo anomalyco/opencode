@@ -49,6 +49,36 @@ type Inline = {
   description?: string
 }
 
+export async function parseSchema(input: string): Promise<unknown> {
+  const json = (() => {
+    try {
+      return JSON.parse(input)
+    } catch {
+      return undefined
+    }
+  })()
+
+  if (json !== undefined) {
+    return json as Record<string, unknown>
+  }
+
+  const file = path.resolve(process.cwd(), input)
+  if (!(await Filesystem.exists(file))) {
+    throw new Error("Invalid schema. Pass a JSON object or a path to a JSON file.")
+  }
+  const text = await Filesystem.readText(file).catch(() => {
+    throw new Error(`Failed to read schema file: ${input}`)
+  })
+  const value = (() => {
+    try {
+      return JSON.parse(text)
+    } catch {
+      throw new Error(`Invalid JSON schema in file: ${input}`)
+    }
+  })()
+  return value as Record<string, unknown>
+}
+
 function inline(info: Inline) {
   const suffix = info.description ? UI.Style.TEXT_DIM + ` ${info.description}` + UI.Style.TEXT_NORMAL : ""
   UI.println(UI.Style.TEXT_NORMAL + info.icon, UI.Style.TEXT_NORMAL + info.title + suffix)
@@ -257,6 +287,10 @@ export const RunCommand = effectCmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
+      .option("output-schema", {
+        type: "string",
+        describe: "JSON schema as inline JSON or path to a JSON file",
+      })
       .option("file", {
         alias: ["f"],
         type: "string",
@@ -350,6 +384,70 @@ export const RunCommand = effectCmd({
         UI.error("You must provide a message or a command")
         process.exit(1)
       }
+    }
+
+    if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
+
+    if (message.trim().length === 0 && !args.command) {
+      UI.error("You must provide a message or a command")
+      process.exit(1)
+    }
+
+    if (args.fork && !args.continue && !args.session) {
+      UI.error("--fork requires --continue or --session")
+      process.exit(1)
+    }
+
+    if (args.outputSchema && args.format === "json") {
+      UI.error("--output-schema cannot be used with --format json")
+      process.exit(1)
+    }
+
+    if (args.outputSchema && args.command) {
+      UI.error("--output-schema is not supported with --command")
+      process.exit(1)
+    }
+
+    const schema = await (async () => {
+      if (typeof args.outputSchema !== "string") return undefined
+      try {
+        return await parseSchema(args.outputSchema)
+      } catch (error) {
+        UI.error(error instanceof Error ? error.message : String(error))
+        process.exit(1)
+      }
+    })()
+
+    const rules: Permission.Ruleset = [
+      {
+        permission: "question",
+        action: "deny",
+        pattern: "*",
+      },
+      {
+        permission: "plan_enter",
+        action: "deny",
+        pattern: "*",
+      },
+      {
+        permission: "plan_exit",
+        action: "deny",
+        pattern: "*",
+      },
+    ]
+
+    function title() {
+      if (args.title === undefined) return
+      if (args.title !== "") return args.title
+      return message.slice(0, 50) + (message.length > 50 ? "..." : "")
+    }
+
+    async function session(sdk: OpencodeClient) {
+      const baseID = args.continue ? (await sdk.session.list()).data?.find((s) => !s.parentID)?.id : args.session
+
+      if (baseID && args.fork) {
+        const forked = await sdk.session.fork({ sessionID: baseID })
+        return forked.data?.id
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
@@ -640,6 +738,42 @@ export const RunCommand = effectCmd({
           process.exit(1)
         })
 
+      if (schema) {
+        const model = args.model ? Provider.parseModel(args.model) : undefined
+        const result = await sdk.session.prompt({
+          sessionID,
+          agent,
+          model,
+          variant: args.variant,
+          format: {
+            type: "json_schema",
+            schema: schema as Record<string, unknown>,
+          },
+          parts: [...files, { type: "text", text: message }],
+        })
+        const info = result.data?.info
+        if (!info || info.role !== "assistant") {
+          UI.error("Prompt failed")
+          process.exit(1)
+        }
+        if (info.error) {
+          const output = "data" in info.error && info.error.data && "message" in info.error.data
+          const text = output ? String(info.error.data.message) : String(info.error.name)
+          UI.error(text)
+          process.exit(1)
+        }
+        if (info.structured === undefined) {
+          UI.error("Model did not produce structured output")
+          process.exit(1)
+        }
+        process.stdout.write(JSON.stringify(info.structured) + EOL)
+        return
+      }
+
+      loop().catch((e) => {
+        console.error(e)
+        process.exit(1)
+      })
         if (args.command) {
           await sdk.session.command({
             sessionID,
