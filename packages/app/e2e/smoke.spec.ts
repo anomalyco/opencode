@@ -1,41 +1,54 @@
-// FORK: web e2e smoke baseline — 验证 Playwright + vite dev server 链路通(2026-05-07)
+// FORK: web e2e smoke + mock 路径 — 验证 Playwright + mock server 链路通(2026-05-07)
 //
-// **本测试只证明"e2e 架子可用",不测业务逻辑**:
-//   - vite dev server 能启起来(playwright.config.ts webServer 配置生效)
-//   - chromium headless 能加载页面
-//   - 页面 URL / 路由响应正常(http 200)
+// 第 1 笔(无 mock):只测链路通(HTTP / HTML / URL),body 为空因后端 fetch 卡住。
+// 第 2 笔(本 — mock 路径):page.route 拦截 4096 所有请求返 200 空 JSON,前端能 render。
 //
-// **测不了什么**:
-//   - 前端 UI 内容渲染 — web 版本依赖 opencode server(端口 4096),无 sidecar 时 body 为空
-//   - 任何业务逻辑 — 文件树 / 设置面板 / 右键菜单等都需要 server fetch
-//
-// **后续接入路径(独立 backlog)**:
-//   - 让 playwright.config.ts webServer 段同时启 opencode server(spawn sub-process)
-//   - 或者前端加 mock mode,e2e 走 mock 数据不真连后端
-//   - 通了之后,把 smoke.spec.ts 扩展成真正的业务测试(右键菜单 / 设置面板 / 切语言等)
+// 这是 V2 双清单 View 清单门槛生效的前置依赖建好了。
 
-import { test, expect } from "@playwright/test"
+import { test, expect } from "./fixtures"
 
-test("e2e 架子可用 — vite dev server + chromium 链路通", async ({ page }) => {
+test("e2e 架子 baseline — vite dev server + chromium 链路通(无 mock)", async ({ page }) => {
   const response = await page.goto("/")
   await page.waitForLoadState("domcontentloaded")
 
   // 1. HTTP 响应 OK(说明 dev server 启起来 + 路由匹配)
   expect(response).toBeTruthy()
-  expect(response?.status()).toBeLessThan(500) // 200 / 304 都接受
+  expect(response?.status()).toBeLessThan(500)
 
-  // 2. 页面是 HTML 文档(说明 vite SSR / serve 工作)
+  // 2. 页面是 HTML 文档
   const html = await page.content()
   expect(html).toContain("<html")
   expect(html).toContain("</html>")
 
-  // 3. 控制台错误降级 — 记录但不 fail(无后端 server 时会有 fetch 错,这是预期)
+  // 3. URL 正确
+  expect(page.url()).toContain("127.0.0.1:3000")
+})
+
+test("e2e mock 路径可用 — 装 server mock 后前端能 render 出真实内容", async ({ mockedPage: page }) => {
+  // 关键 console error 收集(non-fatal,但测试结束前打印便于调试)
+  const consoleErrors: string[] = []
   page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      console.log("[smoke] page console error:", msg.text())
-    }
+    if (msg.type() === "error") consoleErrors.push(msg.text())
   })
 
-  // 4. URL 正确(说明路由没意外重定向到 5xx 页面)
-  expect(page.url()).toContain("127.0.0.1:3000")
+  await page.goto("/")
+  await page.waitForLoadState("domcontentloaded")
+  // 等 SolidJS hydrate(不用 networkidle 因前端 SSE 持续 fetch 永远不 idle)
+  await page.waitForTimeout(2000)
+
+  // 装了 mock 后 body 应该有渲染内容(至少 root div 出来)
+  const body = page.locator("body")
+  await expect(body).toBeVisible()
+
+  // 粗判:body 渲染长度 > 0(无 mock 时是 0)
+  const bodyText = await body.innerText().catch(() => "")
+  console.log(`[smoke-mock] body text length: ${bodyText.length}`)
+  console.log(`[smoke-mock] body preview: ${bodyText.slice(0, 200)}`)
+  console.log(`[smoke-mock] console errors: ${consoleErrors.length}`)
+  if (consoleErrors.length > 0 && consoleErrors.length <= 5) {
+    consoleErrors.forEach((e) => console.log(`  [err] ${e.slice(0, 120)}`))
+  }
+
+  // 验证 — mock 模式下应该比 baseline 多渲染内容
+  expect(bodyText.length).toBeGreaterThan(0)
 })
