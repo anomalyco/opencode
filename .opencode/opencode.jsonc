@@ -6,7 +6,16 @@
       "packages/opencode/migration/*": "deny",
     },
   },
-  "mcp": {},
+  "mcp": {
+    "yunpat-patent": {
+      "type": "local",
+      "command": ["node", "/Users/xujian/projects/YunPat/packages/mcp-server/dist/index.js"],
+      "environment": {
+        "DEEPSEEK_API_KEY": "${env:DEEPSEEK_API_KEY}",
+        "YUNPAT_PATH": "/Users/xujian/projects/YunPat"
+      }
+    }
+  },
   "tools": {
     "github-triage": false,
     "github-pr-search": false,

@@ -17,20 +17,42 @@ YunPat 知识产权智能体 Plugin for OpenCode
 
 ## 安装
 
-```bash
-# 方式 1：npm 安装（发布后）
-npm install opencode-patent-plugin
+### 方式 1：作为 OpenCode Plugin 安装（推荐）
 
-# 方式 2：本地文件（开发中）
+```bash
 # 在 .opencode/opencode.jsonc 中添加：
 {
   "plugin": [
-    "/path/to/opencode-patent-plugin"
+    ["/path/to/opencode-patent-plugin", {
+      "model": "deepseek-reasoner",
+      "provider": "deepseek",
+      "temperature": 0.3
+    }]
   ]
 }
 ```
 
+### 方式 2：作为 MCP Server 安装
+
+YunPat 提供独立的 MCP Server，可被任何 MCP 客户端使用：
+
+```jsonc
+{
+  "mcp": {
+    "yunpat-patent": {
+      "type": "local",
+      "command": ["node", "/path/to/YunPat/packages/mcp-server/dist/index.js"],
+      "environment": {
+        "DEEPSEEK_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
 ## 配置
+
+### Plugin 配置
 
 在 `.opencode/opencode.jsonc` 中添加：
 
@@ -45,6 +67,16 @@ npm install opencode-patent-plugin
   ]
 }
 ```
+
+### YunPat 路径配置
+
+设置环境变量指定 YunPat 项目位置：
+
+```bash
+export YUNPAT_PATH=/Users/xujian/projects/YunPat
+```
+
+Plugin 会动态加载 YunPat 模块，如果不可用则自动降级为纯 LLM 模式。
 
 ## 架构
 
