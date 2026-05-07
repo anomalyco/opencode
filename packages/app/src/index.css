@@ -167,6 +167,11 @@
     --markdown-heading: var(--text-strong);
   }
 
+  [data-slot="session-turn-list"][data-virtualized="true"] [data-component="assistant-message"],
+  [data-slot="session-turn-list"][data-virtualized="true"] [data-component="tool-trigger"] {
+    content-visibility: visible;
+  }
+
   [data-component="quick-assistant-message"] .quick-assistant-markdown p {
     margin-bottom: 0.75rem;
   }

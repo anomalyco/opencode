@@ -277,6 +277,7 @@ export function MessageTimeline(props: {
   let blank: number | undefined
   let windowAdjustVersion = 0
   const turnHeights = new Map<string, number>()
+  const [revision, setRevision] = createSignal(0)
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
@@ -287,7 +288,17 @@ export function MessageTimeline(props: {
     for (let i = 0; i < end; i++) sum += slot(ids[i]!, i, ids.length)
     return sum
   }
-  const totalHeight = createMemo(() => offset(rendered(), rendered().length))
+  const totalHeight = createMemo(() => {
+    revision()
+    return offset(rendered(), rendered().length)
+  })
+  const visible = (node: HTMLElement) => {
+    const root = viewport
+    if (!root) return true
+    const box = root.getBoundingClientRect()
+    const rect = node.getBoundingClientRect()
+    return rect.bottom > box.top && rect.top < box.bottom
+  }
   const [windowed, setWindowed] = createStore({
     start: 0,
     end: Infinity,
@@ -713,9 +724,14 @@ export function MessageTimeline(props: {
   createEffect(
     on(rendered, () => {
       const ids = new Set(rendered())
+      let changed = false
       for (const id of turnHeights.keys()) {
-        if (!ids.has(id)) turnHeights.delete(id)
+        if (!ids.has(id)) {
+          turnHeights.delete(id)
+          changed = true
+        }
       }
+      if (changed) setRevision((value) => value + 1)
       scheduleWindow()
     }),
   )
@@ -2068,7 +2084,9 @@ export function MessageTimeline(props: {
           >
             <div
               role="log"
-              class="items-start justify-start pb-16 transition-[margin]"
+              data-slot="session-turn-list"
+              data-virtualized={canWindow() ? "true" : undefined}
+              class="flex flex-col items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
               }}
@@ -2168,11 +2186,20 @@ export function MessageTimeline(props: {
 
     const measure = () => {
       const time = performance.now()
-      const next = rootRef?.offsetHeight
+      const node = rootRef
+      const next = node?.offsetHeight
       if (!next) return
       const prev = turnHeights.get(item.messageID)
+      const base = prev ?? estimatedTurnHeight
+      if (!visible(node) && next < base - HEIGHT_SHIFT_WARN) {
+        console.debug(
+          `[timeline] ignored offscreen turn shrink: msg=${item.messageID} index=${item.index} prev=${Math.round(base)} next=${Math.round(next)} delta=${Math.round(next - base)} window=[${windowed.start},${windowed.end}]`,
+        )
+        return
+      }
       if (prev !== undefined && Math.abs(prev - next) <= 1) return
       turnHeights.set(item.messageID, next)
+      setRevision((value) => value + 1)
       const delta = prev === undefined ? 0 : Math.round(next - prev)
       if (prev !== undefined && Math.abs(delta) > HEIGHT_SHIFT_WARN) {
         const root = viewport
