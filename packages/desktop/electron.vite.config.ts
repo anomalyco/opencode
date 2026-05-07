@@ -37,7 +37,7 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: { index: "src/main/index.ts" },
+        input: { index: "src/main/index.ts", sidecar: "src/main/sidecar.ts" },
       },
       externalizeDeps: { include: [nodePtyPkg] },
     },

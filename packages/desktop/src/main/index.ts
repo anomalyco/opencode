@@ -47,7 +47,15 @@ import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigratio
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
-import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
+import {
+  getDefaultServerUrl,
+  getWslConfig,
+  preferAppEnv,
+  setDefaultServerUrl,
+  setWslConfig,
+  spawnLocalServer,
+  type SidecarListener,
+} from "./server"
 import {
   createLoadingWindow,
   createMainWindow,
@@ -55,15 +63,13 @@ import {
   setBackgroundColor,
   setDockIcon,
 } from "./windows"
-import { drizzle } from "drizzle-orm/node-sqlite/driver"
-import type { Server } from "virtual:opencode-server"
 import { migrate } from "./migrate"
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
 let mainWindow: BrowserWindow | null = null
-let server: Server.Listener | null = null
+let server: SidecarListener | null = null
 const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
@@ -107,6 +113,8 @@ function setupApp() {
     return
   }
 
+  preferAppEnv(app.getPath("userData"))
+
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
     if (urls.length) {
@@ -123,17 +131,16 @@ function setupApp() {
   })
 
   app.on("before-quit", () => {
-    killSidecar()
+    void killSidecar()
   })
 
   app.on("will-quit", () => {
-    killSidecar()
+    void killSidecar()
   })
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      killSidecar()
-      app.exit(0)
+      void killSidecar().finally(() => app.exit(0))
     })
   }
 
@@ -184,7 +191,6 @@ function setInitStep(step: InitStep) {
 
 async function initialize() {
   const needsMigration = !sqliteFileExists()
-  const sqliteDone = needsMigration ? defer<void>() : undefined
   let overlay: BrowserWindow | null = null
 
   const port = await getSidecarPort()
@@ -199,31 +205,26 @@ async function initialize() {
       setInitStep({ phase: "sqlite_waiting" })
       if (overlay) sendSqliteMigrationProgress(overlay, progress)
       if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
-      if (progress.type === "Done") sqliteDone?.resolve()
     })
-
-    if (needsMigration) {
-      const { Database, JsonMigration } = await import("virtual:opencode-server")
-      await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
-        progress: (event: { current: number; total: number }) => {
-          const percent = Math.round(event.current / event.total) * 100
-          initEmitter.emit("sqlite", { type: "InProgress", value: percent })
-        },
-      })
-      initEmitter.emit("sqlite", { type: "Done" })
-
-      sqliteDone?.resolve()
-    }
-
-    if (needsMigration) {
-      await sqliteDone?.promise
-    }
 
     logger.log("spawning sidecar", { url })
-    const { listener, health } = await spawnLocalServer(hostname, port, password, () => {
-      ensureLoopbackNoProxy()
-      useEnvProxy()
-    })
+    const { listener, health } = await spawnLocalServer(
+      hostname,
+      port,
+      password,
+      () => {
+        ensureLoopbackNoProxy()
+        useEnvProxy()
+      },
+      {
+        needsMigration,
+        userDataPath: app.getPath("userData"),
+        onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
+        onStdout: (message) => logger.log("sidecar stdout", { message }),
+        onStderr: (message) => logger.warn("sidecar stderr", { message }),
+        onExit: (code) => logger.warn("sidecar exited", { code }),
+      },
+    )
     server = listener
     serverReady.resolve({
       url,
@@ -273,9 +274,10 @@ function wireMenu() {
     },
     reload: () => mainWindow?.reload(),
     relaunch: () => {
-      killSidecar()
-      app.relaunch()
-      app.exit(0)
+      void killSidecar().finally(() => {
+        app.relaunch()
+        app.exit(0)
+      })
     },
   })
 }
@@ -304,7 +306,7 @@ registerIpcHandlers({
   getDisplayBackend: async () => null,
   setDisplayBackend: async () => undefined,
   parseMarkdown: async (markdown) => parseMarkdown(markdown),
-  checkAppExists: async (appName) => checkAppExists(appName),
+  checkAppExists: (appName) => checkAppExists(appName),
   wslPath: async (path, mode) => wslPath(path, mode),
   resolveAppPath: async (appName) => resolveAppPath(appName),
   loadingWindowComplete: () => loadingComplete.resolve(),
@@ -314,10 +316,11 @@ registerIpcHandlers({
   setBackgroundColor: (color) => setBackgroundColor(color),
 })
 
-function killSidecar() {
+async function killSidecar() {
   if (!server) return
-  server.stop()
+  const current = server
   server = null
+  await current.stop()
 }
 
 function ensureLoopbackNoProxy() {
@@ -440,7 +443,7 @@ async function installUpdate() {
   logger.log("installing downloaded update", {
     version: downloadedUpdateVersion,
   })
-  killSidecar()
+  await killSidecar()
   autoUpdater.quitAndInstall()
 }
 
