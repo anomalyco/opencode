@@ -1046,7 +1046,11 @@ export function options(input: {
     result["enable_thinking"] = true
   }
 
-  if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
+  if (
+    input.model.api.id.includes("gpt-5") &&
+    !input.model.api.id.includes("gpt-5-chat") &&
+    !input.model.api.id.includes("gpt-5.5")
+  ) {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
       // Only inject reasoningSummary for providers that support it natively.
