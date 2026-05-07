@@ -509,3 +509,31 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### AgentDrop
+
+Add the [AgentDrop MCP server](https://docs.agent-drop.com) to send and receive encrypted files between AI agents.
+
+```json title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "agentdrop": {
+      "type": "local",
+      "command": ["npx", "agentdrop-mcp-server"],
+      "environment": {
+        "AGENTDROP_API_KEY": "{env:AGENTDROP_API_KEY}",
+        "AGENTDROP_AGENT_ID": "{env:AGENTDROP_AGENT_ID}"
+      }
+    }
+  }
+}
+```
+
+Register your agent and get your API key at [agent-drop.com](https://agent-drop.com). Once configured, you can send files between agents directly from your prompts.
+
+```txt "use agentdrop"
+Send this summary to my analysis agent. use agentdrop
+```
