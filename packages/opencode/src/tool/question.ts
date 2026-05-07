@@ -1,16 +1,15 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
+import { ZodOverride, zod } from "@/util/effect-zod"
 import * as Tool from "./tool"
 import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
 
-// normalizeQuestionsInput: Qwen が `questions` を malformed JSON string として送る issue (#67/#69)
-// で、生 input を可能な限り「question 配列形式」へ正規化する。
-//
-// 元 catch-up sprint では `z.preprocess` で schema レベルに組み込んでいたが、v1.14.x で
-// schema が Effect Schema に移行したため、preprocess を schema に組み込むのは別途 refactor が
-// 必要 (Schema.transform)。当面は **processor.ts の state 記録時のみ** にこの関数を使い、
-// execute() に届く時点では upstream の strict decode を許容する (LLM 側に正しい形式を強制)。
-// schema preprocess の再導入は #90 のフォロー作業として継続。
+// normalizeQuestionsInput: Qwen 系モデルが `questions` を malformed JSON string や
+// 単一オブジェクトとして送ってくる issue (#21 / #67 / #100) を吸収するため、生 input を
+// 「question 配列形式」へ正規化する。schema 側 (Parameters) では Schema.Unknown を
+// from に置いた decodeTo で本関数を呼び、Array(Question.Prompt) へ変換する。
+// JSON Schema (LLM 提示用) は ZodOverride で正規 array 形式のみを露出させ、
+// LLM への期待値は "array" のままに保つ。
 
 function trim(input: unknown) {
   return typeof input === "string" ? input.trim() : ""
@@ -89,12 +88,54 @@ export function normalizeQuestionsInput(input: unknown) {
   return input
 }
 
+const QuestionsArray = Schema.mutable(Schema.Array(Question.Prompt))
+
+// Schema.Unknown を from に置くことで、stringified JSON / 単一オブジェクト /
+// bare string などが届いても decodeTo の decode で先に正規化される。
+// JSON Schema 側は ZodOverride で正規 array 形式のみを emit するので、
+// LLM への期待値は arr のままに保つ (#21 の z.preprocess と同等の挙動)。
+// normalize の戻り値は配列でない場合 (input が完全な garbage の場合) もあるが、
+// その場合は to schema の validation で reject されて formatValidationError 経由で
+// LLM にヒントが返る。ここの cast は runtime ではなく Effect Schema の Getter 型に
+// 「decode は To["Encoded"] を返す」と宣言するための型レベルの調整。
+const QuestionsField = Schema.Unknown.pipe(
+  Schema.decodeTo(QuestionsArray, {
+    decode: SchemaGetter.transform(
+      (input) => normalizeQuestionsInput(input) as (typeof QuestionsArray)["Encoded"],
+    ),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+).annotate({
+  description: "Questions to ask",
+  [ZodOverride]: zod(QuestionsArray),
+})
+
 export const Parameters = Schema.Struct({
-  questions: Schema.mutable(Schema.Array(Question.Prompt)).annotate({ description: "Questions to ask" }),
+  questions: QuestionsField,
 })
 
 type Metadata = {
   answers: ReadonlyArray<Question.Answer>
+}
+
+// formatValidationError: preprocess (normalizeQuestionsInput) で吸収しきれなかった
+// schema 違反を LLM に説明する。Effect Schema の decode error メッセージは
+// 構造化されているがそのまま見せると model が path を写経して再失敗するため、
+// canonical な array 形式と `options` 省略可ルールを明示する短いヒントへ置換する。
+function formatValidationError(error: unknown): string {
+  const detail = String(error).slice(0, 240)
+  return [
+    `The "questions" parameter must be a JSON array of question objects.`,
+    `Canonical shape:`,
+    `  [{"question": "...", "header": "...", "options": [{"label": "...", "description": "..."}]}]`,
+    `Common mistakes:`,
+    `  - Wrapping the array in quotes (send the array itself, not a JSON-encoded string).`,
+    `  - Sending a single question object instead of an array (wrap it in []).`,
+    `  - Including stray newlines or whitespace around the array.`,
+    `If a question has no preset choices, omit the "options" field (or pass []) ` +
+      `and the user will be prompted for free-form input.`,
+    `Decoder said: ${detail}`,
+  ].join("\n")
 }
 
 export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Service>(
@@ -105,6 +146,7 @@ export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Se
     return {
       description: DESCRIPTION,
       parameters: Parameters,
+      formatValidationError,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const answers = yield* question.ask({
