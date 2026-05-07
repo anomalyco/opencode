@@ -2,11 +2,13 @@
  * Patent Search Tools
  *
  * 封装 YunPat 专利检索能力为 OpenCode Plugin Tools
+ * 接入真实数据源：patent_db (7500万+ 中国专利)
  */
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
+import { searchPatents, type PatentRecord } from "../utils/db.js"
 
 /**
  * 注册专利检索工具集
@@ -22,13 +24,11 @@ export async function registerSearchTools(pluginContext: PatentPluginContext) {
 
         支持的数据库：
         - CNIPA（中国专利，7500万+）
-        - Google Patents
-        - WIPO
+        - 通过 PostgreSQL 全文搜索 + 向量搜索
 
         检索方式：
-        - 关键词检索
+        - 关键词检索（中文分词）
         - IPC/CPC 分类检索
-        - 语义检索（向量相似度）
         - 申请人/发明人检索
       `,
       args: {
@@ -39,12 +39,27 @@ export async function registerSearchTools(pluginContext: PatentPluginContext) {
         filters: tool.schema.string().optional().describe("过滤条件（JSON 格式）"),
       },
       async execute(args, ctx) {
-        const { query, database = "all", search_type = "keyword", max_results = 10 } = args
+        const { query, database = "all", search_type = "keyword", max_results = 10, filters } = args
 
         ctx.metadata({
           title: `专利检索: ${query}`,
           metadata: { database, searchType: search_type, maxResults: max_results },
         })
+
+        // 优先使用真实专利数据库 (patent_db)
+        try {
+          const filterObj = filters ? JSON.parse(filters) : {}
+          const results = await searchPatents(query, {
+            limit: max_results,
+            ...filterObj,
+          })
+
+          if (results.length > 0) {
+            return formatRealSearchResults(results, query)
+          }
+        } catch (error: any) {
+          console.warn("[PatentDB] Search error:", error?.message)
+        }
 
         // 尝试使用 YunPat PatentSearchAgent v3
         try {
@@ -78,7 +93,7 @@ export async function registerSearchTools(pluginContext: PatentPluginContext) {
             }
           }
         } catch (error: any) {
-          console.warn("[YunPat] PatentSearchAgent error, falling back to LLM:", error?.message)
+          console.warn("[YunPat] PatentSearchAgent error:", error?.message)
         }
 
         // 降级：LLM 模拟检索
@@ -89,7 +104,7 @@ export async function registerSearchTools(pluginContext: PatentPluginContext) {
           ],
         })
 
-        return `## 专利检索结果（LLM 模拟）\n\n**查询**：${query}\n**数据库**：${database}\n\n${response.content}\n\n> 注：真实检索功能需要接入 YunPat 专利数据库。`
+        return `## 专利检索结果（LLM 模拟）\n\n**查询**：${query}\n**数据库**：${database}\n\n${response.content}`
       },
     }),
 
@@ -112,6 +127,26 @@ export async function registerSearchTools(pluginContext: PatentPluginContext) {
       },
     }),
   }
+}
+
+function formatRealSearchResults(results: PatentRecord[], query: string): string {
+  let output = `## 专利检索结果（真实数据库）\n\n**查询**：${query}\n**数据库**：patent_db（7500万+ 中国专利）\n**命中**：${results.length} 条\n\n`
+
+  results.forEach((r, i) => {
+    output += `### ${i + 1}. ${r.patent_name || "未知"}\n`
+    output += `- **申请号**：${r.application_number || "N/A"}\n`
+    output += `- **公开号**：${r.publication_number || "N/A"}\n`
+    output += `- **申请人**：${r.applicant || "N/A"}\n`
+    output += `- **发明人**：${r.inventor || "N/A"}\n`
+    output += `- **IPC**：${r.ipc_main_class || "N/A"}\n`
+    output += `- **申请日**：${r.application_date || "N/A"}\n`
+    if (r.abstract) {
+      output += `- **摘要**：${r.abstract.slice(0, 300)}${r.abstract.length > 300 ? "..." : ""}\n`
+    }
+    output += `\n`
+  })
+
+  return output
 }
 
 function formatSearchResult(data: any, query: string, database: string): string {

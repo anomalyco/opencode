@@ -2,11 +2,14 @@
  * OA Response Tools
  *
  * 封装 YunPat 审查意见答辩能力为 OpenCode Plugin Tools
+ * 接入真实数据源：legal_world_model + Obsidian 知识库
  */
 
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
+import { searchPatentJudgments, searchLegalRules } from "../utils/db.js"
+import { queryInvalidationFromKB, queryJudgmentFromKB } from "../utils/obsidian-kb.js"
 
 /**
  * 注册审查意见答辩工具集
@@ -44,21 +47,62 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
 
         const { action, office_action, application_claims = "", context: extraContext = "" } = args
 
+        // 增强：检索相关先例和法规
+        let precedentData = ""
+        if (action === "analyze" || action === "respond") {
+          try {
+            const keywords = extractKeywords(office_action)
+            if (keywords.length > 0) {
+              // 查询数据库
+              const judgments = await searchPatentJudgments(keywords.join(" "), { limit: 5 })
+              if (judgments.length > 0) {
+                precedentData += `### 相关判决/先例（数据库）\n\n`
+                judgments.forEach((j, i) => {
+                  precedentData += `${i + 1}. **${j.case_number}** ${j.case_title}\n`
+                  precedentData += `   - 法院：${j.court} | 日期：${j.judgment_date}\n`
+                  if (j.case_summary) precedentData += `   - 摘要：${j.case_summary.slice(0, 200)}...\n`
+                  precedentData += `\n`
+                })
+              }
+
+              // 查询知识库
+              const kbResult = await queryInvalidationFromKB(keywords[0])
+              if (kbResult && !kbResult.includes("未在复审无效决定中找到")) {
+                precedentData += `### 复审无效决定（知识库）\n\n${kbResult.slice(0, 1500)}\n\n`
+              }
+
+              // 查询相关法规
+              const rules = await searchLegalRules(keywords.join(" "), { limit: 5 })
+              if (rules.length > 0) {
+                precedentData += `### 相关法规条文\n\n`
+                rules.forEach((r, i) => {
+                  precedentData += `${i + 1}. **${r.article_number}** ${r.title}\n`
+                  precedentData += `   ${r.content?.slice(0, 300) || ""}${r.content?.length > 300 ? "..." : ""}\n\n`
+                })
+              }
+            }
+          } catch (error: any) {
+            console.warn("[OA] Precedent search error:", error?.message)
+          }
+        }
+
         // 尝试使用 YunPat PatentResponderAgent
         if (action === "respond" || action === "revise_claims") {
           try {
             const result = await runPatentResponder(action, office_action, application_claims, extraContext, pluginContext)
-            if (result) return result
+            if (result) {
+              return result + (precedentData ? `\n\n---\n\n${precedentData}` : "")
+            }
           } catch (error: any) {
-            console.warn("[YunPat] PatentResponderAgent error, falling back to LLM:", error?.message)
+            console.warn("[YunPat] PatentResponderAgent error:", error?.message)
           }
         }
 
         switch (action) {
           case "parse": return await oaParse(office_action, pluginContext)
-          case "analyze": return await oaAnalyze(office_action, application_claims, pluginContext)
+          case "analyze": return await oaAnalyze(office_action, application_claims, pluginContext, precedentData)
           case "simulate": return await oaSimulate(office_action, application_claims, pluginContext)
-          case "respond": return await oaRespond(office_action, application_claims, pluginContext)
+          case "respond": return await oaRespond(office_action, application_claims, pluginContext, precedentData)
           case "revise_claims": return await oaReviseClaims(office_action, application_claims, pluginContext)
           case "validate": return await oaValidate(office_action, application_claims, pluginContext)
           default: return `未知的答辩动作: ${action}`
@@ -66,6 +110,19 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
       },
     }),
   }
+}
+
+function extractKeywords(text: string): string[] {
+  const keywords: string[] = []
+  const patterns = [
+    /创造性/g, /新颖性/g, /实用性/g, /公开不充分/g, /不清楚/g, /超范围/g,
+    /独立权利要求/g, /从属权利要求/g, /技术特征/g, /区别特征/g,
+  ]
+  patterns.forEach(p => {
+    if (p.test(text)) keywords.push(p.source)
+  })
+  // 去重并限制数量
+  return [...new Set(keywords)].slice(0, 5)
 }
 
 async function runPatentResponder(
@@ -112,8 +169,6 @@ async function runPatentResponder(
   return null
 }
 
-// LLM fallback implementations
-
 async function oaParse(officeAction: string, pluginContext: PatentPluginContext) {
   const response = await pluginContext.llm.chat({
     messages: [
@@ -124,11 +179,28 @@ async function oaParse(officeAction: string, pluginContext: PatentPluginContext)
   return `## 步骤 1/5：审查意见解析 ✅\n\n${response.content}\n\n---\n\n*请确认解析是否完整准确。确认后将继续步骤 2：深度分析。*`
 }
 
-async function oaAnalyze(officeAction: string, claims: string, pluginContext: PatentPluginContext) {
+async function oaAnalyze(officeAction: string, claims: string, pluginContext: PatentPluginContext, precedentData: string = "") {
+  const prompt = `请对以下审查意见进行深度技术分析：
+
+**审查意见**：
+${officeAction}
+
+**当前权利要求**：
+${claims}
+
+${precedentData ? `**相关先例和法规**：\n${precedentData}\n\n` : ""}
+
+请按驳回类型逐一分析：
+1. 新颖性（A22.2）：单独对比原则，逐特征比对
+2. 创造性（A22.3）：三步法（最接近现有技术→区别特征→技术启示）
+3. 其他驳回理由（如适用）
+
+如有相关先例，请引用以支持分析。`
+
   const response = await pluginContext.llm.chat({
     messages: [
-      { role: "system", content: "你是专利分析专家。运用新颖性单独对比原则和创造性三步法进行深度分析。" },
-      { role: "user", content: `请对以下审查意见进行深度技术分析：\n\n**审查意见**：\n${officeAction}\n\n**当前权利要求**：\n${claims}\n\n请按驳回类型逐一分析：\n1. 新颖性（A22.2）：单独对比原则，逐特征比对\n2. 创造性（A22.3）：三步法（最接近现有技术→区别特征→技术启示）\n3. 其他驳回理由（如适用）` },
+      { role: "system", content: "你是专利分析专家。运用新颖性单独对比原则和创造性三步法进行深度分析。善用相关先例和法规支持论点。" },
+      { role: "user", content: prompt },
     ],
   })
   return `## 步骤 2/5：深度分析 ✅\n\n${response.content}\n\n---\n\n*请确认技术分析。确认后将继续步骤 3：答辩策略。*`
@@ -144,11 +216,33 @@ async function oaSimulate(officeAction: string, claims: string, pluginContext: P
   return `## 审查员视角模拟\n\n${response.content}\n\n---\n\n*以上模拟结果仅供参考。*`
 }
 
-async function oaRespond(officeAction: string, claims: string, pluginContext: PatentPluginContext) {
+async function oaRespond(officeAction: string, claims: string, pluginContext: PatentPluginContext, precedentData: string = "") {
+  const prompt = `请基于以下审查意见和权利要求，撰写意见陈述书草案：
+
+**审查意见**：
+${officeAction}
+
+**权利要求**：
+${claims}
+
+${precedentData ? `**相关先例和法规**：\n${precedentData}\n\n` : ""}
+
+请按以下结构撰写：
+一、关于驳回理由N（类型）
+  1. 审查员观点概述
+  2. 申请人的意见（逐条回应）
+  3. 技术对比分析（详细对比表）
+  4. 法律依据（法条和审查指南引用）
+  5. 结论（明确请求）
+二、权利要求修改说明（如修改）
+  修改依据 + 修改内容标注 + 修改后文本
+
+如有相关先例，请引用以支持论点。`
+
   const response = await pluginContext.llm.chat({
     messages: [
-      { role: "system", content: "你是审查意见答辩专家。撰写结构化的意见陈述书。" },
-      { role: "user", content: `请基于以下审查意见和权利要求，撰写意见陈述书草案：\n\n**审查意见**：\n${officeAction}\n\n**权利要求**：\n${claims}\n\n请按以下结构撰写：\n一、关于驳回理由N（类型）\n  1. 审查员观点概述\n  2. 申请人的意见（逐条回应）\n  3. 技术对比分析（详细对比表）\n  4. 法律依据（法条和审查指南引用）\n  5. 结论（明确请求）\n二、权利要求修改说明（如修改）\n  修改依据 + 修改内容标注 + 修改后文本` },
+      { role: "system", content: "你是审查意见答辩专家。撰写结构化的意见陈述书。善用相关先例和法规支持论点。" },
+      { role: "user", content: prompt },
     ],
   })
   return `## 步骤 4/5：答辩文本撰写 ✅\n\n${response.content}\n\n---\n\n*请逐条审阅修改。确认后将继续步骤 5：验证打包。*`

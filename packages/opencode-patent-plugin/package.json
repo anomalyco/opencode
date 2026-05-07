@@ -18,11 +18,13 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "effect": "catalog:",
+    "pg": "8.20.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "8.20.0",
     "typescript": "catalog:"
   },
   "peerDependencies": {

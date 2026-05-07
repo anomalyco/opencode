@@ -475,11 +475,13 @@
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "effect": "catalog:",
+        "pg": "8.20.0",
         "zod": "catalog:",
       },
       "devDependencies": {
         "@tsconfig/node22": "catalog:",
         "@types/node": "catalog:",
+        "@types/pg": "8.20.0",
         "typescript": "catalog:",
       },
       "peerDependencies": {
@@ -2380,6 +2382,8 @@
 
     "@types/pacote": ["@types/pacote@11.1.8", "https://registry.npmmirror.com/@types/pacote/-/pacote-11.1.8.tgz", { "dependencies": { "@types/node": "*", "@types/npm-registry-fetch": "*", "@types/npmlog": "*", "@types/ssri": "*" } }, "sha512-/XLR0VoTh2JEO0jJg1q/e6Rh9bxjBq9vorJuQmtT7rRrXSiWz7e7NsvXVYJQ0i8JxMlBMPPYDTnrRe7MZRFA8Q=="],
 
+    "@types/pg": ["@types/pg@8.20.0", "https://registry.npmmirror.com/@types/pg/-/pg-8.20.0.tgz", { "dependencies": { "@types/node": "*", "pg-protocol": "*", "pg-types": "^2.2.0" } }, "sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow=="],
+
     "@types/plist": ["@types/plist@3.0.5", "https://registry.npmmirror.com/@types/plist/-/plist-3.0.5.tgz", { "dependencies": { "@types/node": "*", "xmlbuilder": ">=11.0.1" } }, "sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA=="],
 
     "@types/promise.allsettled": ["@types/promise.allsettled@1.0.6", "https://registry.npmmirror.com/@types/promise.allsettled/-/promise.allsettled-1.0.6.tgz", {}, "sha512-wA0UT0HeT2fGHzIFV9kWpYz5mdoyLxKrTgMdZQM++5h6pYAFH73HXcQhefg24nD1yivUFEn5KU+EF4b+CXJ4Wg=="],
@@ -4214,6 +4218,22 @@
 
     "perfect-debounce": ["perfect-debounce@2.1.0", "https://registry.npmmirror.com/perfect-debounce/-/perfect-debounce-2.1.0.tgz", {}, "sha512-LjgdTytVFXeUgtHZr9WYViYSM/g8MkcTPYDlPa3cDqMirHjKiSZPYd6DoL7pK8AJQr+uWkQvCjHNdiMqsrJs+g=="],
 
+    "pg": ["pg@8.20.0", "https://registry.npmmirror.com/pg/-/pg-8.20.0.tgz", { "dependencies": { "pg-connection-string": "^2.12.0", "pg-pool": "^3.13.0", "pg-protocol": "^1.13.0", "pg-types": "2.2.0", "pgpass": "1.0.5" }, "optionalDependencies": { "pg-cloudflare": "^1.3.0" }, "peerDependencies": { "pg-native": ">=3.0.1" }, "optionalPeers": ["pg-native"] }, "sha512-ldhMxz2r8fl/6QkXnBD3CR9/xg694oT6DZQ2s6c/RI28OjtSOpxnPrUCGOBJ46RCUxcWdx3p6kw/xnDHjKvaRA=="],
+
+    "pg-cloudflare": ["pg-cloudflare@1.3.0", "https://registry.npmmirror.com/pg-cloudflare/-/pg-cloudflare-1.3.0.tgz", {}, "sha512-6lswVVSztmHiRtD6I8hw4qP/nDm1EJbKMRhf3HCYaqud7frGysPv7FYJ5noZQdhQtN2xJnimfMtvQq21pdbzyQ=="],
+
+    "pg-connection-string": ["pg-connection-string@2.12.0", "https://registry.npmmirror.com/pg-connection-string/-/pg-connection-string-2.12.0.tgz", {}, "sha512-U7qg+bpswf3Cs5xLzRqbXbQl85ng0mfSV/J0nnA31MCLgvEaAo7CIhmeyrmJpOr7o+zm0rXK+hNnT5l9RHkCkQ=="],
+
+    "pg-int8": ["pg-int8@1.0.1", "https://registry.npmmirror.com/pg-int8/-/pg-int8-1.0.1.tgz", {}, "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw=="],
+
+    "pg-pool": ["pg-pool@3.13.0", "https://registry.npmmirror.com/pg-pool/-/pg-pool-3.13.0.tgz", { "peerDependencies": { "pg": ">=8.0" } }, "sha512-gB+R+Xud1gLFuRD/QgOIgGOBE2KCQPaPwkzBBGC9oG69pHTkhQeIuejVIk3/cnDyX39av2AxomQiyPT13WKHQA=="],
+
+    "pg-protocol": ["pg-protocol@1.13.0", "https://registry.npmmirror.com/pg-protocol/-/pg-protocol-1.13.0.tgz", {}, "sha512-zzdvXfS6v89r6v7OcFCHfHlyG/wvry1ALxZo4LqgUoy7W9xhBDMaqOuMiF3qEV45VqsN6rdlcehHrfDtlCPc8w=="],
+
+    "pg-types": ["pg-types@2.2.0", "https://registry.npmmirror.com/pg-types/-/pg-types-2.2.0.tgz", { "dependencies": { "pg-int8": "1.0.1", "postgres-array": "~2.0.0", "postgres-bytea": "~1.0.0", "postgres-date": "~1.0.4", "postgres-interval": "^1.1.0" } }, "sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA=="],
+
+    "pgpass": ["pgpass@1.0.5", "https://registry.npmmirror.com/pgpass/-/pgpass-1.0.5.tgz", { "dependencies": { "split2": "^4.1.0" } }, "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug=="],
+
     "piccolore": ["piccolore@0.1.3", "https://registry.npmmirror.com/piccolore/-/piccolore-0.1.3.tgz", {}, "sha512-o8bTeDWjE086iwKrROaDf31K0qC/BENdm15/uH9usSC/uZjJOKb2YGiVHfLY4GhwsERiPI1jmwI2XrA7ACOxVw=="],
 
     "picocolors": ["picocolors@1.1.1", "https://registry.npmmirror.com/picocolors/-/picocolors-1.1.1.tgz", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
@@ -4271,6 +4291,14 @@
     "postcss-value-parser": ["postcss-value-parser@4.2.0", "https://registry.npmmirror.com/postcss-value-parser/-/postcss-value-parser-4.2.0.tgz", {}, "sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ=="],
 
     "postgres": ["postgres@3.4.7", "https://registry.npmmirror.com/postgres/-/postgres-3.4.7.tgz", {}, "sha512-Jtc2612XINuBjIl/QTWsV5UvE8UHuNblcO3vVADSrKsrc6RqGX6lOW1cEo3CM2v0XG4Nat8nI+YM7/f26VxXLw=="],
+
+    "postgres-array": ["postgres-array@2.0.0", "https://registry.npmmirror.com/postgres-array/-/postgres-array-2.0.0.tgz", {}, "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA=="],
+
+    "postgres-bytea": ["postgres-bytea@1.0.1", "https://registry.npmmirror.com/postgres-bytea/-/postgres-bytea-1.0.1.tgz", {}, "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ=="],
+
+    "postgres-date": ["postgres-date@1.0.7", "https://registry.npmmirror.com/postgres-date/-/postgres-date-1.0.7.tgz", {}, "sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q=="],
+
+    "postgres-interval": ["postgres-interval@1.2.0", "https://registry.npmmirror.com/postgres-interval/-/postgres-interval-1.2.0.tgz", { "dependencies": { "xtend": "^4.0.0" } }, "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ=="],
 
     "postject": ["postject@1.0.0-alpha.6", "https://registry.npmmirror.com/postject/-/postject-1.0.0-alpha.6.tgz", { "dependencies": { "commander": "^9.4.0" }, "bin": { "postject": "dist/cli.js" } }, "sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A=="],
 
@@ -5107,6 +5135,8 @@
     "xmlbuilder": ["xmlbuilder@11.0.1", "https://registry.npmmirror.com/xmlbuilder/-/xmlbuilder-11.0.1.tgz", {}, "sha512-fDlsI/kFEx7gLvbecc0/ohLG50fugQp8ryHzMTuW9vSa1GJ0XYWKnhsUx7oie3G98+r56aTQIUB4kht42R3JvA=="],
 
     "xmlhttprequest-ssl": ["xmlhttprequest-ssl@2.1.2", "https://registry.npmmirror.com/xmlhttprequest-ssl/-/xmlhttprequest-ssl-2.1.2.tgz", {}, "sha512-TEU+nJVUUnA4CYJFLvK5X9AOeH4KvDvhIfm0vV1GaQRtchnG0hgK5p8hw/xjv8cunWYCsiPCSDzObPyhEwq3KQ=="],
+
+    "xtend": ["xtend@4.0.2", "https://registry.npmmirror.com/xtend/-/xtend-4.0.2.tgz", {}, "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ=="],
 
     "xxhash-wasm": ["xxhash-wasm@1.1.0", "https://registry.npmmirror.com/xxhash-wasm/-/xxhash-wasm-1.1.0.tgz", {}, "sha512-147y/6YNh+tlp6nd/2pWq38i9h6mz/EuQ6njIrmW8D1BS5nCqs0P6DG+m6zTGnNz5I+uhZ0SHxBs9BsPrwcKDA=="],
 
