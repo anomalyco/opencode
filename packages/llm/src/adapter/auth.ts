@@ -2,9 +2,6 @@ import { Config, Effect, Redacted } from "effect"
 import { Headers } from "effect/unstable/http"
 import { AuthenticationReason, InvalidRequestReason, LLMError, type LLMRequest } from "../schema"
 
-export type Secret = Redacted.Redacted<string>
-export type SecretInput = string | Secret | Config.Config<string | Secret>
-
 export class MissingCredentialError extends Error {
   readonly _tag = "MissingCredentialError"
 
@@ -25,7 +22,7 @@ export interface AuthInput {
 }
 
 export interface Credential {
-  readonly load: Effect.Effect<Secret, CredentialError>
+  readonly load: Effect.Effect<Redacted.Redacted<string>, CredentialError>
   readonly orElse: (that: Credential) => Credential
   readonly bearer: () => Auth
   readonly header: (name: string) => Auth
@@ -42,7 +39,7 @@ export interface Auth {
 export const isAuth = (input: unknown): input is Auth =>
   typeof input === "object" && input !== null && "apply" in input && typeof input.apply === "function"
 
-const credential = (load: Effect.Effect<Secret, CredentialError>): Credential => {
+const credential = (load: Effect.Effect<Redacted.Redacted<string>, CredentialError>): Credential => {
   const self: Credential = {
     load,
     orElse: (that) => credential(load.pipe(Effect.catch(() => that.load))),
@@ -56,7 +53,8 @@ const credential = (load: Effect.Effect<Secret, CredentialError>): Credential =>
 const auth = (apply: Auth["apply"]): Auth => {
   const self: Auth = {
     apply,
-    andThen: (that) => auth((input) => apply(input).pipe(Effect.flatMap((headers) => that.apply({ ...input, headers })))),
+    andThen: (that) =>
+      auth((input) => apply(input).pipe(Effect.flatMap((headers) => that.apply({ ...input, headers })))),
     orElse: (that) => auth((input) => apply(input).pipe(Effect.catch(() => that.apply(input)))),
     pipe: (f) => f(self),
   }
@@ -65,18 +63,19 @@ const auth = (apply: Auth["apply"]): Auth => {
 
 const fromCredential = (source: Credential, render: (secret: string) => Headers.Input) =>
   auth((input) =>
-    source.load.pipe(
-      Effect.map((secret) => Headers.setAll(input.headers, render(Redacted.value(secret)))),
-    ),
+    source.load.pipe(Effect.map((secret) => Headers.setAll(input.headers, render(Redacted.value(secret))))),
   )
 
-const secretEffect = (secret: string | Secret, source: string) => {
+const secretEffect = (secret: string | Redacted.Redacted<string>, source: string) => {
   const redacted = typeof secret === "string" ? Redacted.make(secret) : secret
   if (Redacted.value(redacted) === "") return Effect.fail(new MissingCredentialError(source))
   return Effect.succeed(redacted)
 }
 
-const credentialFromSecret = (secret: SecretInput, source: string) => {
+const credentialFromSecret = (
+  secret: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>>,
+  source: string,
+) => {
   if (typeof secret === "string" || Redacted.isRedacted(secret)) return credential(secretEffect(secret, source))
   return credential(
     Effect.gen(function* () {
@@ -87,17 +86,22 @@ const credentialFromSecret = (secret: SecretInput, source: string) => {
 
 export const value = (secret: string, source = "value") => credentialFromSecret(secret, source)
 
-export const optional = (secret: SecretInput | undefined, source = "optional value") =>
-  secret === undefined ? credential(Effect.fail(new MissingCredentialError(source))) : credentialFromSecret(secret, source)
+export const optional = (
+  secret: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | undefined,
+  source = "optional value",
+) =>
+  secret === undefined
+    ? credential(Effect.fail(new MissingCredentialError(source)))
+    : credentialFromSecret(secret, source)
 
-export const config = (name: string) =>
-  credentialFromSecret(Config.redacted(name), name)
+export const config = (name: string) => credentialFromSecret(Config.redacted(name), name)
 
-export const effect = (load: Effect.Effect<Secret, CredentialError>) => credential(load)
+export const effect = (load: Effect.Effect<Redacted.Redacted<string>, CredentialError>) => credential(load)
 
 export const none = auth((input) => Effect.succeed(input.headers))
 
-export const headers = (input: Headers.Input) => auth((inputAuth) => Effect.succeed(Headers.setAll(inputAuth.headers, input)))
+export const headers = (input: Headers.Input) =>
+  auth((inputAuth) => Effect.succeed(Headers.setAll(inputAuth.headers, input)))
 
 export const remove = (name: string) => auth((input) => Effect.succeed(Headers.remove(input.headers, name)))
 
@@ -112,12 +116,16 @@ const fromModelApiKey = (from: (apiKey: string) => Headers.Input) =>
     return Effect.succeed(Headers.setAll(headers, from(key)))
   })
 
-const credentialInput = (source: SecretInput | Credential) =>
-  typeof source === "string" || Redacted.isRedacted(source) || Config.isConfig(source) ? credentialFromSecret(source, "value") : source
+const credentialInput = (
+  source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
+) =>
+  typeof source === "string" || Redacted.isRedacted(source) || Config.isConfig(source)
+    ? credentialFromSecret(source, "value")
+    : source
 
 export function bearer(): Auth
-export function bearer(source: SecretInput | Credential): Auth
-export function bearer(source?: SecretInput | Credential) {
+export function bearer(source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential): Auth
+export function bearer(source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) {
   if (source === undefined) return fromModelApiKey((key) => ({ authorization: `Bearer ${key}` }))
   return credentialInput(source).bearer()
 }
@@ -126,10 +134,13 @@ export const apiKey = bearer
 
 export const apiKeyHeader = (name: string) => fromModelApiKey((key) => ({ [name]: key }))
 
-export function header(name: string): (source: SecretInput | Credential) => Auth
-export function header(name: string, source: SecretInput | Credential): Auth
-export function header(name: string, source?: SecretInput | Credential) {
-  if (source === undefined) return (next: SecretInput | Credential) => credentialInput(next).header(name)
+export function header(name: string): (source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) => Auth
+export function header(name: string, source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential): Auth
+export function header(name: string, source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) {
+  if (source === undefined) {
+    return (next: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) =>
+      credentialInput(next).header(name)
+  }
   return credentialInput(source).header(name)
 }
 
@@ -138,17 +149,18 @@ const toLLMError = (error: AuthError): LLMError => {
     return new LLMError({
       module: "Auth",
       method: "apply",
-      reason: error instanceof MissingCredentialError
-        ? new AuthenticationReason({ message: error.message, kind: "missing" })
-        : new InvalidRequestReason({ message: `Failed to resolve auth config: ${error.message}` }),
+      reason:
+        error instanceof MissingCredentialError
+          ? new AuthenticationReason({ message: error.message, kind: "missing" })
+          : new InvalidRequestReason({ message: `Failed to resolve auth config: ${error.message}` }),
     })
   }
   return error
 }
 
-export const toEffect = (input: Auth) => (authInput: AuthInput): Effect.Effect<Headers.Headers, LLMError> =>
-  input.apply(authInput).pipe(
-    Effect.mapError(toLLMError),
-  )
+export const toEffect =
+  (input: Auth) =>
+  (authInput: AuthInput): Effect.Effect<Headers.Headers, LLMError> =>
+    input.apply(authInput).pipe(Effect.mapError(toLLMError))
 
 export * as Auth from "./auth"

@@ -1,7 +1,7 @@
-import type { Auth, SecretInput } from "./auth"
+import type { Config, Redacted } from "effect"
+import type { Auth } from "./auth"
 
 export type ApiKeyMode = "optional" | "required"
-export type ApiKeyInput = SecretInput
 
 export type AuthOverride = {
   readonly auth: Auth
@@ -9,12 +9,12 @@ export type AuthOverride = {
 }
 
 export type OptionalApiKeyAuth = {
-  readonly apiKey?: ApiKeyInput
+  readonly apiKey?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>>
   readonly auth?: never
 }
 
 export type RequiredApiKeyAuth = {
-  readonly apiKey: ApiKeyInput
+  readonly apiKey: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>>
   readonly auth?: never
 }
 
