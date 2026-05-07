@@ -125,7 +125,7 @@
     }
   }
 
-  [data-slot="list-scroll"] {
+  [data-slot="list-viewport"] {
     display: flex;
     flex-direction: column;
     gap: 12px;

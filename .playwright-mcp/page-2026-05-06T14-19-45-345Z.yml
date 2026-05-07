@@ -1,0 +1,65 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - button "Toggle menu" [ref=e7] [cursor=pointer]:
+        - img [ref=e9]
+    - generic [ref=e11]:
+      - generic [ref=e13]:
+        - navigation "Projects and sessions" [ref=e14]:
+          - generic [ref=e15]:
+            - generic [ref=e16]:
+              - button "Open project" [ref=e21] [cursor=pointer]:
+                - img [ref=e23]
+              - generic [ref=e25]:
+                - button "Config" [ref=e27] [cursor=pointer]:
+                  - img [ref=e29]
+                - button "Settings" [ref=e32] [cursor=pointer]:
+                  - img [ref=e34]
+                - button "Help" [ref=e38] [cursor=pointer]:
+                  - img [ref=e40]
+            - generic [ref=e45]:
+              - generic [ref=e46]:
+                - generic [ref=e47]: No projects open
+                - generic [ref=e48]: Open a project to get started
+              - button "Open project" [ref=e49] [cursor=pointer]:
+                - img [ref=e51]
+                - text: Open project
+        - main [ref=e54]:
+          - generic [ref=e55]:
+            - img [ref=e56]
+            - button "localhost:4096" [ref=e74] [cursor=pointer]: localhost:4096
+            - generic [ref=e76]:
+              - generic [ref=e77]: Loading
+              - button "Open project" [ref=e78] [cursor=pointer]
+      - complementary "Development performance diagnostics" [ref=e79]:
+        - generic [ref=e80]:
+          - generic [ref=e82]:
+            - generic [ref=e83]: NAV
+            - generic [ref=e84]: n/a
+          - generic [ref=e86]:
+            - generic [ref=e87]: FPS
+            - generic [ref=e88]: n/a
+          - generic [ref=e90]:
+            - generic [ref=e91]: FRAME
+            - generic [ref=e92]: n/a
+          - generic [ref=e94]:
+            - generic [ref=e95]: JANK
+            - generic [ref=e96]: n/a
+          - generic [ref=e98]:
+            - generic [ref=e99]: LONG
+            - generic [ref=e100]: 0/0
+          - generic [ref=e102]:
+            - generic [ref=e103]: DELAY
+            - generic [ref=e104]: n/a
+          - generic [ref=e106]:
+            - generic [ref=e107]: INP
+            - generic [ref=e108]: n/a
+          - generic [ref=e110]:
+            - generic [ref=e111]: CLS
+            - generic [ref=e112]: "0.00"
+          - generic [ref=e114]:
+            - generic [ref=e115]: MEM
+            - generic [ref=e116]: 1%
+  - generic:
+    - region "Notifications (alt+T)":
+      - list
