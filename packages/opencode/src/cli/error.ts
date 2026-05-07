@@ -15,6 +15,13 @@ function isTaggedError(error: unknown, tag: string): boolean {
 }
 
 export function FormatError(input: unknown) {
+  // CliError: domain failure surfaced from an effectCmd handler via fail("...")
+  if (isTaggedError(input, "CliError")) {
+    const data = input as ErrorLike & { exitCode?: number }
+    if (data.exitCode != null) process.exitCode = data.exitCode
+    return data.message ?? ""
+  }
+
   // MCPFailed: { name: string }
   if (NamedError.hasName(input, "MCPFailed")) {
     return `MCP server "${(input as ErrorLike).data?.name}" failed. Note, opencode does not support MCP authentication yet.`
