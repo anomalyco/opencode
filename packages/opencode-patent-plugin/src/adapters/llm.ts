@@ -32,7 +32,7 @@ export class OpenCodeLLMAdapter {
   /**
    * 单次聊天调用
    */
-  async chat(params: { messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number }): Promise<{ content: string; usage?: any; model?: string }> {
+  async chat(params: { messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number }): Promise<{ message: { role: string; content: string }; content: string; usage?: any; model?: string }> {
     const { client, modelId, providerId, temperature, maxTokens } = this.config
 
     // 构建 OpenCode 消息格式
@@ -52,9 +52,14 @@ export class OpenCodeLLMAdapter {
       maxTokens: maxTokens ?? 4096,
     })
 
-    // 转换为 YunPat 格式
+    // 转换为 YunPat 格式（兼容 LangChainAdapter / NativeLLMAdapter）
+    const content = response.content ?? ""
     return {
-      content: response.content ?? "",
+      message: {
+        role: "assistant" as const,
+        content,
+      },
+      content,
       usage: response.usage,
       model: response.model,
     }
@@ -63,7 +68,7 @@ export class OpenCodeLLMAdapter {
   /**
    * 流式聊天调用
    */
-  async *chatStream(params: { messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number }): AsyncGenerator<{ content: string; done?: boolean }> {
+  async *chatStream(params: { messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number }): AsyncGenerator<{ message: { role: string; content: string }; content: string; done?: boolean }> {
     const { client, modelId, providerId, temperature, maxTokens } = this.config
 
     const messages = params.messages.map((msg) => ({
@@ -82,8 +87,10 @@ export class OpenCodeLLMAdapter {
     })
 
     for await (const chunk of stream) {
+      const content = chunk.content ?? ""
       yield {
-        content: chunk.content ?? "",
+        message: { role: "assistant" as const, content },
+        content,
         done: chunk.done ?? false,
       }
     }

@@ -8,7 +8,8 @@
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { loadYunPatModule, createAgentContext } from "../utils/yunpat-loader.js"
-import { searchLegalRules, searchPatentJudgments } from "../utils/db.js"
+import { runAgentSafely } from "../utils/agent-runner.js"
+import { searchLegalRules, searchPatentJudgments, searchLegalArticlesSemantic, searchKnowledgeGraphNodes } from "../utils/db.js"
 import { queryLawFromKB, queryGuidelinesFromKB, queryInvalidationFromKB, searchKnowledgeBase } from "../utils/obsidian-kb.js"
 
 /**
@@ -112,29 +113,14 @@ export async function registerResearchTools(pluginContext: PatentPluginContext) 
         // 3. 尝试使用 YunPat ResearcherAgent
         if (!hasRealData || depth === "深度") {
           try {
-            const yunpat = await loadYunPatModule("agents/researcher")
-            if (yunpat?.ResearcherAgent) {
-              const context = await createAgentContext()
-              if (context) {
-                const agent = new yunpat.ResearcherAgent({
-                  llm: pluginContext.llm,
-                  name: "ResearcherAgent",
-                  description: "知识产权法规研究专家",
-                  eventBus: context.eventBus,
-                  memory: context.memory,
-                  tools: context.tools,
-                })
-
-                const result = await agent.run(
-                  { question: topic, depth: mapDepth(depth), sources: ["database"], maxResults: 10 },
-                  context,
-                )
-
-                if (result.success && result.data) {
-                  output += `### 智能体分析\n\n${formatResearchResult(result.data)}\n\n`
-                  hasRealData = true
-                }
-              }
+            const agentResult = await runAgentSafely(
+              { module: "agents/researcher", className: "ResearcherAgent", maxIterations: 2 },
+              { question: topic, depth: mapDepth(depth), sources: ["database"], maxResults: 10 },
+              pluginContext,
+            )
+            if (agentResult.success && agentResult.data) {
+              output += `### 智能体分析\n\n${formatResearchResult(agentResult.data)}\n\n`
+              hasRealData = true
             }
           } catch (error: any) {
             console.warn("[YunPat] ResearcherAgent error:", error?.message)

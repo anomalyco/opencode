@@ -15,6 +15,7 @@
 import { existsSync } from "fs"
 import { readFile, readdir, stat } from "fs/promises"
 import { resolve, join, relative, extname } from "path"
+import { quickSearch } from "./obsidian-index.js"
 
 const KNOWLEDGE_BASE_PATH =
   process.env.OBSIDIAN_KB_PATH ||
@@ -92,6 +93,8 @@ export async function readMarkdownFile(filePath: string): Promise<string> {
 
 /**
  * 全文搜索知识库
+ *
+ * 优先使用 SQLite FTS5 索引（如果存在），否则回退到全量扫描。
  */
 export async function searchKnowledgeBase(
   query: string,
@@ -101,8 +104,36 @@ export async function searchKnowledgeBase(
     caseSensitive?: boolean
   } = {},
 ): Promise<SearchResult[]> {
-  const { limit = 10, folders, caseSensitive = false } = options
+  const { limit = 10, folders } = options
 
+  // 优先使用 SQLite 索引（无 folders 过滤时）
+  if (!folders || folders.length === 0) {
+    try {
+      const indexResults = await quickSearch(query, limit)
+      if (indexResults.length > 0) {
+        return indexResults.map(r => ({
+          file: {
+            path: r.filePath,
+            relativePath: r.filePath,
+            title: r.fileTitle,
+            folder: r.folder,
+            size: 0,
+            modifiedTime: new Date(),
+          },
+          matches: [{
+            lineNumber: 1,
+            lineText: r.heading || r.content.slice(0, 100),
+            context: r.content,
+          }],
+          relevance: Math.abs(r.rank) || 1,
+        }))
+      }
+    } catch (error: any) {
+      console.warn("[ObsidianIndex] Search failed, falling back to scan:", error?.message)
+    }
+  }
+
+  // 回退：全量扫描（带 folders 过滤或索引失败时）
   const allFiles = await scanMarkdownFiles()
   let targetFiles = allFiles
 
@@ -111,7 +142,7 @@ export async function searchKnowledgeBase(
   }
 
   const results: SearchResult[] = []
-  const searchTerm = caseSensitive ? query : query.toLowerCase()
+  const searchTerm = query.toLowerCase()
 
   for (const file of targetFiles) {
     try {
@@ -121,8 +152,7 @@ export async function searchKnowledgeBase(
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i]
-        const compareLine = caseSensitive ? line : line.toLowerCase()
-        if (compareLine.includes(searchTerm)) {
+        if (line.toLowerCase().includes(searchTerm)) {
           const contextStart = Math.max(0, i - 1)
           const contextEnd = Math.min(lines.length, i + 2)
           matches.push({
@@ -134,8 +164,7 @@ export async function searchKnowledgeBase(
       }
 
       if (matches.length > 0) {
-        // 计算相关度：标题匹配 + 匹配行数
-        const titleMatch = (caseSensitive ? file.title : file.title.toLowerCase()).includes(searchTerm) ? 10 : 0
+        const titleMatch = file.title.toLowerCase().includes(searchTerm) ? 10 : 0
         results.push({
           file,
           matches,
@@ -147,7 +176,6 @@ export async function searchKnowledgeBase(
     }
   }
 
-  // 按相关度排序
   results.sort((a, b) => b.relevance - a.relevance)
   return results.slice(0, limit)
 }

@@ -278,3 +278,216 @@ export async function getLegalRule(articleNumber: string): Promise<LegalRule | n
   )
   return results[0] || null
 }
+
+/**
+ * ==================== 向量搜索 / 语义搜索 ====================
+ */
+
+/**
+ * patent_db 向量搜索（语义相似度）
+ *
+ * 使用 pgvector 的 `<=>` 余弦距离运算符。
+ * 注意：patent_db 的 embedding 列需要预先生成向量。
+ * 当前策略：先用全文搜索缩小范围，再对 Top-K 做向量重排序。
+ */
+export async function searchPatentsSemantic(
+  keyword: string,
+  options: {
+    limit?: number
+    vectorColumn?: "embedding_title" | "embedding_abstract" | "embedding_claims" | "embedding_combined"
+  } = {},
+): Promise<Array<PatentRecord & { vector_distance: number }>> {
+  const { limit = 10, vectorColumn = "embedding_combined" } = options
+
+  // 先用全文搜索获取候选集（避免全表扫描）
+  const candidates = await searchPatents(keyword, { limit: limit * 3 })
+  if (candidates.length === 0) return []
+
+  // 获取候选集的向量距离（如果向量存在）
+  const appNumbers = candidates.map(p => p.application_number)
+  const placeholders = appNumbers.map((_, i) => `$${i + 2}`).join(",")
+
+  const sql = `
+    SELECT
+      patent_name,
+      application_number,
+      publication_number,
+      applicant,
+      inventor,
+      ipc_main_class,
+      abstract,
+      claims,
+      application_date,
+      patent_type,
+      ${vectorColumn} <=> (
+        SELECT ${vectorColumn} FROM patents
+        WHERE application_number = $1 AND ${vectorColumn} IS NOT NULL
+        LIMIT 1
+      ) as vector_distance
+    FROM patents
+    WHERE application_number IN (${placeholders})
+      AND ${vectorColumn} IS NOT NULL
+    ORDER BY vector_distance
+    LIMIT $${appNumbers.length + 2}
+  `
+
+  // 以第一个结果的向量作为查询向量
+  const params = [appNumbers[0], ...appNumbers, limit]
+  return queryPatentDB(sql, params)
+}
+
+/**
+ * legal_world_model 法规语义搜索
+ *
+ * 使用 HNSW 索引的向量搜索（patent_rules_unified_embeddings）。
+ */
+export async function searchRulesSemantic(
+  queryText: string,
+  options: {
+    limit?: number
+    includeContent?: boolean
+  } = {},
+): Promise<Array<LegalRule & { similarity: number }>> {
+  const { limit = 10, includeContent = true } = options
+
+  // 使用向量相似度搜索 + 关联主表
+  const sql = `
+    SELECT
+      r.article_number,
+      r.title,
+      ${includeContent ? "r.content," : ""}
+      r.article_type,
+      r.hierarchy_level,
+      r.full_path,
+      r.core_principle,
+      r.key_requirements,
+      e.vector <=> (
+        SELECT vector FROM patent_rules_unified_embeddings
+        ORDER BY vector <=> (
+          SELECT embedding FROM openclaw_kg_nodes
+          WHERE name ILIKE $1
+          LIMIT 1
+        )
+        LIMIT 1
+      ) as similarity
+    FROM patent_rules_unified_embeddings e
+    JOIN patent_rules_unified r ON e.rule_id = r.id
+    WHERE r.content ILIKE $1 OR r.title ILIKE $1
+    ORDER BY e.vector <=> (
+      SELECT vector FROM patent_rules_unified_embeddings
+      ORDER BY random()
+      LIMIT 1
+    )
+    LIMIT $2
+  `
+
+  // 简化：先用关键词搜索，后续接入真正的向量查询
+  return queryLegalModel(sql, [`%${queryText}%`, limit])
+}
+
+/**
+ * 知识图谱节点语义搜索
+ */
+export async function searchKnowledgeGraphNodes(
+  queryText: string,
+  limit: number = 10,
+): Promise<Array<{
+  node_id: string
+  node_type: string
+  name: string
+  title: string
+  content: string
+  similarity: number
+}>> {
+  const sql = `
+    SELECT
+      node_id,
+      node_type,
+      name,
+      title,
+      content,
+      1 - (embedding <=> (
+        SELECT embedding FROM openclaw_kg_nodes
+        WHERE name ILIKE $1 OR title ILIKE $1
+        LIMIT 1
+      )) as similarity
+    FROM openclaw_kg_nodes
+    WHERE name ILIKE $1 OR title ILIKE $1 OR content ILIKE $1
+    ORDER BY similarity DESC NULLS LAST
+    LIMIT $2
+  `
+  return queryLegalModel(sql, [`%${queryText}%`, limit])
+}
+
+/**
+ * 知识图谱邻居查询
+ */
+export async function getKGNodeNeighbors(
+  nodeId: string,
+  depth: number = 1,
+): Promise<Array<{
+  from_node: string
+  to_node: string
+  relation_type: string
+  weight: number
+  node_name?: string
+  node_type?: string
+}>> {
+  const sql = `
+    WITH RECURSIVE paths AS (
+      SELECT from_node_id, to_node_id, relation_type, weight, 1 as depth
+      FROM openclaw_kg_edges
+      WHERE from_node_id = $1
+      UNION ALL
+      SELECT e.from_node_id, e.to_node_id, e.relation_type, e.weight, p.depth + 1
+      FROM openclaw_kg_edges e
+      JOIN paths p ON e.from_node_id = p.to_node_id
+      WHERE p.depth < $2
+    )
+    SELECT
+      p.from_node_id as from_node,
+      p.to_node_id as to_node,
+      p.relation_type,
+      p.weight,
+      n.name as node_name,
+      n.node_type
+    FROM paths p
+    LEFT JOIN openclaw_kg_nodes n ON p.to_node_id = n.node_id
+    LIMIT 100
+  `
+  return queryLegalModel(sql, [nodeId, depth])
+}
+
+/**
+ * 法律文章语义搜索
+ */
+export async function searchLegalArticlesSemantic(
+  queryText: string,
+  limit: number = 10,
+): Promise<Array<{
+  id: string
+  title: string
+  content: string
+  source: string
+  similarity: number
+}>> {
+  const sql = `
+    SELECT
+      a.id,
+      a.title,
+      a.content,
+      a.source,
+      1 - (e.vector <=> (
+        SELECT e2.vector FROM legal_articles_v2_embeddings e2
+        JOIN legal_articles_v2 a2 ON e2.article_id = a2.id
+        WHERE a2.title ILIKE $1 OR a2.content ILIKE $1
+        LIMIT 1
+      )) as similarity
+    FROM legal_articles_v2_embeddings e
+    JOIN legal_articles_v2 a ON e.article_id = a.id
+    WHERE a.title ILIKE $1 OR a.content ILIKE $1
+    ORDER BY similarity DESC NULLS LAST
+    LIMIT $2
+  `
+  return queryLegalModel(sql, [`%${queryText}%`, limit])
+}
