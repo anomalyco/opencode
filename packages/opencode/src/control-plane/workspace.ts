@@ -24,11 +24,12 @@ import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
+import { NotFoundError } from "@/storage/storage"
 import { errorData } from "@/util/error"
 import { waitEvent } from "./util"
 import { WorkspaceContext } from "./workspace-context"
 import { EffectBridge } from "@/effect/bridge"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { withStatics } from "@/util/schema"
 import { zod as effectZod, zodObject } from "@/util/effect-zod"
 
 export const Info = WorkspaceInfoSchema
@@ -739,9 +740,19 @@ export const layer = Layer.effect(
 
     const remove = Effect.fn("Workspace.remove")(function* (id: WorkspaceID) {
       const sessions = yield* db((db) =>
-        db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, id)).all(),
+        db
+          .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
+          .from(SessionTable)
+          .where(eq(SessionTable.workspace_id, id))
+          .all(),
       )
-      yield* Effect.forEach(sessions, (sessionInfo) => session.remove(sessionInfo.id), { discard: true })
+      const sessionIDs = new Set(sessions.map((sessionInfo) => sessionInfo.id))
+      yield* Effect.forEach(
+        sessions.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
+        (sessionInfo) =>
+          session.remove(sessionInfo.id).pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.void)),
+        { discard: true },
+      )
 
       const row = yield* db((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
       if (!row) return
