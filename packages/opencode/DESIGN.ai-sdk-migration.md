@@ -44,16 +44,102 @@ After Phase 1: backend choice is encoded in the return type, not in a per-reques
 
 ### Phase 2 — Decouple AI SDK types from the rest of opencode
 
-Pull AI SDK imports out of every file that isn't `session/llm.ts` or `provider/sdk-resolver.ts`. No behavior change.
+Goal: AI SDK imports only appear in `session/llm.ts` and `provider/sdk-resolver.ts`. Every other file speaks opencode-owned types. No behavior change.
 
-In rough order of pain:
+Each step adds one new opencode type, replaces the AI SDK one at the boundary, and uses an adapter at the actual AI SDK call site.
 
-1. `provider/error.ts` — opencode-owned `ProviderError` shape `{ status, message, isRetryable, providerID, responseBody }`. Adapter constructors `fromAPICallError(e)` and `fromLLMError(e)`. Removes `APICallError` from `acp/agent.ts`.
-2. `session/prompt.ts:resolveTools` — `Tool.Def` becomes the canonical tool type. Convert to AI SDK `Tool` lazily inside the AI SDK adapter, not eagerly here. Drops `tool` / `jsonSchema` / `asSchema` imports from prompt.ts.
-3. `session/message-v2.ts` — add `toLLMMessagesEffect` parallel to `toModelMessagesEffect`. Both convert from the same `MessageV2.WithParts[]` source. Reuse `session/llm-native.ts`.
-4. `session/session.ts` — replace `ProviderMetadata` / `LanguageModelUsage` imports with opencode-owned types. Cosmetic but removes the leak.
-5. `mcp/index.ts` — emit `Tool.Def` alongside the existing `dynamicTool`. Once both exist, the native gate can keep MCP tools.
-6. `agent/agent.ts:generateObject/streamObject` — keep on AI SDK for now (structured output isn't on `@opencode-ai/llm` yet); isolate to one `LLM.generateObject(input, schema)` Service method so the AI SDK call site is in one place.
+#### 2a — `ProviderError` (replaces `APICallError`, `LoadAPIKeyError`)
+
+Today: `provider/error.ts` imports `APICallError` and exposes `parseAPICallError(input: { providerID, error: APICallError })`. `session/message-v2.ts` calls `APICallError.isInstance(e)` / `LoadAPIKeyError.isInstance(e)` to classify thrown errors. `acp/agent.ts` checks `LoadAPIKeyError.isInstance(error)` in 5+ places to surface auth-config errors to the user.
+
+New shape:
+
+```ts
+// packages/opencode/src/provider/error.ts
+export interface ProviderError {
+  readonly providerID: ProviderID
+  readonly kind: "api-call" | "missing-credentials" | "transport"
+  readonly message: string
+  readonly status?: number       // HTTP status if known
+  readonly responseBody?: string // redacted body for diagnostics
+  readonly retryable: boolean
+}
+
+export const fromAPICallError = (input: { providerID: ProviderID; error: APICallError }): ProviderError
+export const fromLoadAPIKeyError = (input: { providerID: ProviderID; error: LoadAPIKeyError }): ProviderError
+export const fromLLMError = (input: { providerID: ProviderID; error: LLMError }): ProviderError  // for native path
+```
+
+Migration: `parseAPICallError` keeps its body but returns `ProviderError`. `acp/agent.ts` checks `error.kind === "missing-credentials"` instead of `LoadAPIKeyError.isInstance`. `session/message-v2.ts` keeps the `APICallError.isInstance` switch but uses it only inside the AI SDK adapter; the rest of message-v2 takes a `ProviderError`.
+
+#### 2b — `Tool.Def` as the canonical tool type
+
+Today: `session/prompt.ts:resolveTools` imports `tool`, `jsonSchema`, `asSchema`, `ToolExecutionOptions`, `Tool as AITool` from `ai` and builds a `Record<string, AITool>` for `streamText`. `mcp/index.ts` imports `dynamicTool` and emits AI-SDK-shaped tools. `session/llm-native-tools.ts` invokes the AI SDK `tool.execute(...)` at the leaves (the native dispatcher still calls AI SDK tools).
+
+opencode already has `Tool.Def` (`packages/opencode/src/tool/tool.ts`) which is the existing internal definition. It's the canonical shape for everything *except* the AI SDK adapter.
+
+New flow:
+
+- `resolveTools` returns `Record<string, Tool.Def>`. No AI SDK imports.
+- `mcp/index.ts` emits `Tool.Def` directly. (`dynamicTool` only needed by the AI SDK adapter.)
+- `session/backends/ai-sdk.ts` (Phase 4) converts `Tool.Def → AITool` lazily before calling `streamText`.
+- `session/backends/native.ts` already speaks `Tool.Def` — no conversion needed.
+
+The `Tool.Def → AITool` conversion is small: `tool({ description, parameters: jsonSchema(toolDef.inputSchema), execute: toolDef.execute })`. It's the only place `tool()` and `jsonSchema()` get imported.
+
+#### 2c — `LLMUsage` and `ProviderMetadata`-the-opencode-type
+
+Today: `session/session.ts` imports `LanguageModelUsage` and `ProviderMetadata` from `ai`. `getUsage(input)` reads `input.usage.inputTokens`, `outputTokens`, `inputTokenDetails.cacheReadTokens`, etc., and reads provider-specific fields from `metadata["anthropic"]["cacheCreationInputTokens"]`.
+
+The `LLMUsage` shape in `@opencode-ai/llm` (`packages/llm/src/schema/events.ts`) already covers the cases (inputTokens, outputTokens, reasoningTokens, cacheReadInputTokens, cacheWriteInputTokens, totalTokens, native).
+
+New flow:
+
+```ts
+// packages/opencode/src/session/session.ts
+import { type Usage as LLMUsage, type ProviderMetadata } from "@opencode-ai/llm"
+
+export const getUsage = (input: { model: Provider.Model; usage: LLMUsage; metadata?: ProviderMetadata }) => { ... }
+```
+
+`ProviderMetadata` from `@opencode-ai/llm/schema/ids.ts` is `Record<string, Record<string, unknown>>` — same shape, opencode-owned.
+
+The AI SDK adapter (Phase 4) constructs `LLMUsage` from `LanguageModelUsage` once, just before yielding `step-finish`. Today's `getUsage` already does that math; we move it to the adapter.
+
+#### 2d — `MessageV2.toLLMMessagesEffect` parallel to `toModelMessagesEffect`
+
+Today: `session/message-v2.ts` is 1221 lines. The biggest function is `toModelMessagesEffect(input): Effect<ReadonlyArray<ModelMessage>>` which converts `WithParts[]` to AI SDK `ModelMessage[]`. It branches on `model.api.npm` for cache markers, file-URL handling, etc.
+
+`session/llm-native.ts` does the same conversion to `LLM.Message[]` (the `@opencode-ai/llm` shape).
+
+Phase 2d: keep both alive in parallel. Don't try to merge them yet. The AI SDK adapter (Phase 4) calls `toModelMessagesEffect`; the native adapter calls `toLLMMessagesEffect`.
+
+The key win is that `MessageV2.WithParts` (opencode's stored shape) is the source of truth in both directions. Nothing above this layer cares which target shape is produced.
+
+#### 2e — `LLM.generateObject(input, schema)` for structured output
+
+Today: `agent/agent.ts` imports `generateObject` and `streamObject` from `ai` directly. Used to generate agent config (one-shot structured output, not part of `LLM.Service.stream`).
+
+`@opencode-ai/llm` doesn't have `generateObject` yet. Strategy: keep AI SDK as the structured-output backend until we add it to `@opencode-ai/llm`, but isolate the call site behind an opencode-owned method:
+
+```ts
+// packages/opencode/src/session/llm.ts
+LLM.Service.generateObject<T>(input: GenerateObjectInput, schema: Schema.Schema<T>): Effect<T, ProviderError>
+```
+
+`agent/agent.ts` calls `LLM.Service.generateObject(...)`. Inside, the AI SDK `generateObject` call lives in `session/backends/ai-sdk.ts`. The native backend either delegates to AI SDK or implements it (Phase 5 decision).
+
+Pulls the only AI SDK import out of `agent/agent.ts`.
+
+#### Order within Phase 2
+
+Roughly leaf-to-root so each step's tests are self-contained:
+
+1. **2a (ProviderError)** — small, isolated, no downstream churn.
+2. **2c (LLMUsage / ProviderMetadata)** — cosmetic types-only swap in session.ts.
+3. **2b (Tool.Def canonical)** — moderate; `resolveTools` is the biggest call site.
+4. **2d (toLLMMessagesEffect)** — additive; `toModelMessagesEffect` keeps working.
+5. **2e (LLM.generateObject)** — last; adds a Service method, isolates the agent.ts call site.
 
 ### Phase 3 — Lift `prepare()` out of `session/llm.ts`
 
