@@ -282,10 +282,59 @@ export function MessageTimeline(props: {
   let windowAdjustVersion = 0
   const turnHeights = new Map<string, number>()
   const [revision, setRevision] = createSignal(0)
+  const sessionID = createMemo(() => params.id)
+  const sessionMessages = createMemo(() => {
+    const id = sessionID()
+    if (!id) return emptyMessages
+    return sync.data.message[id] ?? emptyMessages
+  })
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
-  const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? estimatedTurnHeight
+  const estimates = createMemo(() => {
+    const ids = new Set(rendered())
+    const map = new Map<string, number>()
+    let id: string | undefined
+    let text = 0
+    let code = 0
+    let math = 0
+    let part = 0
+    let tool = 0
+
+    const save = () => {
+      if (!id || !ids.has(id)) return
+      const next = Math.max(280, Math.min(1800, 220 + text / 6 + code * 160 + math * 120 + part * 18 + tool * 90))
+      map.set(id, next)
+    }
+
+    for (const msg of sessionMessages()) {
+      if (msg.role === "user") {
+        save()
+        id = msg.id
+        text = 0
+        code = 0
+        math = 0
+        part = 0
+        tool = 0
+      }
+      if (!id) continue
+
+      const parts = sync.data.part[msg.id] ?? []
+      part += parts.length
+      tool += parts.filter((item) => item.type !== "text").length
+      const body = parts
+        .filter((item): item is TextPart => item.type === "text" && !(item as TextPart).synthetic)
+        .map((item) => item.text)
+        .join("\n")
+      text += body.length
+      code += body.match(/```/g)?.length ?? 0
+      math += (body.match(/\$\$|\\\[|\\\(/g)?.length ?? 0) + (body.match(/(?:^|\s)\$[^$\n]+\$/g)?.length ?? 0)
+    }
+    save()
+
+    return map
+  })
+  const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? estimates()?.get(id) ?? estimatedTurnHeight
   const slot = (id: string, index: number, size: number) => estimateTurnHeight(id) + (index < size - 1 ? gap : 0)
   const offset = (ids: string[], end: number) => {
     let sum = 0
@@ -323,12 +372,6 @@ export function MessageTimeline(props: {
     end: Infinity,
     top: 0,
     bottom: 0,
-  })
-  const sessionID = createMemo(() => params.id)
-  const sessionMessages = createMemo(() => {
-    const id = sessionID()
-    if (!id) return emptyMessages
-    return sync.data.message[id] ?? emptyMessages
   })
   const pendingMessage = createMemo(() => active(sessionMessages()))
   const [jump, setJump] = createSignal(false)
@@ -536,7 +579,7 @@ export function MessageTimeline(props: {
       }
     }
 
-    const span = root.clientHeight + windowOverscan * 2
+    const span = root.clientHeight + windowOverscan * 3
     let start = index
     let end = index + 1
     let covered = slot(ids[index]!, index, ids.length)
@@ -650,7 +693,7 @@ export function MessageTimeline(props: {
 
     audit(props.seekingMessageId ? "seek-window" : "apply-window")
     const adjustVersion = ++windowAdjustVersion
-    if (pinned || (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId)) {
+    if (!seek && (pinned || (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId))) {
       requestAnimationFrame(() => {
         if (adjustVersion !== windowAdjustVersion) return
         const root = viewport
@@ -737,6 +780,15 @@ export function MessageTimeline(props: {
           props.seekingMessageId,
           `source=${source} first=${visibleRendered().at(0) || "none"} last=${visibleRendered().at(-1) || "none"} rendered=${ids.length}`,
         )
+        console.debug(`[virtual] blank rescue: id=${props.seekingMessageId} rendered=${ids.length}`)
+        windowAdjustVersion += 1
+        setWindowed({
+          start: 0,
+          end: ids.length,
+          top: 0,
+          bottom: 0,
+        })
+        return
       }
       scheduleWindow()
     })
@@ -776,6 +828,7 @@ export function MessageTimeline(props: {
 
   createEffect(() => {
     if (!isWorking()) return
+    if (props.seekingMessageId) return
     if (!props.live && !props.scroll.bottom) return
 
     const step = () => {
@@ -783,6 +836,7 @@ export function MessageTimeline(props: {
       const root = viewport
       if (!root) return
       if (!isWorking()) return
+      if (props.seekingMessageId) return
       if (!props.live && !props.scroll.bottom) return
       root.scrollTop = root.scrollHeight
       props.onScheduleScrollState(root)
@@ -808,6 +862,7 @@ export function MessageTimeline(props: {
     const body = contentRef
     if (!body) return
     if (!isWorking()) return
+    if (props.seekingMessageId) return
     if (!props.live && !props.scroll.bottom) return
 
     let queued = false
@@ -817,6 +872,7 @@ export function MessageTimeline(props: {
       const root = viewport
       if (!root) return
       if (!isWorking()) return
+      if (props.seekingMessageId) return
       if (!props.live && !props.scroll.bottom) return
       root.scrollTop = root.scrollHeight
       props.onScheduleScrollState(root)
@@ -2164,12 +2220,22 @@ export function MessageTimeline(props: {
   function TimelineItem(item: { messageID: string; index: number }) {
     const active = createMemo(() => activeMessageID() === item.messageID)
     const eager = createMemo(() => active() || item.index >= rendered().length - 3)
-    const highlight = createMemo<"full" | "defer">(() => (active() ? "full" : "defer"))
+    const near = createMemo(() => {
+      const start = Math.max(0, windowed.start - 2)
+      const end = Math.min(rendered().length, windowed.end + 2)
+      return item.index >= start && item.index < end
+    })
+    const seek = createMemo(() => props.seekingMessageId === item.messageID)
+    const highlight = createMemo<"full" | "defer">(() => {
+      if (seek() || active() || near()) return "full"
+      return "defer"
+    })
     const math = createMemo<"full" | "defer">(() => {
       if (mathMode() !== "turn") return "full"
-      return eager() ? "full" : "defer"
+      if (seek() || active() || near()) return "full"
+      return "defer"
     })
-    const skipRender = createMemo(() => isWorking() && !eager())
+    const skipRender = createMemo(() => isWorking() && !eager() && !near())
     const messages = createMemo<MessageType[]>((prev?: MessageType[]) => {
       if (active()) return turnMessages(sessionMessages(), item.messageID)
       const next = turnMessages(sessionMessages(), item.messageID)
@@ -2191,7 +2257,7 @@ export function MessageTimeline(props: {
       const prev = turnHeights.get(item.messageID)
       const base = prev ?? estimatedTurnHeight
       if (!visible(node) && next < base - HEIGHT_SHIFT_WARN) {
-        if (props.seekingMessageId === item.messageID) {
+        if (seek()) {
           trace(
             "measure-ignored-shrink",
             item.messageID,
@@ -2205,13 +2271,13 @@ export function MessageTimeline(props: {
       setRevision((value) => value + 1)
       const delta = prev === undefined ? 0 : Math.round(next - prev)
       if (prev !== undefined && Math.abs(delta) > HEIGHT_SHIFT_WARN) {
-        if (props.seekingMessageId === item.messageID) {
+        if (seek()) {
           trace("measure-target", item.messageID, `prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta}`)
         }
       }
       scheduleWindow()
       const took = performance.now() - time
-      if (props.seekingMessageId === item.messageID && took > MEASURE_WARN_MS) {
+      if (seek() && took > MEASURE_WARN_MS) {
         trace("measure-slow", item.messageID, `height=${Math.round(next)} took=${Math.round(took)}`)
       }
     }
@@ -2241,13 +2307,13 @@ export function MessageTimeline(props: {
     createEffect(() => {
       if (!active()) return
       if (!isWorking()) return
-      if (props.seekingMessageId === item.messageID) trace("target-mounted", item.messageID)
+      if (seek()) trace("target-mounted", item.messageID)
     })
 
     onCleanup(() => stop?.())
     onCleanup(() => {
       if (!active()) return
-      if (props.seekingMessageId === item.messageID) trace("target-unmounted", item.messageID)
+      if (seek()) trace("target-unmounted", item.messageID)
     })
 
     return (

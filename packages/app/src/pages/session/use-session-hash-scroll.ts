@@ -19,7 +19,7 @@ export const useSessionHashScroll = (input: {
   setSeekingMessage: (value: string | undefined) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   enterLive: () => void
-  enterAnchored: (id?: string) => void
+  enterAnchored: () => void
   autoScroll: { pause: () => void; forceScrollToBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
@@ -33,7 +33,7 @@ export const useSessionHashScroll = (input: {
   let freshKey = ""
   let fresh = true
   let clearing = false
-  let seekTimer: ReturnType<typeof setTimeout> | undefined
+  let seekFrame: number | undefined
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -76,16 +76,10 @@ export const useSessionHashScroll = (input: {
   const cancel = () => {
     for (const id of frames) cancelAnimationFrame(id)
     frames.clear()
-  }
-
-  const clearSeeking = (id: string) => {
-    if (seekTimer) clearTimeout(seekTimer)
-    seekTimer = setTimeout(() => {
-      seekTimer = undefined
-      if (input.currentMessageId() !== id) return
-      trace("seek-clear", id)
-      input.setSeekingMessage(undefined)
-    }, 160)
+    if (seekFrame !== undefined) {
+      cancelAnimationFrame(seekFrame)
+      seekFrame = undefined
+    }
   }
 
   const clearMessageHash = () => {
@@ -135,9 +129,49 @@ export const useSessionHashScroll = (input: {
     return true
   }
 
+  const aligned = (id: string) => {
+    const root = input.scroller()
+    const el = document.getElementById(input.anchor(id))
+    if (!root || !(el instanceof HTMLElement)) return false
+
+    const box = root.getBoundingClientRect()
+    const rect = el.getBoundingClientRect()
+    const raw = getComputedStyle(root).getPropertyValue("--session-title-inset").trim()
+    const inset = Number.parseFloat(raw) || 0
+    const delta = Math.round(rect.top - box.top - inset)
+    trace("align-check", id, `delta=${delta} inset=${Math.round(inset)}`)
+    return Math.abs(delta) <= 2
+  }
+
+  const clearSeeking = (id: string, left = 12, hits = 0) => {
+    if (seekFrame !== undefined) cancelAnimationFrame(seekFrame)
+    seekFrame = requestAnimationFrame(() => {
+      seekFrame = undefined
+      if (input.currentMessageId() !== id) {
+        trace("seek-clear-skip", id, "reason=current-changed")
+        return
+      }
+
+      const ok = aligned(id)
+      const nextHits = ok ? hits + 1 : 0
+      trace("seek-clear-check", id, `aligned=${ok} hits=${nextHits} left=${left}`)
+      if (nextHits >= 2) {
+        trace("seek-clear", id, "reason=aligned-stable")
+        input.setSeekingMessage(undefined)
+        return
+      }
+      if (left <= 0) {
+        trace("seek-clear", id, "reason=timeout")
+        input.setSeekingMessage(undefined)
+        return
+      }
+      clearSeeking(id, left - 1, nextHits)
+    })
+  }
+
   const settle = (id: string, left = 4) => {
     const el = document.getElementById(input.anchor(id))
-    if (el instanceof HTMLElement) scrollToElement(el, "auto", id)
+    if (el instanceof HTMLElement && !aligned(id)) scrollToElement(el, "auto", id)
     if (left <= 0) return
     queue(() => {
       settle(id, left - 1)
@@ -147,10 +181,8 @@ export const useSessionHashScroll = (input: {
   const seek = (id: string, behavior: ScrollBehavior, left = 4): boolean => {
     const anchorId = input.anchor(id)
     const el = document.getElementById(anchorId)
-    const elByQuery = document.querySelector(`[id="${anchorId}"]`)
-    const elByDataAttr = document.querySelector(`[data-message-id="${id}"]`)
 
-    trace("seek-attempt", id, `anchor=${anchorId} retries=${left} foundById=${!!el} foundByQuery=${!!elByQuery} foundByData=${!!elByDataAttr}`)
+    trace("seek-attempt", id, `anchor=${anchorId} retries=${left} foundById=${!!el}`)
 
     if (el) {
       const result = scrollToElement(el, behavior, id)
@@ -175,7 +207,7 @@ export const useSessionHashScroll = (input: {
     trace("message-start", message.id, `behavior=${behavior}`)
     cancel()
     input.setSeekingMessage(message.id)
-    input.enterAnchored(message.id)
+    input.enterAnchored()
     if (input.currentMessageId() !== message.id) {
       input.setActiveMessage(message)
     }
@@ -204,7 +236,7 @@ export const useSessionHashScroll = (input: {
 
     const messageId = messageIdFromHash(hash)
     if (messageId) {
-      input.enterAnchored(messageId)
+      input.enterAnchored()
       input.autoScroll.pause()
       if (input.currentMessageId() === messageId) return
       const msg = messageById().get(messageId)
@@ -275,6 +307,7 @@ export const useSessionHashScroll = (input: {
     fresh = false
     if (pending) input.setPendingMessage(undefined)
     if (input.currentMessageId() === targetId && !pending) return
+    input.setSeekingMessage(targetId)
 
     input.autoScroll.pause()
     cancel()
@@ -306,7 +339,7 @@ export const useSessionHashScroll = (input: {
   })
 
   onCleanup(() => {
-    if (seekTimer) clearTimeout(seekTimer)
+    if (seekFrame !== undefined) cancelAnimationFrame(seekFrame)
     cancel()
   })
 
