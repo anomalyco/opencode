@@ -282,6 +282,29 @@ describe("cross-spawn spawner", () => {
         expect(running).toBe(false)
       }),
     )
+
+    fx.effect(
+      "exit fallback resolves when close hangs due to grandchild holding pipe",
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+
+        const started = Date.now()
+        const handle = yield* js(`
+          const { spawn } = require('child_process')
+          spawn(process.execPath, ['-e', 'setTimeout(()=>{}, 10000)'], {
+            stdio: ['ignore', process.stdout, 'ignore'],
+            detached: true
+          })
+          process.exit(0)
+        `)
+        const code = yield* handle.exitCode
+        const elapsed = Date.now() - started
+
+        expect(elapsed).toBeGreaterThan(1500)
+        expect(elapsed).toBeLessThan(5000)
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
   })
 
   describe("error handling", () => {
