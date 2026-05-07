@@ -1,5 +1,6 @@
 import * as prompts from "@clack/prompts"
 import { Effect, Option } from "effect"
+import { createSpinner } from "../prompt"
 
 export const intro = (msg: string) => Effect.sync(() => prompts.intro(msg))
 export const outro = (msg: string) => Effect.sync(() => prompts.outro(msg))
@@ -29,7 +30,7 @@ export const password = (opts: Parameters<typeof prompts.password>[0]) =>
   Effect.promise(() => prompts.password(opts)).pipe(Effect.map((result) => optional(result)))
 
 export const spinner = () => {
-  const s = prompts.spinner()
+  const s = createSpinner()
   return {
     start: (msg: string) => Effect.sync(() => s.start(msg)),
     stop: (msg: string, code?: number) => Effect.sync(() => s.stop(msg, code)),

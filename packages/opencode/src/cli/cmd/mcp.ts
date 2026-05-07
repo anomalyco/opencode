@@ -5,6 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import * as prompts from "@clack/prompts"
+import { createSpinner } from "../prompt"
 import { UI } from "../ui"
 import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
@@ -253,7 +254,7 @@ export const McpAuthCommand = effectCmd({
       prompts.log.warn(`${serverName} has expired credentials. Re-authenticating...`)
     }
 
-    const spinner = prompts.spinner()
+    const spinner = createSpinner()
     spinner.start("Starting OAuth flow...")
 
     // Subscribe to browser open failure events to show URL for manual opening
@@ -665,7 +666,7 @@ export const McpDebugCommand = effectCmd({
         }
       }
 
-      const spinner = prompts.spinner()
+      const spinner = createSpinner()
       spinner.start("Testing connection...")
 
       // Test basic HTTP connectivity first

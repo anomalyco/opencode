@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
+import { createSpinner } from "../prompt"
 import { Installation } from "../../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
@@ -52,7 +53,7 @@ export const UpgradeCommand = {
     }
 
     prompts.log.info(`From ${InstallationVersion} → ${target}`)
-    const spinner = prompts.spinner({ frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] })
+    const spinner = createSpinner()
     spinner.start("Upgrading...")
     const err = await Installation.upgrade(method, target).catch((err) => err)
     if (err) {

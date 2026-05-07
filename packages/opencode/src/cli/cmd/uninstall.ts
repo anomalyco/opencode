@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
+import { createSpinner } from "../prompt"
 import { Installation } from "../../installation"
 import { Global } from "@opencode-ai/core/global"
 import fs from "fs/promises"
@@ -142,7 +143,7 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
 }
 
 async function executeUninstall(method: Installation.Method, targets: RemovalTargets) {
-  const spinner = prompts.spinner()
+  const spinner = createSpinner()
   const errors: string[] = []
 
   for (const dir of targets.directories) {

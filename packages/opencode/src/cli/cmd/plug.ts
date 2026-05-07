@@ -1,4 +1,5 @@
-import { intro, log, outro, spinner } from "@clack/prompts"
+import { intro, log, outro } from "@clack/prompts"
+import { createSpinner } from "../prompt"
 import { Effect } from "effect"
 
 import { ConfigPaths } from "@/config/paths"
@@ -45,7 +46,7 @@ export type PlugCtx = {
 }
 
 const defaultPlugDeps: PlugDeps = {
-  spinner: () => spinner(),
+  spinner: () => createSpinner(),
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),

@@ -2,6 +2,7 @@ import path from "path"
 import { exec } from "child_process"
 import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
+import { createSpinner } from "../prompt"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
 import { graphql } from "@octokit/graphql"
@@ -325,7 +326,7 @@ export const GithubInstallCommand = effectCmd({
         }
 
         async function installGitHubApp() {
-          const s = prompts.spinner()
+          const s = createSpinner()
           s.start("Installing GitHub app")
 
           // Get installation

@@ -1,5 +1,6 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
+import { createSpinner } from "../prompt"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"
 import { Agent } from "../../agent/agent"
@@ -124,7 +125,7 @@ const AgentCreateCommand = effectCmd({
       }
 
       // Generate agent
-      const spinner = prompts.spinner()
+      const spinner = createSpinner()
       spinner.start("Generating agent configuration...")
       const model = args.model ? Provider.parseModel(args.model) : undefined
       const generated = await Effect.runPromise(agentSvc.generate({ description, model })).catch((error) => {
