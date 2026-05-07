@@ -74,6 +74,7 @@ const useTerminalUiBindings = (input: {
   cleanups: VoidFunction[]
   handlePointerDown: () => void
   handleLinkClick: (event: MouseEvent) => void
+  handleLinkContextMenu: (event: MouseEvent) => void
 }) => {
   const handleCopy = (event: ClipboardEvent) => {
     const selection = input.term.getSelection()
@@ -117,6 +118,15 @@ const useTerminalUiBindings = (input: {
   })
   input.cleanups.push(() =>
     input.container.removeEventListener("click", input.handleLinkClick, {
+      capture: true,
+    }),
+  )
+
+  input.container.addEventListener("contextmenu", input.handleLinkContextMenu, {
+    capture: true,
+  })
+  input.cleanups.push(() =>
+    input.container.removeEventListener("contextmenu", input.handleLinkContextMenu, {
       capture: true,
     }),
   )
@@ -340,6 +350,18 @@ export const Terminal = (props: TerminalProps) => {
     platform.openLink(text)
   }
 
+  const handleLinkContextMenu = (event: MouseEvent) => {
+    const t = term
+    if (!t) return
+
+    const text = getHoveredLinkText(t)
+    if (!text) return
+
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    platform.openLink(text)
+  }
+
   onMount(() => {
     const run = async () => {
       const loaded = await loadGhostty()
@@ -404,6 +426,7 @@ export const Terminal = (props: TerminalProps) => {
         cleanups,
         handlePointerDown,
         handleLinkClick,
+        handleLinkContextMenu,
       })
 
       if (local.autoFocus !== false) focusTerminal()

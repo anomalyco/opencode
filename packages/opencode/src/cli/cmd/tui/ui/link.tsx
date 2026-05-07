@@ -18,8 +18,10 @@ export function Link(props: LinkProps) {
   return (
     <text
       fg={props.fg}
-      onMouseUp={() => {
-        open(props.href).catch(() => {})
+      onMouseUp={(event) => {
+        if (event.button === 2) {
+          open(props.href).catch(() => {})
+        }
       }}
     >
       {displayText}
