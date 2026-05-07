@@ -25,6 +25,7 @@ describe("public exports", () => {
     expect(OpenAI.model).toBeFunction()
     expect(OpenAI.provider.model).toBe(OpenAI.model)
     expect(OpenAI.apis.responses).toBe(OpenAI.responses)
+    expect(OpenAI.apis.responsesWebSocket).toBe(OpenAI.responsesWebSocket)
     expect(OpenAICompatible.deepseek.model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
     expect(OpenRouter.provider.model).toBe(OpenRouter.model)
@@ -47,6 +48,7 @@ describe("public exports", () => {
     expect(OpenAIChat.adapter.id).toBe("openai-chat")
     expect(OpenAICompatibleChat.adapter.id).toBe("openai-compatible-chat")
     expect(OpenAIResponses.adapter.id).toBe("openai-responses")
+    expect(OpenAIResponses.webSocketAdapter.id).toBe("openai-responses-websocket")
     expect(AnthropicMessages.adapter.id).toBe("anthropic-messages")
   })
 

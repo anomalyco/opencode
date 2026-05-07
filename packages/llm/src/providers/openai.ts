@@ -11,7 +11,7 @@ export type { OpenAIOptionsInput } from "./openai-options"
 
 export const id = ProviderID.make("openai")
 
-export const adapters = [OpenAIResponses.adapter, OpenAIChat.adapter]
+export const adapters = [OpenAIResponses.adapter, OpenAIResponses.webSocketAdapter, OpenAIChat.adapter]
 
 // This provider facade wraps the lower-level Responses and Chat model factories
 // with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
@@ -33,6 +33,11 @@ export const responses = (id: string | ModelID, options: OpenAIModelInput<Omit<A
   return OpenAIResponses.model(withOpenAIOptions(id, { ...rest, auth: auth(options) }, { textVerbosity: true }))
 }
 
+export const responsesWebSocket = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
+  const { apiKey: _, ...rest } = options
+  return OpenAIResponses.webSocketModel(withOpenAIOptions(id, { ...rest, auth: auth(options) }, { textVerbosity: true }))
+}
+
 export const chat = (id: string | ModelID, options: OpenAIModelInput<Omit<AdapterModelInput, "id">> = {}) => {
   const { apiKey: _, ...rest } = options
   return OpenAIChat.model(withOpenAIOptions(id, { ...rest, auth: auth(options) }))
@@ -41,7 +46,7 @@ export const chat = (id: string | ModelID, options: OpenAIModelInput<Omit<Adapte
 export const provider = Provider.make({
   id,
   model: responses,
-  apis: { responses, chat },
+  apis: { responses, responsesWebSocket, chat },
 })
 
 export const model = provider.model

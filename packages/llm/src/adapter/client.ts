@@ -1,9 +1,11 @@
-import { Context, Effect, Layer, Schema, Stream } from "effect"
-import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import { Auth, type Auth as AuthDef } from "./auth"
-import { type Endpoint, render as renderEndpoint } from "./endpoint"
+import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import type { Auth as AuthDef } from "./auth"
+import type { Endpoint } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import type { Framing } from "./framing"
+import { HttpTransport } from "./transport"
+import type { Transport, TransportRuntime } from "./transport"
+import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import * as ProviderShared from "../protocols/shared"
 import * as ToolRuntime from "../tool-runtime"
@@ -30,26 +32,27 @@ import {
   ProviderID,
   mergeGenerationOptions,
   mergeHttpOptions,
-  mergeJsonRecords,
   mergeProviderOptions,
 } from "../schema"
 
-export interface HttpContext {
+export interface AdapterContext {
   readonly request: LLMRequest
 }
 
-export interface Adapter<Payload> {
+export interface Adapter<Payload, Prepared = unknown> {
   readonly id: string
   readonly protocol: ProtocolID
+  readonly transport: string
   readonly payloadSchema: Schema.Codec<Payload, unknown>
   readonly toPayload: (request: LLMRequest) => Effect.Effect<Payload, LLMError>
-  readonly toHttp: (
+  readonly prepareTransport: (
     payload: Payload,
-    context: HttpContext,
-  ) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (
-    response: HttpClientResponse.HttpClientResponse,
-    context: HttpContext,
+    context: AdapterContext,
+  ) => Effect.Effect<Prepared, LLMError>
+  readonly streamPrepared: (
+    prepared: Prepared,
+    context: AdapterContext,
+    runtime: TransportRuntime,
   ) => Stream.Stream<LLMEvent, LLMError>
 }
 
@@ -57,7 +60,7 @@ export interface Adapter<Payload> {
 // Normal call sites use `OpenAIChat.adapter`; callers only need payload types
 // when preparing a request with a protocol-specific type assertion.
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
-export type AnyAdapter = Adapter<any>
+export type AnyAdapter = Adapter<any, any>
 
 const adapterRegistry = new Map<string, AnyAdapter>()
 
@@ -229,6 +232,61 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
 }
 
+export interface MakeTransportInput<Payload, Prepared, Frame, Chunk, State> {
+  /** Adapter id used in registry lookup and error messages. */
+  readonly id: string
+  /** Semantic API contract — owns lowering, payload schema, and parsing. */
+  readonly protocol: Protocol<Payload, Frame, Chunk, State>
+  /** Runnable transport route. */
+  readonly transport: Transport<Payload, Prepared, Frame>
+}
+
+const streamError = (adapter: string, message: string, cause: Cause.Cause<unknown>) => {
+  const failed = cause.reasons.find(Cause.isFailReason)?.error
+  if (failed instanceof LLMErrorClass) return failed
+  return ProviderShared.chunkError(adapter, message, Cause.pretty(cause))
+}
+
+function makeFromTransport<Payload, Prepared, Frame, Chunk, State>(
+  input: MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
+): Adapter<Payload, Prepared> {
+  const protocol = input.protocol
+  const decodeChunkEffect = Schema.decodeUnknownEffect(protocol.chunk)
+  const decodeChunk = (route: string) => (frame: Frame) =>
+    decodeChunkEffect(frame).pipe(
+      Effect.mapError(() =>
+        ProviderShared.chunkError(
+          input.id,
+          `Invalid ${route} stream chunk`,
+          typeof frame === "string" ? frame : ProviderShared.encodeJson(frame),
+        ),
+      ),
+    )
+
+  return register({
+    id: input.id,
+    protocol: protocol.id,
+    transport: input.transport.id,
+    payloadSchema: protocol.payload,
+    toPayload: protocol.toPayload,
+    prepareTransport: input.transport.prepare,
+    streamPrepared: (prepared, ctx, runtime) => {
+      const route = `${ctx.request.model.provider}/${ctx.request.model.adapter}`
+      const chunks = input.transport.frames(prepared, ctx, runtime).pipe(
+        Stream.mapEffect(decodeChunk(route)),
+        protocol.terminal ? Stream.takeUntil(protocol.terminal) : (stream) => stream,
+      )
+      return chunks.pipe(
+        Stream.mapAccumEffect(protocol.initial, protocol.process, protocol.onHalt ? { onHalt: protocol.onHalt } : undefined),
+        Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
+      )
+    },
+  })
+}
+
+export function make<Payload, Prepared, Frame, Chunk, State>(
+  input: MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
+): Adapter<Payload, Prepared>
 /**
  * Build an `Adapter` by composing the four orthogonal pieces of a deployment:
  *
@@ -246,79 +304,29 @@ export interface MakeInput<Payload, Frame, Chunk, State> {
  */
 export function make<Payload, Frame, Chunk, State>(
   input: MakeInput<Payload, Frame, Chunk, State>,
-): Adapter<Payload> {
-  const auth = input.auth ?? Auth.bearer()
+): Adapter<Payload, HttpTransport.HttpPrepared<Frame>>
+export function make<Payload, Prepared, Frame, Chunk, State>(
+  input: MakeInput<Payload, Frame, Chunk, State> | MakeTransportInput<Payload, Prepared, Frame, Chunk, State>,
+): Adapter<Payload, Prepared> | Adapter<Payload, HttpTransport.HttpPrepared<Frame>> {
+  if ("transport" in input) return makeFromTransport(input)
   const protocol = input.protocol
   const encodePayload = Schema.encodeSync(Schema.fromJsonString(protocol.payload))
-  const decodeChunkEffect = Schema.decodeUnknownEffect(protocol.chunk)
-  const decodeChunk = (route: string) => (frame: Frame) =>
-    decodeChunkEffect(frame).pipe(
-      Effect.mapError(() =>
-        ProviderShared.chunkError(
-          input.id,
-          `Invalid ${route} stream chunk`,
-          typeof frame === "string" ? frame : ProviderShared.encodeJson(frame),
-        ),
-      ),
-    )
-  const buildHeaders = input.headers ?? (() => ({}))
-  const applyQuery = (url: string, query: Record<string, string> | undefined) => {
-    if (!query) return url
-    const next = new URL(url)
-    Object.entries(query).forEach(([key, value]) => next.searchParams.set(key, value))
-    return next.toString()
-  }
-
-  const toHttp = (payload: Payload, ctx: HttpContext) =>
-    Effect.gen(function* () {
-      const url = applyQuery(
-        (yield* renderEndpoint(input.endpoint, { request: ctx.request, payload })).toString(),
-        ctx.request.http?.query,
-      )
-      const body = ctx.request.http?.body === undefined
-        ? encodePayload(payload)
-        : ProviderShared.isRecord(payload)
-        ? ProviderShared.encodeJson(mergeJsonRecords(payload, ctx.request.http.body) ?? {})
-        : yield* ProviderShared.invalidRequest("http.body can only overlay JSON object request bodies")
-      const merged = Headers.fromInput({
-        ...buildHeaders({ request: ctx.request }),
-        ...ctx.request.model.headers,
-        ...ctx.request.http?.headers,
-      })
-      const headers = yield* Auth.toEffect(Auth.isAuth(ctx.request.model.auth) ? ctx.request.model.auth : auth)({
-        request: ctx.request,
-        method: "POST",
-        url,
-        body,
-        headers: merged,
-      })
-      return ProviderShared.jsonPost({ url, body, headers })
-    })
-
-  const parse = (response: HttpClientResponse.HttpClientResponse, ctx: HttpContext) =>
-    ProviderShared.framed({
-      adapter: `${ctx.request.model.provider}/${ctx.request.model.adapter}`,
-      response,
-      readError: `Failed to read ${ctx.request.model.provider}/${ctx.request.model.adapter} stream`,
-      framing: input.framing.frame,
-      decodeChunk: decodeChunk(`${ctx.request.model.provider}/${ctx.request.model.adapter}`),
-      initial: protocol.initial,
-      process: protocol.process,
-      onHalt: protocol.onHalt,
-    })
-
-  return register({
+  return makeFromTransport({
     id: input.id,
-    protocol: protocol.id,
-    payloadSchema: protocol.payload,
-    toPayload: protocol.toPayload,
-    toHttp,
-    parse,
+    protocol,
+    transport: HttpTransport.httpJson({
+      endpoint: input.endpoint,
+      auth: input.auth,
+      framing: input.framing,
+      encodePayload,
+      headers: input.headers,
+    }),
   })
 }
 
 // `compile` is the important boundary: it turns a common `LLMRequest` into a
-// validated provider payload plus HTTP request, but does not execute transport.
+// validated provider payload plus transport-private prepared data, but does not
+// execute transport.
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   const resolved = resolveRequestOptions(request)
   const adapter = registeredAdapter(resolved.model.adapter)
@@ -327,7 +335,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   const payload = yield* adapter.toPayload(resolved).pipe(
     Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(adapter.payloadSchema))),
   )
-  const http = yield* adapter.toHttp(payload, {
+  const prepared = yield* adapter.prepareTransport(payload, {
     request: resolved,
   })
 
@@ -335,7 +343,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
     request: resolved,
     adapter,
     payload,
-    http,
+    prepared,
   }
 })
 
@@ -347,16 +355,15 @@ const prepareWith = Effect.fn("LLMClient.prepare")(function* (request: LLMReques
     adapter: compiled.adapter.id,
     model: compiled.request.model,
     payload: compiled.payload,
+    metadata: { transport: compiled.adapter.transport },
   })
 })
 
-const streamRequestWith = (executor: RequestExecutor.Interface) => (request: LLMRequest) =>
+const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =>
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request)
-      const response = yield* executor.execute(compiled.http)
-
-      return compiled.adapter.parse(response, { request: compiled.request })
+      return compiled.adapter.streamPrepared(compiled.prepared, { request: compiled.request }, runtime)
     }),
   )
 
@@ -411,7 +418,18 @@ export const streamRequest = (request: LLMRequest) =>
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const stream = streamWith(streamRequestWith(yield* RequestExecutor.Service))
+    const stream = streamWith(streamRequestWith({ http: yield* RequestExecutor.Service }))
+    return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
+  }),
+)
+
+export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutor.Service> = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const stream = streamWith(streamRequestWith({
+      http: yield* RequestExecutor.Service,
+      webSocket: yield* WebSocketExecutor.Service,
+    }))
     return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
   }),
 )
@@ -421,6 +439,7 @@ export const Adapter = { make, model } as const
 export const LLMClient = {
   Service,
   layer,
+  layerWithWebSocket,
   prepare,
   stream,
   generate,

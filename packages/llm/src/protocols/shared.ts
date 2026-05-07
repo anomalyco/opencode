@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer"
-import { Cause, Effect, Schema, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
-import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { InvalidProviderOutputReason, InvalidRequestReason, LLMError, type ContentPart, type LLMRequest, type MediaPart, type ToolResultPart } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
@@ -92,56 +92,13 @@ export const toolResultText = (part: ToolResultPart) => {
   return encodeJson(part.result.value)
 }
 
-const errorText = (error: unknown) => {
+export const errorText = (error: unknown) => {
   if (error instanceof Error) return error.message
   if (typeof error === "string") return error
   if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") return String(error)
   if (error === null) return "null"
   if (error === undefined) return "undefined"
   return "Unknown stream error"
-}
-
-const streamError = (adapter: string, message: string, cause: Cause.Cause<unknown>) => {
-  const failed = cause.reasons.find(Cause.isFailReason)?.error
-  if (failed instanceof LLMError) return failed
-  return chunkError(adapter, message, Cause.pretty(cause))
-}
-
-/**
- * Generic streaming-response decoder used by `Adapter.make`. Splits
- * the response stream into:
- *
- *   bytes → frames (caller-supplied) → chunk → (state, events)
- *
- * The `framing` step is the protocol-specific part — `Framing.sse` uses
- * `sseFraming` below; binary protocols (Bedrock event-stream) supply their
- * own byte-level decoder. Everything else (transport-error normalization,
- * schema decoding per chunk, stateful chunk → event mapping, `onHalt` flush,
- * terminal-error normalization) is shared.
- */
-export const framed = <Frame, Chunk, State, Event>(input: {
-  readonly adapter: string
-  readonly response: HttpClientResponse.HttpClientResponse
-  readonly readError: string
-  readonly framing: (
-    bytes: Stream.Stream<Uint8Array, LLMError>,
-  ) => Stream.Stream<Frame, LLMError>
-  readonly decodeChunk: (frame: Frame) => Effect.Effect<Chunk, LLMError>
-  readonly initial: () => State
-  readonly process: (
-    state: State,
-    chunk: Chunk,
-  ) => Effect.Effect<readonly [State, ReadonlyArray<Event>], LLMError>
-  readonly onHalt?: (state: State) => ReadonlyArray<Event>
-}): Stream.Stream<Event, LLMError> => {
-  const bytes = input.response.stream.pipe(
-    Stream.mapError((error) => chunkError(input.adapter, input.readError, errorText(error))),
-  )
-  return input.framing(bytes).pipe(
-    Stream.mapEffect(input.decodeChunk),
-    Stream.mapAccumEffect(input.initial, input.process, input.onHalt ? { onHalt: input.onHalt } : undefined),
-    Stream.catchCause((cause) => Stream.fail(streamError(input.adapter, input.readError, cause))),
-  )
 }
 
 /**

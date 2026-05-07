@@ -49,6 +49,8 @@ export interface Protocol<Payload, Frame, Chunk, State> {
     state: State,
     chunk: Chunk,
   ) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], LLMError>
+  /** Optional request-completion signal for transports that do not end naturally. */
+  readonly terminal?: (chunk: Chunk) => boolean
   /** Optional flush emitted when the framed stream ends. */
   readonly onHalt?: (state: State) => ReadonlyArray<LLMEvent>
 }

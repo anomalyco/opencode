@@ -34,19 +34,23 @@ export const textRequest = (input: {
   readonly model: ModelRef
   readonly prompt?: string
   readonly maxTokens?: number
+  readonly temperature?: number | false
 }) =>
   LLM.request({
     id: input.id,
     model: input.model,
     system: "You are concise.",
     prompt: input.prompt ?? "Reply with exactly: Hello!",
-    generation: { maxTokens: input.maxTokens ?? 20, temperature: 0 },
+    generation: input.temperature === false
+      ? { maxTokens: input.maxTokens ?? 20 }
+      : { maxTokens: input.maxTokens ?? 20, temperature: input.temperature ?? 0 },
   })
 
 export const weatherToolRequest = (input: {
   readonly id: string
   readonly model: ModelRef
   readonly maxTokens?: number
+  readonly temperature?: number | false
 }) =>
   LLM.request({
     id: input.id,
@@ -55,7 +59,9 @@ export const weatherToolRequest = (input: {
     prompt: "Call get_weather with city exactly Paris.",
     tools: [weatherTool],
     toolChoice: LLM.toolChoice(weatherTool),
-    generation: { maxTokens: input.maxTokens ?? 80, temperature: 0 },
+    generation: input.temperature === false
+      ? { maxTokens: input.maxTokens ?? 80 }
+      : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
   })
 
 export const weatherToolLoopRequest = (input: {
@@ -73,6 +79,17 @@ export const weatherToolLoopRequest = (input: {
     generation: input.temperature === false
       ? { maxTokens: input.maxTokens ?? 80 }
       : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
+  })
+
+export const goldenWeatherToolLoopRequest = (input: {
+  readonly id: string
+  readonly model: ModelRef
+  readonly maxTokens?: number
+  readonly temperature?: number | false
+}) =>
+  weatherToolLoopRequest({
+    ...input,
+    system: "Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.",
   })
 
 export const runWeatherToolLoop = (request: LLMRequest) =>
@@ -117,6 +134,63 @@ export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
   expect(output).toContain("Paris")
   expect(output.trim().length).toBeGreaterThan(0)
 }
+
+export const expectGoldenWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
+  expectWeatherToolLoop(events)
+  expect(LLMResponse.text({ events }).trim()).toMatch(/^Paris is sunny\.?$/)
+}
+
+export type GoldenScenarioID = "text" | "tool-call" | "tool-loop"
+
+export interface GoldenScenarioContext {
+  readonly id: string
+  readonly model: ModelRef
+  readonly maxTokens?: number
+  readonly temperature?: number | false
+}
+
+const generate = (request: LLMRequest) => LLMClient.generate(request)
+
+export const goldenScenarioTags = (id: GoldenScenarioID) => {
+  if (id === "text") return ["text", "golden"]
+  if (id === "tool-call") return ["tool", "tool-call", "golden"]
+  return ["tool", "tool-loop", "golden"]
+}
+
+export const runGoldenScenario = (id: GoldenScenarioID, context: GoldenScenarioContext) =>
+  Effect.gen(function* () {
+    if (id === "text") {
+      const response = yield* generate(textRequest({
+        id: context.id,
+        model: context.model,
+        prompt: "Reply exactly with: Hello!",
+        maxTokens: context.maxTokens ?? 40,
+        temperature: context.temperature,
+      }))
+      expect(response.text.trim()).toMatch(/^Hello!?$/)
+      expectFinish(response.events, "stop")
+      return
+    }
+
+    if (id === "tool-call") {
+      const response = yield* generate(weatherToolRequest({
+        id: context.id,
+        model: context.model,
+        maxTokens: context.maxTokens ?? 80,
+        temperature: context.temperature,
+      }))
+      expectWeatherToolCall(response)
+      expectFinish(response.events, "tool-calls")
+      return
+    }
+
+    expectGoldenWeatherToolLoop(yield* runWeatherToolLoop(goldenWeatherToolLoopRequest({
+      id: context.id,
+      model: context.model,
+      maxTokens: context.maxTokens ?? 80,
+      temperature: context.temperature,
+    })))
+  })
 
 const usageSummary = (usage: LLMResponse["usage"] | undefined) => {
   if (!usage) return undefined
