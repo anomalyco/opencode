@@ -14,6 +14,8 @@ import { registerAnalyzeTools } from "./tools/analyze.js"
 import { registerCheckTools } from "./tools/check.js"
 import { registerReexamTools } from "./tools/reexam.js"
 import { registerInvalidationTools } from "./tools/invalidation.js"
+import { getCaseStore, type TaskType } from "./utils/case-store.js"
+import { checkDBHealth } from "./utils/db.js"
 
 /**
  * YunPat Patent Plugin 入口
@@ -25,6 +27,18 @@ const PatentPlugin: Plugin = async (input, options) => {
 
   // 初始化 LLM 适配器（使用 fetch 调用 OpenAI-compatible API）
   const llm = createDefaultLLM(client, options)
+
+  // 启动时检查数据库连接（异步不阻塞）
+  Promise.all([
+    checkDBHealth().then(h => {
+      if (h.ok) console.log(`[YunPat] patent_db 连接正常 (${h.latencyMs}ms)`)
+      else console.warn(`[YunPat] ⚠️ patent_db 连接失败: ${h.error}`)
+    }),
+    checkDBHealth({ database: "legal_world_model" }).then(h => {
+      if (h.ok) console.log(`[YunPat] legal_world_model 连接正常 (${h.latencyMs}ms)`)
+      else console.warn(`[YunPat] ⚠️ legal_world_model 连接失败: ${h.error}`)
+    }),
+  ]).catch(() => { /* 健康检查失败不阻塞启动 */ })
 
   // 初始化共享上下文
   const context = {
@@ -102,11 +116,36 @@ const PatentPlugin: Plugin = async (input, options) => {
       output.status = "ask"
     },
 
-    // 事件监听：记录专利操作审计日志
+    // 事件监听：记录专利操作审计日志 + 案件任务追踪
     "tool.execute.after": async (event, _output) => {
       const toolId = event.tool
       if (toolId?.startsWith("patent_") || toolId?.startsWith("oa_") || toolId?.startsWith("reexam_") || toolId?.startsWith("invalidation_")) {
         console.log(`[YunPat Audit] ${toolId} executed in session ${event.sessionID}`)
+
+        // 记录到案件任务表
+        try {
+          const store = getCaseStore()
+          const taskTypeMap: Record<string, TaskType> = {
+            patent_research: "research",
+            patent_draft: "draft",
+            oa_response: "oa",
+            patent_search: "research",
+            patent_analyze: "analyze",
+            patent_check: "check",
+            reexam_response: "reexam",
+            invalidation_response: "invalidation",
+          }
+          const taskType = taskTypeMap[toolId]
+          if (taskType) {
+            store.createTask({
+              sessionId: event.sessionID,
+              taskType,
+              toolName: toolId,
+            })
+          }
+        } catch (e: any) {
+          console.warn("[YunPat] Case store recording failed:", e?.message)
+        }
       }
     },
   }

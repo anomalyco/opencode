@@ -11,6 +11,7 @@ import { safeAsk } from "../types.js"
 import { searchLegalRules, searchPatentJudgments, searchPatents } from "../utils/db.js"
 import { queryInvalidationFromKB, queryJudgmentFromKB } from "../utils/obsidian-kb.js"
 import { extractPatentKeywords } from "../utils/patent-keywords.js"
+import { invalidationAttackTemplate, invalidationDefendTemplate } from "../templates/invalidation.js"
 
 /**
  * 注册无效宣告工具集
@@ -104,12 +105,17 @@ async function invalidationAnalyze(
   evidence: string,
   pluginContext: PatentPluginContext,
 ) {
-  // 检索相关法规和先例
+  // 检索相关法规和先例（并行查询）
   let referenceData = ""
   try {
     const keywords = extractInvalidationKeywords(targetPatent)
     if (keywords.length > 0) {
-      const rules = await searchLegalRules(keywords[0], { limit: 5 })
+      const [rules, judgments, kbResult] = await Promise.all([
+        searchLegalRules(keywords[0], { limit: 5 }).catch(() => []),
+        searchPatentJudgments(keywords.join(" "), { limit: 5 }).catch(() => []),
+        queryInvalidationFromKB(keywords[0]).catch(() => null),
+      ])
+
       if (rules.length > 0) {
         referenceData += `### 相关法规\n\n`
         rules.forEach((r, i) => {
@@ -118,7 +124,6 @@ async function invalidationAnalyze(
         })
       }
 
-      const judgments = await searchPatentJudgments(keywords.join(" "), { limit: 5 })
       if (judgments.length > 0) {
         referenceData += `### 相关判决\n\n`
         judgments.forEach((j, i) => {
@@ -129,13 +134,13 @@ async function invalidationAnalyze(
         })
       }
 
-      const kbResult = await queryInvalidationFromKB(keywords[0])
       if (kbResult && !kbResult.includes("未在复审无效决定中找到")) {
         referenceData += `### 复审无效先例\n\n${kbResult.slice(0, 1500)}\n\n`
       }
     }
   } catch (error: any) {
     console.warn("[Invalidation] Reference search error:", error?.message)
+    referenceData += `\n> ⚠️ 法规检索失败（${error?.message}），以下分析基于 LLM 推理，建议人工核实。\n`
   }
 
   const roleLabel = role === "attacker" ? "无效请求人（攻方）" : "专利权人（守方）"
@@ -184,6 +189,8 @@ async function invalidationAttack(
   extraContext: string,
   pluginContext: PatentPluginContext,
 ) {
+  const templateRef = invalidationAttackTemplate()
+
   const prompt = `请撰写专利无效宣告请求书：
 
 **目标专利权利要求**：
@@ -192,27 +199,10 @@ ${targetPatent}
 ${evidence ? `**证据材料**：\n${evidence}\n\n` : ""}
 ${extraContext ? `**额外上下文**：\n${extraContext}\n\n` : ""}
 
-请按以下结构撰写：
+**无效宣告请求书模板参考**（严格遵循此结构）：
+${templateRef}
 
-**无效宣告请求书**
-
-一、请求事项
-（请求宣告 XXX 号专利全部/部分无效）
-
-二、无效宣告的理由和证据
-
-理由一：[无效理由类型]
-1. 法律依据
-2. 证据目录
-3. 具体论述
-   （逐权利要求对比分析）
-
-理由二：[无效理由类型]
-（同上结构）
-
-三、结论
-
-要求：
+请按模板结构撰写，要求：
 - 论证严密，证据链完整
 - 引用准确的法条和审查指南
 - 对比分析使用表格形式
@@ -220,7 +210,7 @@ ${extraContext ? `**额外上下文**：\n${extraContext}\n\n` : ""}
 
   const response = await pluginContext.llm.chat({
     messages: [
-      { role: "system", content: "你是专利无效宣告请求书撰写专家。严格按照审查指南第四部分第五章要求。" },
+      { role: "system", content: "你是专利无效宣告请求书撰写专家。按提供的模板结构撰写，严格遵循审查指南第四部分第五章要求。" },
       { role: "user", content: prompt },
     ],
     maxTokens: 8192,
@@ -238,6 +228,8 @@ async function invalidationDefend(
   extraContext: string,
   pluginContext: PatentPluginContext,
 ) {
+  const templateRef = invalidationDefendTemplate()
+
   const prompt = `请撰写专利无效答辩意见：
 
 **目标专利权利要求**：
@@ -246,30 +238,10 @@ ${targetPatent}
 ${evidence ? `**无效请求人的理由和证据**：\n${evidence}\n\n` : ""}
 ${extraContext ? `**额外上下文**：\n${extraContext}\n\n` : ""}
 
-请按以下结构撰写答辩意见：
+**无效答辩意见模板参考**（严格遵循此结构）：
+${templateRef}
 
-**意见陈述书（无效答辩）**
-
-一、答辩总览
-（针对无效请求的总体回应策略）
-
-二、逐条答辩
-
-针对无效理由一的答辩：
-1. 无效请求人的论点
-2. 专利权人的意见（逐条回应）
-3. 法律依据和论据
-4. 证据反驳
-
-（对每个无效理由重复以上结构）
-
-三、权利要求修改说明（如需修改）
-（修改内容、依据、效果）
-
-四、结论
-（请求维持专利权有效）
-
-要求：
+请按模板结构撰写，要求：
 - 逐一回应对方论点
 - 论证有力、逻辑清晰
 - 必要时提出权利要求修改方案
@@ -277,7 +249,7 @@ ${extraContext ? `**额外上下文**：\n${extraContext}\n\n` : ""}
 
   const response = await pluginContext.llm.chat({
     messages: [
-      { role: "system", content: "你是专利无效答辩专家。维护专利权人的合法权益，逐一反驳无效理由。" },
+      { role: "system", content: "你是专利无效答辩专家。按提供的模板结构撰写，维护专利权人的合法权益，逐一反驳无效理由。" },
       { role: "user", content: prompt },
     ],
     maxTokens: 8192,

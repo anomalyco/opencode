@@ -13,6 +13,7 @@ import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchLegalRules, searchPatentJudgments } from "../utils/db.js"
 import { queryInvalidationFromKB, queryGuidelinesFromKB } from "../utils/obsidian-kb.js"
 import { extractPatentKeywords } from "../utils/patent-keywords.js"
+import { reexamTemplate } from "../templates/reexam.js"
 
 /**
  * 注册复审请求工具集
@@ -96,13 +97,17 @@ async function reexamAnalyze(
   extraContext: string,
   pluginContext: PatentPluginContext,
 ) {
-  // 检索相关法规和先例
+  // 检索相关法规和先例（并行查询）
   let referenceData = ""
   try {
     const keywords = extractReexamKeywords(rejectionDecision)
     if (keywords.length > 0) {
-      // 查询复审相关法规
-      const rules = await searchLegalRules(keywords[0], { limit: 5 })
+      const [rules, kbResult, guidelines] = await Promise.all([
+        searchLegalRules(keywords[0], { limit: 5 }).catch(() => []),
+        queryInvalidationFromKB(keywords[0]).catch(() => null),
+        queryGuidelinesFromKB("复审").catch(() => null),
+      ])
+
       if (rules.length > 0) {
         referenceData += `### 相关法规\n\n`
         rules.forEach((r, i) => {
@@ -111,20 +116,17 @@ async function reexamAnalyze(
         })
       }
 
-      // 查询复审无效先例
-      const kbResult = await queryInvalidationFromKB(keywords[0])
       if (kbResult && !kbResult.includes("未在复审无效决定中找到")) {
         referenceData += `### 复审先例\n\n${kbResult.slice(0, 1500)}\n\n`
       }
 
-      // 查询审查指南
-      const guidelines = await queryGuidelinesFromKB("复审")
       if (guidelines && !guidelines.includes("未在审查指南中找到")) {
         referenceData += `### 审查指南参考\n\n${guidelines.slice(0, 1500)}\n\n`
       }
     }
   } catch (error: any) {
     console.warn("[Reexam] Reference search error:", error?.message)
+    referenceData += `\n> ⚠️ 法规检索失败（${error?.message}），以下分析基于 LLM 推理，建议人工核实。\n`
   }
 
   const prompt = `请对以下驳回决定进行复审可行性分析：
@@ -170,6 +172,8 @@ async function reexamDraft(
   extraContext: string,
   pluginContext: PatentPluginContext,
 ) {
+  const templateRef = reexamTemplate()
+
   const prompt = `请基于以下驳回决定和复审策略，撰写复审请求书：
 
 **驳回决定**：
@@ -178,30 +182,10 @@ ${rejectionDecision}
 ${claims ? `**当前权利要求**：\n${claims}\n\n` : ""}
 ${extraContext ? `**额外上下文**：\n${extraContext}\n\n` : ""}
 
-请按以下结构撰写复审请求书：
+**复审请求书模板参考**（严格遵循此结构）：
+${templateRef}
 
-**复审请求书**
-
-一、请求事项
-（请求撤销驳回决定，对修改后的权利要求重新审查）
-
-二、事实与理由
-
-（针对每个驳回理由逐一论述）
-
-1. 关于驳回理由 X（类型）
-   （1）审查员的观点
-   （2）复审请求人的意见
-   （3）法律依据和论据
-   （4）修改说明（如修改权利要求）
-
-三、权利要求修改说明
-（逐条说明修改内容、依据和效果）
-
-四、结论
-（明确请求事项）
-
-要求：
+请按模板结构撰写，要求：
 - 法律依据引用准确（专利法、实施细则、审查指南）
 - 论证逻辑严密
 - 使用规范的法律文书用语
@@ -209,7 +193,7 @@ ${extraContext ? `**额外上下文**：\n${extraContext}\n\n` : ""}
 
   const response = await pluginContext.llm.chat({
     messages: [
-      { role: "system", content: "你是复审请求书撰写专家。严格按照中国专利法和审查指南要求撰写。" },
+      { role: "system", content: "你是复审请求书撰写专家。按提供的模板结构撰写，严格遵循中国专利法和审查指南要求。" },
       { role: "user", content: prompt },
     ],
     maxTokens: 8192,

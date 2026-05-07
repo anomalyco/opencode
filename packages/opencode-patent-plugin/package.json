@@ -8,7 +8,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -25,6 +27,7 @@
   "devDependencies": {
     "@opentui/solid": "0.2.4",
     "@tsconfig/node22": "catalog:",
+    "@types/bun": "1.3.12",
     "@types/node": "catalog:",
     "@types/pg": "8.20.0",
     "solid-js": "1.9.12",

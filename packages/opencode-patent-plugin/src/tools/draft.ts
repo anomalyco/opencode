@@ -10,6 +10,8 @@ import { safeAsk } from "../types.js"
 import { loadYunPatModule } from "../utils/yunpat-loader.js"
 import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchPatents, type PatentRecord } from "../utils/db.js"
+import { specificationTemplate, SPEC_LENGTH_GUIDE } from "../templates/specification.js"
+import { getClaimsTemplate } from "../templates/claims.js"
 
 /**
  * 注册专利撰写工具集
@@ -199,20 +201,64 @@ async function draftSearch(disclosure: string, pluginContext: PatentPluginContex
 }
 
 async function draftSpecification(disclosure: string, patentType: string, inventionType: string, pluginContext: PatentPluginContext) {
+  // 生成模板参考结构
+  const templateRef = specificationTemplate({
+    inventionTitle: "[发明名称]",
+    patentType: patentType as any,
+    inventionType: inventionType as any,
+  })
+
   const response = await pluginContext.llm.chat({
     messages: [
-      { role: "system", content: "你是专利说明书撰写专家。严格遵循中国专利法第26条和审查指南要求。" },
-      { role: "user", content: `请基于以下发明理解，撰写专利申请说明书：\n\n**专利类型**：${patentType}\n**发明类型**：${inventionType}\n\n**技术交底书**：\n${disclosure}\n\n请按以下结构撰写：\n1. 技术领域（50-100字）\n2. 背景技术（300-500字）\n3. 发明内容（800-1500字）\n4. 具体实施方式（1500-3000字）\n5. 附图说明（如有附图）` },
+      { role: "system", content: "你是专利说明书撰写专家。严格遵循中国专利法第26条和审查指南要求。按提供的模板结构撰写。" },
+      { role: "user", content: `请基于以下发明理解，撰写专利申请说明书：
+
+**专利类型**：${patentType}
+**发明类型**：${inventionType}
+
+**技术交底书**：
+${disclosure}
+
+**说明书模板结构参考**（严格遵循此结构）：
+${templateRef}
+
+**字数要求**：
+- 技术领域：${SPEC_LENGTH_GUIDE.technicalField.min}-${SPEC_LENGTH_GUIDE.technicalField.max}字
+- 背景技术：${SPEC_LENGTH_GUIDE.backgroundArt.min}-${SPEC_LENGTH_GUIDE.backgroundArt.max}字
+- 发明内容：${SPEC_LENGTH_GUIDE.inventionContent.min}-${SPEC_LENGTH_GUIDE.inventionContent.max}字
+- 具体实施方式：${SPEC_LENGTH_GUIDE.detailedDescription.min}-${SPEC_LENGTH_GUIDE.detailedDescription.max}字` },
     ],
   })
   return `## 步骤 3/5：说明书撰写 ✅\n\n${response.content}\n\n---\n\n*请逐章节审阅修改。确认后将继续步骤 4：权利要求撰写。*`
 }
 
 async function draftClaims(disclosure: string, patentType: string, inventionType: string, pluginContext: PatentPluginContext) {
+  // 生成权利要求模板参考
+  const templateRef = getClaimsTemplate({
+    inventionTitle: "[发明名称]",
+    patentType: patentType as any,
+    inventionType: inventionType as any,
+  })
+
   const response = await pluginContext.llm.chat({
     messages: [
-      { role: "system", content: "你是权利要求撰写专家。严格遵循专利法第26条第4款和审查指南要求。" },
-      { role: "user", content: `请基于以下发明内容，撰写权利要求书：\n\n**专利类型**：${patentType}\n**发明类型**：${inventionType}\n\n**发明内容**：\n${disclosure}\n\n要求：\n1. 独立权利要求保护范围适中\n2. 从属权利要求分层布局（3-5层）\n3. 使用规范的专利术语\n4. 符合审查指南格式要求` },
+      { role: "system", content: "你是权利要求撰写专家。严格遵循专利法第26条第4款和审查指南要求。按提供的模板结构撰写。" },
+      { role: "user", content: `请基于以下发明内容，撰写权利要求书：
+
+**专利类型**：${patentType}
+**发明类型**：${inventionType}
+
+**发明内容**：
+${disclosure}
+
+**权利要求模板参考**（遵循此格式）：
+${templateRef}
+
+要求：
+1. 独立权利要求保护范围适中
+2. 从属权利要求分层布局（3-5层）
+3. 使用规范的专利术语
+4. 符合审查指南格式要求` },
     ],
   })
   return `## 步骤 4/5：权利要求撰写 ✅\n\n${response.content}\n\n---\n\n*请审阅权利要求保护范围。确认后将继续步骤 5：摘要与整合。*`

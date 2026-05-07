@@ -13,6 +13,7 @@ import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchPatentJudgments, searchLegalRules } from "../utils/db.js"
 import { queryInvalidationFromKB, queryJudgmentFromKB } from "../utils/obsidian-kb.js"
 import { extractPatentKeywords } from "../utils/patent-keywords.js"
+import { responseTemplate } from "../templates/response.js"
 
 /**
  * 注册审查意见答辩工具集
@@ -50,14 +51,19 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
 
         const { action, office_action, application_claims = "", context: extraContext = "" } = args
 
-        // 增强：检索相关先例和法规
+        // 增强：检索相关先例和法规（并行查询）
         let precedentData = ""
         if (action === "analyze" || action === "respond") {
           try {
             const keywords = extractKeywords(office_action)
             if (keywords.length > 0) {
-              // 查询数据库
-              const judgments = await searchPatentJudgments(keywords.join(" "), { limit: 5 })
+              // 并行查询三个数据源
+              const [judgments, kbResult, rules] = await Promise.all([
+                searchPatentJudgments(keywords.join(" "), { limit: 5 }).catch(() => []),
+                queryInvalidationFromKB(keywords[0]).catch(() => null),
+                searchLegalRules(keywords.join(" "), { limit: 5 }).catch(() => []),
+              ])
+
               if (judgments.length > 0) {
                 precedentData += `### 相关判决/先例（数据库）\n\n`
                 judgments.forEach((j, i) => {
@@ -68,14 +74,10 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
                 })
               }
 
-              // 查询知识库
-              const kbResult = await queryInvalidationFromKB(keywords[0])
               if (kbResult && !kbResult.includes("未在复审无效决定中找到")) {
                 precedentData += `### 复审无效决定（知识库）\n\n${kbResult.slice(0, 1500)}\n\n`
               }
 
-              // 查询相关法规
-              const rules = await searchLegalRules(keywords.join(" "), { limit: 5 })
               if (rules.length > 0) {
                 precedentData += `### 相关法规条文\n\n`
                 rules.forEach((r, i) => {
@@ -86,6 +88,7 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
             }
           } catch (error: any) {
             console.warn("[OA] Precedent search error:", error?.message)
+            precedentData += `\n> ⚠️ 先例检索失败（${error?.message}），以下分析基于 LLM 推理，建议人工核实。\n`
           }
         }
 
@@ -212,6 +215,8 @@ async function oaSimulate(officeAction: string, claims: string, pluginContext: P
 }
 
 async function oaRespond(officeAction: string, claims: string, pluginContext: PatentPluginContext, precedentData: string = "") {
+  const templateRef = responseTemplate()
+
   const prompt = `请基于以下审查意见和权利要求，撰写意见陈述书草案：
 
 **审查意见**：
@@ -222,7 +227,10 @@ ${claims}
 
 ${precedentData ? `**相关先例和法规**：\n${precedentData}\n\n` : ""}
 
-请按以下结构撰写：
+**意见陈述书模板参考**（严格遵循此结构）：
+${templateRef}
+
+请按模板结构撰写，确保：
 一、关于驳回理由N（类型）
   1. 审查员观点概述
   2. 申请人的意见（逐条回应）
@@ -236,7 +244,7 @@ ${precedentData ? `**相关先例和法规**：\n${precedentData}\n\n` : ""}
 
   const response = await pluginContext.llm.chat({
     messages: [
-      { role: "system", content: "你是审查意见答辩专家。撰写结构化的意见陈述书。善用相关先例和法规支持论点。" },
+      { role: "system", content: "你是审查意见答辩专家。按提供的模板结构撰写意见陈述书。善用相关先例和法规支持论点。" },
       { role: "user", content: prompt },
     ],
   })

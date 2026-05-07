@@ -80,6 +80,7 @@ export async function registerResearchTools(pluginContext: PatentPluginContext) 
           }
         } catch (error: any) {
           console.warn("[LegalDB] Query error:", error?.message)
+          output += `\n> ⚠️ 法律数据库查询失败（${error?.message}），部分结果可能基于 LLM 推理。\n`
         }
 
         // 2. 查询 Obsidian 知识库
@@ -107,6 +108,7 @@ export async function registerResearchTools(pluginContext: PatentPluginContext) 
           }
         } catch (error: any) {
           console.warn("[ObsidianKB] Query error:", error?.message)
+          output += `\n> ⚠️ 知识库查询失败（${error?.message}），部分结果可能基于 LLM 推理。\n`
         }
 
         // 3. 尝试使用 YunPat ResearcherAgent
