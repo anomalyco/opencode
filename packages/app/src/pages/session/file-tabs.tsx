@@ -1580,53 +1580,41 @@ export function FileTabContent(props: {
                 class="fixed z-50 min-w-[220px] rounded-md border border-border-base bg-surface-raised-stronger-non-alpha text-text-strong shadow-[var(--shadow-lg-border-base)] py-1 text-sm"
                 style={{ left: `${mdMenu().x}px`, top: `${mdMenu().y}px` }}
               >
-                {/* FORK: 选了文字 → 原选区菜单(添加到聊天 / 编辑 / 复制);
-                    没选文字 → 导出菜单(PDF / Word)— UX 决议 B,语义最干净
-                    [feat: md-export-pdf-word] 2026-05-05 */}
-                <Show
-                  when={mdMenu().text.trim()}
-                  fallback={
-                    <button
-                      class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
-                      onClick={() => void onExportDocx()}
-                    >
-                      {language.t("fileViewer.menu.exportDocx")}
-                    </button>
-                  }
+                {/* FORK: 始终显示完整菜单(2026-05-07)— 选区相关项(添加到聊天 / 复制)按
+                    mdMenu().text.trim() disabled 灰显;编辑 / 导出 Word 不依赖选区,始终可用。
+                    UX 一致性:user 一眼看到全部能做的事,不用先选文字才知道有"导出 Word"。
+                    [feat: menu-always-show-with-disabled] */}
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!mdMenu().text.trim()}
+                  onClick={openMdInputPanel}
                 >
-                  <button
-                    class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
-                    disabled={!mdMenu().text.trim()}
-                    onClick={openMdInputPanel}
-                  >
-                    添加到聊天窗口
-                  </button>
-                  <button
-                    class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
-                    disabled={!canEdit() || !state()?.loaded}
-                    title={editDisabledReason()}
-                    onClick={startEditFromMenu}
-                  >
-                    编辑
-                  </button>
-                  <div class="my-1 border-t border-border-base" />
-                  <button
-                    class="w-full px-3 py-1.5 hover:bg-surface-base-hover flex justify-between items-center gap-6 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
-                    disabled={!mdMenu().text.trim()}
-                    onClick={copyMdSelection}
-                  >
-                    <span>复制</span>
-                    <span class="text-xs text-text-weak">Ctrl+C</span>
-                  </button>
-                  {/* FORK: C1 选了文字也显导出菜单 — 加分隔 + 导出 Word [feat: md-export-pdf-word] 2026-05-06 */}
-                  <div class="my-1 border-t border-border-base" />
-                  <button
-                    class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
-                    onClick={() => void onExportDocx()}
-                  >
-                    {language.t("fileViewer.menu.exportDocx")}
-                  </button>
-                </Show>
+                  添加到聊天窗口
+                </button>
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!canEdit() || !state()?.loaded}
+                  title={editDisabledReason()}
+                  onClick={startEditFromMenu}
+                >
+                  编辑
+                </button>
+                <div class="my-1 border-t border-border-base" />
+                <button
+                  class="w-full px-3 py-1.5 hover:bg-surface-base-hover flex justify-between items-center gap-6 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!mdMenu().text.trim()}
+                  onClick={copyMdSelection}
+                >
+                  <span>复制</span>
+                  <span class="text-xs text-text-weak">Ctrl+C</span>
+                </button>
+                <div class="my-1 border-t border-border-base" />
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
+                  onClick={() => void onExportDocx()}
+                >
+                  {language.t("fileViewer.menu.exportDocx")}
+                </button>
               </div>
             </Match>
             <Match when={mdMenu().mode === "input"}>
