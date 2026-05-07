@@ -1589,7 +1589,7 @@ export function FileTabContent(props: {
                   disabled={!mdMenu().text.trim()}
                   onClick={openMdInputPanel}
                 >
-                  添加到聊天窗口
+                  {language.t("fileViewer.menu.addToChat")}
                 </button>
                 <button
                   class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
@@ -1597,7 +1597,7 @@ export function FileTabContent(props: {
                   title={editDisabledReason()}
                   onClick={startEditFromMenu}
                 >
-                  编辑
+                  {language.t("common.edit")}
                 </button>
                 <div class="my-1 border-t border-border-base" />
                 <button
@@ -1605,7 +1605,7 @@ export function FileTabContent(props: {
                   disabled={!mdMenu().text.trim()}
                   onClick={copyMdSelection}
                 >
-                  <span>复制</span>
+                  <span>{language.t("fileViewer.menu.copy")}</span>
                   <span class="text-xs text-text-weak">Ctrl+C</span>
                 </button>
                 <div class="my-1 border-t border-border-base" />
@@ -1626,7 +1626,7 @@ export function FileTabContent(props: {
                 <textarea
                   ref={(el) => queueMicrotask(() => el.focus())}
                   class="w-full min-h-[80px] rounded border border-border-base bg-background-base px-2 py-1.5 text-sm text-text-strong placeholder:text-text-weak focus:outline-none focus:ring-1 focus:ring-text-interactive-base resize-y"
-                  placeholder="想怎么改 / 想问什么..."
+                  placeholder={language.t("fileViewer.menu.input.placeholder")}
                   value={mdComment()}
                   onInput={(e) => setMdComment(e.currentTarget.value)}
                   onKeyDown={(e) => {
@@ -1638,19 +1638,23 @@ export function FileTabContent(props: {
                   }}
                 />
                 <div class="flex items-center justify-between">
-                  <span class="text-[11px] text-text-weak">{IS_MAC ? "Cmd/Opt+Enter" : "Ctrl+Enter"} 提交 · Esc 取消</span>
+                  <span class="text-[11px] text-text-weak">
+                    {language.t("fileViewer.menu.input.shortcutHint", {
+                      shortcut: IS_MAC ? "Cmd/Opt+Enter" : "Ctrl+Enter",
+                    })}
+                  </span>
                   <div class="flex items-center gap-2">
                     <button
                       class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
                       onClick={closeMdMenu}
                     >
-                      取消
+                      {language.t("common.cancel")}
                     </button>
                     <button
                       class="text-xs px-2 py-1 rounded border border-border-base bg-surface-base hover:bg-surface-base-hover"
                       onClick={submitMdSelection}
                     >
-                      加入聊天
+                      {language.t("fileViewer.menu.input.submit")}
                     </button>
                   </div>
                 </div>

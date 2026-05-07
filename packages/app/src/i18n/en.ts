@@ -1029,5 +1029,11 @@ export const dict = {
   "fileViewer.dialog.exportDocxTitle": "Save as Word document",
   "fileViewer.toast.exportDocxSuccess": "Exported to Word",
   "fileViewer.toast.exportDocxFail": "Export failed",
+  // FORK: md-context-menu-i18n — remaining viewer right-click menu items 2026-05-07
+  "fileViewer.menu.addToChat": "Add to Chat",
+  "fileViewer.menu.copy": "Copy",
+  "fileViewer.menu.input.placeholder": "How would you change it / What would you ask...",
+  "fileViewer.menu.input.shortcutHint": "{{shortcut}} to submit · Esc to cancel",
+  "fileViewer.menu.input.submit": "Add to Chat",
   // FORK-END
 }

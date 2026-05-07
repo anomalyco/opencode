@@ -986,5 +986,11 @@ export const dict = {
   "fileViewer.dialog.exportDocxTitle": "保存为 Word 文档",
   "fileViewer.toast.exportDocxSuccess": "已导出为 Word",
   "fileViewer.toast.exportDocxFail": "导出失败",
+  // FORK: md-context-menu-i18n — viewer 右键菜单剩余项接入 i18n 2026-05-07
+  "fileViewer.menu.addToChat": "添加到聊天窗口",
+  "fileViewer.menu.copy": "复制",
+  "fileViewer.menu.input.placeholder": "想怎么改 / 想问什么...",
+  "fileViewer.menu.input.shortcutHint": "{{shortcut}} 提交 · Esc 取消",
+  "fileViewer.menu.input.submit": "加入聊天",
   // FORK-END
 } satisfies Partial<Record<Keys, string>>
