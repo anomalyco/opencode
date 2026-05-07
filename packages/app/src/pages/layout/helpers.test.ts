@@ -14,6 +14,7 @@ import {
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
+  resetArchiveSessions,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
 
@@ -197,6 +198,20 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("root")
+  })
+
+  test("archives only active sessions in the reset workspace", () => {
+    const result = resetArchiveSessions(
+      [
+        session({ id: "target", directory: "/repo/worktree" }),
+        session({ id: "target-slash", directory: "/repo/worktree/" }),
+        session({ id: "other", directory: "/repo/other-worktree" }),
+        session({ id: "archived", directory: "/repo/worktree", time: { created: 0, updated: 0, archived: 1 } }),
+      ],
+      "/repo/worktree",
+    )
+
+    expect(result.map((item) => item.id)).toEqual(["target", "target-slash"])
   })
 
   test("finds the direct child on the active session path", () => {

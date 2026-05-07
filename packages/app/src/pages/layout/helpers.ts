@@ -32,6 +32,9 @@ export const sortedRootSessions = (store: SessionStore, now: number) => roots(st
 export const latestRootSession = (stores: SessionStore[], now: number) =>
   stores.flatMap(roots).sort(sortSessions(now))[0]
 
+export const resetArchiveSessions = (sessions: Session[], directory: string) =>
+  sessions.filter((session) => pathKey(session.directory) === pathKey(directory) && session.time.archived === undefined)
+
 export function hasProjectPermissions<T>(
   request: Record<string, T[] | undefined> | undefined,
   include: (item: T) => boolean = () => true,

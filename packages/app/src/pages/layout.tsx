@@ -70,6 +70,7 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   latestRootSession,
+  resetArchiveSessions,
   sortedRootSessions,
 } from "./layout/helpers"
 import {
@@ -1580,17 +1581,15 @@ export default function Layout(props: ParentProps) {
 
     const archivedAt = Date.now()
     await Promise.all(
-      sessions
-        .filter((session) => session.time.archived === undefined)
-        .map((session) =>
-          globalSDK.client.session
-            .update({
-              sessionID: session.id,
-              directory: session.directory,
-              time: { archived: archivedAt },
-            })
-            .catch(() => undefined),
-        ),
+      resetArchiveSessions(sessions, directory).map((session) =>
+        globalSDK.client.session
+          .update({
+            sessionID: session.id,
+            directory: session.directory,
+            time: { archived: archivedAt },
+          })
+          .catch(() => undefined),
+      ),
     )
 
     setBusy(directory, false)
@@ -1687,7 +1686,7 @@ export default function Layout(props: ParentProps) {
         .list({ directory: props.directory })
         .then((x) => x.data ?? [])
         .catch(() => [])
-      const active = sessions.filter((session) => session.time.archived === undefined)
+      const active = resetArchiveSessions(sessions, props.directory)
       setState({ sessions: active })
     }
 
