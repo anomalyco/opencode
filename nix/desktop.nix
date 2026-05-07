@@ -1,29 +1,46 @@
 {
   lib,
-  stdenv,
-  rustPlatform,
-  pkg-config,
-  cargo-tauri,
+  stdenvNoCC,
   bun,
   nodejs,
-  cargo,
-  rustc,
-  jq,
-  wrapGAppsHook4,
+  electron,
   makeWrapper,
-  dbus,
-  glib,
-  gtk4,
-  libsoup_3,
-  librsvg,
-  libappindicator,
-  glib-networking,
-  openssl,
-  webkitgtk_4_1,
-  gst_all_1,
+  makeDesktopItem,
+  ripgrep,
+  writeText,
   opencode,
 }:
-rustPlatform.buildRustPackage (finalAttrs: {
+let
+  desktopItem = makeDesktopItem {
+    name = "opencode-desktop";
+    desktopName = "OpenCode";
+    comment = "OpenCode Desktop App";
+    exec = "opencode-desktop";
+    icon = "opencode-desktop";
+    categories = [ "Development" ];
+    startupWMClass = "OpenCode";
+  };
+
+  # electron-builder mutates helper Info.plist files after copying Electron.app.
+  # Nix's Electron app is read-only, so make the copied bundle writable first.
+  darwinAfterExtract = writeText "opencode-desktop-after-extract.cjs" ''
+    const fs = require("node:fs/promises")
+    const path = require("node:path")
+
+    async function chmodWritable(file) {
+      const stat = await fs.lstat(file)
+      await fs.chmod(file, stat.mode | 0o200)
+      if (!stat.isDirectory()) return
+      await Promise.all((await fs.readdir(file)).map((entry) => chmodWritable(path.join(file, entry))))
+    }
+
+    module.exports = async (context) => {
+      if (context.electronPlatformName !== "darwin") return
+      await chmodWritable(path.join(context.appOutDir, "Electron.app"))
+    }
+  '';
+in
+stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "opencode-desktop";
   inherit (opencode)
     version
@@ -32,62 +49,101 @@ rustPlatform.buildRustPackage (finalAttrs: {
     patches
     ;
 
-  cargoRoot = "packages/desktop/src-tauri";
-  cargoLock.lockFile = ../packages/desktop/src-tauri/Cargo.lock;
-  buildAndTestSubdir = finalAttrs.cargoRoot;
-
   nativeBuildInputs = [
-    pkg-config
-    cargo-tauri.hook
     bun
     nodejs # for patchShebangs node_modules
-    cargo
-    rustc
-    jq
     makeWrapper
-  ] ++ lib.optionals stdenv.hostPlatform.isLinux [ wrapGAppsHook4 ];
-
-  buildInputs = lib.optionals stdenv.isLinux [
-    dbus
-    glib
-    gtk4
-    libsoup_3
-    librsvg
-    libappindicator
-    glib-networking
-    openssl
-    webkitgtk_4_1
-    gst_all_1.gstreamer
-    gst_all_1.gst-plugins-base
-    gst_all_1.gst-plugins-good
-    gst_all_1.gst-plugins-bad
   ];
 
-  strictDeps = true;
+  configurePhase = ''
+    runHook preConfigure
 
-  preBuild = ''
-    cp -a ${finalAttrs.node_modules}/{node_modules,packages} .
+    cp -R ${finalAttrs.node_modules}/. .
     chmod -R u+w node_modules packages
     patchShebangs node_modules
-    patchShebangs packages/desktop/node_modules
+    patchShebangs packages/*/node_modules
 
-    mkdir -p packages/desktop/src-tauri/sidecars
-    cp ${opencode}/bin/opencode packages/desktop/src-tauri/sidecars/opencode-cli-${stdenv.hostPlatform.rust.rustcTarget}
+    runHook postConfigure
   '';
 
-  # see publish-tauri job in .github/workflows/publish.yml
-  tauriBuildFlags = [
+  env.OPENCODE_CHANNEL = "prod";
+  env.OPENCODE_DISABLE_UPDATER = "true";
+  env.OPENCODE_DISABLE_MODELS_FETCH = opencode.OPENCODE_DISABLE_MODELS_FETCH;
+  env.MODELS_DEV_API_JSON = opencode.MODELS_DEV_API_JSON;
+  env.OPENCODE_VERSION = finalAttrs.version;
+
+  runtimePath = lib.makeBinPath [ ripgrep ];
+
+  electronBuilderFlags = [
     "--config"
-    "tauri.prod.conf.json"
-    "--no-sign" # no code signing or auto updates
+    "electron-builder.config.ts"
+    "--config.extraMetadata.version=${finalAttrs.version}"
+    "--config.electronVersion=${electron.version}"
   ];
 
-  # FIXME: workaround for concerns about case insensitive filesystems
-  # should be removed once binary is renamed or decided otherwise
-  # darwin output is a .app bundle so no conflict
-  postFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
-    mv $out/bin/OpenCode $out/bin/opencode-desktop
-    sed -i 's|^Exec=OpenCode$|Exec=opencode-desktop|' $out/share/applications/OpenCode.desktop
+  buildPhase = ''
+    runHook preBuild
+
+    cd packages/desktop
+    bun ./scripts/prebuild.ts
+    bun run build
+  ''
+  + lib.optionalString stdenvNoCC.hostPlatform.isDarwin ''
+    bunx electron-builder --mac dir ${
+      lib.escapeShellArgs (
+        finalAttrs.electronBuilderFlags
+        ++ [
+          "--config.electronDist=${electron}/Applications"
+          "--config.afterExtract=${darwinAfterExtract}"
+          "--config.mac.identity=null"
+          "--config.mac.hardenedRuntime=false"
+          "--config.mac.notarize=false"
+        ]
+      )
+    }
+  ''
+  + lib.optionalString stdenvNoCC.hostPlatform.isLinux ''
+    bunx electron-builder --linux dir ${
+      lib.escapeShellArgs (
+        finalAttrs.electronBuilderFlags
+        ++ [
+          "--config.electronDist=${electron}/libexec/electron"
+          "--config.linux.executableName=opencode"
+        ]
+      )
+    }
+  ''
+  + ''
+
+    runHook postBuild
+  '';
+
+  installPhase = ''
+    runHook preInstall
+
+  ''
+  + lib.optionalString stdenvNoCC.hostPlatform.isDarwin ''
+    mkdir -p $out/Applications $out/bin
+    cp -R dist/mac*/OpenCode.app $out/Applications/
+    wrapProgram $out/Applications/OpenCode.app/Contents/MacOS/OpenCode \
+      --prefix PATH : ${finalAttrs.runtimePath}
+    makeWrapper $out/Applications/OpenCode.app/Contents/MacOS/OpenCode $out/bin/opencode-desktop
+  ''
+  + lib.optionalString stdenvNoCC.hostPlatform.isLinux ''
+    mkdir -p $out/share/opencode-desktop $out/bin
+    cp -R dist/linux-unpacked/. $out/share/opencode-desktop/
+    makeWrapper $out/share/opencode-desktop/opencode $out/bin/opencode-desktop \
+      --prefix PATH : ${finalAttrs.runtimePath}
+
+    install -Dm644 resources/icons/32x32.png $out/share/icons/hicolor/32x32/apps/opencode-desktop.png
+    install -Dm644 resources/icons/64x64.png $out/share/icons/hicolor/64x64/apps/opencode-desktop.png
+    install -Dm644 resources/icons/128x128.png $out/share/icons/hicolor/128x128/apps/opencode-desktop.png
+    install -Dm644 resources/icons/128x128@2x.png $out/share/icons/hicolor/256x256/apps/opencode-desktop.png
+    cp -R ${desktopItem}/share/applications $out/share/
+  ''
+  + ''
+
+    runHook postInstall
   '';
 
   meta = {
