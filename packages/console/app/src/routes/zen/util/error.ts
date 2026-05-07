@@ -13,4 +13,13 @@ class LimitError extends Error {
 }
 export class RateLimitError extends LimitError {}
 export class FreeUsageLimitError extends LimitError {}
-export class SubscriptionUsageLimitError extends LimitError {}
+
+class SubscriptionUsageLimitError extends LimitError {
+  workspace: string
+  constructor(message: string, workspace: string, retryAfter?: number) {
+    super(message, retryAfter)
+    this.workspace = workspace
+  }
+}
+export class GoUsageLimitError extends SubscriptionUsageLimitError {}
+export class BlackUsageLimitError extends SubscriptionUsageLimitError {}
