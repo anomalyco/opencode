@@ -60,14 +60,14 @@ new honeycomb.Trigger("IncreasedModelHttpErrorsGo", {
   frequency: 300,
   thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
   recipients: [
-    {
-      id: webhookRecipient.id,
-      notificationDetails: [
-        {
-          variables: [{ name: "type", value: "model_http_errors" }],
-        },
-      ],
-    },
+    // {
+    //   id: webhookRecipient.id,
+    //   notificationDetails: [
+    //     {
+    //       variables: [{ name: "type", value: "model_http_errors" }],
+    //     },
+    //   ],
+    // },
   ],
 })
 
@@ -79,13 +79,13 @@ new honeycomb.Trigger("IncreasedModelHttpErrorsZen", {
   frequency: 300,
   thresholds: [{ op: ">=", value: 0.8, exceededLimit: 1 }],
   recipients: [
-    {
-      id: webhookRecipient.id,
-      notificationDetails: [
-        {
-          variables: [{ name: "type", value: "model_http_errors" }],
-        },
-      ],
-    },
+    // {
+    //   id: webhookRecipient.id,
+    //   notificationDetails: [
+    //     {
+    //       variables: [{ name: "type", value: "model_http_errors" }],
+    //     },
+    //   ],
+    // },
   ],
 })
