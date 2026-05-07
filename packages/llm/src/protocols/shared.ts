@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer"
 import { Cause, Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import { InvalidRequestError, ProviderChunkError, type MediaPart, type ToolResultPart } from "../schema"
+import { InvalidRequestError, ProviderChunkError, type LLMRequest, type MediaPart, type ToolResultPart } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -167,6 +167,24 @@ export const sseFraming = (
  * lands here.
  */
 export const invalidRequest = (message: string) => new InvalidRequestError({ message })
+
+export const matchToolChoice = <Auto, None, Required, Tool>(
+  adapter: string,
+  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
+  cases: {
+    readonly auto: () => Auto
+    readonly none: () => None
+    readonly required: () => Required
+    readonly tool: (name: string) => Tool
+  },
+) =>
+  Effect.gen(function* () {
+    if (toolChoice.type === "auto") return cases.auto()
+    if (toolChoice.type === "none") return cases.none()
+    if (toolChoice.type === "required") return cases.required()
+    if (!toolChoice.name) return yield* invalidRequest(`${adapter} tool choice requires a tool name`)
+    return cases.tool(toolChoice.name)
+  })
 
 /**
  * Build a `validate` step from a Schema decoder. Replaces the per-adapter

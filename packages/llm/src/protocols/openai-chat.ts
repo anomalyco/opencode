@@ -166,13 +166,13 @@ const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
   },
 })
 
-const lowerToolChoice = Effect.fn("OpenAIChat.lowerToolChoice")(function* (
-  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-) {
-  if (toolChoice.type !== "tool") return toolChoice.type
-  if (!toolChoice.name) return yield* invalid("OpenAI Chat tool choice requires a tool name")
-  return { type: "function" as const, function: { name: toolChoice.name } }
-})
+const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
+  ProviderShared.matchToolChoice("OpenAI Chat", toolChoice, {
+    auto: () => "auto" as const,
+    none: () => "none" as const,
+    required: () => "required" as const,
+    tool: (name) => ({ type: "function" as const, function: { name } }),
+  })
 
 const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   id: part.id,

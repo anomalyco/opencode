@@ -232,15 +232,13 @@ const textWithCache = (text: string, cache: CacheHint | undefined): Array<Bedroc
   return cachePoint ? [{ text }, cachePoint] : [{ text }]
 }
 
-const lowerToolChoice = Effect.fn("BedrockConverse.lowerToolChoice")(function* (
-  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-) {
-  if (toolChoice.type === "none") return undefined
-  if (toolChoice.type === "required") return { any: {} } as const
-  if (toolChoice.type !== "tool") return { auto: {} } as const
-  if (!toolChoice.name) return yield* invalid("Bedrock Converse tool choice requires a tool name")
-  return { tool: { name: toolChoice.name } } as const
-})
+const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
+  ProviderShared.matchToolChoice("Bedrock Converse", toolChoice, {
+    auto: () => ({ auto: {} }) as const,
+    none: () => undefined,
+    required: () => ({ any: {} }) as const,
+    tool: (name) => ({ tool: { name } }) as const,
+  })
 
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
   toolUse: {

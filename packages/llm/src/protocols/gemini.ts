@@ -170,17 +170,13 @@ const lowerTool = (tool: ToolDefinition) => ({
   parameters: GeminiToolSchema.convert(tool.inputSchema),
 })
 
-const lowerToolConfig = Effect.fn("Gemini.lowerToolConfig")(function* (
-  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-) {
-  if (toolChoice.type === "required") return { functionCallingConfig: { mode: "ANY" as const } }
-  if (toolChoice.type === "none") return { functionCallingConfig: { mode: "NONE" as const } }
-  if (toolChoice.type !== "tool") return { functionCallingConfig: { mode: "AUTO" as const } }
-  if (!toolChoice.name) return yield* invalid("Gemini tool choice requires a tool name")
-  return {
-    functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [toolChoice.name] },
-  }
-})
+const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
+  ProviderShared.matchToolChoice("Gemini", toolChoice, {
+    auto: () => ({ functionCallingConfig: { mode: "AUTO" as const } }),
+    none: () => ({ functionCallingConfig: { mode: "NONE" as const } }),
+    required: () => ({ functionCallingConfig: { mode: "ANY" as const } }),
+    tool: (name) => ({ functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [name] } }),
+  })
 
 const lowerUserPart = (part: TextPart | MediaPart) =>
   part.type === "text"
