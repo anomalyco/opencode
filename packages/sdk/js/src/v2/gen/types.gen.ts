@@ -266,8 +266,11 @@ export type SessionStatus =
       type: "retry"
       attempt: number
       message: string
-      metadata?: {
-        [key: string]: unknown
+      action?: {
+        title: string
+        message: string
+        label: string
+        link?: string
       }
       next: number
     }

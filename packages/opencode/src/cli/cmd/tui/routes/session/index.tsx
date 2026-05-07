@@ -85,7 +85,7 @@ import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
-import { DialogGoUpsell } from "../../component/dialog-go-upsell"
+import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { useCommandPalette } from "../../context/command-palette"
@@ -260,27 +260,17 @@ export function Session() {
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
     if (evt.properties.status.type !== "retry") return
-    const isGoUpsell = evt.properties.status.metadata?.upsell === "go"
-    const isPaygUpsell = evt.properties.status.metadata?.upsell === "payg"
-    if (!isGoUpsell && !isPaygUpsell) return
+    if (!evt.properties.status.action) return
     if (dialog.stack.length > 0) return
 
-    // const seen = kv.get(GO_UPSELL_LAST_SEEN_AT)
-    // if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
+    const seen = kv.get(GO_UPSELL_LAST_SEEN_AT)
+    if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
 
     if (kv.get(GO_UPSELL_DONT_SHOW)) return
 
-    void DialogGoUpsell.show(
-      dialog,
-      isPaygUpsell
-        ? {
-            mode: "payg",
-            url: typeof evt.properties.status.metadata?.url === "string" ? evt.properties.status.metadata.url : undefined,
-          }
-        : undefined,
-    ).then((dontShowAgain) => {
+    void DialogRetryAction.show(dialog, evt.properties.status.action).then((dontShowAgain) => {
       if (dontShowAgain) kv.set(GO_UPSELL_DONT_SHOW, true)
-      // kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
+      kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
     })
   })
 

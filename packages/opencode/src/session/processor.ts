@@ -717,7 +717,7 @@ export const layer: Layer.Layer<
                     type: "retry",
                     attempt: info.attempt,
                     message: info.message,
-                    metadata: info.metadata,
+                    action: info.action,
                     next: info.next,
                   })
                 },

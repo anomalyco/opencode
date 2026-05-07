@@ -230,12 +230,17 @@ describe("SessionStatus.Info", () => {
     expect(SessionStatus.Info.zod.parse({ type: "idle" })).toEqual({ type: "idle" })
   })
 
-  test("retry carries attempt/message/metadata/next", () => {
+  test("retry carries attempt/message/action/next", () => {
     const input = {
       type: "retry" as const,
       attempt: 1,
       message: "transient",
-      metadata: { upsell: "go", url: "https://opencode.ai/go" },
+      action: {
+        title: "Free limit reached",
+        message: "Subscribe to OpenCode Go.",
+        label: "subscribe",
+        link: "https://opencode.ai/go",
+      },
       next: 500,
     }
     expect(decode(input)).toEqual(input)

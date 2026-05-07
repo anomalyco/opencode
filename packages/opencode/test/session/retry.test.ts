@@ -233,7 +233,7 @@ describe("session.retry.retryable", () => {
     expect(retryable).toEqual({ message: "Response decompression failed" })
   })
 
-  test("maps free limits to Go upsell metadata", () => {
+  test("maps free limits to Go upsell action", () => {
     const error = MessageV2.APIError.Schema.parse(
       new MessageV2.APIError({
         message: "Free usage exceeded",
@@ -248,7 +248,13 @@ describe("session.retry.retryable", () => {
 
     expect(SessionRetry.retryable(error)).toEqual({
       message: SessionRetry.GO_UPSELL_MESSAGE,
-      metadata: { upsell: "go", url: SessionRetry.GO_UPSELL_URL },
+      action: {
+        title: "Free limit reached",
+        message:
+          "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+        label: "subscribe",
+        link: SessionRetry.GO_UPSELL_URL,
+      },
     })
   })
 
@@ -271,9 +277,11 @@ describe("session.retry.retryable", () => {
 
     expect(SessionRetry.retryable(error)).toEqual({
       message: SessionRetry.PAYG_UPSELL_MESSAGE,
-      metadata: {
-        upsell: "payg",
-        url: "https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
+      action: {
+        title: "Go limit reached",
+        message: "Enable pay-as-you-go to keep using Go models after your subscription quota is used.",
+        label: "enable PAYG",
+        link: "https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
       },
     })
   })

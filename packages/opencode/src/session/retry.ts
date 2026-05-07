@@ -11,7 +11,12 @@ export const GO_UPSELL_URL = "https://opencode.ai/go"
 
 export type Retryable = {
   message: string
-  metadata?: Record<string, unknown>
+  action?: {
+    title: string
+    message: string
+    label: string
+    link?: string
+  }
 }
 
 export const RETRY_INITIAL_DELAY = 2000
@@ -65,16 +70,27 @@ export function retryable(error: Err) {
     // even when the provider SDK doesn't explicitly mark them as retryable.
     if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
-      return { message: GO_UPSELL_MESSAGE, metadata: { upsell: "go", url: GO_UPSELL_URL } }
+      return {
+        message: GO_UPSELL_MESSAGE,
+        action: {
+          title: "Free limit reached",
+          message:
+            "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+          label: "subscribe",
+          link: GO_UPSELL_URL,
+        },
+      }
     }
     if (error.data.responseBody?.includes("GoUsageLimitError")) {
       const body = parseJSON(error.data.responseBody)
       const workspace = typeof body?.metadata?.workspace === "string" ? body.metadata.workspace : undefined
       return {
         message: PAYG_UPSELL_MESSAGE,
-        metadata: {
-          upsell: "payg",
-          ...(workspace ? { url: `https://opencode.ai/workspace/${workspace}/go` } : {}),
+        action: {
+          title: "Go limit reached",
+          message: "Enable pay-as-you-go to keep using Go models after your subscription quota is used.",
+          label: "enable PAYG",
+          ...(workspace ? { link: `https://opencode.ai/workspace/${workspace}/go` } : {}),
         },
       }
     }
@@ -123,7 +139,7 @@ function parseJSON(value: unknown) {
 
 export function policy(opts: {
   parse: (error: unknown) => Err
-  set: (input: { attempt: number; message: string; metadata?: Record<string, unknown>; next: number }) => Effect.Effect<void>
+  set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
@@ -136,7 +152,7 @@ export function policy(opts: {
         yield* opts.set({
           attempt: meta.attempt,
           message: retry.message,
-          metadata: retry.metadata,
+          action: retry.action,
           next: now + wait,
         })
         return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]

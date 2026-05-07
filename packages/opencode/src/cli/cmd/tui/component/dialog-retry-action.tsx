@@ -8,36 +8,36 @@ import { GoLogo } from "./logo"
 import { BgPulse, type BgPulseMask } from "./bg-pulse"
 import { useBindings } from "../keymap"
 
-const GO_URL = "https://opencode.ai/go"
 const PAD_X = 3
 const PAD_TOP_OUTER = 1
 
-export type DialogGoUpsellProps = {
-  mode?: "go" | "payg"
-  url?: string
+export type DialogRetryActionProps = {
+  title: string
+  message: string
+  label: string
+  link?: string
   onClose?: (dontShowAgain?: boolean) => void
 }
 
-function subscribe(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog>) {
-  open(props.url ?? GO_URL).catch(() => {})
+function runAction(props: DialogRetryActionProps, dialog: ReturnType<typeof useDialog>) {
+  if (props.link) open(props.link).catch(() => {})
   props.onClose?.()
   dialog.clear()
 }
 
-function dismiss(props: DialogGoUpsellProps, dialog: ReturnType<typeof useDialog>) {
+function dismiss(props: DialogRetryActionProps, dialog: ReturnType<typeof useDialog>) {
   props.onClose?.(true)
   dialog.clear()
 }
 
-export function DialogGoUpsell(props: DialogGoUpsellProps) {
+export function DialogRetryAction(props: DialogRetryActionProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const fg = selectedForeground(theme)
-  const [selected, setSelected] = createSignal<"dismiss" | "subscribe">("subscribe")
+  const [selected, setSelected] = createSignal<"dismiss" | "action">("action")
   const [center, setCenter] = createSignal<{ x: number; y: number } | undefined>()
   const [masks, setMasks] = createSignal<BgPulseMask[]>([])
-  const mode = () => props.mode ?? "go"
-  const url = () => props.url ?? GO_URL
+  const showGoTreatment = () => props.link === "https://opencode.ai/go"
   let content: BoxRenderable | undefined
   let logoBox: BoxRenderable | undefined
   let headingBox: BoxRenderable | undefined
@@ -45,11 +45,13 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
   let buttonsBox: BoxRenderable | undefined
 
   const sync = () => {
-    if (!content || !logoBox) return
-    setCenter({
-      x: logoBox.x - content.x + logoBox.width / 2,
-      y: logoBox.y - content.y + logoBox.height / 2 + PAD_TOP_OUTER,
-    })
+    if (!content) return
+    if (logoBox) {
+      setCenter({
+        x: logoBox.x - content.x + logoBox.width / 2,
+        y: logoBox.y - content.y + logoBox.height / 2 + PAD_TOP_OUTER,
+      })
+    }
     const next: BgPulseMask[] = []
     const baseY = PAD_TOP_OUTER
     for (const b of [headingBox, descBox, buttonsBox]) {
@@ -79,20 +81,20 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
     bindings: [
       {
         key: "left",
-        cmd: () => setSelected((value) => (value === "subscribe" ? "dismiss" : "subscribe")),
+        cmd: () => setSelected((value) => (value === "action" ? "dismiss" : "action")),
       },
       {
         key: "right",
-        cmd: () => setSelected((value) => (value === "subscribe" ? "dismiss" : "subscribe")),
+        cmd: () => setSelected((value) => (value === "action" ? "dismiss" : "action")),
       },
       {
         key: "tab",
-        cmd: () => setSelected((value) => (value === "subscribe" ? "dismiss" : "subscribe")),
+        cmd: () => setSelected((value) => (value === "action" ? "dismiss" : "action")),
       },
       {
         key: "return",
         cmd: () => {
-          if (selected() === "subscribe") subscribe(props, dialog)
+          if (selected() === "action") runAction(props, dialog)
           else dismiss(props, dialog)
         },
       },
@@ -101,42 +103,34 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
 
   return (
     <box ref={(item: BoxRenderable) => (content = item)}>
-      <box position="absolute" top={-PAD_TOP_OUTER} left={0} right={0} bottom={0} zIndex={0}>
-        <BgPulse centerX={center()?.x} centerY={center()?.y} masks={masks()} />
-      </box>
-      <box paddingLeft={PAD_X} paddingRight={PAD_X} paddingBottom={1} gap={1}>
+      {showGoTreatment() ? (
+        <box position="absolute" top={-PAD_TOP_OUTER} left={0} right={0} bottom={0} zIndex={0}>
+          <BgPulse centerX={center()?.x} centerY={center()?.y} masks={masks()} />
+        </box>
+      ) : null}
+      <box paddingLeft={PAD_X} paddingRight={PAD_X} paddingBottom={1} gap={1} zIndex={1}>
         <box ref={(item: BoxRenderable) => (headingBox = item)} flexDirection="row" justifyContent="space-between">
           <text attributes={TextAttributes.BOLD} fg={theme.text}>
-            {mode() === "payg" ? "Go limit reached" : "Free limit reached"}
+            {props.title}
           </text>
           <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
             esc
           </text>
         </box>
         <box ref={(item: BoxRenderable) => (descBox = item)} gap={0}>
-          {mode() === "payg" ? (
-            <>
-              <text fg={theme.textMuted}>Enable pay-as-you-go to keep using Go</text>
-              <text fg={theme.textMuted}>models after your subscription quota is used.</text>
-            </>
-          ) : (
-            <>
-              <box flexDirection="row">
-                <text fg={theme.textMuted}>Subscribe to </text>
-                <text attributes={TextAttributes.BOLD} fg={theme.textMuted}>
-                  OpenCode Go
-                </text>
-                <text fg={theme.textMuted}> for reliable access to the</text>
-              </box>
-              <text fg={theme.textMuted}>best open-source models, starting at $5/month.</text>
-            </>
-          )}
+          <text fg={theme.textMuted}>{props.message}</text>
         </box>
-        <box alignItems="center" gap={1} paddingBottom={1}>
-          <box ref={(item: BoxRenderable) => (logoBox = item)}>
-            <GoLogo />
-          </box>
-          <Link href={url()} fg={theme.primary} />
+        <box gap={1} paddingBottom={1}>
+          {showGoTreatment() ? (
+            <box ref={(item: BoxRenderable) => (logoBox = item)} alignItems="center">
+              <GoLogo />
+            </box>
+          ) : null}
+          {props.link ? (
+            <box width="100%" flexDirection="row" justifyContent="center">
+              <Link href={props.link} fg={theme.primary} wrapMode="none" />
+            </box>
+          ) : null}
         </box>
         <box ref={(item: BoxRenderable) => (buttonsBox = item)} flexDirection="row" justifyContent="space-between">
           <box
@@ -156,15 +150,15 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
           <box
             paddingLeft={2}
             paddingRight={2}
-            backgroundColor={selected() === "subscribe" ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-            onMouseOver={() => setSelected("subscribe")}
-            onMouseUp={() => subscribe(props, dialog)}
+            backgroundColor={selected() === "action" ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+            onMouseOver={() => setSelected("action")}
+            onMouseUp={() => runAction(props, dialog)}
           >
             <text
-              fg={selected() === "subscribe" ? fg : theme.text}
-              attributes={selected() === "subscribe" ? TextAttributes.BOLD : undefined}
+              fg={selected() === "action" ? fg : theme.text}
+              attributes={selected() === "action" ? TextAttributes.BOLD : undefined}
             >
-              {mode() === "payg" ? "enable PAYG" : "subscribe"}
+              {props.label}
             </text>
           </box>
         </box>
@@ -173,10 +167,13 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
   )
 }
 
-DialogGoUpsell.show = (dialog: DialogContext, props?: Pick<DialogGoUpsellProps, "mode" | "url">) => {
+DialogRetryAction.show = (
+  dialog: DialogContext,
+  props: Pick<DialogRetryActionProps, "title" | "message" | "label" | "link">,
+) => {
   return new Promise<boolean>((resolve) => {
     dialog.replace(
-      () => <DialogGoUpsell {...props} onClose={(dontShow) => resolve(dontShow ?? false)} />,
+      () => <DialogRetryAction {...props} onClose={(dontShow) => resolve(dontShow ?? false)} />,
       () => resolve(false),
     )
   })
