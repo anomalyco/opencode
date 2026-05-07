@@ -74,7 +74,10 @@ export type Rgb = [number, number, number]
 export type GoUpsellArtRenderOptions = {
   deltaTime?: number
   rgb?: boolean
+  cache?: boolean
 }
+
+const CACHE_FRAME_COUNT = Math.round(PERIOD / (1000 / 30))
 
 export function toRgb(color: RGBA): Rgb {
   const [r, g, b] = color.toInts()
@@ -125,12 +128,15 @@ export class GoUpsellArtPainter {
   private logoRgb: boolean | undefined
   private pulsePeak = 0
   private pulsePrimary = 0
+  private cacheDirty = true
+  private frameCache: Array<{ fg: Uint16Array; bg: Uint16Array }> = []
 
   setBackgroundPanel(value: RGBA | Rgb | undefined) {
     if (!value) return false
     const next = value instanceof RGBA ? toRgb(value) : value
     if (sameRgb(this.panelRgb, next)) return false
     this.panelRgb = next
+    this.cacheDirty = true
     return true
   }
 
@@ -139,6 +145,7 @@ export class GoUpsellArtPainter {
     const next = value instanceof RGBA ? toRgb(value) : value
     if (sameRgb(this.logoBaseRgb, next)) return false
     this.logoBaseRgb = next
+    this.cacheDirty = true
     return true
   }
 
@@ -147,6 +154,7 @@ export class GoUpsellArtPainter {
     const next = value instanceof RGBA ? toRgb(value) : value
     if (sameRgb(this.primaryRgb, next)) return false
     this.primaryRgb = next
+    this.cacheDirty = true
     return true
   }
 
@@ -154,6 +162,10 @@ export class GoUpsellArtPainter {
     const rgb = options.rgb === true
     this.elapsed = (this.elapsed + (options.deltaTime ?? 0)) % PERIOD
     this.rebuildGeometry(frameBuffer, rgb)
+    if (options.cache !== false) {
+      this.drawCached(frameBuffer, rgb)
+      return
+    }
     this.drawBackground(frameBuffer, this.elapsed)
     this.drawLogo(frameBuffer, this.elapsed, rgb)
   }
@@ -191,7 +203,31 @@ export class GoUpsellArtPainter {
     }
 
     this.logoRgb = rgb
+    this.cacheDirty = true
     this.rebuildCellTemplate(frameBuffer, rgb)
+  }
+
+  private drawCached(frameBuffer: OptimizedBuffer, rgb: boolean) {
+    if (this.cacheDirty || this.frameCache.length === 0) this.rebuildFrameCache(frameBuffer, rgb)
+    const frame = this.frameCache[Math.floor((this.elapsed / PERIOD) * this.frameCache.length) % this.frameCache.length]
+    if (!frame) return
+    frameBuffer.buffers.fg.set(frame.fg)
+    frameBuffer.buffers.bg.set(frame.bg)
+  }
+
+  private rebuildFrameCache(frameBuffer: OptimizedBuffer, rgb: boolean) {
+    this.frameCache = []
+    this.rebuildCellTemplate(frameBuffer, rgb)
+    for (let i = 0; i < CACHE_FRAME_COUNT; i++) {
+      const t = (i / CACHE_FRAME_COUNT) * PERIOD
+      this.drawBackground(frameBuffer, t)
+      this.drawLogo(frameBuffer, t, rgb)
+      this.frameCache.push({
+        fg: new Uint16Array(frameBuffer.buffers.fg),
+        bg: new Uint16Array(frameBuffer.buffers.bg),
+      })
+    }
+    this.cacheDirty = false
   }
 
   private rebuildCellTemplate(frameBuffer: OptimizedBuffer, rgb: boolean) {
