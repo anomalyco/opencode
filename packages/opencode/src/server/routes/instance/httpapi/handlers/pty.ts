@@ -1,19 +1,33 @@
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
+import { PtyTicket } from "@/pty/ticket"
 import { handlePtyInput } from "@/pty/input"
 import { Shell } from "@/shell/shell"
 import { EffectBridge } from "@/effect/bridge"
+import { CorsConfig, isAllowedRequestOrigin, type CorsOptions } from "@/server/cors"
+import {
+  PTY_CONNECT_TICKET_QUERY,
+  PTY_CONNECT_TOKEN_HEADER,
+  PTY_CONNECT_TOKEN_HEADER_VALUE,
+} from "@/server/shared/pty-ticket"
 import { Effect } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
+import * as ApiError from "../errors"
 import { CursorQuery, Params, PtyPaths } from "../groups/pty"
 import { WebSocketTracker } from "../websocket-tracker"
+
+function validOrigin(request: HttpServerRequest.HttpServerRequest, opts: CorsOptions | undefined) {
+  return isAllowedRequestOrigin(request.headers.origin, request.headers.host, opts)
+}
 
 export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handlers) =>
   Effect.gen(function* () {
     const pty = yield* Pty.Service
+    const tickets = yield* PtyTicket.Service
+    const cors = yield* CorsConfig
 
     const shells = Effect.fn("PtyHttpApi.shells")(function* () {
       return yield* Effect.promise(() => Shell.list())
@@ -33,7 +47,7 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
 
     const get = Effect.fn("PtyHttpApi.get")(function* (ctx: { params: { ptyID: PtyID } }) {
       const info = yield* pty.get(ctx.params.ptyID)
-      if (!info) return yield* new HttpApiError.NotFound({})
+      if (!info) return yield* ApiError.notFound("Session not found")
       return info
     })
 
@@ -45,13 +59,21 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
         ...ctx.payload,
         size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
       })
-      if (!info) return yield* new HttpApiError.NotFound({})
+      if (!info) return yield* ApiError.notFound("Session not found")
       return info
     })
 
     const remove = Effect.fn("PtyHttpApi.remove")(function* (ctx: { params: { ptyID: PtyID } }) {
       yield* pty.remove(ctx.params.ptyID)
       return true
+    })
+
+    const connectToken = Effect.fn("PtyHttpApi.connectToken")(function* (ctx: { params: { ptyID: PtyID } }) {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      if (request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE || !validOrigin(request, cors))
+        return yield* new HttpApiError.Forbidden({})
+      if (!(yield* pty.get(ctx.params.ptyID))) return yield* ApiError.notFound("Session not found")
+      return yield* tickets.issue({ ptyID: ctx.params.ptyID, ...(yield* PtyTicket.scope) })
     })
 
     return handlers
@@ -61,12 +83,15 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
       .handle("get", get)
       .handle("update", update)
       .handle("remove", remove)
+      .handle("connectToken", connectToken)
   }),
 )
 
 export const ptyConnectRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const pty = yield* Pty.Service
+    const tickets = yield* PtyTicket.Service
+    const cors = yield* CorsConfig
     yield* router.add(
       "GET",
       PtyPaths.connect,
@@ -75,12 +100,20 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
         if (!(yield* pty.get(params.ptyID))) return HttpServerResponse.empty({ status: 404 })
 
         const query = yield* HttpServerRequest.schemaSearchParams(CursorQuery)
+        const request = yield* HttpServerRequest.HttpServerRequest
+        const ticket = new URL(request.url, "http://localhost").searchParams.get(PTY_CONNECT_TICKET_QUERY)
+        if (ticket) {
+          const valid = validOrigin(request, cors)
+            ? yield* tickets.consume({ ticket, ptyID: params.ptyID, ...(yield* PtyTicket.scope) })
+            : false
+          if (!valid) return HttpServerResponse.empty({ status: 403 })
+        }
         const parsedCursor = query.cursor === undefined ? undefined : Number(query.cursor)
         const cursor =
           parsedCursor !== undefined && Number.isSafeInteger(parsedCursor) && parsedCursor >= -1
             ? parsedCursor
             : undefined
-        const socket = yield* Effect.orDie((yield* HttpServerRequest.HttpServerRequest).upgrade)
+        const socket = yield* Effect.orDie(request.upgrade)
         const write = yield* socket.writer
         const closeAccepted = (event: Socket.CloseEvent) =>
           socket
