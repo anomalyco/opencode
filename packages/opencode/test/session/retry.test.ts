@@ -279,11 +279,13 @@ describe("session.retry.retryable", () => {
     )
 
     expect(SessionRetry.retryable(error)).toEqual({
-      message: SessionRetry.PAYG_UPSELL_MESSAGE,
+      message:
+        "5 hour usage limit reached. It will reset in 5 hours 23 minutes. To continue using this model now, enable usage from your available balance - https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
       action: {
         title: "Go limit reached",
-        message: "You hit your 5 hour limit. It will reset in 5 hours 23 minutes. You can also enable pay-as-you-go.",
-        label: "enable PAYG",
+        message:
+          "5 hour usage limit reached. It will reset in 5 hours 23 minutes. To continue using this model now, enable usage from your available balance",
+        label: "open settings",
         link: "https://opencode.ai/workspace/wrk_01K6XGM22R6FM8JVABE9XDQXGH/go",
       },
     })

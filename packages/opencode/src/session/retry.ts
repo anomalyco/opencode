@@ -6,7 +6,6 @@ import { iife } from "@/util/iife"
 export type Err = ReturnType<NamedError["toObject"]>
 
 export const GO_UPSELL_MESSAGE = "Free usage exceeded, subscribe to Go"
-export const PAYG_UPSELL_MESSAGE = "Go usage exceeded, enable PAYG"
 export const GO_UPSELL_URL = "https://opencode.ai/go"
 
 export type Retryable = {
@@ -83,11 +82,11 @@ export function retryable(error: Err) {
     if (error.data.responseBody?.includes("GoUsageLimitError")) {
       const body = parseJSON(error.data.responseBody)
       const workspace = str(body?.metadata?.workspace)
-      const limit = str(body?.metadata?.limit)
-      const resetAt = num(body?.metadata?.resetAt)
+      const limitName = str(body?.metadata?.limitName)
+      const retryAfter = num(error.data.responseHeaders?.["retry-after"])
       const resetIn = iife(() => {
-        if (resetAt === undefined) return ""
-        const seconds = Math.max(0, Math.ceil(resetAt))
+        if (retryAfter === undefined) return ""
+        const seconds = Math.max(0, Math.ceil(retryAfter))
         const days = Math.floor(seconds / 86_400)
         const hours = Math.floor((seconds % 86_400) / 3_600)
         const minutes = Math.ceil((seconds % 3_600) / 60)
@@ -97,16 +96,17 @@ export function retryable(error: Err) {
         if (hours > 0) return minutes > 0 ? `${unit(hours, "hour")} ${unit(minutes, "minute")}` : unit(hours, "hour")
         return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
       })
+
+      const message = `${limitName} usage limit reached. It will reset in ${resetIn}. To continue using this model now, enable usage from your available balance`
+
+      const link = `https://opencode.ai/workspace/${workspace}/go`
       return {
-        message: PAYG_UPSELL_MESSAGE,
+        message: `${message} - ${link}`,
         action: {
           title: "Go limit reached",
-          message:
-            limit && resetIn
-              ? `You hit your ${limit} limit. It will reset in ${resetIn}. You can also enable pay-as-you-go.`
-              : "Enable pay-as-you-go to keep using Go models after your subscription quota is used.",
-          label: "enable PAYG",
-          ...(workspace ? { link: `https://opencode.ai/workspace/${workspace}/go` } : {}),
+          message,
+          label: "open settings",
+          link,
         },
       }
     }
