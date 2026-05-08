@@ -29,27 +29,27 @@ const decodeBody = (text: string): OpenAIChatBody => decodeJson(text) as OpenAIC
 
 describe("Tool.make (dynamic JSON Schema)", () => {
   test("forwards JSON Schema and description through toDefinitions", () => {
-    const inputSchema = {
+    const jsonSchema = {
       type: "object" as const,
       properties: { city: { type: "string" } },
       required: ["city"],
     }
     const lookup = Tool.make({
       description: "Look up something",
-      inputSchema,
+      jsonSchema,
       execute: () => Effect.succeed({ ok: true }),
     })
     const [definition] = toDefinitions({ lookup })
     expect(definition?.name).toBe("lookup")
     expect(definition?.description).toBe("Look up something")
-    expect(definition?.inputSchema).toEqual(inputSchema)
+    expect(definition?.inputSchema).toEqual(jsonSchema)
   })
 
   test("execute receives the raw input untouched", async () => {
     const seen: unknown[] = []
     const tool = Tool.make({
       description: "echo",
-      inputSchema: { type: "object" },
+      jsonSchema: { type: "object" },
       execute: (params) =>
         Effect.sync(() => {
           seen.push(params)
@@ -79,13 +79,14 @@ describe("LLM.generateObject", () => {
         }),
       )
 
-      const result = yield* LLM.generateObject({
+      const response = yield* LLM.generateObject({
         model,
         prompt: "Return a structured weather report.",
         schema: Schema.Struct({ city: Schema.String, temp: Schema.Number }),
       }).pipe(Effect.provide(layer))
 
-      expect(result).toEqual({ city: "Paris", temp: 22 })
+      expect(response.object).toEqual({ city: "Paris", temp: 22 })
+      expect(response.response.toolCalls).toHaveLength(1)
       expect(bodies).toHaveLength(1)
       expect(bodies[0].tool_choice).toEqual({ type: "function", function: { name: "generate_object" } })
       const tool = bodies[0].tools?.[0]
@@ -119,17 +120,17 @@ describe("LLM.generateObject", () => {
         }),
       )
 
-      const result = yield* LLM.generateObject({
+      const response = yield* LLM.generateObject({
         model,
         prompt: "Extract the user.",
-        inputSchema: {
+        jsonSchema: {
           type: "object",
           properties: { name: { type: "string" }, age: { type: "number" } },
           required: ["name", "age"],
         },
       }).pipe(Effect.provide(layer))
 
-      expect(result).toEqual({ name: "Ada", age: 30 })
+      expect(response.object).toEqual({ name: "Ada", age: 30 })
       expect(bodies[0].tools?.[0]?.function.parameters).toEqual({
         type: "object",
         properties: { name: { type: "string" }, age: { type: "number" } },

@@ -60,7 +60,7 @@ type TypedToolConfig = {
 
 type DynamicToolConfig = {
   readonly description: string
-  readonly inputSchema: JsonSchema.JsonSchema
+  readonly jsonSchema: JsonSchema.JsonSchema
   readonly execute?: (params: unknown) => Effect.Effect<unknown, ToolFailure>
 }
 
@@ -79,7 +79,7 @@ type DynamicToolConfig = {
  *    })
  *    ```
  *
- * 2. **Dynamic** — pass raw JSON Schema as `inputSchema`. Use this when the
+ * 2. **Dynamic** — pass raw JSON Schema as `jsonSchema`. Use this when the
  *    schema comes from an external source (MCP server, plugin manifest,
  *    dynamic config) and is not known at compile time. Inputs are typed as
  *    `unknown`; the handler is responsible for any validation it needs.
@@ -87,7 +87,7 @@ type DynamicToolConfig = {
  *    ```ts
  *    Tool.make({
  *      description: "Look something up",
- *      inputSchema: { type: "object", properties: { ... } },
+ *      jsonSchema: { type: "object", properties: { ... } },
  *      execute: (params) => Effect.succeed(...),
  *    })
  *    ```
@@ -109,16 +109,16 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
 }): Tool<Parameters, Success>
 export function make(config: {
   readonly description: string
-  readonly inputSchema: JsonSchema.JsonSchema
+  readonly jsonSchema: JsonSchema.JsonSchema
   readonly execute: (params: unknown) => Effect.Effect<unknown, ToolFailure>
 }): AnyExecutableTool
 export function make(config: {
   readonly description: string
-  readonly inputSchema: JsonSchema.JsonSchema
+  readonly jsonSchema: JsonSchema.JsonSchema
   readonly execute?: undefined
 }): AnyTool
 export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
-  if ("inputSchema" in config) {
+  if ("jsonSchema" in config) {
     return {
       description: config.description,
       parameters: Schema.Unknown as ToolSchema<unknown>,
@@ -129,7 +129,7 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
       _definition: new ToolDefinition({
         name: "",
         description: config.description,
-        inputSchema: config.inputSchema,
+        inputSchema: config.jsonSchema,
       }),
     }
   }

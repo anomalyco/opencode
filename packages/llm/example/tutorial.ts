@@ -115,6 +115,43 @@ const streamWithTools = LLM.stream({
   Stream.runDrain,
 )
 
+// 6. `generateObject` is the structured-output helper. It forces a synthetic
+// tool call internally, so the same call site works across providers instead of
+// depending on provider-specific JSON mode flags.
+const WeatherReport = Schema.Struct({
+  city: Schema.String,
+  forecast: Schema.String,
+  highFahrenheit: Schema.Number,
+})
+
+const generateStructuredObject = Effect.gen(function* () {
+  const response = yield* LLM.generateObject({
+    model,
+    system: "Return only structured weather data.",
+    prompt: "Give me today's weather for San Francisco.",
+    schema: WeatherReport,
+    generation: { maxTokens: 120, temperature: 0 },
+  })
+
+  console.log("\n== generateObject ==")
+  console.log(Formatter.formatJson(response.object, { space: 2 }))
+})
+
+// If the shape is only known at runtime, pass raw JSON Schema instead. The
+// `.object` type is `unknown`; callers that need static types should validate it.
+const generateDynamicObject = LLM.generateObject({
+  model,
+  prompt: "Extract the city and forecast from: San Francisco is sunny.",
+  jsonSchema: {
+    type: "object",
+    properties: {
+      city: { type: "string" },
+      forecast: { type: "string" },
+    },
+    required: ["city", "forecast"],
+  },
+})
+
 // -----------------------------------------------------------------------------
 // Part 2: provider composition with a fake provider
 // -----------------------------------------------------------------------------
@@ -197,6 +234,8 @@ const program = Effect.gen(function* () {
   // yield* inspectFakeProvider
   // yield* LLMClient.prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.body))))
   // yield* streamText
+  // yield* generateStructuredObject
+  // yield* generateDynamicObject.pipe(Effect.andThen((response) => Effect.sync(() => console.log(response.object))))
   yield* streamWithTools
 }).pipe(Effect.provide(Layer.mergeAll(requestExecutorLayer, llmClientLayer)))
 
