@@ -22,6 +22,7 @@ export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+export const RETRY_MAX_ATTEMPTS = 3
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
@@ -64,6 +65,17 @@ export function retryable(error: Err) {
   // context overflow errors should not be retried
   if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
   if (MessageV2.APIError.isInstance(error)) {
+    // Priority 1: honor explicit header-driven retry decision from the LLM proxy.
+    // Headers are lowercased by fetch/undici on Bun, so we read the lowercase form.
+    const retryableHeader = error.data.responseHeaders?.["x-llm-error-retryable"]
+    if (retryableHeader === "false") return undefined
+    if (retryableHeader === "true") {
+      const errorType = error.data.responseHeaders?.["x-llm-error-type"]
+      if (errorType === "rate_limit") return { message: "Rate Limited" }
+      if (errorType === "provider_unavailable") return { message: "Provider is overloaded" }
+      return { message: error.data.message || "Retrying" }
+    }
+
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
     // even when the provider SDK doesn't explicitly mark them as retryable.
@@ -171,6 +183,7 @@ export function policy(opts: {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
+      if (meta.attempt > RETRY_MAX_ATTEMPTS) return Cause.done(meta.attempt)
       const retry = retryable(error)
       if (!retry) return Cause.done(meta.attempt)
       return Effect.gen(function* () {

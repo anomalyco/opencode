@@ -292,6 +292,155 @@ describe("session.retry.retryable", () => {
       },
     })
   })
+
+  // --- header-driven retry tests ---
+
+  test("x-llm-error-retryable: false suppresses retry regardless of status code", () => {
+    // A 500 would normally be retried, but the proxy says no
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Internal error",
+        isRetryable: true,
+        statusCode: 500,
+        responseHeaders: {
+          "x-llm-error-retryable": "false",
+          "x-llm-error-type": "unknown",
+        },
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("x-llm-error-retryable: false suppresses retry on 4xx too", () => {
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Forbidden",
+        isRetryable: false,
+        statusCode: 403,
+        responseHeaders: {
+          "x-llm-error-retryable": "false",
+          "x-llm-error-type": "auth",
+        },
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("x-llm-error-retryable: true with rate_limit type returns 'Rate Limited'", () => {
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "429 from upstream",
+        isRetryable: false,
+        statusCode: 429,
+        responseHeaders: {
+          "x-llm-error-retryable": "true",
+          "x-llm-error-type": "rate_limit",
+        },
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error)).toEqual({ message: "Rate Limited" })
+  })
+
+  test("x-llm-error-retryable: true with provider_unavailable type returns overloaded message", () => {
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Service unavailable from proxy",
+        isRetryable: false,
+        statusCode: 503,
+        responseHeaders: {
+          "x-llm-error-retryable": "true",
+          "x-llm-error-type": "provider_unavailable",
+        },
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error)).toEqual({ message: "Provider is overloaded" })
+  })
+
+  test("x-llm-error-retryable: true with unknown type falls back to error message", () => {
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Transient upstream error",
+        isRetryable: false,
+        statusCode: 500,
+        responseHeaders: {
+          "x-llm-error-retryable": "true",
+          "x-llm-error-type": "unknown",
+        },
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error)).toEqual({ message: "Transient upstream error" })
+  })
+
+  test("x-llm-error-retryable: true with budget type (402 status) falls back to error message", () => {
+    // budget errors are remapped to 402 by the proxy but are non-retryable
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Budget exceeded",
+        isRetryable: false,
+        statusCode: 402,
+        responseHeaders: {
+          "x-llm-error-retryable": "false",
+          "x-llm-error-type": "budget",
+        },
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("falls back to status-code logic when headers are absent (5xx)", () => {
+    // No response headers — existing behavior: 500 is always retried
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Server blew up",
+        isRetryable: false,
+        statusCode: 500,
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error)).toEqual({ message: "Server blew up" })
+  })
+
+  test("falls back to body-parsing when headers absent and message contains rate limit", () => {
+    const error = wrap("Rate limit exceeded, please try again later")
+    expect(SessionRetry.retryable(error)).toEqual({ message: "Rate limit exceeded, please try again later" })
+  })
+})
+
+describe("session.retry.policy.maxAttempts", () => {
+  it.live("policy stops after RETRY_MAX_ATTEMPTS", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessionID = SessionID.make("session-policy-max")
+        const error = apiError({ "retry-after-ms": "0" })
+        const status = yield* SessionStatus.Service
+        let setCallCount = 0
+
+        const step = yield* Schedule.toStepWithMetadata(
+          SessionRetry.policy({
+            parse: (err) => MessageV2.APIError.Schema.parse(err),
+            set: (info) => {
+              setCallCount++
+              return status.set(sessionID, {
+                type: "retry",
+                attempt: info.attempt,
+                message: info.message,
+                next: info.next,
+              })
+            },
+          }),
+        )
+
+        // Drive the schedule step-by-step; steps beyond RETRY_MAX_ATTEMPTS
+        // return Cause.done (a Pull termination signal) which surfaces as a
+        // failure in the Effect, so we absorb it with Effect.ignore.
+        for (let i = 0; i < SessionRetry.RETRY_MAX_ATTEMPTS + 1; i++) {
+          yield* Effect.ignore(step(error))
+        }
+
+        // set() should have been called exactly RETRY_MAX_ATTEMPTS times
+        expect(setCallCount).toBe(SessionRetry.RETRY_MAX_ATTEMPTS)
+      }),
+    ),
+  )
 })
 
 describe("session.message-v2.fromError", () => {
