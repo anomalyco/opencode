@@ -22,6 +22,7 @@ const command = {
 } as const
 
 const LAYER_PRIORITY = 900
+const KV_LAYOUT = "which_key_layout"
 const KV_PENDING_PREVIEW = "which_key_pending_preview"
 const toggleCommands = [command.toggle, command.toggleLayout, command.togglePending] as const
 const scrollCommands = [command.scrollUp, command.scrollDown, command.pageUp, command.pageDown, command.home, command.end] as const
@@ -147,6 +148,11 @@ function commandShortcut(api: TuiPluginApi, name: string) {
       keymap.getCommandBindings({ visibility: "registered", commands: [name] }).get(name)?.[0]?.sequence,
     ),
   )
+}
+
+function layout(value: unknown): Layout {
+  if (value === "overlay") return "overlay"
+  return "dock"
 }
 
 function WhichKeyPanel(props: {
@@ -481,7 +487,7 @@ function WhichKeyPanel(props: {
 
 const tui: TuiPlugin = async (api) => {
   const [pinned, setPinned] = createSignal(false)
-  const [layout, setLayout] = createSignal<Layout>("dock")
+  const [mode, setMode] = createSignal(layout(api.kv.get(KV_LAYOUT, "dock")))
   const [pendingPreview, setPendingPreview] = createSignal(api.kv.get(KV_PENDING_PREVIEW, false))
 
   api.keymap.registerLayer({
@@ -502,7 +508,11 @@ const tui: TuiPlugin = async (api) => {
         desc: "Switch which-key between dock and overlay mode",
         category: "System",
         run() {
-          setLayout((value) => (value === "dock" ? "overlay" : "dock"))
+          setMode((value) => {
+            const next = value === "dock" ? "overlay" : "dock"
+            api.kv.set(KV_LAYOUT, next)
+            return next
+          })
         },
       },
       {
@@ -525,11 +535,11 @@ const tui: TuiPlugin = async (api) => {
     slots: {
       app() {
         return (
-          <Show when={layout() === "overlay"}>
+          <Show when={mode() === "overlay"}>
             <WhichKeyPanel
               api={api}
               layout="overlay"
-              mode={layout}
+              mode={mode}
               pendingPreview={pendingPreview}
               pinned={pinned}
             />
@@ -538,11 +548,11 @@ const tui: TuiPlugin = async (api) => {
       },
       app_bottom() {
         return (
-          <Show when={layout() === "dock"}>
+          <Show when={mode() === "dock"}>
             <WhichKeyPanel
               api={api}
               layout="dock"
-              mode={layout}
+              mode={mode}
               pendingPreview={pendingPreview}
               pinned={pinned}
             />
