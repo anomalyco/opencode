@@ -19,7 +19,8 @@ export function coverageResult(scenario: Scenario): Result {
 
 export function parseOptions(args: string[]): Options {
   const mode = option(args, "--mode") ?? "effect"
-  if (mode !== "effect" && mode !== "parity" && mode !== "coverage") throw new Error(`invalid --mode ${mode}`)
+  if (mode !== "effect" && mode !== "parity" && mode !== "coverage" && mode !== "auth")
+    throw new Error(`invalid --mode ${mode}`)
   return {
     mode,
     include: option(args, "--include"),

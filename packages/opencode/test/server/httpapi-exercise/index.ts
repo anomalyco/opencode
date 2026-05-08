@@ -23,7 +23,7 @@ import { OpenApi } from "effect/unstable/httpapi"
 import { TestLLMServer } from "../../lib/llm-server"
 import path from "path"
 import { array, boolean, check, isRecord, message, object, stable } from "./assertions"
-import { controlledPtyInput, http, pending, route } from "./dsl"
+import { controlledPtyInput, http, route } from "./dsl"
 import {
   cleanupExercisePaths,
   exerciseConfigDirectory,
@@ -1192,6 +1192,7 @@ const main = Effect.gen(function* () {
     return yield* Effect.fail(new Error("one or more scenarios are skipped"))
   if (options.failOnMissing && missing.length > 0)
     return yield* Effect.fail(new Error("one or more routes have no scenario"))
+  return undefined
 })
 
 Effect.runPromise(main.pipe(Effect.provide(TestLLMServer.layer), Effect.scoped)).then(

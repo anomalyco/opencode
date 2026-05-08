@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { looksJson } from "./assertions"
 import type {
   ActiveScenario,
+  AuthPolicy,
   BuilderState,
   CallResult,
   Comparison,
@@ -21,11 +22,13 @@ class ScenarioBuilder<S = undefined> {
       path,
       name,
       project: { git: true },
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- The unseeded builder state is intentionally undefined until `.seeded(...)` narrows it.
       seed: () => Effect.succeed(undefined as S),
       request: (ctx) => ({ path, headers: ctx.headers() }),
       capture: "full",
       mutates: false,
       reset: true,
+      auth: "protected",
     }
   }
 
@@ -55,6 +58,26 @@ class ScenarioBuilder<S = undefined> {
 
   stream() {
     return this.clone({ capture: "stream" })
+  }
+
+  protected() {
+    return this.auth("protected")
+  }
+
+  public() {
+    return this.auth("public")
+  }
+
+  publicBypass() {
+    return this.auth("public-bypass")
+  }
+
+  ticketBypass() {
+    return this.auth("ticket-bypass")
+  }
+
+  private auth(auth: AuthPolicy) {
+    return this.clone({ auth })
   }
 
   /** Assert a non-JSON or shape-only response. */
@@ -128,12 +151,15 @@ class ScenarioBuilder<S = undefined> {
       name: state.name,
       project: state.project,
       seed: state.seed,
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- `.seeded(...)` preserves the paired request/state type inside the builder.
       request: (ctx, seeded) => state.request({ ...ctx, state: seeded as S }),
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- `.seeded(...)` preserves the paired assertion/state type inside the builder.
       expect: (ctx, seeded, result) => expect({ ...ctx, state: seeded as S }, result),
       compare,
       capture: state.capture,
       mutates: state.mutates,
       reset: state.reset,
+      auth: state.auth,
     }
   }
 }

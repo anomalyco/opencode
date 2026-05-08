@@ -5,22 +5,46 @@ import { parse } from "./assertions"
 import { runtime, type Runtime } from "./runtime"
 import type { ActiveScenario, Backend, BackendApp, CallResult, CaptureMode, SeededContext } from "./types"
 
-export function call(backend: Backend, scenario: ActiveScenario, ctx: SeededContext<unknown>) {
+type CallOptions = {
+  auth?: {
+    password?: string
+    username?: string
+  }
+}
+
+export function call(
+  backend: Backend,
+  scenario: ActiveScenario,
+  ctx: SeededContext<unknown>,
+  options: CallOptions = {},
+) {
   return Effect.promise(async () =>
-    capture(await app(await runtime(), backend).request(toRequest(scenario, ctx)), scenario.capture),
+    capture(await app(await runtime(), backend, options).request(toRequest(scenario, ctx)), scenario.capture),
   )
 }
 
-const appCache: Partial<Record<Backend, BackendApp>> = {}
+export function callAuthProbe(backend: Backend, scenario: ActiveScenario) {
+  return Effect.promise(async () =>
+    capture(
+      await app(await runtime(), backend, { auth: { password: "secret" } }).request(toAuthProbeRequest(scenario)),
+      scenario.capture,
+    ),
+  )
+}
 
-function app(modules: Runtime, backend: Backend) {
+const appCache: Partial<Record<string, BackendApp>> = {}
+
+function app(modules: Runtime, backend: Backend, options: CallOptions) {
+  const username = options.auth?.username
+  const password = options.auth?.password
+  const cacheKey = `${backend}:${username ?? ""}:${password ?? ""}`
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = backend === "effect"
-  Flag.OPENCODE_SERVER_PASSWORD = undefined
-  Flag.OPENCODE_SERVER_USERNAME = undefined
-  if (appCache[backend]) return appCache[backend]
+  Flag.OPENCODE_SERVER_PASSWORD = password
+  Flag.OPENCODE_SERVER_USERNAME = username
+  if (appCache[cacheKey]) return appCache[cacheKey]
   if (backend === "legacy") {
     const legacy = modules.Server.Legacy().app
-    return (appCache.legacy = {
+    return (appCache[cacheKey] = {
       request: (input, init) => legacy.request(input, init),
     })
   }
@@ -29,13 +53,13 @@ function app(modules: Runtime, backend: Backend) {
     modules.ExperimentalHttpApiServer.routes.pipe(
       Layer.provide(
         ConfigProvider.layer(
-          ConfigProvider.fromUnknown({ OPENCODE_SERVER_PASSWORD: undefined, OPENCODE_SERVER_USERNAME: undefined }),
+          ConfigProvider.fromUnknown({ OPENCODE_SERVER_PASSWORD: password, OPENCODE_SERVER_USERNAME: username }),
         ),
       ),
     ),
     { disableLogger: true },
   ).handler
-  return (appCache.effect = {
+  return (appCache[cacheKey] = {
     request(input: string | URL | Request, init?: RequestInit) {
       return handler(
         input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init),
@@ -52,6 +76,20 @@ function toRequest(scenario: ActiveScenario, ctx: SeededContext<unknown>) {
     headers: spec.body === undefined ? spec.headers : { "content-type": "application/json", ...spec.headers },
     body: spec.body === undefined ? undefined : JSON.stringify(spec.body),
   })
+}
+
+function toAuthProbeRequest(scenario: ActiveScenario) {
+  return new Request(new URL(authProbePath(scenario.path), "http://localhost"), {
+    method: scenario.method,
+    headers: scenario.method === "GET" ? undefined : { "content-type": "application/json" },
+    body: scenario.method === "GET" ? undefined : JSON.stringify({}),
+  })
+}
+
+function authProbePath(path: string) {
+  return path
+    .replace(/\{([^}]+)\}/g, (_match, key: string) => `auth_${key}`)
+    .replace(/:([^/]+)/g, (_match, key: string) => `auth_${key}`)
 }
 
 async function capture(response: Response, mode: CaptureMode): Promise<CallResult> {
