@@ -129,6 +129,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     commands: [
       {
         name: "question.edit.clear",
+        title: "Clear answer edit",
+        category: "Question",
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
@@ -142,6 +144,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     bindings: [
       {
         key: "escape",
+        desc: "Cancel answer edit",
+        group: "Question",
         cmd: () => {
           setStore("editing", false)
         },
@@ -149,6 +153,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       ...keymapConfig.pick("question", ["question.edit.clear"]),
       {
         key: "return",
+        desc: "Submit answer edit",
+        group: "Question",
         cmd: () => {
           const text = textarea?.plainText?.trim() ?? ""
           const prev = store.custom[store.tab]
@@ -203,38 +209,68 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       commands: [
         {
           name: "question.reject",
+          title: "Reject question",
+          category: "Question",
           run() {
             reject()
           },
         },
       ],
       bindings: [
-        { key: "left", cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()) },
-        { key: "h", cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()) },
-        { key: "right", cmd: () => selectTab((store.tab + 1) % tabs()) },
-        { key: "l", cmd: () => selectTab((store.tab + 1) % tabs()) },
+        {
+          key: "left",
+          desc: "Previous question",
+          group: "Question",
+          cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()),
+        },
+        {
+          key: "h",
+          desc: "Previous question",
+          group: "Question",
+          cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()),
+        },
+        { key: "right", desc: "Next question", group: "Question", cmd: () => selectTab((store.tab + 1) % tabs()) },
+        { key: "l", desc: "Next question", group: "Question", cmd: () => selectTab((store.tab + 1) % tabs()) },
         {
           key: "tab",
+          desc: "Next question",
+          group: "Question",
           cmd: ({ event }: { event: { shift: boolean } }) => {
             selectTab((store.tab + (event.shift ? -1 : 1) + tabs()) % tabs())
           },
         },
         ...(confirm()
-          ? [{ key: "return", cmd: () => submit() }, { key: "escape", cmd: () => reject() }, ...sections.question]
+          ? [
+              { key: "return", desc: "Submit answer", group: "Question", cmd: () => submit() },
+              { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
+              ...sections.question,
+            ]
           : [
               ...Array.from({ length: max }, (_, index) => ({
                 key: String(index + 1),
+                desc: `Select answer ${index + 1}`,
+                group: "Question",
                 cmd: () => {
                   moveTo(index)
                   selectOption()
                 },
               })),
-              { key: "up", cmd: () => moveTo((store.selected - 1 + total) % total) },
-              { key: "k", cmd: () => moveTo((store.selected - 1 + total) % total) },
-              { key: "down", cmd: () => moveTo((store.selected + 1) % total) },
-              { key: "j", cmd: () => moveTo((store.selected + 1) % total) },
-              { key: "return", cmd: () => selectOption() },
-              { key: "escape", cmd: () => reject() },
+              {
+                key: "up",
+                desc: "Previous answer",
+                group: "Question",
+                cmd: () => moveTo((store.selected - 1 + total) % total),
+              },
+              {
+                key: "k",
+                desc: "Previous answer",
+                group: "Question",
+                cmd: () => moveTo((store.selected - 1 + total) % total),
+              },
+              { key: "down", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
+              { key: "j", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
+              { key: "return", desc: "Select answer", group: "Question", cmd: () => selectOption() },
+              { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
               ...sections.question,
             ]),
       ],

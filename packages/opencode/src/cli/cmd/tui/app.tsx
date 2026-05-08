@@ -399,6 +399,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       {
         name: "command.palette.show",
         title: "Show command palette",
+        category: "System",
         hidden: true,
         run: () => {
           command.show()
@@ -852,6 +853,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     <box
       width={dimensions().width}
       height={dimensions().height}
+      flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -867,17 +869,22 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         <TimeToFirstDraw />
       </Show>
       <Show when={ready()}>
-        <Switch>
-          <Match when={route.data.type === "home"}>
-            <Home />
-          </Match>
-          <Match when={route.data.type === "session"}>
-            <Session />
-          </Match>
-        </Switch>
+        <box flexGrow={1} minHeight={0} flexDirection="column">
+          <Switch>
+            <Match when={route.data.type === "home"}>
+              <Home />
+            </Match>
+            <Match when={route.data.type === "session"}>
+              <Session />
+            </Match>
+          </Switch>
+          {plugin()}
+        </box>
+        <box flexShrink={0}>
+          <TuiPluginRuntime.Slot name="app_bottom" />
+        </box>
+        <TuiPluginRuntime.Slot name="app" />
       </Show>
-      {plugin()}
-      <TuiPluginRuntime.Slot name="app" />
       <StartupLoading ready={ready} />
     </box>
   )

@@ -412,6 +412,7 @@ test("resolves semantic keymap sections", async () => {
           keymap: {
             sections: {
               global: { "command.palette.show": "alt+p" },
+              which_key: { "tui-which-key.toggle": "alt+k" },
               prompt: { "prompt.editor": "ctrl+e" },
               autocomplete: { "prompt.autocomplete.next": "ctrl+j" },
               dialog_actions: { "dialog.action.toggle": "ctrl+t" },
@@ -427,6 +428,23 @@ test("resolves semantic keymap sections", async () => {
   const config = await getTuiConfig(tmp.path)
   expect(config.keymap.sections.global.find((binding) => binding.cmd === "command.palette.show")?.key).toBe("alt+p")
   expect(config.keymap.sections.global.find((binding) => binding.cmd === "session.new")?.key).toBe("<leader>n")
+  expect(config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.toggle")?.key).toBe(
+    "alt+k",
+  )
+  expect(config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.layout.toggle")?.key).toBe(
+    "ctrl+alt+shift+k",
+  )
+  expect(config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.pending.toggle")?.key).toBe(
+    "ctrl+alt+shift+p",
+  )
+  expect(config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.group.next")?.key).toBe(
+    "ctrl+alt+right,ctrl+alt+]",
+  )
+  expect(
+    (config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.toggle") as
+      | { group?: unknown }
+      | undefined)?.group,
+  ).toBe("System")
   expect(config.keymap.sections.prompt.find((binding) => binding.cmd === "prompt.editor")?.key).toBe("ctrl+e")
   expect(config.keymap.sections.autocomplete.find((binding) => binding.cmd === "prompt.autocomplete.next")?.key).toBe(
     "ctrl+j",
@@ -467,6 +485,7 @@ test("legacy keybinds transform into semantic keymap sections", async () => {
   const config = await getTuiConfig(tmp.path)
   expect(Object.keys(config.keymap.sections)).toEqual([
     "global",
+    "which_key",
     "session",
     "prompt",
     "autocomplete",
@@ -480,6 +499,9 @@ test("legacy keybinds transform into semantic keymap sections", async () => {
     "home_tips",
   ])
   expect(config.keymap.sections.global.find((binding) => binding.cmd === "command.palette.show")?.key).toBe("alt+p")
+  expect(config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.toggle")?.key).toBe(
+    "ctrl+alt+k",
+  )
   expect(config.keymap.sections.prompt.find((binding) => binding.cmd === "prompt.editor")?.key).toBe("ctrl+e")
   expect(config.keymap.sections.autocomplete.find((binding) => binding.cmd === "prompt.autocomplete.next")?.key).toBe(
     "ctrl+j",
