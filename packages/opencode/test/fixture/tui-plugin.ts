@@ -40,6 +40,8 @@ function themeCurrent(): HostPluginApi["theme"]["current"] {
     backgroundPanel: h,
     backgroundElement: i,
     backgroundMenu: i,
+    backgroundDialogOverlay: RGBA.fromInts(0, 0, 0, 150),
+    backgroundSidebarOverlay: RGBA.fromInts(0, 0, 0, 70),
     border: j,
     borderActive: c,
     borderSubtle: i,

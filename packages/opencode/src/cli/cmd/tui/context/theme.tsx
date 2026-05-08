@@ -78,9 +78,11 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 export type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu" | "backgroundDialogOverlay" | "backgroundSidebarOverlay"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    backgroundDialogOverlay?: ColorValue
+    backgroundSidebarOverlay?: ColorValue
     thinkingOpacity?: number
   }
 }
@@ -222,7 +224,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "backgroundDialogOverlay" && key !== "backgroundSidebarOverlay" && key !== "thinkingOpacity")
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
@@ -243,6 +245,20 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
   } else {
     resolved.backgroundMenu = resolved.backgroundElement
+  }
+
+  // Handle backgroundDialogOverlay - optional with fallback to semi-transparent black
+  if (theme.theme.backgroundDialogOverlay !== undefined) {
+    resolved.backgroundDialogOverlay = resolveColor(theme.theme.backgroundDialogOverlay)
+  } else {
+    resolved.backgroundDialogOverlay = RGBA.fromInts(0, 0, 0, 150)
+  }
+
+  // Handle backgroundSidebarOverlay - optional with fallback to semi-transparent black
+  if (theme.theme.backgroundSidebarOverlay !== undefined) {
+    resolved.backgroundSidebarOverlay = resolveColor(theme.theme.backgroundSidebarOverlay)
+  } else {
+    resolved.backgroundSidebarOverlay = RGBA.fromInts(0, 0, 0, 70)
   }
 
   // Handle thinkingOpacity - optional with default of 0.6
@@ -579,6 +595,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],
+      backgroundDialogOverlay: transparent,
+      backgroundSidebarOverlay: transparent,
 
       // Border colors
       borderSubtle: grays[6],

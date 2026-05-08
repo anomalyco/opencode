@@ -49,3 +49,19 @@ test("resolveTheme rejects circular color refs", () => {
 
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
 })
+
+test("resolveTheme uses default for overlay backgrounds when not specified", () => {
+  const item = structuredClone(DEFAULT_THEMES.opencode)
+  const resolved = resolveTheme(item, "dark")
+  expect(resolved.backgroundDialogOverlay.a).toBeCloseTo(150 / 255, 2)
+  expect(resolved.backgroundSidebarOverlay.a).toBeCloseTo(70 / 255, 2)
+})
+
+test("resolveTheme uses custom overlay background values", () => {
+  const item = structuredClone(DEFAULT_THEMES.opencode)
+  item.theme.backgroundDialogOverlay = "#ff0000"
+  item.theme.backgroundSidebarOverlay = "#0000ff"
+  const resolved = resolveTheme(item, "dark")
+  expect(resolved.backgroundDialogOverlay.r).toEqual(1)
+  expect(resolved.backgroundSidebarOverlay.b).toEqual(1)
+})

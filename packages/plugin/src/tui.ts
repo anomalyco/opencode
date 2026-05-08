@@ -204,6 +204,8 @@ export type TuiThemeCurrent = {
   readonly backgroundPanel: RGBA
   readonly backgroundElement: RGBA
   readonly backgroundMenu: RGBA
+  readonly backgroundDialogOverlay: RGBA
+  readonly backgroundSidebarOverlay: RGBA
   readonly border: RGBA
   readonly borderActive: RGBA
   readonly borderSubtle: RGBA
