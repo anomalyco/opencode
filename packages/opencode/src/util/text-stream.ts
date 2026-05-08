@@ -16,8 +16,11 @@ export class InvalidUtf8Error extends Error {
 }
 
 /**
- * UTF-8 text Readable for `filepath`. A leading UTF-8 BOM passes through as
- * U+FEFF — same as `createReadStream({ encoding: "utf8" })`.
+ * UTF-8 text Readable for `filepath`. A leading UTF-8 BOM is stripped here by
+ * `TextDecoder` (per WHATWG spec) — note this differs from
+ * `createReadStream({ encoding: "utf8" })`, whose `StringDecoder` preserves
+ * the BOM as U+FEFF. The {@link openDecoded} fallback also strips the BOM
+ * (iconv's utf-8 codec drops it), so both paths agree on BOM handling.
  */
 export function openUtf8(filepath: string): Readable {
   const out = new PassThrough({ encoding: "utf8" })
