@@ -263,10 +263,7 @@ function WhichKeyPanel(props: {
       (sum, item) => sum + (item.type === "tab" ? item.group.label.length + 2 : 3),
       0,
     )
-    return Math.max(
-      MIN_TAB_GAP,
-      Math.min(TAB_GAP, Math.floor((contentWidth() - itemWidth) / (itemCount - 1))),
-    )
+    return Math.max(MIN_TAB_GAP, Math.min(TAB_GAP, Math.floor((contentWidth() - itemWidth) / (itemCount - 1))))
   })
   const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
   const look = createMemo(() => skin(props.api))
