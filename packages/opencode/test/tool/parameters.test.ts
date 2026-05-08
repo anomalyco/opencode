@@ -10,7 +10,6 @@ import { toJsonSchema } from "../../src/util/effect-zod"
 // byte-identical regardless of whether a tool has migrated from zod to Schema.
 
 import { Parameters as ApplyPatch } from "../../src/tool/apply_patch"
-import { Parameters as Bash } from "../../src/tool/bash"
 import { Parameters as Edit } from "../../src/tool/edit"
 import { Parameters as Glob } from "../../src/tool/glob"
 import { Parameters as Grep } from "../../src/tool/grep"
@@ -19,6 +18,7 @@ import { Parameters as Lsp } from "../../src/tool/lsp"
 import { Parameters as Plan } from "../../src/tool/plan"
 import { Parameters as Question } from "../../src/tool/question"
 import { Parameters as Read } from "../../src/tool/read"
+import { Parameters as Shell } from "../../src/tool/shell"
 import { Parameters as Skill } from "../../src/tool/skill"
 import { Parameters as Task } from "../../src/tool/task"
 import { Parameters as Todo } from "../../src/tool/todo"
@@ -35,7 +35,7 @@ const accepts = (schema: Schema.Decoder<unknown>, input: unknown): boolean =>
 describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
     test("apply_patch", () => expect(toJsonSchema(ApplyPatch)).toMatchSnapshot())
-    test("bash", () => expect(toJsonSchema(Bash)).toMatchSnapshot())
+    test("bash", () => expect(toJsonSchema(Shell)).toMatchSnapshot())
     test("edit", () => expect(toJsonSchema(Edit)).toMatchSnapshot())
     test("glob", () => expect(toJsonSchema(Glob)).toMatchSnapshot())
     test("grep", () => expect(toJsonSchema(Grep)).toMatchSnapshot())
@@ -66,20 +66,20 @@ describe("tool parameters", () => {
     })
   })
 
-  describe("bash", () => {
+  describe("shell", () => {
     test("accepts minimum: command + description", () => {
-      expect(parse(Bash, { command: "ls", description: "list" })).toEqual({ command: "ls", description: "list" })
+      expect(parse(Shell, { command: "ls", description: "list" })).toEqual({ command: "ls", description: "list" })
     })
     test("accepts optional timeout + workdir", () => {
-      const parsed = parse(Bash, { command: "ls", description: "list", timeout: 5000, workdir: "/tmp" })
+      const parsed = parse(Shell, { command: "ls", description: "list", timeout: 5000, workdir: "/tmp" })
       expect(parsed.timeout).toBe(5000)
       expect(parsed.workdir).toBe("/tmp")
     })
-    test("rejects missing description (required by zod)", () => {
-      expect(accepts(Bash, { command: "ls" })).toBe(false)
+    test("rejects missing description", () => {
+      expect(accepts(Shell, { command: "ls" })).toBe(false)
     })
     test("rejects missing command", () => {
-      expect(accepts(Bash, { description: "list" })).toBe(false)
+      expect(accepts(Shell, { description: "list" })).toBe(false)
     })
   })
 

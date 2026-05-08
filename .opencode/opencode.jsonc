@@ -3,7 +3,7 @@
   "provider": {},
   "permission": {
     "edit": {
-      "packages/opencode/migration/*": "deny",
+      "packages/opencode/migration/*": "ask",
     },
   },
   "mcp": {},

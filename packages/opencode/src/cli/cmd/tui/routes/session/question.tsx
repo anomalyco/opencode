@@ -1,20 +1,22 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Show } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
-import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
-import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { useTuiConfig } from "../../context/tui-config"
+import { useBindings } from "../../keymap"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
   const { theme } = useTheme()
-  const keybind = useKeybind()
-  const bindings = useTextareaKeybindings()
+  const tuiConfig = useTuiConfig()
+  const {
+    keymap: { sections },
+  } = tuiConfig
+  const keymapConfig = tuiConfig.keymap
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -122,131 +124,120 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
   const dialog = useDialog()
 
-  useKeyboard((evt) => {
-    // Skip processing if a dialog (e.g., command palette) is open
-    if (dialog.stack.length > 0) return
-
-    // When editing custom answer textarea
-    if (store.editing && !confirm()) {
-      if (evt.name === "escape") {
-        evt.preventDefault()
-        setStore("editing", false)
-        return
-      }
-      if (keybind.match("input_clear", evt)) {
-        evt.preventDefault()
-        const text = textarea?.plainText ?? ""
-        if (!text) {
+  useBindings(() => ({
+    enabled: store.editing && !confirm(),
+    commands: [
+      {
+        name: "question.edit.clear",
+        run() {
+          const text = textarea?.plainText ?? ""
+          if (!text) {
+            setStore("editing", false)
+            return
+          }
+          textarea?.setText("")
+        },
+      },
+    ],
+    bindings: [
+      {
+        key: "escape",
+        cmd: () => {
           setStore("editing", false)
-          return
-        }
-        textarea?.setText("")
-        return
-      }
-      if (evt.name === "return") {
-        evt.preventDefault()
-        const text = textarea?.plainText?.trim() ?? ""
-        const prev = store.custom[store.tab]
+        },
+      },
+      ...keymapConfig.pick("question", ["question.edit.clear"]),
+      {
+        key: "return",
+        cmd: () => {
+          const text = textarea?.plainText?.trim() ?? ""
+          const prev = store.custom[store.tab]
 
-        if (!text) {
-          if (prev) {
+          if (!text) {
+            if (prev) {
+              const inputs = [...store.custom]
+              inputs[store.tab] = ""
+              setStore("custom", inputs)
+
+              const answers = [...store.answers]
+              answers[store.tab] = (answers[store.tab] ?? []).filter((x) => x !== prev)
+              setStore("answers", answers)
+            }
+            setStore("editing", false)
+            return
+          }
+
+          if (multi()) {
             const inputs = [...store.custom]
-            inputs[store.tab] = ""
+            inputs[store.tab] = text
             setStore("custom", inputs)
 
+            const existing = store.answers[store.tab] ?? []
+            const next = [...existing]
+            if (prev) {
+              const index = next.indexOf(prev)
+              if (index !== -1) next.splice(index, 1)
+            }
+            if (!next.includes(text)) next.push(text)
             const answers = [...store.answers]
-            answers[store.tab] = (answers[store.tab] ?? []).filter((x) => x !== prev)
+            answers[store.tab] = next
             setStore("answers", answers)
+            setStore("editing", false)
+            return
           }
+
+          pick(text, true)
           setStore("editing", false)
-          return
-        }
+        },
+      },
+    ],
+  }))
 
-        if (multi()) {
-          const inputs = [...store.custom]
-          inputs[store.tab] = text
-          setStore("custom", inputs)
+  useBindings(() => {
+    const opts = options()
+    const total = opts.length + (custom() ? 1 : 0)
+    const max = Math.min(total, 9)
 
-          const existing = store.answers[store.tab] ?? []
-          const next = [...existing]
-          if (prev) {
-            const index = next.indexOf(prev)
-            if (index !== -1) next.splice(index, 1)
-          }
-          if (!next.includes(text)) next.push(text)
-          const answers = [...store.answers]
-          answers[store.tab] = next
-          setStore("answers", answers)
-          setStore("editing", false)
-          return
-        }
-
-        pick(text, true)
-        setStore("editing", false)
-        return
-      }
-      // Let textarea handle all other keys
-      return
-    }
-
-    if (evt.name === "left" || evt.name === "h") {
-      evt.preventDefault()
-      selectTab((store.tab - 1 + tabs()) % tabs())
-    }
-
-    if (evt.name === "right" || evt.name === "l") {
-      evt.preventDefault()
-      selectTab((store.tab + 1) % tabs())
-    }
-
-    if (evt.name === "tab") {
-      evt.preventDefault()
-      const direction = evt.shift ? -1 : 1
-      selectTab((store.tab + direction + tabs()) % tabs())
-    }
-
-    if (confirm()) {
-      if (evt.name === "return") {
-        evt.preventDefault()
-        submit()
-      }
-      if (evt.name === "escape" || keybind.match("app_exit", evt)) {
-        evt.preventDefault()
-        reject()
-      }
-    } else {
-      const opts = options()
-      const total = opts.length + (custom() ? 1 : 0)
-      const max = Math.min(total, 9)
-      const digit = Number(evt.name)
-
-      if (!Number.isNaN(digit) && digit >= 1 && digit <= max) {
-        evt.preventDefault()
-        const index = digit - 1
-        moveTo(index)
-        selectOption()
-        return
-      }
-
-      if (evt.name === "up" || evt.name === "k") {
-        evt.preventDefault()
-        moveTo((store.selected - 1 + total) % total)
-      }
-
-      if (evt.name === "down" || evt.name === "j") {
-        evt.preventDefault()
-        moveTo((store.selected + 1) % total)
-      }
-
-      if (evt.name === "return") {
-        evt.preventDefault()
-        selectOption()
-      }
-
-      if (evt.name === "escape" || keybind.match("app_exit", evt)) {
-        evt.preventDefault()
-        reject()
-      }
+    return {
+      enabled: dialog.stack.length === 0 && !store.editing,
+      commands: [
+        {
+          name: "question.reject",
+          run() {
+            reject()
+          },
+        },
+      ],
+      bindings: [
+        { key: "left", cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()) },
+        { key: "h", cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()) },
+        { key: "right", cmd: () => selectTab((store.tab + 1) % tabs()) },
+        { key: "l", cmd: () => selectTab((store.tab + 1) % tabs()) },
+        {
+          key: "tab",
+          cmd: ({ event }: { event: { shift: boolean } }) => {
+            selectTab((store.tab + (event.shift ? -1 : 1) + tabs()) % tabs())
+          },
+        },
+        ...(confirm()
+          ? [{ key: "return", cmd: () => submit() }, { key: "escape", cmd: () => reject() }, ...sections.question]
+          : [
+              ...Array.from({ length: max }, (_, index) => ({
+                key: String(index + 1),
+                cmd: () => {
+                  moveTo(index)
+                  selectOption()
+                },
+              })),
+              { key: "up", cmd: () => moveTo((store.selected - 1 + total) % total) },
+              { key: "k", cmd: () => moveTo((store.selected - 1 + total) % total) },
+              { key: "down", cmd: () => moveTo((store.selected + 1) % total) },
+              { key: "j", cmd: () => moveTo((store.selected + 1) % total) },
+              { key: "return", cmd: () => selectOption() },
+              { key: "escape", cmd: () => reject() },
+              ...sections.question,
+            ]),
+      ],
     }
   })
 
@@ -394,7 +385,6 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                         textColor={theme.text}
                         focusedTextColor={theme.text}
                         cursorColor={theme.primary}
-                        keyBindings={bindings()}
                       />
                     </box>
                   </Show>

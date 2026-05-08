@@ -1,8 +1,8 @@
 import { Workspace } from "@/control-plane/workspace"
-import { WorkspaceAdaptorEntry } from "@/control-plane/types"
-import { NonNegativeInt } from "@/util/schema"
+import { WorkspaceAdapterEntry } from "@/control-plane/types"
 import { Schema, Struct } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { ApiVcsApplyError } from "./instance"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
@@ -10,30 +10,41 @@ import { described } from "./metadata"
 
 const root = "/experimental/workspace"
 export const CreatePayload = Schema.Struct(Struct.omit(Workspace.CreateInput.fields, ["projectID"]))
-export const SessionRestorePayload = Schema.Struct(Struct.omit(Workspace.SessionRestoreInput.fields, ["workspaceID"]))
-export const SessionRestoreResponse = Schema.Struct({
-  total: NonNegativeInt,
+export const WarpPayload = Schema.Struct({
+  id: Schema.NullOr(Workspace.Info.fields.id),
+  sessionID: Workspace.SessionWarpInput.fields.sessionID,
+  copyChanges: Workspace.SessionWarpInput.fields.copyChanges,
 })
 
+export class ApiWorkspaceWarpError extends Schema.ErrorClass<ApiWorkspaceWarpError>("WorkspaceWarpError")(
+  {
+    name: Schema.Literal("WorkspaceWarpError"),
+    data: Schema.Struct({
+      message: Schema.String,
+    }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
 export const WorkspacePaths = {
-  adaptors: `${root}/adaptor`,
+  adapters: `${root}/adapter`,
   list: root,
   status: `${root}/status`,
   remove: `${root}/:id`,
-  sessionRestore: `${root}/:id/session-restore`,
+  warp: `${root}/warp`,
 } as const
 
 export const WorkspaceApi = HttpApi.make("workspace")
   .add(
     HttpApiGroup.make("workspace")
       .add(
-        HttpApiEndpoint.get("adaptors", WorkspacePaths.adaptors, {
-          success: described(Schema.Array(WorkspaceAdaptorEntry), "Workspace adaptors"),
+        HttpApiEndpoint.get("adapters", WorkspacePaths.adapters, {
+          success: described(Schema.Array(WorkspaceAdapterEntry), "Workspace adapters"),
         }).annotateMerge(
           OpenApi.annotations({
-            identifier: "experimental.workspace.adaptor.list",
-            summary: "List workspace adaptors",
-            description: "List all available workspace adaptors for the current project.",
+            identifier: "experimental.workspace.adapter.list",
+            summary: "List workspace adapters",
+            description: "List all available workspace adapters for the current project.",
           }),
         ),
         HttpApiEndpoint.get("list", WorkspacePaths.list, {
@@ -76,16 +87,15 @@ export const WorkspaceApi = HttpApi.make("workspace")
             description: "Remove an existing workspace.",
           }),
         ),
-        HttpApiEndpoint.post("sessionRestore", WorkspacePaths.sessionRestore, {
-          params: { id: Workspace.Info.fields.id },
-          payload: SessionRestorePayload,
-          success: described(SessionRestoreResponse, "Session replay started"),
-          error: HttpApiError.BadRequest,
+        HttpApiEndpoint.post("warp", WorkspacePaths.warp, {
+          payload: WarpPayload,
+          success: described(HttpApiSchema.NoContent, "Session warped"),
+          error: [ApiWorkspaceWarpError, ApiVcsApplyError],
         }).annotateMerge(
           OpenApi.annotations({
-            identifier: "experimental.workspace.sessionRestore",
-            summary: "Restore session into workspace",
-            description: "Replay a session's sync events into the target workspace in batches.",
+            identifier: "experimental.workspace.warp",
+            summary: "Warp session into workspace",
+            description: "Move a session's sync history into the target workspace, or detach it to the local project.",
           }),
         ),
       )
