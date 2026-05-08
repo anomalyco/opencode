@@ -157,6 +157,23 @@ export function header(
   return credentialInput(source).header(name)
 }
 
+export function bearerHeader(
+  name: string,
+): (source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) => Auth
+export function bearerHeader(
+  name: string,
+  source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
+): Auth
+export function bearerHeader(
+  name: string,
+  source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
+) {
+  const render = (input: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) =>
+    fromCredential(credentialInput(input), (secret) => ({ [name]: `Bearer ${secret}` }))
+  if (source === undefined) return render
+  return render(source)
+}
+
 const toLLMError = (error: AuthError): LLMError => {
   if (error instanceof MissingCredentialError || error instanceof Config.ConfigError) {
     return new LLMError({

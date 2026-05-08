@@ -119,7 +119,8 @@ const PROVIDERS: ReadonlyArray<Provider> = [
           accountId: env.CLOUDFLARE_ACCOUNT_ID,
           gatewayId: env.CLOUDFLARE_GATEWAY_ID || undefined,
         })}/chat/completions`,
-        token: Redacted.make(env.CLOUDFLARE_API_TOKEN),
+        token: Redacted.make(envValue(env, Cloudflare.aiGatewayAuthEnvVars)),
+        tokenHeader: "cf-aig-authorization",
         model: "workers-ai/@cf/meta/llama-3.1-8b-instruct",
       }),
   },
@@ -135,7 +136,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     validate: (env) =>
       validateChat({
         url: `${Cloudflare.workersAIBaseURL({ accountId: env.CLOUDFLARE_ACCOUNT_ID })}/chat/completions`,
-        token: Redacted.make(env.CLOUDFLARE_API_KEY),
+        token: Redacted.make(envValue(env, Cloudflare.workersAIAuthEnvVars)),
         model: "@cf/meta/llama-3.1-8b-instruct",
       }),
   },
@@ -335,8 +336,12 @@ const providerRequiredStatus = (provider: Provider, fileEnv: Env) => {
 
 const requiredVars = (provider: Provider) => provider.vars.filter((item) => !item.optional)
 
+const promptVars = (provider: Provider) => provider.vars.filter((item) => !item.optional || item.secret === false)
+
 const processEnv = (): Env =>
   Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
+
+const envValue = (env: Env, names: ReadonlyArray<string>) => names.map((name) => env[name]).find(Boolean) ?? ""
 
 const envWithValues = (fileEnv: Env, values: Env): Env => ({
   ...processEnv(),
@@ -368,12 +373,13 @@ const validateBearer = (url: string, token: Redacted.Redacted<string>, headers: 
 const validateChat = (input: {
   readonly url: string
   readonly token: Redacted.Redacted<string>
+  readonly tokenHeader?: string
   readonly model: string
   readonly headers?: Record<string, string>
 }) =>
   ProviderShared.jsonPost({
     url: input.url,
-    headers: { ...input.headers, authorization: `Bearer ${Redacted.value(input.token)}` },
+    headers: { ...input.headers, [input.tokenHeader ?? "authorization"]: `Bearer ${Redacted.value(input.token)}` },
     body: ProviderShared.encodeJson({
       model: input.model,
       messages: [{ role: "user", content: "Reply with exactly: ok" }],
@@ -468,8 +474,10 @@ const promptEnvVar = (item: Provider["vars"][number]) =>
   prompt<string>(() => {
     const input = {
       message: item.label ?? item.name,
-      validate: (input: string | undefined) =>
-        !input || input.length === 0 ? "Leave blank by pressing Esc/cancel, or paste a value" : undefined,
+      validate: (input: string | undefined) => {
+        if (item.optional) return undefined
+        return !input || input.length === 0 ? "Leave blank by pressing Esc/cancel, or paste a value" : undefined
+      },
     }
     return item.secret === false ? prompts.text(input) : prompts.password(input)
   })
@@ -480,7 +488,7 @@ const promptProviderValues = Effect.fn("RecordingEnv.promptProviderValues")(func
   const values: Env = {}
   for (const provider of providers) {
     prompts.log.info(`${provider.label}: ${provider.note}`)
-    for (const item of requiredVars(provider)) {
+    for (const item of promptVars(provider)) {
       if (values[item.name]) continue
       const value = yield* promptEnvVar(item)
       if (value !== "") values[item.name] = value

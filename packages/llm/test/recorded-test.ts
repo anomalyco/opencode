@@ -52,6 +52,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         ...recorderOptions?.metadata,
         ...metadata,
       }
+      const mode = recorderOptions?.mode ?? (recording ? "record" : "replay")
       const cassetteService = HttpRecorder.Cassette.layer({ directory: FIXTURES_DIR }).pipe(
         Layer.provide(NodeFileSystem.layer),
       )
@@ -59,14 +60,14 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         Layer.provide(
           HttpRecorder.recordingLayer(cassette, {
             ...recorderOptions,
-            mode: recorderOptions?.mode ?? (recording ? "record" : "replay"),
+            mode,
             metadata: recorderMetadata,
           }).pipe(Layer.provide(FetchHttpClient.layer)),
         ),
       )
       const deps = Layer.mergeAll(
         requestExecutor,
-        webSocketCassetteLayer(cassette, { metadata: recorderMetadata, recording }),
+        webSocketCassetteLayer(cassette, { metadata: recorderMetadata, mode }),
       )
       return Layer.mergeAll(deps, LLMClient.layerWithWebSocket.pipe(Layer.provide(deps))).pipe(
         Layer.provide(cassetteService),

@@ -1,5 +1,4 @@
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
-import { defaultMatcher, type RequestSnapshot } from "@opencode-ai/http-recorder"
 import * as Gemini from "../../src/protocols/gemini"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import * as OpenAIResponses from "../../src/protocols/openai-responses"
@@ -28,8 +27,11 @@ const xaiBasic = XAI.model("grok-3-mini", { apiKey: process.env.XAI_API_KEY ?? "
 const xaiFlagship = XAI.model("grok-4.3", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
 const cloudflareAIGatewayWorkers = Cloudflare.aiGateway("workers-ai/@cf/meta/llama-3.1-8b-instruct", {
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
-  gatewayId: process.env.CLOUDFLARE_GATEWAY_ID,
-  apiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
+  gatewayId:
+    process.env.CLOUDFLARE_GATEWAY_ID && process.env.CLOUDFLARE_GATEWAY_ID !== process.env.CLOUDFLARE_ACCOUNT_ID
+      ? process.env.CLOUDFLARE_GATEWAY_ID
+      : undefined,
+  gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
 })
 const cloudflareWorkersAI = Cloudflare.workersAI("@cf/meta/llama-3.1-8b-instruct", {
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
@@ -51,15 +53,8 @@ const redactCloudflareURL = (url: string) =>
     .replace(/\/client\/v4\/accounts\/[^/]+\/ai\/v1\//, "/client/v4/accounts/{account}/ai/v1/")
     .replace(/\/v1\/[^/]+\/[^/]+\/compat\//, "/v1/{account}/{gateway}/compat/")
 
-const redactCloudflareSnapshotURL = (snapshot: RequestSnapshot): RequestSnapshot => ({
-  ...snapshot,
-  url: redactCloudflareURL(snapshot.url),
-})
-
 const cloudflareOptions = {
   redact: { url: redactCloudflareURL },
-  match: (incoming: RequestSnapshot, recorded: RequestSnapshot) =>
-    defaultMatcher(redactCloudflareSnapshotURL(incoming), redactCloudflareSnapshotURL(recorded)),
 }
 
 describeRecordedGoldenScenarios([

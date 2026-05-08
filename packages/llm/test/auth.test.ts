@@ -68,6 +68,15 @@ describe("Auth", () => {
     }),
   )
 
+  it.effect("renders bearer auth into a custom header", () =>
+    Effect.gen(function* () {
+      const headers = yield* Auth.bearerHeader("cf-aig-authorization", "gateway-token").apply(input)
+
+      expect(headers["cf-aig-authorization"]).toBe("Bearer gateway-token")
+      expect(headers["x-existing"]).toBe("yes")
+    }),
+  )
+
   it.effect("falls back between full auth values", () =>
     Effect.gen(function* () {
       const headers = yield* Auth.config("OPENAI_API_KEY")

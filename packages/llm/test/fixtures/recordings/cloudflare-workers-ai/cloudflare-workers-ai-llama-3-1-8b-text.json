@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "cloudflare-workers-ai/cloudflare-workers-ai-llama-3-1-8b-text",
+    "recordedAt": "2026-05-08T15:56:18.284Z",
+    "provider": "cloudflare-workers-ai",
+    "route": "cloudflare-workers-ai",
+    "transport": "http",
+    "model": "@cf/meta/llama-3.1-8b-instruct",
+    "tags": [
+      "prefix:cloudflare-workers-ai",
+      "provider:cloudflare-workers-ai",
+      "text",
+      "golden"
+    ]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"@cf/meta/llama-3.1-8b-instruct\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply exactly with: Hello!\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":40,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"id-1778255778230\",\"created\":1778255778,\"model\":\"@cf/meta/llama-3.1-8b-instruct\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"}}]}\n\ndata: {\"id\":\"id-1778255778230\",\"created\":1778255778,\"model\":\"@cf/meta/llama-3.1-8b-instruct\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"!\"}}]}\n\ndata: {\"id\":\"id-1778255778230\",\"object\":\"chat.completion.chunk\",\"created\":1778255778,\"model\":\"@cf/meta/llama-3.1-8b-instruct\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":45,\"completion_tokens\":2,\"total_tokens\":47}}\n\ndata: {\"id\":\"id-1778255778230\",\"object\":\"chat.completion.chunk\",\"created\":1778255778,\"model\":\"@cf/meta/llama-3.1-8b-instruct\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":0,\"completion_tokens\":0,\"total_tokens\":0,\"prompt_tokens_details\":{\"cached_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}
