@@ -1,320 +1,199 @@
-const displayName = (s: string) =>
-  s
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ")
-    .replace(/(?<=\d) (?=\d)/g, ".")
+import { SECRET } from "./secret"
+import { domain } from "./stage"
 
-const resourceName = (s: string) => displayName(s).replace(/[^a-zA-Z0-9]/g, "")
-
-const varSpec = (label: string, name: string) =>
-  $jsonStringify({
-    content: [
-      {
-        content: [
-          {
-            attrs: {
-              name,
-              label,
-              missing: false,
-            },
-            type: "varSpec",
-          },
-        ],
-        type: "paragraph",
-      },
-    ],
-    type: "doc",
-  })
-
-const fields = {
-  model: incident.getAlertAttributeOutput({ name: "Model" }),
-  product: incident.getAlertAttributeOutput({ name: "Product" }),
-}
-
-const alertSource = new incident.AlertSource("HoneycombAlertSource", {
-  name: $app.stage === "production" ? "Honeycomb" : `Honeycomb (${$app.stage})`,
-  sourceType: "honeycomb",
-  template: {
-    title: {
-      literal: varSpec("Payload -> Title", "title"),
-    },
-    description: {
-      literal: varSpec("Payload -> Description", "description"),
-    },
-    attributes: [
-      {
-        alertAttributeId: fields.model.id,
-        binding: {
-          value: {
-            reference: 'expressions["model"]',
-          },
-          mergeStrategy: "first_wins",
-        },
-      },
-      {
-        alertAttributeId: fields.product.id,
-        binding: {
-          value: {
-            reference: 'expressions["product"]',
-          },
-          mergeStrategy: "first_wins",
-        },
-      },
-    ],
-    expressions: [
-      {
-        label: "Model",
-        operations: [
-          {
-            operationType: "parse",
-            parse: {
-              returns: {
-                array: false,
-                type: fields.model.type,
-              },
-              source: "$['model']",
-            },
-          },
-        ],
-        reference: "model",
-        rootReference: "payload",
-      },
-      {
-        label: "Product",
-        operations: [
-          {
-            operationType: "parse",
-            parse: {
-              returns: {
-                array: false,
-                type: fields.product.type,
-              },
-              source: "$['product']",
-            },
-          },
-        ],
-        reference: "product",
-        rootReference: "payload",
-      },
-    ],
-  },
-})
-
-const webhookRecipient = new honeycomb.WebhookRecipient(`IncidentWebhook`, {
-  name: $app.stage === "production" ? "Incident.io" : `Incident.io (${$app.stage})`,
-  url: alertSource.alertEventsUrl,
-  secret: alertSource.secretToken,
+const webhookRecipient = new honeycomb.WebhookRecipient("DiscordAlerts", {
+  name: $app.stage === "production" ? "Discord Alerts" : `Discord Alerts (${$app.stage})`,
+  url: `https://${domain}/honeycomb/webhook`,
+  secret: SECRET.HoneycombWebhookSecret.result,
   templates: [
     {
       type: "trigger",
-      body: $jsonStringify({
-        title: "{{ .Name }}",
-        description: "{{ .Description }}",
-        status: "{{ .Alert.Status }}",
-        deduplication_key: "{{ .Alert.InstanceID }}",
-        source_url: "{{ .Result.URL }}",
-        model: "{{ .Vars.model }}",
-        product: "{{ .Vars.product }}",
-      }),
+      body: `{
+        "url": {{ .Result.URL | quote }},
+        "type": {{ .Vars.type | quote }},
+        "name": {{ .Name | quote }},
+        "status": {{ .Alert.Status | quote }},
+        "isTest": {{ .Alert.IsTest }},
+        "groups": {{ .Result.GroupsTriggered | toJson }}
+      }`,
     },
   ],
   variables: [
     {
-      name: "model",
-    },
-    {
-      name: "product",
+      name: "type",
     },
   ],
 })
 
-new incident.AlertRoute("HoneycombAlertRoute", {
-  name: $app.stage === "production" ? "Honeycomb" : `Honeycomb (${$app.stage})`,
-  enabled: true,
-  isPrivate: false,
-  alertSources: [
-    {
-      alertSourceId: alertSource.id,
-      conditionGroups: [
-        {
-          conditions: [
-            {
-              subject: "alert.title",
-              operation: "is_set",
-              paramBindings: [],
-            },
-          ],
-        },
-      ],
-    },
-  ],
-  conditionGroups: [
-    {
-      conditions: [
-        {
-          subject: "alert.title",
-          operation: "is_set",
-          paramBindings: [],
-        },
-      ],
-    },
-  ],
-  expressions: [],
-  escalationConfig: {
-    autoCancelEscalations: true,
-    escalationTargets: [],
-  },
-  incidentConfig: {
-    autoDeclineEnabled: true,
-    enabled: true,
-    conditionGroups: [],
-    deferTimeSeconds: 0,
-    groupingKeys: [
+const modelHttpErrorsQuery = (product: "go" | "zen") => {
+  const filters = [
+    { column: "model", op: "exists" },
+    { column: "event_type", op: "=", value: "completions" },
+    { column: "user_agent", op: "contains", value: "opencode" },
+    { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
+  ]
+
+  return honeycomb.getQuerySpecificationOutput({
+    breakdowns: ["model"],
+    calculatedFields: [
       {
-        reference: $interpolate`alert.attributes.${fields.model.id}`,
-      },
-      {
-        reference: $interpolate`alert.attributes.${fields.product.id}`,
+        name: "is_failed_http_status",
+        expression: `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
       },
     ],
-    groupingWindowSeconds: 900,
-  },
-  incidentTemplate: {
-    name: {
-      value: {
-        literal: varSpec("Alert -> Title", "alert.title"),
-      },
-    },
-    summary: {
-      value: {
-        literal: varSpec("Alert -> Description", "alert.description"),
-      },
-    },
-    startInTriage: {
-      value: {
-        literal: "true",
-      },
-    },
-    severity: {
-      mergeStrategy: "first-wins",
-    },
-    incidentMode: {
-      value: {
-        literal: $app.stage === "production" ? "standard" : "test",
-      },
-    },
-  },
-})
-
-type Product = "go" | "zen"
-
-type Trigger = (opts: { model: string; product: Product }) => {
-  id: string
-  title: string
-  description: string
-  json: honeycomb.GetQuerySpecificationOutputArgs
-  threshold: { op: ">=" | "<="; value: number }
-  baseline: 3600 | 86400
+    calculations: [
+      { op: "COUNT", name: "TOTAL", filterCombination: "AND", filters },
+      { op: "SUM", name: "FAILED", column: "is_failed_http_status", filterCombination: "AND", filters },
+    ],
+    formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 500), DIV($FAILED, $TOTAL), 0)" }],
+    timeRange: 900,
+  }).json
 }
 
-type Model = { id: string; products: Product[]; triggers: Trigger[] }
+const providerHttpErrorsQuery = (product: "go" | "zen") => {
+  const filters = [
+    { column: "provider", op: "exists" },
+    { column: "user_agent", op: "contains", value: "opencode" },
+    { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
+  ]
 
-const httpErrors: Trigger = ({ model, product }) => ({
-  id: "increased-http-errors",
-  title: `Increased HTTP Errors for ${displayName(model)} on ${displayName(product)}`,
-  description: `Detected increased rate of HTTP errors for ${displayName(model)} on OpenCode ${displayName(product)}`,
-  json: {
+  return honeycomb.getQuerySpecificationOutput({
+    breakdowns: ["provider"],
+    calculatedFields: [
+      {
+        name: "is_success_http_status",
+        expression: `IF(AND(GTE($status, "200"), LT($status, "400")), 1, 0)`,
+      },
+      {
+        name: "is_failed_provider_http_status",
+        expression: `IF(GTE($llm.error.code, "400"), 1, 0)`,
+      },
+    ],
     calculations: [
       {
-        op: "COUNT",
-        name: "TOTAL",
+        op: "SUM",
+        name: "SUCCESS",
+        column: "is_success_http_status",
         filterCombination: "AND",
-        filters: [
-          { column: "model", op: "=", value: model },
-          { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
-        ],
+        filters: [...filters, { column: "event_type", op: "=", value: "completions" }],
       },
       {
-        op: "COUNT",
+        op: "SUM",
         name: "FAILED",
+        column: "is_failed_provider_http_status",
         filterCombination: "AND",
-        filters: [
-          { column: "model", op: "=", value: model },
-          { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
-          { column: "status", op: ">=", value: "400" },
-          { column: "status", op: "!=", value: "401" },
-        ],
+        filters: [...filters, { column: "event_type", op: "=", value: "llm.error" }],
       },
     ],
-    formulas: [{ name: "ERROR", expression: "$FAILED / $TOTAL" }],
-    timeRange: 900,
-  },
-  // Alert when errors surge 50% compared to the previous period
-  threshold: { op: ">=", value: 50 },
-  // What previous time period to evaluate against
-  baseline: 3600,
+    formulas: [
+      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 250), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
+    ],
+    timeRange: 1800,
+  }).json
+}
+
+const description = "Managed by SST (Don't edit in Honeycomb UI)"
+
+new honeycomb.Trigger("IncreasedModelHttpErrorsGo", {
+  name: "Increased Model HTTP Errors [Go]",
+  description,
+  queryJson: modelHttpErrorsQuery("go"),
+  alertType: "on_change",
+  frequency: 300,
+  thresholds: [{ op: ">=", value: 0.9, exceededLimit: 1 }],
+  recipients: [
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "model_http_errors" }],
+        },
+      ],
+    },
+  ],
 })
 
-const models: Model[] = [
-  { id: "kimi-k2.6", products: ["go", "zen"], triggers: [httpErrors] },
-  { id: "kimi-k2.5", products: ["go", "zen"], triggers: [httpErrors] },
-  { id: "deepseek-v4-flash", products: ["go", "zen"], triggers: [httpErrors] },
-  { id: "deepseek-v4-pro", products: ["go", "zen"], triggers: [httpErrors] },
-  { id: "glm-5.1", products: ["go", "zen"], triggers: [httpErrors] },
-  // { id: "glm-5", products: ["go"], triggers: [httpErrors] },
-  { id: "qwen3.6-plus", products: ["go", "zen"], triggers: [httpErrors] },
-  { id: "qwen3.5-plus", products: ["go"], triggers: [httpErrors] },
-  { id: "minimax-m2.7", products: ["go", "zen"], triggers: [httpErrors] },
-  // { id: "minimax-m2.5", products: ["go", "zen"], triggers: [httpErrors] },
-  { id: "mimo-v2.5-pro", products: ["go"], triggers: [httpErrors] },
-  // { id: "mimo-v2.5", products: ["go"], triggers: [httpErrors] },
-  // { id: "mimo-v2-omni", products: ["go"], triggers: [httpErrors] },
-  // { id: "mimo-v2-pro", products: ["go"], triggers: [httpErrors] },
-  { id: "claude-opus-4-7", products: ["zen"], triggers: [httpErrors] },
-  // { id: "claude-opus-4-6", products: ["zen"], triggers: [httpErrors] },
-  // { id: "claude-sonnet-4-6", products: ["zen"], triggers: [httpErrors] },
-  { id: "gpt-5.5", products: ["zen"], triggers: [httpErrors] },
-  { id: "big-pickle", products: ["zen"], triggers: [httpErrors] },
-  // { id: "minimax-m2.5-free", products: ["zen"], triggers: [httpErrors] },
-  // { id: "hy3-preview-free", products: ["zen"], triggers: [httpErrors] },
-  // { id: "nemotron-3-super-free", products: ["zen"], triggers: [httpErrors] },
-  // { id: "trinity-large-preview-free", products: ["zen"], triggers: [httpErrors] },
-  // { id: "ling-2.6-flash-free", products: ["zen"], triggers: [httpErrors] },
-]
+new honeycomb.Trigger("IncreasedModelHttpErrorsZen", {
+  name: "Increased Model HTTP Errors [Zen]",
+  description,
+  queryJson: modelHttpErrorsQuery("zen"),
+  alertType: "on_change",
+  frequency: 300,
+  thresholds: [{ op: ">=", value: 0.9, exceededLimit: 1 }],
+  recipients: [
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "model_http_errors" }],
+        },
+      ],
+    },
+  ],
+})
 
-if ($app.stage !== "production") {
-  models.splice(1)
-}
+new honeycomb.Trigger("IncreasedProviderHttpErrorsGo", {
+  name: "Increased Provider HTTP Errors [Go]",
+  description,
+  queryJson: providerHttpErrorsQuery("go"),
+  alertType: "on_change",
+  frequency: 600,
+  thresholds: [{ op: ">=", value: 0.9, exceededLimit: 1 }],
+  recipients: [
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "provider_http_errors" }],
+        },
+      ],
+    },
+  ],
+})
 
-for (const model of models) {
-  for (const product of model.products) {
-    for (const trigger of model.triggers) {
-      const spec = trigger({ model: model.id, product })
+new honeycomb.Trigger("IncreasedProviderHttpErrorsZen", {
+  name: "Increased Provider HTTP Errors [Zen]",
+  description,
+  queryJson: providerHttpErrorsQuery("zen"),
+  alertType: "on_change",
+  frequency: 600,
+  thresholds: [{ op: ">=", value: 0.9, exceededLimit: 1 }],
+  recipients: [
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "provider_http_errors" }],
+        },
+      ],
+    },
+  ],
+})
 
-      new honeycomb.Trigger(resourceName(`${spec.id}-${product}-${model.id}`), {
-        name: spec.title,
-        description: spec.description,
-        queryJson: honeycomb.getQuerySpecificationOutput(spec.json).json,
-        alertType: "on_change",
-        // This is the minimum when using % change detection
-        frequency: 900,
-        baselineDetails: [{ type: "percentage", offsetMinutes: spec.baseline / 60 }],
-        thresholds: [{ ...spec.threshold, exceededLimit: 1 }],
-        recipients: [
-          {
-            id: webhookRecipient.id,
-            notificationDetails: [
-              {
-                variables: [
-                  { name: "model", value: model.id },
-                  { name: "product", value: product },
-                ],
-              },
-            ],
-          },
-        ],
-      })
-    }
-  }
-}
+new honeycomb.Trigger("IncreasedFreeTierRequests", {
+  name: "Increased Free Tier Requests",
+  description,
+  queryJson: honeycomb.getQuerySpecificationOutput({
+    calculations: [{ op: "COUNT" }],
+    filters: [
+      { column: "event_type", op: "=", value: "completions" },
+      { column: "user_agent", op: "contains", value: "opencode" },
+      { column: "isFreeTier", op: "=", value: "true" },
+    ],
+    timeRange: 3600,
+  }).json,
+  alertType: "on_change",
+  frequency: 900,
+  thresholds: [{ op: ">=", value: 60, exceededLimit: 1 }],
+  baselineDetails: [{ type: "percentage", offsetMinutes: 1440 }],
+  recipients: [
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "custom" }],
+        },
+      ],
+    },
+  ],
+})

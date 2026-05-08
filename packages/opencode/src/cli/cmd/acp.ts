@@ -22,7 +22,7 @@ export const AcpCommand = effectCmd({
   },
   handler: Effect.fn("Cli.acp")(function* (args) {
     process.env.OPENCODE_CLIENT = "acp"
-    const opts = yield* Effect.promise(() => resolveNetworkOptions(args))
+    const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
 
     const sdk = createOpencodeClient({

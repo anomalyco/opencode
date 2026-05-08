@@ -107,10 +107,10 @@ function createHono(opts: CorsOptions, selection: ServerBackend.Selection = Serv
   const backendAttributes = ServerBackend.attributes(selection)
   const app = new Hono()
     .onError(ErrorMiddleware)
-    .use(AuthMiddleware)
-    .use(LoggerMiddleware(backendAttributes))
-    .use(CompressionMiddleware)
     .use(CorsMiddleware(opts))
+    .use(LoggerMiddleware(backendAttributes))
+    .use(AuthMiddleware)
+    .use(CompressionMiddleware)
     .route("/global", GlobalRoutes())
 
   const runtime = adapter.create(app)

@@ -8,6 +8,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { WorkspaceAdapterEntry } from "@/control-plane/types"
 import { zodObject } from "@/util/effect-zod"
 import { Instance } from "@/project/instance"
+import { Vcs } from "@/project/vcs"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 
@@ -164,19 +165,47 @@ export const WorkspaceRoutes = lazy(() =>
         z.object({
           id: zodObject(Workspace.Info).shape.id.nullable(),
           sessionID: Workspace.SessionWarpInput.zodObject.shape.sessionID,
+          copyChanges: z.boolean().optional(),
         }),
       ),
       async (c) => {
         const body = c.req.valid("json")
-        await AppRuntime.runPromise(
+        return AppRuntime.runPromise(
           Workspace.Service.use((workspace) =>
             workspace.sessionWarp({
               workspaceID: body.id,
               sessionID: body.sessionID,
+              copyChanges: body.copyChanges,
+            }),
+          ).pipe(
+            Effect.match({
+              onFailure: (error) => {
+                if (error instanceof Vcs.PatchApplyError) {
+                  return c.json(
+                    {
+                      name: "VcsApplyError",
+                      data: {
+                        message: error.message,
+                        reason: error.reason,
+                      },
+                    },
+                    400,
+                  )
+                }
+                return c.json(
+                  {
+                    name: "WorkspaceWarpError",
+                    data: {
+                      message: error.message,
+                    },
+                  },
+                  400,
+                )
+              },
+              onSuccess: () => c.body(null, 204),
             }),
           ),
         )
-        return c.body(null, 204)
       },
     ),
 )
