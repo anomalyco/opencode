@@ -27,7 +27,7 @@ import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
 import { InstanceMiddleware } from "./middleware"
-import { jsonRequest } from "./trace"
+import { jsonRequest, runRequest } from "./trace"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
 import { EventPaths } from "./httpapi/event"
 import { ExperimentalPaths } from "./httpapi/groups/experimental"
@@ -40,6 +40,7 @@ import { SyncPaths } from "./httpapi/groups/sync"
 import { TuiPaths } from "./httpapi/groups/tui"
 import { WorkspacePaths } from "./httpapi/groups/workspace"
 import type { CorsOptions } from "@/server/cors"
+import { errors } from "@/server/error"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): Hono => {
   const app = new Hono()
@@ -86,7 +87,10 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
     app.get(InstancePaths.path, (c) => handler(c.req.raw, context))
     app.post(InstancePaths.dispose, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcs, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.vcsStatus, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcsDiff, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.vcsDiffRaw, (c) => handler(c.req.raw, context))
+    app.post(InstancePaths.vcsApply, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.command, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.agent, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.skill, (c) => handler(c.req.raw, context))
@@ -287,6 +291,98 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
           const vcs = yield* Vcs.Service
           return yield* vcs.diff(c.req.valid("query").mode)
         }),
+    )
+    .get(
+      "/vcs/status",
+      describeRoute({
+        summary: "Get VCS status",
+        description: "Retrieve changed files in the current working tree without patches.",
+        operationId: "vcs.status",
+        responses: {
+          200: {
+            description: "VCS status",
+            content: {
+              "application/json": {
+                schema: resolver(Vcs.FileStatus.zod.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) =>
+        jsonRequest("InstanceRoutes.vcs.status", c, function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.status()
+        }),
+    )
+    .get(
+      "/vcs/diff/raw",
+      describeRoute({
+        summary: "Get raw VCS diff",
+        description: "Retrieve a raw patch for current uncommitted changes.",
+        operationId: "vcs.diff.raw",
+        responses: {
+          200: {
+            description: "Raw VCS diff",
+            content: {
+              "text/x-diff": {
+                schema: resolver(z.string()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const patch = await runRequest(
+          "InstanceRoutes.vcs.diffRaw",
+          c,
+          Vcs.Service.use((vcs) => vcs.diffRaw()),
+        )
+        return c.text(patch, 200, { "content-type": "text/x-diff; charset=utf-8" })
+      },
+    )
+    .post(
+      "/vcs/apply",
+      describeRoute({
+        summary: "Apply VCS patch",
+        description: "Apply a raw patch to the current working tree.",
+        operationId: "vcs.apply",
+        responses: {
+          200: {
+            description: "VCS patch applied",
+            content: {
+              "application/json": {
+                schema: resolver(Vcs.ApplyResult.zod),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Vcs.ApplyInput.zodObject),
+      async (c) => {
+        const result = await runRequest(
+          "InstanceRoutes.vcs.apply",
+          c,
+          Vcs.Service.use((vcs) => vcs.apply(c.req.valid("json") as Vcs.ApplyInput)).pipe(
+            Effect.match({
+              onFailure: (error) => ({ ok: false as const, error }),
+              onSuccess: (value) => ({ ok: true as const, value }),
+            }),
+          ),
+        )
+        if (result.ok) return c.json(result.value)
+        return c.json(
+          {
+            name: "VcsApplyError",
+            data: {
+              message: result.error.message,
+              reason: result.error.reason,
+            },
+          },
+          400,
+        )
+      },
     )
     .get(
       "/command",
