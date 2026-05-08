@@ -53,13 +53,21 @@ Minimal module shape:
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 
 const tui: TuiPlugin = async (api, options, meta) => {
-  api.command.register(() => [
-    {
-      title: "Demo",
-      value: "demo.open",
-      onSelect: () => api.route.navigate("demo"),
-    },
-  ])
+  api.keymap.registerLayer({
+    commands: [
+      {
+        name: "demo.open",
+        title: "Demo",
+        category: "Plugin",
+        namespace: "palette",
+        slashName: "demo",
+        run() {
+          api.route.navigate("demo")
+        },
+      },
+    ],
+    bindings: [{ key: "ctrl+shift+m", cmd: "demo.open", desc: "Open demo" }],
+  })
 
   api.route.register([
     {
@@ -194,10 +202,10 @@ That is what makes local config-scoped plugins able to import `@opencode-ai/plug
 Top-level API groups exposed to `tui(api, options, meta)`:
 
 - `api.app.version`
-- `api.command.register(cb)` / `api.command.trigger(value)` / `api.command.show()`
+- `api.keys.formatSequence(parts)`, `formatBindings(bindings)`
+- `api.keymap`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
 - `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `Slot`, `Prompt`, `ui.toast`, `ui.dialog`
-- `api.keybind.match`, `print`, `create`
 - `api.tuiConfig`
 - `api.kv.get`, `set`, `ready`
 - `api.state`
@@ -209,23 +217,23 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `api.plugins.list()`, `activate(id)`, `deactivate(id)`, `add(spec)`, `install(spec, options?)`
 - `api.lifecycle.signal`, `api.lifecycle.onDispose(fn)`
 
-### Commands
+### Keymap
 
-`api.command.register` returns an unregister function. Command rows support:
+- `api.keymap` exposes the raw `Keymap<Renderable, KeyEvent>` instance from the host.
+- The host already installs the default OpenTUI bundle (`default keys`, metadata fields, and enabled fields) plus OpenCode's comma bindings, leader token, base layout fallback, pending-sequence helpers, and managed textarea layer.
+- Register commands with `api.keymap.registerLayer({ commands: [...] })`.
+- Register key bindings with `bindings: [{ key, cmd, desc }]` in the same layer or a separate layer.
+- Use `api.keymap.acquireResource(...)` for shared plugin addon setup that should ref-count against the host keymap.
+- To surface a command in the host command palette, set `namespace: "palette"` and provide metadata such as `title`, `category`, `desc`, `suggested`, `hidden`, `enabled`, `slashName`, and `slashAliases` on the command.
+- Use `api.keymap.dispatchCommand(name)` for user-style execution semantics and `api.keymap.runCommand(name)` only for forced programmatic execution.
+- Disposers returned by `api.keymap` registrations and `acquireResource(...)` are automatically cleaned up when the plugin deactivates. You do not need to add those disposers to `api.lifecycle.onDispose(...)` yourself.
 
-- `title`, `value`
-- `description`, `category`
-- `keybind`
-- `suggested`, `hidden`, `enabled`
-- `slash: { name, aliases? }`
-- `onSelect`
+### Keys
 
-Command behavior:
-
-- Registrations are reactive.
-- Later registrations win for duplicate `value` and for keybind handling.
-- Hidden commands are removed from the command dialog and slash list, but still respond to keybinds and `command.trigger(value)` if `enabled !== false`.
-- `api.command.show()` opens the host command dialog directly.
+- `api.keys` exposes host-formatted shortcut display helpers for plugin UI.
+- `formatSequence(parts)` formats parsed key sequence parts using the host's display policy.
+- `formatBindings(bindings)` formats binding lists and returns `undefined` when there is nothing to show.
+- For generic config-to-bindings helpers, import `resolveBindingSections` from `@opencode-ai/plugin/tui`.
 
 ### Routes
 
@@ -251,13 +259,6 @@ Command behavior:
   - `clear()`
   - `setSize("medium" | "large" | "xlarge")`
   - readonly `size`, `depth`, `open`
-
-### Keybinds
-
-- `api.keybind.match(key, evt)` and `print(key)` use the host keybind parser/printer.
-- `api.keybind.create(defaults, overrides?)` builds a plugin-local keybind set.
-- Only missing, blank, or non-string overrides are ignored. Key syntax is not validated.
-- Returned keybind set exposes `all`, `get(name)`, `match(name, evt)`, `print(name)`.
 
 ### KV, state, client, events
 
