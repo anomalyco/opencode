@@ -27,7 +27,7 @@ const SKILL_PATTERN = "**/SKILL.md"
 
 export const Info = Schema.Struct({
   name: Schema.String,
-  description: Schema.String,
+  description: Schema.optional(Schema.String),
   location: Schema.String,
   content: Schema.String,
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -93,7 +93,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
 
   if (!md) return
 
-  const parsed = z.object({ name: z.string(), description: z.string() }).safeParse(md.data)
+  const parsed = z.object({ name: z.string(), description: z.string().optional() }).safeParse(md.data)
   if (!parsed.success) return
 
   if (state.skills[parsed.data.name]) {
@@ -278,7 +278,7 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
         .flatMap((skill) => [
           "  <skill>",
           `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
+          `    <description>${description(skill)}</description>`,
           `    <location>${pathToFileURL(skill.location).href}</location>`,
           "  </skill>",
         ]),
@@ -290,8 +290,12 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
     "## Available Skills",
     ...list
       .toSorted((a, b) => a.name.localeCompare(b.name))
-      .map((skill) => `- **${skill.name}**: ${skill.description}`),
+      .map((skill) => `- **${skill.name}**: ${description(skill)}`),
   ].join("\n")
+}
+
+function description(skill: Info) {
+  return skill.description ?? "Manual-only skill; load only when explicitly requested by the user."
 }
 
 export * as Skill from "."

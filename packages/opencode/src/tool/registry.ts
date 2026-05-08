@@ -268,6 +268,7 @@ export const layer: Layer.Layer<
         "",
         "The following skills provide specialized sets of instructions for particular tasks",
         "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
+        "Skills marked manual-only do not have a matching description; load them only if the user explicitly requests that skill.",
         "",
         Skill.fmt(list, { verbose: false }),
       ].join("\n")

@@ -163,6 +163,41 @@ Just some content without YAML frontmatter.
     ),
   )
 
+  it.live("discovers skills without descriptions", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "manual-skill", "SKILL.md"),
+              `---
+name: manual-skill
+---
+
+# Manual Skill
+
+Instructions here.
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = yield* skill.all()
+          expect(list.length).toBe(1)
+          const item = list.find((x) => x.name === "manual-skill")
+          expect(item).toBeDefined()
+          expect(item!.description).toBeUndefined()
+          expect(Skill.fmt(list, { verbose: false })).toContain(
+            "- **manual-skill**: Manual-only skill; load only when explicitly requested by the user.",
+          )
+          expect(Skill.fmt(list, { verbose: true })).toContain(
+            "<description>Manual-only skill; load only when explicitly requested by the user.</description>",
+          )
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("discovers skills from .claude/skills/ directory", () =>
     provideTmpdirInstance(
       (dir) =>
