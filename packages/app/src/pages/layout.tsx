@@ -40,7 +40,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { clearWorkspaceTerminals, getTerminalServerScope } from "@/context/terminal"
 import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
 import {
-  clearSessionPrefetchInflight,
+  clearSessionPrefetchDirectory,
   clearSessionPrefetch,
   getSessionPrefetch,
   isSessionPrefetchCurrent,
@@ -189,7 +189,6 @@ export default function Layout(props: ParentProps) {
   // resolvers keep working, but the icon should not look "selected".
   const onConfigRoute = createMemo(() => /\/config(?:\/|$)/.test(location.pathname))
   const tasksPanelActive = createMemo(() => store.sidebarPanel === "tasks")
-  const railCurrentDir = createMemo(() => (onConfigRoute() ? "" : routeDir()))
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -217,6 +216,7 @@ export default function Layout(props: ParentProps) {
     open: false,
     q: "",
   })
+  const [switching, setSwitching] = createSignal<string | undefined>()
   let findInput: HTMLInputElement | undefined
 
   const closeFindbar = () => {
@@ -521,35 +521,46 @@ export default function Layout(props: ParentProps) {
     element.scrollIntoView({ block: "nearest", behavior: "smooth" })
   }
 
-  const currentProject = createMemo(() => {
-    const directory = routeDir()
+  function resolveProject(directory: string | undefined) {
     if (!directory) return
     const extra = extraAgentByDirectory(directory)
-    if (extra) return extraAgentProject(extra.id)
+    if (extra) {
+      return {
+        extra: extra.directory,
+        project: extraAgentProject(extra.id),
+        root: extra.directory,
+      }
+    }
+
     const key = workspaceKey(directory)
-
-    // IMPORTANT: use the same visible project list that the rail renders.
-    // This list intentionally excludes extra-agent pseudo projects such as
-    // /hermes, /genericagent, and /openclaw. Do NOT convert the drop result
-    // into an absolute index for the backing store here; only identify the
-    // dragged project and the target project that the user saw on screen.
     const projects = layout.projects.list()
+    const project = projects.find(
+      (item) => workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
+    )
+    if (project) return { project, root: project.worktree }
 
-    const sandbox = projects.find((p) => p.sandboxes?.some((item) => pathKey(item) === key))
-    if (sandbox) return sandbox
+    const known = Object.entries(store.workspaceOrder).find(
+      ([root, dirs]) => workspaceKey(root) === key || dirs.some((item) => workspaceKey(item) === key),
+    )
+    if (!known) return
 
-    const direct = projects.find((p) => pathKey(p.worktree) === key)
-    if (direct) return direct
+    const root = known[0]
+    const projectByRoot = projects.find((item) => workspaceKey(item.worktree) === workspaceKey(root))
+    return {
+      project: projectByRoot,
+      root,
+    }
+  }
 
-    const [child] = globalSync.child(directory, { bootstrap: false })
-    const id = child.project
-    if (!id) return
-
-    const meta = globalSync.data.project.find((p) => p.id === id)
-    const root = meta?.worktree
-    if (!root) return
-
-    return projects.find((p) => p.worktree === root)
+  const activeProject = createMemo(() => resolveProject(routeDir()))
+  const currentProject = createMemo(() => activeProject()?.project)
+  const currentProjectRoot = createMemo(() => activeProject()?.root)
+  const currentProjectEntry = createMemo(() => activeProject()?.extra ?? currentProjectRoot())
+  const railCurrentProject = createMemo(() => (onConfigRoute() ? undefined : currentProjectRoot()))
+  const currentProjectDirs = createMemo(() => {
+    const project = currentProject()
+    if (!project) return [] as string[]
+    return workspaceIds(project)
   })
 
   const [autoselecting] = createResource(async () => {
@@ -719,14 +730,14 @@ export default function Layout(props: ParentProps) {
     globalSDK.url
 
     prefetchToken.value += 1
-    clearSessionPrefetchInflight()
-    prefetchQueues.clear()
   })
 
   createEffect(() => {
     const visible = new Set(visibleSessionDirs())
-    for (const [directory, q] of prefetchQueues) {
+    for (const [directory, q] of [...prefetchQueues]) {
       if (visible.has(directory)) continue
+      clearSessionPrefetchDirectory(directory)
+      prefetchedByDir.delete(directory)
       q.pending.length = 0
       q.pendingSet.clear()
       if (q.running === 0) prefetchQueues.delete(directory)
@@ -942,7 +953,7 @@ export default function Layout(props: ParentProps) {
     const projects = layout.projects.list()
     if (projects.length === 0) return
 
-    const current = currentProject()?.worktree
+    const current = currentProjectRoot()
     const fallback = routeDir() ? projectRoot(routeDir()) : undefined
     const active = current ?? fallback
     const index = active ? projects.findIndex((project) => project.worktree === active) : -1
@@ -1147,7 +1158,7 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+t",
         disabled: layout.projects.list().length === 0 && enabledExtraAgents(server.list).length === 0,
         onSelect: () => {
-          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />, undefined, {
+          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} current={currentProjectEntry} />, undefined, {
             modal: false,
             preventScroll: false,
           })
@@ -1587,24 +1598,7 @@ export default function Layout(props: ParentProps) {
   }
 
   function projectRoot(directory: string) {
-    if (isExtraAgentDirectory(directory)) return directory
-    const key = workspaceKey(directory)
-    const project = layout.projects
-      .list()
-      .find((item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key))
-    if (project) return project.worktree
-
-    const known = Object.entries(store.workspaceOrder).find(
-      ([root, dirs]) => pathKey(root) === key || dirs.some((item) => pathKey(item) === key),
-    )
-    if (known) return known[0]
-
-    const [child] = globalSync.child(directory, { bootstrap: false })
-    const id = child.project
-    if (!id) return directory
-
-    const meta = globalSync.data.project.find((item) => item.id === id)
-    return meta?.worktree ?? directory
+    return resolveProject(directory)?.root ?? directory
   }
 
   function activeProjectRoot(directory: string) {
@@ -1629,10 +1623,6 @@ export default function Layout(props: ParentProps) {
   function syncSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
     rememberSessionRoute(directory, id, root)
     notification.session.markViewed(id)
-    const expanded = untrack(() => store.workspaceExpanded[directory])
-    if (expanded === false) {
-      setStore("workspaceExpanded", directory, true)
-    }
     requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
     return root
   }
@@ -1641,6 +1631,7 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     const extra = extraAgentByDirectory(directory)
     if (extra) {
+      setSwitching(undefined)
       const conn = server.list.find((item) => item.integration === extra.id)
       if (conn) {
         const key = ServerConnection.key(conn)
@@ -1657,33 +1648,16 @@ export default function Layout(props: ParentProps) {
         server.setActive(key)
         await waitServer(key)
       }
-      navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
-      return
     }
 
     const root = projectRoot(directory)
-    const project = layout.projects.list().find((item) => workspaceKey(item.worktree) === workspaceKey(root))
-    const dirs = workspaceIds(project)
-    const stores = dirs.map((dir) => globalSync.child(dir, { bootstrap: false })[0])
-    const session = latestProjectSession(
-      {
-        root,
-        dirs,
-        recent: store.lastProjectSession[root],
-        stores,
-      },
-      Date.now(),
-    )
-    server.projects.touch(root)
-    if (session) {
-      navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
-      return
-    }
+    setSwitching(root)
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
+    setSwitching(undefined)
     navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
@@ -2337,6 +2311,54 @@ export default function Layout(props: ParentProps) {
     session: "",
     sessionProject: "",
   }
+
+  createEffect(
+    on(
+      () => [pageReady(), routeDir(), params.id, currentProjectRoot(), switching()] as const,
+      ([ready, dir, id, root, pending]) => {
+        if (!ready || !dir || !root || !pending) return
+        if (workspaceKey(root) !== workspaceKey(pending)) return
+        if (id) {
+          setSwitching(undefined)
+          return
+        }
+
+        const dirs = currentProjectDirs()
+        if (dirs.length === 0) {
+          setSwitching(undefined)
+          return
+        }
+
+        const recent = store.lastProjectSession[root]
+        const known =
+          recent && dirs.some((item) => workspaceKey(item) === workspaceKey(recent.directory))
+            ? recent
+            : undefined
+        const stores = dirs.map((item) => globalSync.child(item, { bootstrap: false })[0])
+        const session = latestProjectSession(
+          {
+            root,
+            dirs,
+            recent: known,
+            stores,
+          },
+          Date.now(),
+        )
+
+        console.debug(
+          `[project-switch] activate root=${root} dir=${dir} recent=${known?.directory ?? ""}:${known?.id ?? ""} session=${session?.directory ?? ""}:${session?.id ?? ""}`,
+        )
+
+        setSwitching(undefined)
+        if (!session) {
+          server.projects.touch(root)
+          return
+        }
+        navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(
     on(
@@ -3511,7 +3533,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const projectSidebarCtx: ProjectSidebarContext = {
-    currentDir: railCurrentDir,
+    current: railCurrentProject,
     sidebarReduced,
     consumeProjectClick,
     navigateToProject,
@@ -3977,7 +3999,7 @@ export default function Layout(props: ParentProps) {
       renderPanel={() =>
         tasksPanelActive() ? (
           <TrellisTasksPanel
-            directory={() => sidebarProject()?.worktree ?? (routeDir() ? projectRoot(routeDir()) : "")}
+            directory={() => sidebarProject()?.worktree ?? currentProjectRoot() ?? routeDir()}
             width={panel}
             mobile={mobile}
             onBack={() => setStore("sidebarPanel", "project")}
