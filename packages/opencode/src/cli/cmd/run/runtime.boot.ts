@@ -8,6 +8,7 @@
 import { Context, Effect, Layer } from "effect"
 import { stringifyKeyStroke } from "@opentui/keymap"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import { TuiKeybind } from "@/cli/cmd/tui/config/keybind"
 import { makeRuntime } from "@/effect/run-service"
 import { reusePendingTask } from "./runtime.shared"
 import { resolveSession, sessionHistory } from "./session.shared"
@@ -15,7 +16,7 @@ import type { FooterKeybinds, RunDiffStyle, RunInput, RunPrompt, RunProvider } f
 import { pickVariant } from "./variant.shared"
 
 const DEFAULT_KEYBINDS: FooterKeybinds = {
-  leader: "ctrl+x",
+  leader: TuiKeybind.LeaderDefault,
   leaderTimeout: 2000,
   commandList: [{ key: "ctrl+p" }],
   variantCycle: [{ key: "ctrl+t" }],
@@ -81,7 +82,7 @@ function emptySessionInfo(): SessionInfo {
 
 function leaderKey(config: Config) {
   const key = config.keybinds.get("leader")?.[0]?.key
-  if (!key) return "ctrl+x"
+  if (!key) return TuiKeybind.LeaderDefault
   return typeof key === "string" ? key : stringifyKeyStroke(key)
 }
 

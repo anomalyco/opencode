@@ -15,6 +15,7 @@ import {
 import type { Accessor } from "solid-js"
 import type { TuiConfig } from "./config/tui"
 import { useTuiConfig } from "./context/tui-config"
+import { TuiKeybind } from "./config/keybind"
 
 export const LEADER_TOKEN = "leader"
 
@@ -64,15 +65,9 @@ const inputCommands = [
   "input.submit",
 ] as const
 
-function leaderBinding(config: TuiConfig.Resolved) {
-  return config.keybinds.get(LEADER_TOKEN) ?? "ctrl+x"
-}
-
 function leaderDisplay(config: TuiConfig.Resolved) {
-  const trigger = leaderBinding(config)
-  if (typeof trigger === "string") return trigger
-  const key = trigger[0]?.key
-  if (!key) return "ctrl+x"
+  const key = config.keybinds.get(LEADER_TOKEN)?.[0]?.key
+  if (!key) return TuiKeybind.LeaderDefault
   return typeof key === "string" ? key : stringifyKeyStroke(key)
 }
 
@@ -107,7 +102,7 @@ export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRende
   const offCommaBindings = addons.registerCommaBindings(keymap)
   const offBaseLayout = addons.registerBaseLayoutFallback(keymap)
   const offLeader = addons.registerTimedLeader(keymap, {
-    trigger: leaderBinding(config),
+    trigger: config.keybinds.get(LEADER_TOKEN) ?? TuiKeybind.LeaderDefault,
     name: LEADER_TOKEN,
     timeoutMs: config.leader_timeout,
   })

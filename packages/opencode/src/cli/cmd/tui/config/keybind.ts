@@ -34,11 +34,12 @@ type Definition = {
 }
 
 const inputUndoDefault = process.platform === "win32" ? "ctrl+z,ctrl+-,super+z" : "ctrl+-,super+z"
+export const LeaderDefault = "ctrl+x"
 
 const keybind = (value: Definition["default"], description: string): Definition => ({ default: value, description })
 
 const Definitions = {
-  leader: keybind("ctrl+x", "Leader key for keybind combinations"),
+  leader: keybind(LeaderDefault, "Leader key for keybind combinations"),
 
   app_exit: keybind("ctrl+c,ctrl+d,<leader>q", "Exit the application"),
   app_debug: keybind("none", "Toggle debug panel"),
