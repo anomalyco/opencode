@@ -872,20 +872,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
-      bindings: [
-        ...keymapConfig.pick("prompt", ["prompt.clear"]),
-        ...(store.mode === "normal" && !auto()?.visible && status().type === "idle"
-          ? [
-              {
-                key: "escape",
-                cmd: () => {
-                  clearPrompt()
-                  dialog.clear()
-                },
-              },
-            ]
-          : []),
-      ],
+      bindings: keymapConfig.pick("prompt", ["prompt.clear"]),
     }
   })
 
