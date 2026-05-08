@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Code Review Findings",
+  "description": "Structured output schema for code review sub-agents",
+  "type": "object",
+  "required": ["reviewer", "findings", "residual_risks", "testing_gaps"],
+  "properties": {
+    "reviewer": {
+      "type": "string",
+      "description": "Persona name that produced this output (e.g., 'correctness', 'security')"
+    },
+    "findings": {
+      "type": "array",
+      "description": "List of code review findings. Empty array if no issues found.",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "severity",
+          "file",
+          "line",
+          "why_it_matters",
+          "autofix_class",
+          "owner",
+          "requires_verification",
+          "confidence",
+          "evidence",
+          "pre_existing"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short, specific issue title. 10 words or fewer.",
+            "maxLength": 100
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["P0", "P1", "P2", "P3"],
+            "description": "Issue severity level"
+          },
+          "file": {
+            "type": "string",
+            "description": "Relative file path from repository root"
+          },
+          "line": {
+            "type": "integer",
+            "description": "Primary line number of the issue",
+            "minimum": 1
+          },
+          "why_it_matters": {
+            "type": "string",
+            "description": "Impact and failure mode -- not 'what is wrong' but 'what breaks'"
+          },
+          "autofix_class": {
+            "type": "string",
+            "enum": ["safe_auto", "gated_auto", "manual", "advisory"],
+            "description": "Reviewer's conservative recommendation for how this issue should be handled after synthesis"
+          },
+          "owner": {
+            "type": "string",
+            "enum": ["review-fixer", "downstream-resolver", "human", "release"],
+            "description": "Who should own the next action for this finding after synthesis"
+          },
+          "requires_verification": {
+            "type": "boolean",
+            "description": "Whether any fix for this finding must be re-verified with targeted tests or a follow-up review pass"
+          },
+          "suggested_fix": {
+            "type": ["string", "null"],
+            "description": "Concrete minimal fix. Omit or null if no good fix is obvious -- a bad suggestion is worse than none."
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Reviewer confidence in this finding, calibrated per persona",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "evidence": {
+            "type": "array",
+            "description": "Code-grounded evidence: snippets, line references, or pattern descriptions. At least 1 item.",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "pre_existing": {
+            "type": "boolean",
+            "description": "True if this issue exists in unchanged code unrelated to the current diff"
+          }
+        }
+      }
+    },
+    "residual_risks": {
+      "type": "array",
+      "description": "Risks the reviewer noticed but could not confirm as findings",
+      "items": { "type": "string" }
+    },
+    "testing_gaps": {
+      "type": "array",
+      "description": "Missing test coverage the reviewer identified",
+      "items": { "type": "string" }
+    }
+    },
+
+  "_meta": {
+    "confidence_thresholds": {
+      "suppress": "Below 0.60 -- do not report. Finding is speculative noise. Exception: P0 findings at 0.50+ may be reported.",
+      "flag": "0.60-0.69 -- include only when the issue is clearly actionable with concrete evidence.",
+      "confident": "0.70-0.84 -- real and important. Report with full evidence.",
+      "certain": "0.85-1.00 -- verifiable from the code alone. Report."
+    },
+    "severity_definitions": {
+      "P0": "Critical breakage, exploitable vulnerability, data loss/corruption. Must fix before merge.",
+      "P1": "High-impact defect likely hit in normal usage, breaking contract. Should fix.",
+      "P2": "Moderate issue with meaningful downside (edge case, perf regression, maintainability trap). Fix if straightforward.",
+      "P3": "Low-impact, narrow scope, minor improvement. User's discretion."
+    },
+    "autofix_classes": {
+      "safe_auto": "Local, deterministic code or test fix suitable for the in-skill fixer. Examples: extract duplicated helper, add missing nil check, fix off-by-one, add missing test, remove dead code. Do not default to advisory when a concrete safe fix exists.",
+      "gated_auto": "Concrete fix exists, but it changes behavior, permissions, contracts, or other sensitive areas that deserve explicit approval. Examples: add auth to unprotected endpoint, change API response shape.",
+      "manual": "Actionable issue that requires design decisions or cross-cutting changes. Examples: redesign data model, add pagination strategy, choose between architectural approaches.",
+      "advisory": "Informational or operational item that should be surfaced in the report only. Examples: design asymmetry the PR improves but does not fully resolve, residual risk notes, deployment considerations."
+    },
+    "owners": {
+      "review-fixer": "The in-skill fixer can own this when policy allows.",
+      "downstream-resolver": "Turn this into residual work for later resolution.",
+      "human": "A person must make a judgment call before code changes should continue.",
+      "release": "Operational or rollout follow-up; do not convert into code-fix work automatically."
+    },
+    "return_tiers": {
+      "description": "Finding fields are split into two tiers. The full schema (with all required fields) applies to the artifact file on disk. The compact return to the orchestrator omits detail-tier fields. Both are valid uses of this schema in different contexts.",
+      "merge_tier": "Returned to orchestrator: title, severity, file, line, confidence, autofix_class, owner, requires_verification, pre_existing, suggested_fix (optional). Plus top-level reviewer, residual_risks, testing_gaps.",
+      "detail_tier": "Required in artifact file, omitted from compact return: why_it_matters, evidence. The artifact file must pass full schema validation including all required fields. Headless output depends on why_it_matters and evidence being present in the artifact."
+    }
+  }
+}

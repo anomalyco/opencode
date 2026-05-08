@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Code Review Findings",
+  "description": "Structured output schema for code review sub-agents",
+  "type": "object",
+  "required": ["reviewer", "findings", "residual_risks", "testing_gaps"],
+  "properties": {
+    "reviewer": {
+      "type": "string",
+      "description": "Persona name that produced this output (e.g., 'correctness', 'security')"
+    },
+    "findings": {
+      "type": "array",
+      "description": "List of code review findings. Empty array if no issues found.",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "severity",
+          "file",
+          "line",
+          "why_it_matters",
+          "autofix_class",
+          "owner",
+          "requires_verification",
+          "confidence",
+          "evidence",
+          "pre_existing"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short, specific issue title. 10 words or fewer.",
+            "maxLength": 100
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["P0", "P1", "P2", "P3"],
+            "description": "Issue severity level"
+          },
+          "file": {
+            "type": "string",
+            "description": "Relative file path from repository root"
+          },
+          "line": {
+            "type": "integer",
+            "description": "Primary line number of the issue",
+            "minimum": 1
+          },
+          "why_it_matters": {
+            "type": "string",
+            "description": "Impact and failure mode -- not 'what is wrong' but 'what breaks'"
+          },
+          "autofix_class": {
+            "type": "string",
+            "enum": ["safe_auto", "gated_auto", "manual", "advisory"],
+            "description": "Routing class for downstream fixer dispatch. safe_auto = local mechanical fix the fixer applies without approval (test: a one-sentence fix with no 'depends on' clauses, AND no change to function signature, public-API/error contract, security posture, or permission model; for helper extraction, naming/placement must follow mechanically from the shared shape). gated_auto = concrete fix that changes contracts/permissions or whose placement requires a design conversation; needs user approval before apply. manual = actionable work needing design decisions; usually paired with a suggested_fix the user can confirm. advisory = report-only, no code change. The wrong-side cost is symmetric -- bias toward safe_auto when the rubric permits, since misclassifying mechanical fixes as gated_auto makes users triage findings the fixer could have applied."
+          },
+          "owner": {
+            "type": "string",
+            "enum": ["review-fixer", "downstream-resolver", "human", "release"],
+            "description": "Who should own the next action for this finding after synthesis"
+          },
+          "requires_verification": {
+            "type": "boolean",
+            "description": "Whether any fix for this finding must be re-verified with targeted tests or a follow-up review pass"
+          },
+          "suggested_fix": {
+            "type": ["string", "null"],
+            "description": "Concrete minimal fix the reviewer can defend from the diff and surrounding code. Propose one whenever any defensible code change is reachable from review context (parallel patterns, framework conventions, or the cited code itself). Imperfect information is not grounds for omission -- propose the most defensible default given what you can see, name any assumption you are making, and let the user override. 'I need <specific input> to commit' is a soft punt: the right question is 'what code change would I propose if I had to choose now?' and propose that, with the assumption named. Omit only when there is genuinely no code-level change to propose -- e.g., the finding is a question rather than a fix ('what is the intended SLA here?'), or the resolution is purely an organizational action with no code component (legal sign-off, business policy decision). These cases are rare in code review. A bad suggestion is still worse than none, but a soft punt is the failure mode this field is designed to prevent."
+          },
+          "confidence": {
+            "type": "integer",
+            "enum": [0, 25, 50, 75, 100],
+            "description": "Anchored confidence score. Use exactly one of 0, 25, 50, 75, 100. Each anchor has a behavioral criterion the reviewer must honestly self-apply. 0: Not confident. This is a false positive that does not stand up to light scrutiny, or a pre-existing issue this PR did not introduce. 25: Somewhat confident. Might be a real issue but could also be a false positive; the reviewer could not verify from the diff and surrounding code alone. 50: Moderately confident. The reviewer verified this is a real issue but it may be a nitpick, narrow edge case, or have minimal practical impact. Relative to the diff's other concerns, it is not very important. Style preferences and subjective improvements land here. 75: Highly confident. The reviewer double-checked the diff and confirmed the issue will affect users, downstream callers, or runtime behavior in normal usage. The bug, vulnerability, or contract violation is clearly present and actionable. 100: Absolutely certain. The issue is verifiable from the code itself -- compile error, type mismatch, definitive logic bug, or an explicit project-standards violation with a quotable rule. No interpretation required."
+          },
+          "evidence": {
+            "type": "array",
+            "description": "Code-grounded evidence: snippets, line references, or pattern descriptions. At least 1 item.",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "pre_existing": {
+            "type": "boolean",
+            "description": "True if this issue exists in unchanged code unrelated to the current diff"
+          }
+        }
+      }
+    },
+    "residual_risks": {
+      "type": "array",
+      "description": "Risks the reviewer noticed but could not confirm as findings",
+      "items": { "type": "string" }
+    },
+    "testing_gaps": {
+      "type": "array",
+      "description": "Missing test coverage the reviewer identified",
+      "items": { "type": "string" }
+    }
+  },
+
+  "_meta": {
+    "confidence_anchors": {
+      "description": "Confidence is one of 5 discrete anchors (0, 25, 50, 75, 100), each tied to a behavioral criterion the reviewer can honestly self-apply. Float values (e.g., 0.73) are not valid -- the model cannot meaningfully calibrate at finer granularity, and discrete anchors prevent false-precision gaming.",
+      "0": "False positive or pre-existing -- do not report",
+      "25": "Speculative; could not verify -- do not report",
+      "50": "Verified real but minor or stylistic -- report only when P0 or when synthesis routes to advisory/soft buckets",
+      "75": "Highly confident, will affect users or runtime in normal usage -- report",
+      "100": "Verifiable from code alone (compile error, type mismatch, definitive logic bug, quoted standards violation) -- report"
+    },
+    "confidence_thresholds": {
+      "suppress": "Below anchor 75 -- do not report. Exception: P0 findings at anchor 50+ may be reported (critical-but-uncertain issues must not be silently dropped).",
+      "report": "Anchor 75 or 100 -- include with full evidence."
+    },
+    "severity_definitions": {
+      "P0": "Critical breakage, exploitable vulnerability, data loss/corruption. Must fix before merge.",
+      "P1": "High-impact defect likely hit in normal usage, breaking contract. Should fix.",
+      "P2": "Moderate issue with meaningful downside (edge case, perf regression, maintainability trap). Fix if straightforward.",
+      "P3": "Low-impact, narrow scope, minor improvement. User's discretion."
+    },
+    "autofix_classes": {
+      "safe_auto": "Local, deterministic code or test fix suitable for the in-skill fixer. Examples: extract duplicated helper, add missing nil check, fix off-by-one, add missing test, remove dead code. Do not default to advisory when a concrete safe fix exists.",
+      "gated_auto": "Concrete fix exists, but it changes behavior, permissions, contracts, or other sensitive areas that deserve explicit approval. Examples: add auth to unprotected endpoint, change API response shape.",
+      "manual": "Actionable issue that requires design decisions or cross-cutting changes. Examples: redesign data model, add pagination strategy, choose between architectural approaches.",
+      "advisory": "Informational or operational item that should be surfaced in the report only. Examples: design asymmetry the PR improves but does not fully resolve, residual risk notes, deployment considerations."
+    },
+    "owners": {
+      "review-fixer": "The in-skill fixer can own this when policy allows.",
+      "downstream-resolver": "Turn this into residual work for later resolution.",
+      "human": "A person must make a judgment call before code changes should continue.",
+      "release": "Operational or rollout follow-up; do not convert into code-fix work automatically."
+    },
+    "return_tiers": {
+      "description": "Finding fields are split into two tiers. The full schema (with all required fields) applies to the artifact file on disk. The compact return to the orchestrator omits detail-tier fields. Both are valid uses of this schema in different contexts.",
+      "merge_tier": "Returned to orchestrator: title, severity, file, line, confidence, autofix_class, owner, requires_verification, pre_existing, suggested_fix (optional). Plus top-level reviewer, residual_risks, testing_gaps.",
+      "detail_tier": "Required in artifact file, omitted from compact return: why_it_matters, evidence. The artifact file must pass full schema validation including all required fields. Headless output depends on why_it_matters and evidence being present in the artifact."
+    }
+  }
+}

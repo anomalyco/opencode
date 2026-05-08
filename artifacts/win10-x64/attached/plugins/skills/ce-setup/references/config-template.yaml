@@ -1,0 +1,31 @@
+# Compound Engineering -- local config
+# Copy to .compound-engineering/config.local.yaml in your project root.
+# All settings are optional. Invalid values fall through to defaults.
+
+# --- Work delegation (Codex) ---
+
+# work_delegate: codex           # codex | false (default: false)
+# work_delegate_consent: true    # true | false (default: false)
+# work_delegate_sandbox: yolo    # yolo | full-auto (default: yolo)
+# work_delegate_decision: auto   # auto | ask (default: auto)
+# work_delegate_model: gpt-5.4   # any valid codex model (omit to use ~/.codex/config.toml default)
+# work_delegate_effort: high     # minimal | low | medium | high | xhigh (omit to use ~/.codex/config.toml default)
+
+# --- Product pulse ---
+# Settings written by /ce-product-pulse first-run interview. Re-run the skill with
+# argument `setup` or `reconfigure` to edit interactively.
+
+# pulse_product_name: "Spiral"                          # used in report titles (no default)
+# pulse_lookback_default: 24h                           # 1h | 24h | 7d | 30d (default: 24h)
+# pulse_primary_event: "session_started"                # the event that means "user showed up"
+# pulse_value_event: "task_completed"                   # the event that means "user got value"
+# pulse_completion_events: "onboarded,first_purchase"   # comma-separated, 0-3 events
+# pulse_quality_scoring: false                          # true | false (default: false; AI products only)
+# pulse_quality_dimension: "answer accuracy"            # dimension scored 1-5 when pulse_quality_scoring is true
+# pulse_analytics_source: posthog                       # posthog | mixpanel | custom (no default)
+# pulse_tracing_source: sentry                          # sentry | datadog | custom (no default)
+# pulse_payments_source: stripe                         # stripe | custom (no default)
+# pulse_db_enabled: false                               # true | false (default: false; read-only DB if true)
+# pulse_metric_sources: "retention_d7=posthog,nps=delighted"  # strategy-metric -> source overrides; comma-separated 'metric=source' pairs; unlisted metrics fall back to pulse_analytics_source
+# pulse_pending_metrics: "retention_d7,nps"             # comma-separated strategy metrics awaiting instrumentation; render as 'no data'
+# pulse_excluded_metrics: "north_star"                  # comma-separated strategy metrics intentionally not in pulse
