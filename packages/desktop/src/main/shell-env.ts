@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { basename } from "node:path"
+import { getLogger } from "./logging";
 
 const TIMEOUT = 5_000
 
@@ -55,28 +56,29 @@ export function isNushell(shell: string) {
 }
 
 export function loadShellEnv(shell: string) {
+  const logger = getLogger()
   if (isNushell(shell)) {
-    console.log(`[server] Skipping shell env probe for nushell: ${shell}`)
+    logger.log(`[server] Skipping shell env probe for nushell: ${shell}`)
     return null
   }
 
   const interactive = probe(shell, "-il")
   if (interactive.type === "Loaded") {
-    console.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
+    logger.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
     return interactive.value
   }
   if (interactive.type === "Timeout") {
-    console.warn(`[server] Interactive shell env probe timed out: ${shell}`)
+    logger.log(`[server] Interactive shell env probe timed out: ${shell}`)
     return null
   }
 
   const login = probe(shell, "-l")
   if (login.type === "Loaded") {
-    console.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
+    logger.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
     return login.value
   }
 
-  console.warn(`[server] Falling back to app environment: ${shell}`)
+  logger.log(`[server] Falling back to app environment: ${shell}`)
   return null
 }
 
