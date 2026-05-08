@@ -44,11 +44,14 @@ export type AtLeastOne<T> = {
  * override, otherwise resolve `apiKey` (option > config var) and apply it as
  * a bearer token.
  */
-export const bearer = (options: ProviderAuthOption<"optional">, envVar: string): Auth =>
-  "auth" in options && options.auth
-    ? options.auth
-    : Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey")
-        .orElse(Auth.config(envVar))
-        .bearer()
+export const bearer = (options: ProviderAuthOption<"optional">, envVar: string | ReadonlyArray<string>): Auth => {
+  if ("auth" in options && options.auth) return options.auth
+  return (Array.isArray(envVar) ? envVar : [envVar])
+    .reduce(
+      (auth, name) => auth.orElse(Auth.config(name)),
+      Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey"),
+    )
+    .bearer()
+}
 
 export * as AuthOptions from "./auth-options"

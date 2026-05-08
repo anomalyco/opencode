@@ -63,8 +63,10 @@ const stringEntries = (value: unknown, base = ""): ReadonlyArray<{ readonly path
 const redactionSet = (values: ReadonlyArray<string> | undefined, defaults: ReadonlyArray<string>) =>
   new Set([...defaults, ...(values ?? [])].map((value) => value.toLowerCase()))
 
-export const redactUrl = (raw: string, query: ReadonlyArray<string> = DEFAULT_REDACT_QUERY) => {
-  if (!URL.canParse(raw)) return raw
+export type UrlRedactor = (url: string) => string
+
+export const redactUrl = (raw: string, query: ReadonlyArray<string> = DEFAULT_REDACT_QUERY, urlRedactor?: UrlRedactor) => {
+  if (!URL.canParse(raw)) return urlRedactor?.(raw) ?? raw
   const url = new URL(raw)
   if (url.username) url.username = REDACTED
   if (url.password) url.password = REDACTED
@@ -72,7 +74,7 @@ export const redactUrl = (raw: string, query: ReadonlyArray<string> = DEFAULT_RE
   for (const key of [...url.searchParams.keys()]) {
     if (redacted.has(key.toLowerCase())) url.searchParams.set(key, REDACTED)
   }
-  return url.toString()
+  return urlRedactor?.(url.toString()) ?? url.toString()
 }
 
 export const redactHeaders = (

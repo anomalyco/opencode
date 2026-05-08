@@ -59,7 +59,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         Layer.provide(
           HttpRecorder.recordingLayer(cassette, {
             ...recorderOptions,
-            mode: recording ? "record" : (recorderOptions?.mode ?? "replay"),
+            mode: recorderOptions?.mode ?? (recording ? "record" : "replay"),
             metadata: recorderMetadata,
           }).pipe(Layer.provide(FetchHttpClient.layer)),
         ),

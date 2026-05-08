@@ -31,6 +31,7 @@ export interface RecordReplayOptions {
   readonly redact?: {
     readonly headers?: ReadonlyArray<string>
     readonly query?: ReadonlyArray<string>
+    readonly url?: (url: string) => string
   }
   readonly requestHeaders?: ReadonlyArray<string>
   readonly responseHeaders?: ReadonlyArray<string>
@@ -126,7 +127,7 @@ export const recordingLayer = (
             : raw
           return {
             method: web.method,
-            url: redactUrl(web.url, options.redact?.query),
+            url: redactUrl(web.url, options.redact?.query, options.redact?.url),
             headers: redactHeaders(
               Object.fromEntries(web.headers.entries()),
               requestHeadersAllow,

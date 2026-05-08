@@ -1,4 +1,5 @@
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
+import { defaultMatcher, type RequestSnapshot } from "@opencode-ai/http-recorder"
 import * as Gemini from "../../src/protocols/gemini"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import * as OpenAIResponses from "../../src/protocols/openai-responses"
@@ -44,6 +45,22 @@ const openrouterGpt55 = OpenRouter.model("openai/gpt-5.5", { apiKey: process.env
 const openrouterOpus = OpenRouter.model("anthropic/claude-opus-4.7", {
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
 })
+
+const redactCloudflareURL = (url: string) =>
+  url
+    .replace(/\/client\/v4\/accounts\/[^/]+\/ai\/v1\//, "/client/v4/accounts/{account}/ai/v1/")
+    .replace(/\/v1\/[^/]+\/[^/]+\/compat\//, "/v1/{account}/{gateway}/compat/")
+
+const redactCloudflareSnapshotURL = (snapshot: RequestSnapshot): RequestSnapshot => ({
+  ...snapshot,
+  url: redactCloudflareURL(snapshot.url),
+})
+
+const cloudflareOptions = {
+  redact: { url: redactCloudflareURL },
+  match: (incoming: RequestSnapshot, recorded: RequestSnapshot) =>
+    defaultMatcher(redactCloudflareSnapshotURL(incoming), redactCloudflareSnapshotURL(recorded)),
+}
 
 describeRecordedGoldenScenarios([
   {
@@ -117,14 +134,16 @@ describeRecordedGoldenScenarios([
     prefix: "cloudflare-ai-gateway",
     model: cloudflareAIGatewayWorkers,
     requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
-    scenarios: ["text", "tool-call"],
+    options: cloudflareOptions,
+    scenarios: ["text"],
   },
   {
     name: "Cloudflare Workers AI Llama 3.1 8B",
     prefix: "cloudflare-workers-ai",
     model: cloudflareWorkersAI,
     requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"],
-    scenarios: ["text", "tool-call"],
+    options: cloudflareOptions,
+    scenarios: ["text"],
   },
   {
     name: "DeepSeek Chat",

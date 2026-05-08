@@ -31,6 +31,7 @@ export interface WebSocketRecordReplayOptions<E> {
   readonly redact?: {
     readonly headers?: ReadonlyArray<string>
     readonly query?: ReadonlyArray<string>
+    readonly url?: (url: string) => string
   }
   readonly requestHeaders?: ReadonlyArray<string>
   readonly compareClientMessagesAsJson?: boolean
@@ -47,7 +48,7 @@ const openSnapshot = (
   request: WebSocketRequest,
   options: Pick<WebSocketRecordReplayOptions<never>, "redact" | "requestHeaders"> = {},
 ) => ({
-  url: redactUrl(request.url, options.redact?.query),
+  url: redactUrl(request.url, options.redact?.query, options.redact?.url),
   headers: redactHeaders(
     headersRecord(request.headers),
     options.requestHeaders ?? DEFAULT_WEBSOCKET_REQUEST_HEADERS,

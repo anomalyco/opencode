@@ -1,8 +1,7 @@
 import { type ModelInput } from "../llm"
 import { Provider } from "../provider"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
-import { Auth } from "../route/auth"
-import { type ProviderAuthOption } from "../route/auth-options"
+import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
 import { Route } from "../route/client"
 import { ProviderID, type ModelID } from "../schema"
 
@@ -10,17 +9,12 @@ export const aiGatewayID = ProviderID.make("cloudflare-ai-gateway")
 export const workersAIID = ProviderID.make("cloudflare-workers-ai")
 export const id = aiGatewayID
 
-type GatewayURL =
-  | {
-      readonly accountId: string
-      readonly gatewayId?: string
-      readonly baseURL?: string
-    }
-  | {
-      readonly baseURL: string
-      readonly accountId?: string
-      readonly gatewayId?: string
-    }
+type GatewayURL = AtLeastOne<{
+  readonly accountId: string
+  readonly baseURL: string
+}> & {
+  readonly gatewayId?: string
+}
 
 export type AIGatewayOptions = GatewayURL &
   Omit<ModelInput, "id" | "provider" | "route" | "baseURL" | "apiKey" | "auth"> &
@@ -28,15 +22,10 @@ export type AIGatewayOptions = GatewayURL &
 
 type AIGatewayInput = AIGatewayOptions & Pick<ModelInput, "id">
 
-type WorkersAIURL =
-  | {
-      readonly accountId: string
-      readonly baseURL?: string
-    }
-  | {
-      readonly baseURL: string
-      readonly accountId?: string
-    }
+type WorkersAIURL = AtLeastOne<{
+  readonly accountId: string
+  readonly baseURL: string
+}>
 
 export type WorkersAIOptions = WorkersAIURL &
   Omit<ModelInput, "id" | "provider" | "route" | "baseURL" | "apiKey" | "auth"> &
@@ -51,11 +40,7 @@ export const aiGatewayBaseURL = (input: GatewayURL) => {
 }
 
 const aiGatewayAuth = (input: AIGatewayInput) => {
-  if ("auth" in input && input.auth) return input.auth
-  return Auth.optional("apiKey" in input ? input.apiKey : undefined, "apiKey")
-    .orElse(Auth.config("CLOUDFLARE_API_TOKEN"))
-    .orElse(Auth.config("CF_AIG_TOKEN"))
-    .bearer()
+  return AuthOptions.bearer(input, ["CLOUDFLARE_API_TOKEN", "CF_AIG_TOKEN"])
 }
 
 export const workersAIBaseURL = (input: WorkersAIURL) => {
@@ -65,11 +50,7 @@ export const workersAIBaseURL = (input: WorkersAIURL) => {
 }
 
 const workersAIAuth = (input: WorkersAIInput) => {
-  if ("auth" in input && input.auth) return input.auth
-  return Auth.optional("apiKey" in input ? input.apiKey : undefined, "apiKey")
-    .orElse(Auth.config("CLOUDFLARE_API_KEY"))
-    .orElse(Auth.config("CLOUDFLARE_WORKERS_AI_TOKEN"))
-    .bearer()
+  return AuthOptions.bearer(input, ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN"])
 }
 
 export const aiGatewayRoute = OpenAICompatibleChat.route.with({
@@ -129,4 +110,7 @@ export const model = aiGateway
 export const provider = Provider.make({
   id,
   model,
+  apis: { aiGateway, workersAI },
 })
+
+export const apis = provider.apis

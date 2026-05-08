@@ -7,6 +7,7 @@ import { AwsV4Signer } from "aws4fetch"
 import { Config, ConfigProvider, Effect, FileSystem, PlatformError, Redacted } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import * as ProviderShared from "../src/protocols/shared"
+import * as Cloudflare from "../src/providers/cloudflare"
 
 type Provider = {
   readonly id: string
@@ -114,10 +115,12 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     ],
     validate: (env) =>
       validateChat({
-        url: `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}/${encodeURIComponent(env.CLOUDFLARE_GATEWAY_ID || "default")}/compat/chat/completions`,
+        url: `${Cloudflare.aiGatewayBaseURL({
+          accountId: env.CLOUDFLARE_ACCOUNT_ID,
+          gatewayId: env.CLOUDFLARE_GATEWAY_ID || undefined,
+        })}/chat/completions`,
         token: Redacted.make(env.CLOUDFLARE_API_TOKEN),
         model: "workers-ai/@cf/meta/llama-3.1-8b-instruct",
-        headers: { "cf-aig-authorization": `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
       }),
   },
   {
@@ -131,7 +134,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     ],
     validate: (env) =>
       validateChat({
-        url: `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}/ai/v1/chat/completions`,
+        url: `${Cloudflare.workersAIBaseURL({ accountId: env.CLOUDFLARE_ACCOUNT_ID })}/chat/completions`,
         token: Redacted.make(env.CLOUDFLARE_API_KEY),
         model: "@cf/meta/llama-3.1-8b-instruct",
       }),
