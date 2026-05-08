@@ -36,7 +36,6 @@ const MIN_COLUMN_WIDTH = 28
 const MAX_COLUMN_WIDTH = 44
 const PANEL_HEIGHT_RATIO = 0.3
 const PANEL_TOP_PADDING = 1
-const HEADER_SIDE_WIDTH = 5
 const FOOTER_HEIGHT = 1
 const FOOTER_MARGIN = 1
 
@@ -213,12 +212,12 @@ function WhichKeyPanel(props: {
   const upActive = createMemo(() => offset() > 0)
   const downActive = createMemo(() => offset() < maxOffset())
   const scrollable = createMemo(() => maxOffset() > 0)
-  const headerSideWidth = createMemo(() => (scrollable() ? HEADER_SIDE_WIDTH : 0))
   const tabGap = createMemo(() => {
-    if (groups().length <= 1) return 0
+    const itemCount = groups().length + (scrollable() ? 1 : 0)
+    if (itemCount <= 1) return 0
     const tabWidth = groups().reduce((sum, group) => sum + group.label.length + 2, 0)
-    const available = Math.max(0, width() - 2 - headerSideWidth() * 2)
-    return Math.max(MIN_TAB_GAP, Math.min(TAB_GAP, Math.floor((available - tabWidth) / (groups().length - 1))))
+    const arrowWidth = scrollable() ? 3 : 0
+    return Math.max(MIN_TAB_GAP, Math.min(TAB_GAP, Math.floor((contentWidth() - tabWidth - arrowWidth) / (itemCount - 1))))
   })
   const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
   const look = createMemo(() => skin(props.api))
@@ -362,46 +361,43 @@ function WhichKeyPanel(props: {
         flexDirection="column"
       >
         <Show when={headerVisible()}>
-          <box width="100%" flexDirection="row" flexShrink={0}>
-            <box width={headerSideWidth()} flexShrink={0} />
-            <box flexGrow={1} minWidth={0} flexDirection="row" justifyContent="center" gap={tabGap()}>
-              <Show when={tabsVisible()}>
-                <For each={groups()}>
-                  {(group) => {
-                    const selected = createMemo(() => currentGroup()?.label === group.label)
-                    return (
-                      <box
-                        paddingLeft={1}
-                        paddingRight={1}
-                        flexShrink={0}
-                        backgroundColor={selected() ? look().tab : undefined}
-                        onMouseDown={() => {
-                          setActiveGroup(group.label)
-                          setOffset(0)
-                        }}
+          <box width="100%" flexDirection="row" justifyContent="center" gap={tabGap()} flexShrink={0}>
+            <Show when={tabsVisible()}>
+              <For each={groups()}>
+                {(group) => {
+                  const selected = createMemo(() => currentGroup()?.label === group.label)
+                  return (
+                    <box
+                      paddingLeft={1}
+                      paddingRight={1}
+                      flexShrink={0}
+                      backgroundColor={selected() ? look().tab : undefined}
+                      onMouseDown={() => {
+                        setActiveGroup(group.label)
+                        setOffset(0)
+                      }}
+                    >
+                      <text
+                        fg={selected() ? look().tabText : look().muted}
+                        attributes={selected() ? TextAttributes.BOLD : undefined}
+                        wrapMode="none"
                       >
-                        <text
-                          fg={selected() ? look().tabText : look().muted}
-                          attributes={selected() ? TextAttributes.BOLD : undefined}
-                          wrapMode="none"
-                        >
-                          {group.label}
-                        </text>
-                      </box>
-                    )
-                  }}
-                </For>
-              </Show>
-            </box>
-            <box width={headerSideWidth()} flexShrink={0} alignItems="flex-end">
-              <Show when={scrollable()}>
+                        {group.label}
+                      </text>
+                    </box>
+                  )
+                }}
+              </For>
+            </Show>
+            <Show when={scrollable()}>
+              <box flexShrink={0}>
                 <text wrapMode="none">
                   <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
                   <span style={{ fg: look().muted }}> </span>
                   <span style={{ fg: downActive() ? look().text : look().muted }}>↓</span>
                 </text>
-              </Show>
-            </box>
+              </box>
+            </Show>
           </box>
         </Show>
         <Show when={tabsVisible()}>
