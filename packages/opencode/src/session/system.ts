@@ -70,7 +70,6 @@ export const layer = Layer.effect(
         return [
           "Skills provide specialized instructions and workflows for specific tasks.",
           "Use the skill tool to load a skill when a task matches its description.",
-          "Skills marked manual-only do not have a matching description; load them only if the user explicitly requests that skill.",
           // the agents seem to ingest the information about skills a bit better if we present a more verbose
           // version of them here and a less verbose version in tool description, rather than vice versa.
           Skill.fmt(list, { verbose: true }),

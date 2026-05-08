@@ -269,16 +269,17 @@ export const defaultLayer = layer.pipe(
 )
 
 export function fmt(list: Info[], opts: { verbose: boolean }) {
-  if (list.length === 0) return "No skills are currently available."
+  const described = list.filter((skill) => skill.description !== undefined)
+  if (described.length === 0) return "No skills are currently available."
   if (opts.verbose) {
     return [
       "<available_skills>",
-      ...list
-        .sort((a, b) => a.name.localeCompare(b.name))
+      ...described
+        .toSorted((a, b) => a.name.localeCompare(b.name))
         .flatMap((skill) => [
           "  <skill>",
           `    <name>${skill.name}</name>`,
-          `    <description>${description(skill)}</description>`,
+          `    <description>${skill.description}</description>`,
           `    <location>${pathToFileURL(skill.location).href}</location>`,
           "  </skill>",
         ]),
@@ -288,14 +289,10 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
 
   return [
     "## Available Skills",
-    ...list
+    ...described
       .toSorted((a, b) => a.name.localeCompare(b.name))
-      .map((skill) => `- **${skill.name}**: ${description(skill)}`),
+      .map((skill) => `- **${skill.name}**: ${skill.description}`),
   ].join("\n")
-}
-
-function description(skill: Info) {
-  return skill.description ?? "Manual-only skill; load only when explicitly requested by the user."
 }
 
 export * as Skill from "."

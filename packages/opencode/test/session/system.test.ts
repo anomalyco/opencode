@@ -73,8 +73,7 @@ describe("session.system", () => {
       expect(alpha).toBeGreaterThan(-1)
       expect(middle).toBeGreaterThan(alpha)
       expect(zeta).toBeGreaterThan(middle)
-      expect(output).toContain("Skills marked manual-only do not have a matching description")
-      expect(output).toContain("<description>Manual-only skill; load only when explicitly requested by the user.</description>")
+      expect(output).not.toContain("manual-skill")
     }),
   )
 })
