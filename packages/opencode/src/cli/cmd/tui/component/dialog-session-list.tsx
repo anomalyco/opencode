@@ -107,6 +107,7 @@ export function DialogSessionList() {
             dialog,
             sdk,
             sync,
+            project,
             toast,
             onSelect: (selection) => {
               void warp(selection)

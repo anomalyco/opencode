@@ -603,6 +603,29 @@ function anthropicAdaptiveEfforts(apiId: string): string[] | null {
   return null
 }
 
+function googleThinkingLevelEfforts(apiId: string) {
+  const id = apiId.toLowerCase()
+  if (!id.includes("gemini-3")) return ["low", "high"]
+  if (id.includes("flash-image")) return ["minimal", "high"]
+  if (id.includes("pro-image")) return ["high"]
+  if (id.includes("flash")) return ["minimal", "low", "medium", "high"]
+  return ["low", "medium", "high"]
+}
+
+function googleThinkingBudgetMax(apiId: string) {
+  const id = apiId.toLowerCase()
+  if (id.includes("2.5") && id.includes("pro") && !id.includes("flash")) return 32_768
+  return 24_576
+}
+
+function googleSmallThinkingConfig(apiId: string) {
+  const levels = googleThinkingLevelEfforts(apiId)
+  if (apiId.toLowerCase().includes("gemini-3")) {
+    return { thinkingLevel: levels.includes("minimal") ? "minimal" : levels.includes("low") ? "low" : "high" }
+  }
+  return { thinkingBudget: googleThinkingBudgetMax(apiId) === 32_768 ? 128 : 0 }
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
@@ -908,18 +931,14 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           max: {
             thinkingConfig: {
               includeThoughts: true,
-              thinkingBudget: 24576,
+              thinkingBudget: googleThinkingBudgetMax(id),
             },
           },
         }
       }
-      let levels = ["low", "high"]
-      if (id.includes("3.1")) {
-        levels = ["low", "medium", "high"]
-      }
 
       return Object.fromEntries(
-        levels.map((effort) => [
+        googleThinkingLevelEfforts(id).map((effort) => [
           effort,
           {
             thinkingConfig: {
@@ -1186,10 +1205,7 @@ export function smallOptions(model: Provider.Model) {
   }
   if (model.providerID === "google") {
     // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget
-    if (model.api.id.includes("gemini-3")) {
-      return { thinkingConfig: { thinkingLevel: "minimal" } }
-    }
-    return { thinkingConfig: { thinkingBudget: 0 } }
+    return { thinkingConfig: googleSmallThinkingConfig(model.api.id) }
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
     if (model.api.id.includes("google")) {

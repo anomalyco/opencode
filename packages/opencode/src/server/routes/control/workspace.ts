@@ -93,6 +93,23 @@ export const WorkspaceRoutes = lazy(() =>
         return c.json(await AppRuntime.runPromise(Workspace.Service.use((svc) => svc.list(Instance.project))))
       },
     )
+    .post(
+      "/sync-list",
+      describeRoute({
+        summary: "Sync workspace list",
+        description: "Register missing workspaces returned by workspace adapters.",
+        operationId: "experimental.workspace.syncList",
+        responses: {
+          204: {
+            description: "Workspace list synced",
+          },
+        },
+      }),
+      async (c) => {
+        await AppRuntime.runPromise(Workspace.Service.use((svc) => svc.syncList(Instance.project)))
+        return c.body(null, 204)
+      },
+    )
     .get(
       "/status",
       describeRoute({

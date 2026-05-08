@@ -610,6 +610,7 @@ export function Prompt(props: PromptProps) {
             dialog,
             sdk,
             sync,
+            project,
             toast,
             onSelect: (selection) => {
               void warpSession(selection)
@@ -1036,6 +1037,7 @@ export function Prompt(props: PromptProps) {
               dialog,
               sdk,
               sync,
+              project,
               toast,
               onSelect: (selection) => {
                 void warpSession(selection)

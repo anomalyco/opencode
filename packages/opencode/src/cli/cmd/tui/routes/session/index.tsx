@@ -93,9 +93,29 @@ import { useBindings, useCommandShortcut } from "../../keymap"
 
 addDefaultParsers(parsers.parsers)
 
-const GO_UPSELL_LAST_SEEN_AT = "go_upsell_last_seen_at"
-const GO_UPSELL_DONT_SHOW = "go_upsell_dont_show"
+const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
+const GO_UPSELL_FREE_TIER_DONT_SHOW = "go_upsell_dont_show"
+const GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT = "go_upsell_account_rate_limit_last_seen_at"
+const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
+const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
+
+function goUpsellKeys(action: SessionRetry.Retryable["action"]) {
+  if (!action) return
+  if (!GO_UPSELL_PROVIDERS.has(action.provider)) return
+  if (action.reason === "free_tier_limit") {
+    return {
+      lastSeenAt: GO_UPSELL_FREE_TIER_LAST_SEEN_AT,
+      dontShow: GO_UPSELL_FREE_TIER_DONT_SHOW,
+    }
+  }
+  if (action.reason === "account_rate_limit") {
+    return {
+      lastSeenAt: GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT,
+      dontShow: GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW,
+    }
+  }
+}
 
 const context = createContext<{
   width: number
@@ -263,14 +283,17 @@ export function Session() {
     if (!evt.properties.status.action) return
     if (dialog.stack.length > 0) return
 
-    const seen = kv.get(GO_UPSELL_LAST_SEEN_AT)
+    const keys = goUpsellKeys(evt.properties.status.action)
+    if (!keys) return
+
+    const seen = kv.get(keys.lastSeenAt)
     if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
 
-    if (kv.get(GO_UPSELL_DONT_SHOW)) return
+    if (kv.get(keys.dontShow)) return
 
     void DialogRetryAction.show(dialog, evt.properties.status.action).then((dontShowAgain) => {
-      if (dontShowAgain) kv.set(GO_UPSELL_DONT_SHOW, true)
-      kv.set(GO_UPSELL_LAST_SEEN_AT, Date.now())
+      if (dontShowAgain) kv.set(keys.dontShow, true)
+      kv.set(keys.lastSeenAt, Date.now())
     })
   })
 

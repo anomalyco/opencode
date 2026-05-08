@@ -29,6 +29,7 @@ export class ApiWorkspaceWarpError extends Schema.ErrorClass<ApiWorkspaceWarpErr
 export const WorkspacePaths = {
   adapters: `${root}/adapter`,
   list: root,
+  syncList: `${root}/sync-list`,
   status: `${root}/status`,
   remove: `${root}/:id`,
   warp: `${root}/warp`,
@@ -65,6 +66,15 @@ export const WorkspaceApi = HttpApi.make("workspace")
             identifier: "experimental.workspace.create",
             summary: "Create workspace",
             description: "Create a workspace for the current project.",
+          }),
+        ),
+        HttpApiEndpoint.post("syncList", WorkspacePaths.syncList, {
+          success: described(HttpApiSchema.NoContent, "Workspace list synced"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.workspace.syncList",
+            summary: "Sync workspace list",
+            description: "Register missing workspaces returned by workspace adapters.",
           }),
         ),
         HttpApiEndpoint.get("status", WorkspacePaths.status, {
