@@ -35,6 +35,7 @@ import synthwave84ThemeJson from "./themes/synthwave84.json"
 import tokyonightThemeJson from "./themes/tokyonight.json"
 import vercelThemeJson from "./themes/vercel.json"
 import vesperThemeJson from "./themes/vesper.json"
+import daybreakThemeJson from "./themes/daybreak.json"
 import zenburnThemeJson from "./themes/zenburn.json"
 
 export const oc2Theme = oc2ThemeJson as DesktopTheme
@@ -47,6 +48,7 @@ export const catppuccinFrappeTheme = catppuccinFrappeThemeJson as DesktopTheme
 export const catppuccinMacchiatoTheme = catppuccinMacchiatoThemeJson as DesktopTheme
 export const cobalt2Theme = cobalt2ThemeJson as DesktopTheme
 export const cursorTheme = cursorThemeJson as DesktopTheme
+export const daybreakTheme = daybreakThemeJson as DesktopTheme
 export const draculaTheme = draculaThemeJson as DesktopTheme
 export const everforestTheme = everforestThemeJson as DesktopTheme
 export const flexokiTheme = flexokiThemeJson as DesktopTheme
@@ -112,5 +114,6 @@ export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   tokyonight: tokyonightTheme,
   vercel: vercelTheme,
   vesper: vesperTheme,
+  daybreak: daybreakTheme,
   zenburn: zenburnTheme,
 }
