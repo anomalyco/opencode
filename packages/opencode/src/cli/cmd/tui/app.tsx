@@ -15,7 +15,7 @@ import {
   Show,
   on,
 } from "solid-js"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { win32DisableProcessedInput, win32InstallCtrlCGuard, win32IsCtrlHeld } from "./win32"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -133,6 +133,17 @@ export function tui(input: {
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
+
+    if (process.platform === "win32") {
+      const stdinParser = (renderer as any).stdinParser as { push: (data: Uint8Array) => void }
+      const originalPush = stdinParser.push.bind(stdinParser)
+      stdinParser.push = (data: Uint8Array) => {
+        if (data.length === 1 && data[0] === 0x08 && win32IsCtrlHeld()) {
+          return originalPush(Buffer.from("\x1b[127;5u"))
+        }
+        return originalPush(data)
+      }
+    }
     const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
 
     await render(() => {
