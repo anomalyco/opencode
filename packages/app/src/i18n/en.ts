@@ -1060,5 +1060,9 @@ export const dict = {
   "settings.feishu.bind.statusError": "Error: {{msg}}",
   "settings.feishu.bind.cancel": "Cancel",
   "settings.feishu.bind.retry": "Retry",
+  "settings.feishu.bind.done": "Done",
+  "settings.feishu.bind.switchToLark": "Need to bind a Lark (Global) account? Switch",
+  "settings.feishu.bind.switchToFeishu": "Need to bind a 飞书 (China) account? Switch",
+  "settings.feishu.bind.qrLoading": "Generating QR code...",
   // FORK-END
 }

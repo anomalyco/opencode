@@ -1,12 +1,16 @@
-// FORK: 飞书扫码绑定弹窗(C1.5)[feat: feishu-bridge] 2026-05-08
+// FORK: 飞书扫码绑定弹窗(C1.5 + C1.5b QR 渲染 + 自动 domain 选择)
+// [feat: feishu-bridge] 2026-05-08
 //
-// 流程:
-//   1. 用户选 domain(feishu / lark)+ 点"开始绑定"
-//   2. 调 invoke("feishu_oauth_start") 拿 device_code / user_code / verification_uri
-//   3. 显示 user_code 大字 + verification_uri 链接 + 倒计时 + "等待授权..."
-//      (v1 不画 QR,显文本 + 链接;真 QR 渲染等单独一笔加 qrcode 依赖再做)
-//   4. 按 interval 间隔轮询 invoke("feishu_oauth_poll")
-//   5. 终态:success → 通知绑定完成 + close;denied/expired → 显错误 + 重试按钮
+// 流程(简化版,不让用户选 domain):
+//   1. 进 dialog 即 loading,根据 i18n locale 自动选 domain:
+//      - zh / zht → "feishu"(accounts.feishu.cn)
+//      - 其它    → "lark"(accounts.larksuite.com)
+//   2. invoke("feishu_oauth_start") 拿 device_code / user_code / verification_uri
+//   3. 用 qrcode 包把 verification_uri_complete 渲染成 PNG dataURL → <img>
+//   4. 显 QR + user_code 大字 + 倒计时 + "等待用户授权..."
+//   5. 底部小字"切换到 Lark/飞书"链接(default 错时 fallback)
+//   6. 按 interval 间隔轮询 invoke("feishu_oauth_poll")
+//   7. 终态:success → 通知绑定完成 + close;denied/expired/error → 显错误 + 重试
 //
 // 注:Phase 3 接入 SecretRef 写 ~/.opencode/feishu-config.json;v1 弹窗只跑通 OAuth flow,
 // 拿到 {appId, appSecret, openId} 后暂时仅 console.log + 显示成功状态。
@@ -17,9 +21,11 @@ import {
   createSignal,
   Match,
   onCleanup,
+  onMount,
   Show,
   Switch,
 } from "solid-js"
+import QRCode from "qrcode"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
@@ -32,17 +38,21 @@ import {
 } from "@/utils/feishu-config"
 
 type Phase =
-  | { kind: "select" }
   | { kind: "loading" }
-  | { kind: "waiting"; data: OauthStartResponse }
+  | { kind: "waiting"; data: OauthStartResponse; qrDataUrl: string | null }
   | { kind: "success"; result: OauthPollResponse }
   | { kind: "error"; message: string; canRetry: boolean }
+
+/** locale → 默认飞书域名(zh / zht 优先国内,其它默认国际)*/
+function defaultDomainFor(locale: string): FeishuDomain {
+  return locale === "zh" || locale === "zht" ? "feishu" : "lark"
+}
 
 export const FeishuBindDialog: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
-  const [domain, setDomain] = createSignal<FeishuDomain>("feishu")
-  const [phase, setPhase] = createSignal<Phase>({ kind: "select" })
+  const [domain, setDomain] = createSignal<FeishuDomain>(defaultDomainFor(language.locale()))
+  const [phase, setPhase] = createSignal<Phase>({ kind: "loading" })
   const [secsLeft, setSecsLeft] = createSignal(0)
 
   let pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -59,11 +69,25 @@ export const FeishuBindDialog: Component = () => {
     }
   }
 
-  const startBind = async () => {
+  const startBind = async (selectedDomain: FeishuDomain) => {
+    stopAllTimers()
+    setDomain(selectedDomain)
     setPhase({ kind: "loading" })
     try {
-      const data = await feishuOauthStart(domain())
-      setPhase({ kind: "waiting", data })
+      const data = await feishuOauthStart(selectedDomain)
+      // 立即生成 QR(qrcode toDataURL 异步)
+      let qrDataUrl: string | null = null
+      try {
+        qrDataUrl = await QRCode.toDataURL(data.verification_uri_complete, {
+          width: 240,
+          margin: 1,
+          errorCorrectionLevel: "M",
+        })
+      } catch (qrErr) {
+        // QR 生成失败不阻断流程,仅 fallback 显文本链接
+        console.warn("[feishu-bridge] QR generation failed:", qrErr)
+      }
+      setPhase({ kind: "waiting", data, qrDataUrl })
       setSecsLeft(data.expires_in)
       // 倒计时
       countdownTimer = setInterval(() => {
@@ -111,7 +135,6 @@ export const FeishuBindDialog: Component = () => {
             })
             return
           case "slow_down":
-            // 服务端要求慢点,加倍 interval
             schedulePoll(sessionId, intervalMs * 2)
             return
           case "pending":
@@ -149,87 +172,58 @@ export const FeishuBindDialog: Component = () => {
     }
   })
 
+  // 进 dialog 即自动启动
+  onMount(() => {
+    void startBind(domain())
+  })
+
   onCleanup(() => stopAllTimers())
 
   return (
     <Dialog title={language.t("settings.feishu.bind.title")}>
       <div class="flex flex-col gap-4 p-4 min-w-md max-w-lg">
         <Switch>
-          {/* 阶段 1:选 domain + 开始 */}
-          <Match when={phase().kind === "select"}>
-            <div class="flex flex-col gap-3">
-              <label class="text-13-medium">
-                {language.t("settings.feishu.bind.domain.label")}
-              </label>
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  class={`px-3 py-1.5 rounded-md text-13-medium ${
-                    domain() === "feishu"
-                      ? "bg-surface-strong"
-                      : "bg-surface-base hover:bg-surface-strong"
-                  }`}
-                  onClick={() => setDomain("feishu")}
-                >
-                  {language.t("settings.feishu.bind.domain.feishu")}
-                </button>
-                <button
-                  type="button"
-                  class={`px-3 py-1.5 rounded-md text-13-medium ${
-                    domain() === "lark"
-                      ? "bg-surface-strong"
-                      : "bg-surface-base hover:bg-surface-strong"
-                  }`}
-                  onClick={() => setDomain("lark")}
-                >
-                  {language.t("settings.feishu.bind.domain.lark")}
-                </button>
-              </div>
-              <div class="flex justify-end gap-2 mt-2">
-                <button
-                  type="button"
-                  class="px-3 py-1.5 rounded-md text-13-medium bg-surface-base hover:bg-surface-strong"
-                  onClick={() => dialog.close()}
-                >
-                  {language.t("settings.feishu.bind.cancel")}
-                </button>
-                <button
-                  type="button"
-                  class="px-3 py-1.5 rounded-md text-13-medium bg-surface-strong hover:bg-surface-stronger"
-                  onClick={() => void startBind()}
-                >
-                  {language.t("settings.feishu.account.add")}
-                </button>
-              </div>
-            </div>
-          </Match>
-
-          {/* 阶段 2:loading */}
+          {/* 阶段 1:loading */}
           <Match when={phase().kind === "loading"}>
-            <p class="text-13-regular text-text-weak text-center py-6">
-              {language.t("settings.feishu.bind.statusPending")}
+            <p class="text-13-regular text-text-weak text-center py-8">
+              {language.t("settings.feishu.bind.qrLoading")}
             </p>
           </Match>
 
-          {/* 阶段 3:waiting — user_code + verification_uri + 倒计时 */}
+          {/* 阶段 2:waiting — QR + user_code + 倒计时 */}
           <Match when={phase().kind === "waiting"}>
             {(() => {
-              const p = phase() as { kind: "waiting"; data: OauthStartResponse }
+              const p = phase() as {
+                kind: "waiting"
+                data: OauthStartResponse
+                qrDataUrl: string | null
+              }
               return (
-                <div class="flex flex-col gap-3">
-                  <p class="text-13-regular text-text-weak">
+                <div class="flex flex-col gap-3 items-center">
+                  <p class="text-13-regular text-text-weak text-center">
                     {language.t("settings.feishu.bind.scanQr")}
                   </p>
-                  {/* TODO C1.5b:加 qrcode 依赖渲染真 QR;v1 仅显文本链接 */}
-                  <a
-                    href={p.data.verification_uri_complete}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-13-regular text-text-base underline break-all"
+
+                  {/* QR 图 */}
+                  <Show
+                    when={p.qrDataUrl}
+                    fallback={
+                      <div class="text-12-regular text-text-weak py-4">
+                        {language.t("settings.feishu.bind.qrLoading")}
+                      </div>
+                    }
                   >
-                    {p.data.verification_uri_complete}
-                  </a>
-                  <div class="flex flex-col items-center gap-1.5 py-3">
+                    <img
+                      src={p.qrDataUrl ?? ""}
+                      alt="QR code"
+                      width={240}
+                      height={240}
+                      class="rounded bg-white p-2"
+                    />
+                  </Show>
+
+                  {/* user_code 大字 */}
+                  <div class="flex flex-col items-center gap-1">
                     <span class="text-12-regular text-text-weak">
                       {language.t("settings.feishu.bind.userCodeLabel")}
                     </span>
@@ -237,13 +231,39 @@ export const FeishuBindDialog: Component = () => {
                       {p.data.user_code}
                     </span>
                   </div>
-                  <p class="text-12-regular text-text-weak text-center">
+
+                  {/* verification_uri 链接(QR 解析失败时也能用)*/}
+                  <a
+                    href={p.data.verification_uri_complete}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-11-regular text-text-weak underline break-all text-center px-4"
+                  >
+                    {p.data.verification_uri_complete}
+                  </a>
+
+                  <p class="text-12-regular text-text-weak">
                     {language.t("settings.feishu.bind.expiresIn", { secs: String(secsLeft()) })}
                   </p>
-                  <p class="text-12-regular text-text-weak text-center">
+                  <p class="text-12-regular text-text-weak">
                     {language.t("settings.feishu.bind.statusPending")}
                   </p>
-                  <div class="flex justify-end mt-2">
+
+                  {/* 切换到另一域名(default 错时 fallback)*/}
+                  <button
+                    type="button"
+                    class="text-11-regular text-text-weak hover:text-text-base underline"
+                    onClick={() => {
+                      const next: FeishuDomain = domain() === "feishu" ? "lark" : "feishu"
+                      void startBind(next)
+                    }}
+                  >
+                    {domain() === "feishu"
+                      ? language.t("settings.feishu.bind.switchToLark")
+                      : language.t("settings.feishu.bind.switchToFeishu")}
+                  </button>
+
+                  <div class="flex justify-end w-full mt-2">
                     <button
                       type="button"
                       class="px-3 py-1.5 rounded-md text-13-medium bg-surface-base hover:bg-surface-strong"
@@ -260,7 +280,7 @@ export const FeishuBindDialog: Component = () => {
             })()}
           </Match>
 
-          {/* 阶段 4:success */}
+          {/* 阶段 3:success */}
           <Match when={phase().kind === "success"}>
             <div class="flex flex-col gap-3 items-center py-4">
               <p class="text-16-medium">
@@ -271,12 +291,12 @@ export const FeishuBindDialog: Component = () => {
                 class="px-3 py-1.5 rounded-md text-13-medium bg-surface-strong hover:bg-surface-stronger"
                 onClick={() => dialog.close()}
               >
-                {language.t("settings.feishu.bind.cancel")}
+                {language.t("settings.feishu.bind.done")}
               </button>
             </div>
           </Match>
 
-          {/* 阶段 5:error */}
+          {/* 阶段 4:error */}
           <Match when={phase().kind === "error"}>
             {(() => {
               const p = phase() as { kind: "error"; message: string; canRetry: boolean }
@@ -295,7 +315,7 @@ export const FeishuBindDialog: Component = () => {
                       <button
                         type="button"
                         class="px-3 py-1.5 rounded-md text-13-medium bg-surface-strong hover:bg-surface-stronger"
-                        onClick={() => setPhase({ kind: "select" })}
+                        onClick={() => void startBind(domain())}
                       >
                         {language.t("settings.feishu.bind.retry")}
                       </button>

@@ -330,17 +330,25 @@ export async function poll(
     return mapErrorCode(errorCode, pickStr(data, "error_description", "message"))
   }
 
-  // 成功:appId + appSecret + openId 必备
-  const appId = pickStr(data, "app_id", "appId", "client_id", "clientId")
-  const appSecret = pickStr(data, "app_secret", "appSecret", "client_secret", "clientSecret")
-  const openId = pickStr(data, "open_id", "openId", "user_open_id", "userOpenId")
+  // 成功:client_id + client_secret 必备(参 OpenClaw install-prompts.js line 96-110)
+  // open_id 是 best-effort,可能在 user_info 嵌套对象内,可能 undefined
+  const appId = pickStr(data, "client_id", "clientId", "app_id", "appId")
+  const appSecret = pickStr(data, "client_secret", "clientSecret", "app_secret", "appSecret")
+  // 优先从 user_info.open_id 取(飞书 PollResponse 真实结构),fallback 顶层
+  const userInfo =
+    data["user_info"] && typeof data["user_info"] === "object"
+      ? (data["user_info"] as Loose)
+      : null
+  const openId =
+    pickStr(userInfo ?? {}, "open_id", "openId") ??
+    pickStr(data, "open_id", "openId", "user_open_id", "userOpenId")
 
-  if (appId && appSecret && openId) {
+  if (appId && appSecret) {
     return {
       status: "success",
       appId,
       appSecret,
-      openId,
+      openId: openId ?? "",
       accessToken: pickStr(data, "access_token", "accessToken"),
       refreshToken: pickStr(data, "refresh_token", "refreshToken"),
       expiresIn: pickNum(data, "expires_in", "expiresIn"),

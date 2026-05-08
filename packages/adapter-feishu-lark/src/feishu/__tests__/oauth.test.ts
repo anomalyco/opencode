@@ -302,6 +302,45 @@ describe("poll", () => {
     if (r.status === "success") expect(r.appId).toBe("wa")
   })
 
+  test("飞书真实响应:client_id/client_secret + user_info.open_id 嵌套", async () => {
+    // 这是 OpenClaw install-prompts.js 处理的真实 PollResponse 形状
+    const m = mockFetch({
+      status: 200,
+      body: {
+        client_id: "cli_real",
+        client_secret: "sec_real",
+        user_info: {
+          open_id: "ou_real",
+          tenant_brand: "feishu",
+        },
+      },
+    })
+    const r = await poll("feishu", "d", "n", { fetchImpl: m.fn })
+    expect(r.status).toBe("success")
+    if (r.status === "success") {
+      expect(r.appId).toBe("cli_real")
+      expect(r.appSecret).toBe("sec_real")
+      expect(r.openId).toBe("ou_real")
+    }
+  })
+
+  test("飞书真实响应:open_id 缺失也算 success(best-effort)", async () => {
+    const m = mockFetch({
+      status: 200,
+      body: {
+        client_id: "cli_only",
+        client_secret: "sec_only",
+        // 没 user_info 也没 open_id
+      },
+    })
+    const r = await poll("feishu", "d", "n", { fetchImpl: m.fn })
+    expect(r.status).toBe("success")
+    if (r.status === "success") {
+      expect(r.appId).toBe("cli_only")
+      expect(r.openId).toBe("")
+    }
+  })
+
   test("提交 form 含 device_code + nonce + action=poll", async () => {
     const m = mockFetch({ status: 200, body: { error: "authorization_pending" } })
     await poll("feishu", "the-device-code", "the-nonce", { fetchImpl: m.fn })

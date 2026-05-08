@@ -1039,5 +1039,9 @@ export const dict = {
   "settings.feishu.bind.statusError": "錯誤:{{msg}}",
   "settings.feishu.bind.cancel": "取消",
   "settings.feishu.bind.retry": "重試",
+  "settings.feishu.bind.done": "完成",
+  "settings.feishu.bind.switchToLark": "要綁定 Lark(國際)帳號?切換",
+  "settings.feishu.bind.switchToFeishu": "要綁定飛書(國內)帳號?切換",
+  "settings.feishu.bind.qrLoading": "產生 QR Code 中...",
   // FORK-END
 } satisfies Partial<Record<Keys, string>>
