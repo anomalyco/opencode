@@ -6,7 +6,7 @@ import type { RGBA } from "@opentui/core"
 import { SpinnerRenderable } from "opentui-spinner"
 import { extend } from "@opentui/solid"
 
-extend({ spinner: SpinnerRenderable })
+extend({ spinner: SpinnerRenderable } as any)
 
 export { createColors, createFrames } from "../ui/spinner"
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]

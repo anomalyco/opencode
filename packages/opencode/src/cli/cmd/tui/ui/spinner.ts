@@ -152,7 +152,7 @@ function createKnightRiderTrail(options: AdvancedGradientOptions): ColorGenerato
   let cachedFrameIndex = -1
   let cachedState: ScannerState | null = null
 
-  return (frameIndex: number, charIndex: number, _totalFrames: number, totalChars: number) => {
+  return ((frameIndex: number, charIndex: number, _totalFrames: number, totalChars: number) => {
     if (frameIndex !== cachedFrameIndex) {
       cachedFrameIndex = frameIndex
       cachedState = getScannerState(frameIndex, totalChars, options)
@@ -187,7 +187,7 @@ function createKnightRiderTrail(options: AdvancedGradientOptions): ColorGenerato
     }
 
     return colors[index] ?? defaultRgba
-  }
+  }) as ColorGenerator
 }
 
 /**
