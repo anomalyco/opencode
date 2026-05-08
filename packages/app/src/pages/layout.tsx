@@ -17,6 +17,7 @@ import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
+import { scheduleIdle } from "@/utils/schedule-idle"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -843,7 +844,7 @@ export default function Layout(props: ParentProps) {
     void prefetchMessages(directory, sessionID, token).finally(() => {
       q.running -= 1
       q.inflight.delete(sessionID)
-      pumpPrefetch(directory)
+      scheduleIdle(() => pumpPrefetch(directory))
     })
   }
 
@@ -888,7 +889,7 @@ export default function Layout(props: ParentProps) {
       q.pendingSet.delete(dropped)
     }
 
-    pumpPrefetch(directory)
+    scheduleIdle(() => pumpPrefetch(directory))
   }
 
   const warm = (sessions: Session[], index: number) => {

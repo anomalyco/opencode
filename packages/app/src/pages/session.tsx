@@ -9,7 +9,6 @@ import {
   Switch,
   createMemo,
   createEffect,
-  createComputed,
   on,
   onMount,
   untrack,
@@ -534,16 +533,14 @@ export default function Page() {
     }),
   )
 
-  createComputed((prev) => {
-    const key = sessionKey()
+  createEffect(on(sessionKey, (key, prev) => {
     if (key !== prev) {
       setStore("deferRender", true)
       requestAnimationFrame(() => {
         setTimeout(() => setStore("deferRender", false), 0)
       })
     }
-    return key
-  }, sessionKey())
+  }, { defer: true }))
 
   let reviewFrame: number | undefined
   let refreshFrame: number | undefined
@@ -553,9 +550,8 @@ export default function Page() {
   let diffFrame: number | undefined
   let diffTimer: number | undefined
 
-  createComputed((prev) => {
-    const open = desktopReviewOpen()
-    if (prev === undefined || prev === open) return open
+  createEffect(on(desktopReviewOpen, (open, prev) => {
+    if (prev === undefined || prev === open) return
 
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     setUi("reviewSnap", true)
@@ -563,8 +559,7 @@ export default function Page() {
       reviewFrame = undefined
       setUi("reviewSnap", false)
     })
-    return open
-  }, desktopReviewOpen())
+  }, { defer: true }))
 
   const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => !!sync.project && sync.project.vcs !== "git")
@@ -1836,48 +1831,46 @@ export default function Page() {
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
-                <Show when={messagesReady()}>
-                  <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                    actions={actions}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    onUserScroll={markUserScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+                <MessageTimeline
+                  mobileChanges={mobileChanges()}
+                  mobileFallback={reviewContent({
+                    diffStyle: "unified",
+                    classes: {
+                      root: "pb-8",
+                      header: "px-4",
+                      container: "px-4",
+                    },
+                    loadingClass: "px-4 py-4 text-text-weak",
+                    emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+                  })}
+                  actions={actions}
+                  scroll={ui.scroll}
+                  onResumeScroll={resumeScroll}
+                  setScrollRef={setScrollRef}
+                  onScheduleScrollState={scheduleScrollState}
+                  onAutoScrollHandleScroll={autoScroll.handleScroll}
+                  onMarkScrollGesture={markScrollGesture}
+                  hasScrollGesture={hasScrollGesture}
+                  onUserScroll={markUserScroll}
+                  onTurnBackfillScroll={historyWindow.onScrollerScroll}
+                  onAutoScrollInteraction={autoScroll.handleInteraction}
+                  centered={centered()}
+                  setContentRef={(el) => {
+                    content = el
+                    autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    turnStart={historyWindow.turnStart()}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      void historyWindow.loadAndReveal()
-                    }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
-                    anchor={anchor}
-                  />
-                </Show>
+                    const root = scroller
+                    if (root) scheduleScrollState(root)
+                  }}
+                  turnStart={historyWindow.turnStart()}
+                  historyMore={historyMore()}
+                  historyLoading={historyLoading()}
+                  onLoadEarlier={() => {
+                    void historyWindow.loadAndReveal()
+                  }}
+                  renderedUserMessages={historyWindow.renderedUserMessages()}
+                  anchor={anchor}
+                />
               </Match>
               <Match when={true}>
                 <NewSessionView worktree={newSessionWorktree()} />
