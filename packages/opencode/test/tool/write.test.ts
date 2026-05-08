@@ -249,6 +249,47 @@ describe("tool.write", () => {
     )
   })
 
+  describe("large files", () => {
+    it.instance("writes a ~1500-line file successfully (regression: #19604)", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "large.md")
+        const lines = Array.from({ length: 1500 }, (_, i) => `Line ${i + 1}: ${"x".repeat(60)}`)
+        const content = lines.join("\n") + "\n"
+
+        const result = yield* run({ filePath: filepath, content })
+        expect(result.output).toContain("Wrote file successfully")
+
+        const written = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(written).toBe(content)
+      }),
+    )
+
+    it.instance(
+      "succeeds even when formatter exits non-zero (post-write side-effect failure must not abort)",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "boom.fail")
+          const result = yield* run({ filePath: filepath, content: "payload\n" })
+
+          expect(result.output).toContain("Wrote file successfully")
+          const written = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+          expect(written).toBe("payload\n")
+        }),
+      {
+        config: {
+          formatter: {
+            alwaysfail: {
+              extensions: [".fail"],
+              command: ["node", "-e", "process.exit(2)"],
+            },
+          },
+        },
+      },
+    )
+  })
+
   describe("error handling", () => {
     it.instance("throws error when OS denies write access", () =>
       Effect.gen(function* () {

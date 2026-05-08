@@ -3,6 +3,7 @@ import * as path from "path"
 import { Effect } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
+import * as LSPClient from "@/lsp/client"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
@@ -62,18 +63,49 @@ export const WriteTool = Tool.define(
           })
 
           yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
-          if (yield* format.file(filepath)) {
-            yield* Bom.syncFile(fs, filepath, desiredBom)
-          }
-          yield* bus.publish(File.Event.Edited, { file: filepath })
-          yield* bus.publish(FileWatcher.Event.Updated, {
-            file: filepath,
-            event: exists ? "change" : "add",
-          })
+
+          // Post-write side-effects: format, BOM sync, bus publish, LSP.
+          // These must NOT fail the tool — the bytes are already on disk and
+          // the model needs to know that. Previously a throw in any of these
+          // (e.g. LSP server stalling on a large file, formatter OOM, BOM
+          // re-read race) would propagate through `Effect.orDie` and surface
+          // to the user as a silent abort with no error message.
+          // See: https://github.com/anomalyco/opencode/issues/19604
+          yield* Effect.gen(function* () {
+            if (yield* format.file(filepath)) {
+              yield* Bom.syncFile(fs, filepath, desiredBom)
+            }
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("write: post-write format/BOM step failed (file already written)", { cause }),
+            ),
+          )
+          yield* bus
+            .publish(File.Event.Edited, { file: filepath })
+            .pipe(Effect.catchCause((cause) => Effect.logWarning("write: bus publish File.Edited failed", { cause })))
+          yield* bus
+            .publish(FileWatcher.Event.Updated, {
+              file: filepath,
+              event: exists ? "change" : "add",
+            })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("write: bus publish FileWatcher.Updated failed", { cause }),
+              ),
+            )
 
           let output = "Wrote file successfully."
-          yield* lsp.touchFile(filepath, "document")
-          const diagnostics = yield* lsp.diagnostics()
+          yield* lsp
+            .touchFile(filepath, "document")
+            .pipe(Effect.catchCause((cause) => Effect.logWarning("write: lsp.touchFile failed", { cause })))
+          const diagnostics: Record<string, LSPClient.Diagnostic[]> = yield* lsp.diagnostics().pipe(
+            Effect.catchCause((cause) =>
+              Effect.gen(function* () {
+                yield* Effect.logWarning("write: lsp.diagnostics failed", { cause })
+                return {} as Record<string, LSPClient.Diagnostic[]>
+              }),
+            ),
+          )
           const normalizedFilepath = AppFileSystem.normalizePath(filepath)
           let projectDiagnosticsCount = 0
           for (const [file, issues] of Object.entries(diagnostics)) {
