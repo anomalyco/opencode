@@ -157,6 +157,7 @@
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",
     "minimatch": "10.0.3",
+    "node-edge-tts": "1.2.10",
     "npm-package-arg": "13.0.2",
     "open": "10.1.2",
     "opencode-gitlab-auth": "2.0.1",
