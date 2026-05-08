@@ -329,6 +329,7 @@ export type TuiSidebarFileItem = {
 
 export type TuiHostSlotMap = {
   app: {}
+  app_bottom: {}
   home_logo: {}
   home_prompt: {
     workspace_id?: string

@@ -36,6 +36,7 @@ Example:
 - `plugin_enabled` is keyed by plugin id, not by plugin spec.
 - For file plugins, that id must come from the plugin module's exported `id`. For npm plugins, it is the exported `id` or the package name if `id` is omitted.
 - Plugins are enabled by default. `plugin_enabled` is only for explicit overrides, usually to disable a plugin with `false`.
+- Internal plugins can declare `enabled: false` to be registered but inactive by default; `plugin_enabled` and runtime KV can still enable them by id.
 - `plugin_enabled` is merged across config layers.
 - Runtime enable/disable state is also stored in KV under `plugin_enabled`; that KV state overrides config on startup.
 
@@ -227,6 +228,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - To surface a command in the host command palette, set `namespace: "palette"` and provide metadata such as `title`, `category`, `desc`, `suggested`, `hidden`, `enabled`, `slashName`, and `slashAliases` on the command.
 - Use `api.keymap.dispatchCommand(name)` for user-style execution semantics and `api.keymap.runCommand(name)` only for forced programmatic execution.
 - Disposers returned by `api.keymap` registrations and `acquireResource(...)` are automatically cleaned up when the plugin deactivates. You do not need to add those disposers to `api.lifecycle.onDispose(...)` yourself.
+- Built-in which-key shortcuts are resolved from `keymap.sections.which_key`, not plugin options.
 
 ### Keys
 
@@ -314,6 +316,7 @@ Theme install behavior:
 Current host slot names:
 
 - `app`
+- `app_bottom`
 - `home_logo`
 - `home_prompt` with props `{ workspace_id?, ref? }`
 - `home_prompt_right` with props `{ workspace_id? }`
@@ -332,7 +335,8 @@ Slot notes:
 - `api.slots.register(plugin)` does not return an unregister function.
 - Returned ids are `pluginId`, `pluginId:1`, `pluginId:2`, and so on.
 - Plugin-provided `id` is not allowed.
-- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `home_prompt_right`, `session_prompt_right`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `app_bottom`, `home_prompt_right`, `session_prompt_right`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- `app_bottom` is rendered in normal layout flow below the active route, while `app` is rendered afterward for global app-level UI.
 - Plugins can define custom slot names in `api.slots.register(...)` and render them from plugin UI with `ui.Slot`.
 
 ### Plugin control and lifecycle

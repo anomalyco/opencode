@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "openai-compatible-chat/openrouter-gpt-5-5-drives-a-tool-loop",
+    "recordedAt": "2026-05-06T01:35:11.662Z",
+    "tags": [
+      "prefix:openai-compatible-chat",
+      "protocol:openai-compatible-chat",
+      "provider:openrouter",
+      "tool",
+      "tool-loop",
+      "golden",
+      "flagship"
+    ]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"openai/gpt-5.5\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": ": OPENROUTER PROCESSING\n\n: OPENROUTER PROCESSING\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_4A7V7UN36HXCUUn8qAOQaKGw\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"city\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\":\\\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"Paris\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"}\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"completed\"}]}\n\ndata: {\"id\":\"gen-1778031308-dVa9axcHcOlG9GcilZkz\",\"object\":\"chat.completion.chunk\",\"created\":1778031308,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"completed\"}],\"usage\":{\"prompt_tokens\":69,\"completion_tokens\":18,\"total_tokens\":87,\"cost\":0.000885,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.000885,\"upstream_inference_prompt_cost\":0.000345,\"upstream_inference_completions_cost\":0.00054},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"openai/gpt-5.5\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_4A7V7UN36HXCUUn8qAOQaKGw\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_4A7V7UN36HXCUUn8qAOQaKGw\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": ": OPENROUTER PROCESSING\n\n: OPENROUTER PROCESSING\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Paris\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" is\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" sunny\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" and\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" \",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"22\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"°C\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"completed\"}]}\n\ndata: {\"id\":\"gen-1778031310-JUYfFzDbun699uUYoA4N\",\"object\":\"chat.completion.chunk\",\"created\":1778031310,\"model\":\"openai/gpt-5.5-20260423\",\"provider\":\"OpenAI\",\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"completed\"}],\"usage\":{\"prompt_tokens\":108,\"completion_tokens\":12,\"total_tokens\":120,\"cost\":0.0009,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.0009,\"upstream_inference_prompt_cost\":0.00054,\"upstream_inference_completions_cost\":0.00036},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

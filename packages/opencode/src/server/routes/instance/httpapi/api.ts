@@ -20,13 +20,17 @@ import { SyncApi } from "./groups/sync"
 import { TuiApi } from "./groups/tui"
 import { WorkspaceApi } from "./groups/workspace"
 import { V2Api } from "./groups/v2"
+import { Authorization } from "./middleware/authorization"
 
 // SSE event schemas built from the same BusEvent/SyncEvent registries that
 // the Hono spec uses, so both specs emit identical Event/SyncEvent components.
 const EventSchema = Schema.Union(BusEvent.effectPayloads()).annotate({ identifier: "Event" })
 const SyncEventSchemas = SyncEvent.effectPayloads()
 
-export const RootHttpApi = HttpApi.make("opencode-root").addHttpApi(ControlApi).addHttpApi(GlobalApi)
+export const RootHttpApi = HttpApi.make("opencode-root")
+  .addHttpApi(ControlApi)
+  .addHttpApi(GlobalApi)
+  .middleware(Authorization)
 
 export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(ConfigApi)

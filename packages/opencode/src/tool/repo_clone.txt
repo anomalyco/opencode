@@ -1,0 +1,5 @@
+- Clone or refresh a repository into OpenCode's managed cache under the data directory
+- Accepts git URLs, forge host/path references, or GitHub owner/repo shorthand
+- Returns the cached absolute local path so other tools can explore the cloned source
+- Use this before Read, Glob, or Grep when the code you need lives outside the current workspace
+- This tool is intended for dependency and documentation research workflows, not for modifying the user's workspace
