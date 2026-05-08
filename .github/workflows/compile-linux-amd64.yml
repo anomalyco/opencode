@@ -17,7 +17,7 @@ jobs:
           ./script/version.ts
         env:
           GH_TOKEN: ${{ github.token }}
-          OPENCODE_CHANNEL: compile
+          OPENCODE_CHANNEL: canary
     outputs:
       version: ${{ steps.version.outputs.version }}
 
@@ -37,7 +37,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: false
-          OPENCODE_CHANNEL: compile
+          OPENCODE_CHANNEL: canary
           OPENCODE_MODELS_URL: https://models.dev
 
       - name: Verify Binary
