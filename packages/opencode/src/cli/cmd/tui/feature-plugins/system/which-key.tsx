@@ -33,6 +33,9 @@ const panelCommands = [
   command.end,
 ] as const
 const COLUMN_GAP = 4
+const MIN_COLUMN_WIDTH = 28
+const MAX_COLUMN_WIDTH = 44
+const PANEL_HEIGHT_RATIO = 0.3
 
 type Layout = "dock" | "overlay"
 
@@ -44,6 +47,8 @@ type Skin = {
   muted: Color
   key: Color
   accent: Color
+  tab: Color
+  tabText: Color
 }
 
 type Entry = {
@@ -79,6 +84,8 @@ function skin(api: TuiPluginApi): Skin {
     muted: ink(api, "textMuted", "#a5a5a5"),
     key: ink(api, "warning", "#ffd75f"),
     accent: ink(api, "primary", "#5f87ff"),
+    tab: ink(api, "backgroundElement", "#303030"),
+    tabText: ink(api, "text", "#f0f0f0"),
   }
 }
 
@@ -143,11 +150,11 @@ function WhichKeyPanel(props: {
   const visible = createMemo(() => props.pinned() || (pending().length > 0 && active().length > 0))
   const left = 0
   const width = createMemo(() => Math.max(1, dimensions().width))
-  const columns = createMemo(() => Math.max(1, Math.min(6, Math.floor((width() - 2) / 42) || 1)))
-  // Keep the full panel roughly 30% shorter than the previous max-height layout after adding tabs and footer.
-  const rows = createMemo(() =>
-    Math.max(2, Math.floor((Math.max(3, Math.min(18, dimensions().height - 8)) + 2) * 0.7) - 4),
+  const panelHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height * PANEL_HEIGHT_RATIO)))
+  const columns = createMemo(() =>
+    Math.max(1, Math.min(3, Math.floor((width() - 2 + COLUMN_GAP) / (MIN_COLUMN_WIDTH + COLUMN_GAP)) || 1)),
   )
+  const rows = createMemo(() => Math.max(1, panelHeight() - 3))
   const pageSize = createMemo(() => rows() * columns())
   const entries = createMemo(() => active().map((item) => activeKeyEntry(props.api, item)))
   const groups = createMemo(() => grouped(entries()))
@@ -159,14 +166,10 @@ function WhichKeyPanel(props: {
   const maxOffset = createMemo(() => Math.max(0, activeEntries().length - pageSize()))
   const shown = createMemo(() => {
     const columnsItems: Entry[][] = []
-    const targetRows = Math.max(
-      1,
-      Math.min(rows(), Math.ceil(Math.min(pageSize(), activeEntries().length - offset()) / columns())),
-    )
     let index = offset()
     for (let column = 0; column < columns() && index < activeEntries().length; column++) {
       const list: Entry[] = []
-      while (list.length < targetRows && index < activeEntries().length) {
+      while (list.length < rows() && index < activeEntries().length) {
         list.push(activeEntries()[index]!)
         index += 1
       }
@@ -174,8 +177,7 @@ function WhichKeyPanel(props: {
     }
     return columnsItems
   })
-  const visibleRows = createMemo(() => Math.max(1, ...shown().map((column) => column.length)))
-  const rowIndexes = createMemo(() => Array.from({ length: visibleRows() }, (_, index) => index))
+  const rowIndexes = createMemo(() => Array.from({ length: rows() }, (_, index) => index))
   const columnIndexes = createMemo(() => Array.from({ length: columns() }, (_, index) => index))
   const position = createMemo(() => {
     if (!activeEntries().length) return "0 bindings"
@@ -188,7 +190,7 @@ function WhichKeyPanel(props: {
   const scrollDownTrigger = commandShortcut(props.api, command.scrollDown)
   const look = createMemo(() => skin(props.api))
   const columnWidth = createMemo(() =>
-    Math.max(24, Math.floor((width() - 2 - (columns() - 1) * COLUMN_GAP) / columns())),
+    Math.max(1, Math.min(MAX_COLUMN_WIDTH, Math.floor((width() - 2 - (columns() - 1) * COLUMN_GAP) / columns()))),
   )
   const clamp = (value: number) => Math.max(0, Math.min(maxOffset(), value))
   const scroll = (delta: number) => setOffset((value) => clamp(value + delta))
@@ -315,6 +317,7 @@ function WhichKeyPanel(props: {
         left={left}
         bottom={props.layout === "overlay" ? 0 : undefined}
         width={dimensions().width}
+        height={panelHeight()}
         backgroundColor={look().panel}
         paddingLeft={1}
         paddingRight={1}
@@ -323,14 +326,13 @@ function WhichKeyPanel(props: {
         flexDirection="column"
       >
         <Show when={groups().length > 0}>
-          <box flexDirection="row" gap={1} paddingRight={1}>
+          <box flexDirection="row" justifyContent="center" gap={1} paddingRight={1}>
             <For each={groups()}>
               {(group) => {
                 const selected = createMemo(() => currentGroup()?.label === group.label)
                 return (
                   <text
-                    fg={selected() ? look().accent : look().muted}
-                    attributes={selected() ? TextAttributes.BOLD : undefined}
+                    fg={selected() ? look().tabText : look().muted}
                     wrapMode="none"
                     truncate
                     onMouseDown={() => {
@@ -338,46 +340,56 @@ function WhichKeyPanel(props: {
                       setOffset(0)
                     }}
                   >
-                    {selected() ? `[${group.label}]` : group.label}
+                    <span
+                      style={{
+                        fg: selected() ? look().tabText : look().muted,
+                        bg: selected() ? look().tab : undefined,
+                        bold: selected(),
+                      }}
+                    >
+                      {selected() ? ` ${group.label} ` : group.label}
+                    </span>
                   </text>
                 )
               }}
             </For>
           </box>
         </Show>
-        <Show when={shown().length > 0} fallback={<text fg={look().muted}>No reachable bindings</text>}>
-          <For each={rowIndexes()}>
-            {(row) => (
-              <box flexDirection="row" gap={COLUMN_GAP}>
-                <For each={columnIndexes()}>
-                  {(column) => {
-                    const entry = createMemo(() => shown()[column]?.[row])
-                    return (
-                      <box width={columnWidth()} flexDirection="row" gap={1} justifyContent="space-between">
-                        <Show when={entry()}>
-                          {(binding) => (
-                            <>
-                              <box flexGrow={1} minWidth={0}>
-                                <text fg={binding().continues ? look().accent : look().text} wrapMode="none" truncate>
-                                  {binding().label}
-                                </text>
-                              </box>
-                              <box flexShrink={0}>
-                                <text fg={look().key} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
-                                  {binding().key}
-                                </text>
-                              </box>
-                            </>
-                          )}
-                        </Show>
-                      </box>
-                    )
-                  }}
-                </For>
-              </box>
-            )}
-          </For>
-        </Show>
+        <box height={rows()} flexShrink={0} flexDirection="column">
+          <Show when={shown().length > 0} fallback={<text fg={look().muted}>No reachable bindings</text>}>
+            <For each={rowIndexes()}>
+              {(row) => (
+                <box flexDirection="row" gap={COLUMN_GAP}>
+                  <For each={columnIndexes()}>
+                    {(column) => {
+                      const entry = createMemo(() => shown()[column]?.[row])
+                      return (
+                        <box width={columnWidth()} flexDirection="row" gap={1} justifyContent="space-between">
+                          <Show when={entry()}>
+                            {(binding) => (
+                              <>
+                                <box flexGrow={1} minWidth={0}>
+                                  <text fg={binding().continues ? look().accent : look().text} wrapMode="none" truncate>
+                                    {binding().label}
+                                  </text>
+                                </box>
+                                <box flexShrink={0}>
+                                  <text fg={look().key} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                                    {binding().key}
+                                  </text>
+                                </box>
+                              </>
+                            )}
+                          </Show>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </box>
+              )}
+            </For>
+          </Show>
+        </box>
         <box flexDirection="row" justifyContent="space-between" paddingTop={1}>
           <text fg={look().muted} wrapMode="none">
             {props.pinned() ? `toggle ${trigger() || command.toggle}` : prefix() ? `pending ${prefix()}` : trigger()}
