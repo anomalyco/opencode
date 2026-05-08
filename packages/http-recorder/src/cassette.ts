@@ -1,4 +1,5 @@
-import { Context, Effect, FileSystem, Layer, Path, PlatformError, Ref } from "effect"
+import { Context, Effect, FileSystem, Layer, PlatformError, Ref } from "effect"
+import * as path from "node:path"
 import { cassetteSecretFindings, type SecretFinding } from "./redaction"
 import type { Cassette, CassetteMetadata, Interaction } from "./schema"
 import { cassetteFor, cassettePath, DEFAULT_RECORDINGS_DIR, formatCassette, parseCassette } from "./storage"
@@ -35,7 +36,6 @@ export const layer = (options: { readonly directory?: string } = {}) =>
     Service,
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem
-      const paths = yield* Path.Path
       const directory = options.directory ?? DEFAULT_RECORDINGS_DIR
       const recorded = yield* Ref.make(new Map<string, ReadonlyArray<Interaction>>())
 
@@ -47,7 +47,7 @@ export const layer = (options: { readonly directory?: string } = {}) =>
             .readDirectory(directory)
             .pipe(Effect.catch(() => Effect.succeed([] as string[])))
           const nested = yield* Effect.forEach(entries, (entry) => {
-            const full = paths.join(directory, entry)
+            const full = path.join(directory, entry)
             return fileSystem.stat(full).pipe(
               Effect.flatMap((stat) => (stat.type === "Directory" ? walk(full) : Effect.succeed([full]))),
               Effect.catch(() => Effect.succeed([] as string[])),
@@ -61,7 +61,7 @@ export const layer = (options: { readonly directory?: string } = {}) =>
       })
 
       const write = Effect.fn("Cassette.write")(function* (name: string, cassette: Cassette) {
-        yield* fileSystem.makeDirectory(paths.dirname(pathFor(name)), { recursive: true })
+        yield* fileSystem.makeDirectory(path.dirname(pathFor(name)), { recursive: true })
         yield* fileSystem.writeFileString(pathFor(name), formatCassette(cassette))
       })
 
@@ -90,7 +90,7 @@ export const layer = (options: { readonly directory?: string } = {}) =>
         return (yield* walk(directory))
           .filter((file) => file.endsWith(".json"))
           .map((file) => ({
-            name: paths.relative(directory, file).replace(/\.json$/, ""),
+            name: path.relative(directory, file).replace(/\\/g, "/").replace(/\.json$/, ""),
             path: file,
           }))
           .toSorted((a, b) => a.name.localeCompare(b.name))
@@ -98,7 +98,7 @@ export const layer = (options: { readonly directory?: string } = {}) =>
 
       return Service.of({ path: pathFor, read, write, append, exists, list, scan: cassetteSecretFindings })
     }),
-  ).pipe(Layer.provide(Path.layer))
+  )
 
 export const defaultLayer = layer()
 
