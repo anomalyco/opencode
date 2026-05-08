@@ -109,11 +109,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
           id: event.id,
           type: "model-switched",
           metadata: event.metadata,
-          model: {
-            id: event.data.id,
-            providerID: event.data.providerID,
-            variant: event.data.variant,
-          },
+          model: event.data.model,
           time: { created: event.data.timestamp },
         }),
       )
@@ -195,6 +191,17 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
             draft.cost = event.data.cost
             draft.tokens = event.data.tokens
             if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, end: event.data.snapshot }
+          }),
+        )
+      }
+    },
+    "session.next.step.failed": (event) => {
+      if (currentAssistant) {
+        adapter.updateAssistant(
+          produce(currentAssistant, (draft) => {
+            draft.time.completed = event.data.timestamp
+            draft.finish = "error"
+            draft.error = event.data.error
           }),
         )
       }
@@ -314,7 +321,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         )
       }
     },
-    "session.next.tool.error": (event) => {
+    "session.next.tool.failed": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {

@@ -222,7 +222,7 @@ describe("HttpApi server", () => {
   })
 
   test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
-    const honoRoutes = openApiRouteKeys(await Server.openapi())
+    const honoRoutes = openApiRouteKeys(await Server.openapiHono())
     const effectRoutes = openApiRouteKeys(effectOpenApi())
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
@@ -237,7 +237,7 @@ describe("HttpApi server", () => {
   })
 
   test("matches generated OpenAPI route parameters", async () => {
-    const hono = openApiParameters(await Server.openapi())
+    const hono = openApiParameters(await Server.openapiHono())
     const effect = openApiParameters(effectOpenApi())
 
     expect(
@@ -248,7 +248,7 @@ describe("HttpApi server", () => {
   })
 
   test("matches generated OpenAPI request body shape", async () => {
-    const hono = openApiRequestBodies(await Server.openapi())
+    const hono = openApiRequestBodies(await Server.openapiHono())
     const effect = openApiRequestBodies(effectOpenApi())
 
     expect(
@@ -356,6 +356,64 @@ describe("HttpApi server", () => {
     expect(missing.status).toBe(401)
     expect(bad.status).toBe(401)
     expect(good.status).toBe(200)
+  })
+
+  test("requires credentials for root routes when auth is enabled", async () => {
+    const server = app({ password: "secret" })
+    const auth = { authorization: authorization("opencode", "secret") }
+    const wrongAuth = { authorization: authorization("opencode", "wrong") }
+
+    const [missingHealth, goodHealth, missingConfig, wrongConfig, goodConfig] = await Promise.all([
+      server.request(GlobalPaths.health),
+      server.request(GlobalPaths.health, { headers: auth }),
+      server.request(GlobalPaths.config),
+      server.request(GlobalPaths.config, { headers: wrongAuth }),
+      server.request(GlobalPaths.config, { headers: auth }),
+    ])
+
+    expect(missingHealth.status).toBe(401)
+    expect(goodHealth.status).toBe(200)
+    expect(missingConfig.status).toBe(401)
+    expect(wrongConfig.status).toBe(401)
+    expect(goodConfig.status).toBe(200)
+
+    const missingDispose = await server.request(GlobalPaths.dispose, { method: "POST" })
+    expect(missingDispose.status).toBe(401)
+
+    const missingUpgrade = await server.request(GlobalPaths.upgrade, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "not-json",
+    })
+    expect(missingUpgrade.status).toBe(401)
+
+    const invalidUpgrade = await server.request(GlobalPaths.upgrade, {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: "not-json",
+    })
+    expect(invalidUpgrade.status).toBe(400)
+
+    const missingLog = await server.request(ControlPaths.log, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ service: "httpapi-auth-test", level: "info", message: "hello" }),
+    })
+    expect(missingLog.status).toBe(401)
+
+    const missingAuth = await server.request(ControlPaths.auth.replace(":providerID", "test"), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "api", key: "secret" }),
+    })
+    expect(missingAuth.status).toBe(401)
+
+    const invalidAuth = await server.request(ControlPaths.auth.replace(":providerID", "test"), {
+      method: "PUT",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ type: "api" }),
+    })
+    expect(invalidAuth.status).toBe(400)
   })
 
   test("accepts auth_token query credentials", async () => {
