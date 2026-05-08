@@ -79,10 +79,7 @@ export async function installUpdate(killSidecar: () => Promise<void>) {
   autoUpdater.quitAndInstall()
 }
 
-export async function checkForUpdates(
-  alertOnFail: boolean,
-  killSidecar: () => Promise<void>,
-) {
+export async function checkForUpdates(alertOnFail: boolean, killSidecar: () => Promise<void>) {
   if (!UPDATER_ENABLED) return
   logger.log("checkForUpdates invoked", { alertOnFail })
   const result = await checkUpdate()
