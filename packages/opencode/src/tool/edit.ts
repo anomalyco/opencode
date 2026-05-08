@@ -18,6 +18,7 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Bom from "@/util/bom"
+import { EncodedIO } from "@/util/encoded-io"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -89,7 +90,10 @@ export const EditTool = Tool.define(
             Effect.gen(function* () {
               if (params.oldString === "") {
                 const existed = yield* afs.existsSafe(filePath)
-                const source = existed ? yield* Bom.readFile(afs, filePath) : { bom: false, text: "" }
+                // Encoding.read strips UTF-8 BOMs so derive the BOM flag from the
+                // detected encoding label instead of the decoded text.
+                const pre = existed ? yield* EncodedIO.read(filePath) : { text: "", encoding: "utf-8" }
+                const source = { bom: pre.encoding === "utf-8-bom", text: pre.text, encoding: pre.encoding }
                 const next = Bom.split(params.newString)
                 const desiredBom = source.bom || next.bom
                 contentOld = source.text
@@ -104,7 +108,7 @@ export const EditTool = Tool.define(
                     diff,
                   },
                 })
-                yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
+                yield* EncodedIO.write(filePath, Bom.join(contentNew, desiredBom), source.encoding)
                 if (yield* format.file(filePath)) {
                   contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
                 }
@@ -119,7 +123,10 @@ export const EditTool = Tool.define(
               const info = yield* afs.stat(filePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
               if (!info) throw new Error(`File ${filePath} not found`)
               if (info.type === "Directory") throw new Error(`Path is a directory, not a file: ${filePath}`)
-              const source = yield* Bom.readFile(afs, filePath)
+              // Encoding.read strips UTF-8 BOMs so derive the BOM flag from the
+              // detected encoding label instead of the decoded text.
+              const pre = yield* EncodedIO.read(filePath)
+              const source = { bom: pre.encoding === "utf-8-bom", text: pre.text, encoding: pre.encoding }
               contentOld = source.text
 
               const ending = detectLineEnding(contentOld)
@@ -148,7 +155,7 @@ export const EditTool = Tool.define(
                 },
               })
 
-              yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
+              yield* EncodedIO.write(filePath, Bom.join(contentNew, desiredBom), source.encoding)
               if (yield* format.file(filePath)) {
                 contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
               }

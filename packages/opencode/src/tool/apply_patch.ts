@@ -14,6 +14,7 @@ import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
+import { EncodedIO } from "@/util/encoded-io"
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -65,6 +66,7 @@ export const ApplyPatchTool = Tool.define(
         additions: number
         deletions: number
         bom: boolean
+        encoding: string
       }> = []
 
       let totalDiff = ""
@@ -97,6 +99,7 @@ export const ApplyPatchTool = Tool.define(
               additions,
               deletions,
               bom: next.bom,
+              encoding: "utf-8",
             })
 
             totalDiff += diff + "\n"
@@ -116,12 +119,14 @@ export const ApplyPatchTool = Tool.define(
             const oldContent = source.text
             let newContent = oldContent
             let bom = source.bom
+            let encoding: string
 
             // Apply the update chunks to get new content
             try {
               const fileUpdate = Patch.deriveNewContentsFromChunks(filePath, hunk.chunks)
               newContent = fileUpdate.content
               bom = fileUpdate.bom
+              encoding = fileUpdate.encoding
             } catch (error) {
               return yield* Effect.fail(new Error(`apply_patch verification failed: ${error}`))
             }
@@ -148,6 +153,7 @@ export const ApplyPatchTool = Tool.define(
               additions,
               deletions,
               bom,
+              encoding,
             })
 
             totalDiff += diff + "\n"
@@ -155,7 +161,8 @@ export const ApplyPatchTool = Tool.define(
           }
 
           case "delete": {
-            const source = yield* Bom.readFile(afs, filePath).pipe(
+            // encoding-aware read so non-UTF-8 files decode without corruption
+            const deleteRead = yield* EncodedIO.read(filePath).pipe(
               Effect.catch((error) =>
                 Effect.fail(
                   new Error(
@@ -164,7 +171,8 @@ export const ApplyPatchTool = Tool.define(
                 ),
               ),
             )
-            const contentToDelete = source.text
+            const contentToDelete = deleteRead.text
+            const source = Bom.split(contentToDelete)
             const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
 
             const deletions = contentToDelete.split("\n").length
@@ -178,6 +186,7 @@ export const ApplyPatchTool = Tool.define(
               additions: 0,
               deletions,
               bom: source.bom,
+              encoding: deleteRead.encoding,
             })
 
             totalDiff += deleteDiff + "\n"
@@ -217,22 +226,18 @@ export const ApplyPatchTool = Tool.define(
         const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
         switch (change.type) {
           case "add":
-            // Create parent directories (recursive: true is safe on existing/root dirs)
-
-            yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+            yield* EncodedIO.write(change.filePath, Bom.join(change.newContent, change.bom), change.encoding)
             updates.push({ file: change.filePath, event: "add" })
             break
 
           case "update":
-            yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+            yield* EncodedIO.write(change.filePath, Bom.join(change.newContent, change.bom), change.encoding)
             updates.push({ file: change.filePath, event: "change" })
             break
 
           case "move":
             if (change.movePath) {
-              // Create parent directories (recursive: true is safe on existing/root dirs)
-
-              yield* afs.writeWithDirs(change.movePath!, Bom.join(change.newContent, change.bom))
+              yield* EncodedIO.write(change.movePath!, Bom.join(change.newContent, change.bom), change.encoding)
               yield* afs.remove(change.filePath)
               updates.push({ file: change.filePath, event: "unlink" })
               updates.push({ file: change.movePath, event: "add" })
