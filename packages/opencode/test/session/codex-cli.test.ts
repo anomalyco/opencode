@@ -3,6 +3,7 @@ import { SessionCodexCli } from "../../src/session/codex-cli"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import { pathToFileURL } from "node:url"
 
 const sessionID = SessionID.make("session_test")
 const providerID = ProviderID.make("test")
@@ -90,7 +91,7 @@ describe("SessionCodexCli", () => {
         content: [
           {
             type: "output_text",
-            text: "[reasoning]\nNeed to inspect logs\n\n[tool:bash]\n1 failed",
+            text: '[reasoning]\nNeed to inspect logs\n\n[tool:bash]\ninput: {"command":"bun test"}\n1 failed',
           },
         ],
       },
@@ -123,6 +124,25 @@ describe("SessionCodexCli", () => {
       { type: "text", text: "Inspect this screenshot", text_elements: [] },
       { type: "image", url: "data:image/png;base64,abc" },
     ])
+  })
+
+  test("inputFromMessage decodes local image file URLs", () => {
+    const imagePath = "/repo/screenshots/home page.png"
+    expect(
+      SessionCodexCli.inputFromMessage(
+        message("user", "msg_user", [
+          {
+            id: PartID.make("prt_image"),
+            sessionID,
+            messageID: MessageID.make("msg_user"),
+            type: "file",
+            mime: "image/png",
+            filename: "home page.png",
+            url: pathToFileURL(imagePath).href,
+          },
+        ]),
+      ),
+    ).toEqual([{ type: "localImage", path: imagePath }])
   })
 
   test("patchFiles maps Codex file updates to UI patch metadata", () => {

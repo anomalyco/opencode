@@ -6,6 +6,7 @@ import { spawn } from "node:child_process"
 import { existsSync, readdirSync } from "node:fs"
 import path from "node:path"
 import readline from "node:readline"
+import { fileURLToPath } from "node:url"
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 
@@ -153,12 +154,22 @@ function partText(part: MessageV2.Part) {
   if (part.type === "text") return part.text
   if (part.type === "reasoning") return `[reasoning]\n${part.text}`
   if (part.type !== "tool") return
-  if (part.state.status === "completed") return `[tool:${part.tool}]\n${part.state.output}`
-  if (part.state.status === "error") return `[tool:${part.tool}:error]\n${part.state.error}`
+  const input = JSON.stringify(part.state.input)
+  if (part.state.status === "completed") {
+    return [`[tool:${part.tool}]`, input ? `input: ${input}` : undefined, part.state.output].filter(Boolean).join("\n")
+  }
+  if (part.state.status === "error") {
+    return [`[tool:${part.tool}:error]`, input ? `input: ${input}` : undefined, part.state.error]
+      .filter(Boolean)
+      .join("\n")
+  }
 }
 
 function promptFromMessage(message: MessageV2.WithParts) {
-  return message.parts.map(partText).filter((part): part is string => !!part?.trim()).join("\n\n")
+  return message.parts
+    .map(partText)
+    .filter((part): part is string => !!part?.trim())
+    .join("\n\n")
 }
 
 function inputContentFromMessage(message: MessageV2.WithParts): ResponseContent[] {
@@ -171,7 +182,7 @@ function inputContentFromMessage(message: MessageV2.WithParts): ResponseContent[
         return [
           {
             type: "input_text" as const,
-            text: `[Attached local image: ${part.filename ?? part.url.slice("file://".length)}]`,
+            text: `[Attached local image: ${part.filename ?? fileURLToPath(part.url)}]`,
           },
         ]
       }
@@ -200,7 +211,7 @@ export function inputFromMessage(message: MessageV2.WithParts): UserInput[] {
     ...(text ? [{ type: "text" as const, text, text_elements: [] as [] }] : []),
     ...message.parts.flatMap((part): UserInput[] => {
       if (part.type !== "file" || !part.mime.startsWith("image/")) return []
-      if (part.url.startsWith("file://")) return [{ type: "localImage" as const, path: part.url.slice("file://".length) }]
+      if (part.url.startsWith("file://")) return [{ type: "localImage" as const, path: fileURLToPath(part.url) }]
       return [{ type: "image" as const, url: part.url }]
     }),
   ]
@@ -219,6 +230,15 @@ function findThreadID(value: unknown): string | undefined {
 function rpcErrorMessage(value: unknown) {
   const error = object(value)
   return string(error?.message) ?? "Codex app-server request failed"
+}
+
+function parseLine(line: string) {
+  try {
+    const parsed = JSON.parse(line) as unknown
+    return isObject(parsed) ? parsed : undefined
+  } catch {
+    return
+  }
 }
 
 function toolStatus(status: unknown) {
@@ -254,7 +274,9 @@ function resolveCommand(configured: string | undefined) {
 function envOverrides(value: unknown) {
   const env = object(value)
   if (!env) return {}
-  return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+  return Object.fromEntries(
+    Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  )
 }
 
 function pathWithCommand(command: string, env: Record<string, string | undefined>) {
@@ -270,7 +292,8 @@ function pathWithCommand(command: string, env: Record<string, string | undefined
 function modelProvider(model: Provider.Model) {
   const configured = string(model.options.modelProvider)
   if (configured) return configured
-  if (model.providerID === "codex-cli" || model.api.id.startsWith("gpt-") || model.api.id.includes("codex")) return "openai"
+  if (model.providerID === "codex-cli" || model.api.id.startsWith("gpt-") || model.api.id.includes("codex"))
+    return "openai"
   return model.providerID
 }
 
@@ -477,7 +500,9 @@ export async function run(input: Input) {
       const part = toolParts.get(id)
       if (!part) return
       const output =
-        string(item.aggregatedOutput) ?? string("metadata" in part.state ? part.state.metadata?.output : undefined) ?? ""
+        string(item.aggregatedOutput) ??
+        string("metadata" in part.state ? part.state.metadata?.output : undefined) ??
+        ""
       const inputValue = part.state.input
       const start = "time" in part.state ? part.state.time.start : Date.now()
       if (toolStatus(item.status) === "error") {
@@ -536,7 +561,8 @@ export async function run(input: Input) {
     if (message.method === "item/commandExecution/outputDelta") return updateCommandOutput(params)
     if (message.method === "item/fileChange/patchUpdated") return updateFileChange(params)
     if (message.method === "item/started") return startItem((object(params.item) ?? {}) as Item)
-    if (message.method === "item/completed") return completeItem((object(params.item) ?? {}) as Item, number(params.completedAtMs))
+    if (message.method === "item/completed")
+      return completeItem((object(params.item) ?? {}) as Item, number(params.completedAtMs))
     if (message.method === "turn/completed") {
       const turn = object(params.turn)
       const status = string(turn?.status)
@@ -556,8 +582,38 @@ export async function run(input: Input) {
       send({ id: message.id, result: { decision: "decline" } })
       return
     }
-    if (message.method === "item/fileChange/requestApproval" || message.method === "item/permissions/requestApproval") {
+    if (message.method === "item/fileChange/requestApproval") {
       send({ id: message.id, result: { decision: "decline" } })
+      return
+    }
+    if (message.method === "item/permissions/requestApproval") {
+      send({ id: message.id, result: { permissions: {}, scope: "turn" } })
+      return
+    }
+    if (message.method === "applyPatchApproval" || message.method === "execCommandApproval") {
+      send({ id: message.id, result: { decision: "denied" } })
+      return
+    }
+    if (message.method === "item/tool/requestUserInput") {
+      send({ id: message.id, result: { answers: {} } })
+      return
+    }
+    if (message.method === "mcpServer/elicitation/request") {
+      send({ id: message.id, result: { action: "decline", content: null, _meta: null } })
+      return
+    }
+    if (message.method === "item/tool/call") {
+      send({ id: message.id, result: { contentItems: [], success: false } })
+      return
+    }
+    if (message.method === "account/chatgptAuthTokens/refresh") {
+      send({
+        id: message.id,
+        error: {
+          code: -32603,
+          message: "Codex auth token refresh is not available through the OpenCode Codex bridge. Run `codex login`.",
+        },
+      })
       return
     }
     send({
@@ -580,8 +636,8 @@ export async function run(input: Input) {
   })
 
   lineReader.on("line", (line) => {
-    const parsed = JSON.parse(line) as unknown
-    if (!isObject(parsed)) return
+    const parsed = parseLine(line)
+    if (!parsed) return
     if ("id" in parsed && ("result" in parsed || "error" in parsed) && !("method" in parsed)) {
       const response = parsed as RpcResponse
       const waiter = pending.get(response.id)
@@ -625,7 +681,7 @@ export async function run(input: Input) {
     if (!threadID) throw new Error("Codex app-server did not return a thread id")
     if (input.historyItems.length > 0) {
       await Promise.race([
-        request("thread/injectItems", { threadId: threadID, items: input.historyItems }),
+        request("thread/inject_items", { threadId: threadID, items: input.historyItems }),
         closed,
         aborted,
       ])
