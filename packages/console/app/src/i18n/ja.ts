@@ -360,8 +360,12 @@ export const dict = {
   "zen.api.error.invalidApiKey": "無効なAPIキーです。",
   "zen.api.error.subscriptionQuotaExceeded":
     "サブスクリプションの制限を超えました。{{retryIn}} 後に再試行してください。",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "サブスクリプションの制限を超えました。無料モデルは引き続きご利用いただけます。",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "5時間の利用上限に達しました。{{retryIn}} 後にリセットされます。今すぐこのモデルの利用を続けるには、利用可能な残高からの利用を有効化してください: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "週間の利用上限に達しました。{{retryIn}} 後にリセットされます。今すぐこのモデルの利用を続けるには、利用可能な残高からの利用を有効化してください: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "月間の利用上限に達しました。{{retryIn}} 後にリセットされます。今すぐこのモデルの利用を続けるには、利用可能な残高からの利用を有効化してください: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "お支払い方法がありません。こちらからお支払い方法を追加してください: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "残高が不足しています。こちらから請求を管理してください: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":

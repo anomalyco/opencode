@@ -266,6 +266,14 @@ export type SessionStatus =
       type: "retry"
       attempt: number
       message: string
+      action?: {
+        reason: string
+        provider: string
+        title: string
+        message: string
+        label: string
+        link?: string
+      }
       next: number
     }
   | {
@@ -1749,6 +1757,7 @@ export type Workspace = {
   directory: string | null
   extra: unknown | null
   projectID: string
+  timeUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
 
 export type WorkspaceWarpError = {
@@ -6699,6 +6708,26 @@ export type ExperimentalWorkspaceCreateResponses = {
 
 export type ExperimentalWorkspaceCreateResponse =
   ExperimentalWorkspaceCreateResponses[keyof ExperimentalWorkspaceCreateResponses]
+
+export type ExperimentalWorkspaceSyncListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/workspace/sync-list"
+}
+
+export type ExperimentalWorkspaceSyncListResponses = {
+  /**
+   * Workspace list synced
+   */
+  204: void
+}
+
+export type ExperimentalWorkspaceSyncListResponse =
+  ExperimentalWorkspaceSyncListResponses[keyof ExperimentalWorkspaceSyncListResponses]
 
 export type ExperimentalWorkspaceStatusData = {
   body?: never

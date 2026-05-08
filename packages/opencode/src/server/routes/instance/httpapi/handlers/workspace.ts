@@ -14,7 +14,7 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
 
     const adapters = Effect.fn("WorkspaceHttpApi.adapters")(function* () {
       const instance = yield* InstanceState.context
-      return yield* Effect.promise(() => listAdapters(instance.project.id))
+      return yield* Effect.sync(() => listAdapters(instance.project.id))
     })
 
     const list = Effect.fn("WorkspaceHttpApi.list")(function* () {
@@ -30,6 +30,10 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
           projectID: instance.project.id,
         })
         .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+    })
+
+    const syncList = Effect.fn("WorkspaceHttpApi.syncList")(function* () {
+      yield* workspace.syncList((yield* InstanceState.context).project)
     })
 
     const status = Effect.fn("WorkspaceHttpApi.status")(function* () {
@@ -73,6 +77,7 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
       .handle("adapters", adapters)
       .handle("list", list)
       .handle("create", create)
+      .handle("syncList", syncList)
       .handle("status", status)
       .handle("remove", remove)
       .handle("warp", warp)

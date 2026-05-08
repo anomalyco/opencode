@@ -363,8 +363,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Clé API manquante.",
   "zen.api.error.invalidApiKey": "Clé API invalide.",
   "zen.api.error.subscriptionQuotaExceeded": "Quota d'abonnement dépassé. Réessayez dans {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Quota d'abonnement dépassé. Vous pouvez continuer à utiliser les modèles gratuits.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "Limite d'utilisation sur 5 heures atteinte. Réinitialisation dans {{retryIn}}. Pour continuer à utiliser ce modèle dès maintenant, activez l'utilisation depuis votre solde disponible : {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Limite d'utilisation hebdomadaire atteinte. Réinitialisation dans {{retryIn}}. Pour continuer à utiliser ce modèle dès maintenant, activez l'utilisation depuis votre solde disponible : {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Limite d'utilisation mensuelle atteinte. Réinitialisation dans {{retryIn}}. Pour continuer à utiliser ce modèle dès maintenant, activez l'utilisation depuis votre solde disponible : {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Aucune méthode de paiement. Ajoutez une méthode de paiement ici : {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Solde insuffisant. Gérez votre facturation ici : {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
