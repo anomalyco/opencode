@@ -8,6 +8,8 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+// FORK: 飞书桥接 Settings Tab(C1.4)[feat: feishu-bridge] 2026-05-08
+import { SettingsFeishu } from "./settings-feishu"
 // FORK: 设置页脚显示 DeskFox <Platform> + installer 版本号(YYYY.M.D.N), 2026-05-06
 // installer-versions.json 由 bump-installer-version.{ps1,sh} 在每次 bump 时同步更新对应平台 key
 import installerVersions from "@opencode-ai/branding/installer-versions.json"
@@ -59,6 +61,11 @@ export const DialogSettings: Component = () => {
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
+                    {/* FORK: 飞书桥接 Tab(C1.4)[feat: feishu-bridge] 2026-05-08 */}
+                    <Tabs.Trigger value="feishu">
+                      <Icon name="comment" />
+                      {language.t("settings.tab.feishu")}
+                    </Tabs.Trigger>
                   </div>
                 </div>
               </div>
@@ -80,6 +87,10 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
+        </Tabs.Content>
+        {/* FORK: 飞书桥接 Tab Content(C1.4)[feat: feishu-bridge] 2026-05-08 */}
+        <Tabs.Content value="feishu" class="no-scrollbar">
+          <SettingsFeishu />
         </Tabs.Content>
       </Tabs>
     </Dialog>
