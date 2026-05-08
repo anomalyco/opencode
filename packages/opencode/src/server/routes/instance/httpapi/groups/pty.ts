@@ -1,10 +1,12 @@
 import { Pty } from "@/pty"
+import { PtyTicket } from "@/pty/ticket"
 import { PtyID } from "@/pty/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { ApiNotFoundError } from "../errors"
 import { described } from "./metadata"
 
 const root = "/pty"
@@ -23,6 +25,7 @@ export const PtyPaths = {
   get: `${root}/:ptyID`,
   update: `${root}/:ptyID`,
   remove: `${root}/:ptyID`,
+  connectToken: `${root}/:ptyID/connect-token`,
   connect: `${root}/:ptyID/connect`,
 } as const
 
@@ -62,7 +65,7 @@ export const PtyApi = HttpApi.make("pty")
         HttpApiEndpoint.get("get", PtyPaths.get, {
           params: { ptyID: PtyID },
           success: described(Pty.Info, "Session info"),
-          error: HttpApiError.NotFound,
+          error: ApiNotFoundError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.get",
@@ -74,7 +77,7 @@ export const PtyApi = HttpApi.make("pty")
           params: { ptyID: PtyID },
           payload: Pty.UpdateInput,
           success: described(Pty.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.update",
@@ -85,12 +88,23 @@ export const PtyApi = HttpApi.make("pty")
         HttpApiEndpoint.delete("remove", PtyPaths.remove, {
           params: { ptyID: PtyID },
           success: described(Schema.Boolean, "Session removed"),
-          error: HttpApiError.NotFound,
+          error: ApiNotFoundError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.remove",
             summary: "Remove PTY session",
             description: "Remove and terminate a specific pseudo-terminal (PTY) session.",
+          }),
+        ),
+        HttpApiEndpoint.post("connectToken", PtyPaths.connectToken, {
+          params: { ptyID: PtyID },
+          success: described(PtyTicket.ConnectToken, "WebSocket connect token"),
+          error: [HttpApiError.Forbidden, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "pty.connectToken",
+            summary: "Create PTY WebSocket token",
+            description: "Create a short-lived ticket for opening a PTY WebSocket connection.",
           }),
         ),
       )
@@ -113,7 +127,7 @@ export const PtyConnectApi = HttpApi.make("pty-connect").add(
       HttpApiEndpoint.get("connect", PtyPaths.connect, {
         params: Params,
         success: described(Schema.Boolean, "Connected session"),
-        error: HttpApiError.NotFound,
+        error: [HttpApiError.Forbidden, HttpApiError.NotFound],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "pty.connect",

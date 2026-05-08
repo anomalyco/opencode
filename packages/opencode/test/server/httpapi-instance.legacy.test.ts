@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { GlobalBus } from "@/bus/global"
-import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { waitGlobalBusEventPromise } from "./global-bus"
 
 void Log.init({ print: false })
 
@@ -18,26 +17,15 @@ function app() {
 }
 
 async function waitDisposed(directory: string) {
-  return await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      GlobalBus.off("event", onEvent)
-      reject(new Error("timed out waiting for instance disposal"))
-    }, 10_000)
-
-    function onEvent(event: { directory?: string; payload: { type?: string } }) {
-      if (event.payload.type !== "server.instance.disposed" || event.directory !== directory) return
-      clearTimeout(timer)
-      GlobalBus.off("event", onEvent)
-      resolve()
-    }
-
-    GlobalBus.on("event", onEvent)
+  await waitGlobalBusEventPromise({
+    message: "timed out waiting for instance disposal",
+    predicate: (event) => event.payload.type === "server.instance.disposed" && event.directory === directory,
   })
 }
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
@@ -117,13 +105,9 @@ describe("instance HttpApi", () => {
   test("serves instance dispose through Hono bridge", async () => {
     await using tmp = await tmpdir()
 
-    const disposed = new Promise<string | undefined>((resolve) => {
-      const onEvent = (event: { directory?: string; payload: { type?: string } }) => {
-        if (event.payload.type !== "server.instance.disposed") return
-        GlobalBus.off("event", onEvent)
-        resolve(event.directory)
-      }
-      GlobalBus.on("event", onEvent)
+    const disposed = waitGlobalBusEventPromise({
+      message: "timed out waiting for instance disposal",
+      predicate: (event) => event.payload.type === "server.instance.disposed",
     })
 
     const response = await app().request(InstancePaths.dispose, {
@@ -133,6 +117,6 @@ describe("instance HttpApi", () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toBe(true)
-    expect(await disposed).toBe(tmp.path)
+    expect((await disposed).directory).toBe(tmp.path)
   })
 })

@@ -195,7 +195,7 @@ export const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
-          ...(Flag.OPENCODE_EXPERIMENTAL
+          ...(Flag.OPENCODE_EXPERIMENTAL_SCOUT
             ? {
                 scout: {
                   name: "scout",
@@ -340,7 +340,7 @@ export const layer = Layer.effect(
           ].join("\n\n")
         }
 
-        if (Flag.OPENCODE_EXPERIMENTAL) {
+        if (Flag.OPENCODE_EXPERIMENTAL_SCOUT) {
           for (const [name, reference] of Object.entries(cfg.reference ?? {})) {
             if (agents[name]) continue
             const resolved = resolveReference(reference)

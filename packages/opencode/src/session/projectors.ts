@@ -5,7 +5,9 @@ import { SyncEvent } from "@/sync"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import * as Log from "@opencode-ai/core/util/log"
+import { WorkspaceTable } from "@/control-plane/workspace.sql"
+import { Log } from "@opencode-ai/core/util/log"
+import nextProjectors from "./projectors-next"
 
 const log = Log.create({ service: "session.projector" })
 
@@ -68,6 +70,10 @@ export default [
     db.insert(SessionTable)
       .values(Session.toRow(data.info as Session.Info))
       .run()
+
+    if (data.info.workspaceID) {
+      db.update(WorkspaceTable).set({ time_used: Date.now() }).where(eq(WorkspaceTable.id, data.info.workspaceID)).run()
+    }
   }),
 
   SyncEvent.project(Session.Event.Updated, (db, data) => {
@@ -136,4 +142,6 @@ export default [
       log.warn("ignored late part update", { partID: id, messageID, sessionID })
     }
   }),
+
+  ...nextProjectors,
 ]
