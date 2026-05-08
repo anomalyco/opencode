@@ -97,15 +97,11 @@ const cors = (corsOptions?: CorsOptions) =>
   )
 
 // Route tree:
-// - rootApiRoutes: /global/* and control routes; requires auth but no workspace context.
+// - protectedRootRoutes: /global/*, control routes, and UI fallback; requires auth but no workspace context.
 // - eventApiRoutes/rawInstanceRoutes: raw instance routes; auth and workspace routing happen as router middleware.
 // - instanceApiRoutes: schema routes; auth is declared on each group and workspace context is provided below.
-// - uiRoute: raw catch-all fallback; uses the same auth-only router layer as root routes.
 const rootRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
-const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
-  Layer.provide([controlHandlers, globalHandlers]),
-  Layer.provide(rootRouterLayer),
-)
+const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
 const instanceRouterLayer = authorizationRouterMiddleware
   .combine(instanceRouterMiddleware)
   .combine(workspaceRouterMiddleware)
@@ -149,10 +145,12 @@ const uiRoute = HttpRouter.use((router) =>
     const client = yield* HttpClient.HttpClient
     yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
   }),
-).pipe(Layer.provide(rootRouterLayer))
+)
+
+const protectedRootRoutes = Layer.mergeAll(rootApiRoutes, uiRoute).pipe(Layer.provide(rootRouterLayer))
 
 export function createRoutes(corsOptions?: CorsOptions) {
-  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
+  return Layer.mergeAll(protectedRootRoutes, eventApiRoutes, instanceRoutes).pipe(
     Layer.provide([
       errorLayer,
       cors(corsOptions),
