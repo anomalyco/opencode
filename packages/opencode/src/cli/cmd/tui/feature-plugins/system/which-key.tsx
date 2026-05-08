@@ -85,8 +85,8 @@ function skin(api: TuiPluginApi): Skin {
     muted: ink(api, "textMuted", "#a5a5a5"),
     key: ink(api, "warning", "#ffd75f"),
     accent: ink(api, "primary", "#5f87ff"),
-    tab: ink(api, "backgroundElement", "#303030"),
-    tabText: ink(api, "text", "#f0f0f0"),
+    tab: ink(api, "primary", "#5f87ff"),
+    tabText: ink(api, "selectedListItemText", "#ffffff"),
   }
 }
 
@@ -179,7 +179,6 @@ function WhichKeyPanel(props: {
     return columnsItems
   })
   const rowIndexes = createMemo(() => Array.from({ length: rows() }, (_, index) => index))
-  const columnIndexes = createMemo(() => Array.from({ length: columns() }, (_, index) => index))
   const position = createMemo(() => {
     if (!activeEntries().length) return "0 bindings"
     return `page ${Math.floor(offset() / pageSize()) + 1}/${Math.max(1, Math.ceil(activeEntries().length / pageSize()))}  ${activeEntries().length} bindings`
@@ -359,10 +358,10 @@ function WhichKeyPanel(props: {
           <Show when={shown().length > 0} fallback={<text fg={look().muted}>No reachable bindings</text>}>
             <For each={rowIndexes()}>
               {(row) => (
-                <box flexDirection="row" gap={COLUMN_GAP}>
-                  <For each={columnIndexes()}>
+                <box width="100%" flexDirection="row" justifyContent="center" gap={COLUMN_GAP}>
+                  <For each={shown()}>
                     {(column) => {
-                      const entry = createMemo(() => shown()[column]?.[row])
+                      const entry = createMemo(() => column[row])
                       return (
                         <box width={columnWidth()} flexDirection="row" gap={1} justifyContent="space-between">
                           <Show when={entry()}>
