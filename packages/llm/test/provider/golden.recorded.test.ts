@@ -33,7 +33,19 @@ const cloudflareAIGatewayWorkers = Cloudflare.aiGateway("workers-ai/@cf/meta/lla
       : undefined,
   gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
 })
+const cloudflareAIGatewayWorkersTools = Cloudflare.aiGateway("workers-ai/@cf/openai/gpt-oss-20b", {
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
+  gatewayId:
+    process.env.CLOUDFLARE_GATEWAY_ID && process.env.CLOUDFLARE_GATEWAY_ID !== process.env.CLOUDFLARE_ACCOUNT_ID
+      ? process.env.CLOUDFLARE_GATEWAY_ID
+      : undefined,
+  gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
+})
 const cloudflareWorkersAI = Cloudflare.workersAI("@cf/meta/llama-3.1-8b-instruct", {
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
+  apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
+})
+const cloudflareWorkersAITools = Cloudflare.workersAI("@cf/openai/gpt-oss-20b", {
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
   apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
 })
@@ -133,12 +145,28 @@ describeRecordedGoldenScenarios([
     scenarios: ["text"],
   },
   {
+    name: "Cloudflare AI Gateway Workers AI GPT OSS 20B Tools",
+    prefix: "cloudflare-ai-gateway",
+    model: cloudflareAIGatewayWorkersTools,
+    requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+    options: cloudflareOptions,
+    scenarios: [{ id: "tool-call", maxTokens: 120 }],
+  },
+  {
     name: "Cloudflare Workers AI Llama 3.1 8B",
     prefix: "cloudflare-workers-ai",
     model: cloudflareWorkersAI,
     requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"],
     options: cloudflareOptions,
     scenarios: ["text"],
+  },
+  {
+    name: "Cloudflare Workers AI GPT OSS 20B Tools",
+    prefix: "cloudflare-workers-ai",
+    model: cloudflareWorkersAITools,
+    requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"],
+    options: cloudflareOptions,
+    scenarios: [{ id: "tool-call", maxTokens: 120 }],
   },
   {
     name: "DeepSeek Chat",
