@@ -703,7 +703,7 @@ export const Zls: Info = {
 export const CSharp: Info = {
   id: "csharp",
   root: NearestRoot([".slnx", ".sln", ".csproj", "global.json"]),
-  extensions: [".cs", ".csx"],
+  extensions: [".cs", ".csx", ".cshtml", ".razor"],
   async spawn(root) {
     const bin = await getRoslynLanguageServer()
     if (!bin) return
