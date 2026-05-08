@@ -361,8 +361,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Brak klucza API.",
   "zen.api.error.invalidApiKey": "Nieprawidłowy klucz API.",
   "zen.api.error.subscriptionQuotaExceeded": "Przekroczono limit subskrypcji. Spróbuj ponownie za {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Przekroczono limit subskrypcji. Możesz kontynuować korzystanie z darmowych modeli.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "Osiągnięto 5-godzinny limit użycia. Resetuje się za {{retryIn}}. Aby nadal korzystać z tego modelu, włącz użycie z dostępnego salda: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Osiągnięto tygodniowy limit użycia. Resetuje się za {{retryIn}}. Aby nadal korzystać z tego modelu, włącz użycie z dostępnego salda: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Osiągnięto miesięczny limit użycia. Resetuje się za {{retryIn}}. Aby nadal korzystać z tego modelu, włącz użycie z dostępnego salda: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Brak metody płatności. Dodaj metodę płatności tutaj: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Niewystarczające saldo. Zarządzaj swoimi płatnościami tutaj: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":

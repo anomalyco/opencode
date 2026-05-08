@@ -317,7 +317,17 @@ function taskAgent(
   }
 }
 
-export function getToolInfo(tool: string, input: any = {}): ToolInfo {
+function webSearchProviderLabel(provider: unknown) {
+  if (provider === "parallel") return "Parallel Web Search"
+  if (provider === "exa") return "Exa Web Search"
+  return "Web Search"
+}
+
+export function getToolInfo(
+  tool: string,
+  input: any = {},
+  metadata: Record<string, unknown> | undefined = {},
+): ToolInfo {
   const i18n = useI18n()
   switch (tool) {
     case "read":
@@ -353,7 +363,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
     case "websearch":
       return {
         icon: "window-cursor",
-        title: i18n.t("ui.tool.websearch"),
+        title: webSearchProviderLabel(metadata?.provider),
         subtitle: input.query,
       }
     case "task": {
@@ -692,7 +702,11 @@ function isContextGroupTool(part: PartType): part is ToolPart {
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
-  const info = getToolInfo(part.tool, part.state.input ?? {})
+  const info = getToolInfo(
+    part.tool,
+    part.state.input ?? {},
+    "metadata" in part.state ? part.state.metadata : undefined,
+  )
   if (info.subtitle) return info.subtitle
   if (part.state.status === "error") return part.state.error
   if ((part.state.status === "running" || part.state.status === "completed") && part.state.title)
@@ -744,7 +758,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     }
     default: {
-      const info = getToolInfo(part.tool, input)
+      const info = getToolInfo(part.tool, input, "metadata" in part.state ? part.state.metadata : undefined)
       return {
         title: info.title,
         subtitle: info.subtitle || contextToolDetail(part),
@@ -1224,6 +1238,7 @@ export interface ToolProps {
   input: Record<string, any>
   metadata: Record<string, any>
   tool: string
+  sessionID?: string
   output?: string
   status?: string
   hideDetails?: boolean
@@ -1346,6 +1361,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                 <ToolErrorCard
                   tool={part().tool}
                   error={error()}
+                  title={part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider) : undefined}
                   defaultOpen={props.defaultOpen}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
@@ -1358,6 +1374,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               component={render()}
               input={input()}
               tool={part().tool}
+              sessionID={part().sessionID}
               metadata={partMetadata()}
               // @ts-expect-error
               output={part().state.output}
@@ -1681,19 +1698,19 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "websearch",
   render(props) {
-    const i18n = useI18n()
     const query = createMemo(() => {
       const value = props.input.query
       if (typeof value !== "string") return ""
       return value
     })
+    const title = createMemo(() => webSearchProviderLabel(props.metadata.provider))
 
     return (
       <BasicTool
         {...props}
         icon="window-cursor"
         trigger={{
-          title: i18n.t("ui.tool.websearch"),
+          title: title(),
           subtitle: query(),
           subtitleClass: "exa-tool-query",
         }}
