@@ -534,6 +534,12 @@ export const dict = {
   "workspace.settings.updating": "Updating...",
   "workspace.settings.save": "Save",
   "workspace.settings.edit": "Edit",
+  "workspace.settings.accountEmail": "Account email",
+  "workspace.settings.changeEmail": "Change email",
+  "workspace.settings.newEmailPlaceholder": "new@email.com",
+  "workspace.settings.sending": "Sending...",
+  "workspace.settings.sendConfirmations": "Send confirmations",
+  "workspace.settings.emailChangeSent": "Check both email addresses to complete the change.",
 
   "workspace.billing.title": "Billing",
   "workspace.billing.subtitle.beforeLink": "Manage payment methods.",

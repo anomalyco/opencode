@@ -8,6 +8,9 @@ import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { useI18n } from "~/context/i18n"
 import { formError, localizeError } from "~/lib/form-error"
+import { EmailChange } from "@opencode-ai/console-core/email-change.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
+import { getActor } from "~/context/auth"
 
 const getWorkspaceInfo = query(async (workspaceID: string) => {
   "use server"
@@ -28,6 +31,12 @@ const getWorkspaceInfo = query(async (workspaceID: string) => {
   )
 }, "workspace.get")
 
+const getAccountEmail = query(async () => {
+  "use server"
+  const actor = await getActor()
+  return actor.type === "account" ? actor.properties.email : null
+}, "account.email")
+
 const updateWorkspace = action(async (form: FormData) => {
   "use server"
   const name = (form.get("name") as string | null)?.trim()
@@ -46,14 +55,32 @@ const updateWorkspace = action(async (form: FormData) => {
   )
 }, "workspace.update")
 
+const requestEmailChange = action(async (form: FormData) => {
+  "use server"
+  const newEmail = (form.get("email") as string | null)?.trim()
+  if (!newEmail) return { error: formError.emailRequired }
+  const actor = await getActor()
+  if (actor.type !== "account") return { error: "Expected account actor" }
+  return json(
+    await Actor.provide("account", actor.properties, () =>
+      EmailChange.request({ newEmail })
+        .then(() => ({ error: undefined }))
+        .catch((e) => ({ error: e.message as string })),
+    ),
+  )
+}, "account.email.change")
+
 export function SettingsSection() {
   const params = useParams()
   const i18n = useI18n()
   const workspaceInfo = createAsync(() => getWorkspaceInfo(params.id!))
+  const accountEmail = createAsync(() => getAccountEmail())
   const submission = useSubmission(updateWorkspace)
-  const [store, setStore] = createStore({ show: false })
+  const emailSubmission = useSubmission(requestEmailChange)
+  const [store, setStore] = createStore({ show: false, showEmail: false })
 
   let input: HTMLInputElement
+  let emailInput: HTMLInputElement
 
   createEffect(() => {
     if (!submission.pending && submission.result && !submission.result.error) {
@@ -67,11 +94,24 @@ export function SettingsSection() {
       if (!submission.result) break
     }
     setStore("show", true)
-    input.focus()
+    queueMicrotask(() => input.focus())
   }
 
   function hide() {
     setStore("show", false)
+  }
+
+  function showEmail() {
+    while (true) {
+      emailSubmission.clear()
+      if (!emailSubmission.result) break
+    }
+    setStore("showEmail", true)
+    queueMicrotask(() => emailInput.focus())
+  }
+
+  function hideEmail() {
+    setStore("showEmail", false)
   }
 
   return (
@@ -115,6 +155,47 @@ export function SettingsSection() {
               <p data-slot="current-value">{workspaceInfo()?.name}</p>
               <button data-color="primary" onClick={() => show()}>
                 {i18n.t("workspace.settings.edit")}
+              </button>
+            </div>
+          </Show>
+        </div>
+        <div data-slot="setting">
+          <p>{i18n.t("workspace.settings.accountEmail")}</p>
+          <Show
+            when={!store.showEmail}
+            fallback={
+              <form action={requestEmailChange} method="post" data-slot="create-form">
+                <div data-slot="input-container">
+                  <input
+                    required
+                    ref={(r) => (emailInput = r)}
+                    data-component="input"
+                    name="email"
+                    type="email"
+                    placeholder={i18n.t("workspace.settings.newEmailPlaceholder")}
+                  />
+                  <button type="submit" data-color="primary" disabled={emailSubmission.pending}>
+                    {emailSubmission.pending
+                      ? i18n.t("workspace.settings.sending")
+                      : i18n.t("workspace.settings.sendConfirmations")}
+                  </button>
+                  <button type="reset" data-color="ghost" onClick={() => hideEmail()}>
+                    {i18n.t("common.cancel")}
+                  </button>
+                </div>
+                <Show when={emailSubmission.result && emailSubmission.result.error}>
+                  {(err) => <div data-slot="form-error">{localizeError(i18n.t, err())}</div>}
+                </Show>
+                <Show when={emailSubmission.result && !emailSubmission.result.error}>
+                  <div data-slot="form-success">{i18n.t("workspace.settings.emailChangeSent")}</div>
+                </Show>
+              </form>
+            }
+          >
+            <div data-slot="value-with-action">
+              <p data-slot="current-value">{accountEmail()}</p>
+              <button data-color="primary" onClick={() => showEmail()}>
+                {i18n.t("workspace.settings.changeEmail")}
               </button>
             </div>
           </Show>
