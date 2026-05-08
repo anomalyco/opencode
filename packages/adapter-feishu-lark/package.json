@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/adapter-feishu-lark",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "[fork-only] DeskFox 飞书 / Lark IM 桥接 adapter — OAuth Device Flow 扫码绑定 + WSS 长连接 + opencode session 转发,不与 sst/opencode 上游同步",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./src/index.ts",
+    "./core/*": "./src/core/*.ts",
+    "./feishu/*": "./src/feishu/*.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "typecheck": "tsgo --noEmit",
+    "probe-feishu-oauth": "bun run scripts/probe-feishu-oauth.ts"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "1.50.0",
+    "axios": "1.7.9",
+    "qrcode-terminal": "0.12.0",
+    "zod": "catalog:"
+  }
+}
