@@ -11,6 +11,7 @@
 // The diff view (when available) uses the same diff component as scrollback
 // tool snapshots.
 /** @jsxImportSource @opentui/solid */
+import type { TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
@@ -31,14 +32,6 @@ import {
 import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { PermissionReply, RunDiffStyle } from "./types"
-
-type RejectArea = {
-  isDestroyed: boolean
-  plainText: string
-  cursorOffset: number
-  setText(text: string): void
-  focus(): void
-}
 
 function buttons(
   list: PermissionOption[],
@@ -79,7 +72,7 @@ function RejectField(props: {
   onConfirm: () => void
   onCancel: () => void
 }) {
-  let area: RejectArea | undefined
+  let area: TextareaRenderable | undefined
 
   createEffect(() => {
     if (!area || area.isDestroyed) {
@@ -133,7 +126,7 @@ function RejectField(props: {
         }
       }}
       ref={(item) => {
-        area = item as RejectArea
+        area = item
       }}
     />
   )

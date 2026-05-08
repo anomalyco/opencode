@@ -694,7 +694,7 @@ function createLayer(input: StreamInput) {
         }
 
         const watch = Effect.fn("RunStreamTransport.watch")(() =>
-          Stream.fromAsyncIterable(events.stream as AsyncIterable<unknown>, (error) =>
+          Stream.fromAsyncIterable(events.stream, (error) =>
             error instanceof Error ? error : new Error(String(error)),
           ).pipe(
             Stream.takeUntil(() => input.footer.isClosed || abort.signal.aborted),

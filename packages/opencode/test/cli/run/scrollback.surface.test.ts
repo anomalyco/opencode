@@ -14,12 +14,6 @@ type ClaimedCommit = {
   trailingNewline: boolean
 }
 
-type QueueRenderer = {
-  externalOutputQueue: {
-    claim(): ClaimedCommit[]
-  }
-}
-
 const decoder = new TextDecoder()
 const active: TestRenderer[] = []
 
@@ -29,8 +23,18 @@ afterEach(() => {
   }
 })
 
-function claim(renderer: TestRenderer) {
-  return (renderer as unknown as QueueRenderer).externalOutputQueue.claim()
+function claim(renderer: TestRenderer): ClaimedCommit[] {
+  const queue = Reflect.get(renderer, "externalOutputQueue")
+  if (!queue || typeof queue !== "object" || !("claim" in queue) || typeof queue.claim !== "function") {
+    throw new Error("renderer missing external output queue")
+  }
+
+  const commits = queue.claim()
+  if (!Array.isArray(commits)) {
+    throw new Error("renderer external output queue returned invalid commits")
+  }
+
+  return commits as ClaimedCommit[]
 }
 
 function renderCommit(commit: ClaimedCommit) {

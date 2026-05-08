@@ -13,6 +13,7 @@
 // All state logic lives in question.shared.ts as a pure state machine.
 // This component just renders it and dispatches keyboard events.
 /** @jsxImportSource @opentui/solid */
+import type { TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -41,14 +42,6 @@ import {
 } from "./question.shared"
 import type { RunFooterTheme } from "./theme"
 import type { QuestionReject, QuestionReply } from "./types"
-
-type Area = {
-  isDestroyed: boolean
-  plainText: string
-  cursorOffset: number
-  setText(text: string): void
-  focus(): void
-}
 
 export function RunQuestionBody(props: {
   request: QuestionRequest
@@ -81,7 +74,7 @@ export function RunQuestionBody(props: {
 
     return "confirm"
   })
-  let area: Area | undefined
+  let area: TextareaRenderable | undefined
 
   createEffect(() => {
     setState((prev) => questionSync(prev, props.request.id))
@@ -512,7 +505,7 @@ export function RunQuestionBody(props: {
                               setState((prev) => questionStoreCustom(prev, prev.tab, text))
                             }}
                             ref={(item) => {
-                              area = item as Area
+                              area = item
                             }}
                           />
                         </box>
