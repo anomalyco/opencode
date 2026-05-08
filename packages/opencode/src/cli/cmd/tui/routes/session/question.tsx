@@ -124,7 +124,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     enabled: store.editing && !confirm(),
     commands: [
       {
-        name: "input_clear",
+        name: "prompt.clear",
         title: "Clear answer edit",
         category: "Question",
         run() {
@@ -146,7 +146,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
           setStore("editing", false)
         },
       },
-      ...(tuiConfig.keybinds.get("input_clear") ?? []),
+      ...(tuiConfig.keybinds.get("prompt.clear") ?? []),
       {
         key: "return",
         desc: "Submit answer edit",
@@ -204,7 +204,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       enabled: dialog.stack.length === 0 && !store.editing,
       commands: [
         {
-          name: "app_exit",
+          name: "app.exit",
           title: "Reject question",
           category: "Question",
           run() {
@@ -239,7 +239,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
           ? [
               { key: "return", desc: "Submit answer", group: "Question", cmd: () => submit() },
               { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
-              ...(tuiConfig.keybinds.get("app_exit") ?? []),
+              ...(tuiConfig.keybinds.get("app.exit") ?? []),
             ]
           : [
               ...Array.from({ length: max }, (_, index) => ({
@@ -267,7 +267,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               { key: "j", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
               { key: "return", desc: "Select answer", group: "Question", cmd: () => selectOption() },
               { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
-              ...(tuiConfig.keybinds.get("app_exit") ?? []),
+              ...(tuiConfig.keybinds.get("app.exit") ?? []),
             ]),
       ],
     }

@@ -192,6 +192,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   const result: Resolved = {
     ...acc.result,
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(parsedKeybinds), {
+      commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader,

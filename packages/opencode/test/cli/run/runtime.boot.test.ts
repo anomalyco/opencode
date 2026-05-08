@@ -97,6 +97,7 @@ function config(input?: {
   return {
     diff_style: input?.diff_style,
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
+      commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader,

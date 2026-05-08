@@ -239,7 +239,7 @@ const tui: TuiPlugin = async (api) => {
   api.keymap.registerLayer({
     commands: [
       {
-        name: "plugin_manager",
+        name: "plugins.list",
         title: "Plugins",
         category: "System",
         namespace: "palette",
@@ -248,7 +248,7 @@ const tui: TuiPlugin = async (api) => {
         },
       },
       {
-        name: "plugin_install",
+        name: "plugins.install",
         title: "Install plugin",
         category: "System",
         namespace: "palette",
@@ -257,7 +257,7 @@ const tui: TuiPlugin = async (api) => {
         },
       },
     ],
-    bindings: api.tuiConfig.keybinds.gather("plugins.palette", ["plugin_manager", "plugin_install"]),
+    bindings: api.tuiConfig.keybinds.gather("plugins.palette", ["plugins.list", "plugins.install"]),
   })
 }
 

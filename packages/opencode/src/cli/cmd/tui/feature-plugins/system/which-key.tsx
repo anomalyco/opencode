@@ -8,17 +8,17 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 
 const command = {
-  toggle: "which_key_toggle",
-  toggleLayout: "which_key_layout_toggle",
-  togglePending: "which_key_pending_toggle",
-  groupPrevious: "which_key_group_previous",
-  groupNext: "which_key_group_next",
-  scrollUp: "which_key_scroll_up",
-  scrollDown: "which_key_scroll_down",
-  pageUp: "which_key_page_up",
-  pageDown: "which_key_page_down",
-  home: "which_key_home",
-  end: "which_key_end",
+  toggle: "which-key.toggle",
+  toggleLayout: "which-key.layout.toggle",
+  togglePending: "which-key.pending.toggle",
+  groupPrevious: "which-key.group.previous",
+  groupNext: "which-key.group.next",
+  scrollUp: "which-key.scroll.up",
+  scrollDown: "which-key.scroll.down",
+  pageUp: "which-key.page.up",
+  pageDown: "which-key.page.down",
+  home: "which-key.home",
+  end: "which-key.end",
 } as const
 
 const LAYER_PRIORITY = 900

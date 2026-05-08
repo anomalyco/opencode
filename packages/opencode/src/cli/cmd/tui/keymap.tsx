@@ -1,6 +1,5 @@
 import { type CliRenderer } from "@opentui/core"
 import * as addons from "@opentui/keymap/addons/opentui"
-import type { EditBufferCommandName } from "@opentui/keymap/addons/opentui"
 import {
   formatCommandBindings as formatCommandBindingsExtra,
   formatKeySequence as formatKeySequenceExtra,
@@ -25,46 +24,44 @@ export { reactiveMatcherFromSignal, useBindings, useKeymapSelector }
 
 export type OpenTuiKeymap = ReturnType<typeof useKeymap>
 
-const inputCommandNames = {
-  "move-left": "input_move_left",
-  "move-right": "input_move_right",
-  "move-up": "input_move_up",
-  "move-down": "input_move_down",
-  "select-left": "input_select_left",
-  "select-right": "input_select_right",
-  "select-up": "input_select_up",
-  "select-down": "input_select_down",
-  "line-home": "input_line_home",
-  "line-end": "input_line_end",
-  "select-line-home": "input_select_line_home",
-  "select-line-end": "input_select_line_end",
-  "visual-line-home": "input_visual_line_home",
-  "visual-line-end": "input_visual_line_end",
-  "select-visual-line-home": "input_select_visual_line_home",
-  "select-visual-line-end": "input_select_visual_line_end",
-  "buffer-home": "input_buffer_home",
-  "buffer-end": "input_buffer_end",
-  "select-buffer-home": "input_select_buffer_home",
-  "select-buffer-end": "input_select_buffer_end",
-  "delete-line": "input_delete_line",
-  "delete-to-line-end": "input_delete_to_line_end",
-  "delete-to-line-start": "input_delete_to_line_start",
-  backspace: "input_backspace",
-  delete: "input_delete",
-  newline: "input_newline",
-  undo: "input_undo",
-  redo: "input_redo",
-  "word-forward": "input_word_forward",
-  "word-backward": "input_word_backward",
-  "select-word-forward": "input_select_word_forward",
-  "select-word-backward": "input_select_word_backward",
-  "delete-word-forward": "input_delete_word_forward",
-  "delete-word-backward": "input_delete_word_backward",
-  "select-all": "input_select_all",
-  submit: "input_submit",
-} satisfies Record<EditBufferCommandName, string>
-
-const inputCommands = Object.values(inputCommandNames)
+const inputCommands = [
+  "input.move.left",
+  "input.move.right",
+  "input.move.up",
+  "input.move.down",
+  "input.select.left",
+  "input.select.right",
+  "input.select.up",
+  "input.select.down",
+  "input.line.home",
+  "input.line.end",
+  "input.select.line.home",
+  "input.select.line.end",
+  "input.visual.line.home",
+  "input.visual.line.end",
+  "input.select.visual.line.home",
+  "input.select.visual.line.end",
+  "input.buffer.home",
+  "input.buffer.end",
+  "input.select.buffer.home",
+  "input.select.buffer.end",
+  "input.delete.line",
+  "input.delete.to.line.end",
+  "input.delete.to.line.start",
+  "input.backspace",
+  "input.delete",
+  "input.newline",
+  "input.undo",
+  "input.redo",
+  "input.word.forward",
+  "input.word.backward",
+  "input.select.word.forward",
+  "input.select.word.backward",
+  "input.delete.word.forward",
+  "input.delete.word.backward",
+  "input.select.all",
+  "input.submit",
+] as const
 
 function formatOptions(config: TuiConfig.Resolved) {
   return {
@@ -103,7 +100,7 @@ export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRende
   })
   const offEscape = addons.registerEscapeClearsPendingSequence(keymap)
   const offBackspace = addons.registerBackspacePopsPendingSequence(keymap)
-  const offInputCommands = addons.registerEditBufferCommands(keymap, renderer, { commandNames: inputCommandNames })
+  const offInputCommands = addons.registerEditBufferCommands(keymap, renderer)
   const offInputSuspension = addons.registerTextareaMappingSuspension(keymap, renderer)
   const offInputBindings = keymap.registerLayer({
     enabled: () => renderer.currentFocusedEditor !== null,

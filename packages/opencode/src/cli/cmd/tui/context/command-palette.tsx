@@ -26,7 +26,7 @@ type CommandPaletteContext = {
   matcher: ReturnType<typeof reactiveMatcherFromSignal>
 }
 
-const COMMAND_PALETTE_DIALOG = "command_list"
+const COMMAND_PALETTE_DIALOG = "command.palette.show"
 const ctx = createContext<CommandPaletteContext>()
 type PaletteCommandEntry = ReturnType<OpenTuiKeymap["getCommandEntries"]>[number]
 

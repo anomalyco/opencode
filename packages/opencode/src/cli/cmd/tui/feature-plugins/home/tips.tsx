@@ -10,7 +10,7 @@ function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connec
   useBindings(() => ({
     commands: [
       {
-        name: "tips_toggle",
+        name: "tips.toggle",
         title: props.hidden ? "Show tips" : "Hide tips",
         category: "System",
         namespace: "palette",
@@ -20,7 +20,7 @@ function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connec
         },
       },
     ],
-    bindings: props.api.tuiConfig.keybinds.get("tips_toggle") ?? [],
+    bindings: props.api.tuiConfig.keybinds.get("tips.toggle") ?? [],
   }))
 
   return (

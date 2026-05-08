@@ -150,14 +150,14 @@ export function DialogModel(props: { providerID?: string }) {
       options={options()}
       actions={[
         {
-          command: "model_provider_list",
+          command: "model.dialog.provider",
           title: connected() ? "Connect provider" : "View all providers",
           onTrigger() {
             dialog.replace(() => <DialogProvider />)
           },
         },
         {
-          command: "model_favorite_toggle",
+          command: "model.dialog.favorite",
           title: "Favorite",
           disabled: !connected(),
           onTrigger: (option) => {

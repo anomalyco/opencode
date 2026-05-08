@@ -6,7 +6,7 @@ import { useBindings, useCommandShortcut } from "../keymap"
 export function DialogHelp() {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const commandShortcut = useCommandShortcut("command_list")
+  const commandShortcut = useCommandShortcut("command.palette.show")
 
   useBindings(() => ({
     bindings: [

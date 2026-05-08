@@ -470,7 +470,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
     enabled: dialog.stack.length === 0,
     commands: [
       {
-        name: "app_exit",
+        name: "app.exit",
         title: "Cancel permission rejection",
         category: "Permission",
         run() {
@@ -480,7 +480,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
     ],
     bindings: [
       { key: "escape", desc: "Cancel permission rejection", group: "Permission", cmd: () => props.onCancel() },
-      ...(tuiConfig.keybinds.get("app_exit") ?? []),
+      ...(tuiConfig.keybinds.get("app.exit") ?? []),
       {
         key: "return",
         desc: "Confirm permission rejection",
@@ -566,7 +566,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     enabled: dialog.stack.length === 0,
     commands: [
       {
-        name: "app_exit",
+        name: "app.exit",
         title: "Reject permission",
         category: "Permission",
         run() {
@@ -641,7 +641,7 @@ function Prompt<const T extends Record<string, string>>(props: {
             },
           ]
         : []),
-      ...(props.escapeKey ? (tuiConfig.keybinds.get("app_exit") ?? []) : []),
+      ...(props.escapeKey ? (tuiConfig.keybinds.get("app.exit") ?? []) : []),
       ...(props.fullscreen ? (tuiConfig.keybinds.get("permission.prompt.fullscreen") ?? []) : []),
     ],
   }))

@@ -13,6 +13,7 @@ type ResolvedInput = Omit<TuiConfig.Resolved, "keybinds" | "leader" | "leader_ti
 export function createTuiResolvedKeybinds(input: Partial<TuiKeybind.Keybinds> = {}): TuiConfig.Resolved["keybinds"] {
   const keybinds = TuiKeybind.Keybinds.parse(input)
   return createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
+    commandMap: TuiKeybind.CommandMap,
     bindingDefaults: TuiKeybind.bindingDefaults(),
   })
 }

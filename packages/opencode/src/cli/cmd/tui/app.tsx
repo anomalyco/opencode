@@ -71,61 +71,40 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
 const appBindingCommands = [
-  "command_list",
-  "session_list",
-  "session_new",
-  "model_list",
-  "model_cycle_recent",
-  "model_cycle_recent_reverse",
-  "model_cycle_favorite",
-  "model_cycle_favorite_reverse",
-  "agent_list",
-  "mcp_list",
-  "agent_cycle",
-  "agent_cycle_reverse",
-  "variant_cycle",
-  "variant_list",
-  "provider_connect",
-  "console_org_switch",
-  "status_view",
-  "theme_list",
-  "theme_switch_mode",
-  "theme_mode_lock",
-  "help_show",
-  "docs_open",
-  "app_exit",
-  "app_debug",
-  "app_console",
-  "app_heap_snapshot",
-  "terminal_suspend",
-  "terminal_title_toggle",
-  "app_toggle_animations",
-  "app_toggle_file_context",
-  "app_toggle_diffwrap",
-  "app_toggle_paste_summary",
-  "app_toggle_session_directory_filter",
+  "command.palette.show",
+  "session.list",
+  "session.new",
+  "model.list",
+  "model.cycle_recent",
+  "model.cycle_recent_reverse",
+  "model.cycle_favorite",
+  "model.cycle_favorite_reverse",
+  "agent.list",
+  "mcp.list",
+  "agent.cycle",
+  "agent.cycle.reverse",
+  "variant.cycle",
+  "variant.list",
+  "provider.connect",
+  "console.org.switch",
+  "opencode.status",
+  "theme.switch",
+  "theme.switch_mode",
+  "theme.mode.lock",
+  "help.show",
+  "docs.open",
+  "app.exit",
+  "app.debug",
+  "app.console",
+  "app.heap_snapshot",
+  "terminal.suspend",
+  "terminal.title.toggle",
+  "app.toggle.animations",
+  "app.toggle.file_context",
+  "app.toggle.diffwrap",
+  "app.toggle.paste_summary",
+  "app.toggle.session_directory_filter",
 ] as const
-
-const commandEventAliases: Record<string, string> = {
-  "help.show": "help_show",
-  "session.list": "session_list",
-  "session.new": "session_new",
-  "session.share": "session_share",
-  "session.interrupt": "session_interrupt",
-  "session.compact": "session_compact",
-  "session.page.up": "messages_page_up",
-  "session.page.down": "messages_page_down",
-  "session.line.up": "messages_line_up",
-  "session.line.down": "messages_line_down",
-  "session.half.page.up": "messages_half_page_up",
-  "session.half.page.down": "messages_half_page_down",
-  "session.first": "messages_first",
-  "session.last": "messages_last",
-  "model.list": "model_list",
-  "prompt.clear": "input_clear",
-  "prompt.submit": "prompt_submit",
-  "agent.cycle": "agent_cycle",
-}
 
 function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
@@ -451,7 +430,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const appCommands = createMemo(() =>
     [
       {
-        name: "command_list",
+        name: "command.palette.show",
         title: "Show command palette",
         category: "System",
         hidden: true,
@@ -460,7 +439,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "session_list",
+        name: "session.list",
         title: "Switch session",
         category: "Session",
         suggested: sync.data.session.length > 0,
@@ -471,7 +450,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "session_new",
+        name: "session.new",
         title: "New session",
         suggested: route.data.type === "session",
         category: "Session",
@@ -485,7 +464,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model_list",
+        name: "model.list",
         title: "Switch model",
         suggested: true,
         category: "Agent",
@@ -495,7 +474,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model_cycle_recent",
+        name: "model.cycle_recent",
         title: "Model cycle",
         category: "Agent",
         hidden: true,
@@ -504,7 +483,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model_cycle_recent_reverse",
+        name: "model.cycle_recent_reverse",
         title: "Model cycle reverse",
         category: "Agent",
         hidden: true,
@@ -513,7 +492,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model_cycle_favorite",
+        name: "model.cycle_favorite",
         title: "Favorite cycle",
         category: "Agent",
         hidden: true,
@@ -522,7 +501,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model_cycle_favorite_reverse",
+        name: "model.cycle_favorite_reverse",
         title: "Favorite cycle reverse",
         category: "Agent",
         hidden: true,
@@ -531,7 +510,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "agent_list",
+        name: "agent.list",
         title: "Switch agent",
         category: "Agent",
         slashName: "agents",
@@ -540,7 +519,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "mcp_list",
+        name: "mcp.list",
         title: "Toggle MCPs",
         category: "Agent",
         slashName: "mcps",
@@ -549,7 +528,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "agent_cycle",
+        name: "agent.cycle",
         title: "Agent cycle",
         category: "Agent",
         hidden: true,
@@ -558,7 +537,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "variant_cycle",
+        name: "variant.cycle",
         title: "Variant cycle",
         category: "Agent",
         run: () => {
@@ -566,7 +545,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "variant_list",
+        name: "variant.list",
         title: "Switch model variant",
         category: "Agent",
         hidden: local.model.variant.list().length === 0,
@@ -576,7 +555,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "agent_cycle_reverse",
+        name: "agent.cycle.reverse",
         title: "Agent cycle reverse",
         category: "Agent",
         hidden: true,
@@ -585,7 +564,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "provider_connect",
+        name: "provider.connect",
         title: "Connect provider",
         suggested: !connected(),
         slashName: "connect",
@@ -597,7 +576,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       ...(sync.data.console_state.switchableOrgCount > 1
         ? [
             {
-              name: "console_org_switch",
+              name: "console.org.switch",
               title: "Switch org",
               suggested: Boolean(sync.data.console_state.activeOrgName),
               slashName: "org",
@@ -610,7 +589,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           ]
         : []),
       {
-        name: "status_view",
+        name: "opencode.status",
         title: "View status",
         slashName: "status",
         run: () => {
@@ -619,7 +598,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "theme_list",
+        name: "theme.switch",
         title: "Switch theme",
         slashName: "themes",
         run: () => {
@@ -628,7 +607,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "theme_switch_mode",
+        name: "theme.switch_mode",
         title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
         run: () => {
           setMode(mode() === "dark" ? "light" : "dark")
@@ -637,7 +616,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "theme_mode_lock",
+        name: "theme.mode.lock",
         title: locked() ? "Unlock theme mode" : "Lock theme mode",
         run: () => {
           if (locked()) unlock()
@@ -647,7 +626,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "help_show",
+        name: "help.show",
         title: "Help",
         slashName: "help",
         run: () => {
@@ -656,7 +635,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "docs_open",
+        name: "docs.open",
         title: "Open docs",
         run: () => {
           open("https://opencode.ai/docs").catch(() => {})
@@ -665,7 +644,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "app_exit",
+        name: "app.exit",
         title: "Exit the app",
         slashName: "exit",
         slashAliases: ["quit", "q"],
@@ -678,7 +657,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "app_debug",
+        name: "app.debug",
         title: "Toggle debug panel",
         category: "System",
         run: () => {
@@ -687,7 +666,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app_console",
+        name: "app.console",
         title: "Toggle console",
         category: "System",
         run: () => {
@@ -696,7 +675,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app_heap_snapshot",
+        name: "app.heap_snapshot",
         title: "Write heap snapshot",
         category: "System",
         run: async () => {
@@ -710,7 +689,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "terminal_suspend",
+        name: "terminal.suspend",
         title: "Suspend terminal",
         category: "System",
         hidden: true,
@@ -725,7 +704,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "terminal_title_toggle",
+        name: "terminal.title.toggle",
         title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
         category: "System",
         run: () => {
@@ -739,7 +718,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app_toggle_animations",
+        name: "app.toggle.animations",
         title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
         category: "System",
         run: () => {
@@ -748,7 +727,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app_toggle_file_context",
+        name: "app.toggle.file_context",
         title: kv.get("file_context_enabled", true) ? "Disable file context" : "Enable file context",
         category: "System",
         run: () => {
@@ -757,7 +736,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app_toggle_diffwrap",
+        name: "app.toggle.diffwrap",
         title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
         category: "System",
         run: () => {
@@ -767,7 +746,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app_toggle_paste_summary",
+        name: "app.toggle.paste_summary",
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
         run: () => {
@@ -780,7 +759,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app_toggle_session_directory_filter",
+        name: "app.toggle.session_directory_filter",
         title: kv.get("session_directory_filter_enabled", true)
           ? "Disable session directory filtering"
           : "Enable session directory filtering",
@@ -807,7 +786,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }))
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {
-    command.run(commandEventAliases[evt.properties.command] ?? evt.properties.command)
+    command.run(evt.properties.command)
   })
 
   event.on(TuiEvent.ToastShow.type, (evt) => {

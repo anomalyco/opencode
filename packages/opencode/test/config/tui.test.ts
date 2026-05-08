@@ -163,7 +163,7 @@ test("migrates tui-specific keys from opencode.json when tui.json does not exist
   const config = await getTuiConfig(tmp.path)
   expect(config.theme).toBe("migrated-theme")
   expect(config.scroll_speed).toBe(5)
-  expect(config.keybinds.get("app_exit")?.[0]?.key).toBe("ctrl+q")
+  expect(config.keybinds.get("app.exit")?.[0]?.key).toBe("ctrl+q")
   const text = await Filesystem.readText(path.join(tmp.path, "tui.json"))
   expect(JSON.parse(text)).toMatchObject({
     theme: "migrated-theme",
@@ -398,8 +398,8 @@ test("merges keybind overrides across precedence layers", async () => {
     },
   })
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds.get("app_exit")?.[0]?.key).toBe("ctrl+q")
-  expect(config.keybinds.get("theme_list")?.[0]?.key).toBe("ctrl+k")
+  expect(config.keybinds.get("app.exit")?.[0]?.key).toBe("ctrl+q")
+  expect(config.keybinds.get("theme.switch")?.[0]?.key).toBe("ctrl+k")
 })
 
 test("resolves keybind lookup from canonical keybinds", async () => {
@@ -427,19 +427,19 @@ test("resolves keybind lookup from canonical keybinds", async () => {
   const config = await getTuiConfig(tmp.path)
   expect(config.leader).toBe("ctrl+g")
   expect(config.leader_timeout).toBe(1234)
-  expect(config.keybinds.get("command_list")?.[0]?.key).toBe("alt+p")
-  expect(config.keybinds.get("session_new")?.[0]?.key).toBe("<leader>n")
-  expect(config.keybinds.get("which_key_toggle")?.[0]?.key).toBe("alt+k")
-  expect(config.keybinds.get("which_key_layout_toggle")?.[0]?.key).toBe("ctrl+alt+shift+k")
-  expect(config.keybinds.get("which_key_pending_toggle")?.[0]?.key).toBe("ctrl+alt+shift+p")
-  expect(config.keybinds.get("which_key_group_next")?.[0]?.key).toBe("ctrl+alt+right,ctrl+alt+]")
-  expect((config.keybinds.get("which_key_toggle")?.[0] as { desc?: unknown } | undefined)?.desc).toBe(
+  expect(config.keybinds.get("command.palette.show")?.[0]?.key).toBe("alt+p")
+  expect(config.keybinds.get("session.new")?.[0]?.key).toBe("<leader>n")
+  expect(config.keybinds.get("which-key.toggle")?.[0]?.key).toBe("alt+k")
+  expect(config.keybinds.get("which-key.layout.toggle")?.[0]?.key).toBe("ctrl+alt+shift+k")
+  expect(config.keybinds.get("which-key.pending.toggle")?.[0]?.key).toBe("ctrl+alt+shift+p")
+  expect(config.keybinds.get("which-key.group.next")?.[0]?.key).toBe("ctrl+alt+right,ctrl+alt+]")
+  expect((config.keybinds.get("which-key.toggle")?.[0] as { desc?: unknown } | undefined)?.desc).toBe(
     "Toggle which-key panel",
   )
-  expect(config.keybinds.get("editor_open")?.[0]?.key).toBe("ctrl+e")
+  expect(config.keybinds.get("prompt.editor")?.[0]?.key).toBe("ctrl+e")
   expect(config.keybinds.get("prompt.autocomplete.next")?.[0]?.key).toBe("ctrl+j")
   expect(config.keybinds.get("dialog.mcp.toggle")?.[0]?.key).toBe("ctrl+t")
-  expect(config.keybinds.get("model_favorite_toggle")?.[0]?.key).toBe("ctrl+f")
+  expect(config.keybinds.get("model.dialog.favorite")?.[0]?.key).toBe("ctrl+f")
   expect(config.keybinds.get("dialog.plugins.install")?.[0]?.key).toBe("shift+i")
   expect(config.keybinds.gather("plugins.dialog", ["dialog.plugins.install"]).map((binding) => binding.cmd)).toEqual([
     "dialog.plugins.install",
@@ -464,23 +464,23 @@ test("keybinds accept OpenTUI binding specs", async () => {
   })
 
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds.get("command_list")).toEqual([
-    { key: "alt+p", cmd: "command_list", preventDefault: false, desc: "List available commands" },
+  expect(config.keybinds.get("command.palette.show")).toEqual([
+    { key: "alt+p", cmd: "command.palette.show", preventDefault: false, desc: "List available commands" },
   ])
-  expect(config.keybinds.get("editor_open")?.[0]).toMatchObject({
+  expect(config.keybinds.get("prompt.editor")?.[0]).toMatchObject({
     key: { name: "e", ctrl: true },
-    cmd: "editor_open",
+    cmd: "prompt.editor",
     group: "Explicit",
   })
   expect(config.keybinds.get("prompt.autocomplete.next")).toBeUndefined()
-  expect(config.keybinds.get("plugin_manager")?.[0]?.key).toBe("ctrl+shift+p")
+  expect(config.keybinds.get("plugins.list")?.[0]?.key).toBe("ctrl+shift+p")
 })
 
 wintest("defaults Ctrl+Z to input undo on Windows", async () => {
   await using tmp = await tmpdir()
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds.get("terminal_suspend")).toBeUndefined()
-  expect(config.keybinds.get("input_undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
+  expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+  expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
 })
 
 wintest("keeps explicit input undo overrides on Windows", async () => {
@@ -490,8 +490,8 @@ wintest("keeps explicit input undo overrides on Windows", async () => {
     },
   })
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds.get("terminal_suspend")).toBeUndefined()
-  expect(config.keybinds.get("input_undo")?.[0]?.key).toBe("ctrl+y")
+  expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+  expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+y")
 })
 
 wintest("ignores terminal suspend bindings on Windows", async () => {
@@ -502,8 +502,8 @@ wintest("ignores terminal suspend bindings on Windows", async () => {
   })
 
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds.get("terminal_suspend")).toBeUndefined()
-  expect(config.keybinds.get("input_undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
+  expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+  expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
 })
 
 test("applies Windows keybind defaults", async () => {
@@ -511,8 +511,8 @@ test("applies Windows keybind defaults", async () => {
     await using tmp = await tmpdir()
 
     const config = await getTuiConfig(tmp.path)
-    expect(config.keybinds.get("terminal_suspend")).toBeUndefined()
-    expect(config.keybinds.get("input_undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
+    expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+    expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
   })
 })
 
@@ -532,7 +532,7 @@ test("ignores explicit keybind terminal suspend binding on Windows", async () =>
     })
 
     const config = await getTuiConfig(tmp.path)
-    expect(config.keybinds.get("terminal_suspend")).toBeUndefined()
+    expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
   })
 })
 
@@ -552,7 +552,7 @@ test("keeps explicit configured keybind input undo on Windows", async () => {
     })
 
     const config = await getTuiConfig(tmp.path)
-    expect(config.keybinds.get("input_undo")?.[0]?.key).toBe("ctrl+y")
+    expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+y")
   })
 })
 
@@ -601,7 +601,7 @@ test("applies env and file substitutions in tui.json", async () => {
     })
     const config = await getTuiConfig(tmp.path)
     expect(config.theme).toBe("env-theme")
-    expect(config.keybinds.get("app_exit")?.[0]?.key).toBe("ctrl+q")
+    expect(config.keybinds.get("app.exit")?.[0]?.key).toBe("ctrl+q")
   } finally {
     if (original === undefined) delete process.env.TUI_THEME_TEST
     else process.env.TUI_THEME_TEST = original

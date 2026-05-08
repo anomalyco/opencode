@@ -154,8 +154,8 @@ export function Prompt(props: PromptProps) {
   const stash = usePromptStash()
   const command = useCommandPalette()
   const keymap = useOpencodeKeymap()
-  const agentShortcut = useCommandShortcut("agent_cycle")
-  const paletteShortcut = useCommandShortcut("command_list")
+  const agentShortcut = useCommandShortcut("agent.cycle")
+  const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
@@ -409,7 +409,7 @@ export function Prompt(props: PromptProps) {
     [
       {
         title: "Clear prompt",
-        name: "input_clear",
+        name: "prompt.clear",
         category: "Prompt",
         hidden: true,
         run: () => {
@@ -419,7 +419,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Submit prompt",
-        name: "prompt_submit",
+        name: "prompt.submit",
         category: "Prompt",
         hidden: true,
         run: async () => {
@@ -432,7 +432,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Remove editor context",
-        name: "prompt_editor_context_clear",
+        name: "prompt.editor_context.clear",
         category: "Prompt",
         enabled: Boolean(editorContext()),
         run: () => {
@@ -442,7 +442,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Paste",
-        name: "input_paste",
+        name: "prompt.paste",
         category: "Prompt",
         hidden: true,
         run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
@@ -464,7 +464,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Interrupt session",
-        name: "session_interrupt",
+        name: "session.interrupt",
         category: "Session",
         hidden: true,
         enabled: status().type !== "idle",
@@ -496,7 +496,7 @@ export function Prompt(props: PromptProps) {
       {
         title: "Open editor",
         category: "Session",
-        name: "editor_open",
+        name: "prompt.editor",
         slashName: "editor",
         run: async () => {
           dialog.clear()
@@ -579,7 +579,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Skills",
-        name: "prompt_skills",
+        name: "prompt.skills",
         category: "Prompt",
         slashName: "skills",
         run: () => {
@@ -600,7 +600,7 @@ export function Prompt(props: PromptProps) {
       {
         title: "Warp",
         desc: "Change the workspace for the session",
-        name: "workspace_set",
+        name: "workspace.set",
         category: "Session",
         enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
         slashName: "warp",
@@ -630,14 +630,14 @@ export function Prompt(props: PromptProps) {
   useBindings(() => ({
     enabled: command.matcher,
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
-      "prompt_submit",
-      "editor_open",
-      "prompt_editor_context_clear",
-      "prompt_stash",
-      "prompt_stash_pop",
-      "prompt_stash_list",
-      "session_interrupt",
-      "workspace_set",
+      "prompt.submit",
+      "prompt.editor",
+      "prompt.editor_context.clear",
+      "prompt.stash",
+      "prompt.stash.pop",
+      "prompt.stash.list",
+      "session.interrupt",
+      "workspace.set",
     ]),
   }))
 
@@ -800,7 +800,7 @@ export function Prompt(props: PromptProps) {
     [
       {
         title: "Stash prompt",
-        name: "prompt_stash",
+        name: "prompt.stash",
         category: "Prompt",
         enabled: !!store.prompt.input,
         run: () => {
@@ -818,7 +818,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Stash pop",
-        name: "prompt_stash_pop",
+        name: "prompt.stash.pop",
         category: "Prompt",
         enabled: stash.list().length > 0,
         run: () => {
@@ -834,7 +834,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Stash list",
-        name: "prompt_stash_list",
+        name: "prompt.stash.list",
         category: "Prompt",
         enabled: stash.list().length > 0,
         run: () => {
@@ -864,7 +864,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled,
-      bindings: tuiConfig.keybinds.get("input_paste") ?? [],
+      bindings: tuiConfig.keybinds.get("prompt.paste") ?? [],
     }
   })
 
@@ -872,7 +872,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
-      bindings: tuiConfig.keybinds.get("input_clear") ?? [],
+      bindings: tuiConfig.keybinds.get("prompt.clear") ?? [],
     }
   })
 
@@ -937,7 +937,7 @@ export function Prompt(props: PromptProps) {
       })(),
       commands: [
         {
-          name: "history_previous",
+          name: "prompt.history.previous",
           title: "Previous prompt history",
           category: "Prompt",
           run() {
@@ -956,7 +956,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: tuiConfig.keybinds.get("history_previous") ?? [],
+      bindings: tuiConfig.keybinds.get("prompt.history.previous") ?? [],
     }
   })
 
@@ -975,7 +975,7 @@ export function Prompt(props: PromptProps) {
       })(),
       commands: [
         {
-          name: "history_next",
+          name: "prompt.history.next",
           title: "Next prompt history",
           category: "Prompt",
           run() {
@@ -994,7 +994,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: tuiConfig.keybinds.get("history_next") ?? [],
+      bindings: tuiConfig.keybinds.get("prompt.history.next") ?? [],
     }
   })
 
@@ -1523,7 +1523,7 @@ export function Prompt(props: PromptProps) {
                 // Windows Terminal <1.25 can surface image-only clipboard as an
                 // empty bracketed paste. Windows Terminal 1.25+ does not.
                 if (!pastedContent) {
-                  keymap.dispatchCommand("input_paste")
+                  keymap.dispatchCommand("prompt.paste")
                   return
                 }
 
