@@ -500,6 +500,9 @@ export function topK(model: Provider.Model) {
 
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+const OPENAI_GPT5_1_EFFORTS = ["none", ...WIDELY_SUPPORTED_EFFORTS]
+const OPENAI_GPT5_2_PLUS_EFFORTS = [...OPENAI_GPT5_1_EFFORTS, "xhigh"]
+const OPENAI_GPT5_CODEX_2_PLUS_EFFORTS = [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
 // OpenAI rolled out the `none` reasoning_effort tier on this date (Responses API).
 // Models released before it 400 on `reasoning_effort: "none"`, so we only expose
@@ -519,24 +522,28 @@ function gpt5Version(apiId: string) {
   return Number(GPT5_VERSION_RE.exec(apiId)?.[1]) || undefined
 }
 
+function versionedGpt5ReasoningEfforts(apiId: string) {
+  const version = gpt5Version(apiId)
+  if (version === undefined) return undefined
+  if (version === 1) return OPENAI_GPT5_1_EFFORTS
+  return OPENAI_GPT5_2_PLUS_EFFORTS
+}
+
 // Computes the reasoning_effort tiers an OpenAI (or OpenAI-compatible upstream
 // routed through it, e.g. cf-ai-gateway) model exposes. Returns null for models
 // with no tunable effort knob (gpt-5-pro). Effort order: weakest to strongest.
 function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | null {
   const id = apiId.toLowerCase()
   if (id === "gpt-5-pro" || id === "openai/gpt-5-pro") return null
-  if (id.includes("codex")) {
-    if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-    return [...WIDELY_SUPPORTED_EFFORTS]
-  }
   const version = gpt5Version(id)
-  if (version !== undefined) {
-    // GPT-5.1 replaced GPT-5's `minimal` effort with `none`; GPT-5.2+
-    // additionally accepts `xhigh`. Model pages list the supported subset.
-    const efforts = ["none", ...WIDELY_SUPPORTED_EFFORTS]
-    if (version >= 2) efforts.push("xhigh")
-    return efforts
+  if (id.includes("codex")) {
+    if (version !== undefined && version >= 2) return OPENAI_GPT5_CODEX_2_PLUS_EFFORTS
+    return WIDELY_SUPPORTED_EFFORTS
   }
+  const versionedEfforts = versionedGpt5ReasoningEfforts(id)
+  // GPT-5.1 replaced GPT-5's `minimal` effort with `none`; GPT-5.2+
+  // additionally accepts `xhigh`. Model pages list the supported subset.
+  if (versionedEfforts) return versionedEfforts
   const efforts = [...WIDELY_SUPPORTED_EFFORTS]
   if (GPT5_FAMILY_RE.test(id)) efforts.unshift("minimal")
   if (releaseDate >= OPENAI_NONE_EFFORT_RELEASE_DATE) efforts.unshift("none")
@@ -545,10 +552,7 @@ function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | 
 }
 
 function openaiCompatibleReasoningEfforts(id: string) {
-  const version = gpt5Version(id.toLowerCase())
-  if (version === undefined) return OPENAI_EFFORTS
-  if (version === 1) return ["none", ...WIDELY_SUPPORTED_EFFORTS]
-  return ["none", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+  return versionedGpt5ReasoningEfforts(id.toLowerCase()) ?? OPENAI_EFFORTS
 }
 
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
@@ -727,12 +731,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@ai-sdk/azure":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
       if (id === "o1-mini") return {}
-      const azureEfforts = ["low", "medium", "high"]
-      if ((id.includes("gpt-5-") || id === "gpt-5") && gpt5Version(id) === undefined) {
-        azureEfforts.unshift("minimal")
-      }
       return Object.fromEntries(
-        azureEfforts.map((effort) => [
+        (GPT5_FAMILY_RE.test(id) && gpt5Version(id) === undefined
+          ? ["minimal", ...WIDELY_SUPPORTED_EFFORTS]
+          : WIDELY_SUPPORTED_EFFORTS
+        ).map((effort) => [
           effort,
           {
             reasoningEffort: effort,
