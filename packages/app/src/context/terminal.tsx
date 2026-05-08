@@ -444,6 +444,11 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
           if (next.dir === prev.dir && next.id === prev.id && next.scope === prev.scope) return
           if (next.dir === prev.dir && next.id && next.scope === prev.scope) return
           loadWorkspace(prev.dir, prev.id, prev.scope).trimAll()
+          // Clear stale terminal buffers when switching to a different directory
+          // to prevent previous session's output from being displayed
+          if (next.dir !== prev.dir) {
+            workspace().trimAll()
+          }
         },
         { defer: true },
       ),
