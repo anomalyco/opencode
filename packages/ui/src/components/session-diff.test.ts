@@ -50,6 +50,23 @@ describe("session diff", () => {
     expect(text(view, "additions")).toBe("two\n")
   })
 
+  test("can preserve edit patch line numbers with synthetic context", () => {
+    const diff = {
+      file: "a.ts",
+      patch:
+        "diff --git a/a.ts b/a.ts\nindex 0000000..1111111 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -10,2 +10,2 @@\n one\n-two\n+three\n",
+      additions: 1,
+      deletions: 1,
+      status: "modified" as const,
+    }
+    const view = normalize(diff, { preservePatchLineNumbers: true })
+    const hunk = view.fileDiff.hunks[0]!
+    const change = hunk.hunkContent.find((item) => item.type === "change")!
+
+    expect(hunk.deletionStart + (change.deletionLineIndex - hunk.deletionLineIndex)).toBe(11)
+    expect(hunk.additionStart + (change.additionLineIndex - hunk.additionLineIndex)).toBe(11)
+  })
+
   test("ignores malformed persisted patches", () => {
     const diff = {
       file: "a.ts",

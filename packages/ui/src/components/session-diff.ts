@@ -13,6 +13,9 @@ type LegacyDiff = {
 }
 
 type ReviewDiff = SnapshotFileDiff | VcsFileDiff | LegacyDiff
+type NormalizeOptions = {
+  preservePatchLineNumbers?: boolean
+}
 
 export type ViewDiff = {
   file: string
@@ -25,46 +28,78 @@ export type ViewDiff = {
 
 const cache = new Map<string, FileDiffMetadata>()
 
-function patch(diff: ReviewDiff) {
+function patch(diff: ReviewDiff, options?: NormalizeOptions) {
   if (typeof diff.patch === "string") {
     try {
       const [patch] = parsePatch(diff.patch)
-      const beforeLines: Array<{ text: string; newline: boolean }> = []
-      const afterLines: Array<{ text: string; newline: boolean }> = []
+      const beforeLines: Array<{ text: string; newline: boolean } | undefined> = []
+      const afterLines: Array<{ text: string; newline: boolean } | undefined> = []
       let previous: "-" | "+" | " " | undefined
+      let oldIndex = 0
+      let newIndex = 0
+
+      const push = (
+        lines: Array<{ text: string; newline: boolean } | undefined>,
+        index: number,
+        text: string,
+      ) => {
+        while (lines.length < index) lines.push({ text: "", newline: true })
+        lines[index] = { text, newline: true }
+      }
 
       for (const hunk of patch.hunks) {
+        if (options?.preservePatchLineNumbers) {
+          oldIndex = hunk.oldStart - 1
+          newIndex = hunk.newStart - 1
+        }
         for (const line of hunk.lines) {
           if (line.startsWith("\\")) {
             if (previous === "-" || previous === " ") {
-              const before = beforeLines.at(-1)
+              const before = beforeLines.findLast(Boolean)
               if (before) before.newline = false
             }
             if (previous === "+" || previous === " ") {
-              const after = afterLines.at(-1)
+              const after = afterLines.findLast(Boolean)
               if (after) after.newline = false
             }
             continue
           }
 
           if (line.startsWith("-")) {
-            beforeLines.push({ text: line.slice(1), newline: true })
+            if (options?.preservePatchLineNumbers) {
+              push(beforeLines, oldIndex, line.slice(1))
+              oldIndex++
+            } else {
+              beforeLines.push({ text: line.slice(1), newline: true })
+            }
             previous = "-"
           } else if (line.startsWith("+")) {
-            afterLines.push({ text: line.slice(1), newline: true })
+            if (options?.preservePatchLineNumbers) {
+              push(afterLines, newIndex, line.slice(1))
+              newIndex++
+            } else {
+              afterLines.push({ text: line.slice(1), newline: true })
+            }
             previous = "+"
           } else {
             // context line (starts with ' ')
-            beforeLines.push({ text: line.slice(1), newline: true })
-            afterLines.push({ text: line.slice(1), newline: true })
+            if (options?.preservePatchLineNumbers) {
+              push(beforeLines, oldIndex, line.slice(1))
+              push(afterLines, newIndex, line.slice(1))
+              oldIndex++
+              newIndex++
+            } else {
+              beforeLines.push({ text: line.slice(1), newline: true })
+              afterLines.push({ text: line.slice(1), newline: true })
+            }
             previous = " "
           }
         }
       }
 
       return {
-        before: beforeLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
-        after: afterLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
+        before: beforeLines.map((line) => (line?.text ?? "") + (line?.newline === false ? "" : "\n")).join(""),
+        after: afterLines.map((line) => (line?.text ?? "") + (line?.newline === false ? "" : "\n")).join(""),
         patch: diff.patch,
       }
     } catch {
@@ -97,8 +132,8 @@ function file(file: string, patch: string, before: string, after: string) {
   return value
 }
 
-export function normalize(diff: ReviewDiff): ViewDiff {
-  const next = patch(diff)
+export function normalize(diff: ReviewDiff, options?: NormalizeOptions): ViewDiff {
+  const next = patch(diff, options)
   return {
     file: diff.file,
     patch: next.patch,

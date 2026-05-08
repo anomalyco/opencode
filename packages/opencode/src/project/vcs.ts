@@ -7,6 +7,7 @@ import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
 import { zod, zodObject } from "@/util/effect-zod"
+import { errorMessage } from "@/util/error"
 import { NonNegativeInt, withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "vcs" })
@@ -208,6 +209,13 @@ const track = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref:
   return yield* diffAgainstRef(git, cwd, ref)
 })
 
+const resolveRoot = Effect.fnUntraced(function* (git: Git.Interface, directory: string, fallback: string) {
+  const result = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: directory })
+  const next = result.text().trim()
+  if (result.exitCode === 0 && next) return next
+  return fallback
+})
+
 export const Mode = Schema.Literals(["git", "branch"]).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Mode = Schema.Schema.Type<typeof Mode>
 
@@ -294,10 +302,12 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
           return { current: undefined, root: undefined }
         }
 
+        const cwd = yield* resolveRoot(git, ctx.directory, ctx.worktree)
+
         const get = Effect.fnUntraced(function* () {
-          return yield* git.branch(ctx.directory)
+          return yield* git.branch(cwd)
         })
-        const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
+        const [current, root] = yield* Effect.all([git.branch(cwd), git.defaultBranch(cwd)], {
           concurrency: 2,
         })
         const value = { current, root }
@@ -335,9 +345,10 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
       status: Effect.fn("Vcs.status")(function* () {
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
-        const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
+        const cwd = yield* resolveRoot(git, ctx.directory, ctx.worktree)
+        const ref = (yield* git.hasHead(cwd)) ? "HEAD" : undefined
         const [list, stats] = yield* Effect.all(
-          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
+          [git.status(cwd), ref ? git.stats(cwd, ref) : Effect.succeed([])],
           { concurrency: 2 },
         )
         const map = nums(stats)
@@ -347,7 +358,7 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
             Effect.gen(function* () {
               const stat =
                 map.get(item.file) ??
-                (item.status === "added" ? yield* git.statUntracked(ctx.worktree, item.file) : undefined)
+                (item.status === "added" ? yield* git.statUntracked(cwd, item.file) : undefined)
               return {
                 file: item.file,
                 additions: stat?.additions ?? 0,
@@ -360,27 +371,34 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode) {
         const value = yield* InstanceState.get(state)
         const ctx = yield* InstanceState.context
+        const cwd = yield* resolveRoot(git, ctx.directory, ctx.worktree)
         if (ctx.project.vcs !== "git") return []
         if (mode === "git") {
-          return yield* track(git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined)
+          return yield* track(git, cwd, (yield* git.hasHead(cwd)) ? "HEAD" : undefined)
         }
 
         if (!value.root) return []
         if (value.current && value.current === value.root.name) return []
-        const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
+        const ref = yield* git.mergeBase(cwd, value.root.ref)
         if (!ref) return []
-        return yield* diffAgainstRef(git, ctx.directory, ref)
+        return yield* diffAgainstRef(git, cwd, ref).pipe(
+          Effect.catch((error) => {
+            log.warn("failed to load branch git diff", { cwd, ref, error: errorMessage(error) })
+            return Effect.succeed([] as FileDiff[])
+          }),
+        )
       }),
       diffRaw: Effect.fn("Vcs.diffRaw")(function* () {
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return ""
-        const [hasHead, status] = yield* Effect.all([git.hasHead(ctx.directory), git.status(ctx.directory)], {
+        const cwd = yield* resolveRoot(git, ctx.directory, ctx.worktree)
+        const [hasHead, status] = yield* Effect.all([git.hasHead(cwd), git.status(cwd)], {
           concurrency: 2,
         })
-        const tracked = hasHead ? (yield* git.patchAll(ctx.directory, "HEAD")).text : ""
+        const tracked = hasHead ? (yield* git.patchAll(cwd, "HEAD")).text : ""
         const untracked = yield* Effect.forEach(
           status.filter((item) => item.code === "??"),
-          (item) => git.patchUntracked(ctx.directory, item.file).pipe(Effect.map((patch) => patch.text)),
+          (item) => git.patchUntracked(cwd, item.file).pipe(Effect.map((patch) => patch.text)),
         )
         return [tracked, ...untracked].filter(Boolean).join("\n")
       }),
@@ -392,7 +410,8 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
             reason: "non-git",
           })
         }
-        const applied = yield* git.applyPatch(ctx.directory, input.patch)
+        const cwd = yield* resolveRoot(git, ctx.directory, ctx.worktree)
+        const applied = yield* git.applyPatch(cwd, input.patch)
         if (applied.exitCode !== 0) {
           return yield* new PatchApplyError({
             message: "Patch can't be applied",

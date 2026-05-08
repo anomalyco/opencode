@@ -566,7 +566,6 @@ export default function Page() {
     return open
   }, desktopReviewOpen())
 
-  const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => !!sync.project && sync.project.vcs !== "git")
   const changesOptions = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
@@ -587,6 +586,36 @@ export default function Page() {
     isDesktop()
       ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
       : store.mobileTab === "changes",
+  )
+  const turnKey = createMemo(() => ["session-turn-diff", params.id ?? "", lastUserMessage()?.id ?? ""] as const)
+  const turnDiffQuery = createQuery(() => {
+    const sessionID = params.id
+    const messageID = lastUserMessage()?.id
+    const enabled = wantsReview() && store.changes === "turn" && !!sessionID && !!messageID
+
+    return {
+      queryKey: turnKey(),
+      enabled,
+      staleTime: Number.POSITIVE_INFINITY,
+      gcTime: 60 * 1000,
+      queryFn:
+        sessionID && messageID
+          ? () =>
+              sdk.client.session
+                .diff({ sessionID, messageID })
+                .then((result) => list(result.data))
+                .catch((error) => {
+                  console.debug("[session-review] failed to load turn diff", { sessionID, messageID, error })
+                  return list(lastUserMessage()?.summary?.diffs)
+                })
+          : skipToken,
+    }
+  })
+  const refreshTurnDiff = () => void queryClient.invalidateQueries({ queryKey: turnKey() })
+  const turnDiffs = createMemo(() =>
+    turnDiffQuery.isFetched
+      ? (turnDiffQuery.data ?? list(lastUserMessage()?.summary?.diffs))
+      : list(lastUserMessage()?.summary?.diffs),
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     if (store.changes === "git" || store.changes === "branch") return store.changes
@@ -626,7 +655,7 @@ export default function Page() {
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
     if (store.changes === "git" || store.changes === "branch") return !vcsQuery.isPending
-    return true
+    return !turnDiffQuery.isPending
   }
 
   const newSessionWorktree = createMemo(() => {
@@ -994,6 +1023,7 @@ export default function Page() {
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
         refreshVcs()
+        refreshTurnDiff()
       },
       { defer: true },
     ),

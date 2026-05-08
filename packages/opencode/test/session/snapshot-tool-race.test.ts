@@ -234,6 +234,8 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
         .flatMap((m) => m.parts)
         .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash")
       expect(tool?.state.status).toBe("completed")
+      const user = allMsgs.find((m) => m.info.role === "user")
+      expect(user?.info.id).toBeTruthy()
 
       // Poll for diff — summarize() is fire-and-forget
       let diff: Array<{ file: string }> = []
@@ -243,6 +245,15 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
         yield* Effect.sleep("100 millis")
       }
       expect(diff.length).toBeGreaterThan(0)
+
+      let turnDiff: Array<{ file: string }> = []
+      for (let i = 0; i < 50; i++) {
+        turnDiff = yield* summary.diff({ sessionID: session.id, messageID: user!.info.id })
+        if (turnDiff.length > 0) break
+        yield* Effect.sleep("100 millis")
+      }
+      expect(turnDiff.length).toBeGreaterThan(0)
+      expect(turnDiff.some((item) => item.file.endsWith("race-test.txt"))).toBe(true)
     }),
     { git: true, config: providerCfg },
   ),

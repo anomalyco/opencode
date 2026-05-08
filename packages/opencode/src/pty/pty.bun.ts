@@ -1,10 +1,14 @@
-import { spawn as create } from "bun-pty"
 import type { Opts, Proc } from "./pty"
+import { needsWindowsPipePtyFallback, spawnPipeFallback } from "./pty.compat"
 
 export type { Disp, Exit, Opts, Proc } from "./pty"
 
+const native = needsWindowsPipePtyFallback() ? null : await import("bun-pty")
+
 export function spawn(file: string, args: string[], opts: Opts): Proc {
-  const pty = create(file, args, opts)
+  if (!native) return spawnPipeFallback(file, args, opts)
+
+  const pty = native.spawn(file, args, opts)
   return {
     pid: pty.pid,
     onData(listener) {

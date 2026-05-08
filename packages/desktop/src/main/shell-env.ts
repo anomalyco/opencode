@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process"
-import { basename } from "node:path"
+import { existsSync } from "node:fs"
+import { basename, delimiter, dirname, win32 } from "node:path"
 
 const TIMEOUT = 5_000
 
@@ -84,5 +85,68 @@ export function mergeShellEnv(shell: Record<string, string> | null, env: Record<
   return {
     ...shell,
     ...env,
+  }
+}
+
+function pathKey(env: Record<string, string>) {
+  if ("PATH" in env) return "PATH"
+  if ("Path" in env) return "Path"
+  return process.platform === "win32" ? "Path" : "PATH"
+}
+
+function existingDirs(dirs: string[], exists: (dir: string) => boolean = existsSync) {
+  return dirs.filter((dir) => {
+    try {
+      return exists(dir)
+    } catch {
+      return false
+    }
+  })
+}
+
+function uniquePaths(paths: string[], platform = process.platform) {
+  const seen = new Set<string>()
+  return paths.filter((item) => {
+    const key = platform === "win32" ? item.toLowerCase() : item
+    if (!item || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function gitWindowsCandidates(env: Record<string, string>, exists?: (dir: string) => boolean) {
+  const programFiles = env.ProgramFiles || process.env.ProgramFiles
+  const programFilesX86 = env["ProgramFiles(x86)"] || process.env["ProgramFiles(x86)"]
+  const localAppData = env.LOCALAPPDATA || env.LocalAppData || process.env.LOCALAPPDATA
+
+  const roots = [programFiles, programFilesX86, localAppData].filter((value): value is string => !!value)
+  const candidates = roots.flatMap((root) => [win32.join(root, "Git", "cmd"), win32.join(root, "Git", "bin")])
+
+  const gitExec = env.GIT_EXEC_PATH || process.env.GIT_EXEC_PATH
+  if (gitExec) {
+    candidates.push(dirname(gitExec))
+    candidates.push(win32.join(dirname(gitExec), "..", "cmd"))
+    candidates.push(win32.join(dirname(gitExec), "..", "bin"))
+  }
+
+  return existingDirs(candidates, exists)
+}
+
+export function ensureWindowsGitPath(
+  env: Record<string, string>,
+  opts?: { platform?: NodeJS.Platform; exists?: (dir: string) => boolean },
+) {
+  const platform = opts?.platform ?? process.platform
+  if (platform !== "win32") return env
+
+  const key = pathKey(env)
+  const current = env[key] || process.env[key] || ""
+  const currentParts = current.split(platform === "win32" ? ";" : delimiter).filter(Boolean)
+  const gitParts = gitWindowsCandidates(env, opts?.exists)
+  if (gitParts.length === 0) return env
+
+  return {
+    ...env,
+    [key]: uniquePaths([...currentParts, ...gitParts], platform).join(platform === "win32" ? ";" : delimiter),
   }
 }

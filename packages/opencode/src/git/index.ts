@@ -1,6 +1,7 @@
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Effect, Layer, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { which } from "@/util/which"
 
 const cfg = [
   "--no-optional-locks",
@@ -97,6 +98,14 @@ const kind = (code: string): Kind => {
   return "modified"
 }
 
+const parseStatus = (text: string) =>
+  nuls(text).flatMap((item) => {
+    const file = item.slice(3)
+    if (!file) return []
+    const code = item.slice(0, 2)
+    return [{ file, code, status: kind(code) } satisfies Item]
+  })
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/Git") {}
 
 export const layer = Layer.effect(
@@ -108,7 +117,8 @@ export const layer = Layer.effect(
 
     const run = Effect.fn("Git.run")(
       function* (args: string[], opts: Options) {
-        const proc = ChildProcess.make("git", [...cfg, ...args], {
+        const binary = which("git", { ...process.env, ...opts.env }) || "git"
+        const proc = ChildProcess.make(binary, [...cfg, ...args], {
           cwd: opts.cwd,
           env: opts.env,
           extendEnv: true,
@@ -230,22 +240,24 @@ export const layer = Layer.effect(
     })
 
     const status = Effect.fn("Git.status")(function* (cwd: string) {
-      return nuls(
-        yield* text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], {
-          cwd,
-        }),
-      ).flatMap((item) => {
-        const file = item.slice(3)
-        if (!file) return []
-        const code = item.slice(0, 2)
-        return [{ file, code, status: kind(code) } satisfies Item]
-      })
+      const args = ["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."]
+      const result = yield* run(args, { cwd })
+      if (result.exitCode !== 0) return []
+      const scoped = parseStatus(result.text())
+      if (scoped.length > 0) return scoped
+
+      const allArgs = ["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z"]
+      const all = yield* run(allArgs, { cwd })
+      if (all.exitCode !== 0) return []
+      return parseStatus(all.text())
     })
 
     const diff = Effect.fn("Git.diff")(function* (cwd: string, ref: string) {
-      const list = nuls(
-        yield* text(["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."], { cwd }),
-      )
+      const args = ["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."]
+      const result = yield* run(args, { cwd })
+      if (result.exitCode !== 0) return []
+
+      const list = nuls(result.text())
       return list.flatMap((code, idx) => {
         if (idx % 2 !== 0) return []
         const file = list[idx + 1]
@@ -255,9 +267,11 @@ export const layer = Layer.effect(
     })
 
     const stats = Effect.fn("Git.stats")(function* (cwd: string, ref: string) {
-      return nuls(
-        yield* text(["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."], { cwd }),
-      ).flatMap((item) => {
+      const args = ["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."]
+      const result = yield* run(args, { cwd })
+      if (result.exitCode !== 0) return []
+
+      return nuls(result.text()).flatMap((item) => {
         const a = item.indexOf("\t")
         const b = item.indexOf("\t", a + 1)
         if (a === -1 || b === -1) return []

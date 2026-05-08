@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { isNushell, mergeShellEnv, parseShellEnv } from "./shell-env"
+import { ensureWindowsGitPath, isNushell, mergeShellEnv, parseShellEnv } from "./shell-env"
 
 describe("shell env", () => {
   test("parseShellEnv supports null-delimited pairs", () => {
@@ -39,5 +39,26 @@ describe("shell env", () => {
     expect(isNushell("/opt/homebrew/bin/nu")).toBe(true)
     expect(isNushell("C:\\Program Files\\nu.exe")).toBe(true)
     expect(isNushell("/bin/zsh")).toBe(false)
+  })
+
+  test("ensureWindowsGitPath adds common Git for Windows paths", () => {
+    const env = ensureWindowsGitPath(
+      {
+        Path: "C:\\Windows\\System32",
+        ProgramFiles: "C:\\Program Files",
+      },
+      {
+        platform: "win32",
+        exists(dir) {
+          return dir === "C:\\Program Files\\Git\\cmd" || dir === "C:\\Program Files\\Git\\bin"
+        },
+      },
+    )
+
+    expect(env.Path?.split(";")).toEqual([
+      "C:\\Windows\\System32",
+      "C:\\Program Files\\Git\\cmd",
+      "C:\\Program Files\\Git\\bin",
+    ])
   })
 })

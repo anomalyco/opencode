@@ -57,6 +57,7 @@ import { patchFiles } from "./apply-patch-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
+import { normalize } from "./session-diff"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -1858,6 +1859,9 @@ ToolRegistry.register({
     const fileComponent = useFileComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
+    const view = createMemo(() =>
+      props.metadata?.filediff ? normalize(props.metadata.filediff, { preservePatchLineNumbers: true }) : undefined,
+    )
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
     return (
@@ -1901,18 +1905,25 @@ ToolRegistry.register({
               }
             >
               <div data-component="edit-content">
-                <Dynamic
-                  component={fileComponent}
-                  mode="diff"
-                  before={{
-                    name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.before || props.input.oldString || "",
-                  }}
-                  after={{
-                    name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.after || props.input.newString || "",
-                  }}
-                />
+                <Show
+                  when={view()}
+                  fallback={
+                    <Dynamic
+                      component={fileComponent}
+                      mode="diff"
+                      before={{
+                        name: props.metadata?.filediff?.file || props.input.filePath,
+                        contents: props.input.oldString,
+                      }}
+                      after={{
+                        name: props.metadata?.filediff?.file || props.input.filePath,
+                        contents: props.input.newString,
+                      }}
+                    />
+                  }
+                >
+                  {(diff) => <Dynamic component={fileComponent} mode="diff" fileDiff={diff().fileDiff} />}
+                </Show>
               </div>
             </ToolFileAccordion>
           </Show>
