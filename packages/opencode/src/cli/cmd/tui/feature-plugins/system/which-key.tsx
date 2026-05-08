@@ -41,6 +41,7 @@ const PANEL_HEIGHT_RATIO = 0.3
 const PANEL_TOP_PADDING = 1
 const FOOTER_HEIGHT = 1
 const FOOTER_MARGIN = 1
+const UNKNOWN = "Unknown"
 
 type Layout = "dock" | "overlay"
 
@@ -111,25 +112,27 @@ function activeKeyLabel(active: ActiveKey<Renderable, KeyEvent>) {
     text(active.bindingAttrs?.desc) ??
     text(active.commandAttrs?.desc) ??
     (typeof active.command === "string" ? active.command : undefined) ??
-    (active.continues ? "prefix" : "binding")
+    UNKNOWN
   )
 }
 
 function activeKeyGroup(active: ActiveKey<Renderable, KeyEvent>) {
-  return text(active.commandAttrs?.category) ?? text(active.bindingAttrs?.group) ?? "Other"
+  if (active.continues) return "System"
+  return text(active.commandAttrs?.category) ?? text(active.bindingAttrs?.group) ?? UNKNOWN
 }
 
 function activeKeyEntry(api: TuiPluginApi, active: ActiveKey<Renderable, KeyEvent>): Entry {
+  const key = api.keys.formatSequence([
+    {
+      stroke: active.stroke,
+      display: active.display,
+      tokenName: active.tokenName,
+    },
+  ])
   const label = activeKeyLabel(active)
   return {
     type: "entry",
-    key: api.keys.formatSequence([
-      {
-        stroke: active.stroke,
-        display: active.display,
-        tokenName: active.tokenName,
-      },
-    ]),
+    key,
     label: active.continues ? `+${label}` : label,
     group: activeKeyGroup(active),
     continues: active.continues,
