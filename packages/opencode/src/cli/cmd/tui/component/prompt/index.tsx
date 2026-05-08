@@ -94,6 +94,8 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
+const DRAFT_RETENTION_MIN_CHARS = 20
+
 function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
@@ -412,13 +414,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         hidden: true,
         run: () => {
-          input.clear()
-          input.extmarks.clear()
-          setStore("prompt", {
-            input: "",
-            parts: [],
-          })
-          setStore("extmarkToPartIndex", new Map())
+          clearPrompt()
           dialog.clear()
         },
       },
@@ -876,7 +872,20 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
-      bindings: keymapConfig.pick("prompt", ["prompt.clear"]),
+      bindings: [
+        ...keymapConfig.pick("prompt", ["prompt.clear"]),
+        ...(store.mode === "normal" && !auto()?.visible && status().type === "idle"
+          ? [
+              {
+                key: "escape",
+                cmd: () => {
+                  clearPrompt()
+                  dialog.clear()
+                },
+              },
+            ]
+          : []),
+      ],
     }
   })
 
@@ -1354,6 +1363,22 @@ export function Prompt(props: PromptProps) {
       }),
     )
     return
+  }
+
+  function clearPrompt() {
+    if (store.prompt.input.trim().length >= DRAFT_RETENTION_MIN_CHARS || store.prompt.parts.length > 0) {
+      history.append({
+        ...store.prompt,
+        mode: store.mode,
+      })
+    }
+    input.clear()
+    input.extmarks.clear()
+    setStore("prompt", {
+      input: "",
+      parts: [],
+    })
+    setStore("extmarkToPartIndex", new Map())
   }
 
   const highlight = createMemo(() => {
