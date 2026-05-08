@@ -2,6 +2,8 @@ mod cli;
 mod constants;
 // FORK: 本地资源自定义 protocol(.md 图 / 音视频 / HTML 预览 iframe 共用)2026-05-05
 mod local_asset;
+// FORK: DeskFox system tray + 主进程常驻骨架 [feat: feishu-bridge] 2026-05-08
+mod system_tray;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 #[cfg(target_os = "linux")]
@@ -482,6 +484,11 @@ pub fn run() {
 
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
+
+            // FORK: 注册 system tray(C0.5.1 scaffold,菜单 / 命令 C0.5.3 加)[feat: feishu-bridge]
+            if let Err(err) = system_tray::build_tray(app.handle()) {
+                tracing::warn!("failed to build system tray: {err}");
+            }
 
             Ok(())
         });
