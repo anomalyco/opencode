@@ -106,3 +106,43 @@ pub fn write_binary_file_absolute_base64(
     }
     std::fs::write(&path, bytes).map_err(|e| format!("write failed: {}: {}", path, e))
 }
+
+// FORK: 远端图片 fetch → base64 — MD 导出 Word 时让 markdown-docx 通过 data: URL 嵌入图片,
+// 绕过 WebView2 fetch CORS / 网络限制。8MB 上限防 DoS / 内存占用过大。2026-05-08
+const MAX_FETCH_BYTES: u64 = 8 * 1024 * 1024;
+
+#[tauri::command]
+#[specta::specta]
+pub async fn fetch_url_base64(url: String) -> Result<String, String> {
+    use base64::Engine;
+    let parsed = reqwest::Url::parse(&url).map_err(|e| format!("invalid url: {}", e))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(format!("scheme not allowed: {}", parsed.scheme()));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("DeskFox/1.0 (md-export-word)")
+        .build()
+        .map_err(|e| format!("client build failed: {}", e))?;
+    let resp = client
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|e| format!("fetch failed: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("http {}", resp.status().as_u16()));
+    }
+    if let Some(len) = resp.content_length() {
+        if len > MAX_FETCH_BYTES {
+            return Err(format!("response too large: {} > {} bytes", len, MAX_FETCH_BYTES));
+        }
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("read body failed: {}", e))?;
+    if bytes.len() as u64 > MAX_FETCH_BYTES {
+        return Err(format!("response too large: {} bytes", bytes.len()));
+    }
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
