@@ -169,7 +169,7 @@ export const SortableProject = (props: {
 }): JSX.Element | null => {
   if (!props.project?.worktree) return null
   const sortable = createSortable(props.project.worktree)
-  const selected = createMemo(() => projectSelected(props.ctx.current(), props.project.worktree))
+  const selected = createMemo(() => projectSelected(props.ctx.current(), props.project.worktree, props.project.sandboxes))
   const language = useLanguage()
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
   const [state, setState] = createStore({ menu: false })
