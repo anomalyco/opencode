@@ -398,10 +398,11 @@ export function Prompt(props: PromptProps) {
       if (msg.agent && isPrimaryAgent) {
         // Keep command line --agent if specified.
         if (!args.agent) local.agent.set(msg.agent)
-        if (msg.model) {
-          local.model.set(msg.model)
-          local.model.variant.set(msg.model.variant)
-        }
+        // NOTE: uncomment to also restore model/variant from session history
+        // if (msg.model) {
+        //   local.model.set(msg.model)
+        //   local.model.variant.set(msg.model.variant)
+        // }
       }
     }
   })
