@@ -182,10 +182,10 @@ function WhichKeyPanel(props: {
   const [activeGroup, setActiveGroup] = createSignal<string | undefined>()
   const pending = useKeymapSelector((keymap) => keymap.getPendingSequence())
   const active = useKeymapSelector((keymap) => keymap.getActiveKeys({ includeMetadata: true }))
-  const pendingMode = createMemo(
-    () => props.mode() === "overlay" && props.pendingPreview() && pending().length > 0 && active().length > 0,
-  )
-  const visible = createMemo(() => props.pinned() || pendingMode())
+  const pendingActive = createMemo(() => pending().length > 0 && active().length > 0)
+  const pendingAutoVisible = createMemo(() => props.mode() === "overlay" && props.pendingPreview() && pendingActive())
+  const visible = createMemo(() => props.pinned() || pendingAutoVisible())
+  const pendingMode = createMemo(() => visible() && pendingActive())
   const left = 0
   const width = createMemo(() => Math.max(1, dimensions().width))
   const panelHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height * PANEL_HEIGHT_RATIO)))
