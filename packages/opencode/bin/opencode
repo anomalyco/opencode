@@ -5,7 +5,7 @@ const fs = require("fs")
 const path = require("path")
 const os = require("os")
 
-const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT", "SIGUSR1", "SIGUSR2"]
+const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 
 function run(target) {
   const child = childProcess.spawn(target, process.argv.slice(2), {
@@ -44,18 +44,12 @@ function run(target) {
 }
 
 const envPath = process.env.OPENCODE_BIN_PATH
-if (envPath) {
-  run(envPath)
-}
 
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
 //
 const cached = path.join(scriptDir, ".opencode")
-if (fs.existsSync(cached)) {
-  run(cached)
-}
 
 const platformMap = {
   darwin: "darwin",
@@ -192,7 +186,7 @@ function findBinary(startDir) {
   }
 }
 
-const resolved = findBinary(scriptDir)
+const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
 if (!resolved) {
   console.error(
     "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +
