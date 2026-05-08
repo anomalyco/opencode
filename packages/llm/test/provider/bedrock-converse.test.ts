@@ -50,7 +50,7 @@ const eventStreamBody = (...payloads: ReadonlyArray<readonly [string, object]>) 
 // Override the default SSE content-type with the binary event-stream type so
 // the cassette layer treats the body as bytes when recording.
 const fixedBytes = (bytes: Uint8Array) =>
-  fixedResponse(bytes, { headers: { "content-type": "application/vnd.amazon.eventstream" } })
+  fixedResponse(bytes.slice().buffer, { headers: { "content-type": "application/vnd.amazon.eventstream" } })
 
 const model = BedrockConverse.model({
   id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
