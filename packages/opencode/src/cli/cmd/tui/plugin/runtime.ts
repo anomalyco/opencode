@@ -1049,7 +1049,7 @@ async function load(input: { api: Api; config: TuiConfig.Resolved }) {
             meta,
             themes: {},
             plugin: entry.module.tui,
-            enabled: true,
+            enabled: item.enabled ?? true,
           })
         }
 
