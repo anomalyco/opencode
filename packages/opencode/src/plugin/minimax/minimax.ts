@@ -1,7 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createHash, randomBytes } from "node:crypto"
-import { Auth } from "@/auth"
+
 
 const CLIENT_ID = "d38bdbee-2b8c-4c74-9a9c-5875fabe6317"
 
@@ -99,12 +99,15 @@ function createMinimaxAuthPlugin(config: MinimaxRegionConfig) {
             if (refreshed) {
               accessToken = refreshed.access_token
               // Persist refreshed tokens so subsequent calls use the updated values
-              await Auth.set(provider, {
-                type: "oauth",
-                access: refreshed.access_token,
-                refresh: refreshed.refresh_token,
-                expires: refreshed.expired_in,
-                enterpriseUrl: refreshed.resource_url || resourceUrl,
+              await _input.client.auth.set({
+                path: { id: provider },
+                body: {
+                  type: "oauth",
+                  access: refreshed.access_token,
+                  refresh: refreshed.refresh_token,
+                  expires: refreshed.expired_in,
+                  enterpriseUrl: refreshed.resource_url || resourceUrl,
+                },
               })
             }
           }
