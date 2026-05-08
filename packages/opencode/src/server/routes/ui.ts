@@ -1,10 +1,9 @@
 import fs from "node:fs/promises"
-import { createHash } from "node:crypto"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import { ProxyUtil } from "../proxy-util"
-import { DEFAULT_CSP, UI_UPSTREAM, csp, embeddedUI, themePreloadHash, upstreamURL } from "../shared/ui"
+import { UI_UPSTREAM, csp, cspForHtml, embeddedUI, upstreamURL } from "../shared/ui"
 
 export async function serveUI(request: Request) {
   const embeddedWebUI = await embeddedUI()
@@ -17,8 +16,11 @@ export async function serveUI(request: Request) {
     if (await fs.exists(match)) {
       const mime = AppFileSystem.mimeType(match)
       const headers = new Headers({ "content-type": mime })
-      if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-      return new Response(new Uint8Array(await fs.readFile(match)), { headers })
+      const body = new Uint8Array(await fs.readFile(match))
+      if (mime.startsWith("text/html")) {
+        headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
+      }
+      return new Response(body, { headers })
     }
 
     return Response.json({ error: "Not Found" }, { status: 404 })
@@ -28,11 +30,10 @@ export async function serveUI(request: Request) {
     raw: request,
     headers: ProxyUtil.headers(request, { host: UI_UPSTREAM.host }),
   })
-  const match = response.headers.get("content-type")?.includes("text/html")
-    ? themePreloadHash(await response.clone().text())
-    : undefined
-  const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
-  response.headers.set("Content-Security-Policy", csp(hash))
+  response.headers.set(
+    "Content-Security-Policy",
+    response.headers.get("content-type")?.includes("text/html") ? cspForHtml(await response.clone().text()) : csp(),
+  )
   return response
 }
 
