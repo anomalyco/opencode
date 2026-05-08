@@ -415,8 +415,11 @@ export async function handler(
             message: error.message,
           },
           metadata:
-            error instanceof GoUsageLimitError || error instanceof BlackUsageLimitError
-              ? { workspace: error.workspace }
+            error instanceof GoUsageLimitError
+              ? {
+                  workspace: error.workspace,
+                  limitName: error.limitName,
+                }
               : {},
         }),
         { status: 429, headers },
@@ -710,7 +713,6 @@ export async function handler(
               t("zen.api.error.subscriptionQuotaExceeded", {
                 retryIn: formatRetryTime(result.resetInSec),
               }),
-              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -729,7 +731,6 @@ export async function handler(
               t("zen.api.error.subscriptionQuotaExceeded", {
                 retryIn: formatRetryTime(result.resetInSec),
               }),
-              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -757,6 +758,7 @@ export async function handler(
             throw new GoUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
               authInfo.workspaceID,
+              "weekly",
               result.resetInSec,
             )
         }
@@ -773,6 +775,7 @@ export async function handler(
             throw new GoUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
               authInfo.workspaceID,
+              "monthly",
               result.resetInSec,
             )
         }
@@ -789,6 +792,7 @@ export async function handler(
             throw new GoUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
               authInfo.workspaceID,
+              "5 hour",
               result.resetInSec,
             )
         }
