@@ -70,7 +70,7 @@ export const layer = Layer.effect(
           db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
         ),
       )
-      return rows.map((row) => ({
+      return rows.filter((row) => row.status === "pending" || row.status === "in_progress").map((row) => ({
         content: row.content,
         status: row.status,
         priority: row.priority,
