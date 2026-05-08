@@ -34,6 +34,7 @@ const panelCommands = [
 ] as const
 const COLUMN_GAP = 4
 const TAB_GAP = 3
+const TAB_CONTENT_GAP = 1
 const MIN_COLUMN_WIDTH = 28
 const MAX_COLUMN_WIDTH = 44
 const PANEL_HEIGHT_RATIO = 0.3
@@ -155,7 +156,7 @@ function WhichKeyPanel(props: {
   const columns = createMemo(() =>
     Math.max(1, Math.min(3, Math.floor((width() - 2 + COLUMN_GAP) / (MIN_COLUMN_WIDTH + COLUMN_GAP)) || 1)),
   )
-  const rows = createMemo(() => Math.max(1, panelHeight() - 3))
+  const rows = createMemo(() => Math.max(1, panelHeight() - 3 - TAB_CONTENT_GAP))
   const pageSize = createMemo(() => rows() * columns())
   const entries = createMemo(() => active().map((item) => activeKeyEntry(props.api, item)))
   const groups = createMemo(() => grouped(entries()))
@@ -354,6 +355,7 @@ function WhichKeyPanel(props: {
             </For>
           </box>
         </Show>
+        <box height={TAB_CONTENT_GAP} flexShrink={0} />
         <box height={rows()} flexShrink={0} flexDirection="column">
           <Show when={shown().length > 0} fallback={<text fg={look().muted}>No reachable bindings</text>}>
             <For each={rowIndexes()}>
@@ -368,12 +370,12 @@ function WhichKeyPanel(props: {
                             {(binding) => (
                               <>
                                 <box flexGrow={1} minWidth={0}>
-                                  <text fg={binding().continues ? look().accent : look().text} wrapMode="none" truncate>
+                                  <text fg={binding().continues ? look().accent : look().muted} wrapMode="none" truncate>
                                     {binding().label}
                                   </text>
                                 </box>
                                 <box flexShrink={0}>
-                                  <text fg={look().key} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                                  <text fg={look().text} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
                                     {binding().key}
                                   </text>
                                 </box>
