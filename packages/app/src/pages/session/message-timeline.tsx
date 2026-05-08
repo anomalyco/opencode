@@ -72,6 +72,13 @@ const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
 const IDLE_QUEUE_MS = 300
+const scrollDebugKey = "opencode.session.scroll.debug"
+
+function probe(id?: string) {
+  if (typeof window === "undefined") return false
+  const flag = window.localStorage.getItem(scrollDebugKey)
+  return flag === "1" || (!!id && flag === id)
+}
 
 type MathMode = "turn" | "markdown"
 
@@ -280,6 +287,8 @@ export function MessageTimeline(props: {
   let windowFrame: number | undefined
   let bottomFrame: number | undefined
   let mutationFrame: number | undefined
+  let pinFrame: number | undefined
+  let pinSource = "unknown"
   let blank: number | undefined
   let idleTimer: ReturnType<typeof setTimeout> | undefined
   let windowAdjustVersion = 0
@@ -288,6 +297,7 @@ export function MessageTimeline(props: {
   const [stageMark, setStageMark] = createSignal(0)
   const stageByTurn = new Map<string, Map<string, MarkdownStage>>()
   const upgraded = new Set<string>()
+  let skipped = 0
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
@@ -340,6 +350,24 @@ export function MessageTimeline(props: {
 
     return map
   })
+
+  const follow = (root: HTMLDivElement, src: string) => {
+    if (props.hasScrollGesture()) {
+      const now = Date.now()
+      if (now - skipped > 300) {
+        debug("follow:held", { source: src })
+        console.debug("[timeline] follow held", { src })
+        skipped = now
+      }
+      return
+    }
+
+    const max = Math.max(0, root.scrollHeight - root.clientHeight)
+    const dist = max - root.scrollTop
+    root.scrollTop = root.scrollHeight
+    debug("follow:write", { source: src, dist: Math.round(dist) })
+    props.onScheduleScrollState(root)
+  }
   const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? estimates()?.get(id) ?? estimatedTurnHeight
   const slot = (id: string, index: number, size: number) => estimateTurnHeight(id) + (index < size - 1 ? gap : 0)
   const offset = (ids: string[], end: number) => {
@@ -357,6 +385,48 @@ export function MessageTimeline(props: {
     const box = root.getBoundingClientRect()
     const rect = node.getBoundingClientRect()
     return rect.bottom > box.top && rect.top < box.bottom
+  }
+  const debug = (src: string, extra?: Record<string, unknown>) => {
+    if (!probe(sessionID())) return
+    const root = viewport
+    const data = root ? snap(root) : undefined
+    const body = contentRef
+    const list = body?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
+    const first = root?.querySelector<HTMLElement>("[data-message-id]")
+    const last = root ? [...root.querySelectorAll<HTMLElement>("[data-message-id]")].at(-1) : undefined
+    const box = root?.getBoundingClientRect()
+    const a = first?.getBoundingClientRect()
+    const b = last?.getBoundingClientRect()
+    console.debug("[timeline-scroll]", {
+      src,
+      id: sessionID(),
+      live: props.live,
+      bottom: props.scroll.bottom,
+      overflow: props.scroll.overflow,
+      gesture: props.hasScrollGesture(),
+      seeking: props.seekingMessageId || "none",
+      current: props.currentMessageId || "none",
+      active: activeMessageID() || "none",
+      top: data?.top ?? "none",
+      max: data?.max ?? "none",
+      gap: data?.gap ?? "none",
+      height: data?.height ?? "none",
+      client: data?.client ?? "none",
+      body: body ? Math.round(body.getBoundingClientRect().height) : "none",
+      list: list ? Math.round(list.getBoundingClientRect().height) : "none",
+      margin: list ? getComputedStyle(list).marginTop : "none",
+      first: first?.dataset.messageId || "none",
+      firstTop: a && box ? Math.round(a.top - box.top) : "none",
+      last: last?.dataset.messageId || "none",
+      lastBottom: b && box ? Math.round(b.bottom - box.top) : "none",
+      window: `[${windowed.start},${windowed.end}]`,
+      spacerTop: Math.round(windowed.top),
+      spacerBottom: Math.round(windowed.bottom),
+      total: Math.round(totalHeight()),
+      measured: turnHeights.size,
+      visible: visibleRendered().length,
+      ...extra,
+    })
   }
   const trace = (stage: string, id?: string, extra = "") => {
     const root = viewport
@@ -662,6 +732,7 @@ export function MessageTimeline(props: {
     const root = viewport
     const before = root ? snap(root) : undefined
     const seek = props.seekingMessageId
+    debug("window:before", { seek: seek || "none" })
     if (seek) trace("apply-before", seek)
     const pinned = !props.seekingMessageId && !!before && before.gap <= 16
     const viewportAnchor = pinned ? undefined : captureWindowAnchor()
@@ -684,6 +755,7 @@ export function MessageTimeline(props: {
       if (pinned && root) {
         root.scrollTop = root.scrollHeight
         props.onScheduleScrollState(root)
+        debug("window:pinned-same")
       }
       return
     }
@@ -707,6 +779,7 @@ export function MessageTimeline(props: {
         if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
         root.scrollTop = root.scrollHeight
         props.onScheduleScrollState(root)
+        debug("window:bottom-write")
       })
       return
     }
@@ -732,6 +805,7 @@ export function MessageTimeline(props: {
       const prevTop = root.scrollTop
       root.scrollTop += delta
       const after = snap(root)
+      debug("window:anchor-write", { delta: Math.round(delta), prevTop: Math.round(prevTop), afterTop: after.top })
 
       if (seek) trace("anchor-write", seek, `delta=${Math.round(delta)} prevTop=${Math.round(prevTop)} afterTop=${after.top} anchor=${scrollAnchor.id} target=${targetId || "none"}`)
       props.onScheduleScrollState(root)
@@ -825,6 +899,53 @@ export function MessageTimeline(props: {
     })
   }
 
+  const pin = (source: string) => {
+    const root = viewport
+    if (!root) {
+      debug("pin:skip", { source, reason: "root" })
+      return
+    }
+    if (props.seekingMessageId || props.currentMessageId) {
+      debug("pin:skip", { source, reason: "target" })
+      return
+    }
+    if (!props.live) {
+      debug("pin:skip", { source, reason: "live" })
+      return
+    }
+    if (props.hasScrollGesture()) {
+      debug("pin:skip", { source, reason: "gesture" })
+      return
+    }
+    if (root.clientHeight <= 0 || root.scrollHeight <= 0) {
+      debug("pin:skip", { source, reason: "size" })
+      return
+    }
+
+    const top = Math.max(0, root.scrollHeight - root.clientHeight)
+    const dist = top - root.scrollTop
+    if (Math.abs(dist) <= 1) {
+      debug("pin:skip", { source, reason: "close", dist: Math.round(dist) })
+      return
+    }
+
+    root.scrollTop = top
+    debug("pin:write", { source, dist: Math.round(dist) })
+    console.debug(
+      `[timeline] bottom pin: source=${source} dist=${Math.round(dist)} top=${Math.round(root.scrollTop)} scrollHeight=${Math.round(root.scrollHeight)} clientHeight=${Math.round(root.clientHeight)}`,
+    )
+    props.onScheduleScrollState(root)
+  }
+
+  const schedulePin = (source: string) => {
+    pinSource = source
+    if (pinFrame !== undefined) return
+    pinFrame = requestAnimationFrame(() => {
+      pinFrame = undefined
+      pin(pinSource)
+    })
+  }
+
   createEffect(
     on(rendered, () => {
       const ids = new Set(rendered())
@@ -884,7 +1005,7 @@ export function MessageTimeline(props: {
   createEffect(() => {
     if (!isWorking()) return
     if (props.seekingMessageId) return
-    if (!props.live && !props.scroll.bottom) return
+    if (!props.live) return
 
     const step = () => {
       bottomFrame = undefined
@@ -892,9 +1013,8 @@ export function MessageTimeline(props: {
       if (!root) return
       if (!isWorking()) return
       if (props.seekingMessageId) return
-      if (!props.live && !props.scroll.bottom) return
-      root.scrollTop = root.scrollHeight
-      props.onScheduleScrollState(root)
+      if (!props.live) return
+      follow(root, "frame")
       bottomFrame = requestAnimationFrame(step)
     }
 
@@ -910,6 +1030,7 @@ export function MessageTimeline(props: {
     if (windowFrame !== undefined) cancelAnimationFrame(windowFrame)
     if (bottomFrame !== undefined) cancelAnimationFrame(bottomFrame)
     if (mutationFrame !== undefined) cancelAnimationFrame(mutationFrame)
+    if (pinFrame !== undefined) cancelAnimationFrame(pinFrame)
     if (blank !== undefined) cancelAnimationFrame(blank)
     if (idleTimer !== undefined) clearTimeout(idleTimer)
   })
@@ -917,9 +1038,26 @@ export function MessageTimeline(props: {
   createEffect(() => {
     const body = contentRef
     if (!body) return
+
+    const sync = () => {
+      debug("content-resize")
+      pin("content-resize")
+      schedulePin("content-resize")
+    }
+
+    const observer = new ResizeObserver(sync)
+    observer.observe(body)
+    if (body.firstElementChild instanceof HTMLElement) observer.observe(body.firstElementChild)
+
+    onCleanup(() => observer.disconnect())
+  })
+
+  createEffect(() => {
+    const body = contentRef
+    if (!body) return
     if (!isWorking()) return
     if (props.seekingMessageId) return
-    if (!props.live && !props.scroll.bottom) return
+    if (!props.live) return
 
     let queued = false
     const flush = () => {
@@ -929,9 +1067,8 @@ export function MessageTimeline(props: {
       if (!root) return
       if (!isWorking()) return
       if (props.seekingMessageId) return
-      if (!props.live && !props.scroll.bottom) return
-      root.scrollTop = root.scrollHeight
-      props.onScheduleScrollState(root)
+      if (!props.live) return
+      follow(root, "mutation")
     }
     const schedule = () => {
       if (queued) return
@@ -2197,20 +2334,14 @@ export function MessageTimeline(props: {
               role="log"
               data-slot="session-turn-list"
               data-virtualized={canWindow() ? "true" : undefined}
-              class="flex flex-col items-start justify-start pb-16 transition-[margin]"
+              class="flex flex-col items-start justify-start pb-16"
               classList={{
                 "w-full": true,
               }}
               style={{
                 ...itemStyle(props.centered),
                 gap: "0px",
-                "margin-top": showHeader()
-                  ? props.centered
-                    ? "calc(64px + 0.125rem)"
-                    : "64px"
-                  : props.centered
-                    ? "0.125rem"
-                    : "0px",
+                "margin-top": showHeader() ? "64px" : props.centered ? "0.125rem" : "0px",
               }}
             >
               <Show when={props.historyMore}>
@@ -2339,6 +2470,13 @@ export function MessageTimeline(props: {
         }
       }
       scheduleWindow()
+      debug("measure", {
+        message: item.messageID,
+        prev: prev === undefined ? "none" : Math.round(prev),
+        next: Math.round(next),
+        delta,
+      })
+      schedulePin("turn-measure")
       const took = performance.now() - time
       if (seek() && took > MEASURE_WARN_MS) {
         trace("measure-slow", item.messageID, `height=${Math.round(next)} took=${Math.round(took)}`)
