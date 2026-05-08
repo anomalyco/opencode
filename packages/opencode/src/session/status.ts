@@ -17,6 +17,8 @@ export const Info = Schema.Union([
     message: Schema.String,
     action: Schema.optional(
       Schema.Struct({
+        reason: Schema.String,
+        provider: Schema.String,
         title: Schema.String,
         message: Schema.String,
         label: Schema.String,

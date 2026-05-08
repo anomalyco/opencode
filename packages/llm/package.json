@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "version": "1.14.25",
+  "name": "@opencode-ai/llm",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "setup:recording-env": "bun run script/setup-recording-env.ts",
+    "test": "bun test --timeout 30000",
+    "typecheck": "tsgo --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./route": "./src/route/index.ts",
+    "./provider": "./src/provider.ts",
+    "./providers": "./src/providers/index.ts",
+    "./providers/amazon-bedrock": "./src/providers/amazon-bedrock.ts",
+    "./providers/anthropic": "./src/providers/anthropic.ts",
+    "./providers/azure": "./src/providers/azure.ts",
+    "./providers/cloudflare": "./src/providers/cloudflare.ts",
+    "./providers/github-copilot": "./src/providers/github-copilot.ts",
+    "./providers/google": "./src/providers/google.ts",
+    "./providers/openai": "./src/providers/openai.ts",
+    "./providers/openai-compatible": "./src/providers/openai-compatible.ts",
+    "./providers/openai-compatible-profile": "./src/providers/openai-compatible-profile.ts",
+    "./providers/openrouter": "./src/providers/openrouter.ts",
+    "./providers/xai": "./src/providers/xai.ts",
+    "./protocols": "./src/protocols/index.ts",
+    "./protocols/anthropic-messages": "./src/protocols/anthropic-messages.ts",
+    "./protocols/bedrock-converse": "./src/protocols/bedrock-converse.ts",
+    "./protocols/gemini": "./src/protocols/gemini.ts",
+    "./protocols/openai-chat": "./src/protocols/openai-chat.ts",
+    "./protocols/openai-compatible-chat": "./src/protocols/openai-compatible-chat.ts",
+    "./protocols/openai-responses": "./src/protocols/openai-responses.ts"
+  },
+  "devDependencies": {
+    "@clack/prompts": "1.0.0-alpha.1",
+    "@effect/platform-node": "catalog:",
+    "@opencode-ai/http-recorder": "workspace:*",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  },
+  "dependencies": {
+    "@smithy/eventstream-codec": "4.2.14",
+    "@smithy/util-utf8": "4.2.2",
+    "aws4fetch": "1.0.20",
+    "effect": "catalog:"
+  }
+}

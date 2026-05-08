@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Event } from "@opencode-ai/sdk/v2"
 import { entryBody } from "@/cli/cmd/run/entry.body"
 import {
+  bootstrapSubagentCalls,
   bootstrapSubagentData,
   clearFinishedSubagents,
   createSubagentData,
@@ -10,6 +11,7 @@ import {
 } from "@/cli/cmd/run/subagent-data"
 
 type SessionMessage = Parameters<typeof bootstrapSubagentData>[0]["messages"][number]
+type ChildMessage = Parameters<typeof bootstrapSubagentCalls>[0]["messages"][number]
 
 function visible(commits: Array<Parameters<typeof entryBody>[0]>) {
   return commits.flatMap((item) => {
@@ -118,6 +120,65 @@ function question(id: string, sessionID: string) {
       },
     ],
   }
+}
+
+function childMessage(input: {
+  messageID: string
+  sessionID: string
+  role: "user" | "assistant"
+  parts: ChildMessage["parts"]
+}) {
+  if (input.role === "user") {
+    return {
+      info: {
+        id: input.messageID,
+        sessionID: input.sessionID,
+        role: "user",
+        time: {
+          created: 1,
+        },
+        agent: "test",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-5",
+        },
+      },
+      parts: input.parts,
+    } satisfies ChildMessage
+  }
+
+  return {
+    info: {
+      id: input.messageID,
+      sessionID: input.sessionID,
+      role: "assistant",
+      time: {
+        created: 2,
+        completed: 3,
+      },
+      parentID: "msg-user-1",
+      providerID: "openai",
+      modelID: "gpt-5",
+      mode: "default",
+      agent: "explore",
+      path: {
+        cwd: "/tmp",
+        root: "/tmp",
+      },
+      cost: 0,
+      tokens: {
+        input: 1,
+        output: 1,
+        reasoning: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+      },
+      finish: "stop",
+    },
+    parts: input.parts,
+  } satisfies ChildMessage
 }
 
 describe("run subagent data", () => {
@@ -307,6 +368,73 @@ describe("run subagent data", () => {
       }),
     ])
     expect(snapshot.questions).toEqual([])
+  })
+
+  test("replays bootstrapped child session messages into inspector commits", () => {
+    const data = createSubagentData()
+
+    bootstrapSubagentData({
+      data,
+      messages: [taskMessage("child-1", "completed")],
+      children: [{ id: "child-1" }],
+      permissions: [],
+      questions: [],
+    })
+
+    expect(
+      bootstrapSubagentCalls({
+        data,
+        sessionID: "child-1",
+        messages: [
+          childMessage({
+            messageID: "msg-user-1",
+            sessionID: "child-1",
+            role: "user",
+            parts: [
+              {
+                id: "txt-user-1",
+                messageID: "msg-user-1",
+                sessionID: "child-1",
+                type: "text",
+                text: "Inspect footer tabs",
+                time: { start: 1, end: 1 },
+              },
+            ],
+          }),
+          childMessage({
+            messageID: "msg-assistant-1",
+            sessionID: "child-1",
+            role: "assistant",
+            parts: [
+              {
+                id: "reason-1",
+                messageID: "msg-assistant-1",
+                sessionID: "child-1",
+                type: "reasoning",
+                text: "planning next steps",
+                time: { start: 2, end: 2 },
+              },
+              {
+                id: "txt-1",
+                messageID: "msg-assistant-1",
+                sessionID: "child-1",
+                type: "text",
+                text: "hello world",
+                time: { start: 2, end: 3 },
+              },
+            ],
+          }),
+        ],
+        thinking: true,
+        limits: {},
+      }),
+    ).toBe(true)
+
+    expect(visible(snapshotSubagentData(data).details["child-1"]?.commits ?? [])).toEqual([
+      "› Inspect footer tabs",
+      "_Thinking:_ planning next steps",
+      "hello world",
+    ])
   })
 
   test("clears finished tabs on the next parent prompt", () => {

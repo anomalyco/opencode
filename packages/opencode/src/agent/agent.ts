@@ -10,11 +10,13 @@ import { ProviderTransform } from "@/provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_SCOUT from "./prompt/scout.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
@@ -24,6 +26,9 @@ import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { zod } from "@/util/effect-zod"
 import { withStatics, type DeepMutable } from "@/util/schema"
+
+type ReferenceEntry = NonNullable<Config.Info["reference"]>[string]
+type ResolvedReference = { kind: "git"; repository: string; branch?: string } | { kind: "local"; path: string }
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -86,6 +91,10 @@ export const layer = Layer.effect(
           path.join(Global.Path.tmp, "*"),
           ...skillDirs.map((dir) => path.join(dir, "*")),
         ]
+        const readonlyExternalDirectory = {
+          "*": "ask",
+          ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+        } satisfies Record<string, "allow" | "ask" | "deny">
 
         const defaults = Permission.fromConfig({
           "*": "allow",
@@ -97,6 +106,8 @@ export const layer = Layer.effect(
           question: "deny",
           plan_enter: "deny",
           plan_exit: "deny",
+          repo_clone: "deny",
+          repo_overview: "deny",
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
           read: {
             "*": "allow",
@@ -174,10 +185,7 @@ export const layer = Layer.effect(
                 webfetch: "allow",
                 websearch: "allow",
                 read: "allow",
-                external_directory: {
-                  "*": "ask",
-                  ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-                },
+                external_directory: readonlyExternalDirectory,
               }),
               user,
             ),
@@ -187,6 +195,37 @@ export const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
+          ...(Flag.OPENCODE_EXPERIMENTAL_SCOUT
+            ? {
+                scout: {
+                  name: "scout",
+                  permission: Permission.merge(
+                    defaults,
+                    Permission.fromConfig({
+                      "*": "deny",
+                      grep: "allow",
+                      glob: "allow",
+                      webfetch: "allow",
+                      websearch: "allow",
+                      codesearch: "allow",
+                      read: "allow",
+                      repo_clone: "allow",
+                      repo_overview: "allow",
+                      external_directory: {
+                        ...readonlyExternalDirectory,
+                        [path.join(Global.Path.repos, "*")]: "allow",
+                      },
+                    }),
+                    user,
+                  ),
+                  description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
+                  prompt: PROMPT_SCOUT,
+                  options: {},
+                  mode: "subagent" as const,
+                  native: true,
+                },
+              }
+            : {}),
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -262,6 +301,75 @@ export const layer = Layer.effect(
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+        }
+
+        function referencePath(value: string) {
+          if (value.startsWith("~/")) return path.join(Global.Path.home, value.slice(2))
+          return path.isAbsolute(value)
+            ? value
+            : path.resolve(ctx.worktree === "/" ? ctx.directory : ctx.worktree, value)
+        }
+
+        function resolveReference(reference: ReferenceEntry): ResolvedReference {
+          if (typeof reference === "string") {
+            if (reference.startsWith(".") || reference.startsWith("/") || reference.startsWith("~")) {
+              return { kind: "local", path: referencePath(reference) }
+            }
+            return { kind: "git", repository: reference }
+          }
+          if ("path" in reference) return { kind: "local", path: referencePath(reference.path) }
+          return { kind: "git", repository: reference.repository, branch: reference.branch }
+        }
+
+        function referencePrompt(name: string, reference: ResolvedReference) {
+          if (reference.kind === "local") {
+            return [
+              PROMPT_SCOUT,
+              `You are Scout reference @${name}. This reference points to a local directory outside or alongside the current workspace.`,
+              `Local directory: ${reference.path}`,
+              `When invoked, inspect this directory as the primary reference source. Prefer repo_overview with path ${JSON.stringify(reference.path)} before broader searches. Do not edit files.`,
+            ].join("\n\n")
+          }
+
+          return [
+            PROMPT_SCOUT,
+            `You are Scout reference @${name}. This reference points to a git repository.`,
+            `Repository: ${reference.repository}`,
+            ...(reference.branch ? [`Branch/ref: ${reference.branch}`] : []),
+            `When invoked, clone or refresh this repository with repo_clone, then inspect the cached repository as the primary reference source. Do not edit files.`,
+          ].join("\n\n")
+        }
+
+        if (Flag.OPENCODE_EXPERIMENTAL_SCOUT) {
+          for (const [name, reference] of Object.entries(cfg.reference ?? {})) {
+            if (agents[name]) continue
+            const resolved = resolveReference(reference)
+            const localPath = resolved.kind === "local" ? resolved.path : undefined
+            agents[name] = {
+              name,
+              description:
+                resolved.kind === "local"
+                  ? `Scout reference for local directory ${resolved.path}`
+                  : `Scout reference for repository ${resolved.repository}`,
+              permission: Permission.merge(
+                agents.scout.permission,
+                Permission.fromConfig(
+                  localPath
+                    ? {
+                        external_directory: {
+                          [localPath]: "allow",
+                          [path.join(localPath, "*")]: "allow",
+                        },
+                      }
+                    : {},
+                ),
+              ),
+              prompt: referencePrompt(name, resolved),
+              options: { reference },
+              mode: "subagent",
+              native: false,
+            }
+          }
         }
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured
