@@ -37,6 +37,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let settleTimer: ReturnType<typeof setTimeout> | undefined
   let autoTimer: ReturnType<typeof setTimeout> | undefined
   let auto: { top: number; time: number } | undefined
+  let away = 0
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -105,7 +106,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const scrollToBottom = (force: boolean) => {
     if (!force && !active()) return
 
-    if (force && store.userScrolled) setStore("userScrolled", false)
+    if (force) {
+      away = 0
+      if (store.userScrolled) setStore("userScrolled", false)
+    }
 
     const el = store.scrollRef
     if (!el) return
@@ -122,9 +126,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
     scrollToBottomNow("auto")
   }
 
-  const stop = () => {
-    const el = store.scrollRef
+  const stop = (hold = false) => {
+    const el = scroll
     if (!el) return
+    if (hold) away = Date.now()
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
       return
@@ -132,11 +137,19 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (store.userScrolled) return
 
     setStore("userScrolled", true)
+    console.debug("[auto-scroll] paused", {
+      gap: Math.round(distanceFromBottom(el)),
+      hold,
+    })
     options.onUserInteracted?.()
   }
 
   const handleWheel = (e: WheelEvent) => {
-    if (e.deltaY >= 0) return
+    if (e.deltaY > 0) {
+      away = 0
+      return
+    }
+    if (e.deltaY === 0) return
     // If the user is scrolling within a nested scrollable region (tool output,
     // code block, etc), don't treat it as leaving the "follow bottom" mode.
     // Those regions opt in via `data-scrollable`.
@@ -144,7 +157,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const target = e.target instanceof Element ? e.target : undefined
     const nested = target?.closest("[data-scrollable]")
     if (el && nested && nested !== el) return
-    stop()
+    stop(true)
   }
 
   const handleScroll = () => {
@@ -157,6 +170,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
     }
 
     if (atBottom(el)) {
+      if (store.userScrolled && away && Date.now() - away < 700) return
+      away = 0
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }
@@ -254,6 +269,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     handleInteraction,
     pause: stop,
     resume: () => {
+      away = 0
       if (store.userScrolled) setStore("userScrolled", false)
       scrollToBottom(true)
     },
