@@ -2,14 +2,12 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { getFilename } from "@opencode-ai/util/path"
-import { useParams } from "@solidjs/router"
-import { createMemo, Show } from "solid-js"
+import { createMemo, Show, type Accessor } from "solid-js"
 import { useLayout, getAvatarColors, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { Icon, type IconName } from "@opencode-ai/ui/icon"
-import { decode64 } from "@/utils/base64"
 import { enabledExtraAgents } from "@/pages/layout/extra-agents"
 
 type ProjectItem = {
@@ -32,26 +30,17 @@ type ExtraAgentItem = {
 
 type ProjectEntry = ProjectItem | ExtraAgentItem
 
-export function DialogSwitchProject(props: { onSelect: (directory: string) => void }) {
+export function DialogSwitchProject(props: { onSelect: (directory: string) => void; current: Accessor<string | undefined> }) {
   const dialog = useDialog()
   const language = useLanguage()
   const layout = useLayout()
   const server = useServer()
-  const params = useParams()
-
-  const currentDirectory = createMemo(() => {
-    try {
-      return decode64(params.dir)
-    } catch {
-      return undefined
-    }
-  })
 
   const enabledAgents = createMemo(() => enabledExtraAgents(server.list))
 
   const entries = createMemo((): ProjectEntry[] => {
     const projects = layout.projects.rail()
-    const current = currentDirectory()
+    const current = props.current()
 
     const result: ProjectEntry[] = projects.map((project) => ({
       kind: "project",

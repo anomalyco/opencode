@@ -20,7 +20,7 @@ function railHue(input: string): number {
 }
 
 export type ProjectSidebarContext = {
-  currentDir: Accessor<string>
+  current: Accessor<string | undefined>
   sidebarReduced: Accessor<boolean>
   consumeProjectClick: () => boolean
   navigateToProject: (directory: string) => void
@@ -169,9 +169,7 @@ export const SortableProject = (props: {
 }): JSX.Element | null => {
   if (!props.project?.worktree) return null
   const sortable = createSortable(props.project.worktree)
-  const selected = createMemo(() =>
-    projectSelected(props.ctx.currentDir(), props.project.worktree, props.project.sandboxes),
-  )
+  const selected = createMemo(() => projectSelected(props.ctx.current(), props.project.worktree))
   const language = useLanguage()
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
   const [state, setState] = createStore({ menu: false })
