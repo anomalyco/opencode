@@ -23,7 +23,8 @@ import {
   ModelError,
   RateLimitError,
   FreeUsageLimitError,
-  SubscriptionUsageLimitError,
+  GoUsageLimitError,
+  BlackUsageLimitError,
 } from "./error"
 import {
   buildCostChunk,
@@ -70,6 +71,7 @@ export async function handler(
     modelList: "lite" | "full"
     parseApiKey: (headers: Headers) => string | undefined
     parseModel: (url: string, body: any) => string
+    parseVariant: (url: string, body: any) => string | undefined
     parseIsStream: (url: string, body: any) => boolean
   },
 ) {
@@ -92,6 +94,7 @@ export async function handler(
     const url = input.request.url
     const body = await input.request.json()
     const model = opts.parseModel(url, body)
+    const variant = opts.parseVariant(url, body)
     const isStream = opts.parseIsStream(url, body)
     const rawIp = input.request.headers.get("x-real-ip") ?? ""
     const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
@@ -108,6 +111,7 @@ export async function handler(
       request: requestId,
       client: ocClient,
       user_agent: userAgent,
+      "model.variant": variant,
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
@@ -116,7 +120,7 @@ export async function handler(
     const trialProviders = await trialLimiter?.check()
     const rateLimiter = modelInfo.allowAnonymous
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
-      : createKeyRateLimiter(modelInfo.id, zenApiKey, input.request)
+      : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
@@ -161,6 +165,7 @@ export async function handler(
                   if (typeof v === "string") {
                     if (v === "$ip") return [[k, ip]]
                     if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v === "$session") return sessionId ? [[k, sessionId]] : []
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
                       return headerValue ? [[k, headerValue]] : []
@@ -395,7 +400,8 @@ export async function handler(
     if (
       error instanceof RateLimitError ||
       error instanceof FreeUsageLimitError ||
-      error instanceof SubscriptionUsageLimitError
+      error instanceof GoUsageLimitError ||
+      error instanceof BlackUsageLimitError
     ) {
       const headers = new Headers()
       if (error.retryAfter) {
@@ -404,7 +410,17 @@ export async function handler(
       return new Response(
         JSON.stringify({
           type: "error",
-          error: { type: error.constructor.name, message: error.message },
+          error: {
+            type: error.constructor.name,
+            message: error.message,
+          },
+          metadata:
+            error instanceof GoUsageLimitError
+              ? {
+                  workspace: error.workspace,
+                  limitName: error.limitName,
+                }
+              : {},
         }),
         { status: 429, headers },
       )
@@ -693,7 +709,7 @@ export async function handler(
             timeUpdated: sub.timeFixedUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
+            throw new BlackUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceeded", {
                 retryIn: formatRetryTime(result.resetInSec),
               }),
@@ -711,7 +727,7 @@ export async function handler(
             timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
+            throw new BlackUsageLimitError(
               t("zen.api.error.subscriptionQuotaExceeded", {
                 retryIn: formatRetryTime(result.resetInSec),
               }),
@@ -728,6 +744,7 @@ export async function handler(
     // Validate lite subscription billing
     if (opts.modelList === "lite" && authInfo.billing.lite && authInfo.lite) {
       try {
+        const consoleGoUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/go`
         const sub = authInfo.lite
         const liteData = LiteData.getLimits()
 
@@ -739,8 +756,13 @@ export async function handler(
             timeUpdated: sub.timeWeeklyUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
-              t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+            throw new GoUsageLimitError(
+              t("zen.api.error.goSubscriptionWeeklyLimitExceeded", {
+                retryIn: formatRetryTime(result.resetInSec),
+                consoleGoUrl,
+              }),
+              authInfo.workspaceID,
+              "weekly",
               result.resetInSec,
             )
         }
@@ -754,8 +776,13 @@ export async function handler(
             timeSubscribed: sub.timeCreated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
-              t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+            throw new GoUsageLimitError(
+              t("zen.api.error.goSubscriptionMonthlyLimitExceeded", {
+                retryIn: formatRetryTime(result.resetInSec),
+                consoleGoUrl,
+              }),
+              authInfo.workspaceID,
+              "monthly",
               result.resetInSec,
             )
         }
@@ -769,8 +796,13 @@ export async function handler(
             timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionUsageLimitError(
-              t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+            throw new GoUsageLimitError(
+              t("zen.api.error.goSubscriptionRollingLimitExceeded", {
+                retryIn: formatRetryTime(result.resetInSec),
+                consoleGoUrl,
+              }),
+              authInfo.workspaceID,
+              "5 hour",
               result.resetInSec,
             )
         }
