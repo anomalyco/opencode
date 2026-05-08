@@ -1,0 +1,54 @@
+REGEDIT4
+
+; Description.
+; Run 'File under cursor' or 'Command line' in new console of ConEmu.
+; 'Press enter to close console' will be displayed after command completion.
+; Note! If you want to disable this confirmation, add ":n" after "-new_console"
+;       below. I.e. " -new_console:bn" or " -new_console:n".
+
+; ShiftEnter - run command in background ConEmu tab
+; Note! If you want to activate new tab on ShiftEnter,
+;       remove ":b" in " -new_console:b" below.
+
+; AltEnter   - run command and activate new ConEmu tab
+; Note! You must enable "Alt+Enter" option in ConEmu Settings->Keys.
+
+
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Vars]
+"%%ConEmu_ShiftEnter"="$if (akey(1,1)==\"ShiftEnter\") %add = \" -new_console:b\"; $else %add = \" -new_console\"; $end %oldcmd = \"\"; $if (Search) %oldcmd = CmdLine.Value; %oldpos = CmdLine.CurPos; Esc Esc $end $if (!CmdLine.Empty) $if (CmdLine.Value==\".\" || CmdLine.Value==\"..\" || CmdLine.Value==\"...\") ShiftEnter $else $if (MacroArea==\"AutoCompletion\") $if (CmdLine.Selected) Del $end Esc $if (MacroArea!=\"Shell\") $Exit $end $end $Rep(CmdLine.ItemCount) CtrlD $end $if (index(CmdLine.Value,\"-new_console\")<0) print(%add) $end $if (CmdLine.Selected) Del $end Enter $end $else $if (APanel.FilePanel && !APanel.Plugin && !APanel.Empty && !APanel.Folder && len(APanel.Current)>4) $if (MacroArea==\"AutoCompletion\") Esc $if (MacroArea!=\"Shell\") $Exit $end $end %exec = ucase(env(\"PATHEXT\")); $if (%exec==\"\") %exec = \".COM;.EXE;.BAT;.CMD\"; $end %ext = ucase(fsplit(APanel.Current,8)); $if (%ext!=\"\" && index(\";\"+%exec+\";\",\";\"+%ext+\";\")>=0) CtrlEnter $if (CmdLine.Selected) Del $end print(%add) $if (CmdLine.Selected) Del $end Enter $else $if (akey(1,1)==\"ShiftEnter\") ShiftEnter $end $end $else $if (akey(1,1)==\"ShiftEnter\") ShiftEnter $end $end $end $if (%oldcmd != \"\") print(%oldcmd) $if (%oldpos>=1 && %oldpos<=CmdLine.ItemCount) CtrlHome $Rep(%oldpos-1) CtrlD $end $end $end"
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\ShiftEnter]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\ShiftEnter]
+"Sequence"="eval(%%ConEmu_ShiftEnter)"
+"Description"="Run <File under cursor> or <Command line> in new console of ConEmu"
+"DisableOutput"=dword:00000001
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Search\ShiftEnter]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Search\ShiftEnter]
+"Sequence"="eval(%%ConEmu_ShiftEnter)"
+"DisableOutput"=dword:00000001
+"Description"="Run <File under cursor> or <Command line> in new console of ConEmu"
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\AutoCompletion\ShiftEnter]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\AutoCompletion\ShiftEnter]
+"Sequence"="eval(%%ConEmu_ShiftEnter)"
+"DisableOutput"=dword:00000001
+"Description"="Run <File under cursor> or <Command line> in new console of ConEmu"
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\AltEnter]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\AltEnter]
+"Sequence"="eval(%%ConEmu_ShiftEnter)"
+"Description"="Run <File under cursor> or <Command line> in new console of ConEmu"
+"DisableOutput"=dword:00000001
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Search\AltEnter]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Search\AltEnter]
+"Sequence"="eval(%%ConEmu_ShiftEnter)"
+"DisableOutput"=dword:00000001
+"Description"="Run <File under cursor> or <Command line> in new console of ConEmu"
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\AutoCompletion\AltEnter]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\AutoCompletion\AltEnter]
+"Sequence"="eval(%%ConEmu_ShiftEnter)"
+"DisableOutput"=dword:00000001
+"Description"="Run <File under cursor> or <Command line> in new console of ConEmu"

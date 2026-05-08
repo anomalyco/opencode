@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Description.
+  This Far TechInfo's replace key bar label for macroses from ConEmu.Thumbnails.lua
+  CtrlShiftF1 - switches Thumbnails view, CtrlShiftF2 - Tiles view
+  Use: "%FARHOME%\Far.exe" /import Thumbnails_KeyBar.farconfig
+-->
+<farconfig version="3.0.2102">
+    <generalconfig>
+        <setting key="KeyBarLabels.English.Shell" name="CtrlShiftF1" type="text" value="Thumb" />
+        <setting key="KeyBarLabels.English.Shell" name="CtrlShiftF2" type="text" value="Tiles" />
+        <setting key="KeyBarLabels.Russian.Shell" name="CtrlShiftF1" type="text" value="Эскиз" />
+        <setting key="KeyBarLabels.Russian.Shell" name="CtrlShiftF2" type="text" value="Плитка" />
+    </generalconfig>
+</farconfig>

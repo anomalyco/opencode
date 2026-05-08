@@ -1,0 +1,41 @@
+﻿
+// This is sample macro-file for MacroLib plugin for Far Manager 2.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+const ConEmu   = 0x43454D55
+const ConEmuTh = 0x43455568
+
+// Макросы для ConEmu
+macro Descr="ConEmu: Switch tabs visibility" Key="CtrlShiftT"
+{{
+callplugin(#%ConEmu,3)
+}}
+macro Descr="ConEmu: Show console output in editor" Area="Shell" Key="CtrlO"
+{{
+callplugin(#%ConEmu,1) CtrlEnd
+}}
+macro Descr="Hide/Show panels (standard FAR CtrlO)" Area="Shell" Key="CtrlAltO"
+{{
+CtrlO
+}}
+macro Descr="Тест открытия EMenu макросом (ready for conemu)" Area="Shell" Key="ShiftApps"
+{{
+$If (!CmdLine.Empty) %Flg_Cmd=1; %CmdCurPos=CmdLine.ItemCount-CmdLine.CurPos+1; %CmdVal=CmdLine.Value; Esc $Else %Flg_Cmd=0; $End print("rclk_gui:") Enter $If (%Flg_Cmd==1) print(%CmdVal) %Flg_Cmd=0; %Num=%CmdCurPos; $While (%Num!=0) %Num=%Num-1; CtrlS $End $End
+}}
+// Create new console with ConEmu debugger on this instance of FAR
+macro Descr="ConEmu: debugger on this instance of FAR" Area="Shell" Key="CtrlAltD"
+{{
+callplugin(#%ConEmu,8)
+}}
+
+// Макросы ConEmu PanelView
+macro Descr="ConEmuTh: Switch Thumbnail view on active panel" Area="Shell" Key="CtrlShiftF1"
+{{
+callplugin(#%ConEmuTh,1)
+}}
+macro Descr="ConEmuTh: Switch Tiles view on active panel" Area="Shell" Key="CtrlShiftF2"
+{{
+callplugin(#%ConEmuTh,2)
+}}

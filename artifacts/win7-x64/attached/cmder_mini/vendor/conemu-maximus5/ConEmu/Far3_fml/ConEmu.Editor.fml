@@ -1,0 +1,51 @@
+
+// This is sample macro-file for MacroLib plugin for Far Manager 2.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+// Several Far instances may be opened in ConEmu tabs.
+// This macro activates existing Editor/Viewer, wich
+// may be opened in then inactive instance of Far.
+
+const ConEmu   = "4b675d80-1d4a-4ea9-8436-fdc23f2fc14b"
+
+farmacro
+  Descr="ConEmu: Auto switch to Editor Tab"
+  Key="F3 F4"
+  Area="Shell Search"
+  Cond="PanelType:0"
+{{
+  %k = akey(1,0);
+  
+  $if (!APanel.Empty && (APanel.Current!=".."))
+    %s=APanel.Path;
+    %s=%s+iif(substr(%s,len(%s)-1)=="\\","","\\")+APanel.Current;
+    //MsgBox("Current item", %s)
+    %c = substr(%k,len(%k)-1,1);
+    %cmd = iif(%c=="4","FindEditor:","FindViewer:")+%s;
+    %iRc=callplugin(#%ConEmu,%cmd);
+    //MsgBox("EditOpen result", "callplugin="+%iRc+"\n<"+env("ConEmuMacroResult")+">")
+    $if (%iRc!=0)
+      %r = env("ConEmuMacroResult");
+      $if (substr(%r,0,5)=="Found")
+        $Exit // Ok
+      $else $if (substr(%r,0,6)=="Active")
+        F12 eval(substr(%r,7))
+        $Exit // Ok
+      $else $if (%r=="Blocked")
+        // MsgBox("ConEmu macro","Tab can't be activated now\n"+%s);
+      $end $end $end
+    $end
+  $end
+
+  //history.enable(0xF)
+  $if (%k=="F4") F4 $else F3 $end
+
+  // As we get here, Far will try to open viewer or editor window.
+  // But, it may be already opened in the current Far instance.
+  // When it's exists, Far show messagebox with confirmation and buttons:
+  // { Current } [ New instance ] [ Reload ]
+  // Next macro line depress { Current } button
+  $if (Dialog && Title=="Editor" && Dlg.ItemCount==7 && Dlg.CurPos==5 && Dlg.ItemType==7) Enter $end
+}}

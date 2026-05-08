@@ -1,0 +1,18 @@
+REGEDIT4
+
+; Description.
+; Switch ConEmu Panel Views mode.
+
+
+; Far2
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\CtrlShiftF1]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\CtrlShiftF1]
+"Sequence"="callplugin(0x43455568,1)"
+"Description"="Switch Thumbnails view on active panel"
+"DisableOutput"=dword:00000001
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\CtrlShiftF2]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\CtrlShiftF2]
+"Sequence"="callplugin(0x43455568,2)"
+"Description"="Switch Tiles view on active panel"
+"DisableOutput"=dword:00000001

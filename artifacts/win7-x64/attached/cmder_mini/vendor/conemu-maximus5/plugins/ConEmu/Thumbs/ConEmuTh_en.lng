@@ -1,0 +1,36 @@
+.Language=English,English
+
+// Plugin title
+"ConEmu Panel Views"
+// Panel modes
+"Thumbnails mode"
+// Panel modes
+"Tiles mode"
+// Panel modes
+"Icons mode"
+// Panel modes
+"Turn off"
+// Column titles
+"Thumbnails"
+"Tiles"
+// Some strings for Tiles mode
+"Folder"
+"Sym."
+"Junc."
+// Error messages
+"ConEmu PanelViews\nConEmu plugin not found,\nThumbnails will not be available."
+"ConEmu PanelViews\nOld version of ConEmu plugin,\nThumbnails will not be available."
+"ConEmu PanelViews\nThumbnails are not available in plain Far.\nFar Manager was not started under ConEmu?"
+"ConEmu PanelViews\nPlugin requires checked\noption in panel settings:\n[x] Show column titles"
+"ConEmu PanelViews\nPlugin requires space for checkmark\nin panel settings (flag 'M' in 'N' columns)\OK"
+"ConEmu PanelViews\nIcons mode required\nFar 3 bis build 2579 or higher\OK"
+"ConEmu PanelViews\nCreateThread(DisplayThread) failed\nErrCode=0x%08X"
+"ConEmu PanelViews\nThread activation timeout (DisplayThread)"
+"ConEmu PanelViews\nPostThreadmessage(DisplayThread) failed\nErrCode=0x%08X"
+"ConEmu PanelViews\nDisplayThread was terminated\nCode=0x%08X"
+"ConEmu PanelViews\nRegisterClass failed\nCode=0x%08X"
+"ConEmu PanelViews\nCreateWindow failed\nCode=0x%08X"
+"ConEmu PanelViews\nView registration in ConEmu failed\nErrCode=%i"
+"ConEmu PanelViews\nInternal error. Unknown panel mode was requested."
+"ConEmu PanelViews\nInternal error. Invalid settings was recieved."
+"ConEmu PanelViews\nConEmu is not available in terminal mode\nCheck TERM environment variable\nOK"

@@ -1,0 +1,16 @@
+REGEDIT4
+
+; Note! This is just an example of calling GuiMacro from Far Manager
+; Note! Ctrl+Wheel may be already binded in ConEmu Keys&Macro settings
+
+; Increase/decrease ConEmu GUI font size
+
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Common\AltMsWheelDown]
+"Sequence"="F11 $if (menu.Select(\"ConEmu\",2)<=0) MsgBox(\"ConEmu\",\"Plugin was not found in list!\",1) $Exit $end Enter $if (menu.select(\"~.\",1)>0) ~ $Text \"FontSetSize(1,-2)\" Enter $end Esc"
+"DisableOutput"=dword:00000001
+"Description"="ConEmu: Decrease GUI font size"
+
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Common\AltMsWheelUp]
+"Sequence"="F11 $if (menu.Select(\"ConEmu\",2)<=0) MsgBox(\"ConEmu\",\"Plugin was not found in list!\",1) $Exit $end Enter $if (menu.select(\"~.\",1)>0) ~ $Text \"FontSetSize(1,2)\" Enter $end Esc"
+"DisableOutput"=dword:00000001
+"Description"="ConEmu: Increase GUI font size"

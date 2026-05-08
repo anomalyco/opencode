@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    This is default configuration file for MinGW installation
+    It is stored in packages as "/libexec/conemu/ConEmu.xml"
+    Here are some changes in default ConEmu behavior and settings.
+    Ctrl+D -> exit\n
+    Ctrl+Shift+O & Ctrl+Shift+E -> create copy of current tab in split pane
+    Changes mouse selection
+-->
+<key name="Software">
+	<key name="ConEmu">
+		<key name=".Vanilla" modified="2015-02-25 12:24:13" build="150224a">
+			<value name="ClipboardDetectLineEnd" type="hex" data="01"/>
+			<value name="ClipboardBashMargin" type="hex" data="01"/>
+			<value name="ClipboardTrimTrailing" type="hex" data="02"/>
+			<value name="ClipboardEOL" type="hex" data="00"/>
+			<value name="ClipboardAllLines" type="hex" data="01"/>
+			<value name="ClipboardFirstLine" type="hex" data="01"/>
+			<value name="ClipboardClickPromptPosition" type="hex" data="02"/>
+			<value name="CTS.AutoCopy" type="hex" data="01"/>
+			<value name="CTS.EndOnTyping" type="hex" data="01"/>
+			<value name="CTS.EndOnKeyPress" type="hex" data="01"/>
+			<value name="CTS.Freeze" type="hex" data="00"/>
+			<value name="CTS.SelectBlock" type="hex" data="01"/>
+			<value name="CTS.SelectText" type="hex" data="01"/>
+			<value name="CTS.ActMode" type="hex" data="02"/>
+			<value name="CTS.RBtnAction" type="hex" data="03"/>
+			<value name="CTS.MBtnAction" type="hex" data="00"/>
+			<value name="CTS.ColorIndex" type="hex" data="e0"/>
+			<value name="ClipboardConfirmEnter" type="hex" data="01"/>
+			<value name="ClipboardConfirmLonger" type="dword" data="000000c8"/>
+			<value name="KeyMacro01" type="dword" data="00001144"/>
+			<value name="KeyMacro01.Text" type="string" data="print(&quot;exit
+&quot;)"/>
+			<value name="WndDragKey" type="dword" data="00121101"/>
+			<key name="Tasks" modified="2012-09-09 21:10:21">
+				<value name="Count" type="dword" data="00000003"/>
+				<key name="Task1" modified="2012-09-09 21:10:21">
+					<value name="Name" type="string" data="{Bash}"/>
+					<value name="GuiArgs" type="string" data=""/>
+					<value name="Cmd1" type="string" data="&quot;%ConEmuDir%\..\msys\1.0\bin\sh.exe&quot; --login -i -new_console:n"/>
+					<value name="Active" type="dword" data="00000000"/>
+					<value name="Count" type="dword" data="00000001"/>
+				</key>
+				<key name="Task2" modified="2012-09-09 21:10:21">
+					<value name="Name" type="string" data="{CMD}"/>
+					<value name="GuiArgs" type="string" data=""/>
+					<value name="Cmd1" type="string" data="cmd -new_console:n"/>
+					<value name="Active" type="dword" data="00000000"/>
+					<value name="Count" type="dword" data="00000001"/>
+				</key>
+				<key name="Task3" modified="2012-09-09 21:10:21">
+					<value name="Name" type="string" data="{PowerShell}"/>
+					<value name="GuiArgs" type="string" data=""/>
+					<value name="Cmd1" type="string" data="PowerShell -new_console:n"/>
+					<value name="Active" type="dword" data="00000000"/>
+					<value name="Count" type="dword" data="00000001"/>
+				</key>
+			</key>
+			<value name="CTS.VkBlock" type="hex" data="a4"/>
+			<value name="CTS.VkText" type="hex" data="00"/>
+			<value name="CTS.VkAct" type="hex" data="00"/>
+			<value name="CTS.VkPrompt" type="hex" data="a0"/>
+			<value name="FarGotoEditorVk" type="hex" data="a2"/>
+			<value name="UseCurrentSizePos" type="hex" data="01"/>
+			<value name="WindowMode" type="dword" data="0000051f"/>
+			<value name="ConWnd Width" type="dword" data="00000050"/>
+			<value name="ConWnd Height" type="dword" data="00000019"/>
+			<value name="Cascaded" type="hex" data="01"/>
+			<value name="IntegralSize" type="hex" data="00"/>
+			<value name="ConWnd X" type="dword" data="000000b8"/>
+			<value name="ConWnd Y" type="dword" data="0000015b"/>
+			<value name="16bit Height" type="dword" data="00000000"/>
+			<value name="AutoSaveSizePos" type="hex" data="01"/>
+		</key>
+	</key>
+</key>

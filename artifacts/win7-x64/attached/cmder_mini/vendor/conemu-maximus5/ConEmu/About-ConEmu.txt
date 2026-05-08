@@ -1,0 +1,93 @@
+ConEmu-Maximus5 - Handy Windows terminal
+
+
+About ConEmu
+
+    ConEmu-Maximus5 is a Windows console emulator with tabs, which presents
+    multiple consoles and simple GUI applications as one customizable GUI
+    window with various features.
+
+    Initially, the program was created as a companion to Far Manager,
+    my favorite shell replacement - file and archive management,
+    command history and completion, powerful editor.
+
+    Today, ConEmu can be used with any other console application or simple
+    GUI tools (like PuTTY for example).
+
+    ConEmu is an active project, open to suggestions.
+    https://conemu.github.io/en/Issues.html
+
+
+Description
+
+    ConEmu starts a console program in hidden console window and provides an
+    alternative customizable GUI window with various features:
+
+    * smooth and friendly window resizing;
+    * tabs for editors, viewers, panels and consoles;
+    * run simple GUI apps in tabs;
+    * Windows 7 Jump Lists and Progress on Taskbar buttons;
+    * easily run old DOS applications (games) in Windows 7 or 64-bit OS;
+    * thumbnails and tiles in Far Manager;
+    * normal, maximized and full screen graphical window modes;
+    * window font anti-aliasing: standard, ClearType, disabled;
+    * window fonts: family, height, width, bold, italic, etc.;
+    * Chinese verions of Windows supported;
+    * using normal/bold/italic fonts for different parts of the console simultaneously;
+    * using 24-bit colors in Far Manager 3.x;
+    * ANSI X3.64 and Xterm 256 colors;
+    * cursor: standard console (horizontal) or GUI (vertical);
+    * optional per-application settings (e.g. palette);
+    * vertical console buffer scrolling using the keyboard (BufferHeight mode);
+    * show full output (1K+ lines) of last command in Far Manager's editor/viewer;
+    * customizable Far Manager right click behaviour (long click opens context menu);
+    * drag and drop (explorer style) of files and folders in Far Manager;
+    * limited support of BDF fonts;
+    * user friendly text and block selection;
+    * transparency and desktop mode;
+    * customizable starting tabs;
+    * configurable and clickable status bar;
+    * and much more - take a look at the Settings dialog or https://conemu.github.io/en/Settings.html
+
+    All settings are read from the registry or xml-file (multiple named
+    configurations are supported), after which the command line parameters
+    are applied. Most settings are configured using the Settings dialog,
+    not from the command line.
+
+
+
+Requirements
+
+    * Windows XP or later for 32-bit.
+    * Windows Vista or later for 64-bit.
+
+
+Installation
+
+    1. Just unpack all files (from appropriate "ConEmuPack.*.7z")
+       or install "ConEmuSetup.*.exe" package to any folder your choice.
+       Subfolder "plugins" is required if you are using "Far Manager"!
+    2. Run `ConEmu.exe` or `ConEmu64.exe`.
+
+    For more details please refer to: https://conemu.github.io/en/Installation.html
+
+Command Line Syntax
+
+    Started without params, ConEmu runs some default shell.
+
+    Run "ConEmu.exe /?" or "ConEmu64.exe /?" to view the list of switches,
+    or visit our website to examine switches description:
+
+    * https://conemu.github.io/en/ConEmuArgs.html
+    * https://conemu.github.io/en/ConEmuC.html
+
+
+Command Line Examples
+
+	ConEmu.exe -cmd {Git bash}
+	ConEmu.exe -title "Kill voracious browsers" -StartTSA -cmd -cur_console:n powershell -noprofile C:\DropBox\Kill.ps1
+
+
+Documentation
+
+    Please, visit: https://conemu.github.io/

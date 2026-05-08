@@ -1,0 +1,12 @@
+REGEDIT4
+
+; Redirect output of console program to FAR editor.
+; Checkbox 'AltEnter' in ConEmu settings must be On.
+; Plugin 'Far commands' must be installed.
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\AltEnter]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\AltEnter]
+"Sequence"="CtrlHome e d i t : < Enter"
+"DisableOutput"=dword:00000001
+"Description"="Execute CmdLine and redirect output to Editor"
+"NotEmptyCommandLine"=dword:00000001

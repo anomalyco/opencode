@@ -1,0 +1,33 @@
+# When this file is named "default_settings" and is in the binaries
+# directory or profile directory, it provides enhanced default settings.
+
+# Override built-in default settings with ones that provide a more
+# enhanced Clink experience.
+
+autosuggest.enable                = True
+clink.default_bindings            = windows
+cmd.ctrld_exits                   = False
+color.arginfo                     = sgr 38;5;172
+color.argmatcher                  = sgr 1;38;5;40
+color.cmd                         = bold
+color.cmdredir                    = sgr 38;5;172
+color.cmdsep                      = sgr 38;5;135
+color.comment_row                 = sgr 38;5;87;48;5;18
+color.description                 = sgr 38;5;39
+color.doskey                      = sgr 1;38;5;75
+color.executable                  = sgr 1;38;5;33
+color.filtered                    = bold
+color.flag                        = sgr 38;5;117
+color.hidden                      = sgr 38;5;160
+color.histexpand                  = sgr 97;48;5;55
+color.horizscroll                 = sgr 38;5;16;48;5;30
+color.input                       = sgr 38;5;214
+color.readonly                    = sgr 38;5;28
+color.selected_completion         = sgr 7
+color.selection                   = sgr 38;5;16;48;5;179
+color.unrecognized                = sgr 38;5;203
+history.max_lines                 = 25000
+history.time_stamp                = show
+match.expand_envvars              = True
+match.substring                   = True
+

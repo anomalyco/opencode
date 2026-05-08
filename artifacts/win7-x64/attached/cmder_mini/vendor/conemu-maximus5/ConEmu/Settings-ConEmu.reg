@@ -1,0 +1,509 @@
+REGEDIT4
+
+[HKEY_CURRENT_USER\Software\ConEmu\.Vanilla]
+;; 'default' command line. May be empty
+"CmdLine"="Far.exe"
+
+;; You may choose program icon
+;; 1 - standard ConEmu icon
+;; 2 - Far manager icon
+;; 3 - "Far Unicode" icon
+;; Btw, You may place any 'ConEmu.ico' file with 'ConEmu.exe'
+"IconID"=dword:00000001
+
+;; hex:01 - enabled, hex:02 - enabled only in panels
+"BackGround Image show"=hex:00
+"BackGround Image"="c:\\back.bmp"
+"bgImageDarker"=hex:46
+;; BitMask for background colors replaced with background image
+;; Default is 3 (black & blue)
+;"bgImageColors"=dword:00000003
+
+;; Transparency of the main window (28..FF). FF - opaque.
+"AlphaValue"=hex:ff
+;; Transparent «User screen» while panel(s) is turned off
+;"UseColorKey"=hex:01
+;"ColorKey"=dword:00010101
+
+;; hex:01 - Search, register for process, and use first *.ttf file in conemu folder
+;; hex:00 - ConEmu will use only preregistered, system fonts
+"AutoRegisterFonts"=hex:01
+
+
+;; Main display font
+"FontName"="Lucida Console"
+"FontSize"=dword:00000014
+"FontSizeX"=dword:00000000
+;; Automatic font resize for the fixed real console width
+;"FontAutoSize"=hex:00
+"FontCharSet"=hex:cc
+"FontBold"=hex:00
+"FontItalic"=hex:00
+;; Determine behaviour of symbol placing in the cells.
+;; hex:00 - cast main font as PROPORTIONAL font (i.e. Arial, Tahoma, Times New Roman, ...)
+;; hex:01 - ... as MONOSPACE font (i.e. Courier, Lucida Concole, FixedSys, Terminal, ...)
+;; hex:02 - same as 'hex:01', but ConEmu will try to center symbols in their cells
+"Monospace"=hex:01
+;; Width of the cell for 'Monospace' mode, default is 0
+;"FontSizeX3"=dword:0000000c
+;; Anti-aliasing. 3 - Disabled, 4 - Standard, 6 - ClearType
+"Anti-aliasing"=hex:04
+
+
+;; ConEmu may draw specified ranges of symbols with alternative NON Anti-Aliased Font.
+;; By default, this range contains pseudographics (borders).
+;; hex:00 - borders are drawn using main font.
+;; hex:01 - using FontName2.
+"FixFarBorders"=hex:01
+;"FontName2"="Lucida Console"
+;"FontSizeX2"=dword:00000000
+;; You may redefine default character ranges for 'Fix far borders' feature.
+;; Charset - Unicode, one char - 4 hex digits, max - 10 ranges.
+;"FixFarBordersRanges"="2013-2015;2190-21AF;2500-25C4;3B2-3B2"
+
+
+
+;; ConEmu is able to use normal, bold and italic fonts side by side.
+;; Set "ExtendFonts"=hex:01 to enable this feature
+"ExtendFonts"=hex:01
+;; "ExtendFontBoldIdx" and "ExtendFontItalicIdx" are background color indecies,
+;; for which Bold and Italic font properties are inverted.
+;; Allowed values: 0..F (indecies), FF - disabled
+"ExtendFontBoldIdx"=hex:0C
+"ExtendFontItalicIdx"=hex:0D
+;; When Bold or Italic font property was inverted, ConEmu may
+;; change background to default color (blue, for example).
+;; Allowed values: 0..F (indecies), FF - don't touch background
+"ExtendFontNormalIdx"=hex:01
+
+
+
+;; Enhance appearence of progressbars and scrollbars
+"EnhanceGraphics"=hex:01
+;; For "EnhanceGraphics" == 1 You may specify the weights of parts (5..250)
+;"PartBrush75"=hex:C8
+;"PartBrush50"=hex:96
+;"PartBrush25"=hex:5A
+;"PartBrushBlack"=hex:20 ; somth. like gamma for dark monitors
+
+;; 1 - Vertical cursor
+"CursorType"=hex:01
+"CursorColor"=hex:00
+;; 0 - To disable cursor blinking
+"CursorBlink"=hex:01
+;; Rectangle instead of cursor line, when ConEmu has no focus
+"CursorBlockInactive"=hex:01
+
+;; 0 - don't handle - always send RClick to console
+;; 1 - always show context menu (look at "RightClickMacro2" value)
+;; 2 - ShortClick - send RClick, LongClick - show menu
+"RightClick opens context menu"=hex:02
+;; You may specify special macro, used to display menu.
+;; By default (value is absent or empty) ConEmu simply send next macro:
+;;   $If (!CmdLine.Empty) %Flg_Cmd=1; %CmdCurPos=CmdLine.ItemCount-CmdLine.CurPos+1;
+;;   %CmdVal=CmdLine.Value; Esc $Else %Flg_Cmd=0; $End $Text "rclk_gui:" Enter 
+;;   $If (%Flg_Cmd==1) $Text %CmdVal %Flg_Cmd=0; %Num=%CmdCurPos; 
+;;   $While (%Num!=0) %Num=%Num-1; CtrlS $End $End
+;; Prepend macro with '@' to 'DisableOutput'
+;"RightClickMacro2"="@F11 e Enter Enter"
+
+;; Turn on multiconsole (sort of 'ConMan' functionality)
+"Multi"=hex:00
+;; Some hotkeys for multiconsole
+;"Multi.NewConsole"=hex:57   ; "Win-W" - Create new console hotkey
+;"Multi.NewConfirm"=hex:01   ; Confirm new console creation from shortcut
+;"Multi.Next"=hex:51         ; "Win-Q" - Switch next console hotkey
+;"Multi.Recreate"=hex:C0     ; "Win-~" - Restart or terminate console hotkey
+;"Multi.Close"=hex:2E        ; "Win-Del" - Terminate active console hotkey
+;"Multi.CmdKey"=hex:58       ; "Win-X' - Create new "cmd.exe" console hotkey
+;"Multi.Buffer"=hex:41       ; "Win-A" - Turn bufferheight mode on/off hotkey. This value does not depend on "Multi"
+;; Hotkey modifiers ('Win' by default), or...
+;"Multi.Modifier"=dword:00111210 ; Ctrl-Alt-Shift+key
+;"Multi.Modifier"=dword:00001110 ; Ctrl-Shift+key
+;"Multi.Modifier"=dword:00001112 ; Ctrl-Alt+key
+;"Multi.UseNumbers"=hex:01   ; Use 'Host-key'+Numbers to switch consoles
+;"Multi.AutoCreate"=hex:00   ; 01 - Create new console, when 'Host-key'+Number depressed and console is absent
+;"Multi.Iterate"=hex:01      ; Iterate active console opened tabs with 'Host-key'+Number
+;"Multi.LeaveOnClose"=hex:00 ; 01 - Don't close ConEmu window when last console is closing
+;; Register hotkey for minimize/restore of main ConEmu window. Use "hex:00" for disabling feature.
+;"MinimizeRestore"=hex:43    ; "Win-C" - minimize/restore of the ConEmu window. This is _global_ hotkey.
+;; Use Keyboard Hooks for processing (required for Win-Number in Windows 7)
+;; hex:01 - enabled; hex:02 - disabled (don't use hooks)
+;"KeyboardHooks"=hex:01
+
+;; Window mode. 51f - Normal, 520 - Maximized, 521 - Fullscreen
+"WindowMode"=dword:0000051f
+;; Set to hex:01 to hide window caption in Maximized mode
+;"HideCaption"=hex:00
+;; Set to hex:01 to hide caption in all modes (normal/maximized/fullscreen)
+;"HideCaptionAlways"=hex:00
+;; While caption and frame are hidden, ConEmu may keep small part
+;; of frame (in pixels) around console part. Default is 1 pixel.
+;"HideCaptionAlwaysFrame"=hex:01
+;; Delay in milliseconds, for Caption and Frame appearance
+;"HideCaptionAlwaysDelay"=dword:000007d0
+;; Delay in milliseconds, for Caption and Frame disappearance
+;"HideCaptionAlwaysDisappear"=dword:000007d0
+
+
+;; Auto minimize to the Taskbar Status Area (TSA)
+;"Min2Tray"=hex:01
+;; Always show ConEmu icon in the Taskbar Status Area (TSA)
+;"AlwaysShowTrayIcon"=hex:01
+
+;; Center console in Fullscreen and Maximized modes
+"TryToCenter"=hex:01
+
+;; Scrollbar (console buffer mode) on the right edge of window
+;; 0 - scrollbar hidden, appears only on mouse moves over right edge of the window
+;; 1 - scrollbar always shown, even if buffermode is off
+;; 2 - autoshow scrollbar on scrolling position change
+;"ShowScrollbar"=hex:02
+
+;; Add extra space (in pixels) after last toolbar button
+;"ToolbarAddSpace"=dword:00000000
+
+;; Reduce FPS when ConEmu loose focus
+;"SleepInBackground"=hex:01
+
+;; Turn on 'User screen' transparency, when panel(s) is lifted up or hided.
+;; You may temporary reveal «User screen» by depressing Ctrl-Alt-Shift.
+;"UserScreenTransparent"=hex:00
+
+;; No comments
+;"AlwaysOnTop"=hex:00
+
+;; Act as a part of Windows Desktop
+;"DesktopMode"=hex:00
+
+
+;; Console (real) width and height in characters (window size)
+"ConWnd Width"=dword:00000050
+"ConWnd Height"=dword:00000019
+;; Autoswitch to buffer height mode, while FAR executes console programs.
+"AutoBufferHeight"=hex:01
+;; Console buffer height (default). min=300 lines
+;"DefaultBufferHeight"=dword:000003E8 ; 1000 lines
+
+;; Buffer height for 16bit applications (is not supported in x64 OS)
+;; Allowed values: 
+;;   dword:00000032 (50 lines), dword:0000002B (43 lines), 
+;;   dword:0000001C (28 lines), dword:00000019 (25 lines), 
+;;   dword:00000000 - means autoselection
+"16bit Height"=dword:00000000
+
+;; You can force output of internal cmd.exe commands to Unicode or Ansi (OEM actually).
+;; ConEmu can do this, by using /U or /A switches of cmd.exe
+;; dword:00000000 - Don't use /U or /A switches
+;; dword:00000002 - cmd.exe is forced to Unicode output (/U switch in cmd.exe arguments)
+;; dword:00000003 - cmd.exe is forced to OEM output (/A switch in cmd.exe arguments)
+;; dword:00000001 - Automatic selection. Unicode in FAR 2.x and OEM in FAR 1.7x
+"CmdOutputCP"=dword:00000001
+
+;; UpperLeft ConEmu window corner (pixels)
+"ConWnd X"=dword:0000001a
+"ConWnd Y"=dword:00000060
+;; Cascaded, when WindowMode is Normal (51f)
+"Cascaded"=hex:01
+
+;; 1 - Send Alt+Enter to console, so you can't switch Fullscreen mode from keyboard
+"AltEnter"=hex:00
+
+;; 1 - Send Alt+Space to console, so you can't pop up system menu from keyboard (HostKey+Space still works)
+"AltSpace"=hex:00
+
+;; Monitor input language change in console (i.e. XLat switching support)
+;; 00 - disabled, 01 - monitor console, 02 - one lang for all consoles, 03 == 01 & 02
+"MonitorConsoleLang"=hex:03
+
+;; Disable focus events send to console (search in panels will never be closed).
+;"SkipFocusEvents"=hex:01
+
+;; !!! HIGHLY EXPERIMENTAL. Use of ASCII string sort in FAR
+;"FARuseASCIIsort"=hex:01
+
+;; Sometimes on AltTab press Alt is sended in Console
+;; This may be annoying, when you have macro on Alt or RAlt key
+;; Fix this issue, by sending AltTab before Alt release
+;"FixAltOnAltTab"=hex:01
+
+
+;; Debug. 1 - Don't hide console window
+"ConVisible"=hex:00
+
+;; Allow injects of ConEmuHk.dll in every process of ConEmu console window
+"UseInjects"=hex:01
+
+;; Drag'n'Drop
+;; 0 - Drag disabled, 1 - LDrag, 2 - RDrag, 3 - LDrag&RDrag
+"Dnd"=hex:03
+;; 1 - Default action - Copy, 0 - Move
+"DefCopy"=hex:01
+;; Modifier-key for left mouse key drag (look 4 Virtual Key Codes)
+"DndLKey"=dword:00000000
+;; Modifier-key for right mouse key drag (look 4 Virtual Key Codes)
+"DndRKey"=dword:000000a2
+;; 0 - Disable Drop from external apps, 1 - Allow, 2 - Allow w/o confirmation
+"DndDrop"=hex:01
+;; Draw 'screenshot' with icons and labels while dragging
+;"DragOverlay"=hex:01
+;; Draw icons in dragging screenshot
+;"DragShowIcons"=hex:01
+
+
+;; Allows FAR panels resizing (height and width) by mouse
+;; hex:00 - disbaled
+;; hex:01 - Live resizing by Ctrl-Left/Right/Up/Down
+;; hex:02 - Resize on button release by macroses
+"DragPanel"=hex:01
+
+;; 1 - Show some debug information in ConEmu title, i.e. plugin communication steps; 0 - don't show
+"DebugSteps"=hex:01
+
+;; 1 - don't send mouse events to console; 0 - allow mouse (defalt)
+"DisableMouse"=hex:00
+
+;; Fix dashed selection with right mouse drag
+"RSelectionFix"=hex:01
+
+;; Show Popup menu for RClick on Far KeyBar
+"KeyBarRClick"=hex:01
+
+;; Skip mouse button (left/right/middle) click, while activating ConEmu
+"MouseSkipActivation"=hex:01
+;; Skip mouse move events, while ConEmu is not foreground window
+"MouseSkipMoving"=hex:01
+
+;; Show AppStarting cursor (arrow with a small hourglass)
+;; when FAR is not responding (during long operations)
+"FarHourglass"=hex:01
+;; Delay for FarHourglass, default = 500 ms
+;"FarHourglassDelay"=dword:000001F4
+
+;; Used for consoles, started under Administrator
+;"AdminTitleSuffix"=" (Admin)"
+;; By default - show Tab icon 'Shield' instead of suffix
+;"AdminShowShield"=hex:01
+
+;; Tabs: 0 - don't show, 1 - always, 2 - auto
+"Tabs"=hex:02
+;; Key macros for close active tab (editor/viewer/panel)
+;"TabCloseMacro"="F10"
+;; Handle 'Ctrl-Tab' & 'Ctrl-Shift-Tab' internally
+"TabSelf"=hex:01
+;; Keyboard switching: 0 - immediate, 1 - on Ctrl depress
+"TabLazy"=hex:01
+;; Switch first between recent tabs
+"TabRecent"=hex:01
+;; Tabs view style. 0 - Labels only, 1 - Labels & Frame
+;"TabFrame"=hex:00 - Does not work still
+;; For internal use (Tab control sizes)
+;"TabMargins"=hex:04,00,00,00,19,00,00,00,04,00,00,00,04,00,00,00
+;; Tab labels formatting. '%i' is optional.
+"TabConsole"="%s"
+"TabEditor"="%i-[%s]"
+"TabEditorModified"="%i-[%s] *"
+"TabViewer"="%i-{%s}"
+"TabLenMax"=dword:00000014
+;; Tab font facename. Default is "Tahoma"
+;"TabFontFace"="Tahoma"
+;; However, Tahoma does not contains much unicode glyphs (i.e. hieroglyph)
+;; You may choose other font, for example "Arial Unicode MS"
+;"TabFontFace"="Arial Unicode MS"
+;; Tab font charset. Default is ANSI_CHARSET = 0.
+;"TabFontCharSet"=dword:00000000
+;; Tab font height. Default is 16
+;"TabFontHeight"=dword:00000010
+;; hex:01 - will show tabs of active console only
+;"HideInactiveConsoleTabs"=hex:00
+
+;; Close Far with Macro instead of sending WM_CLOSE to console window
+"SafeFarClose"=hex:01
+;"SafeFarCloseMacro"="@$while (Dialog||Editor||Viewer||Menu||Disks||MainMenu||UserMenu||Other||Help) $if (Editor) ShiftF10 $else Esc $end $end  Esc  $if (Shell) F10 $if (Dialog) Enter $end $Exit $end  F10"
+
+
+;; Debug. 1 - Create 'app' window on taskbar
+;"CreateAppWindow"=hex:00 - does not working still
+
+;; Console colors (16..31 used with ExtendColors=01)
+;"ColorTable00"=hex:ff,ff,ff,00
+;...
+;"ColorTable31"=hex:ff,ff,ff,00
+;; Extend foreground colors
+"ExtendColors"=hex:00
+;; with background (color index)
+"ExtendColorIdx"=hex:0e
+
+;; Fading console contents, when ConEmu have no focus
+"FadeInactive"=hex:01
+;; Fading parameters. Each source color value (0..255)
+;; will be transformed to (FadeInactiveLow..FadeInactiveHigh)
+"FadeInactiveLow"=hex:00
+"FadeInactiveHigh"=hex:d0
+
+
+;; Enable Colorer TrueMod support
+"TrueColorerSupport"=hex:01
+
+;; Time interval between console read in ms (10..1000)
+;"MainTimerElapse"=dword:0000000A
+;; Same as above, for inactive windows (10..10000)
+;"MainTimerInactiveElapse"=dword:000003E8
+
+;; PictureView1 support
+;; Interval between slides for PictureView1 plugin (default is 2.5s).
+;; Slideshow mode may be activated by 'Pause/Break' key.
+;"SlideShowElapse"=dword:00001000
+
+;; Value for SetProcessAffinityMask (Processors used)
+;; 0 - don't change default affinity (this is default)
+;; 3 - means use of 'CPU 0' & 'CPU 1'
+;"AffinityMask"=dword:00000003
+
+;; Real Console font. Use very carefully.
+;; !!! It MUST be UNICODE. 
+;; !!! It MUST be smaller than main font.
+;"ConsoleFontName"="Lucida Console"
+;"ConsoleFontWidth"=dword:4
+;"ConsoleFontHeight"=dword:6
+
+;; 'Save All Editors' macro. Use this from Tab context menu.
+;"SaveAllEditors"="@F2 $If (!Editor) $Exit $End %i0=-1; F12 %cur = CurPos; Home Down %s = Menu.Select(\" * \",3,2); $While (%s > 0) $If (%s == %i0) MsgBox(\"FAR SaveAll\",\"Asterisk in menuitem for already processed window\",0x10001) $Exit $End Enter $If (Editor) F2 $If (!Editor) $Exit $End $Else $If (!Viewer) $Exit $End $End %i0 = %s; F12 %s = Menu.Select(\" * \",3,2); $End $If (Menu && Title==\"Screens\") Home $Rep (%cur-1) Down $End Enter $End $Exit"
+
+
+;; 'Select text with mouse' options
+;"ConsoleTextSelection"=hex:02
+;"CTS.SelectBlock"=hex:01
+;"CTS.VkBlock"=hex:00
+;"CTS.SelectText"=hex:01
+;"CTS.VkText"=hex:a4
+;; Actions for Right & Middle mouse buttons
+;"CTS.ActMode"=hex:02
+;"CTS.VkAct"=hex:a0
+;"CTS.RBtnAction"=hex:03
+;"CTS.MBtnAction"=hex:00
+;; Colors indexes (background & foreground) of selection mark
+;"CTS.ColorIndex"=hex:e0
+
+;; Open Far editor and position on error line by clicking compiler error message, like:
+;; 1>realconsole.cpp(8104) : error C2065: 'qqq' : undeclared identifier
+;"FarGotoEditor"=hex:01    ; 01-enable, 00-disable
+;"FarGotoEditorVk"=hex:a2  ; VK modifier, which must be depressed when click. LCtrl by default.
+;; Panel View settings (ConEmuTh.dll Far Manager plugin)
+;"PanView.BackColor"=dword:10ffffff
+;"PanView.LoadFolders"=hex:01
+;"PanView.LoadPreviews"=hex:03
+;"PanView.LoadTimeout"=dword:0000000f
+;"PanView.MaxZoom"=dword:000001f4
+;"PanView.PFrame"=dword:00000001
+;"PanView.PFrameColor"=dword:28808080
+;"PanView.SFrame"=dword:00000001
+;"PanView.SFrameColor"=dword:07c0c0c0
+;"PanView.Thumbs.FontHeight"=dword:0000000e
+;"PanView.Thumbs.FontName"="Tahoma"
+;"PanView.Thumbs.ImgSize"=dword:00000060
+;"PanView.Thumbs.LabelPadding"=dword:00000000
+;"PanView.Thumbs.LabelSpacing"=dword:00000000
+;"PanView.Thumbs.SpaceX1"=dword:00000001
+;"PanView.Thumbs.SpaceX2"=dword:00000005
+;"PanView.Thumbs.SpaceY1"=dword:00000001
+;"PanView.Thumbs.SpaceY2"=dword:00000019
+;"PanView.Tiles.FontHeight"=dword:0000000e
+;"PanView.Tiles.FontName"="Tahoma"
+;"PanView.Tiles.ImgSize"=dword:00000030
+;"PanView.Tiles.LabelPadding"=dword:00000001
+;"PanView.Tiles.LabelSpacing"=dword:00000004
+;"PanView.Tiles.SpaceX1"=dword:00000004
+;"PanView.Tiles.SpaceX2"=dword:000000ac
+;"PanView.Tiles.SpaceY1"=dword:00000004
+;"PanView.Tiles.SpaceY2"=dword:00000004
+;"PanView.UsePicView2"=hex:01
+;"PanView.RestoreOnStartup"=hex:01
+
+
+
+
+;; You may define command groups, which starts one or more consoles
+
+;[HKEY_CURRENT_USER\Software\ConEmu\.Vanilla\Tasks]
+;"Count"=dword:00000002
+;
+;[HKEY_CURRENT_USER\Software\ConEmu\.Vanilla\Tasks\Task1]
+;; <Shells> group, starts 3 consoles
+;;   PowerShell as Administrator,
+;;   Cmd with buffer of 9999 lines
+;;   SH
+;; Active console will be 'Cmd'
+;"Name"="Shells"
+;"Count"=dword:00000003
+;"Active"=dword:00000002
+;"Cmd1"="powershell -new_console:a"
+;"Cmd2"="cmd -new_console:h9999"
+;"Cmd3"="sh"
+;
+;[HKEY_CURRENT_USER\Software\ConEmu\.Vanilla\Tasks\Task2]
+;; <Putty> is a simle alias for starting this application in ConEmu tab
+;"Name"="Putty"
+;"Count"=dword:00000001
+;"Cmd1"="C:\\Tools\\Putty\\PUTTY.EXE"
+
+
+                    
+;; You may set some settings separately by active process name
+
+;[HKEY_CURRENT_USER\Software\ConEmu\.Vanilla\Apps]
+;"Count"=dword:00000001
+;
+;[HKEY_CURRENT_USER\Software\ConEmu\.Vanilla\Apps\App1]
+;; List of executable names, delimited with "|"
+;"AppNames"="hiew32.exe|biew.exe"
+;; 00 - unimportant, 01 - elevated, 02 - nonelevated
+;"Elevated"=hex:00
+
+;; By process settings
+;"ExtendColors"=hex:00
+;"ExtendColorIdx"=hex:0e
+;"ExtendFonts"=hex:01
+;"ExtendFontBoldIdx"=hex:0c
+;"ExtendFontItalicIdx"=hex:0d
+;"ExtendFontNormalIdx"=hex:0f
+
+;; For example, 'Murena' color scheme
+;"ColorTable00"=dword:00000000
+;"ColorTable01"=dword:00644100
+;"ColorTable02"=dword:00008000
+;"ColorTable03"=dword:00808000
+;"ColorTable04"=dword:00000080
+;"ColorTable05"=dword:00800080
+;"ColorTable06"=dword:00008080
+;"ColorTable07"=dword:00c0c0c0
+;"ColorTable08"=dword:00808080
+;"ColorTable09"=dword:00ff0000
+;"ColorTable10"=dword:0076c587
+;"ColorTable11"=dword:00ffff00
+;"ColorTable12"=dword:00004bff
+;"ColorTable13"=dword:00d78ce6
+;"ColorTable14"=dword:0000ffff
+;"ColorTable15"=dword:00ffffff
+;"ColorTable16"=dword:00000000
+;"ColorTable17"=dword:00800000
+;"ColorTable18"=dword:00008000
+;"ColorTable19"=dword:00808000
+;"ColorTable20"=dword:00000080
+;"ColorTable21"=dword:00800080
+;"ColorTable22"=dword:00008080
+;"ColorTable23"=dword:00c0c0c0
+;"ColorTable24"=dword:00808080
+;"ColorTable25"=dword:00ff0000
+;"ColorTable26"=dword:0000ff00
+;"ColorTable27"=dword:00ffff00
+;"ColorTable28"=dword:000000ff
+;"ColorTable29"=dword:00ff00ff
+;"ColorTable30"=dword:0000ffff
+;"ColorTable31"=dword:00ffffff
+
+
+;; Autorun does not works in the current version of ConEmu.
+;; You may uncomment this to 'Auto run' ConEmu with any batch file or Cmd.exe call
+;[HKEY_CURRENT_USER\Software\Microsoft\Command Processor]
+;"AutoRun"="C:\\Program Files\\FAR\\cmd_autorun.cmd\""

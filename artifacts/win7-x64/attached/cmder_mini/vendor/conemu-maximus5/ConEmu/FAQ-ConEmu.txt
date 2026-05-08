@@ -1,0 +1,7 @@
+﻿You may browse Frequently Asked Questions online
+English: https://conemu.github.io/en/ConEmuFAQ.html
+Russian: https://conemu.github.io/ru/ConEmuFAQ.html
+
+And ConEmu's documentation is here
+English: https://conemu.github.io/en/TableOfContents.html
+Russian: https://conemu.github.io/ru/TableOfContents.html

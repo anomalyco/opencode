@@ -1,0 +1,17 @@
+
+// This is sample macro-file for MacroLib plugin for Far Manager 3.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+// Switch visibility of tab/toolbar panel.
+// Look at 'Enable Tabs' checkbox in ConEmu Settings -> Tabs
+
+const ConEmu   = "4b675d80-1d4a-4ea9-8436-fdc23f2fc14b"
+
+farmacro
+  Descr="ConEmu: Switch tabs visibility"
+  Key="CtrlShiftT"
+{{
+  callplugin(#%ConEmu,3)
+}}

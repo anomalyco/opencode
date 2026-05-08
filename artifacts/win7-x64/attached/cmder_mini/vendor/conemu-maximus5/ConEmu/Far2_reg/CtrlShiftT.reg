@@ -1,0 +1,11 @@
+REGEDIT4
+
+; Description.
+; Switch ConEmu tabs visibility
+
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Common\CtrlShiftT]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Common\CtrlShiftT]
+"Sequence"="callplugin(0x43454D55,3)"
+"Description"="Switch ConEmu tabs visibility"
+"DisableOutput"=dword:00000001

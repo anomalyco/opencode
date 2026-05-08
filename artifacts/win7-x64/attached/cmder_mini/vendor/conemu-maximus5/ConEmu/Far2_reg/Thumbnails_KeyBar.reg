@@ -1,0 +1,13 @@
+REGEDIT4
+
+; Description.
+; This FAR TechInfo's replace key bar label for macroses from Thumbnails.reg
+; CtrlShiftF1 - switches Thumbnails view, CtrlShiftF2 - Tiles view
+
+[HKEY_CURRENT_USER\Software\Far2\KeyBarLabels\English\Shell]
+"CtrlShiftF1"="Thumb"
+"CtrlShiftF2"="Tiles"
+
+[HKEY_CURRENT_USER\Software\Far2\KeyBarLabels\Russian\Shell]
+"CtrlShiftF1"="Эскиз"
+"CtrlShiftF2"="Плитка"

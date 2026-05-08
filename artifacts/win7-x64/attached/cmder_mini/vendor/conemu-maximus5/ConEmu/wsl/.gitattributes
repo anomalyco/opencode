@@ -1,0 +1,2 @@
+*.sh text eol=lf
+*.pl text eol=lf

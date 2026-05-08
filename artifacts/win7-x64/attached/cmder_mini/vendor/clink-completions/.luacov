@@ -1,0 +1,6 @@
+return {
+    include = { "modules/*" },
+    exclude = { "lua_modules/*", ".lua/*", "modules/clink_version.lua" },
+    deletestats = false,
+    runreport = true
+}

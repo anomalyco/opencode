@@ -1,0 +1,15 @@
+REGEDIT4
+
+; Description.
+; This example FAR2 macro allows browse font names easily
+; while plugin dialog "Unicode CharMap" is active.
+
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Dialog\CtrlDown]
+"Sequence"="$If (Title==\"Unicode CharMap\") CtrlF Down Enter $Else CtrlDown $End"
+"DisableOutput"=dword:00000001
+"Description"="Unicode CharMap: Listing fonts with CtrlUp/CtrlDown"
+
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Dialog\CtrlUp]
+"Sequence"="$If (Title==\"Unicode CharMap\") CtrlF Up Enter $Else CtrlUp $End"
+"DisableOutput"=dword:00000001
+"Description"="Unicode CharMap: Listing fonts with CtrlUp/CtrlDown"

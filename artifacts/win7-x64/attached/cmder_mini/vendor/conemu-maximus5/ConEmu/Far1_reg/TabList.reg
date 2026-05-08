@@ -1,0 +1,55 @@
+REGEDIT4
+
+; Description.
+; Show all windows list from all consoles
+
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Vars]
+"%%ConEmu_TabList"="F11 $if (menu.Select(\"ConEmu\",2)<=0) MsgBox(\"ConEmu\",\"Plugin was not found in list!\",1) $Exit $end Enter T"
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\F12]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\F12]
+"Sequence"="eval(%%ConEmu_TabList)"
+"DisableOutput"=dword:00000001
+"Description"="Show all windows list from all consoles"
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Search\F12]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Search\F12]
+"Sequence"="eval(%%ConEmu_TabList)"
+"DisableOutput"=dword:00000001
+"Description"="Show all windows list from all consoles"
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Dialog\F12]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Dialog\F12]
+"Sequence"="eval(%%ConEmu_TabList)"
+"DisableOutput"=dword:00000001
+"Description"="Show all windows list from all consoles"
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Editor\F12]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Editor\F12]
+"Sequence"="eval(%%ConEmu_TabList)"
+"DisableOutput"=dword:00000001
+"Description"="Show all windows list from all consoles"
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Viewer\F12]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Viewer\F12]
+"Sequence"="eval(%%ConEmu_TabList)"
+"DisableOutput"=dword:00000001
+"Description"="Show all windows list from all consoles"
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Info\F12]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Info\F12]
+"Sequence"="eval(%%ConEmu_TabList)"
+"DisableOutput"=dword:00000001
+"Description"="Show all windows list from all consoles"
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\QView\F12]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\QView\F12]
+"Sequence"="eval(%%ConEmu_TabList)"
+"DisableOutput"=dword:00000001
+"Description"="Show all windows list from all consoles"
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Tree\F12]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Tree\F12]
+"Sequence"="eval(%%ConEmu_TabList)"
+"DisableOutput"=dword:00000001
+"Description"="Show all windows list from all consoles"
