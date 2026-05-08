@@ -77,18 +77,39 @@ if [[ -z "$RUST_TARGET" ]]; then
 fi
 echo "[deskfox] RUST_TARGET=$RUST_TARGET"
 
+# 绕过上游 packages/desktop/scripts/predev.ts:它会按 SIDECAR_BINARIES 表跑 build --single --baseline,
+# Bun.compile 内部需要从 GitHub 拉 ~190MB 的 bun-darwin-arm64-baseline 运行时,clash/CI 网络常超时失败
+# (实测 GitHub Actions macos-latest runner build 卡 57 分钟触发 1h 超时,2026-05-07 ship-mac-prod-2026.5.7.1)。
+# DeskFox 用户群默认现代 CPU(都有 AVX2),baseline 二进制不需要兜底,直接 build --single 即可,
+# 输出 dist/opencode-darwin-{arm64,x64}/bin/opencode,复用本机已有的 bun runtime,零下载。
+# 跟 Win 侧 build-deskfox.ps1 同等修法(commit 696bbcc00 / [feat: post-sync-build-fix])。
+
+# 把 RUST_TARGET 转成 build.ts 输出目录名:aarch64-apple-darwin → opencode-darwin-arm64
+case "$RUST_TARGET" in
+    aarch64-apple-darwin)   BUILD_DIR_NAME="opencode-darwin-arm64" ;;
+    x86_64-apple-darwin)    BUILD_DIR_NAME="opencode-darwin-x64" ;;
+    aarch64-unknown-linux-gnu) BUILD_DIR_NAME="opencode-linux-arm64" ;;
+    x86_64-unknown-linux-gnu)  BUILD_DIR_NAME="opencode-linux-x64" ;;
+    *) echo "Unknown RUST_TARGET=$RUST_TARGET, cannot map to build.ts dir" >&2; exit 1 ;;
+esac
+
 SIDECAR_PATH="$REPO_ROOT/packages/desktop/src-tauri/sidecars/opencode-cli-${RUST_TARGET}"
 if [[ ! -f "$SIDECAR_PATH" ]]; then
-    echo "[deskfox] sidecar not found, building via predev.ts..."
+    echo "[deskfox] sidecar not found, building via 'bun run build --single' (no --baseline, RUST_TARGET=$RUST_TARGET)..."
     (
-        cd "$REPO_ROOT/packages/desktop"
-        bun ./scripts/predev.ts
+        cd "$REPO_ROOT/packages/opencode"
+        bun run build --single
     )
-    if [[ ! -f "$SIDECAR_PATH" ]]; then
-        echo "Error: sidecar build did not produce $SIDECAR_PATH" >&2
-        echo "Hint: check packages/opencode/dist/ or run predev.ts manually" >&2
+    SRC_BIN="$REPO_ROOT/packages/opencode/dist/$BUILD_DIR_NAME/bin/opencode"
+    if [[ ! -f "$SRC_BIN" ]]; then
+        echo "Error: sidecar build reported success but no binary at $SRC_BIN" >&2
+        echo "Hint: 检查 bun 输出 / @opentui/core 安装" >&2
         exit 1
     fi
+    # CI 干净 checkout 时 sidecars/ 目录可能不存在
+    mkdir -p "$(dirname "$SIDECAR_PATH")"
+    cp "$SRC_BIN" "$SIDECAR_PATH"
+    chmod +x "$SIDECAR_PATH"
     echo "[deskfox] sidecar built: $(stat -f%z "$SIDECAR_PATH" 2>/dev/null || stat -c%s "$SIDECAR_PATH") bytes"
 else
     echo "[deskfox] sidecar exists: $SIDECAR_PATH"
