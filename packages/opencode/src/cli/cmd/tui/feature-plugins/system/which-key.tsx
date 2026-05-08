@@ -155,6 +155,19 @@ function layout(value: unknown): Layout {
   return "dock"
 }
 
+function HomeHint(props: { api: TuiPluginApi }) {
+  const trigger = commandShortcut(props.api, command.toggle)
+  const look = createMemo(() => skin(props.api))
+
+  return (
+    <box width="100%" maxWidth={75} alignItems="center" paddingTop={1} flexShrink={0}>
+      <text fg={look().muted} wrapMode="none">
+        Show keyboard shortcuts with <span style={{ fg: look().subtle }}>{trigger() || command.toggle}</span>
+      </text>
+    </box>
+  )
+}
+
 function WhichKeyPanel(props: {
   api: TuiPluginApi
   layout: Layout
@@ -532,7 +545,11 @@ const tui: TuiPlugin = async (api) => {
   })
 
   api.slots.register({
+    order: 200,
     slots: {
+      home_bottom() {
+        return <HomeHint api={api} />
+      },
       app() {
         return (
           <Show when={mode() === "overlay"}>
