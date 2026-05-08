@@ -2,7 +2,12 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import { RUN_COMMAND_PANEL_ROWS, RunCommandMenuBody, RunModelSelectBody, RunVariantSelectBody } from "@/cli/cmd/run/footer.command"
+import {
+  RUN_COMMAND_PANEL_ROWS,
+  RunCommandMenuBody,
+  RunModelSelectBody,
+  RunVariantSelectBody,
+} from "@/cli/cmd/run/footer.command"
 import { RunEntryContent } from "@/cli/cmd/run/scrollback.writer"
 import { RUN_THEME_FALLBACK } from "@/cli/cmd/run/theme"
 import type { FooterKeybinds, RunCommand, RunInput, RunProvider, StreamCommit } from "@/cli/cmd/run/types"
@@ -117,14 +122,17 @@ test("run entry content updates when live commit text changes", async () => {
     tool: "bash",
   })
 
-  const app = await testRender(() => (
-    <box width={80} height={4}>
-      <RunEntryContent commit={commit()} theme={RUN_THEME_FALLBACK} width={80} />
-    </box>
-  ), {
-    width: 80,
-    height: 4,
-  })
+  const app = await testRender(
+    () => (
+      <box width={80} height={4}>
+        <RunEntryContent commit={commit()} theme={RUN_THEME_FALLBACK} width={80} />
+      </box>
+    ),
+    {
+      width: 80,
+      height: 4,
+    },
+  )
 
   try {
     await app.renderOnce()
@@ -155,26 +163,29 @@ test("direct command panel renders grouped command palette", async () => {
   ])
   const [variants] = createSignal(["high", "minimal"])
 
-  const app = await testRender(() => (
-    <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
-      <RunCommandMenuBody
-        theme={() => RUN_THEME_FALLBACK.footer}
-        commands={commands}
-        variants={variants}
-        keybinds={keybinds}
-        onClose={() => {}}
-        onModel={() => {}}
-        onVariant={() => {}}
-        onVariantCycle={() => {}}
-        onCommand={() => {}}
-        onNew={() => {}}
-        onExit={() => {}}
-      />
-    </box>
-  ), {
-    width: 100,
-    height: RUN_COMMAND_PANEL_ROWS,
-  })
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunCommandMenuBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          commands={commands}
+          variants={variants}
+          keybinds={keybinds}
+          onClose={() => {}}
+          onModel={() => {}}
+          onVariant={() => {}}
+          onVariantCycle={() => {}}
+          onCommand={() => {}}
+          onNew={() => {}}
+          onExit={() => {}}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: RUN_COMMAND_PANEL_ROWS,
+    },
+  )
 
   try {
     await app.renderOnce()
@@ -207,20 +218,23 @@ test("direct model panel renders current model selector", async () => {
   const [providers] = createSignal<RunProvider[] | undefined>([provider()])
   const [current] = createSignal<RunInput["model"]>({ providerID: "opencode", modelID: "gpt-5" })
 
-  const app = await testRender(() => (
-    <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
-      <RunModelSelectBody
-        theme={() => RUN_THEME_FALLBACK.footer}
-        providers={providers}
-        current={current}
-        onClose={() => {}}
-        onSelect={() => {}}
-      />
-    </box>
-  ), {
-    width: 100,
-    height: RUN_COMMAND_PANEL_ROWS,
-  })
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunModelSelectBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          providers={providers}
+          current={current}
+          onClose={() => {}}
+          onSelect={() => {}}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: RUN_COMMAND_PANEL_ROWS,
+    },
+  )
 
   try {
     await app.renderOnce()
@@ -243,20 +257,23 @@ test("direct variant panel renders current variant selector", async () => {
   const [variants] = createSignal(["high", "minimal"])
   const [current] = createSignal<string | undefined>("high")
 
-  const app = await testRender(() => (
-    <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
-      <RunVariantSelectBody
-        theme={() => RUN_THEME_FALLBACK.footer}
-        variants={variants}
-        current={current}
-        onClose={() => {}}
-        onSelect={() => {}}
-      />
-    </box>
-  ), {
-    width: 100,
-    height: RUN_COMMAND_PANEL_ROWS,
-  })
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunVariantSelectBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          variants={variants}
+          current={current}
+          onClose={() => {}}
+          onSelect={() => {}}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: RUN_COMMAND_PANEL_ROWS,
+    },
+  )
 
   try {
     await app.renderOnce()

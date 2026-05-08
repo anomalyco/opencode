@@ -2,16 +2,7 @@ import { expect, test } from "bun:test"
 import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
 import { RUN_THEME_FALLBACK, generateSystem, resolveRunTheme, resolveTheme } from "@/cli/cmd/run/theme"
 
-const palette = [
-  "#15161e",
-  "#f7768e",
-  "#9ece6a",
-  "#e0af68",
-  "#7aa2f7",
-  "#bb9af7",
-  "#7dcfff",
-  "#c0caf5",
-] as const
+const palette = ["#15161e", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff", "#c0caf5"] as const
 
 function terminalColors(input: Partial<TerminalColors> = {}): TerminalColors {
   return {
@@ -28,11 +19,13 @@ function terminalColors(input: Partial<TerminalColors> = {}): TerminalColors {
   }
 }
 
-function renderer(input: {
-  themeMode?: "dark" | "light"
-  colors?: TerminalColors
-  fail?: boolean
-} = {}) {
+function renderer(
+  input: {
+    themeMode?: "dark" | "light"
+    colors?: TerminalColors
+    fail?: boolean
+  } = {},
+) {
   return {
     themeMode: input.themeMode,
     getPalette: async () => {

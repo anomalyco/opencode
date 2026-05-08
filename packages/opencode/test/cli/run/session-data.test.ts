@@ -48,12 +48,7 @@ function user(id: string) {
   }
 }
 
-function text(input: {
-  id: string
-  messageID: string
-  text: string
-  time?: Record<string, number>
-}) {
+function text(input: { id: string; messageID: string; text: string; time?: Record<string, number> }) {
   return {
     type: "message.part.updated",
     properties: {
@@ -98,13 +93,7 @@ function delta(messageID: string, partID: string, value: string) {
   }
 }
 
-function tool(input: {
-  id: string
-  messageID: string
-  tool: string
-  state: Record<string, unknown>
-  callID?: string
-}) {
+function tool(input: { id: string; messageID: string; tool: string; state: Record<string, unknown>; callID?: string }) {
   return {
     type: "message.part.updated",
     properties: {

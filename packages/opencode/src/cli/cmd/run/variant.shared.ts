@@ -178,10 +178,12 @@ function createLayer(fs = AppFileSystem.defaultLayer) {
             delete next[key]
           }
 
-          yield* file.writeJson(MODEL_FILE, {
-            ...current,
-            variant: next,
-          }).pipe(Effect.orElseSucceed(() => undefined))
+          yield* file
+            .writeJson(MODEL_FILE, {
+              ...current,
+              variant: next,
+            })
+            .pipe(Effect.orElseSucceed(() => undefined))
         })
 
         return Service.of({

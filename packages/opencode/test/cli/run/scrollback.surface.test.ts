@@ -58,10 +58,12 @@ function destroy(commits: ClaimedCommit[]) {
   }
 }
 
-async function setup(input: {
-  width?: number
-  wrote?: boolean
-} = {}) {
+async function setup(
+  input: {
+    width?: number
+    wrote?: boolean
+  } = {},
+) {
   const out = await createTestRenderer({
     width: input.width ?? 80,
     screenMode: "split-footer",
@@ -150,7 +152,8 @@ function toolCommit(input: {
 }
 
 test("finalizes markdown tables for streamed and coalesced input", async () => {
-  const text = "| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Row 1 | Value 1 | Value 2 |\n| Row 2 | Value 3 | Value 4 |"
+  const text =
+    "| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Row 1 | Value 1 | Value 2 |\n| Row 2 | Value 3 | Value 4 |"
 
   for (const chunks of [[text], [...text]]) {
     const out = await setup()
@@ -182,7 +185,9 @@ test("holds markdown code blocks until final commit and keeps newline ownership"
 
   try {
     await out.scrollback.append(
-      assistant('# Markdown Sample\n\n- Item 1\n- Item 2\n\n```js\nconst message = "Hello, markdown"\nconsole.log(message)\n```'),
+      assistant(
+        '# Markdown Sample\n\n- Item 1\n- Item 2\n\n```js\nconst message = "Hello, markdown"\nconsole.log(message)\n```',
+      ),
     )
 
     const progress = claim(out.renderer)
@@ -543,7 +548,7 @@ test("inserts a spacer before the next tool after completed multiline bash outpu
     take()
 
     const output = lines.join("\n")
-    expect(output).toContain("total 4\n\n✱ Glob \"**/*tool*\" in src/cli/cmd")
+    expect(output).toContain('total 4\n\n✱ Glob "**/*tool*" in src/cli/cmd')
   } finally {
     out.scrollback.destroy()
   }

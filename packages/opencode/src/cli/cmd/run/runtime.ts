@@ -39,10 +39,7 @@ type CreateSessionInput = {
   variant: string | undefined
 }
 
-type CreateSession = (
-  sdk: RunInput["sdk"],
-  input: CreateSessionInput,
-) => Promise<{ id: string; title?: string }>
+type CreateSession = (sdk: RunInput["sdk"], input: CreateSessionInput) => Promise<{ id: string; title?: string }>
 
 type RunRuntimeInput = {
   boot: () => Promise<BootContext>
@@ -548,9 +545,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
                   state.sessionTitle = created.sessionTitle
                   state.agent = created.agent ?? state.agent
                   state.history = []
-                   includeFiles = true
-                   state.demo = input.demo
-                     ? createRunDemo({
+                  includeFiles = true
+                  state.demo = input.demo
+                    ? createRunDemo({
                         footer,
                         sessionID: state.sessionID,
                         thinking: input.thinking,

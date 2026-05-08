@@ -103,15 +103,13 @@ export function withRunSpan<A>(
         attributes: attributes(input),
       })
 
-      return context.with(
-        trace.setSpan(context.active(), span),
-        () =>
-          finish(
-            span,
-            new Promise<A>((resolve) => {
-              resolve(fn(span))
-            }),
-          ),
+      return context.with(trace.setSpan(context.active(), span), () =>
+        finish(
+          span,
+          new Promise<A>((resolve) => {
+            resolve(fn(span))
+          }),
+        ),
       )
     },
     () => fn(noop),

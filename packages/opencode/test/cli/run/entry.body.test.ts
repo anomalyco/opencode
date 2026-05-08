@@ -191,8 +191,8 @@ describe("run entry body", () => {
             deletions: 0,
           },
         ],
-        },
       },
+    },
   ] satisfies Array<{ name: string; commit: StreamCommit; snapshot: ToolSnapshot }>) {
     test(item.name, () => {
       expect(structured(item.commit)).toEqual(item.snapshot)
@@ -335,26 +335,16 @@ describe("run entry body", () => {
           tool: "bash",
           phase: "progress",
           toolState: "completed",
-          text: [
-            "/tmp/demo",
-            "git status",
-            "On branch demo",
-            "nothing to commit, working tree clean",
-            "",
-          ].join("\n"),
+          text: ["/tmp/demo", "git status", "On branch demo", "nothing to commit, working tree clean", ""].join("\n"),
           state: {
             status: "completed",
             input: {
               command: "git status",
               workdir: "/tmp/demo",
             },
-            output: [
-              "/tmp/demo",
-              "git status",
-              "On branch demo",
-              "nothing to commit, working tree clean",
-              "",
-            ].join("\n"),
+            output: ["/tmp/demo", "git status", "On branch demo", "nothing to commit, working tree clean", ""].join(
+              "\n",
+            ),
             title: "git status",
             metadata: {
               exitCode: 0,

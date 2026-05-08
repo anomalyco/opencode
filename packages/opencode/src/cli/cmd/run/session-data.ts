@@ -205,10 +205,7 @@ function out(data: SessionData, commits: SessionCommit[], footer?: FooterOutput)
   }
 }
 
-export function pickBlockerView(input: {
-  permission?: PermissionRequest
-  question?: QuestionRequest
-}): FooterView {
+export function pickBlockerView(input: { permission?: PermissionRequest; question?: QuestionRequest }): FooterView {
   if (input.permission) {
     return { type: "permission", request: input.permission }
   }

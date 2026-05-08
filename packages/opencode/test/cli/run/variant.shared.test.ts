@@ -79,7 +79,10 @@ const providers: RunProvider[] = [
   },
 ]
 
-function userMessage(id: string, input: { providerID: string; modelID: string; variant?: string }): SessionMessages[number] {
+function userMessage(
+  id: string,
+  input: { providerID: string; modelID: string; variant?: string },
+): SessionMessages[number] {
   return {
     info: {
       id,

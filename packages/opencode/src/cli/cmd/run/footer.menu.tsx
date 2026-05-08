@@ -161,10 +161,7 @@ export function RunFooterMenu(props: {
       return
     }
 
-    const dir =
-      props.selected() === previous + 1 ? 1
-      : props.selected() === previous - 1 ? -1
-      : undefined
+    const dir = props.selected() === previous + 1 ? 1 : props.selected() === previous - 1 ? -1 : undefined
     setGroupOffset((value) =>
       dir
         ? moveOffset(value, { count: all.length, limit: limit(), selected, dir })
@@ -175,11 +172,14 @@ export function RunFooterMenu(props: {
 
   const rows = createMemo<RunFooterMenuRow[]>(() => {
     if (!props.grouped) {
-      return props.items().slice(props.offset(), props.offset() + limit()).map((item, index) => ({
-        type: "item",
-        item,
-        index: index + props.offset(),
-      }))
+      return props
+        .items()
+        .slice(props.offset(), props.offset() + limit())
+        .map((item, index) => ({
+          type: "item",
+          item,
+          index: index + props.offset(),
+        }))
     }
 
     const all = groupedRows()
@@ -187,7 +187,13 @@ export function RunFooterMenu(props: {
     return all.slice(start, start + limit())
   })
   const descriptionColumn = createMemo(() => {
-    const width = Math.max(0, ...props.items().filter((item) => item.description).map((item) => Bun.stringWidth(item.display)))
+    const width = Math.max(
+      0,
+      ...props
+        .items()
+        .filter((item) => item.description)
+        .map((item) => Bun.stringWidth(item.display)),
+    )
     return width === 0 ? 0 : width + 2
   })
   const descriptionPad = (item: RunFooterMenuItem) => {
@@ -264,7 +270,12 @@ export function RunFooterMenu(props: {
                   backgroundColor={active() ? props.theme().highlight : props.theme().surface}
                 >
                   <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
-                    <text fg={active() ? props.theme().surface : props.theme().text} wrapMode="none" truncate flexGrow={1}>
+                    <text
+                      fg={active() ? props.theme().surface : props.theme().text}
+                      wrapMode="none"
+                      truncate
+                      flexGrow={1}
+                    >
                       {row.item.display}
                       {row.item.description ? (
                         <span style={{ fg: active() ? props.theme().surface : props.theme().muted }}>
@@ -274,7 +285,12 @@ export function RunFooterMenu(props: {
                       ) : undefined}
                     </text>
                     {row.item.footer ? (
-                      <text fg={active() ? props.theme().surface : props.theme().muted} wrapMode="none" truncate flexShrink={0}>
+                      <text
+                        fg={active() ? props.theme().surface : props.theme().muted}
+                        wrapMode="none"
+                        truncate
+                        flexShrink={0}
+                      >
                         {row.item.footer}
                       </text>
                     ) : undefined}

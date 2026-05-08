@@ -7,11 +7,7 @@ import { TuiConfig, type Resolved } from "@/cli/cmd/tui/config/tui"
 import { formatBindings } from "@/cli/cmd/run/keymap.shared"
 import { KeymapSectionNames, keymapBindingDefaults, type KeymapSection } from "@/cli/cmd/tui/config/tui-schema"
 import { ConfigKeybinds } from "@/config/keybinds"
-import {
-  resolveDiffStyle,
-  resolveFooterKeybinds,
-  resolveModelInfo,
-} from "@/cli/cmd/run/runtime.boot"
+import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo } from "@/cli/cmd/run/runtime.boot"
 
 type RunBinding = Binding<Renderable, KeyEvent>
 
@@ -299,5 +295,4 @@ describe("run runtime boot", () => {
       },
     })
   })
-
 })

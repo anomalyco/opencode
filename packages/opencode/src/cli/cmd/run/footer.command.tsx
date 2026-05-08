@@ -180,13 +180,7 @@ function PanelShell(props: {
   children: JSX.Element
 }) {
   return (
-    <box
-      id={props.id}
-      width="100%"
-      flexDirection="column"
-      backgroundColor="transparent"
-      flexShrink={0}
-    >
+    <box id={props.id} width="100%" flexDirection="column" backgroundColor="transparent" flexShrink={0}>
       <box
         width="100%"
         flexDirection="column"
@@ -333,14 +327,14 @@ export function RunCommandMenuBody(props: {
               category: item.source === "mcp" ? "MCP Commands" : "Project Commands",
               name: item.name,
               display: item.name,
-               footer: `/${item.name}`,
-               keywords:
-                 item.source === "mcp"
-                   ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
-                   : `/${item.name} ${item.name} ${item.description ?? ""}`,
-             }) satisfies CommandEntry,
-         )
-         .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display)),
+              footer: `/${item.name}`,
+              keywords:
+                item.source === "mcp"
+                  ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
+                  : `/${item.name} ${item.name} ${item.description ?? ""}`,
+            }) satisfies CommandEntry,
+        )
+        .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display)),
       { action: "exit", category: "System", display: "Exit", footer: "/exit", keywords: "/exit exit" },
     ]
   })

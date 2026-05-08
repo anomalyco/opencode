@@ -36,10 +36,7 @@ function statusIcon(status: FooterSubagentTab["status"]) {
 }
 
 function tabText(tab: FooterSubagentTab, slot: string, count: number, width: number) {
-  const perTab = Math.max(
-    1,
-    Math.floor((width - 4 - Math.max(0, count - 1) * 3) / Math.max(1, count)),
-  )
+  const perTab = Math.max(1, Math.floor((width - 4 - Math.max(0, count - 1) * 3) / Math.max(1, count)))
   if (count >= 8 || perTab < 12) {
     return `[${slot}]`
   }
@@ -96,7 +93,9 @@ export function RunFooterSubagentTabs(props: {
       flexDirection="row"
       flexShrink={0}
     >
-      <box flexDirection="row" gap={3} flexShrink={1} flexGrow={1}>{items()}</box>
+      <box flexDirection="row" gap={3} flexShrink={1} flexGrow={1}>
+        {items()}
+      </box>
     </box>
   )
 }

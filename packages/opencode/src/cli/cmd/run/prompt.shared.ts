@@ -23,13 +23,7 @@ export type PromptHistoryState = {
   draft: string
 }
 
-export function promptInfo(event: {
-  name: string
-  ctrl?: boolean
-  meta?: boolean
-  shift?: boolean
-  super?: boolean
-}) {
+export function promptInfo(event: { name: string; ctrl?: boolean; meta?: boolean; shift?: boolean; super?: boolean }) {
   return {
     name: event.name === " " ? "space" : event.name,
     ctrl: !!event.ctrl,
@@ -123,7 +117,11 @@ export function promptBindings(bindings: FooterKeybinds["commandList"], leader: 
   })
 }
 
-function mapInputBindings(bindings: FooterKeybinds["inputSubmit"], leader: string, action: "submit" | "newline"): KeyBinding[] {
+function mapInputBindings(
+  bindings: FooterKeybinds["inputSubmit"],
+  leader: string,
+  action: "submit" | "newline",
+): KeyBinding[] {
   return promptBindings(bindings, leader).flatMap((key) => {
     if (key.leader) {
       return []

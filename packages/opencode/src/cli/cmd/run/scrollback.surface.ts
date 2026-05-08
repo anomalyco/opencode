@@ -118,37 +118,37 @@ export class RunScrollbackStream {
     const renderable =
       body.type === "text"
         ? new TextRenderable(surface.renderContext, {
-          id,
-          content: "",
-          width: "100%",
-          wrapMode: "word",
-          fg: style.fg,
-          attributes: style.attrs,
-        })
-        : body.type === "code"
-          ? new CodeRenderable(surface.renderContext, {
             id,
             content: "",
-            filetype: body.filetype,
-            syntaxStyle: entrySyntax(commit, this.theme),
             width: "100%",
             wrapMode: "word",
-            drawUnstyledText: false,
-            streaming: true,
-            fg: entryColor(commit, this.theme),
-            treeSitterClient: this.treeSitterClient,
+            fg: style.fg,
+            attributes: style.attrs,
           })
+        : body.type === "code"
+          ? new CodeRenderable(surface.renderContext, {
+              id,
+              content: "",
+              filetype: body.filetype,
+              syntaxStyle: entrySyntax(commit, this.theme),
+              width: "100%",
+              wrapMode: "word",
+              drawUnstyledText: false,
+              streaming: true,
+              fg: entryColor(commit, this.theme),
+              treeSitterClient: this.treeSitterClient,
+            })
           : new MarkdownRenderable(surface.renderContext, {
-            id,
-            content: "",
-            syntaxStyle: entrySyntax(commit, this.theme),
-            width: "100%",
-            streaming: true,
-            internalBlockMode: "top-level",
-            tableOptions: { widthMode: "content" },
-            fg: entryColor(commit, this.theme),
-            treeSitterClient: this.treeSitterClient,
-          })
+              id,
+              content: "",
+              syntaxStyle: entrySyntax(commit, this.theme),
+              width: "100%",
+              streaming: true,
+              internalBlockMode: "top-level",
+              tableOptions: { widthMode: "content" },
+              fg: entryColor(commit, this.theme),
+              treeSitterClient: this.treeSitterClient,
+            })
 
     surface.root.add(renderable)
 
@@ -326,8 +326,7 @@ export class RunScrollbackStream {
 
     if (
       body.type !== "structured" &&
-      (entryCanStream(commit, body) ||
-        (commit.kind === "tool" && commit.phase === "final" && body.type === "markdown"))
+      (entryCanStream(commit, body) || (commit.kind === "tool" && commit.phase === "final" && body.type === "markdown"))
     ) {
       await this.writeStreaming(commit, body)
       if (entryDone(commit)) {

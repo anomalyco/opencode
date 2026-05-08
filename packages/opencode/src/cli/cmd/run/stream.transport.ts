@@ -189,9 +189,7 @@ function waitTurn(done: Wait["done"], signal: AbortSignal) {
       signal.addEventListener("abort", onAbort, { once: true })
       return Effect.sync(() => signal.removeEventListener("abort", onAbort))
     }).pipe(Effect.exit),
-  ]).pipe(
-    Effect.flatMap((exit) => (Exit.isFailure(exit) ? Effect.failCause(exit.cause) : Effect.succeed(exit.value))),
-  )
+  ]).pipe(Effect.flatMap((exit) => (Exit.isFailure(exit) ? Effect.failCause(exit.cause) : Effect.succeed(exit.value))))
 }
 
 export function formatUnknownError(error: unknown): string {
@@ -380,7 +378,7 @@ function createLayer(input: StreamInput) {
             (events) =>
               Effect.sync(() => {
                 void events.stream.return(undefined).catch(() => {})
-                }),
+              }),
           ),
         )
         closeStream = () => {
@@ -422,10 +420,7 @@ function createLayer(input: StreamInput) {
             return
           }
 
-          if (
-            event.properties.sessionID !== input.sessionID &&
-            !state.subagent.tabs.has(event.properties.sessionID)
-          ) {
+          if (event.properties.sessionID !== input.sessionID && !state.subagent.tabs.has(event.properties.sessionID)) {
             return
           }
 

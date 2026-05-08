@@ -55,7 +55,12 @@ export function entryLayout(commit: StreamCommit, body: RunEntryBody = entryBody
       return "block"
     }
 
-    if (commit.phase === "progress" && commit.toolState === "completed" && body.type === "text" && body.content.includes("\n")) {
+    if (
+      commit.phase === "progress" &&
+      commit.toolState === "completed" &&
+      body.type === "text" &&
+      body.content.includes("\n")
+    ) {
       return "block"
     }
 
