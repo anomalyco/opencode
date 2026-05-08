@@ -22,11 +22,15 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.2.2",
-    "@opentui/solid": ">=0.2.2"
+    "@opentui/core": ">=0.2.4",
+    "@opentui/keymap": ">=0.2.4",
+    "@opentui/solid": ">=0.2.4"
   },
   "peerDependenciesMeta": {
     "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/keymap": {
       "optional": true
     },
     "@opentui/solid": {
@@ -35,6 +39,7 @@
   },
   "devDependencies": {
     "@opentui/core": "catalog:",
+    "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
