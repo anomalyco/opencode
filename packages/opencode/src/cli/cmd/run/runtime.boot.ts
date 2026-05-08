@@ -84,16 +84,16 @@ function footerKeybinds(config: Config | undefined): FooterKeybinds {
   }
 
   return {
-    leader: config.keymap.leader,
-    leaderTimeout: config.keymap.leader_timeout,
-    commandList: config.keymap.get("global", "command.palette.show") ?? [],
-    variantCycle: config.keymap.get("global", "variant.cycle") ?? [],
-    interrupt: config.keymap.get("prompt", "session.interrupt") ?? [],
-    historyPrevious: config.keymap.get("prompt", "prompt.history.previous") ?? [],
-    historyNext: config.keymap.get("prompt", "prompt.history.next") ?? [],
-    inputClear: config.keymap.get("prompt", "prompt.clear") ?? [],
-    inputSubmit: config.keymap.get("input", "input.submit") ?? [],
-    inputNewline: config.keymap.get("input", "input.newline") ?? [],
+    leader: config.leader,
+    leaderTimeout: config.leader_timeout,
+    commandList: config.keybinds.get("command_list") ?? [],
+    variantCycle: config.keybinds.get("variant_cycle") ?? [],
+    interrupt: config.keybinds.get("session_interrupt") ?? [],
+    historyPrevious: config.keybinds.get("history_previous") ?? [],
+    historyNext: config.keybinds.get("history_next") ?? [],
+    inputClear: config.keybinds.get("input_clear") ?? [],
+    inputSubmit: config.keybinds.get("input_submit") ?? [],
+    inputNewline: config.keybinds.get("input_newline") ?? [],
   }
 }
 

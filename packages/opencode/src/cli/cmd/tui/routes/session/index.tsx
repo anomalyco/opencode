@@ -117,6 +117,42 @@ function goUpsellKeys(action: SessionRetry.Retryable["action"]) {
   }
 }
 
+const sessionBindingCommands = [
+  "session_share",
+  "session_rename",
+  "session_timeline",
+  "session_fork",
+  "session_compact",
+  "session_unshare",
+  "messages_undo",
+  "messages_redo",
+  "sidebar_toggle",
+  "messages_toggle_conceal",
+  "session_toggle_timestamps",
+  "display_thinking",
+  "tool_details",
+  "scrollbar_toggle",
+  "session_toggle_generic_tool_output",
+  "messages_page_up",
+  "messages_page_down",
+  "messages_line_up",
+  "messages_line_down",
+  "messages_half_page_up",
+  "messages_half_page_down",
+  "messages_first",
+  "messages_last",
+  "messages_last_user",
+  "messages_next",
+  "messages_previous",
+  "messages_copy",
+  "session_copy",
+  "session_export",
+  "session_child_first",
+  "session_parent",
+  "session_child_cycle",
+  "session_child_cycle_reverse",
+] as const
+
 const context = createContext<{
   width: number
   sessionID: string
@@ -144,9 +180,6 @@ export function Session() {
   const event = useEvent()
   const project = useProject()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -410,7 +443,7 @@ export function Session() {
   const sessionCommandList = createMemo(() => [
     {
       title: session()?.share?.url ? "Copy share link" : "Share session",
-      value: "session.share",
+      value: "session_share",
       suggested: route.type === "session",
       category: "Session",
       enabled: sync.data.config.share !== "disabled",
@@ -449,7 +482,7 @@ export function Session() {
     },
     {
       title: "Rename session",
-      value: "session.rename",
+      value: "session_rename",
       category: "Session",
       slash: {
         name: "rename",
@@ -460,7 +493,7 @@ export function Session() {
     },
     {
       title: "Jump to message",
-      value: "session.timeline",
+      value: "session_timeline",
       category: "Session",
       slash: {
         name: "timeline",
@@ -482,7 +515,7 @@ export function Session() {
     },
     {
       title: "Fork session",
-      value: "session.fork",
+      value: "session_fork",
       category: "Session",
       slash: {
         name: "fork",
@@ -504,7 +537,7 @@ export function Session() {
     },
     {
       title: "Compact session",
-      value: "session.compact",
+      value: "session_compact",
       category: "Session",
       slash: {
         name: "compact",
@@ -530,7 +563,7 @@ export function Session() {
     },
     {
       title: "Unshare session",
-      value: "session.unshare",
+      value: "session_unshare",
       category: "Session",
       enabled: !!session()?.share?.url,
       slash: {
@@ -553,7 +586,7 @@ export function Session() {
     },
     {
       title: "Undo previous message",
-      value: "session.undo",
+      value: "messages_undo",
       category: "Session",
       slash: {
         name: "undo",
@@ -590,7 +623,7 @@ export function Session() {
     },
     {
       title: "Redo",
-      value: "session.redo",
+      value: "messages_redo",
       category: "Session",
       enabled: !!session()?.revert?.messageID,
       slash: {
@@ -616,7 +649,7 @@ export function Session() {
     },
     {
       title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
-      value: "session.sidebar.toggle",
+      value: "sidebar_toggle",
       category: "Session",
       run: () => {
         batch(() => {
@@ -629,7 +662,7 @@ export function Session() {
     },
     {
       title: conceal() ? "Disable code concealment" : "Enable code concealment",
-      value: "session.toggle.conceal",
+      value: "messages_toggle_conceal",
       category: "Session",
       run: () => {
         setConceal((prev) => !prev)
@@ -638,7 +671,7 @@ export function Session() {
     },
     {
       title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
-      value: "session.toggle.timestamps",
+      value: "session_toggle_timestamps",
       category: "Session",
       slash: {
         name: "timestamps",
@@ -651,7 +684,7 @@ export function Session() {
     },
     {
       title: showThinking() ? "Hide thinking" : "Show thinking",
-      value: "session.toggle.thinking",
+      value: "display_thinking",
       category: "Session",
       slash: {
         name: "thinking",
@@ -664,7 +697,7 @@ export function Session() {
     },
     {
       title: showDetails() ? "Hide tool details" : "Show tool details",
-      value: "session.toggle.actions",
+      value: "tool_details",
       category: "Session",
       run: () => {
         setShowDetails((prev) => !prev)
@@ -673,7 +706,7 @@ export function Session() {
     },
     {
       title: "Toggle session scrollbar",
-      value: "session.toggle.scrollbar",
+      value: "scrollbar_toggle",
       category: "Session",
       run: () => {
         setShowScrollbar((prev) => !prev)
@@ -682,7 +715,7 @@ export function Session() {
     },
     {
       title: showGenericToolOutput() ? "Hide generic tool output" : "Show generic tool output",
-      value: "session.toggle.generic_tool_output",
+      value: "session_toggle_generic_tool_output",
       category: "Session",
       run: () => {
         setShowGenericToolOutput((prev) => !prev)
@@ -691,7 +724,7 @@ export function Session() {
     },
     {
       title: "Page up",
-      value: "session.page.up",
+      value: "messages_page_up",
       category: "Session",
       hidden: true,
       run: () => {
@@ -701,7 +734,7 @@ export function Session() {
     },
     {
       title: "Page down",
-      value: "session.page.down",
+      value: "messages_page_down",
       category: "Session",
       hidden: true,
       run: () => {
@@ -711,7 +744,7 @@ export function Session() {
     },
     {
       title: "Line up",
-      value: "session.line.up",
+      value: "messages_line_up",
       category: "Session",
       enabled: false,
       run: () => {
@@ -721,7 +754,7 @@ export function Session() {
     },
     {
       title: "Line down",
-      value: "session.line.down",
+      value: "messages_line_down",
       category: "Session",
       enabled: false,
       run: () => {
@@ -731,7 +764,7 @@ export function Session() {
     },
     {
       title: "Half page up",
-      value: "session.half.page.up",
+      value: "messages_half_page_up",
       category: "Session",
       hidden: true,
       run: () => {
@@ -741,7 +774,7 @@ export function Session() {
     },
     {
       title: "Half page down",
-      value: "session.half.page.down",
+      value: "messages_half_page_down",
       category: "Session",
       hidden: true,
       run: () => {
@@ -751,7 +784,7 @@ export function Session() {
     },
     {
       title: "First message",
-      value: "session.first",
+      value: "messages_first",
       category: "Session",
       hidden: true,
       run: () => {
@@ -761,7 +794,7 @@ export function Session() {
     },
     {
       title: "Last message",
-      value: "session.last",
+      value: "messages_last",
       category: "Session",
       hidden: true,
       run: () => {
@@ -771,7 +804,7 @@ export function Session() {
     },
     {
       title: "Jump to last user message",
-      value: "session.messages_last_user",
+      value: "messages_last_user",
       category: "Session",
       hidden: true,
       run: () => {
@@ -802,21 +835,21 @@ export function Session() {
     },
     {
       title: "Next message",
-      value: "session.message.next",
+      value: "messages_next",
       category: "Session",
       hidden: true,
       run: () => scrollToMessage("next", dialog),
     },
     {
       title: "Previous message",
-      value: "session.message.previous",
+      value: "messages_previous",
       category: "Session",
       hidden: true,
       run: () => scrollToMessage("prev", dialog),
     },
     {
       title: "Copy last assistant message",
-      value: "messages.copy",
+      value: "messages_copy",
       category: "Session",
       run: () => {
         const revertID = session()?.revert?.messageID
@@ -858,7 +891,7 @@ export function Session() {
     },
     {
       title: "Copy session transcript",
-      value: "session.copy",
+      value: "session_copy",
       category: "Session",
       slash: {
         name: "copy",
@@ -888,7 +921,7 @@ export function Session() {
     },
     {
       title: "Export session transcript",
-      value: "session.export",
+      value: "session_export",
       category: "Session",
       slash: {
         name: "export",
@@ -949,7 +982,7 @@ export function Session() {
     },
     {
       title: "Go to child session",
-      value: "session.child.first",
+      value: "session_child_first",
       category: "Session",
       hidden: true,
       run: () => {
@@ -959,7 +992,7 @@ export function Session() {
     },
     {
       title: "Go to parent session",
-      value: "session.parent",
+      value: "session_parent",
       category: "Session",
       hidden: true,
       enabled: !!session()?.parentID,
@@ -976,7 +1009,7 @@ export function Session() {
     },
     {
       title: "Next child session",
-      value: "session.child.next",
+      value: "session_child_cycle",
       category: "Session",
       hidden: true,
       enabled: !!session()?.parentID,
@@ -987,7 +1020,7 @@ export function Session() {
     },
     {
       title: "Previous child session",
-      value: "session.child.previous",
+      value: "session_child_cycle_reverse",
       category: "Session",
       hidden: true,
       enabled: !!session()?.parentID,
@@ -1015,7 +1048,7 @@ export function Session() {
 
   useBindings(() => ({
     enabled: command.matcher,
-    bindings: sections.session,
+    bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
   }))
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1090,7 +1123,7 @@ export function Session() {
                     <Match when={message.id === revert()?.messageID}>
                       {(function () {
                         const command = useCommandPalette()
-                        const redoShortcut = useCommandShortcut("session.redo")
+                        const redoShortcut = useCommandShortcut("messages_redo")
                         const [hover, setHover] = createSignal(false)
                         const dialog = useDialog()
 
@@ -1101,7 +1134,7 @@ export function Session() {
                             "Are you sure you want to restore the reverted messages?",
                           )
                           if (confirmed) {
-                            command.run("session.redo")
+                            command.run("messages_redo")
                           }
                         }
 
@@ -1377,7 +1410,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
-  const childShortcut = useCommandShortcut("session.child.first")
+  const childShortcut = useCommandShortcut("session_child_first")
 
   return (
     <>

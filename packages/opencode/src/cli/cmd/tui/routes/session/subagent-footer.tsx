@@ -57,9 +57,9 @@ export function SubagentFooter() {
 
   const { theme } = useTheme()
   const command = useCommandPalette()
-  const parentShortcut = useCommandShortcut("session.parent")
-  const previousShortcut = useCommandShortcut("session.child.previous")
-  const nextShortcut = useCommandShortcut("session.child.next")
+  const parentShortcut = useCommandShortcut("session_parent")
+  const previousShortcut = useCommandShortcut("session_child_cycle_reverse")
+  const nextShortcut = useCommandShortcut("session_child_cycle")
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
   useTerminalDimensions()
 
@@ -98,7 +98,7 @@ export function SubagentFooter() {
             <box
               onMouseOver={() => setHover("parent")}
               onMouseOut={() => setHover(null)}
-              onMouseUp={() => command.run("session.parent")}
+              onMouseUp={() => command.run("session_parent")}
               backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <text fg={theme.text}>
@@ -108,7 +108,7 @@ export function SubagentFooter() {
             <box
               onMouseOver={() => setHover("prev")}
               onMouseOut={() => setHover(null)}
-              onMouseUp={() => command.run("session.child.previous")}
+              onMouseUp={() => command.run("session_child_cycle_reverse")}
               backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <text fg={theme.text}>
@@ -118,7 +118,7 @@ export function SubagentFooter() {
             <box
               onMouseOver={() => setHover("next")}
               onMouseOut={() => setHover(null)}
-              onMouseUp={() => command.run("session.child.next")}
+              onMouseUp={() => command.run("session_child_cycle")}
               backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <text fg={theme.text}>

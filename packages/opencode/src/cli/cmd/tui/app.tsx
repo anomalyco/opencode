@@ -70,6 +70,63 @@ import { OpencodeKeymapProvider, registerOpencodeKeymap, useBindings, useOpencod
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
+const appBindingCommands = [
+  "command_list",
+  "session_list",
+  "session_new",
+  "model_list",
+  "model_cycle_recent",
+  "model_cycle_recent_reverse",
+  "model_cycle_favorite",
+  "model_cycle_favorite_reverse",
+  "agent_list",
+  "mcp_list",
+  "agent_cycle",
+  "agent_cycle_reverse",
+  "variant_cycle",
+  "variant_list",
+  "provider_connect",
+  "console_org_switch",
+  "status_view",
+  "theme_list",
+  "theme_switch_mode",
+  "theme_mode_lock",
+  "help_show",
+  "docs_open",
+  "app_exit",
+  "app_debug",
+  "app_console",
+  "app_heap_snapshot",
+  "terminal_suspend",
+  "terminal_title_toggle",
+  "app_toggle_animations",
+  "app_toggle_file_context",
+  "app_toggle_diffwrap",
+  "app_toggle_paste_summary",
+  "app_toggle_session_directory_filter",
+] as const
+
+const commandEventAliases: Record<string, string> = {
+  "help.show": "help_show",
+  "session.list": "session_list",
+  "session.new": "session_new",
+  "session.share": "session_share",
+  "session.interrupt": "session_interrupt",
+  "session.compact": "session_compact",
+  "session.page.up": "messages_page_up",
+  "session.page.down": "messages_page_down",
+  "session.line.up": "messages_line_up",
+  "session.line.down": "messages_line_down",
+  "session.half.page.up": "messages_half_page_up",
+  "session.half.page.down": "messages_half_page_down",
+  "session.first": "messages_first",
+  "session.last": "messages_last",
+  "model.list": "model_list",
+  "prompt.clear": "input_clear",
+  "prompt.submit": "prompt_submit",
+  "agent.cycle": "agent_cycle",
+}
+
 function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
 
@@ -215,9 +272,6 @@ export function tui(input: {
 
 function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -397,7 +451,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const appCommands = createMemo(() =>
     [
       {
-        name: "command.palette.show",
+        name: "command_list",
         title: "Show command palette",
         category: "System",
         hidden: true,
@@ -406,7 +460,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "session.list",
+        name: "session_list",
         title: "Switch session",
         category: "Session",
         suggested: sync.data.session.length > 0,
@@ -417,7 +471,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "session.new",
+        name: "session_new",
         title: "New session",
         suggested: route.data.type === "session",
         category: "Session",
@@ -431,7 +485,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model.list",
+        name: "model_list",
         title: "Switch model",
         suggested: true,
         category: "Agent",
@@ -441,7 +495,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model.cycle_recent",
+        name: "model_cycle_recent",
         title: "Model cycle",
         category: "Agent",
         hidden: true,
@@ -450,7 +504,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model.cycle_recent_reverse",
+        name: "model_cycle_recent_reverse",
         title: "Model cycle reverse",
         category: "Agent",
         hidden: true,
@@ -459,7 +513,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model.cycle_favorite",
+        name: "model_cycle_favorite",
         title: "Favorite cycle",
         category: "Agent",
         hidden: true,
@@ -468,7 +522,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "model.cycle_favorite_reverse",
+        name: "model_cycle_favorite_reverse",
         title: "Favorite cycle reverse",
         category: "Agent",
         hidden: true,
@@ -477,7 +531,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "agent.list",
+        name: "agent_list",
         title: "Switch agent",
         category: "Agent",
         slashName: "agents",
@@ -486,7 +540,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "mcp.list",
+        name: "mcp_list",
         title: "Toggle MCPs",
         category: "Agent",
         slashName: "mcps",
@@ -495,7 +549,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "agent.cycle",
+        name: "agent_cycle",
         title: "Agent cycle",
         category: "Agent",
         hidden: true,
@@ -504,7 +558,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "variant.cycle",
+        name: "variant_cycle",
         title: "Variant cycle",
         category: "Agent",
         run: () => {
@@ -512,7 +566,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "variant.list",
+        name: "variant_list",
         title: "Switch model variant",
         category: "Agent",
         hidden: local.model.variant.list().length === 0,
@@ -522,7 +576,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "agent.cycle.reverse",
+        name: "agent_cycle_reverse",
         title: "Agent cycle reverse",
         category: "Agent",
         hidden: true,
@@ -531,7 +585,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "provider.connect",
+        name: "provider_connect",
         title: "Connect provider",
         suggested: !connected(),
         slashName: "connect",
@@ -543,7 +597,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       ...(sync.data.console_state.switchableOrgCount > 1
         ? [
             {
-              name: "console.org.switch",
+              name: "console_org_switch",
               title: "Switch org",
               suggested: Boolean(sync.data.console_state.activeOrgName),
               slashName: "org",
@@ -556,7 +610,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           ]
         : []),
       {
-        name: "opencode.status",
+        name: "status_view",
         title: "View status",
         slashName: "status",
         run: () => {
@@ -565,7 +619,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "theme.switch",
+        name: "theme_list",
         title: "Switch theme",
         slashName: "themes",
         run: () => {
@@ -574,7 +628,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "theme.switch_mode",
+        name: "theme_switch_mode",
         title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
         run: () => {
           setMode(mode() === "dark" ? "light" : "dark")
@@ -583,7 +637,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "theme.mode.lock",
+        name: "theme_mode_lock",
         title: locked() ? "Unlock theme mode" : "Lock theme mode",
         run: () => {
           if (locked()) unlock()
@@ -593,7 +647,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "help.show",
+        name: "help_show",
         title: "Help",
         slashName: "help",
         run: () => {
@@ -602,7 +656,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "docs.open",
+        name: "docs_open",
         title: "Open docs",
         run: () => {
           open("https://opencode.ai/docs").catch(() => {})
@@ -611,7 +665,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "app.exit",
+        name: "app_exit",
         title: "Exit the app",
         slashName: "exit",
         slashAliases: ["quit", "q"],
@@ -624,7 +678,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "System",
       },
       {
-        name: "app.debug",
+        name: "app_debug",
         title: "Toggle debug panel",
         category: "System",
         run: () => {
@@ -633,7 +687,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app.console",
+        name: "app_console",
         title: "Toggle console",
         category: "System",
         run: () => {
@@ -642,7 +696,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app.heap_snapshot",
+        name: "app_heap_snapshot",
         title: "Write heap snapshot",
         category: "System",
         run: async () => {
@@ -656,7 +710,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "terminal.suspend",
+        name: "terminal_suspend",
         title: "Suspend terminal",
         category: "System",
         hidden: true,
@@ -671,7 +725,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "terminal.title.toggle",
+        name: "terminal_title_toggle",
         title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
         category: "System",
         run: () => {
@@ -685,7 +739,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app.toggle.animations",
+        name: "app_toggle_animations",
         title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
         category: "System",
         run: () => {
@@ -694,7 +748,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app.toggle.file_context",
+        name: "app_toggle_file_context",
         title: kv.get("file_context_enabled", true) ? "Disable file context" : "Enable file context",
         category: "System",
         run: () => {
@@ -703,7 +757,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app.toggle.diffwrap",
+        name: "app_toggle_diffwrap",
         title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
         category: "System",
         run: () => {
@@ -713,7 +767,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app.toggle.paste_summary",
+        name: "app_toggle_paste_summary",
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
         run: () => {
@@ -726,7 +780,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
       },
       {
-        name: "app.toggle.session_directory_filter",
+        name: "app_toggle_session_directory_filter",
         title: kv.get("session_directory_filter_enabled", true)
           ? "Disable session directory filtering"
           : "Enable session directory filtering",
@@ -749,11 +803,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useBindings(() => ({
     enabled: command.matcher,
-    bindings: sections.global,
+    bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
   }))
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {
-    command.run(evt.properties.command)
+    command.run(commandEventAliases[evt.properties.command] ?? evt.properties.command)
   })
 
   event.on(TuiEvent.ToastShow.type, (evt) => {

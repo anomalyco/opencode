@@ -353,14 +353,10 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
-  "keymap": {
+  "leader_timeout": 2000,
+  "keybinds": {
     "leader": "ctrl+x",
-    "leader_timeout": 2000,
-    "sections": {
-      "global": {
-        "command.palette.show": "ctrl+p"
-      }
-    }
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
@@ -373,13 +369,13 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
 
 This is separate from `opencode.json`, which configures server/runtime behavior.
 
-`keymap` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
+`keybinds` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
 
 ### Options
 
 - `theme` - Sets your UI theme. [Learn more](/docs/themes).
-- `keymap` - Customizes keyboard shortcuts. [Learn more](/docs/keybinds).
-- `keybinds` - Deprecated legacy shortcut config. This only applies when `keymap` is not present.
+- `keybinds` - Customizes keyboard shortcuts. [Learn more](/docs/keybinds).
+- `leader_timeout` - Controls how long OpenCode waits after the leader key. Defaults to `2000`.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.

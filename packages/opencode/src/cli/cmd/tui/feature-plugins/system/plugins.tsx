@@ -207,7 +207,7 @@ function View(props: { api: TuiPluginApi }) {
       actions={[
         {
           title: "toggle",
-          command: "dialog.action.toggle",
+          command: "plugins.toggle",
           disabled: lock(),
           onTrigger: (item) => {
             setCur(item.value)
@@ -216,14 +216,13 @@ function View(props: { api: TuiPluginApi }) {
         },
         {
           title: "install",
-          command: "plugin.dialog.install",
+          command: "dialog.plugins.install",
           disabled: lock(),
           onTrigger: () => {
             showInstall(props.api)
           },
         },
       ]}
-      bindings={props.api.tuiConfig.keymap.pick("plugins", ["plugin.dialog.install"])}
       onSelect={(item) => {
         setCur(item.value)
         flip(item.value)
@@ -240,7 +239,7 @@ const tui: TuiPlugin = async (api) => {
   api.keymap.registerLayer({
     commands: [
       {
-        name: "plugins.list",
+        name: "plugin_manager",
         title: "Plugins",
         category: "System",
         namespace: "palette",
@@ -249,7 +248,7 @@ const tui: TuiPlugin = async (api) => {
         },
       },
       {
-        name: "plugins.install",
+        name: "plugin_install",
         title: "Install plugin",
         category: "System",
         namespace: "palette",
@@ -258,7 +257,7 @@ const tui: TuiPlugin = async (api) => {
         },
       },
     ],
-    bindings: api.tuiConfig.keymap.omit("plugins", ["plugin.dialog.install"]),
+    bindings: api.tuiConfig.keybinds.gather("plugins.palette", ["plugin_manager", "plugin_install"]),
   })
 }
 
