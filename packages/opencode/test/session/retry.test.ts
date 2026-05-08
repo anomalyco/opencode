@@ -294,6 +294,44 @@ describe("session.retry.retryable", () => {
   })
 })
 
+describe("session.retry.policy.maxAttempts", () => {
+  it.live("policy stops after RETRY_MAX_ATTEMPTS", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessionID = SessionID.make("session-policy-max")
+        const error = apiError({ "retry-after-ms": "0" })
+        const status = yield* SessionStatus.Service
+        let setCallCount = 0
+
+        const step = yield* Schedule.toStepWithMetadata(
+          SessionRetry.policy({
+            parse: (err) => MessageV2.APIError.Schema.parse(err),
+            set: (info) => {
+              setCallCount++
+              return status.set(sessionID, {
+                type: "retry",
+                attempt: info.attempt,
+                message: info.message,
+                next: info.next,
+              })
+            },
+          }),
+        )
+
+        // Drive the schedule step-by-step; steps beyond RETRY_MAX_ATTEMPTS
+        // return Cause.done (a Pull termination signal) which surfaces as a
+        // failure in the Effect, so we absorb it with Effect.ignore.
+        for (let i = 0; i < SessionRetry.RETRY_MAX_ATTEMPTS + 1; i++) {
+          yield* Effect.ignore(step(error))
+        }
+
+        // set() should have been called exactly RETRY_MAX_ATTEMPTS times
+        expect(setCallCount).toBe(SessionRetry.RETRY_MAX_ATTEMPTS)
+      }),
+    ),
+  )
+})
+
 describe("session.message-v2.fromError", () => {
   test.concurrent(
     "converts ECONNRESET socket errors to retryable APIError",
