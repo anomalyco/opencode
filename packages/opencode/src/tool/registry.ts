@@ -49,6 +49,13 @@ import { Permission } from "@/permission"
 
 const log = Log.create({ service: "tool.registry" })
 
+export function webSearchEnabled(
+  providerID: ProviderID,
+  flags = { exa: Flag.OPENCODE_ENABLE_EXA, parallel: Flag.OPENCODE_ENABLE_PARALLEL },
+) {
+  return providerID === ProviderID.opencode || flags.exa || flags.parallel
+}
+
 type TaskDef = Tool.InferDef<typeof TaskTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
 
@@ -284,7 +291,7 @@ export const layer: Layer.Layer<
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
-          return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+          return webSearchEnabled(input.providerID)
         }
 
         const usePatch =

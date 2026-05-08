@@ -91,6 +91,9 @@ export const layer = Layer.effect(
                     cwd: dir,
                     env: item.environment,
                     extendEnv: true,
+                    stdin: "ignore",
+                    stdout: "ignore",
+                    stderr: "ignore",
                   }),
                 )
                 .pipe(

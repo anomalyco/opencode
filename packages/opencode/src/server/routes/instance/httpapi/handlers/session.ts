@@ -37,14 +37,7 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
-
-const mapNotFound = <A, E, R>(self: Effect.Effect<A, E, R>) =>
-  self.pipe(
-    Effect.catchIf(NotFoundError.isInstance, () => Effect.fail(new HttpApiError.NotFound({}))),
-    Effect.catchDefect((error) =>
-      NotFoundError.isInstance(error) ? Effect.fail(new HttpApiError.NotFound({})) : Effect.die(error),
-    ),
-  )
+import * as SessionError from "./session-errors"
 
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
   Effect.gen(function* () {
@@ -79,7 +72,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const get = Effect.fn("SessionHttpApi.get")(function* (ctx: { params: { sessionID: SessionID } }) {
-      return yield* mapNotFound(session.get(ctx.params.sessionID))
+      return yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
     })
 
     const children = Effect.fn("SessionHttpApi.children")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -101,51 +94,49 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       query: typeof MessagesQuery.Type
     }) {
-      return yield* mapNotFound(
-        Effect.gen(function* () {
-          if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
-          if (ctx.query.before) {
-            const before = ctx.query.before
-            yield* Effect.try({
-              try: () => MessageV2.cursor.decode(before),
-              catch: () => new HttpApiError.BadRequest({}),
-            })
-          }
-          if (ctx.query.limit === undefined || ctx.query.limit === 0) {
-            yield* session.get(ctx.params.sessionID)
-            return yield* session.messages({ sessionID: ctx.params.sessionID })
-          }
+      if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
+      if (ctx.query.before) {
+        const before = ctx.query.before
+        yield* Effect.try({
+          try: () => MessageV2.cursor.decode(before),
+          catch: () => new HttpApiError.BadRequest({}),
+        })
+      }
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      if (ctx.query.limit === undefined || ctx.query.limit === 0) {
+        return yield* session.messages({ sessionID: ctx.params.sessionID })
+      }
 
-          yield* session.get(ctx.params.sessionID)
-          const page = MessageV2.page({
-            sessionID: ctx.params.sessionID,
-            limit: ctx.query.limit,
-            before: ctx.query.before,
-          })
-          if (!page.cursor) return page.items
+      const page = MessageV2.page({
+        sessionID: ctx.params.sessionID,
+        limit: ctx.query.limit,
+        before: ctx.query.before,
+      })
+      if (!page.cursor) return page.items
 
-          const request = yield* HttpServerRequest.HttpServerRequest
-          // toURL() honors the Host + x-forwarded-proto headers, so the Link
-          // header echoes the real origin instead of a hard-coded localhost.
-          const url = Option.getOrElse(HttpServerRequest.toURL(request), () => new URL(request.url, "http://localhost"))
-          url.searchParams.set("limit", ctx.query.limit.toString())
-          url.searchParams.set("before", page.cursor)
-          return HttpServerResponse.jsonUnsafe(page.items, {
-            headers: {
-              "Access-Control-Expose-Headers": "Link, X-Next-Cursor",
-              Link: `<${url.toString()}>; rel="next"`,
-              "X-Next-Cursor": page.cursor,
-            },
-          })
-        }),
-      )
+      const request = yield* HttpServerRequest.HttpServerRequest
+      // toURL() honors the Host + x-forwarded-proto headers, so the Link
+      // header echoes the real origin instead of a hard-coded localhost.
+      const url = Option.getOrElse(HttpServerRequest.toURL(request), () => new URL(request.url, "http://localhost"))
+      url.searchParams.set("limit", ctx.query.limit.toString())
+      url.searchParams.set("before", page.cursor)
+      return HttpServerResponse.jsonUnsafe(page.items, {
+        headers: {
+          "Access-Control-Expose-Headers": "Link, X-Next-Cursor",
+          Link: `<${url.toString()}>; rel="next"`,
+          "X-Next-Cursor": page.cursor,
+        },
+      })
     })
 
     const message = Effect.fn("SessionHttpApi.message")(function* (ctx: {
       params: { sessionID: SessionID; messageID: MessageID }
     }) {
-      return yield* mapNotFound(
-        Effect.sync(() => MessageV2.get({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID })),
+      return yield* SessionError.mapStorageNotFound(
+        Effect.try({
+          try: () => MessageV2.get({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID }),
+          catch: (error) => error,
+        }).pipe(Effect.catch((error) => (NotFoundError.isInstance(error) ? Effect.fail(error) : Effect.die(error)))),
       )
     })
 
@@ -170,7 +161,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const remove = Effect.fn("SessionHttpApi.remove")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* session.remove(ctx.params.sessionID)
+      yield* SessionError.mapStorageNotFound(session.remove(ctx.params.sessionID))
       return true
     })
 
@@ -178,7 +169,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof UpdatePayload.Type
     }) {
-      const current = yield* session.get(ctx.params.sessionID)
+      const current = yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
       if (ctx.payload.title !== undefined) {
         yield* session.setTitle({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
       }
@@ -191,14 +182,16 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       if (ctx.payload.time?.archived !== undefined) {
         yield* session.setArchived({ sessionID: ctx.params.sessionID, time: ctx.payload.time.archived })
       }
-      return yield* session.get(ctx.params.sessionID)
+      return yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
     })
 
     const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof ForkPayload.Type
     }) {
-      return yield* session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload.messageID })
+      return yield* SessionError.mapStorageNotFound(
+        session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload.messageID }),
+      )
     })
 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -222,19 +215,19 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const share = Effect.fn("SessionHttpApi.share")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* shareSvc.share(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
-      return yield* session.get(ctx.params.sessionID)
+      return yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
     })
 
     const unshare = Effect.fn("SessionHttpApi.unshare")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* shareSvc.unshare(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
-      return yield* session.get(ctx.params.sessionID)
+      return yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
     })
 
     const summarize = Effect.fn("SessionHttpApi.summarize")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof SummarizePayload.Type
     }) {
-      yield* revertSvc.cleanup(yield* session.get(ctx.params.sessionID))
+      yield* revertSvc.cleanup(yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID)))
       const messages = yield* session.messages({ sessionID: ctx.params.sessionID })
       const defaultAgent = yield* agentSvc.defaultAgent()
       const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
