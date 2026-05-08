@@ -120,6 +120,14 @@ grep `[feat: <id>]` 能反查到对应文档。
 
 ## 默认仓库约定(分支策略 v2,2026-04-30 起)
 
+### 🚨 三条铁律(2026-05-08 立,绝对约束)
+
+1. **永不直接在 dev 上开发** — 任何代码改动必须先开 feat 分支(`feat/<name>` kebab-case),build script / 配置 / 一行 fix 都不例外
+2. **所有合并到 dev 必须 user 同意** — agent 不得自动 `git merge` / `git rebase` 影响 dev 内容,先请示再执行
+3. **所有 dev → 远端 push 必须 user 同意** — agent 不得自动 `git push origin dev` / `git push origin --tags`,先请示再执行
+
+每层把关给 user 一次刹车机会。例外:开 feat 分支 / feat 分支内 commit / feat 分支 push origin(私有 work,不影响 dev)agent 可自主。
+
 - **默认分支**:`dev` — **单一稳定主干**,不自动跟随 `upstream/dev`,合上游是主动决策(不是被动跟随)
 - **功能分支**:`feat/<name>` — **一次性容器**,合 dev = 销毁,**新项目用新名字,绝不复用**。`<name>` **全小写 + kebab-case**(中划线分词,行业常规),中英混合 OK 但英文部分必须小写。详见 [`docs/governance/双端协作-SOP.md`](docs/governance/双端协作-SOP.md)(feat 生命周期 + 命名规范 + Win/Mac 双端协作流程)
 - **🌿 开任何新分支前必先拉最新 dev**(硬规则,无例外):`git checkout -b feat/<name>` / `chore/<name>` / `sync/<日期>` 之前,**必须**先 `git checkout dev && git pull --rebase`。理由:Win/Mac 双端协作 + 远端持续推进,基于 stale dev 起 feat = 注定 rebase / 大概率冲突。实施超 30 min 时,合 dev 前再 `git fetch && git log dev..origin/dev` 确认远端没新动。
