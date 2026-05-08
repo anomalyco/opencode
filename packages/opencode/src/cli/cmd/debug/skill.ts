@@ -10,6 +10,10 @@ export const SkillCommand = effectCmd({
   handler: Effect.fn("Cli.debug.skill")(function* () {
     const skill = yield* Skill.Service
     const skills = yield* skill.all()
-    process.stdout.write(JSON.stringify(skills, null, 2) + EOL)
+    yield* Effect.callback<void>((resume) => {
+      process.stdout.write(JSON.stringify(skills, null, 2) + EOL, (err) => {
+        resume(err ? Effect.die(err) : Effect.void)
+      })
+    })
   }),
 })
