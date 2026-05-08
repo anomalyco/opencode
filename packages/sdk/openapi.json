@@ -12223,6 +12223,9 @@
               "disable_paste_summary": {
                 "type": "boolean"
               },
+              "disable_vcs_diff": {
+                "type": "boolean"
+              },
               "batch_tool": {
                 "type": "boolean"
               },

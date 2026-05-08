@@ -1362,9 +1362,10 @@ export type Config = {
     }
     /**
      * Number of retries for chat completions on failure
-     */
+    */
     chatMaxRetries?: number
     disable_paste_summary?: boolean
+    disable_vcs_diff?: boolean
     /**
      * Enable the batch tool
      */
