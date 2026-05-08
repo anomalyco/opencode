@@ -2,7 +2,7 @@
 
 ## Current State
 - Branch: `rebase/upstream-sync` (based on `upstream/dev`)
-- Latest commit: `38405e57a` (`feat: port fork features onto upstream/dev`)
+- Latest commit: `243ffdb7b` (`fix: stabilize recent session routing and TTS handling`)
 - Active todos:
   - `rebase-ui` — in progress
   - `rebase-tts` — in progress
@@ -25,9 +25,22 @@
   - `packages/app`: `bun run build`
   - `packages/opencode`: `bun test test/tts/route.test.ts test/tts/edge.test.ts`
 
+## In Progress
+- Session resilience MVP wiring (uncommitted):
+  - `packages/opencode/src/cli/cmd/serve-autoresume.ts` (new)
+    - scans recent sessions globally
+    - picks `unanswered` / `interrupted` actions via `pickAction`
+    - resumes inside `InstanceStore.provide({ directory })`
+    - provides `WorkspaceRef` and skips busy sessions
+  - `packages/opencode/src/cli/cmd/serve.ts`
+    - starts auto-resume worker in background (`Effect.scoped(...forkScoped...)`)
+- Validation already green for current in-progress code:
+  - `packages/opencode`: `bun typecheck`
+  - `packages/opencode`: `bun test test/session/auto-resume.test.ts test/tts/route.test.ts test/tts/edge.test.ts`
+
 ## Execution Plan
-1. **Commit UI+TTS stabilization follow-up**
-   - Commit the validated UI/TTS fixes listed above on `rebase/upstream-sync`.
+1. **Commit session resilience MVP**
+   - Commit `serve-autoresume.ts` + `serve.ts` once final review is complete.
 
 2. **Port auto-review group cleanly**
    - Confirm auto-review files already included in commit `38405e57a` still match upstream model/session APIs.

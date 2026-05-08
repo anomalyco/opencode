@@ -3,6 +3,7 @@ import { Server } from "../../server/server"
 import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { autoresume } from "./serve-autoresume"
 
 export const ServeCommand = effectCmd({
   command: "serve",
@@ -18,6 +19,13 @@ export const ServeCommand = effectCmd({
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+    yield* Effect.scoped(
+      autoresume().pipe(
+        Effect.catchCause((cause) => Effect.logWarning("auto resume process failed", { cause })),
+        Effect.forkScoped,
+        Effect.asVoid,
+      ),
+    )
 
     yield* Effect.never
   }),
