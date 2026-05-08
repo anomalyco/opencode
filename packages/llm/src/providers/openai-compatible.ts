@@ -38,7 +38,6 @@ export const profileModel = (
     id,
     provider: profile.provider,
     baseURL: options.baseURL ?? profile.baseURL,
-    capabilities: options.capabilities ?? profile.capabilities,
   })
 
 const define = (profile: OpenAICompatibleProfile) =>

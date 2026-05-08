@@ -3,7 +3,6 @@ import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
-import { capabilities } from "../llm"
 import { Protocol } from "../route/protocol"
 import {
   Usage,
@@ -393,12 +392,6 @@ export const route = Route.make({
 export const model = Route.model(route, {
   provider: "google",
   baseURL: DEFAULT_BASE_URL,
-  capabilities: capabilities({
-    input: { image: true, audio: true, video: true, pdf: true },
-    output: { reasoning: true },
-    tools: { calls: true },
-    reasoning: { efforts: ["minimal", "low", "medium", "high", "xhigh", "max"] },
-  }),
 })
 
 export * as Gemini from "./gemini"

@@ -1,9 +1,6 @@
-import type { CapabilitiesInput } from "../llm"
-
 export interface OpenAICompatibleProfile {
   readonly provider: string
   readonly baseURL: string
-  readonly capabilities?: CapabilitiesInput
 }
 
 export const profiles = {

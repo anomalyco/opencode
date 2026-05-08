@@ -1,7 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Route, type RouteModelInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
-import { capabilities } from "../llm"
 import { Protocol } from "../route/protocol"
 import {
   Usage,
@@ -507,22 +506,12 @@ export const route = Route.make({
   framing,
 })
 
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const defaultCapabilities = capabilities({
-  output: { reasoning: true },
-  tools: { calls: true, streamingInput: true },
-  cache: { prompt: true, contentBlocks: true },
-})
-
 export const nativeCredentials = BedrockAuth.nativeCredentials
 
 const bedrockModel = Route.model(
   route,
   {
     provider: "bedrock",
-    capabilities: defaultCapabilities,
   },
   {
     mapInput: (input: BedrockConverseModelInput) => {

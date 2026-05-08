@@ -1,4 +1,4 @@
-import { CacheHint, LLM, type ContentPart, type MediaPart, type Message, type ModelRef, type SystemPart } from "@opencode-ai/llm"
+import { CacheHint, LLM, type ContentPart, type MediaPart, type Message, type SystemPart } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { ProviderLLMBridge } from "@/provider/llm-bridge"
 import * as EffectZod from "@/util/effect-zod"
@@ -188,13 +188,12 @@ const cacheLastText = (content: ReadonlyArray<ContentPart>): ReadonlyArray<Conte
 }
 
 const cacheHints = (input: {
-  readonly model: ModelRef
+  readonly cachePrompt: boolean
   readonly system: ReadonlyArray<SystemPart>
   readonly messages: ReadonlyArray<Message>
 }) => {
-  if (!input.model.capabilities.cache.prompt) return input
+  if (!input.cachePrompt) return input
   return {
-    model: input.model,
     system: input.system.map((part, index) => index < 2 ? { ...part, cache: EPHEMERAL_CACHE } : part),
     messages: input.messages.map((message, index) =>
       index < input.messages.length - 2 ? message : LLM.message({ ...message, content: cacheLastText(message.content) }),
@@ -262,7 +261,7 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
   const headers = { ...model.headers, ...input.headers }
   const requestModel = Object.keys(headers).length === 0 ? model : LLM.model({ ...model, headers })
   const cached = cacheHints({
-    model: requestModel,
+    cachePrompt: ["anthropic-messages", "bedrock-converse"].includes(requestModel.route),
     system: input.system?.filter((part) => part.trim() !== "").map(LLM.system) ?? [],
     messages: (yield* Effect.forEach(input.messages, lowerMessage)).flat(),
   })
@@ -271,7 +270,7 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
   // quirks should live on model policy, provider facades, or protocol lowering.
   return LLM.request({
     id: input.id,
-    model: cached.model,
+    model: requestModel,
     system: cached.system,
     messages: cached.messages,
     tools: input.tools?.map((tool) => toolDefinition({ model: input.model, tool })) ?? [],

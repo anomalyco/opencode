@@ -4,7 +4,6 @@ import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { HttpTransport, WebSocketTransport } from "../route/transport"
-import { capabilities } from "../llm"
 import { Protocol } from "../route/protocol"
 import {
   Usage,
@@ -527,7 +526,6 @@ const transportBase = {
 }
 const routeDefaults = {
   baseURL: DEFAULT_BASE_URL,
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
 }
 
 export const httpTransport = HttpTransport.httpJson({

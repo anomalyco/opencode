@@ -17,7 +17,6 @@ import {
   HttpOptions,
   LLMRequest,
   LLMResponse,
-  ModelCapabilities,
   ModelID,
   ModelLimits,
   ModelRef,
@@ -76,19 +75,16 @@ const register = <R extends AnyRoute>(route: R): R => {
 
 const registeredRoute = (id: string) => routeRegistry.get(id)
 
-export type ModelCapabilitiesInput = Exclude<ModelCapabilities.Input, ModelCapabilities>
-
 export type HttpOptionsInput = HttpOptions.Input
 
 export type ModelRefInput = Omit<
   ConstructorParameters<typeof ModelRef>[0],
-  "id" | "provider" | "route" | "capabilities" | "limits" | "generation" | "http" | "auth"
+  "id" | "provider" | "route" | "limits" | "generation" | "http" | "auth"
 > & {
   readonly id: string | ModelID
   readonly provider: string | ProviderID
   readonly route: string | RouteID
   readonly auth?: AuthDef
-  readonly capabilities?: ModelCapabilities.Input
   readonly limits?: ModelLimits.Input
   readonly generation?: GenerationOptions.Input
   readonly http?: HttpOptionsInput
@@ -159,7 +155,6 @@ const modelWithDefaults =
       baseURL,
       provider,
       route: route.id,
-      capabilities: mapped.capabilities ?? defaults.capabilities ?? route.defaults.capabilities,
       limits: mapped.limits ?? defaults.limits ?? route.defaults.limits,
       generation: mergeGenerationOptions(generation, mapped.generation),
       providerOptions: mergeProviderOptions(providerOptions, mapped.providerOptions),
@@ -170,14 +165,11 @@ const modelWithDefaults =
 const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaults): RouteDefaults => ({
   ...base,
   ...patch,
-  capabilities: patch.capabilities ?? base?.capabilities,
   limits: patch.limits ?? base?.limits,
   generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
   providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
   http: mergeHttpOptions(httpOptions(base?.http), httpOptions(patch.http)),
 })
-
-export const modelCapabilities = ModelCapabilities.make
 
 export const modelLimits = ModelLimits.make
 
@@ -195,7 +187,6 @@ export const modelRef = (input: ModelRefInput) =>
     id: ModelID.make(input.id),
     provider: ProviderID.make(input.provider),
     route: RouteID.make(input.route),
-    capabilities: modelCapabilities(input.capabilities),
     limits: modelLimits(input.limits),
     generation: generationOptions(input.generation),
     http: httpOptions(input.http),

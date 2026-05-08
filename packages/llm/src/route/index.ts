@@ -1,4 +1,4 @@
-export { Route, LLMClient, modelCapabilities, modelLimits, modelRef } from "./client"
+export { Route, LLMClient, modelLimits, modelRef } from "./client"
 export type {
   Route as RouteShape,
   RouteModelDefaults,
@@ -8,7 +8,6 @@ export type {
   AnyRoute,
   Interface as LLMClientShape,
   Service as LLMClientService,
-  ModelCapabilitiesInput,
   ModelRefInput,
 } from "./client"
 export * from "./executor"

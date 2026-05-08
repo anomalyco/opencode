@@ -1,7 +1,6 @@
 import { Route, type RouteRoutedModelInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
-import { capabilities } from "../llm"
 import * as OpenAIChat from "./openai-chat"
 
 const ADAPTER = "openai-compatible-chat"
@@ -24,8 +23,6 @@ export const route = Route.make({
   framing: Framing.sse,
 })
 
-export const model = Route.model<OpenAICompatibleChatModelInput>(route, {
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
-})
+export const model = Route.model<OpenAICompatibleChatModelInput>(route)
 
 export * as OpenAICompatibleChat from "./openai-compatible-chat"

@@ -1,10 +1,8 @@
 import { Effect, JsonSchema, Schema } from "effect"
 import {
   LLMClient,
-  modelCapabilities,
   modelLimits,
   modelRef,
-  type ModelCapabilitiesInput,
   type ModelRefInput,
 } from "./route/client"
 import {
@@ -24,8 +22,6 @@ import {
   ToolResultPart,
 } from "./schema"
 import { make as makeTool, type ToolSchema } from "./tool"
-
-export type CapabilitiesInput = ModelCapabilitiesInput
 
 export type ModelInput = ModelRefInput
 
@@ -50,8 +46,6 @@ export type RequestInput = Omit<
   readonly providerOptions?: ConstructorParameters<typeof LLMRequest>[0]["providerOptions"]
   readonly http?: HttpOptions.Input
 }
-
-export const capabilities = modelCapabilities
 
 export const limits = modelLimits
 

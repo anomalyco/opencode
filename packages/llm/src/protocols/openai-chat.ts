@@ -4,7 +4,6 @@ import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { HttpTransport } from "../route/transport"
-import { capabilities } from "../llm"
 import { Protocol } from "../route/protocol"
 import {
   Usage,
@@ -394,7 +393,6 @@ export const route = Route.make({
   transport: httpTransport,
   defaults: {
     baseURL: DEFAULT_BASE_URL,
-    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
   },
 })
 

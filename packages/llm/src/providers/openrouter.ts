@@ -2,7 +2,6 @@ import { Effect, Schema } from "effect"
 import { Route, type RouteModelInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
-import { capabilities } from "../llm"
 import { Provider } from "../provider"
 import { Protocol } from "../route/protocol"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
@@ -79,7 +78,6 @@ export const routes = [route]
 const modelRef = Route.model<ModelInput>(route, {
   provider: profile.provider,
   baseURL: profile.baseURL,
-  capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
 })
 
 export const model = (id: string | ModelID, options: ModelOptions = {}) => modelRef({ ...options, id })

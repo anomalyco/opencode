@@ -4,27 +4,17 @@ import {
   ContentPart,
   LLMEvent,
   LLMRequest,
-  ModelCapabilities,
   ModelID,
   ModelLimits,
   ModelRef,
   ProviderID,
 } from "../src/schema"
 
-const capabilities = new ModelCapabilities({
-  input: { text: true, image: false, audio: false, video: false, pdf: false },
-  output: { text: true, reasoning: false },
-  tools: { calls: true, streamingInput: true, providerExecuted: false },
-  cache: { prompt: false, messageBlocks: false, contentBlocks: false },
-  reasoning: { efforts: [], summaries: false, encryptedContent: false },
-})
-
 const model = new ModelRef({
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
   route: "openai-chat",
   baseURL: "https://fake.local",
-  capabilities,
   limits: new ModelLimits({}),
 })
 

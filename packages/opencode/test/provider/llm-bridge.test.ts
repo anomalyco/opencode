@@ -46,14 +46,12 @@ describe("ProviderLLMBridge", () => {
     expect(ref).toMatchObject({
       id: "gpt-5",
       provider: "openai",
-      protocol: "openai-responses",
-      apiKey: "openai-key",
+      route: "openai-responses",
       limits: { context: 128_000, output: 32_000 },
     })
-    expect(ref?.capabilities.reasoning.efforts).toEqual(["high"])
   })
 
-  test("maps Anthropic headers and cache capability", () => {
+  test("maps Anthropic headers", () => {
     const ref = ProviderLLMBridge.toModelRef({
       provider: provider({
         id: ProviderID.anthropic,
@@ -64,13 +62,12 @@ describe("ProviderLLMBridge", () => {
     })
 
     expect(ref).toMatchObject({
-      protocol: "anthropic-messages",
+      route: "anthropic-messages",
       apiKey: "anthropic-key",
       headers: {
         "anthropic-beta": "fine-grained-tool-streaming-2025-05-14",
       },
     })
-    expect(ref?.capabilities.cache).toMatchObject({ prompt: true, contentBlocks: true })
   })
 
   test("maps Gemini API keys", () => {
@@ -80,10 +77,9 @@ describe("ProviderLLMBridge", () => {
     })
 
     expect(ref).toMatchObject({
-      protocol: "gemini",
+      route: "gemini",
       apiKey: "google-key",
     })
-    expect(ref?.capabilities.tools.streamingInput).toBe(false)
   })
 
   test("maps known OpenAI-compatible provider families", () => {
@@ -100,7 +96,7 @@ describe("ProviderLLMBridge", () => {
     expect(ref).toMatchObject({
       id: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       provider: "togetherai",
-      protocol: "openai-chat",
+      route: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
       apiKey: "together-key",
     })
@@ -125,8 +121,7 @@ describe("ProviderLLMBridge", () => {
     expect(ref).toMatchObject({
       id: "openai/gpt-4o-mini",
       provider: "openrouter",
-      adapter: "openrouter",
-      protocol: "openrouter-chat",
+      route: "openrouter",
       baseURL: "https://openrouter.ai/api/v1",
       apiKey: "openrouter-key",
       providerOptions: {
@@ -147,7 +142,7 @@ describe("ProviderLLMBridge", () => {
 
     expect(ref).toMatchObject({
       provider: "github-copilot",
-      protocol: "openai-responses",
+      route: "openai-responses",
       apiKey: "copilot-key",
     })
   })
@@ -161,9 +156,8 @@ describe("ProviderLLMBridge", () => {
     expect(ref).toMatchObject({
       id: "grok-4.3",
       provider: "xai",
-      protocol: "openai-responses",
+      route: "openai-responses",
       baseURL: "https://api.x.ai/v1",
-      apiKey: "xai-key",
     })
   })
 
@@ -179,10 +173,8 @@ describe("ProviderLLMBridge", () => {
 
     expect(ref).toMatchObject({
       provider: "azure",
-      adapter: "azure-openai-responses",
-      protocol: "openai-responses",
+      route: "azure-openai-responses",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
-      apiKey: "azure-key",
       queryParams: { "api-version": "2025-04-01-preview" },
     })
   })
@@ -195,8 +187,7 @@ describe("ProviderLLMBridge", () => {
 
     expect(ref).toMatchObject({
       provider: "azure",
-      adapter: "azure-openai-chat",
-      protocol: "openai-chat",
+      route: "azure-openai-chat",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
       queryParams: { "api-version": "v1" },
     })
@@ -221,7 +212,7 @@ describe("ProviderLLMBridge", () => {
     })
 
     expect(ref).toMatchObject({
-      protocol: "openai-chat",
+      route: "openai-compatible-chat",
       baseURL: "https://custom.cerebras.test/v1",
       apiKey: "cerebras-key",
       headers: {
@@ -231,7 +222,7 @@ describe("ProviderLLMBridge", () => {
     })
   })
 
-  test("maps Amazon Bedrock to Converse with bearer auth and content-block cache", () => {
+  test("maps Amazon Bedrock to Converse with bearer auth", () => {
     const ref = ProviderLLMBridge.toModelRef({
       provider: provider({ id: ProviderID.make("amazon-bedrock"), key: "bedrock-bearer-key" }),
       model: model({
@@ -242,12 +233,9 @@ describe("ProviderLLMBridge", () => {
     })
 
     expect(ref).toMatchObject({
-      protocol: "bedrock-converse",
+      route: "bedrock-converse",
       apiKey: "bedrock-bearer-key",
     })
-    // Bedrock Converse supports both prompt-level and positional content-block
-    // cache markers (cachePoint blocks landed in 9d7d518ac).
-    expect(ref?.capabilities.cache).toMatchObject({ prompt: true, contentBlocks: true })
   })
 
   test("leaves undecided provider packages unmapped", () => {

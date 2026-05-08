@@ -25,7 +25,6 @@ const converseModel = Route.model<ModelInput>(
   BedrockConverse.route,
   {
     provider: "amazon-bedrock",
-    capabilities: BedrockConverse.defaultCapabilities,
   },
   {
     mapInput: (input) => {

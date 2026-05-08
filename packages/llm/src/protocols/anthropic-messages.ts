@@ -3,7 +3,6 @@ import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
-import { capabilities } from "../llm"
 import { Protocol } from "../route/protocol"
 import {
   Usage,
@@ -588,12 +587,6 @@ export const route = Route.make({
 export const model = Route.model(route, {
   provider: "anthropic",
   baseURL: DEFAULT_BASE_URL,
-  capabilities: capabilities({
-    output: { reasoning: true },
-    tools: { calls: true, streamingInput: true },
-    cache: { prompt: true, contentBlocks: true },
-    reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], summaries: false, encryptedContent: true },
-  }),
 })
 
 export * as AnthropicMessages from "./anthropic-messages"

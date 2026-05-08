@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { JsonSchema, ModelID, ProviderID, ReasoningEffort, RouteID } from "./ids"
+import { JsonSchema, ModelID, ProviderID, RouteID } from "./ids"
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -122,61 +122,6 @@ export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptions
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
-export class ModelCapabilities extends Schema.Class<ModelCapabilities>("LLM.ModelCapabilities")({
-  input: Schema.Struct({
-    text: Schema.Boolean,
-    image: Schema.Boolean,
-    audio: Schema.Boolean,
-    video: Schema.Boolean,
-    pdf: Schema.Boolean,
-  }),
-  output: Schema.Struct({
-    text: Schema.Boolean,
-    reasoning: Schema.Boolean,
-  }),
-  tools: Schema.Struct({
-    calls: Schema.Boolean,
-    streamingInput: Schema.Boolean,
-    providerExecuted: Schema.Boolean,
-  }),
-  cache: Schema.Struct({
-    prompt: Schema.Boolean,
-    messageBlocks: Schema.Boolean,
-    contentBlocks: Schema.Boolean,
-  }),
-  reasoning: Schema.Struct({
-    efforts: Schema.Array(ReasoningEffort),
-    summaries: Schema.Boolean,
-    encryptedContent: Schema.Boolean,
-  }),
-}) {}
-
-export namespace ModelCapabilities {
-  export type Input =
-    | ModelCapabilities
-    | {
-        readonly input?: Partial<ModelCapabilities["input"]>
-        readonly output?: Partial<ModelCapabilities["output"]>
-        readonly tools?: Partial<ModelCapabilities["tools"]>
-        readonly cache?: Partial<ModelCapabilities["cache"]>
-        readonly reasoning?: Partial<Omit<ModelCapabilities["reasoning"], "efforts">> & {
-          readonly efforts?: ReadonlyArray<ModelCapabilities["reasoning"]["efforts"][number]>
-        }
-      }
-
-  /** Normalize partial capability input into the canonical capability set. */
-  export const make = (input: Input | undefined) => {
-    if (input instanceof ModelCapabilities) return input
-    return new ModelCapabilities({
-      input: { text: true, image: false, audio: false, video: false, pdf: false, ...input?.input },
-      output: { text: true, reasoning: false, ...input?.output },
-      tools: { calls: false, streamingInput: false, providerExecuted: false, ...input?.tools },
-      cache: { prompt: false, messageBlocks: false, contentBlocks: false, ...input?.cache },
-      reasoning: { efforts: [], summaries: false, encryptedContent: false, ...input?.reasoning },
-    })
-  }
-}
-
 export class ModelLimits extends Schema.Class<ModelLimits>("LLM.ModelLimits")({
   context: Schema.optional(Schema.Number),
   output: Schema.optional(Schema.Number),
@@ -207,7 +152,6 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
    * lives as a typed first-class field instead of `native`.
    */
   queryParams: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  capabilities: ModelCapabilities,
   limits: ModelLimits,
   /** Provider-neutral generation defaults. Request-level values override them. */
   generation: Schema.optional(GenerationOptions),
@@ -236,7 +180,6 @@ export namespace ModelRef {
     auth: model.auth,
     headers: model.headers,
     queryParams: model.queryParams,
-    capabilities: model.capabilities,
     limits: model.limits,
     generation: model.generation,
     providerOptions: model.providerOptions,
