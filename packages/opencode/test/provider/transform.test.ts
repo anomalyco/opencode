@@ -3176,6 +3176,22 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
+    test("opus 4.5 returns effort options without max", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-5",
+        providerID: "anthropic",
+        api: {
+          id: "claude-opus-4-5-20251101",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.low).toEqual({ effort: "low" })
+      expect(result.high).toEqual({ effort: "high" })
+    })
+
     test("github copilot opus 4.7 returns only medium reasoning effort", () => {
       const model = createMockModel({
         id: "claude-opus-4.7",
