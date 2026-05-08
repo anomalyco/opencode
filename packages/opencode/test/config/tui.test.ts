@@ -30,6 +30,19 @@ const getTuiConfig = async (directory: string) =>
     ),
   )
 
+async function withPlatform<Value>(platform: typeof process.platform, fn: () => Promise<Value>) {
+  const original = Object.getOwnPropertyDescriptor(process, "platform")
+  Object.defineProperty(process, "platform", {
+    ...original,
+    value: platform,
+  })
+  try {
+    return await fn()
+  } finally {
+    if (original) Object.defineProperty(process, "platform", original)
+  }
+}
+
 afterEach(async () => {
   delete process.env.OPENCODE_CONFIG
   delete process.env.OPENCODE_TUI_CONFIG
@@ -389,6 +402,106 @@ test("merges keybind overrides across precedence layers", async () => {
   expect(config.keybinds?.theme_list).toBe("ctrl+k")
 })
 
+test("resolves semantic keymap sections", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          keybinds: { command_list: "ctrl+z" },
+          keymap: {
+            sections: {
+              global: { "command.palette.show": "alt+p" },
+              prompt: { "prompt.editor": "ctrl+e" },
+              autocomplete: { "prompt.autocomplete.next": "ctrl+j" },
+              dialog_actions: { "dialog.action.toggle": "ctrl+t" },
+              model: { "model.dialog.favorite": "ctrl+f" },
+              plugins: { "plugin.dialog.install": "shift+i" },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.keymap.sections.global.find((binding) => binding.cmd === "command.palette.show")?.key).toBe("alt+p")
+  expect(config.keymap.sections.global.find((binding) => binding.cmd === "session.new")?.key).toBe("<leader>n")
+  expect(config.keymap.sections.prompt.find((binding) => binding.cmd === "prompt.editor")?.key).toBe("ctrl+e")
+  expect(config.keymap.sections.autocomplete.find((binding) => binding.cmd === "prompt.autocomplete.next")?.key).toBe(
+    "ctrl+j",
+  )
+  expect(config.keymap.sections.dialog_actions.find((binding) => binding.cmd === "dialog.action.toggle")?.key).toBe(
+    "ctrl+t",
+  )
+  expect(config.keymap.sections.model.find((binding) => binding.cmd === "model.dialog.favorite")?.key).toBe("ctrl+f")
+  expect(config.keymap.sections.plugins.find((binding) => binding.cmd === "plugin.dialog.install")?.key).toBe("shift+i")
+  expect(config.keymap.pick("plugins", ["plugin.dialog.install"]).map((binding) => binding.cmd)).toEqual([
+    "plugin.dialog.install",
+  ])
+  expect((config.keymap.pick("plugins", ["plugin.dialog.install"])[0] as { group?: unknown } | undefined)?.group).toBe(
+    "Plugins",
+  )
+  expect(config.keymap.omit("plugins", ["plugin.dialog.install"]).map((binding) => binding.cmd)).toEqual([])
+})
+
+test("legacy keybinds transform into semantic keymap sections", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          keybinds: {
+            command_list: "alt+p",
+            editor_open: "ctrl+e",
+            "prompt.autocomplete.next": "ctrl+j",
+            "dialog.mcp.toggle": "ctrl+t",
+            "dialog.plugins.install": "shift+i",
+            plugin_manager: "ctrl+shift+p",
+          },
+        }),
+      )
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(Object.keys(config.keymap.sections)).toEqual([
+    "global",
+    "session",
+    "prompt",
+    "autocomplete",
+    "input",
+    "dialog_select",
+    "dialog_actions",
+    "model",
+    "permission",
+    "question",
+    "plugins",
+    "home_tips",
+  ])
+  expect(config.keymap.sections.global.find((binding) => binding.cmd === "command.palette.show")?.key).toBe("alt+p")
+  expect(config.keymap.sections.prompt.find((binding) => binding.cmd === "prompt.editor")?.key).toBe("ctrl+e")
+  expect(config.keymap.sections.autocomplete.find((binding) => binding.cmd === "prompt.autocomplete.next")?.key).toBe(
+    "ctrl+j",
+  )
+  expect(config.keymap.sections.dialog_actions.find((binding) => binding.cmd === "dialog.action.toggle")?.key).toBe(
+    "ctrl+t",
+  )
+  expect(config.keymap.sections.model.find((binding) => binding.cmd === "model.dialog.provider")?.key).toBe("ctrl+a")
+  expect(config.keymap.sections.model.find((binding) => binding.cmd === "model.dialog.favorite")?.key).toBe("ctrl+f")
+  expect(config.keymap.sections.plugins.find((binding) => binding.cmd === "plugin.dialog.install")?.key).toBe("shift+i")
+  expect(config.keymap.sections.plugins.find((binding) => binding.cmd === "plugins.list")?.key).toBe("ctrl+shift+p")
+  expect(config.keymap.pick("plugins", ["plugin.dialog.install"]).map((binding) => binding.cmd)).toEqual([
+    "plugin.dialog.install",
+  ])
+  expect((config.keymap.omit("plugins", ["plugin.dialog.install"])[0] as { group?: unknown } | undefined)?.group).toBe(
+    "Plugins",
+  )
+  expect(config.keymap.omit("plugins", ["plugin.dialog.install"]).map((binding) => binding.cmd)).toEqual([
+    "plugins.list",
+  ])
+})
+
 wintest("defaults Ctrl+Z to input undo on Windows", async () => {
   await using tmp = await tmpdir()
   const config = await getTuiConfig(tmp.path)
@@ -417,6 +530,62 @@ wintest("ignores terminal suspend bindings on Windows", async () => {
   const config = await getTuiConfig(tmp.path)
   expect(config.keybinds?.terminal_suspend).toBe("none")
   expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
+})
+
+test("applies Windows keymap defaults", async () => {
+  await withPlatform("win32", async () => {
+    await using tmp = await tmpdir()
+
+    const config = await getTuiConfig(tmp.path)
+    expect(config.keymap.sections.global.find((binding) => binding.cmd === "terminal.suspend")).toBeUndefined()
+    expect(config.keymap.sections.input.find((binding) => binding.cmd === "input.undo")?.key).toBe(
+      "ctrl+z,ctrl+-,super+z",
+    )
+  })
+})
+
+test("keeps explicit configured keymap terminal suspend binding on Windows", async () => {
+  await withPlatform("win32", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "tui.json"),
+          JSON.stringify({
+            keymap: {
+              sections: {
+                global: { "terminal.suspend": "alt+z" },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    const config = await getTuiConfig(tmp.path)
+    expect(config.keymap.sections.global.find((binding) => binding.cmd === "terminal.suspend")?.key).toBe("alt+z")
+  })
+})
+
+test("keeps explicit configured keymap input undo on Windows", async () => {
+  await withPlatform("win32", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "tui.json"),
+          JSON.stringify({
+            keymap: {
+              sections: {
+                input: { "input.undo": "ctrl+y" },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    const config = await getTuiConfig(tmp.path)
+    expect(config.keymap.sections.input.find((binding) => binding.cmd === "input.undo")?.key).toBe("ctrl+y")
+  })
 })
 
 test("OPENCODE_TUI_CONFIG provides settings when no project config exists", async () => {
