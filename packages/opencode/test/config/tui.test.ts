@@ -434,6 +434,9 @@ test("resolves semantic keymap sections", async () => {
   expect(config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.layout.toggle")?.key).toBe(
     "ctrl+alt+shift+k",
   )
+  expect(config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.group.next")?.key).toBe(
+    "ctrl+alt+right",
+  )
   expect(
     (config.keymap.sections.which_key.find((binding) => binding.cmd === "tui-which-key.toggle") as
       | { group?: unknown }

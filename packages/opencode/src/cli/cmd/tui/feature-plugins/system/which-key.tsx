@@ -10,6 +10,8 @@ import type { InternalTuiPlugin } from "../../plugin/internal"
 const command = {
   toggle: "tui-which-key.toggle",
   toggleLayout: "tui-which-key.layout.toggle",
+  groupPrevious: "tui-which-key.group.previous",
+  groupNext: "tui-which-key.group.next",
   scrollUp: "tui-which-key.scroll.up",
   scrollDown: "tui-which-key.scroll.down",
   pageUp: "tui-which-key.page.up",
@@ -20,7 +22,17 @@ const command = {
 
 const LAYER_PRIORITY = 900
 const toggleCommands = [command.toggle, command.toggleLayout] as const
-const scrollCommands = [command.scrollUp, command.scrollDown, command.pageUp, command.pageDown, command.home, command.end] as const
+const panelCommands = [
+  command.groupPrevious,
+  command.groupNext,
+  command.scrollUp,
+  command.scrollDown,
+  command.pageUp,
+  command.pageDown,
+  command.home,
+  command.end,
+] as const
+const COLUMN_GAP = 4
 
 type Layout = "dock" | "overlay"
 
@@ -42,12 +54,10 @@ type Entry = {
   continues: boolean
 }
 
-type GroupHeader = {
-  type: "group"
+type Group = {
   label: string
+  entries: Entry[]
 }
-
-type Item = Entry | GroupHeader
 
 function text(value: unknown) {
   if (typeof value !== "string") return undefined
@@ -76,9 +86,9 @@ function activeKeyLabel(active: ActiveKey<Renderable, KeyEvent>) {
   const group = text(active.bindingAttrs?.group)
   if (active.continues && group) return group
   return (
+    text(active.commandAttrs?.title) ??
     text(active.bindingAttrs?.desc) ??
     text(active.commandAttrs?.desc) ??
-    text(active.commandAttrs?.title) ??
     (typeof active.command === "string" ? active.command : undefined) ??
     (active.continues ? "prefix" : "binding")
   )
@@ -105,17 +115,10 @@ function activeKeyEntry(api: TuiPluginApi, active: ActiveKey<Renderable, KeyEven
   }
 }
 
-function grouped(entries: Entry[]): Item[] {
+function grouped(entries: Entry[]): Group[] {
   const map = new Map<string, Entry[]>()
   for (const entry of entries) map.set(entry.group, [...(map.get(entry.group) ?? []), entry])
-  return [...map].flatMap(([label, items]) => [{ type: "group", label } satisfies GroupHeader, ...items])
-}
-
-function previousGroup(items: readonly Item[], index: number) {
-  const item = items[index - 1]
-  if (!item) return undefined
-  if (item.type === "group") return item.label
-  return item.group
+  return [...map].map(([label, entries]) => ({ label, entries }))
 }
 
 function commandShortcut(api: TuiPluginApi, name: string) {
@@ -134,38 +137,37 @@ function WhichKeyPanel(props: {
 }) {
   const dimensions = useTerminalDimensions()
   const [offset, setOffset] = createSignal(0)
+  const [activeGroup, setActiveGroup] = createSignal<string | undefined>()
   const pending = useKeymapSelector((keymap) => keymap.getPendingSequence())
   const active = useKeymapSelector((keymap) => keymap.getActiveKeys({ includeMetadata: true }))
   const visible = createMemo(() => props.pinned() || (pending().length > 0 && active().length > 0))
   const left = 0
   const width = createMemo(() => Math.max(1, dimensions().width))
   const columns = createMemo(() => Math.max(1, Math.min(6, Math.floor((width() - 2) / 42) || 1)))
-  const rows = createMemo(() => Math.max(3, Math.min(18, dimensions().height - 8)))
+  // Keep the full panel roughly 30% shorter than the previous max-height layout after adding tabs and footer.
+  const rows = createMemo(() =>
+    Math.max(2, Math.floor((Math.max(3, Math.min(18, dimensions().height - 8)) + 2) * 0.7) - 4),
+  )
   const pageSize = createMemo(() => rows() * columns())
   const entries = createMemo(() => active().map((item) => activeKeyEntry(props.api, item)))
-  const items = createMemo(() => grouped(entries()))
-  const maxOffset = createMemo(() => Math.max(0, items().length - pageSize()))
+  const groups = createMemo(() => grouped(entries()))
+  const currentGroup = createMemo(() => {
+    const group = activeGroup()
+    return groups().find((item) => item.label === group) ?? groups()[0]
+  })
+  const activeEntries = createMemo(() => currentGroup()?.entries ?? [])
+  const maxOffset = createMemo(() => Math.max(0, activeEntries().length - pageSize()))
   const shown = createMemo(() => {
-    const columnsItems: Item[][] = []
+    const columnsItems: Entry[][] = []
     const targetRows = Math.max(
       1,
-      Math.min(rows(), Math.ceil(Math.min(pageSize(), items().length - offset()) / columns())),
+      Math.min(rows(), Math.ceil(Math.min(pageSize(), activeEntries().length - offset()) / columns())),
     )
     let index = offset()
-    for (let column = 0; column < columns() && index < items().length; column++) {
-      const list: Item[] = []
-      const current = items()[index]
-      const repeatGroup =
-        current?.type === "entry" && previousGroup(items(), index) === current.group && targetRows < rows()
-      if (repeatGroup) {
-        list.push({ type: "group", label: current.group })
-      }
-      while (list.length < targetRows + (repeatGroup ? 1 : 0) && index < items().length) {
-        const item = items()[index]!
-        if (item.type === "group" && list.length > 0 && list.length + 1 >= targetRows && index + 1 < items().length) {
-          break
-        }
-        list.push(item)
+    for (let column = 0; column < columns() && index < activeEntries().length; column++) {
+      const list: Entry[] = []
+      while (list.length < targetRows && index < activeEntries().length) {
+        list.push(activeEntries()[index]!)
         index += 1
       }
       columnsItems.push(list)
@@ -176,8 +178,8 @@ function WhichKeyPanel(props: {
   const rowIndexes = createMemo(() => Array.from({ length: visibleRows() }, (_, index) => index))
   const columnIndexes = createMemo(() => Array.from({ length: columns() }, (_, index) => index))
   const position = createMemo(() => {
-    if (!entries().length) return "0 bindings"
-    return `page ${Math.floor(offset() / pageSize()) + 1}/${Math.max(1, Math.ceil(items().length / pageSize()))}  ${entries().length} bindings`
+    if (!activeEntries().length) return "0 bindings"
+    return `page ${Math.floor(offset() / pageSize()) + 1}/${Math.max(1, Math.ceil(activeEntries().length / pageSize()))}  ${activeEntries().length} bindings`
   })
   const prefix = createMemo(() => props.api.keys.formatSequence(pending()))
   const trigger = commandShortcut(props.api, command.toggle)
@@ -185,15 +187,44 @@ function WhichKeyPanel(props: {
   const scrollUpTrigger = commandShortcut(props.api, command.scrollUp)
   const scrollDownTrigger = commandShortcut(props.api, command.scrollDown)
   const look = createMemo(() => skin(props.api))
-  const columnWidth = createMemo(() => Math.max(24, Math.floor((width() - 2 - (columns() - 1) * 2) / columns())))
-  const keyWidth = createMemo(() => Math.min(18, Math.max(4, ...entries().map((entry) => entry.key.length))))
+  const columnWidth = createMemo(() =>
+    Math.max(24, Math.floor((width() - 2 - (columns() - 1) * COLUMN_GAP) / columns())),
+  )
   const clamp = (value: number) => Math.max(0, Math.min(maxOffset(), value))
   const scroll = (delta: number) => setOffset((value) => clamp(value + delta))
+  const moveGroup = (delta: number) => {
+    const list = groups()
+    if (!list.length) return
+    const index = Math.max(
+      0,
+      list.findIndex((item) => item.label === currentGroup()?.label),
+    )
+    setActiveGroup(list[(index + delta + list.length) % list.length]!.label)
+    setOffset(0)
+  }
 
   useBindings(() => ({
     priority: 1000,
     enabled: visible(),
     commands: [
+      {
+        name: command.groupPrevious,
+        title: "Previous key binding group",
+        desc: "Show the previous which-key group",
+        category: "System",
+        run() {
+          moveGroup(-1)
+        },
+      },
+      {
+        name: command.groupNext,
+        title: "Next key binding group",
+        desc: "Show the next which-key group",
+        category: "System",
+        run() {
+          moveGroup(1)
+        },
+      },
       {
         name: command.scrollUp,
         title: "Scroll key bindings up",
@@ -249,8 +280,19 @@ function WhichKeyPanel(props: {
         },
       },
     ],
-    bindings: props.api.tuiConfig.keymap.pick("which_key", scrollCommands),
+    bindings: props.api.tuiConfig.keymap.pick("which_key", panelCommands),
   }))
+
+  createEffect(() => {
+    const group = currentGroup()
+    if (group?.label === activeGroup()) return
+    setActiveGroup(group?.label)
+  })
+
+  createEffect(() => {
+    activeGroup()
+    setOffset(0)
+  })
 
   createEffect(() => {
     if (!visible()) setOffset(0)
@@ -280,52 +322,52 @@ function WhichKeyPanel(props: {
         flexShrink={0}
         flexDirection="column"
       >
+        <Show when={groups().length > 0}>
+          <box flexDirection="row" gap={1} paddingRight={1}>
+            <For each={groups()}>
+              {(group) => {
+                const selected = createMemo(() => currentGroup()?.label === group.label)
+                return (
+                  <text
+                    fg={selected() ? look().accent : look().muted}
+                    attributes={selected() ? TextAttributes.BOLD : undefined}
+                    wrapMode="none"
+                    truncate
+                    onMouseDown={() => {
+                      setActiveGroup(group.label)
+                      setOffset(0)
+                    }}
+                  >
+                    {selected() ? `[${group.label}]` : group.label}
+                  </text>
+                )
+              }}
+            </For>
+          </box>
+        </Show>
         <Show when={shown().length > 0} fallback={<text fg={look().muted}>No reachable bindings</text>}>
           <For each={rowIndexes()}>
             {(row) => (
-              <box flexDirection="row" gap={2}>
+              <box flexDirection="row" gap={COLUMN_GAP}>
                 <For each={columnIndexes()}>
                   {(column) => {
-                    const item = createMemo(() => shown()[column]?.[row])
-                    const binding = createMemo(() => {
-                      const value = item()
-                      if (value?.type !== "entry") return undefined
-                      return value
-                    })
+                    const entry = createMemo(() => shown()[column]?.[row])
                     return (
-                      <box width={columnWidth()} flexDirection="row" gap={1}>
-                        <Show when={item()}>
-                          {(entry) => (
-                            <Show
-                              when={binding()}
-                              fallback={
-                                <text fg={look().accent} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
-                                  {`+${entry().label}`}
+                      <box width={columnWidth()} flexDirection="row" gap={1} justifyContent="space-between">
+                        <Show when={entry()}>
+                          {(binding) => (
+                            <>
+                              <box flexGrow={1} minWidth={0}>
+                                <text fg={binding().continues ? look().accent : look().text} wrapMode="none" truncate>
+                                  {binding().label}
                                 </text>
-                              }
-                            >
-                              {(binding) => (
-                                <>
-                                  <box width={keyWidth()}>
-                                    <text fg={look().key} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
-                                      {binding().key}
-                                    </text>
-                                  </box>
-                                  <text fg={look().muted} wrapMode="none">
-                                    {"->"}
-                                  </text>
-                                  <box flexGrow={1}>
-                                    <text
-                                      fg={binding().continues ? look().accent : look().text}
-                                      wrapMode="none"
-                                      truncate
-                                    >
-                                      {binding().label}
-                                    </text>
-                                  </box>
-                                </>
-                              )}
-                            </Show>
+                              </box>
+                              <box flexShrink={0}>
+                                <text fg={look().key} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                                  {binding().key}
+                                </text>
+                              </box>
+                            </>
                           )}
                         </Show>
                       </box>
