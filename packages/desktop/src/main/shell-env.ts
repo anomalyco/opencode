@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { basename } from "node:path"
-import { getLogger } from "./logging";
+import { getLogger } from "./logging"
 
 const TIMEOUT = 5_000
 
