@@ -30,6 +30,7 @@ export const api = new sst.cloudflare.Worker("Api", {
   transform: {
     worker: (args) => {
       args.logpush = true
+      if ($app.stage === "vimtor") return
       args.bindings = $resolve(args.bindings).apply((bindings) => [
         ...bindings,
         {
