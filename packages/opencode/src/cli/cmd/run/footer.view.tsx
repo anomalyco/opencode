@@ -12,8 +12,7 @@
 /** @jsxImportSource @opentui/solid */
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import "opentui-spinner/solid"
-import { createColors, createFrames } from "../tui/ui/spinner"
+import { createColors, createFrames, SPINNER_FRAMES } from "../tui/component/spinner"
 import { RunCommandMenuBody, RunModelSelectBody, RunVariantSelectBody } from "./footer.command"
 import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody, RunFooterSubagentTabs } from "./footer.subagent"
