@@ -324,6 +324,53 @@ describe("tool encoding preservation", () => {
       ),
     )
 
+    // Regression guard: the diff and additions/deletions counts surfaced to the
+    // user (and to the permission prompt) are derived from the pre-patch read
+    // of the file. A previous version reused a hard-coded UTF-8 decoder for
+    // that read, producing mojibake for any non-UTF-8 file. The bytes ended up
+    // correct because the patch helper does its own encoding-aware read, so
+    // tests that only checked final file bytes (above) missed the bug.
+    it.live("returns a non-mojibake diff for a Shift_JIS update", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const filepath = path.join(dir, "doc.txt")
+          const replacement = "日本語"
+          const original = "line1\n" + samples.shiftJis + "\nline3\n"
+          yield* putEncoded(filepath, original, "Shift_JIS")
+
+          const patch = [
+            "*** Begin Patch",
+            "*** Update File: doc.txt",
+            "@@",
+            " line1",
+            "-" + samples.shiftJis,
+            "+" + replacement,
+            " line3",
+            "*** End Patch",
+          ].join("\n")
+
+          const result = (yield* runPatch({ patchText: patch })) as {
+            metadata: {
+              diff: string
+              files: Array<{ additions: number; deletions: number }>
+            }
+          }
+
+          // The diff must contain the real decoded old/new lines, not a UTF-8
+          // misread of the Shift_JIS bytes (which would surface as U+FFFD).
+          expect(result.metadata.diff).toContain(samples.shiftJis)
+          expect(result.metadata.diff).toContain(replacement)
+          expect(result.metadata.diff).not.toContain("\uFFFD")
+
+          // Per-file stats are derived from the same diff, so a mojibake read
+          // would inflate both additions and deletions.
+          expect(result.metadata.files).toHaveLength(1)
+          expect(result.metadata.files[0].additions).toBe(1)
+          expect(result.metadata.files[0].deletions).toBe(1)
+        }),
+      ),
+    )
+
     it.live("new files added via apply_patch are UTF-8", () =>
       provideTmpdirInstance((dir) =>
         Effect.gen(function* () {

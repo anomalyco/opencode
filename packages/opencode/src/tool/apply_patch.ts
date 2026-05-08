@@ -115,11 +115,23 @@ export const ApplyPatchTool = Tool.define(
               )
             }
 
-            const source = yield* Bom.readFile(afs, filePath)
+            // encoding-aware read so non-UTF-8 files decode without mojibake; the
+            // resulting diff, additions/deletions counts, and permission-prompt
+            // metadata shown to the user must reflect the real file contents.
+            const read = yield* EncodedIO.read(filePath).pipe(
+              Effect.catch((error) =>
+                Effect.fail(
+                  new Error(
+                    `apply_patch verification failed: ${error instanceof Error ? error.message : String(error)}`,
+                  ),
+                ),
+              ),
+            )
+            const source = Bom.split(read.text)
             const oldContent = source.text
             let newContent = oldContent
             let bom = source.bom
-            let encoding: string
+            let encoding = read.encoding // overwritten by deriveNewContentsFromChunks below
 
             // Apply the update chunks to get new content
             try {
