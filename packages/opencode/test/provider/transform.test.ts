@@ -2478,6 +2478,20 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
     })
 
+    test("gpt-5.5-pro models use pro effort levels", () => {
+      const model = createMockModel({
+        id: "openai/gpt-5.5-pro",
+        providerID: "openrouter",
+        api: {
+          id: "openai/gpt-5.5-pro",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["medium", "high", "xhigh"])
+    })
+
     test("gemini-3 returns OPENAI_EFFORTS with reasoning", () => {
       const model = createMockModel({
         id: "openrouter/gemini-3-5-pro",
@@ -2678,6 +2692,20 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-5.5-pro models use pro effort levels", () => {
+      const model = createMockModel({
+        id: "openai/gpt-5-5-pro",
+        providerID: "gateway",
+        api: {
+          id: "openai/gpt-5-5-pro",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["medium", "high", "xhigh"])
     })
   })
 
@@ -3095,6 +3123,21 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-5.4-pro uses pro effort levels", () => {
+      const model = createMockModel({
+        id: "gpt-5.4-pro",
+        providerID: "openai",
+        api: {
+          id: "gpt-5.4-pro",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2026-03-05",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["medium", "high", "xhigh"])
     })
 
     test("gpt-50 (lookalike) does not get gpt-5 family treatment", () => {
@@ -3583,6 +3626,11 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(cfModel("openai/gpt-5.2-codex", "2025-12-11"))
       expect(result.xhigh).toEqual({ reasoningEffort: "xhigh" })
       expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
+    })
+
+    test("openai gpt-5.2-pro uses pro effort levels", () => {
+      const result = ProviderTransform.variants(cfModel("openai/gpt-5.2-pro", "2025-12-11"))
+      expect(Object.keys(result)).toEqual(["medium", "high", "xhigh"])
     })
 
     test("openai gpt-4o (no reasoning) returns empty", () => {

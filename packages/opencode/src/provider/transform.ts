@@ -502,6 +502,7 @@ const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 const OPENAI_GPT5_1_EFFORTS = ["none", ...WIDELY_SUPPORTED_EFFORTS]
 const OPENAI_GPT5_2_PLUS_EFFORTS = [...OPENAI_GPT5_1_EFFORTS, "xhigh"]
+const OPENAI_GPT5_PRO_2_PLUS_EFFORTS = ["medium", "high", "xhigh"]
 const OPENAI_GPT5_CODEX_2_PLUS_EFFORTS = [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
 // OpenAI rolled out the `none` reasoning_effort tier on this date (Responses API).
@@ -517,12 +518,14 @@ const OPENAI_XHIGH_EFFORT_RELEASE_DATE = "2025-12-04"
 // Anchored to start-of-string or "/" so it doesn't false-match "gpt-50" or "gpt-5o".
 const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
 const GPT5_VERSION_RE = /(?:^|\/)gpt-5[.-](\d+)(?:[.-]|$)/
+const GPT5_VERSIONED_PRO_RE = /(?:^|\/)gpt-5[.-]\d+[.-]pro(?:[.-]|$)/
 
 function gpt5Version(apiId: string) {
   return Number(GPT5_VERSION_RE.exec(apiId)?.[1]) || undefined
 }
 
 function versionedGpt5ReasoningEfforts(apiId: string) {
+  if (GPT5_VERSIONED_PRO_RE.test(apiId)) return OPENAI_GPT5_PRO_2_PLUS_EFFORTS
   const version = gpt5Version(apiId)
   if (version === undefined) return undefined
   if (version === 1) return OPENAI_GPT5_1_EFFORTS
