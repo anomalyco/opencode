@@ -524,7 +524,7 @@ export function Autocomplete(props: {
     enabled: () => Boolean(store.visible),
     commands: [
       {
-          name: "prompt.autocomplete.prev",
+        name: "prompt.autocomplete.prev",
         title: "Previous autocomplete item",
         category: "Autocomplete",
         run() {
@@ -533,7 +533,7 @@ export function Autocomplete(props: {
         },
       },
       {
-          name: "prompt.autocomplete.next",
+        name: "prompt.autocomplete.next",
         title: "Next autocomplete item",
         category: "Autocomplete",
         run() {
@@ -542,7 +542,7 @@ export function Autocomplete(props: {
         },
       },
       {
-          name: "prompt.autocomplete.hide",
+        name: "prompt.autocomplete.hide",
         title: "Hide autocomplete",
         category: "Autocomplete",
         run() {
@@ -550,7 +550,7 @@ export function Autocomplete(props: {
         },
       },
       {
-          name: "prompt.autocomplete.select",
+        name: "prompt.autocomplete.select",
         title: "Select autocomplete item",
         category: "Autocomplete",
         run() {
@@ -558,7 +558,7 @@ export function Autocomplete(props: {
         },
       },
       {
-          name: "prompt.autocomplete.complete",
+        name: "prompt.autocomplete.complete",
         title: "Complete autocomplete item",
         category: "Autocomplete",
         run() {

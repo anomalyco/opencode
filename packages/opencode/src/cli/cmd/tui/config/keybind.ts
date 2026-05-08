@@ -355,7 +355,10 @@ export const CommandMap = {
   which_key_end: "which-key.end",
 } satisfies BindingCommandMap
 const CommandDescriptions = Object.fromEntries(
-  Object.entries(Definitions).map(([name, item]) => [CommandMap[name as keyof typeof CommandMap] ?? name, item.description]),
+  Object.entries(Definitions).map(([name, item]) => [
+    CommandMap[name as keyof typeof CommandMap] ?? name,
+    item.description,
+  ]),
 ) as Record<string, string>
 
 export type Keybinds = z.output<typeof Keybinds>
@@ -369,10 +372,7 @@ export type BindingLookupView = {
 }
 
 export function toBindingConfig(keybinds: Keybinds): BindingConfig<Renderable, KeyEvent> {
-  return Object.fromEntries(Object.entries(keybinds)) as BindingConfig<
-    Renderable,
-    KeyEvent
-  >
+  return Object.fromEntries(Object.entries(keybinds)) as BindingConfig<Renderable, KeyEvent>
 }
 
 export function bindingDefaults(): BindingDefaults<Renderable, KeyEvent> {

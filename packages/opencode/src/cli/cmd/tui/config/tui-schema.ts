@@ -3,11 +3,7 @@ import { ConfigPlugin } from "@/config/plugin"
 import { TuiKeybind } from "./keybind"
 
 export const KeymapLeaderTimeoutDefault = 2000
-const KeymapLeaderTimeout = z
-  .number()
-  .int()
-  .positive()
-  .describe("Leader key timeout in milliseconds")
+const KeymapLeaderTimeout = z.number().int().positive().describe("Leader key timeout in milliseconds")
 
 export const TuiOptions = z.object({
   leader_timeout: KeymapLeaderTimeout.optional(),
