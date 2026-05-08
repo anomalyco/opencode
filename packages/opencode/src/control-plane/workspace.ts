@@ -18,7 +18,7 @@ import { ProjectID } from "@/project/schema"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { WorkspaceTable } from "./workspace.sql"
 import { getAdapter } from "./adapters"
-import { type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
+import { type Target, type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
 import { WorkspaceID } from "./schema"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
@@ -31,6 +31,9 @@ import { WorkspaceContext } from "./workspace-context"
 import { EffectBridge } from "@/effect/bridge"
 import { withStatics } from "@/util/schema"
 import { zod as effectZod, zodObject } from "@/util/effect-zod"
+import { Vcs } from "@/project/vcs"
+import { InstanceStore } from "@/project/instance-store"
+import { InstanceBootstrap } from "@/project/bootstrap"
 
 export const Info = WorkspaceInfoSchema
 export type Info = WorkspaceInfo
@@ -86,6 +89,7 @@ export type CreateInput = Schema.Schema.Type<typeof CreateInput>
 export const SessionWarpInput = Schema.Struct({
   workspaceID: Schema.NullOr(WorkspaceID),
   sessionID: SessionID,
+  copyChanges: Schema.optional(Schema.Boolean),
 }).pipe(withStatics((s) => ({ zod: effectZod(s), zodObject: zodObject(s) })))
 export type SessionWarpInput = Schema.Schema.Type<typeof SessionWarpInput>
 
@@ -137,6 +141,7 @@ type SessionWarpError =
   | WorkspaceNotFoundError
   | SessionEventsNotFoundError
   | SessionWarpHttpError
+  | Vcs.PatchApplyError
   | HttpClientError.HttpClientError
 type WaitForSyncError = SyncTimeoutError | SyncAbortedError
 type SyncLoopError = SyncHttpError | HttpClientError.HttpClientError
@@ -167,6 +172,7 @@ export const layer = Layer.effect(
     const prompt = yield* SessionPrompt.Service
     const http = yield* HttpClient.HttpClient
     const sync = yield* SyncEvent.Service
+    const vcs = yield* Vcs.Service
     const connections = new Map<WorkspaceID, ConnectionStatus>()
     const syncFibers = yield* FiberMap.make<WorkspaceID, void, SyncLoopError>()
 
@@ -254,6 +260,66 @@ export const layer = Layer.effect(
         Stream.runForEach(onEvent),
       )
     })
+
+    const runInWorkspace = <A, E, R>(input: {
+      workspaceID?: WorkspaceID
+      local: () => Effect.Effect<A, E, R>
+      remote: (input: {
+        workspace: Info
+        target: Extract<Target, { type: "remote" }>
+      }) => HttpClientRequest.HttpClientRequest
+      fallback: A
+      response?: "json" | "text"
+    }) =>
+      Effect.gen(function* () {
+        if (!input.workspaceID) return yield* input.local()
+
+        const workspace = yield* get(input.workspaceID)
+        if (!workspace) return input.fallback
+
+        const adapter = getAdapter(workspace.projectID, workspace.type)
+        const target = yield* EffectBridge.fromPromise(() => adapter.target(workspace))
+
+        if (target.type === "local") {
+          const store = yield* InstanceStore.Service
+          return yield* store.provide({ directory: target.directory }, input.local())
+        }
+
+        const response = yield* http.execute(input.remote({ workspace, target })).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              log.warn("workspace target request failed", {
+                workspaceID: workspace.id,
+                error: errorData(error),
+              })
+            }),
+          ),
+        )
+        if (!response) return input.fallback
+        if (response.status < 200 || response.status >= 300) {
+          const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
+          log.warn("workspace target request failed", {
+            workspaceID: workspace.id,
+            status: response.status,
+            body,
+          })
+          return input.fallback
+        }
+
+        const body = input.response === "text" ? response.text : response.json
+        return yield* body.pipe(
+          Effect.map((result) => result as A),
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              log.warn("workspace target response decode failed", {
+                workspaceID: workspace.id,
+                error: errorData(error),
+              })
+              return input.fallback
+            }),
+          ),
+        )
+      })
 
     const syncHistory = Effect.fn("Workspace.syncHistory")(function* (
       space: Info,
@@ -555,6 +621,36 @@ export const layer = Layer.effect(
             // the old workspace are ignored
             SyncEvent.claim(input.sessionID, input.workspaceID ?? Instance.project.id)
           }
+        }
+
+        const sourcePatch =
+          input.copyChanges && current?.workspaceID
+            ? yield* runInWorkspace({
+                workspaceID: current?.workspaceID ?? undefined,
+                local: () => vcs.diffRaw(),
+                remote: ({ target }) =>
+                  HttpClientRequest.get(route(target.url, "/vcs/diff/raw"), {
+                    headers: new Headers(target.headers),
+                  }),
+                fallback: "",
+                response: "text",
+              }).pipe(Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))))
+            : ""
+
+        if (sourcePatch) {
+          // Attempt to apply the file changes to the new workspace.
+          // We intentionally do first so if it fails we don't warp
+          // the session.
+          yield* runInWorkspace({
+            workspaceID: input.workspaceID ?? undefined,
+            local: () => vcs.apply({ patch: sourcePatch }),
+            remote: ({ target }) =>
+              HttpClientRequest.post(route(target.url, "/vcs/apply"), {
+                headers: new Headers(target.headers),
+                body: HttpBody.jsonUnsafe({ patch: sourcePatch }),
+              }),
+            fallback: { applied: false },
+          }).pipe(Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))))
         }
 
         if (input.workspaceID === null) {
@@ -866,6 +962,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Session.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(SessionPrompt.defaultLayer),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(Vcs.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
 )
 
