@@ -63,7 +63,7 @@ export function delay(attempt: number, error?: MessageV2.APIError) {
   return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
 }
 
-export function retryable(error: Err, provider?: string) {
+export function retryable(error: Err, provider: string) {
   // context overflow errors should not be retried
   if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
   if (MessageV2.APIError.isInstance(error)) {
@@ -74,19 +74,14 @@ export function retryable(error: Err, provider?: string) {
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
       return {
         message: GO_UPSELL_MESSAGE,
-        ...(provider
-          ? {
-              action: {
-                reason: "free_tier_limit" as const,
-                provider,
-                title: "Free limit reached",
-                message:
-                  "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
-                label: "subscribe",
-                link: GO_UPSELL_URL,
-              },
-            }
-          : {}),
+        action: {
+          reason: "free_tier_limit",
+          provider,
+          title: "Free limit reached",
+          message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+          label: "subscribe",
+          link: GO_UPSELL_URL,
+        },
       }
     }
     if (error.data.responseBody?.includes("GoUsageLimitError")) {
@@ -112,18 +107,14 @@ export function retryable(error: Err, provider?: string) {
       const link = `https://opencode.ai/workspace/${workspace}/go`
       return {
         message: `${message} - ${link}`,
-        ...(provider
-          ? {
-              action: {
-                reason: "account_rate_limit" as const,
-                provider,
-                title: "Go limit reached",
-                message,
-                label: "open settings",
-                link,
-              },
-            }
-          : {}),
+        action: {
+          reason: "account_rate_limit",
+          provider,
+          title: "Go limit reached",
+          message,
+          label: "open settings",
+          link,
+        },
       }
     }
     return { message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message }

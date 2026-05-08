@@ -13,6 +13,7 @@ import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const providerID = ProviderID.make("test")
+const retryProvider = "test"
 const it = testEffect(Layer.mergeAll(SessionStatus.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
 function apiError(headers?: Record<string, string>): MessageV2.APIError {
@@ -119,47 +120,47 @@ describe("session.retry.delay", () => {
 describe("session.retry.retryable", () => {
   test("maps too_many_requests json messages", () => {
     const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
-    expect(SessionRetry.retryable(error)).toEqual({ message: "Too Many Requests" })
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Too Many Requests" })
   })
 
   test("maps overloaded provider codes", () => {
     const error = wrap(JSON.stringify({ code: "resource_exhausted" }))
-    expect(SessionRetry.retryable(error)).toEqual({ message: "Provider is overloaded" })
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Provider is overloaded" })
   })
 
   test("does not retry unknown json messages", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
-    expect(SessionRetry.retryable(error)).toBeUndefined()
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
 
   test("does not throw on numeric error codes", () => {
     const error = wrap(JSON.stringify({ type: "error", error: { code: 123 } }))
-    const result = SessionRetry.retryable(error)
+    const result = SessionRetry.retryable(error, retryProvider)
     expect(result).toBeUndefined()
   })
 
   test("returns undefined for non-json message", () => {
     const error = wrap("not-json")
-    expect(SessionRetry.retryable(error)).toBeUndefined()
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
 
   test("retries plain text rate limit errors from Alibaba", () => {
     const msg =
       "Upstream error from Alibaba: Request rate increased too quickly. To ensure system stability, please adjust your client logic to scale requests more smoothly over time."
     const error = wrap(msg)
-    expect(SessionRetry.retryable(error)).toEqual({ message: msg })
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
   })
 
   test("retries plain text rate limit errors", () => {
     const msg = "Rate limit exceeded, please try again later"
     const error = wrap(msg)
-    expect(SessionRetry.retryable(error)).toEqual({ message: msg })
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
   })
 
   test("retries too many requests in plain text", () => {
     const msg = "Too many requests, please slow down"
     const error = wrap(msg)
-    expect(SessionRetry.retryable(error)).toEqual({ message: msg })
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
   })
 
   test("does not retry context overflow errors", () => {
@@ -168,7 +169,7 @@ describe("session.retry.retryable", () => {
       responseBody: '{"error":{"code":"context_length_exceeded"}}',
     }).toObject()
 
-    expect(SessionRetry.retryable(error)).toBeUndefined()
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
 
   test("retries 500 errors even when isRetryable is false", () => {
@@ -181,7 +182,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    expect(SessionRetry.retryable(error)).toEqual({ message: "Internal server error" })
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Internal server error" })
   })
 
   test("retries 502 bad gateway errors", () => {
@@ -193,7 +194,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    expect(SessionRetry.retryable(error)).toEqual({ message: "Bad gateway" })
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Bad gateway" })
   })
 
   test("retries 503 service unavailable errors", () => {
@@ -205,7 +206,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    expect(SessionRetry.retryable(error)).toEqual({ message: "Service unavailable" })
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Service unavailable" })
   })
 
   test("does not retry 4xx errors when isRetryable is false", () => {
@@ -217,7 +218,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    expect(SessionRetry.retryable(error)).toBeUndefined()
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
 
   test("retries ZlibError decompression failures", () => {
@@ -229,7 +230,7 @@ describe("session.retry.retryable", () => {
       }).toObject(),
     )
 
-    const retryable = SessionRetry.retryable(error)
+    const retryable = SessionRetry.retryable(error, retryProvider)
     expect(retryable).toBeDefined()
     expect(retryable).toEqual({ message: "Response decompression failed" })
   })
@@ -373,7 +374,7 @@ describe("session.message-v2.fromError", () => {
       }).toObject(),
     )
 
-    const retryable = SessionRetry.retryable(error)
+    const retryable = SessionRetry.retryable(error, retryProvider)
     expect(retryable).toBeDefined()
     expect(retryable).toEqual({ message: "Connection reset by server" })
   })
@@ -413,6 +414,6 @@ describe("session.message-v2.fromError", () => {
     expect(MessageV2.APIError.isInstance(result)).toBe(true)
     if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
     expect(result.data.isRetryable).toBe(true)
-    expect(SessionRetry.retryable(result)).toEqual({ message: "An error occurred while processing your request." })
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: "An error occurred while processing your request." })
   })
 })
