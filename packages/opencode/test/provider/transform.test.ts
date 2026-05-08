@@ -3066,6 +3066,14 @@ describe("ProviderTransform.variants", () => {
     })
 
     for (const testCase of [
+      { id: "o1", releaseDate: "2024-12-17", efforts: ["low", "medium", "high"] },
+      { id: "o1-pro", releaseDate: "2025-03-19", efforts: ["low", "medium", "high"] },
+      { id: "o3", releaseDate: "2025-04-16", efforts: ["low", "medium", "high"] },
+      { id: "o3-mini", releaseDate: "2025-01-31", efforts: ["low", "medium", "high"] },
+      { id: "o3-pro", releaseDate: "2025-06-10", efforts: ["low", "medium", "high"] },
+      { id: "o4-mini", releaseDate: "2025-04-16", efforts: ["low", "medium", "high"] },
+      { id: "o3-deep-research", releaseDate: "2025-06-26", efforts: ["medium"] },
+      { id: "o4-mini-deep-research", releaseDate: "2025-06-26", efforts: ["medium"] },
       { id: "gpt-5.1", releaseDate: "2025-11-13", efforts: ["none", "low", "medium", "high"] },
       { id: "gpt-5.4", releaseDate: "2026-03-05", efforts: ["none", "low", "medium", "high", "xhigh"] },
       {
