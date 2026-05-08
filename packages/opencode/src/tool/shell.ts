@@ -620,7 +620,7 @@ export const ShellTool = Tool.define(
                   cwd,
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
-                  description: params.description,
+                  description: params.description ?? "",
                 },
                 ctx,
               )
