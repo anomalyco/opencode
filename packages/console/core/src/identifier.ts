@@ -7,6 +7,7 @@ export namespace Identifier {
     auth: "aut",
     benchmark: "ben",
     billing: "bil",
+    emailChange: "emc",
     key: "key",
     lite: "lit",
     model: "mod",
