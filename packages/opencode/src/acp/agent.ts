@@ -39,6 +39,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
+import { llmErrorPayloadFromSDK, type SessionUpdateWithAgentError } from "./agent-error"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
@@ -270,6 +271,45 @@ export class Agent implements ACPAgent {
             }
           })
         this.permissionQueues.set(permission.sessionID, next)
+        return
+      }
+
+      case "session.error": {
+        const props = event.properties
+        const sessionID = props.sessionID
+        const error = props.error
+        if (!sessionID || !error) return
+
+        // ContextOverflowError triggers in-process compaction and the turn
+        // continues; do not surface it as a turn-ending error. Non-overflow
+        // errors fall through to the agent_error emit below.
+        if (error.name === "ContextOverflowError") return
+
+        const session = this.sessionManager.tryGet(sessionID)
+        if (!session) return
+
+        const payload = llmErrorPayloadFromSDK(error)
+        const update: SessionUpdateWithAgentError = {
+          sessionUpdate: "agent_error",
+          error: payload,
+          stopReason: "error",
+        }
+        await this.connection
+          .sessionUpdate({
+            sessionId: session.id,
+            // Cast: the upstream `@agentclientprotocol/sdk` `SessionUpdate`
+            // union is closed and does not yet include `agent_error`. Until
+            // that PR lands the local `SessionUpdateWithAgentError` superset
+            // carries the typed payload at the emit site; the runtime wire
+            // shape is independent of the typing.
+            update: update as unknown as Parameters<typeof this.connection.sessionUpdate>[0]["update"],
+          })
+          .catch((err) => {
+            log.error("failed to emit agent_error session/update", {
+              error: err,
+              sessionID,
+            })
+          })
         return
       }
 
