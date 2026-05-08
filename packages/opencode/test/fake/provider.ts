@@ -38,10 +38,6 @@ export namespace ProviderTest {
       source: "config",
       env: [],
       options: {},
-      // Default key so provider helpers can build a valid Auth without
-      // requiring `<PROVIDER>_API_KEY` env vars in tests. Individual tests
-      // can override.
-      key: "test-key",
       models: { [mdl.id]: mdl },
       ...override,
     }

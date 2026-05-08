@@ -3,23 +3,13 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { mergeDeep } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
-import {
-  LLMClient,
-  type LLMClientService,
-  type RouteID,
-} from "@opencode-ai/llm"
-import { RequestExecutor } from "@opencode-ai/llm/route"
-import "@opencode-ai/llm/protocols"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
-// Aliased to avoid a name clash with the AI SDK `Tool` type imported above.
-import type { Tool as OpenCodeTool } from "@/tool/tool"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -29,35 +19,15 @@ import { Bus } from "@/bus"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
+import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
-import { LLMNative } from "./llm-native"
-import { LLMNativeEvents } from "./llm-native-events"
-import { LLMNativeTools } from "./llm-native-tools"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 type Result = Awaited<ReturnType<typeof streamText>>
-
-type PreparedStream = {
-  readonly language: LanguageModelV3
-  readonly cfg: Config.Info
-  readonly item: Provider.Info
-  readonly system: string[]
-  readonly options: Record<string, any>
-  readonly messages: ModelMessage[]
-  readonly params: {
-    readonly temperature?: number
-    readonly topP?: number
-    readonly topK?: number
-    readonly maxOutputTokens?: number
-    readonly options: Record<string, any>
-  }
-  readonly headers: Record<string, string>
-  readonly tools: Record<string, Tool>
-}
 
 // Avoid re-instantiating remeda's deep merge types in this hot LLM path; the runtime behavior is still mergeDeep.
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
@@ -76,12 +46,6 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
-  nativeMessages?: ReadonlyArray<MessageV2.WithParts>
-  // OpenCode-native `Tool.Def[]` parallel to `tools` (AI SDK shape). When
-  // populated alongside `tools`, the LLM-native path forwards definitions to
-  // the model and can dispatch multi-round tool loops without changing the
-  // existing AI SDK path.
-  nativeTools?: ReadonlyArray<OpenCodeTool.Def>
 }
 
 export type StreamRequest = StreamInput & {
@@ -99,12 +63,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 const live: Layer.Layer<
   Service,
   never,
-  | Auth.Service
-  | Config.Service
-  | Provider.Service
-  | Plugin.Service
-  | Permission.Service
-  | LLMClientService
+  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -113,9 +72,21 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
-    const llmClient = yield* LLMClient.Service
 
-    const prepare = Effect.fn("LLM.prepareStream")(function* (input: StreamRequest) {
+    const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      const l = log
+        .clone()
+        .tag("providerID", input.model.providerID)
+        .tag("modelID", input.model.id)
+        .tag("session.id", input.sessionID)
+        .tag("small", (input.small ?? false).toString())
+        .tag("agent", input.agent.name)
+        .tag("mode", input.agent.mode)
+      l.info("stream", {
+        modelID: input.model.id,
+        providerID: input.model.providerID,
+      })
+
       const [language, cfg, item, info] = yield* Effect.all(
         [
           provider.getLanguage(input.model),
@@ -255,65 +226,24 @@ const live: Layer.Layer<
         })
       }
 
-      return { language, cfg, item, system, options, messages, params, headers, tools } satisfies PreparedStream
-    })
-
-    const transportHeaders = Effect.fn("LLM.transportHeaders")(function* (
-      input: StreamRequest,
-      headers: Record<string, string>,
-    ) {
-      if (input.model.providerID.startsWith("opencode")) {
-        return {
-          "x-opencode-project": (yield* InstanceState.context).project.id,
-          "x-opencode-session": input.sessionID,
-          "x-opencode-request": input.user.id,
-          "x-opencode-client": Flag.OPENCODE_CLIENT,
-          "User-Agent": `opencode/${InstallationVersion}`,
-          ...input.model.headers,
-          ...headers,
-        }
-      }
-      return {
-        "x-session-affinity": input.sessionID,
-        ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-        "User-Agent": `opencode/${InstallationVersion}`,
-        ...input.model.headers,
-        ...headers,
-      }
-    })
-
-    const run = Effect.fn("LLM.run")(function* (input: StreamRequest, prepared: PreparedStream) {
-      const l = log
-        .clone()
-        .tag("providerID", input.model.providerID)
-        .tag("modelID", input.model.id)
-        .tag("session.id", input.sessionID)
-        .tag("small", (input.small ?? false).toString())
-        .tag("agent", input.agent.name)
-        .tag("mode", input.agent.mode)
-      l.info("stream", {
-        modelID: input.model.id,
-        providerID: input.model.providerID,
-      })
-
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
       // and results sent back over the WebSocket.
-      if (prepared.language instanceof GitLabWorkflowLanguageModel) {
-        const workflowModel: GitLabWorkflowLanguageModel & {
+      if (language instanceof GitLabWorkflowLanguageModel) {
+        const workflowModel = language as GitLabWorkflowLanguageModel & {
           sessionID?: string
           sessionPreapprovedTools?: string[]
-          approvalHandler?: ((approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean; message?: string }>) | null
-        } = prepared.language
+          approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
+        }
         workflowModel.sessionID = input.sessionID
-        workflowModel.systemPrompt = prepared.system.join("\n")
+        workflowModel.systemPrompt = system.join("\n")
         workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
-          const t = prepared.tools[toolName]
+          const t = tools[toolName]
           if (!t || !t.execute) {
             return { result: "", error: `Unknown tool: ${toolName}` }
           }
           try {
-            const result = await t.execute(JSON.parse(argsJson), {
+            const result = await t.execute!(JSON.parse(argsJson), {
               toolCallId: _requestID,
               messages: input.messages,
               abortSignal: input.abort,
@@ -330,7 +260,7 @@ const live: Layer.Layer<
         }
 
         const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
-        workflowModel.sessionPreapprovedTools = Object.keys(prepared.tools).filter((name) => {
+        workflowModel.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
           const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
           return !match || match.action !== "ask"
         })
@@ -353,13 +283,8 @@ const live: Layer.Layer<
             })
             const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
               try {
-                const parsed = JSON.parse(t.args) as unknown
-                const value = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : {}
-                const title = "title" in value && typeof value.title === "string"
-                  ? value.title
-                  : "name" in value && typeof value.name === "string"
-                    ? value.name
-                    : ""
+                const parsed = JSON.parse(t.args) as Record<string, unknown>
+                const title = (parsed?.title ?? parsed?.name ?? "") as string
                 return title ? `${t.name}: ${title}` : t.name
               } catch {
                 return t.name
@@ -388,7 +313,7 @@ const live: Layer.Layer<
         })
       }
 
-      const tracer = prepared.cfg.experimental?.openTelemetry
+      const tracer = cfg.experimental?.openTelemetry
         ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
         : undefined
       const telemetryTracer = tracer
@@ -404,6 +329,10 @@ const live: Layer.Layer<
           })
         : undefined
 
+      const opencodeProjectID = input.model.providerID.startsWith("opencode")
+        ? (yield* InstanceState.context).project.id
+        : undefined
+
       return streamText({
         onError(error) {
           l.error("stream error", {
@@ -412,7 +341,7 @@ const live: Layer.Layer<
         },
         async experimental_repairToolCall(failed) {
           const lower = failed.toolCall.toolName.toLowerCase()
-          if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
+          if (lower !== failed.toolCall.toolName && tools[lower]) {
             l.info("repairing tool call", {
               tool: failed.toolCall.toolName,
               repaired: lower,
@@ -431,27 +360,43 @@ const live: Layer.Layer<
             toolName: "invalid",
           }
         },
-        temperature: prepared.params.temperature,
-        topP: prepared.params.topP,
-        topK: prepared.params.topK,
-        providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
-        activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
-        tools: prepared.tools,
+        temperature: params.temperature,
+        topP: params.topP,
+        topK: params.topK,
+        providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+        activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+        tools,
         toolChoice: input.toolChoice,
-        maxOutputTokens: prepared.params.maxOutputTokens,
+        maxOutputTokens: params.maxOutputTokens,
         abortSignal: input.abort,
-        headers: yield* transportHeaders(input, prepared.headers),
+        headers: {
+          ...(input.model.providerID.startsWith("opencode")
+            ? {
+                "x-opencode-project": opencodeProjectID,
+                "x-opencode-session": input.sessionID,
+                "x-opencode-request": input.user.id,
+                "x-opencode-client": Flag.OPENCODE_CLIENT,
+                "User-Agent": `opencode/${InstallationVersion}`,
+              }
+            : {
+                "x-session-affinity": input.sessionID,
+                ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
+                "User-Agent": `opencode/${InstallationVersion}`,
+              }),
+          ...input.model.headers,
+          ...headers,
+        },
         maxRetries: input.retries ?? 0,
-        messages: prepared.messages,
+        messages,
         model: wrapLanguageModel({
-          model: prepared.language,
+          model: language,
           middleware: [
             {
               specificationVersion: "v3" as const,
               async transformParams(args) {
                 if (args.type === "stream") {
                   // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, prepared.options)
+                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
                 }
                 return args.params
               },
@@ -459,134 +404,15 @@ const live: Layer.Layer<
           ],
         }),
         experimental_telemetry: {
-          isEnabled: prepared.cfg.experimental?.openTelemetry,
+          isEnabled: cfg.experimental?.openTelemetry,
           functionId: "session.llm",
           tracer: telemetryTracer,
           metadata: {
-            userId: prepared.cfg.username ?? "unknown",
+            userId: cfg.username ?? "unknown",
             sessionId: input.sessionID,
           },
         },
       })
-    })
-
-    // ----- LLM-native opt-in path -----
-    //
-    // `runNative` returns the session-shaped Stream when (and only when) the
-    // request matches the narrow opt-in profile we've actively wired:
-    //
-    //   - The flag `OPENCODE_EXPERIMENTAL_LLM_NATIVE` is set.
-    //   - The caller populated `input.nativeMessages` with `MessageV2.WithParts`
-    //     (the AI SDK `messages` array isn't enough — the LLM-native bridge
-    //     needs the typed parts).
-    //   - The bridge can route the model to one of the routes listed in
-    //     `NATIVE_ROUTES`. The route registry is broader than this allowlist
-    //     so we can enable providers incrementally.
-    //   - If tools are present, the caller supplied a native tool definition
-    //     for every AI SDK tool key so the native path can dispatch them.
-    //
-    // Otherwise it returns `undefined` and the caller falls through to the
-    // existing AI SDK path. The return shape is deliberately narrow — we are
-    // not yet committed to native-by-default for any provider.
-    const NATIVE_ROUTES = new Set<RouteID>(["anthropic-messages"])
-    const runNative = Effect.fn("LLM.runNative")(function* (input: StreamRequest, prepared: PreparedStream) {
-      if (!Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE) return undefined
-      if (!input.nativeMessages || input.nativeMessages.length === 0) return undefined
-      if (input.retries && input.retries > 0) return undefined
-      if (prepared.cfg.experimental?.openTelemetry) return undefined
-      // The native core does not yet carry AI SDK providerOptions. If request
-      // preparation produced any, keep exact behavior by falling back.
-      if (Object.keys(prepared.params.options).length > 0) return undefined
-      // The native dispatcher needs a `Tool.Def` for every AI SDK tool key
-      // the model might call. Two failure modes the gate has to catch:
-      //
-      //   1. AI SDK tools present but `nativeTools` undefined / empty —
-      //      caller didn't (or couldn't) supply native shapes.
-      //   2. AI SDK tools include a key that's missing from `nativeTools` —
-      //      coverage gap. Today this happens with MCP tools (only AI SDK
-      //      shape) and the synthesized `StructuredOutput` tool. The
-      //      `prompt.ts:resolveTools` call sets `nativeTools: undefined` in
-      //      both cases, but check defensively in case a future caller
-      //      passes a partial set.
-      //
-      // Either way fall through so the session takes the AI SDK path
-      // unchanged.
-      const aiToolKeys = Object.keys(prepared.tools)
-      if (aiToolKeys.length > 0) {
-        if (input.nativeTools === undefined || input.nativeTools.length === 0) return undefined
-        const nativeIDs = new Set(input.nativeTools.map((tool) => tool.id))
-        for (const key of aiToolKeys) {
-          if (!nativeIDs.has(key)) return undefined
-        }
-      }
-
-      // Mirror the AI SDK path's permission/user-disabled filter for both
-      // the AI SDK record (used as the dispatch table) and the native tool
-      // definitions (sent to the model). Without this, the model would see
-      // tools that the session has actively disabled.
-      const filteredAITools = prepared.tools
-      const allowedIds = new Set(Object.keys(filteredAITools))
-      const filteredNativeTools = input.nativeTools?.filter((tool) => allowedIds.has(tool.id))
-
-      const llmRequest = yield* LLMNative.request({
-        id: input.user.id,
-        provider: prepared.item,
-        model: input.model,
-        system: prepared.system,
-        messages: input.nativeMessages,
-        tools: filteredNativeTools,
-        toolChoice: input.toolChoice,
-        generation: {
-          maxTokens: prepared.params.maxOutputTokens,
-          temperature: prepared.params.temperature,
-          topP: prepared.params.topP,
-        },
-        headers: yield* transportHeaders(input, prepared.headers),
-      }).pipe(
-        Effect.catchTag("LLMNative.UnsupportedModelError", () => Effect.void),
-        Effect.catchTag("LLMNative.UnsupportedContentError", () => Effect.void),
-      )
-      if (!llmRequest) return undefined
-      if (!NATIVE_ROUTES.has(llmRequest.model.route)) return undefined
-
-      log.info("native stream", {
-        sessionID: input.sessionID,
-        modelID: input.model.id,
-        providerID: input.model.providerID,
-        route: llmRequest.model.route,
-      })
-
-      // Stateful LLMEvent → SessionEvent translator. `map.map(event)` is called
-      // per-element, `map.flush()` emits the remaining `*-end` events for any
-      // text/reasoning/tool-input parts left open at stream close. The flush
-      // stream is built lazily (`Stream.unwrap(Effect.sync(...))`) so it
-      // observes the mapper's final state after `flatMap` has consumed every
-      // upstream event.
-      //
-      // The upstream source is one of two paths:
-      //
-      //   - When `nativeTools` is unset (zero-tool sessions), call the LLM
-      //     client directly. One model round, single stream, no dispatch.
-      //   - When `nativeTools` is set, hand both the request and the matching
-      //     AI SDK `tools` record to `LLMNativeTools.runWithTools`, which
-      //     drives the multi-round loop with streaming dispatch: each
-      //     `tool-call` event forks a tool handler fiber, and the
-      //     handler's result is injected back into the same stream as a
-      //     synthetic `tool-result` event. Long-running tools don't block
-      //     subsequent tool-call streaming.
-      const map = LLMNativeEvents.mapper()
-      const upstream = filteredNativeTools && filteredNativeTools.length > 0
-          ? LLMNativeTools.runWithTools({
-              request: llmRequest,
-              client: llmClient,
-              tools: filteredAITools,
-              abort: input.abort,
-            })
-          : llmClient.stream(llmRequest)
-      return upstream.pipe(
-        Stream.flatMap((event) => Stream.fromIterable(map.map(event))),
-        Stream.concat(Stream.unwrap(Effect.sync(() => Stream.fromIterable(map.flush())))),
-      )
     })
 
     const stream: Interface["stream"] = (input) =>
@@ -598,13 +424,7 @@ const live: Layer.Layer<
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
 
-            const request = { ...input, abort: ctrl.signal }
-            const prepared = yield* prepare(request)
-
-            const native = yield* runNative(request, prepared)
-            if (native) return native
-
-            const result = yield* run(request, prepared)
+            const result = yield* run({ ...input, abort: ctrl.signal })
 
             return Stream.fromAsyncIterable(result.fullStream, (e) => (e instanceof Error ? e : new Error(String(e))))
           }),
@@ -617,16 +437,14 @@ const live: Layer.Layer<
 
 export const layer = live.pipe(Layer.provide(Permission.defaultLayer))
 
-export const defaultLayer = Layer.suspend(() => {
-  const llmClientLayer = LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer))
-  return layer.pipe(
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
-    Layer.provide(llmClientLayer),
-  )
-})
+  ),
+)
 
 function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
   const disabled = Permission.disabled(

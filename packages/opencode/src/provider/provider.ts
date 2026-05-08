@@ -25,12 +25,17 @@ import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined, withStatics } from "@/util/schema"
-import * as GitHubCopilot from "@opencode-ai/llm/providers/github-copilot"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
+
+function shouldUseCopilotResponsesApi(modelID: string): boolean {
+  const match = /^gpt-(\d+)/.exec(modelID)
+  if (!match) return false
+  return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
+}
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -188,7 +193,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          return GitHubCopilot.shouldUseResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
+          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }),
