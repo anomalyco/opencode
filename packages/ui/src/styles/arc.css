@@ -400,7 +400,7 @@ html[data-theme="arc"] [data-component="dialog"] {
 }
 
 html[data-theme="arc"] [data-component="user-message"] [data-slot="user-message-text"] {
-  border-radius: var(--radius-xl);
+  border-radius: 1.25rem;
 }
 
 /* ───────────────────────────────────────────────────────────── */
@@ -503,20 +503,20 @@ html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
      ratio. Palette inspired by the "Purple Dream" scale:
      #EDE9FE → #C4B5FD → #A78BFA → #8B5CF6 → #7C3AED. */
   html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] {
-    background-color: #EDE9FE;
+    background-color: #ede9fe;
 
     [data-slot="option-description"] {
-      color: #5B21B6;
+      color: #5b21b6;
     }
 
     [data-slot="question-option"][data-focused="true"]:not([data-picked="true"]) {
-      background-color: #DDD6FE;
-      border-color: #A78BFA;
+      background-color: #ddd6fe;
+      border-color: #a78bfa;
     }
 
     [data-slot="question-option"][data-picked="true"] {
-      background-color: #C4B5FD;
-      border-color: #8B5CF6;
+      background-color: #c4b5fd;
+      border-color: #8b5cf6;
     }
   }
 }
@@ -650,8 +650,8 @@ html[data-theme="arc"] [data-action="project-switch"] {
 /* Inner ProjectIcon wrappers + Avatar fill the full tile, with the
    Avatar's bg made transparent so the rail-hue gradient is the only
    color visible behind the centered letter. */
-html[data-theme="arc"] [data-action="project-switch"] > div,
-html[data-theme="arc"] [data-action="project-switch"] > div > div {
+html[data-theme="arc"] [data-action="project-switch"] [data-slot="project-avatar"],
+html[data-theme="arc"] [data-action="project-switch"] [data-slot="project-avatar-clip"] {
   width: 100% !important;
   height: 100% !important;
   border-radius: 0.75rem !important;
@@ -746,9 +746,9 @@ html[data-theme="arc"] [data-action="project-switch"][aria-current="true"]::befo
 html[data-theme="arc"] [data-component="sidebar-session"][data-active="true"] {
   /* No inset-left stripe: a 2px stripe on a rounded-[22px] container
      bends with the radius and reads as a dark crescent against the
-     mauve panel. The gradient background + violet border-color set in
-     index.css already mark the active row clearly. We keep just the
-     subtle top inner highlight + outer drop shadow for depth. */
+     mauve panel. Flat background (no gradient) keeps the row clean
+     and matches Arc's flat-panel aesthetic. */
+  background: var(--sidebar-session-active-bg-top);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 8px 20px -16px var(--sidebar-session-active-shadow);
