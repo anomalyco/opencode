@@ -232,6 +232,11 @@ function rpcErrorMessage(value: unknown) {
   return string(error?.message) ?? "Codex app-server request failed"
 }
 
+export function isContextOverflowError(error: unknown) {
+  const message = error instanceof Error ? error.message : string(error)
+  return !!message && /ran out of room in the model's context window|clear earlier history|context window/i.test(message)
+}
+
 function parseLine(line: string) {
   try {
     const parsed = JSON.parse(line) as unknown

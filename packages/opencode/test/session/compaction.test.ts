@@ -1145,6 +1145,71 @@ describe("session.compaction.process", () => {
     })
   })
 
+  test("sends compaction history as text instead of tool-call messages", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const stub = llm()
+    let captured: LLM.StreamInput["messages"] = []
+    stub.push(
+      reply("summary", (input) => {
+        captured = input.messages
+      }),
+    )
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await svc.create({})
+        const prompt = await user(session.id, "run tests")
+        const response = await assistant(session.id, prompt.id, tmp.path)
+        await svc.updatePart({
+          id: PartID.ascending(),
+          messageID: response.id,
+          sessionID: session.id,
+          type: "tool",
+          tool: "bash",
+          callID: "call_1",
+          state: {
+            status: "completed",
+            input: { command: "bun test" },
+            output: "1 failed",
+            title: "",
+            metadata: {},
+            time: { start: 0, end: 1 },
+          },
+        })
+        await SessionCompaction.create({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        const rt = liveRuntime(stub.layer, wide())
+        try {
+          const msgs = await svc.messages({ sessionID: session.id })
+          const parent = msgs.at(-1)?.info.id
+          expect(parent).toBeTruthy()
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: parent!,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          expect(captured.some((message) => message.role === "tool")).toBe(false)
+          expect(JSON.stringify(captured)).toContain("[tool:bash]")
+          expect(JSON.stringify(captured)).not.toContain("tool-call")
+          expect(JSON.stringify(captured)).not.toContain("tool-result")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
   test("retains a split turn suffix when a later message fits the preserve token budget", async () => {
     await using tmp = await tmpdir({ git: true })
     const stub = llm()

@@ -1492,6 +1492,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             if (Exit.isFailure(exit)) {
               const error = Cause.squash(exit.cause)
               const message = error instanceof Error ? error.message : String(error)
+              if (SessionCodexCli.isContextOverflowError(error)) {
+                msg.error = new MessageV2.ContextOverflowError({ message }).toObject()
+                msg.finish = "error"
+                msg.time.completed = Date.now()
+                yield* sessions.updateMessage(msg)
+                yield* bus.publish(Session.Event.Error, { sessionID, error: msg.error })
+                yield* compaction.create({
+                  sessionID,
+                  agent: lastUser.agent,
+                  model: lastUser.model,
+                  auto: true,
+                  overflow: true,
+                })
+                continue
+              }
               msg.error = new NamedError.Unknown({ message }).toObject()
               msg.finish = "error"
               msg.time.completed = Date.now()

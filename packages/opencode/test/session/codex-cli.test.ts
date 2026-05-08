@@ -145,6 +145,17 @@ describe("SessionCodexCli", () => {
     ).toEqual([{ type: "localImage", path: imagePath }])
   })
 
+  test("detects Codex context overflow errors", () => {
+    expect(
+      SessionCodexCli.isContextOverflowError(
+        new Error(
+          "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying.",
+        ),
+      ),
+    ).toBe(true)
+    expect(SessionCodexCli.isContextOverflowError(new Error("Codex app-server stopped"))).toBe(false)
+  })
+
   test("patchFiles maps Codex file updates to UI patch metadata", () => {
     expect(
       SessionCodexCli.patchFiles(

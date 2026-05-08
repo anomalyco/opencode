@@ -18,6 +18,7 @@ import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
+import type { ModelMessage } from "ai"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -129,6 +130,82 @@ function buildPrompt(input: { previousSummary?: string; context: string[] }) {
       ].join("\n")
     : "Create a new anchored summary from the conversation history above."
   return [anchor, SUMMARY_TEMPLATE, ...input.context].join("\n\n")
+}
+
+function object(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+}
+
+function string(value: unknown) {
+  return typeof value === "string" ? value : undefined
+}
+
+function stringify(value: unknown) {
+  if (value === undefined) return undefined
+  if (typeof value === "string") return value
+  return JSON.stringify(value)
+}
+
+function outputText(output: unknown): string | undefined {
+  const value = object(output)
+  if (!value) return stringify(output)
+
+  const type = string(value.type)
+  if (type === "text" || type === "error-text") return string(value.value)
+  if (type === "json") return stringify(value.value)
+  if (type === "content" && Array.isArray(value.value)) {
+    const text = value.value
+      .map(modelPartText)
+      .filter((item): item is string => !!item?.trim())
+      .join("\n")
+      .trim()
+    return text || undefined
+  }
+  return stringify(output)
+}
+
+function modelPartText(part: unknown): string | undefined {
+  const value = object(part)
+  if (!value) return stringify(part)
+
+  const type = string(value.type)
+  if (type === "text") return string(value.text)
+  if (type === "reasoning") return [`[reasoning]`, string(value.text)].filter(Boolean).join("\n")
+  if (type === "image") return "[Attached image]"
+  if (type === "file") return `[Attached ${string(value.mediaType) ?? "file"}]`
+  if (type === "tool-call") {
+    return [
+      `[tool:${string(value.toolName) ?? "unknown"}]`,
+      value.input === undefined ? undefined : `input: ${stringify(value.input)}`,
+    ]
+      .filter(Boolean)
+      .join("\n")
+  }
+  if (type === "tool-result") {
+    return [`[tool:${string(value.toolName) ?? "unknown"}:result]`, outputText(value.output)].filter(Boolean).join("\n")
+  }
+  return stringify(part)
+}
+
+function contentText(content: ModelMessage["content"]): string | undefined {
+  if (typeof content === "string") return content.trim() ? content : undefined
+  if (!Array.isArray(content)) return undefined
+  const text = content
+    .map(modelPartText)
+    .filter((item): item is string => !!item?.trim())
+    .join("\n\n")
+    .trim()
+  return text || undefined
+}
+
+function textOnly(messages: ModelMessage[]): ModelMessage[] {
+  return messages.flatMap((message): ModelMessage[] => {
+    const content = contentText(message.content)
+    if (!content) return []
+    if (message.role === "system") return [{ role: "system", content }]
+    if (message.role === "assistant") return [{ role: "assistant", content }]
+    return [{ role: "user", content }]
+  })
 }
 
 function preserveRecentBudget(input: { cfg: Config.Info; model: Provider.Model }) {
@@ -402,10 +479,12 @@ export const layer: Layer.Layer<
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
-        stripMedia: true,
-        toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
-      })
+      const modelMessages = textOnly(
+        yield* MessageV2.toModelMessagesEffect(msgs, model, {
+          stripMedia: true,
+          toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
+        }),
+      )
       const ctx = yield* InstanceState.context
       const msg: MessageV2.Assistant = {
         id: MessageID.ascending(),
