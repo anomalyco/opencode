@@ -1,8 +1,8 @@
-import { createMemo, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Portal } from "solid-js/web"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { useLayout, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
@@ -18,6 +18,11 @@ function railHue(input: string): number {
   for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) | 0
   return Math.abs(h) % 6 + 1
 }
+
+const debug = () =>
+  import.meta.env.DEV &&
+  typeof localStorage !== "undefined" &&
+  localStorage.getItem("opencode.projectRail.debug") === "1"
 
 export type ProjectSidebarContext = {
   current: Accessor<string | undefined>
@@ -65,6 +70,8 @@ const ProjectTile = (props: {
 }): JSX.Element => {
   const notification = useNotification()
   const layout = useLayout()
+  const [pos, setPos] = createSignal<{ left: number; top: number; x: string }>()
+  let node: HTMLButtonElement | undefined
   const unseenCount = createMemo(() =>
     props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
@@ -76,53 +83,88 @@ const ProjectTile = (props: {
       .forEach((directory) => notification.project.markViewed(directory))
 
   const name = () => displayName(props.project)
+  const show = () => {
+    if (!node) return
+    const rect = node.getBoundingClientRect()
+    const next = props.mobile
+      ? {
+          left: rect.left + rect.width / 2,
+          top: rect.bottom + 8,
+          x: "-50%",
+        }
+      : {
+          left: rect.right + 10,
+          top: rect.top + rect.height / 2,
+          x: "0",
+        }
+    if (debug()) console.debug("[project-rail] label", { dir: props.project.worktree, ...next })
+    setPos(next)
+  }
+  const hide = () => setPos(undefined)
 
   return (
     <ContextMenu
       modal
       onOpenChange={(value) => {
+        if (value) hide()
         props.setMenu(value)
       }}
     >
-      <Tooltip
-        openDelay={0}
-        placement={props.mobile ? "bottom" : "right"}
-        contentClass="max-w-none border-border-strong-base bg-surface-float-base-hover shadow-lg"
-        value={<div class="px-2 py-1 text-14-medium text-text-invert-strong whitespace-nowrap">{name()}</div>}
-        gutter={10}
+      <ContextMenu.Trigger
+        ref={(el: HTMLButtonElement) => {
+          node = el
+        }}
+        as="button"
+        type="button"
+        aria-label={name()}
+        aria-current={props.selected() ? "true" : undefined}
+        data-action="project-switch"
+        data-project={base64Encode(props.project.worktree)}
+        data-rail-hue={railHue(props.project.worktree)}
+        classList={{
+          "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden cursor-pointer": true,
+          "transition-all duration-150": !props.sidebarReduced(),
+          "bg-surface-interactive-selected border-2 border-border-brand-base": props.selected(),
+          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-base hover:scale-105":
+            !props.sidebarReduced() && !props.selected() && !props.active(),
+          "bg-surface-base-hover border border-border-base": !props.selected() && props.active(),
+        }}
+        onPointerEnter={show}
+        onPointerLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        onPointerDown={(event) => {
+          if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
+          event.preventDefault()
+        }}
+        onClick={() => {
+          if (props.consumeProjectClick()) return
+          if (props.selected()) {
+            layout.sidebar.toggle()
+            return
+          }
+          props.navigateToProject(props.project.worktree)
+        }}
       >
-        <ContextMenu.Trigger
-          as="button"
-          type="button"
-          aria-label={name()}
-          aria-current={props.selected() ? "true" : undefined}
-          data-action="project-switch"
-          data-project={base64Encode(props.project.worktree)}
-          data-rail-hue={railHue(props.project.worktree)}
-          classList={{
-            "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden cursor-pointer": true,
-            "transition-all duration-150": !props.sidebarReduced(),
-            "bg-surface-interactive-selected border-2 border-border-brand-base": props.selected(),
-            "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-base hover:scale-105":
-              !props.sidebarReduced() && !props.selected() && !props.active(),
-            "bg-surface-base-hover border border-border-base": !props.selected() && props.active(),
-          }}
-          onPointerDown={(event) => {
-            if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
-            event.preventDefault()
-          }}
-          onClick={() => {
-            if (props.consumeProjectClick()) return
-            if (props.selected()) {
-              layout.sidebar.toggle()
-              return
-            }
-            props.navigateToProject(props.project.worktree)
-          }}
-        >
-          <ProjectIcon project={props.project} notify />
-        </ContextMenu.Trigger>
-      </Tooltip>
+        <ProjectIcon project={props.project} notify />
+      </ContextMenu.Trigger>
+      <Portal>
+        <Show when={pos()}>
+          {(p) => (
+            <div
+              data-component="project-rail-label"
+              class="pointer-events-none fixed z-[100] whitespace-nowrap rounded-lg border border-border-strong-base bg-surface-float-base-hover px-3 py-1.5 text-14-medium text-text-strong shadow-lg"
+              style={{
+                left: `${p().left}px`,
+                top: `${p().top}px`,
+                transform: `translate(${p().x}, ${props.mobile ? "0" : "-50%"})`,
+              }}
+            >
+              {name()}
+            </div>
+          )}
+        </Show>
+      </Portal>
       <ContextMenu.Portal>
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
