@@ -322,6 +322,39 @@ function normalizeMessages(
     })
   }
 
+  // Databricks generates itemIds up to ~192 chars on its Responses path, but
+  // OpenAI's Responses backend validates incoming itemIds at max 64 chars.
+  // Strip any oversized itemId so it isn't echoed back and rejected on
+  // multi-turn. Applies to both the model-serving path (via the bundled
+  // provider's providerOptions.databricks.itemId) and the AI Gateway path
+  // (via @ai-sdk/openai's providerOptions.openai.itemId).
+  const nativeApiSurface = (model as any).options?.nativeApiSurface
+  const skipItemIdTruncation =
+    nativeApiSurface === "anthropic" ||
+    nativeApiSurface === "gemini" ||
+    process.env["DATABRICKS_BARE_FETCH"] === "1"
+  if ((model as any).options?.useResponsesApi && !skipItemIdTruncation) {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+      return {
+        ...msg,
+        content: msg.content.map((part) => {
+          const opts = (part as any).providerOptions
+          if (!opts) return part
+          let next = opts
+          for (const key of ["databricks", "openai"] as const) {
+            const itemId = next?.[key]?.itemId
+            if (typeof itemId === "string" && itemId.length > 64) {
+              const { itemId: _, ...rest } = next[key]
+              next = { ...next, [key]: rest }
+            }
+          }
+          return next === opts ? part : { ...part, providerOptions: next }
+        }) as typeof msg.content,
+      }
+    })
+  }
+
   return msgs
 }
 

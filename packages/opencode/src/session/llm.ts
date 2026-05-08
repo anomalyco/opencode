@@ -401,6 +401,66 @@ const live: Layer.Layer<
                 return args.params
               },
             },
+            // @databricks/ai-sdk-provider emits only an atomic tool-call (no
+            // tool-input-start/delta/end) and re-emits each call in flush()
+            // with providerExecuted:true. Without this middleware, AI SDK
+            // skips local execution and the session processor never persists
+            // the tool part (it's created on tool-input-start), so every loop
+            // round prompts the model with no tool history. Synthesize the
+            // missing start chunk, dedupe the flush re-emit, and unwrap the
+            // "databricks-tool-call" placeholder back to its real name.
+            //
+            // DELETE-WHEN: drop this middleware once @databricks/ai-sdk-provider
+            // ships a release that (a) emits the AI-SDK v3 tool-streaming
+            // lifecycle on the Responses path and (b) stops setting
+            // providerExecuted:true in flush() when useRemoteToolCalling is
+            // false. Currently broken in 0.5.0; track upstream for the fix.
+            //
+            // Gate on both useResponsesApi AND the bundled npm package — on
+            // the AI Gateway path, GPT goes through @ai-sdk/openai which emits
+            // the proper lifecycle natively, so synthesizing a tool-input-start
+            // would double-emit and break the stream.
+            ...(input.model.options?.useResponsesApi &&
+            input.model.api?.npm === "@databricks/ai-sdk-provider"
+              ? [
+                  {
+                    specificationVersion: "v3" as const,
+                    async wrapStream({ doStream }: any) {
+                      const result = await doStream()
+                      const seenToolCallIds = new Set<string>()
+                      return {
+                        ...result,
+                        stream: result.stream.pipeThrough(
+                          new TransformStream({
+                            transform(chunk: any, controller: any) {
+                              if (chunk.type === "tool-call") {
+                                if (chunk.toolCallId && seenToolCallIds.has(chunk.toolCallId)) return
+                                if (chunk.toolCallId) seenToolCallIds.add(chunk.toolCallId)
+                                let toolName = chunk.toolName
+                                let providerMetadata = chunk.providerMetadata
+                                if (toolName === "databricks-tool-call") {
+                                  const actual = providerMetadata?.databricks?.toolName
+                                  if (actual && typeof actual === "string") toolName = actual
+                                }
+                                controller.enqueue({
+                                  type: "tool-input-start",
+                                  id: chunk.toolCallId,
+                                  toolName,
+                                  ...(chunk.providerExecuted != null ? { providerExecuted: chunk.providerExecuted } : {}),
+                                  ...(providerMetadata != null ? { providerMetadata } : {}),
+                                })
+                                controller.enqueue({ ...chunk, toolName })
+                                return
+                              }
+                              controller.enqueue(chunk)
+                            },
+                          }),
+                        ),
+                      }
+                    },
+                  },
+                ]
+              : []),
           ],
         }),
         experimental_telemetry: {

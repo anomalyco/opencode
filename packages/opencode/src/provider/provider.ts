@@ -830,6 +830,611 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    databricks: Effect.fnUntraced(function* (input: Info) {
+      const {
+        Config: DatabricksConfig,
+        isAnyAuthConfigured,
+        WorkspaceClient,
+      } = yield* Effect.promise(() => import("@databricks/sdk-experimental"))
+
+      const opencodeConfig = yield* dep.config()
+      const providerConfig = opencodeConfig.provider?.["databricks"]
+      const auth = yield* dep.auth("databricks")
+      const env = yield* dep.env()
+      const hasEnvAuth = !!(env.DATABRICKS_HOST && env.DATABRICKS_TOKEN)
+      const authProfile =
+        !hasEnvAuth && auth?.type === "databricks-profile" ? (auth as any).profile : undefined
+      const profile = hasEnvAuth
+        ? undefined
+        : (authProfile ?? providerConfig?.options?.profile)
+
+      const envCopy = { ...env }
+      if (profile) {
+        delete envCopy.DATABRICKS_HOST
+        delete envCopy.DATABRICKS_TOKEN
+      }
+      const dbConfig = new DatabricksConfig({
+        env: envCopy,
+        host:
+          (auth?.type === "api" ? auth.metadata?.host : undefined) ??
+          providerConfig?.options?.baseURL ??
+          providerConfig?.options?.host ??
+          undefined,
+        token: auth?.type === "api" ? auth.key : undefined,
+        clientId: providerConfig?.options?.clientId,
+        clientSecret: providerConfig?.options?.clientSecret,
+        azureClientId: providerConfig?.options?.azureClientId,
+        azureClientSecret: providerConfig?.options?.azureClientSecret,
+        azureTenantId: providerConfig?.options?.azureTenantId,
+        profile,
+      })
+
+      const source = profile
+        ? `profile "${profile}"`
+        : dbConfig.host
+          ? `host ${dbConfig.host}`
+          : "default config"
+
+      const resolveResult = yield* Effect.promise(async () => {
+        try {
+          await dbConfig.ensureResolved()
+          return { ok: true as const }
+        } catch (e) {
+          return { ok: false as const, error: e instanceof Error ? e.message : "unknown error" }
+        }
+      })
+      if (!resolveResult.ok) {
+        log.warn(`Databricks auth failed to resolve (${source}): ${resolveResult.error}`)
+        return { autoload: false }
+      }
+
+      if (!dbConfig.host || !isAnyAuthConfigured(dbConfig)) {
+        log.warn(
+          !dbConfig.host
+            ? "Databricks: no host configured"
+            : `Databricks: no auth for ${dbConfig.host}`,
+        )
+        return { autoload: false }
+      }
+
+      const authResult = yield* Effect.promise(async () => {
+        try {
+          const testHeaders = new Headers()
+          await dbConfig.authenticate(testHeaders)
+          if (!testHeaders.has("Authorization")) {
+            return { ok: false as const, reason: "no-credentials" as const }
+          }
+          return { ok: true as const }
+        } catch (e) {
+          return { ok: false as const, reason: "error" as const, error: e instanceof Error ? e.message : "unknown" }
+        }
+      })
+      if (!authResult.ok) {
+        if (authResult.reason === "no-credentials") {
+          log.warn(`Databricks: auth produced no credentials for ${dbConfig.host}`)
+        } else {
+          log.warn(`Databricks: auth failed for ${dbConfig.host}: ${authResult.error}`)
+        }
+        return { autoload: false }
+      }
+
+      const hostResult = yield* Effect.promise(async () => {
+        try {
+          return { ok: true as const, host: (await dbConfig.getHost()).origin }
+        } catch (e) {
+          return { ok: false as const, error: e instanceof Error ? e.message : "unknown" }
+        }
+      })
+      if (!hostResult.ok) {
+        log.warn(`Databricks: getHost failed: ${hostResult.error}`)
+        return { autoload: false }
+      }
+      const normalizedHost = hostResult.host
+
+      // Surface selection. Default is "auto" — probe AI Gateway, fall back to
+      // /serving-endpoints if disabled. AI Gateway is the strategic Databricks
+      // surface; the per-family adapters (@ai-sdk/anthropic, /google, /openai)
+      // hit it natively, bypassing @databricks/ai-sdk-provider entirely.
+      const surfacePref: "auto" | "ai-gateway" | "model-serving" =
+        providerConfig?.options?.surface ?? "auto"
+      const useAiGateway = yield* Effect.promise(async () => {
+        if (surfacePref === "model-serving") return false
+        try {
+          const headers = new Headers({ accept: "application/json" })
+          await dbConfig.authenticate(headers)
+          const r = await fetch(`${normalizedHost}/ai-gateway/anthropic/v1/models`, { headers })
+          if (r.ok) return true
+          if (surfacePref === "ai-gateway") {
+            log.warn(`Databricks: surface forced to ai-gateway but probe returned ${r.status}; using it anyway`)
+            return true
+          }
+          return false
+        } catch (e) {
+          if (surfacePref === "ai-gateway") {
+            log.warn(`Databricks: surface forced to ai-gateway but probe threw: ${e instanceof Error ? e.message : "unknown"}`)
+            return true
+          }
+          return false
+        }
+      })
+      log.info("Databricks surface", { surface: useAiGateway ? "ai-gateway" : "model-serving", host: normalizedHost })
+
+      const baseURL = useAiGateway
+        ? `${normalizedHost}/ai-gateway`
+        : `${normalizedHost}/serving-endpoints`
+
+      // Diagnostic switch: when DATABRICKS_BARE_FETCH=1, perform auth only and
+      // skip every outgoing body / incoming SSE workaround. Used to A/B which
+      // quirks AI Gateway still requires vs which the bundled provider hides.
+      const bareFetch = process.env.DATABRICKS_BARE_FETCH === "1"
+
+      const databricksFetch = async (url: RequestInfo | URL, init?: RequestInit) => {
+        const headers = new Headers(init?.headers)
+        await dbConfig.authenticate(headers)
+
+        if (!bareFetch && init?.body && typeof init.body === "string") {
+          try {
+            const body = JSON.parse(init.body)
+            if (Array.isArray(body.tools)) {
+              let modified = false
+              for (const t of body.tools) {
+                const params = t.function?.parameters
+                if (params && !params.type) {
+                  params.type = "object"
+                  modified = true
+                }
+              }
+              if (modified) init = { ...init, body: JSON.stringify(body) }
+            }
+          } catch {}
+        }
+
+        const urlStr = typeof url === "string" ? url : url.toString()
+        const isResponsesApi = !bareFetch && urlStr.includes("/responses")
+
+        const response = await fetch(url, { ...init, headers })
+
+        if (
+          isResponsesApi &&
+          response.body &&
+          response.headers.get("content-type")?.includes("text/event-stream")
+        ) {
+          const decoder = new TextDecoder()
+          const encoder = new TextEncoder()
+          let buffer = ""
+          // State that must persist across `transform` invocations (one per
+          // network chunk batch), not be reset on every call:
+          //   - `itemIdByOutputIndex` accumulates across the whole stream so
+          //     content_part.added arriving in a later chunk than its
+          //     output_item.added still gets rewritten correctly.
+          const itemIdByOutputIndex: Record<number, string> = {}
+
+          const transform = new TransformStream({
+            transform(value: Uint8Array, controller) {
+              buffer += decoder.decode(value, { stream: true })
+              const lines = buffer.split("\n")
+              buffer = lines.pop()!
+
+              // Databricks emits Responses item IDs up to ~192 chars; OpenAI's
+              // Responses backend (and our consumer SDK) cap at 64. Truncate
+              // any id/item_id/call_id field deterministically so cross-event
+              // correlation still works (same long id → same 64-char prefix).
+              const truncateIds = (o: any): any => {
+                if (Array.isArray(o)) {
+                  for (let i = 0; i < o.length; i++) o[i] = truncateIds(o[i])
+                  return o
+                }
+                if (o && typeof o === "object") {
+                  for (const k of Object.keys(o)) {
+                    const v = o[k]
+                    if (
+                      typeof v === "string" &&
+                      v.length > 64 &&
+                      (k === "id" || k === "item_id" || k === "call_id")
+                    ) {
+                      o[k] = v.slice(0, 64)
+                    } else {
+                      o[k] = truncateIds(v)
+                    }
+                  }
+                }
+                return o
+              }
+
+              // AI Gateway sometimes emits `response.output_item.added` with
+              // one item id (e.g. msg_073e...) and the subsequent
+              // `response.content_part.added` / `response.output_text.delta`
+              // events for the SAME output_index with a different item_id
+              // (e.g. msg_0177...). @ai-sdk/openai correlates text parts by
+              // id, so the mismatch breaks the stream with "text part not
+              // found". The map (declared in the outer scope) accumulates
+              // item ids per output_index across all chunk batches so
+              // dependent events arriving in later batches are rewritten.
+
+              for (const line of lines) {
+                if (line.startsWith("data: ") && line !== "data: [DONE]") {
+                  try {
+                    const chunk = JSON.parse(line.slice(6))
+                    truncateIds(chunk)
+                    if (
+                      chunk.type === "response.output_item.added" &&
+                      typeof chunk.output_index === "number" &&
+                      typeof chunk.item?.id === "string"
+                    ) {
+                      itemIdByOutputIndex[chunk.output_index] = chunk.item.id
+                    } else if (
+                      typeof chunk.output_index === "number" &&
+                      typeof chunk.item_id === "string" &&
+                      itemIdByOutputIndex[chunk.output_index] != null &&
+                      itemIdByOutputIndex[chunk.output_index] !== chunk.item_id
+                    ) {
+                      chunk.item_id = itemIdByOutputIndex[chunk.output_index]
+                    }
+                    if (chunk.type === "response.completed") {
+                      chunk.type = "responses.completed"
+                      if (chunk.response?.usage && chunk.response.usage.total_tokens == null) {
+                        chunk.response.usage.total_tokens =
+                          (chunk.response.usage.input_tokens ?? 0) +
+                          (chunk.response.usage.output_tokens ?? 0)
+                      }
+                    }
+                    controller.enqueue(encoder.encode("data: " + JSON.stringify(chunk) + "\n"))
+                  } catch {
+                    controller.enqueue(encoder.encode(line + "\n"))
+                  }
+                } else if (line.startsWith("event: response.completed")) {
+                  controller.enqueue(encoder.encode("event: responses.completed\n"))
+                } else {
+                  controller.enqueue(encoder.encode(line + "\n"))
+                }
+              }
+            },
+            flush(controller) {
+              if (buffer.length > 0) {
+                controller.enqueue(encoder.encode(buffer))
+              }
+            },
+          })
+
+          return new Response(response.body.pipeThrough(transform), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          })
+        }
+
+        return response
+      }
+
+      function toProviderModel(model: ModelsDev.Model): Model {
+        return {
+          id: model.id as any,
+          providerID: "databricks" as any,
+          name: model.name,
+          family: model.family,
+          api: {
+            id: model.id,
+            url: baseURL,
+            npm: "@databricks/ai-sdk-provider",
+          },
+          status: "active",
+          headers: {},
+          options: (model as any).options ?? {},
+          cost: {
+            input: model.cost?.input ?? 0,
+            output: model.cost?.output ?? 0,
+            cache: {
+              read: model.cost?.cache_read ?? 0,
+              write: model.cost?.cache_write ?? 0,
+            },
+          },
+          limit: {
+            context: model.limit.context,
+            output: model.limit.output,
+          },
+          capabilities: {
+            temperature: model.temperature,
+            reasoning: model.reasoning,
+            attachment: model.attachment,
+            toolcall: model.tool_call,
+            input: {
+              text: model.modalities?.input?.includes("text") ?? false,
+              audio: model.modalities?.input?.includes("audio") ?? false,
+              image: model.modalities?.input?.includes("image") ?? false,
+              video: model.modalities?.input?.includes("video") ?? false,
+              pdf: model.modalities?.input?.includes("pdf") ?? false,
+            },
+            output: {
+              text: model.modalities?.output?.includes("text") ?? false,
+              audio: model.modalities?.output?.includes("audio") ?? false,
+              image: model.modalities?.output?.includes("image") ?? false,
+              video: model.modalities?.output?.includes("video") ?? false,
+              pdf: model.modalities?.output?.includes("pdf") ?? false,
+            },
+            interleaved: false,
+          },
+          release_date: model.release_date,
+          variants: {},
+        }
+      }
+
+      const DISCOVERY_TIMEOUT_MS = 10_000
+      yield* Effect.promise(async () => {
+        try {
+          const client = new WorkspaceClient(dbConfig)
+
+          await Promise.race([
+          (async () => {
+            const toolCapableFamilies = [
+              "claude",
+              "codex",
+              "gpt",
+              "gemini",
+              "llama",
+              "qwen",
+              "gemma",
+            ]
+
+            const familyDefaults: Record<
+              string,
+              {
+                context: number
+                output: number
+                reasoning: boolean
+                attachment: boolean
+                maxTools?: number
+              }
+            > = {
+              claude: { context: 200000, output: 64000, reasoning: true, attachment: true },
+              gpt: { context: 400000, output: 128000, reasoning: true, attachment: true, maxTools: 16 },
+              codex: {
+                context: 400000,
+                output: 128000,
+                reasoning: true,
+                attachment: true,
+                maxTools: 10,
+              },
+              gemini: { context: 1000000, output: 65536, reasoning: true, attachment: true },
+              llama: {
+                context: 128000,
+                output: 8192,
+                reasoning: false,
+                attachment: false,
+                maxTools: 32,
+              },
+              qwen: {
+                context: 128000,
+                output: 16000,
+                reasoning: false,
+                attachment: false,
+                maxTools: 32,
+              },
+              gemma: {
+                context: 128000,
+                output: 8192,
+                reasoning: false,
+                attachment: false,
+                maxTools: 32,
+              },
+            }
+
+            for await (const endpoint of client.servingEndpoints.list()) {
+              const endpointName = endpoint.name
+              if (!endpointName) continue
+              const task = endpoint.task
+
+              if (input.models[endpointName]) {
+                const configNameLower = endpointName.toLowerCase()
+                const configFamily = toolCapableFamilies.find((f) =>
+                  configNameLower.includes(f),
+                )
+                const configNativeApiSurface = (() => {
+                  switch (configFamily) {
+                    case "claude":
+                      return "anthropic" as const
+                    case "gemini":
+                      return "gemini" as const
+                    case "gpt":
+                    case "codex":
+                      return "openai-responses" as const
+                    default:
+                      return "chat-completions" as const
+                  }
+                })()
+                const npm =
+                  configNativeApiSurface === "anthropic"
+                    ? "@ai-sdk/anthropic"
+                    : configNativeApiSurface === "gemini"
+                      ? "@ai-sdk/google"
+                      : configNativeApiSurface === "openai-responses" && useAiGateway
+                        ? "@ai-sdk/openai"
+                        : "@databricks/ai-sdk-provider"
+                input.models[endpointName].api = {
+                  ...input.models[endpointName].api,
+                  npm,
+                }
+                const configResponses =
+                  configNativeApiSurface === "openai-responses" &&
+                  (task === "llm/v1/responses" || configFamily === "gpt")
+                input.models[endpointName].options = {
+                  ...input.models[endpointName].options,
+                  nativeApiSurface: configNativeApiSurface,
+                  ...(configResponses ? { useResponsesApi: true } : {}),
+                }
+                continue
+              }
+
+              const foundationModel =
+                endpoint.config?.served_entities?.[0]?.foundation_model
+              if (!foundationModel) continue
+              if (task && task !== "llm/v1/chat" && task !== "llm/v1/responses") continue
+
+              const nameLower = endpointName.toLowerCase()
+              const family = toolCapableFamilies.find((f) => nameLower.includes(f))
+              if (!family) {
+                log.info("Skipping endpoint - unknown model family", {
+                  endpoint: endpointName,
+                })
+                continue
+              }
+
+              const familyDefault = familyDefaults[family] ?? {
+                context: 128000,
+                output: 16000,
+                reasoning: false,
+                attachment: false,
+              }
+              // Quirk #8 (per-endpoint active-tools cap) is enforced on
+              // /serving-endpoints but NOT on AI Gateway — verified empirically
+              // 2026-05-06 (script/probe-aigw-quirks.ts: 89 tools accepted on
+              // Claude/GPT/Gemini). On the gateway path drop the gpt-family
+              // cap that was added for the model-serving 89-tool rejection.
+              const defaults =
+                useAiGateway && (family === "gpt" || family === "codex")
+                  ? { ...familyDefault, maxTools: undefined }
+                  : familyDefault
+
+              const nativeApiSurface = (() => {
+                switch (family) {
+                  case "claude":
+                    return "anthropic" as const
+                  case "gemini":
+                    return "gemini" as const
+                  case "gpt":
+                  case "codex":
+                    return "openai-responses" as const
+                  default:
+                    return "chat-completions" as const
+                }
+              })()
+
+              const useResponsesApi =
+                nativeApiSurface === "openai-responses" &&
+                (task === "llm/v1/responses" || family === "gpt")
+
+              const discoveredModel = {
+                id: endpointName,
+                name: foundationModel.display_name ?? endpointName,
+                family,
+                attachment: defaults.attachment,
+                reasoning: defaults.reasoning,
+                tool_call: true,
+                temperature: true,
+                release_date: new Date().toISOString().split("T")[0],
+                modalities: {
+                  input: defaults.attachment ? ["text", "image"] : ["text"],
+                  output: ["text"],
+                },
+                cost: { input: 0, output: 0 },
+                limit: { context: defaults.context, output: defaults.output },
+                options: {
+                  nativeApiSurface,
+                  ...(useResponsesApi ? { useResponsesApi: true } : {}),
+                  ...(defaults.maxTools ? { maxTools: defaults.maxTools } : {}),
+                },
+              } as any as ModelsDev.Model
+
+              const model = toProviderModel(discoveredModel)
+              if (nativeApiSurface === "anthropic")
+                model.api = { ...model.api, npm: "@ai-sdk/anthropic" }
+              else if (nativeApiSurface === "gemini")
+                model.api = { ...model.api, npm: "@ai-sdk/google" }
+              else if (nativeApiSurface === "openai-responses" && useAiGateway)
+                model.api = { ...model.api, npm: "@ai-sdk/openai" }
+              input.models[endpointName] = model
+            }
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error(`Discovery timed out after ${DISCOVERY_TIMEOUT_MS}ms`),
+                ),
+              DISCOVERY_TIMEOUT_MS,
+            ),
+          ),
+        ])
+        } catch (e) {
+          log.warn("Failed to discover Databricks serving endpoints", {
+            error: e instanceof Error ? e.message : "Unknown error",
+          })
+        }
+      })
+
+      log.info("Databricks authenticated", { host: normalizedHost, profile })
+
+      const anthropicBase = useAiGateway
+        ? `${normalizedHost}/ai-gateway/anthropic/v1`
+        : `${normalizedHost}/serving-endpoints/anthropic/v1`
+      const geminiBase = useAiGateway
+        ? `${normalizedHost}/ai-gateway/gemini/v1beta`
+        : `${normalizedHost}/serving-endpoints/gemini/v1beta`
+      const openaiResponsesBase = useAiGateway
+        ? `${normalizedHost}/ai-gateway/codex/v1`
+        : null // model-serving path uses the bundled provider, not @ai-sdk/openai
+
+      let anthropicSdk: any = null
+      let geminiSdk: any = null
+      let openaiSdk: any = null
+
+      return {
+        autoload: true,
+        async getModel(_sdk: any, modelID: string, options?: Record<string, any>) {
+          const surface = options?.nativeApiSurface
+
+          if (surface === "anthropic") {
+            if (!anthropicSdk) {
+              const { createAnthropic } = await import("@ai-sdk/anthropic")
+              anthropicSdk = createAnthropic({
+                baseURL: anthropicBase,
+                apiKey: "unused",
+                fetch: databricksFetch as typeof fetch,
+                headers: { "User-Agent": "opencode" },
+              })
+            }
+            return anthropicSdk(modelID)
+          }
+
+          if (surface === "gemini") {
+            if (!geminiSdk) {
+              const { createGoogleGenerativeAI } = await import("@ai-sdk/google")
+              geminiSdk = createGoogleGenerativeAI({
+                baseURL: geminiBase,
+                apiKey: "databricks",
+                fetch: databricksFetch as typeof fetch,
+                headers: { "User-Agent": "opencode" },
+              })
+            }
+            return geminiSdk(modelID)
+          }
+
+          // GPT/Codex on AI Gateway: use @ai-sdk/openai's Responses adapter
+          // pointed at /ai-gateway/codex/v1. Bypasses @databricks/ai-sdk-provider
+          // entirely, so the lifecycle/flush bugs (#9, #10) don't apply on this
+          // path and the middleware in session/llm.ts is inert.
+          if (surface === "openai-responses" && openaiResponsesBase) {
+            if (!openaiSdk) {
+              const { createOpenAI } = await import("@ai-sdk/openai")
+              openaiSdk = createOpenAI({
+                baseURL: openaiResponsesBase,
+                apiKey: "databricks",
+                fetch: databricksFetch as typeof fetch,
+                headers: { "User-Agent": "opencode" },
+              })
+            }
+            return openaiSdk.responses(modelID)
+          }
+
+          if (options?.useResponsesApi) return _sdk.responses(modelID)
+          return _sdk.chatCompletions(modelID)
+        },
+        options: {
+          baseURL,
+          headers: { "User-Agent": "opencode" },
+          fetch: databricksFetch as typeof fetch,
+        },
+      }
+    }),
   }
 }
 
@@ -1152,7 +1757,9 @@ const layer: Layer.Layer<
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
-            const next = await models(provider, { auth: pluginAuth })
+            // databricks-profile is an internal-only auth type and is never
+            // attached to a plugin-driven provider; safe to narrow here.
+            const next = await models(provider, { auth: pluginAuth as Parameters<typeof models>[1]["auth"] })
             return Object.fromEntries(
               Object.entries(next).map(([id, model]) => [
                 id,

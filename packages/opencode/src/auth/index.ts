@@ -32,7 +32,12 @@ export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
   token: Schema.String,
 }) {}
 
-const _Info = Schema.Union([Oauth, Api, WellKnown]).annotate({ discriminator: "type", identifier: "Auth" })
+export class DatabricksProfile extends Schema.Class<DatabricksProfile>("DatabricksProfileAuth")({
+  type: Schema.Literal("databricks-profile"),
+  profile: Schema.String,
+}) {}
+
+const _Info = Schema.Union([Oauth, Api, WellKnown, DatabricksProfile]).annotate({ discriminator: "type", identifier: "Auth" })
 export const Info = Object.assign(_Info, { zod: zod(_Info) })
 export type Info = Schema.Schema.Type<typeof _Info>
 
