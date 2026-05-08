@@ -1300,6 +1300,22 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
   }
   */
 
+  // Ensure `required` is present when `properties` exists. Claude and other
+  // providers reject schemas that have properties but no required field.
+  const ensureRequired = (obj: unknown): unknown => {
+    if (obj === null || typeof obj !== "object" || Array.isArray(obj)) return obj
+    const node = obj as Record<string, unknown>
+    const result: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(node)) {
+      result[key] = typeof value === "object" && value !== null ? ensureRequired(value) : value
+    }
+    if (result.type === "object" && result.properties && !Array.isArray(result.required)) {
+      result.required = []
+    }
+    return result
+  }
+  schema = ensureRequired(schema) as JSONSchema.BaseSchema | JSONSchema7
+
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
     const sanitizeMoonshot = (obj: unknown): unknown => {
       if (obj === null || typeof obj !== "object") return obj
