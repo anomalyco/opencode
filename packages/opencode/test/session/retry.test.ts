@@ -263,6 +263,9 @@ describe("session.retry.retryable", () => {
         message: "Subscription quota exceeded. You can continue using free models.",
         isRetryable: true,
         statusCode: 429,
+        responseHeaders: {
+          "retry-after": "19380",
+        },
         responseBody: JSON.stringify({
           type: "error",
           error: {
@@ -271,8 +274,7 @@ describe("session.retry.retryable", () => {
           },
           metadata: {
             workspace: "wrk_01K6XGM22R6FM8JVABE9XDQXGH",
-            limit: "5 hour",
-            resetAt: 19_380,
+            limitName: "5 hour",
           },
         }),
       }).toObject(),
