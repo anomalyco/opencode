@@ -7,8 +7,11 @@ export const Local = Schema.Struct({
   command: Schema.mutable(Schema.Array(Schema.String)).annotate({
     description: "Command and arguments to run the MCP server",
   }),
-  environment: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
     description: "Environment variables to set when running the MCP server",
+  }),
+  environment: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+    description: "Environment variables to set when running the MCP server (alias for env)",
   }),
   enabled: Schema.optional(Schema.Boolean).annotate({
     description: "Enable or disable the MCP server on startup",
