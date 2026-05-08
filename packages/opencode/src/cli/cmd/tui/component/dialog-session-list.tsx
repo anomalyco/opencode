@@ -154,7 +154,7 @@ export function DialogSessionList() {
         }
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
-        const isWorking = status?.type === "busy"
+        const isWorking = status?.type === "busy" || status?.type === "retry"
         return {
           title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
           bg: isDeleting ? theme.error : undefined,

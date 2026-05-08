@@ -56,6 +56,7 @@ const ProjectTile = (props: {
   sidebarHovering: Accessor<boolean>
   selected: Accessor<boolean>
   active: Accessor<boolean>
+  isWorking: Accessor<boolean>
   overlay: Accessor<boolean>
   suppressHover: Accessor<boolean>
   dirs: Accessor<string[]>
@@ -143,7 +144,7 @@ const ProjectTile = (props: {
         }}
         onBlur={() => props.setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
+        <ProjectIcon project={props.project} notify working={props.isWorking()} />
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>
@@ -301,6 +302,12 @@ export const SortableProject = (props: {
   }
 
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
+  const isWorking = createMemo(() =>
+    dirs().some((directory) => {
+      const [store] = globalSync.child(directory, { bootstrap: false })
+      return Object.values(store.session_status).some((status) => status?.type === "busy" || status?.type === "retry")
+    }),
+  )
   const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
   const workspaceSessions = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
@@ -313,6 +320,7 @@ export const SortableProject = (props: {
       sidebarHovering={props.ctx.sidebarHovering}
       selected={selected}
       active={active}
+      isWorking={isWorking}
       overlay={overlay}
       suppressHover={() => state.suppressHover}
       dirs={dirs}
