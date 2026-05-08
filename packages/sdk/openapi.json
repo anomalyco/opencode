@@ -8417,6 +8417,43 @@
         ]
       }
     },
+    "/experimental/workspace/sync-list": {
+      "post": {
+        "tags": ["workspace"],
+        "operationId": "experimental.workspace.syncList",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Workspace list synced"
+          }
+        },
+        "description": "Register missing workspaces returned by workspace adapters.",
+        "summary": "Sync workspace list",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.syncList({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/workspace/status": {
       "get": {
         "tags": ["workspace"],
@@ -9404,6 +9441,12 @@
               "action": {
                 "type": "object",
                 "properties": {
+                  "reason": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
                   "title": {
                     "type": "string"
                   },
@@ -9417,7 +9460,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["title", "message", "label"],
+                "required": ["reason", "provider", "title", "message", "label"],
                 "additionalProperties": false
               },
               "next": {
@@ -13672,9 +13715,32 @@
           },
           "projectID": {
             "type": "string"
+          },
+          "timeUsed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
           }
         },
-        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID"],
+        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID", "timeUsed"],
         "additionalProperties": false
       },
       "WorkspaceWarpError": {

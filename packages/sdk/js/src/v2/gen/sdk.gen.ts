@@ -36,6 +36,7 @@ import type {
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
   ExperimentalWorkspaceStatusResponses,
+  ExperimentalWorkspaceSyncListResponses,
   ExperimentalWorkspaceWarpErrors,
   ExperimentalWorkspaceWarpResponses,
   FileListResponses,
@@ -946,6 +947,36 @@ export class Workspace extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Sync workspace list
+   *
+   * Register missing workspaces returned by workspace adapters.
+   */
+  public syncList<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ExperimentalWorkspaceSyncListResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/sync-list",
+      ...options,
+      ...params,
     })
   }
 
