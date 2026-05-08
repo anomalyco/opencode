@@ -363,12 +363,16 @@ describe("HttpApi server", () => {
     const auth = { authorization: authorization("opencode", "secret") }
     const wrongAuth = { authorization: authorization("opencode", "wrong") }
 
-    const [missingConfig, wrongConfig, goodConfig] = await Promise.all([
+    const [missingHealth, goodHealth, missingConfig, wrongConfig, goodConfig] = await Promise.all([
+      server.request(GlobalPaths.health),
+      server.request(GlobalPaths.health, { headers: auth }),
       server.request(GlobalPaths.config),
       server.request(GlobalPaths.config, { headers: wrongAuth }),
       server.request(GlobalPaths.config, { headers: auth }),
     ])
 
+    expect(missingHealth.status).toBe(401)
+    expect(goodHealth.status).toBe(200)
     expect(missingConfig.status).toBe(401)
     expect(wrongConfig.status).toBe(401)
     expect(goodConfig.status).toBe(200)

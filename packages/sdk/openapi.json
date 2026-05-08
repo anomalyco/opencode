@@ -2265,7 +2265,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["name", "description", "location", "content"],
+                    "required": ["name", "location", "content"],
                     "additionalProperties": false
                   },
                   "description": "List of skills"
@@ -11311,6 +11311,44 @@
         "additionalProperties": false,
         "description": "Server configuration for opencode serve and web commands"
       },
+      "ReferenceConfigEntry": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "repository": {
+                "type": "string",
+                "description": "Git repository URL, host/path reference, or GitHub owner/repo shorthand"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["repository"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Absolute path, ~/ path, or workspace-relative path to a local reference directory"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ReferenceConfig": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/ReferenceConfigEntry"
+        }
+      },
       "PermissionActionConfig": {
         "type": "string",
         "enum": ["ask", "allow", "deny"]
@@ -11374,6 +11412,15 @@
               },
               "websearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "codesearch": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "repo_clone": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "repo_overview": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
               },
               "lsp": {
                 "$ref": "#/components/schemas/PermissionRuleConfig"
@@ -11851,6 +11898,9 @@
             },
             "additionalProperties": false
           },
+          "reference": {
+            "$ref": "#/components/schemas/ReferenceConfig"
+          },
           "watcher": {
             "type": "object",
             "properties": {
@@ -11959,6 +12009,9 @@
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "explore": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "scout": {
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "title": {

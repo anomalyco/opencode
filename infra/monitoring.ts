@@ -38,7 +38,10 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
     calculatedFields: [
       {
         name: "is_failed_http_status",
-        expression: `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
+        expression:
+          product === "go"
+            ? `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401")), NOT(EQUALS($status, "429"))), 1, 0)`
+            : `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
       },
     ],
     calculations: [
@@ -66,7 +69,7 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
       },
       {
         name: "is_failed_provider_http_status",
-        expression: `IF(GTE($llm.error.code, "400"), 1, 0)`,
+        expression: `IF(GT($llm.error.code, "400"), 1, 0)`,
       },
     ],
     calculations: [

@@ -96,9 +96,16 @@ const cors = (corsOptions?: CorsOptions) =>
     { global: true },
   )
 
+// Route tree:
+// - rootApiRoutes: typed /global/* and control routes; auth is declared by RootHttpApi.
+// - eventApiRoutes/rawInstanceRoutes: raw instance routes; auth and workspace routing happen as router middleware.
+// - instanceApiRoutes: schema routes; auth is declared on each group and workspace context is provided below.
+// - uiRoute: raw catch-all fallback; auth is router middleware so public static assets can bypass it.
+const authOnlyRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
+const httpApiAuthLayer = authorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, globalHandlers]),
-  Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))),
+  Layer.provide(httpApiAuthLayer),
 )
 const instanceRouterLayer = authorizationRouterMiddleware
   .combine(instanceRouterMiddleware)
@@ -131,7 +138,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
 const rawInstanceRoutes = Layer.mergeAll(ptyConnectRoute).pipe(Layer.provide(instanceRouterLayer))
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
   Layer.provide([
-    authorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer)),
+    httpApiAuthLayer,
     workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
     instanceContextLayer,
   ]),
@@ -143,7 +150,7 @@ const uiRoute = HttpRouter.use((router) =>
     const client = yield* HttpClient.HttpClient
     yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
   }),
-).pipe(Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))))
+).pipe(Layer.provide(authOnlyRouterLayer))
 
 export function createRoutes(corsOptions?: CorsOptions) {
   return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
