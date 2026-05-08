@@ -486,9 +486,9 @@
         "typescript": "catalog:",
       },
       "peerDependencies": {
-        "@opentui/core": ">=0.2.4",
-        "@opentui/keymap": ">=0.2.4",
-        "@opentui/solid": ">=0.2.4",
+        "@opentui/core": ">=0.2.5",
+        "@opentui/keymap": ">=0.2.5",
+        "@opentui/solid": ">=0.2.5",
       },
       "optionalPeers": [
         "@opentui/core",
