@@ -14,6 +14,7 @@ import { searchPatentJudgments, searchLegalRules } from "../utils/db.js"
 import { queryInvalidationFromKB, queryJudgmentFromKB } from "../utils/obsidian-kb.js"
 import { extractPatentKeywords } from "../utils/patent-keywords.js"
 import { responseTemplate } from "../templates/response.js"
+import { createFlow, advance, getState, getCurrentStep, formatStepResult, reset as resetFlow } from "../services/workflow-orchestrator.js"
 
 /**
  * 注册审查意见答辩工具集
@@ -34,9 +35,10 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
         - respond: 生成答辩策略和意见陈述书
         - revise_claims: 修改权利要求
         - validate: 验证答辩完整性
+        - workflow: 多步骤编排模式（自动推进 5 步流程）
       `,
       args: {
-        action: tool.schema.enum(["parse", "analyze", "simulate", "respond", "revise_claims", "validate"]).describe("答辩动作"),
+        action: tool.schema.enum(["parse", "analyze", "simulate", "respond", "revise_claims", "validate", "workflow"]).describe("答辩动作"),
         office_action: tool.schema.string().describe("审查意见通知书内容或文件路径"),
         application_claims: tool.schema.string().optional().describe("当前权利要求书"),
         context: tool.schema.string().optional().describe("额外上下文（如对比文件、审查历史）"),
@@ -105,6 +107,7 @@ export async function registerOATools(pluginContext: PatentPluginContext) {
         }
 
         switch (action) {
+          case "workflow": return await oaWorkflow(office_action, application_claims, extraContext, pluginContext, ctx.sessionID)
           case "parse": return await oaParse(office_action, pluginContext)
           case "analyze": return await oaAnalyze(office_action, application_claims, pluginContext, precedentData)
           case "simulate": return await oaSimulate(office_action, application_claims, pluginContext)
@@ -376,4 +379,41 @@ ${rejections.map(r => `${r.id}. ${r.type}（权利要求 ${r.claims.join(", ")}�
 
   output += `---\n\n*验证完成。如有不合格项，请返回修改后重新验证。*`
   return output
+}
+
+/**
+ * OA 答辩工作流编排
+ */
+async function oaWorkflow(
+  officeAction: string,
+  claims: string,
+  extraContext: string,
+  pluginContext: PatentPluginContext,
+  sessionId: string,
+): Promise<string> {
+  let state = getState(sessionId)
+  if (!state || state.status === "completed" || state.workflowType !== "oa") {
+    if (state) resetFlow(sessionId)
+    state = createFlow("oa", sessionId)
+  }
+
+  if (state.status === "paused") {
+    return `[WORKFLOW_STEP_COMPLETE]\n工作流已暂停。请确认上一步结果后回复「继续」以推进。\n\n当前步骤：${state.currentStep + 1}/${state.totalSteps}`
+  }
+
+  const step = getCurrentStep(state)
+  if (!step) return "工作流已完成"
+
+  let output: string
+  switch (step.action) {
+    case "parse": output = await oaParse(officeAction, pluginContext); break
+    case "analyze": output = await oaAnalyze(officeAction, claims, pluginContext); break
+    case "simulate": output = await oaSimulate(officeAction, claims, pluginContext); break
+    case "respond": output = await oaRespond(officeAction, claims, pluginContext); break
+    case "validate": output = await oaValidate(officeAction, claims, pluginContext); break
+    default: output = `未知步骤: ${step.action}`
+  }
+
+  state = advance(sessionId, step.action, output)
+  return formatStepResult(state, step, output)
 }

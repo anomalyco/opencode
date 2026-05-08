@@ -23,7 +23,10 @@ import { registerTrademarkReviewTools } from "./tools/trademark-review.js"
 import { registerDocumentReaderTools } from "./tools/document-reader.js"
 import { registerFileWriterTools } from "./tools/file-writer.js"
 import { registerMemoryTools } from "./tools/task-memory.js"
-import { getCaseStore, type TaskType } from "./utils/case-store.js"
+import { registerCaseTools } from "./tools/case-manager.js"
+import { createPermissionHandler } from "./hooks/permission.js"
+import { createSystemPromptHandler } from "./hooks/system-prompt.js"
+import { createAuditLogHandler } from "./hooks/audit-log.js"
 import { checkDBHealth } from "./utils/db.js"
 import { getWorkflowStore } from "./utils/workflow-store.js"
 import { seedTemplates } from "./utils/workflow-seeds.js"
@@ -121,6 +124,7 @@ const PatentPlugin: Plugin = async (input, options) => {
   const documentTools = await registerDocumentReaderTools(context).catch(e => { console.error("[YunPat] Document Reader tools failed:", e); failedRegistrations.push("document"); return {} })
   const fileWriterTools = await registerFileWriterTools(context).catch(e => { console.error("[YunPat] File Writer tools failed:", e); failedRegistrations.push("file_writer"); return {} })
   const memoryTools = await registerMemoryTools(context).catch(e => { console.error("[YunPat] Memory tools failed:", e); failedRegistrations.push("memory"); return {} })
+  const caseTools = await registerCaseTools(context).catch(e => { console.error("[YunPat] Case tools failed:", e); failedRegistrations.push("case"); return {} })
 
   if (failedRegistrations.length > 0) {
     console.warn(`[YunPat] ⚠️ 以下工具注册失败，相关功能不可用: ${failedRegistrations.join(", ")}`)
@@ -146,109 +150,17 @@ const PatentPlugin: Plugin = async (input, options) => {
       ...documentTools,
       ...fileWriterTools,
       ...memoryTools,
+      ...caseTools,
     },
 
     // 注入专利领域系统提示词
-    "experimental.chat.system.transform": async (_input, output) => {
-      output.system.push(
-        `你是 YunPat 知识产权智能助手，基于 OpenCode 平台运行。`,
-        `当用户涉及专利问题时，优先使用 patent_* 系列工具；涉及商标问题时，优先使用 trademark_* 系列工具。`,
-        `你可以使用 document_read 工具读取 DOCX/PDF/图片等文档文件，提取技术交底书、对比文件等内容。`,
-        `使用 file_write 工具将撰写稿、答辩书等产出保存到文件。`,
-        `专利检索时：CNIPA 数据库（patent_search）用于中国专利，Google Patents（patent_search_google）用于全球专利，academic_search 用于学术论文检索。`,
-        `你的能力包括：法规研究、专利撰写、审查意见答辩、专利分析、质量检查、商标全流程、文档解析、文件输出。`,
-        `所有法律文件生成后必须标记为"草案"状态，需经专业审校。`,
-        `涉及未公开发明内容的操作需经用户明确审批。`,
-        // 跨会话记忆指令
-        `【重要】你拥有跨会话记忆能力。在处理新任务时：`,
-        `1. 先用 task_memory(action="search", task_type=..., keyword=...) 查询相似历史任务`,
-        `2. 参考历史经验（输出摘要、关键词、策略）来指导当前工作`,
-        `3. 如果用户提到之前做过的任务，用 task_memory 查找历史记录`,
-        `4. 完成任务后，产出会自动保存到记忆系统，供未来复用`,
-        `这确保了"做过的事不需要重复指导"，经验会持续积累。`,
-      )
-    },
+    "experimental.chat.system.transform": createSystemPromptHandler(),
 
     // 专利操作审批策略
-    "permission.ask": async (permission, output) => {
-      const perm = permission.type
-      const patterns = Array.isArray(permission.pattern) ? permission.pattern : [permission.pattern].filter(Boolean)
-
-      // 公开数据库检索：自动放行
-      if (perm === "patent_search" || perm === "patent_research") {
-        output.status = "allow"
-        return
-      }
-
-      // 分析/检查/文档操作：自动放行
-      if (perm === "patent_analyze" || perm === "patent_check" || perm === "trademark" || perm === "document" || perm === "memory") {
-        output.status = "allow"
-        return
-      }
-
-      // 文件写入：需要审批
-      if (perm === "file") {
-        output.status = "ask"
-        return
-      }
-
-      // 撰写/修改操作：需要审批
-      if (perm.startsWith("patent_draft") || perm.startsWith("oa_response") || perm.startsWith("reexam") || perm.startsWith("invalidation")) {
-        output.status = "ask"
-        return
-      }
-
-      // 默认：询问
-      output.status = "ask"
-    },
+    "permission.ask": createPermissionHandler(),
 
     // 事件监听：记录专利操作审计日志 + 案件任务追踪
-    "tool.execute.after": async (event, _output) => {
-      const toolId = event.tool
-      if (toolId?.startsWith("patent_") || toolId?.startsWith("oa_") || toolId?.startsWith("reexam_") || toolId?.startsWith("invalidation_") || toolId?.startsWith("trademark_") || toolId === "document_read" || toolId === "academic_search" || toolId === "task_memory") {
-        console.log(`[YunPat Audit] ${toolId} executed in session ${event.sessionID}`)
-
-        // 记录到案件任务表（含输入输出）
-        try {
-          const store = getCaseStore()
-          const taskTypeMap: Record<string, TaskType> = {
-            patent_research: "research",
-            patent_draft: "draft",
-            oa_response: "oa",
-            patent_search: "research",
-            patent_search_google: "research",
-            academic_search: "research",
-            patent_analyze: "analyze",
-            patent_check: "check",
-            reexam_response: "reexam",
-            invalidation_response: "invalidation",
-            trademark_research: "trademark",
-            trademark_search: "trademark",
-            trademark_analyze: "trademark",
-            trademark_draft: "trademark",
-            trademark_opposition: "trademark",
-            trademark_review: "trademark",
-            document_read: "research",
-            task_memory: "research",
-          }
-          const taskType = taskTypeMap[toolId]
-          if (taskType) {
-            const task = store.createTask({
-              sessionId: event.sessionID,
-              taskType,
-              toolName: toolId,
-            })
-            // 记录输入输出
-            const inputJson = JSON.stringify((event as any).input || {}).slice(0, 2000)
-            const outputStr = typeof _output === "string" ? _output : JSON.stringify(_output || {})
-            store.recordTaskIO(task.id, inputJson, outputStr)
-            store.completeTask(task.id)
-          }
-        } catch (e: any) {
-          console.warn("[YunPat] Case store recording failed:", e?.message)
-        }
-      }
-    },
+    "tool.execute.after": createAuditLogHandler(),
   }
 }
 

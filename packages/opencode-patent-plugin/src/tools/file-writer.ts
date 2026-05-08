@@ -7,8 +7,10 @@
 import { tool } from "@opencode-ai/plugin/tool"
 import * as fs from "fs"
 import * as path from "path"
+import { createHash } from "crypto"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
+import { getCaseStore, type DocType } from "../utils/case-store.js"
 
 export async function registerFileWriterTools(_pluginContext: PatentPluginContext) {
   return {
@@ -65,6 +67,20 @@ export async function registerFileWriterTools(_pluginContext: PatentPluginContex
           }
           fs.writeFileSync(finalPath, content, "utf-8")
           const relativePath = path.relative(ctx.worktree || ctx.directory, finalPath)
+
+          // 记录文档版本
+          try {
+            const store = getCaseStore()
+            const caseRecord = store.getOrCreateCaseForProject(ctx.directory)
+            const contentHash = createHash("sha256").update(content).digest("hex").slice(0, 16)
+            store.addDocument({
+              caseId: caseRecord.id,
+              docType: guessDocType(relativePath),
+              filePath: relativePath,
+              contentHash,
+            })
+          } catch {}
+
           return `✅ 文件已保存: ${relativePath}\n（原文件已存在，自动递增序号）`
         }
 
@@ -76,8 +92,41 @@ export async function registerFileWriterTools(_pluginContext: PatentPluginContex
         fs.writeFileSync(resolvedPath, content, "utf-8")
 
         const relativePath = path.relative(ctx.worktree || ctx.directory, resolvedPath)
+
+        // 记录文档版本到案件存储
+        try {
+          const store = getCaseStore()
+          const caseRecord = store.getOrCreateCaseForProject(ctx.directory)
+          const contentHash = createHash("sha256").update(content).digest("hex").slice(0, 16)
+          const docType = guessDocType(relativePath)
+          store.addDocument({
+            caseId: caseRecord.id,
+            docType,
+            filePath: relativePath,
+            contentHash,
+          })
+        } catch {
+          // 文档记录失败不影响文件写入
+        }
+
         return `✅ 文件已保存: ${relativePath}`
       },
     }),
   }
+}
+
+/** 根据文件路径猜测文档类型 */
+function guessDocType(filePath: string): DocType {
+  const lower = filePath.toLowerCase()
+  if (lower.includes("spec") || lower.includes("说明书")) return "specification"
+  if (lower.includes("claim") || lower.includes("权利要求")) return "claims"
+  if (lower.includes("abstract") || lower.includes("摘要")) return "abstract"
+  if (lower.includes("response") || lower.includes("答辩") || lower.includes("陈述")) return "response"
+  if (lower.includes("oa") || lower.includes("审查意见")) return "office_action"
+  if (lower.includes("reexam") || lower.includes("复审")) return "reexam_request"
+  if (lower.includes("invalidation") || lower.includes("无效")) return "invalidation_req"
+  if (lower.includes("search") || lower.includes("检索")) return "search_report"
+  if (lower.includes("analysis") || lower.includes("分析")) return "analysis_report"
+  if (lower.includes("disclosure") || lower.includes("交底")) return "disclosure"
+  return "other"
 }

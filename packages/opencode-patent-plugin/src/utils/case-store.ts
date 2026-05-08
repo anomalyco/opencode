@@ -13,6 +13,7 @@
 import { Database } from "bun:sqlite"
 import { join } from "path"
 import { randomUUID } from "crypto"
+import { canTransition } from "./case-state-machine.js"
 
 /** SQLite 数据库路径 */
 const DB_PATH = join(
@@ -23,8 +24,14 @@ const DB_PATH = join(
 
 // ========== 类型定义 ==========
 
-/** 案件状态 */
-export type CaseStatus = "active" | "closed" | "archived"
+/** 案件状态（含完整专利生命周期） */
+export type CaseStatus =
+  // 生命周期状态
+  | "draft" | "filed" | "under_exam" | "oa_issued" | "amended"
+  | "allowed" | "granted" | "rejected" | "reexam" | "invalidation_pending"
+  | "abandoned" | "expired" | "withdrawn"
+  // 向后兼容
+  | "active" | "closed" | "archived"
 
 /** 专利类型 */
 export type PatentType = "发明" | "实用新型" | "外观设计"
@@ -57,6 +64,7 @@ export interface PatentCase {
   patent_type: PatentType | null
   title: string | null
   status: CaseStatus
+  project_path: string | null
   metadata: Record<string, unknown>
   created_at: number
   updated_at: number
@@ -167,6 +175,7 @@ export class CaseStore {
 
     // 向后兼容：为旧表添加新字段
     this.migrateTasksTable()
+    this.migrateCasesTable()
   }
 
   // ========== 案件 CRUD ==========
@@ -175,14 +184,15 @@ export class CaseStore {
     applicationNo?: string
     patentType?: PatentType
     title?: string
+    projectPath?: string
     metadata?: Record<string, unknown>
   }): PatentCase {
     const id = randomUUID()
     const now = Math.floor(Date.now() / 1000)
     this.db.prepare(`
-      INSERT INTO patent_cases (id, application_no, patent_type, title, metadata, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.applicationNo || null, data.patentType || null, data.title || null, JSON.stringify(data.metadata || {}), now, now)
+      INSERT INTO patent_cases (id, application_no, patent_type, title, project_path, metadata, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, data.applicationNo || null, data.patentType || null, data.title || null, data.projectPath || null, JSON.stringify(data.metadata || {}), now, now)
 
     return this.getCase(id)!
   }
@@ -190,7 +200,7 @@ export class CaseStore {
   getCase(id: string): PatentCase | null {
     const row = this.db.prepare("SELECT * FROM patent_cases WHERE id = ?").get(id) as any
     if (!row) return null
-    return { ...row, metadata: JSON.parse(row.metadata) }
+    return { ...row, metadata: JSON.parse(row.metadata), project_path: row.project_path || null }
   }
 
   listCases(status?: CaseStatus): PatentCase[] {
@@ -379,6 +389,64 @@ export class CaseStore {
     if (!columnNames.has("parent_task_id")) {
       this.db.exec("ALTER TABLE patent_tasks ADD COLUMN parent_task_id TEXT")
     }
+  }
+
+  private migrateCasesTable() {
+    const columns = this.db.prepare("PRAGMA table_info(patent_cases)").all() as any[]
+    const columnNames = new Set(columns.map(c => c.name))
+
+    if (!columnNames.has("project_path")) {
+      this.db.exec("ALTER TABLE patent_cases ADD COLUMN project_path TEXT")
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_cases_project ON patent_cases(project_path)")
+    }
+  }
+
+  // ========== Case 生命周期方法 ==========
+
+  /** 按项目路径获取或创建案件 */
+  getOrCreateCaseForProject(projectPath: string): PatentCase {
+    const row = this.db.prepare(
+      "SELECT * FROM patent_cases WHERE project_path = ? ORDER BY updated_at DESC LIMIT 1",
+    ).get(projectPath) as any
+
+    if (row) {
+      return { ...row, metadata: JSON.parse(row.metadata), project_path: row.project_path || null }
+    }
+
+    return this.createCase({
+      projectPath,
+      title: projectPath.split("/").pop() || "新案件",
+    })
+  }
+
+  /** 带校验的状态转换 */
+  transitionCaseStatus(caseId: string, newStatus: CaseStatus, reason?: string): PatentCase | null {
+    const existing = this.getCase(caseId)
+    if (!existing) return null
+
+    if (!canTransition(existing.status, newStatus)) {
+      console.warn(`[CaseStore] Invalid transition: ${existing.status} → ${newStatus}`)
+      return null
+    }
+
+    const metadata = { ...existing.metadata }
+    if (reason) {
+      const transitions = (metadata._transitions as Array<{ from: string; to: string; reason: string; at: number }>) || []
+      transitions.push({ from: existing.status, to: newStatus, reason, at: Date.now() })
+      metadata._transitions = transitions
+    }
+
+    return this.updateCase(caseId, { status: newStatus, metadata })
+  }
+
+  /** 获取案件全部任务 */
+  getCaseTasks(caseId: string): PatentTask[] {
+    return this.listTasks(caseId, 100)
+  }
+
+  /** 获取案件全部文档 */
+  getCaseDocuments(caseId: string): PatentDocument[] {
+    return this.listDocuments(caseId)
   }
 
   close() {

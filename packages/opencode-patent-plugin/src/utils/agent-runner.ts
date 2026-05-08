@@ -160,6 +160,7 @@ export async function runAgentWithFallback<T = any>(
  * Agent 配置注册表（正确的类名和输入格式）
  */
 export const AGENT_CONFIGS: Record<string, AgentConfig> = {
+  // === 已有 Agent（13 个）===
   researcher: { module: "agents/researcher", className: "ResearcherAgent" },
   patentSearch: { module: "agents/search", className: "PatentSearchAgentV3", timeout: 60000 },
   patentSearchV2: { module: "agents/search", className: "PatentSearchAgent", timeout: 30000 },
@@ -173,4 +174,28 @@ export const AGENT_CONFIGS: Record<string, AgentConfig> = {
   qualityChecker: { module: "agents/quality", className: "QualityCheckerAgent" },
   enhancedQualityChecker: { module: "agents/quality", className: "EnhancedQualityCheckerAgent" },
   writer: { module: "agents/writer", className: "WriterAgent", timeout: 60000 },
+
+  // === 新增 Agent（+12 个，CONSTITUTION 10.6）===
+
+  // 分析类
+  // 注：patent-analyzer 只导出 ComparisonAnalyzerAgent，CreativeAnalyzerAgent 待 YunPat 实现
+  // creativeAnalyzer: { module: "agents/patent-analyzer", className: "CreativeAnalyzerAgent" },
+  priorArtAnalyzer: { module: "agents/analysis", className: "PriorArtAnalyzerAgent" },
+  disclosureRefiner: { module: "agents/analysis", className: "DisclosureRefinerAgent" },
+  comparisonReportGenerator: { module: "agents/analysis", className: "ComparisonReportGeneratorAgent" },
+
+  // 检查类
+  subjectMatterChecker: { module: "agents/subject-matter-checker", className: "SubjectMatterChecker" },
+  specFormalityChecker: { module: "agents/spec-formality-checker", className: "SpecFormalityChecker" },
+  unityChecker: { module: "agents/unity-checker", className: "UnityChecker" },
+
+  // 检索类
+  priorArtSearch: { module: "agents/prior-art-search", className: "PriorArtSearchAgent" },
+
+  // 转换类
+  formatConverter: { module: "agents/format-converter", className: "PatentFormatConverterAgent" },
+
+  // 多模态类
+  drawingUnderstanding: { module: "agents/image-understanding", className: "DrawingUnderstandingAgent" },
+  technicalDrawing: { module: "agents/technical-drawing", className: "TechnicalDrawingAgent" },
 }

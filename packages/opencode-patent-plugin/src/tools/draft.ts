@@ -12,6 +12,7 @@ import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchPatents, type PatentRecord } from "../utils/db.js"
 import { specificationTemplate, SPEC_LENGTH_GUIDE } from "../templates/specification.js"
 import { getClaimsTemplate } from "../templates/claims.js"
+import { createFlow, advance, getState, getCurrentStep, formatStepResult, reset as resetFlow, type WorkflowType } from "../services/workflow-orchestrator.js"
 
 /**
  * 注册专利撰写工具集
@@ -32,9 +33,10 @@ export async function registerDraftTools(pluginContext: PatentPluginContext) {
         - claims: 权利要求撰写
         - abstract: 摘要撰写
         - integrate: 全文整合
+        - workflow: 多步骤编排模式（自动推进 5 步流程）
       `,
       args: {
-        action: tool.schema.enum(["understand", "search", "specification", "claims", "abstract", "integrate"]).describe("撰写动作"),
+        action: tool.schema.enum(["understand", "search", "specification", "claims", "abstract", "integrate", "workflow"]).describe("撰写动作"),
         disclosure: tool.schema.string().describe("技术交底书内容或文件路径"),
         patent_type: tool.schema.enum(["发明", "实用新型"]).describe("专利类型"),
         invention_type: tool.schema.enum(["装置", "方法", "系统", "组合物"]).optional().describe("发明类型"),
@@ -58,6 +60,7 @@ export async function registerDraftTools(pluginContext: PatentPluginContext) {
 
         // 降级：LLM 直接调用
         switch (action) {
+          case "workflow": return await draftWorkflow(disclosure, patent_type, invention_type, pluginContext, ctx.sessionID)
           case "understand": return await draftUnderstand(disclosure, patent_type, invention_type, pluginContext)
           case "search": return await draftSearch(disclosure, pluginContext)
           case "specification": return await draftSpecification(disclosure, patent_type, invention_type, pluginContext)
@@ -321,4 +324,47 @@ ${disclosure}
   })
 
   return `## 专利申请文件（完整版）✅\n\n${response.content}\n\n---\n\n⚠️ 以上为草案，请经专业审校后提交。建议使用 \`patent_check\` 工具进行质量检查。`
+}
+
+/**
+ * 撰写工作流编排
+ *
+ * 多步骤编排模式：通过 workflow orchestrator 管理状态，
+ * 每次调用推进一个步骤，暂停等待用户确认。
+ */
+async function draftWorkflow(
+  disclosure: string,
+  patentType: string,
+  inventionType: string,
+  pluginContext: PatentPluginContext,
+  sessionId: string,
+): Promise<string> {
+  // 获取或创建流程
+  let state = getState(sessionId)
+  if (!state || state.status === "completed" || state.workflowType !== "draft") {
+    if (state) resetFlow(sessionId)
+    state = createFlow("draft", sessionId)
+  }
+
+  if (state.status === "paused") {
+    return `[WORKFLOW_STEP_COMPLETE]\n工作流已暂停。请确认上一步结果后回复「继续」以推进。\n\n当前步骤：${state.currentStep + 1}/${state.totalSteps}`
+  }
+
+  const step = getCurrentStep(state)
+  if (!step) return "工作流已完成"
+
+  // 执行当前步骤
+  let output: string
+  switch (step.action) {
+    case "understand": output = await draftUnderstand(disclosure, patentType, inventionType, pluginContext); break
+    case "search": output = await draftSearch(disclosure, pluginContext); break
+    case "specification": output = await draftSpecification(disclosure, patentType, inventionType, pluginContext); break
+    case "claims": output = await draftClaims(disclosure, patentType, inventionType, pluginContext); break
+    case "integrate": output = await draftIntegrate(disclosure, pluginContext); break
+    default: output = `未知步骤: ${step.action}`
+  }
+
+  // 推进状态
+  state = advance(sessionId, step.action, output)
+  return formatStepResult(state, step, output)
 }

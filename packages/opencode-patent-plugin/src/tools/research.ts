@@ -10,6 +10,7 @@ import type { PatentPluginContext } from "../types.js"
 import { runAgentSafely } from "../utils/agent-runner.js"
 import { searchLegalRules, searchPatentJudgments, searchLegalArticlesSemantic, searchKnowledgeGraphNodes } from "../utils/db.js"
 import { queryLawFromKB, queryGuidelinesFromKB, queryInvalidationFromKB, searchKnowledgeBase } from "../utils/obsidian-kb.js"
+import { createFlow, advance, getState, getCurrentStep, formatStepResult, reset as resetFlow } from "../services/workflow-orchestrator.js"
 
 /**
  * 注册规则研究工具集
@@ -37,9 +38,15 @@ export async function registerResearchTools(pluginContext: PatentPluginContext) 
         topic: tool.schema.string().describe("研究主题，如'新用途专利创造性判定'"),
         scope: tool.schema.enum(["法规", "案例", "实务", "全部"]).optional().describe("研究范围"),
         depth: tool.schema.enum(["概述", "详细", "深度"]).optional().describe("研究深度"),
+        action: tool.schema.enum(["workflow"]).optional().describe("可选：设为 'workflow' 启用多步骤编排模式"),
       },
       async execute(args, ctx) {
-        const { topic, scope = "全部", depth = "详细" } = args
+        const { topic, scope = "全部", depth = "详细", action } = args
+
+        // 工作流编排模式
+        if (action === "workflow") {
+          return await researchWorkflow(topic, scope, depth, pluginContext, ctx.sessionID)
+        }
 
         let output = `## 专利法规研究：${topic}\n\n`
         let hasRealData = false
@@ -266,4 +273,85 @@ function buildResearchPrompt(topic: string, scope: string, depth: string): strin
 - 所有案例引用必须标注案号
 - 不允许无出处的断言
 - 如信息不确定，明确标注"待核实"`
+}
+
+/**
+ * 研究工作流编排（3 步骤）
+ */
+async function researchWorkflow(
+  topic: string,
+  scope: string,
+  depth: string,
+  pluginContext: PatentPluginContext,
+  sessionId: string,
+): Promise<string> {
+  let state = getState(sessionId)
+  if (!state || state.status === "completed" || state.workflowType !== "research") {
+    if (state) resetFlow(sessionId)
+    state = createFlow("research", sessionId)
+  }
+
+  if (state.status === "paused") {
+    return `[WORKFLOW_STEP_COMPLETE]\n工作流已暂停。请确认上一步结果后回复「继续」以推进。\n\n当前步骤：${state.currentStep + 1}/${state.totalSteps}`
+  }
+
+  const step = getCurrentStep(state)
+  if (!step) return "工作流已完成"
+
+  let output: string
+  switch (step.action) {
+    case "plan": {
+      // 步骤1：制定研究计划
+      const response = await pluginContext.llm.chat({
+        messages: [
+          { role: "system", content: "你是知识产权法规研究专家。根据研究主题制定结构化检索计划。" },
+          { role: "user", content: `请为以下研究主题制定检索计划：\n\n**主题**：${topic}\n**范围**：${scope}\n**深度**：${depth}\n\n请输出：\n1. 研究子问题分解\n2. 关键检索词（中英文）\n3. 需要查询的法规/指南/案例清单` },
+        ],
+      })
+      output = `## 步骤 1/3：研究计划 ✅\n\n${response.content}`
+      break
+    }
+    case "search": {
+      // 步骤2：知识库与法规检索
+      let searchOutput = `## 步骤 2/3：知识库与法规检索 ✅\n\n`
+      try {
+        const rules = await searchLegalRules(topic, { limit: 10 })
+        if (rules.length > 0) {
+          searchOutput += `### 法规条文\n\n`
+          rules.forEach((r, i) => {
+            searchOutput += `**${i + 1}. ${r.article_number || ""} ${r.title || ""}**\n${r.content?.slice(0, 300) || ""}\n\n`
+          })
+        }
+        const judgments = await searchPatentJudgments(topic, { limit: 5 })
+        if (judgments.length > 0) {
+          searchOutput += `### 相关判决\n\n`
+          judgments.forEach((j, i) => {
+            searchOutput += `${i + 1}. **${j.case_number}** ${j.case_title}\n`
+          })
+          searchOutput += "\n"
+        }
+      } catch {
+        searchOutput += "> 检索失败，将在下一步通过 LLM 推理补充。\n"
+      }
+      output = searchOutput
+      break
+    }
+    case "synthesize": {
+      // 步骤3：综合分析与报告
+      const prompt = buildResearchPrompt(topic, scope, depth)
+      const response = await pluginContext.llm.chat({
+        messages: [
+          { role: "system", content: "你是知识产权法规研究专家，熟悉中国专利法及实施细则、审查指南、复审无效案例。" },
+          { role: "user", content: prompt },
+        ],
+      })
+      output = `## 步骤 3/3：综合研究报告 ✅\n\n${response.content}`
+      break
+    }
+    default:
+      output = `未知步骤: ${step!.action}`
+  }
+
+  state = advance(sessionId, step!.action, output)
+  return formatStepResult(state, step!, output)
 }

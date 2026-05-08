@@ -14,6 +14,7 @@ import { searchLegalRules, searchPatentJudgments } from "../utils/db.js"
 import { queryInvalidationFromKB, queryGuidelinesFromKB } from "../utils/obsidian-kb.js"
 import { extractPatentKeywords } from "../utils/patent-keywords.js"
 import { reexamTemplate } from "../templates/reexam.js"
+import { createFlow, advance, getState, getCurrentStep, formatStepResult, reset as resetFlow } from "../services/workflow-orchestrator.js"
 
 /**
  * 注册复审请求工具集
@@ -32,9 +33,10 @@ export async function registerReexamTools(pluginContext: PatentPluginContext) {
         - analyze: 分析驳回理由和复审可行性
         - draft: 撰写复审请求书
         - revise_claims: 修改权利要求（复审版）
+        - workflow: 多步骤编排模式（自动推进 4 步流程）
       `,
       args: {
-        action: tool.schema.enum(["parse", "analyze", "draft", "revise_claims"]).describe("复审动作"),
+        action: tool.schema.enum(["parse", "analyze", "draft", "revise_claims", "workflow"]).describe("复审动作"),
         rejection_decision: tool.schema.string().describe("驳回决定内容或文件路径"),
         application_claims: tool.schema.string().optional().describe("当前权利要求书"),
         context: tool.schema.string().optional().describe("额外上下文（如审查历史、对比文件）"),
@@ -50,6 +52,7 @@ export async function registerReexamTools(pluginContext: PatentPluginContext) {
         const { action, rejection_decision, application_claims = "", context: extraContext = "" } = args
 
         switch (action) {
+          case "workflow": return await reexamWorkflow(rejection_decision, application_claims, extraContext, pluginContext, ctx.sessionID)
           case "parse": return await reexamParse(rejection_decision, pluginContext)
           case "analyze": return await reexamAnalyze(rejection_decision, application_claims, extraContext, pluginContext)
           case "draft": return await reexamDraft(rejection_decision, application_claims, extraContext, pluginContext)
@@ -248,4 +251,40 @@ ${claims}
  */
 function extractReexamKeywords(text: string): string[] {
   return extractPatentKeywords(text)
+}
+
+/**
+ * 复审工作流编排
+ */
+async function reexamWorkflow(
+  rejectionDecision: string,
+  claims: string,
+  extraContext: string,
+  pluginContext: PatentPluginContext,
+  sessionId: string,
+): Promise<string> {
+  let state = getState(sessionId)
+  if (!state || state.status === "completed" || state.workflowType !== "reexam") {
+    if (state) resetFlow(sessionId)
+    state = createFlow("reexam", sessionId)
+  }
+
+  if (state.status === "paused") {
+    return `[WORKFLOW_STEP_COMPLETE]\n工作流已暂停。请确认上一步结果后回复「继续」以推进。\n\n当前步骤：${state.currentStep + 1}/${state.totalSteps}`
+  }
+
+  const step = getCurrentStep(state)
+  if (!step) return "工作流已完成"
+
+  let output: string
+  switch (step.action) {
+    case "parse": output = await reexamParse(rejectionDecision, pluginContext); break
+    case "analyze": output = await reexamAnalyze(rejectionDecision, claims, extraContext, pluginContext); break
+    case "draft": output = await reexamDraft(rejectionDecision, claims, extraContext, pluginContext); break
+    case "revise_claims": output = await reexamReviseClaims(rejectionDecision, claims, pluginContext); break
+    default: output = `未知步骤: ${step.action}`
+  }
+
+  state = advance(sessionId, step.action, output)
+  return formatStepResult(state, step, output)
 }

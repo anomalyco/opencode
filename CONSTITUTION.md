@@ -1373,7 +1373,7 @@ YunPat OpenCode 采用 **YunPat 现有代码封装为 OpenCode Plugin** 的方�
 **各层说明**：
 
 - **OpenCode Core** — 完全复用，不修改。Session 管理、Permission 系统、Model Provider、Snapshot、SyncEvent、Config 系统等
-- **Patent Plugin** — 核心封装层。将 YunPat 的 29 个 Agent 封装为 OpenCode Plugin Tools，复用 YunPat 的 `ProfessionalAgent.run()` 生命周期。Plugin 内部通过 npm workspace 或 `file:` 依赖引用 YunPat 现有包
+- **Patent Plugin** — 核心封装层。将 YunPat 的 Agent 封装为 OpenCode Plugin Tools，复用 YunPat 的 `ProfessionalAgent.run()` 生命周期。Plugin 通过运行时动态加载（`YUNPAT_PATH` 环境变量 + `import()` 动态导入）引用 YunPat 现有包，避免 Bun/pnpm 工具链冲突。当 YunPat 不可用时，自动降级为 DB/KB 查询或 LLM 纯推理模式
 - **MCP Server** — 复用 YunPat 已有的 `@yunpat/mcp-server`，暴露 `patent_search`、`claims_generator`、`quality_checker` 等标准化 API
 - **YunPat Backend Services** — 独立运行的后端服务（Docker 或本地进程），包括专利数据库（PostgreSQL + 7500万 CN 专利）、Rust 性能服务（向量/相似度）、Python ML 服务、知识图谱等。Plugin 通过 gRPC / REST / CLI 调用这些服务
 - **Data Layer** — 三层存储：OpenCode SQLite（会话/项目）、Plugin 自建表（案件元数据）、YunPat PostgreSQL（专利数据/向量索引/结构化知识）
@@ -1386,48 +1386,70 @@ YunPat OpenCode 采用 **YunPat 现有代码封装为 OpenCode Plugin** 的方�
 opencode-patent-plugin/
 ├── package.json              # npm 包定义，声明 opencode 兼容版本
 │   └── dependencies:
-│       ├── @yunpat/core           # YunPat 框架核心（Agent 基类、EventBus、LLM 适配器）
-│       ├── @yunpat/patent-tools   # 专利工具（检索、生成、下载）
-│       ├── @yunpat/patent-knowledge # 知识库桥接
-│       ├── @yunpat/patent-database  # 专利数据库访问
-│       ├── @yunpat/skills         # Skill 管理系统
-│       ├── @yunpat/agent-researcher      # 规则研究 Agent
-│       ├── @yunpat/agent-patent-writer   # 专利撰写 Agent
-│       ├── @yunpat/agent-patent-responder # 审查意见答复 Agent
-│       ├── @yunpat/agent-patent-analyzer  # 专利分析 Agent
-│       ├── @yunpat/agent-search         # 专利检索 Agent
-│       ├── @yunpat/agent-quality        # 质量检查 Agent
-│       └── ... (其他 20+ 个 YunPat Agent 包)
+│       ├── @opencode-ai/plugin     # OpenCode Plugin SDK
+│       ├── @opencode-ai/sdk        # OpenCode SDK
+│       ├── pg                      # PostgreSQL 客户端（专利数据库）
+│       └── ...（其他通用依赖）
+│   └── yunpat: { note: "YunPat 模块通过 YUNPAT_PATH 运行时动态加载，非构建时依赖" }
 ├── src/
-│   ├── index.ts              # Plugin 入口，export default { server }
+│   ├── index.ts              # Plugin 入口，注册所有 Tools 和 Hooks
 │   ├── tools/                # Patent Tools 定义（封装 YunPat Agent）
-│   │   ├── research.ts       # patent_research → 调用 @yunpat/agent-researcher
-│   │   ├── draft.ts          # patent_draft → 调用 @yunpat/agent-patent-writer
-│   │   ├── oa.ts             # oa_response → 调用 @yunpat/agent-patent-responder
-│   │   ├── reexam.ts         # reexam_analyze → 调用 @yunpat/agent-patent-analyzer
-│   │   ├── invalid.ts        # invalidation_analyze → 调用 @yunpat/agent-patent-analyzer
-│   │   ├── search.ts         # patent_search → 调用 @yunpat/agent-search
-│   │   ├── analyze.ts        # patent_analyze → 调用 @yunpat/agent-patent-analyzer
-│   │   ├── check.ts          # patent_check → 调用 @yunpat/agent-quality
-│   │   └── shared/           # 共享工具函数（YunPat EventBus 初始化、上下文转换）
-│   ├── services/             # 内部服务（复用 YunPat 服务）
-│   │   ├── knowledge-base.ts # 封装 @yunpat/patent-knowledge
-│   │   ├── vector-store.ts   # 封装 @yunpat/core EmbeddingAdapter + pgvector
-│   │   ├── template.ts       # 封装 @yunpat/patent-prompts
-│   │   └── quality-check.ts  # 封装 @yunpat/agent-quality
-│   ├── hooks/                # Hooks 实现
+│   │   ├── research.ts       # patent_research → 动态加载 ResearcherAgent
+│   │   ├── draft.ts          # patent_draft → 动态加载撰写 Agent 链
+│   │   ├── oa.ts             # oa_response → 动态加载 PatentResponderAgent
+│   │   ├── reexam.ts         # reexam_response → 动态加载分析/撰写 Agent
+│   │   ├── invalidation.ts   # invalidation_response → 动态加载分析/撰写 Agent
+│   │   ├── search.ts         # patent_search → 动态加载 PatentSearchAgent
+│   │   ├── analyze.ts        # patent_analyze → 动态加载 ComparisonAnalyzerAgent
+│   │   ├── check.ts          # patent_check → 动态加载 QualityCheckerAgent
+│   │   ├── trademark-*.ts    # 商标全流程（6 个工具）
+│   │   ├── document-reader.ts # 文档解析（DOCX/PDF）
+│   │   ├── file-writer.ts    # 文件输出
+│   │   ├── task-memory.ts    # 跨会话记忆
+│   │   └── case-manager.ts   # 案件管理
+│   ├── services/             # 内部服务层
+│   │   ├── knowledge-base.ts # Obsidian 知识库查询服务
+│   │   ├── vector-store.ts   # PostgreSQL 向量检索服务
+│   │   ├── template-service.ts # 模板访问服务
+│   │   ├── quality-service.ts  # 7 维度质量检查服务
+│   │   └── workflow-orchestrator.ts # 多步骤工作流编排器
+│   ├── hooks/                # Plugin Hooks 实现
 │   │   ├── permission.ts     # 审批策略（专利操作分级审批）
-│   │   └── system-prompt.ts  # 系统提示词注入（专利领域上下文）
-│   └── types.ts              # 共享类型定义
-├── skills/                   # Skill 指令文件（复用 @yunpat/skills）
-│   └── patent-workflow.md    # 专利工作流 Skill
-└── templates/                # 专利文件模板（复用 YunPat 模板）
-    ├── claims/               # 权利要求模板
-    ├── specification/        # 说明书模板
-    └── response/             # 答辩文件模板
+│   │   ├── system-prompt.ts  # 系统提示词注入（专利领域上下文 + 工作流指引）
+│   │   └── audit-log.ts      # 审计日志 + 案件任务追踪
+│   ├── workflows/            # 工作流步骤定义
+│   │   ├── draft-flow.ts     # 专利撰写 5 步骤
+│   │   ├── oa-flow.ts        # OA 答辩 5 步骤
+│   │   ├── reexam-flow.ts    # 复审 4 步骤
+│   │   ├── invalidation-flow.ts # 无效宣告 4 步骤
+│   │   └── research-flow.ts  # 规则研究 3 步骤
+│   ├── utils/                # 工具函数
+│   │   ├── yunpat-loader.ts  # 运行时动态加载器（YUNPAT_PATH + import()）
+│   │   ├── agent-runner.ts   # Agent 执行器（安全运行 + 超时 + 降级）
+│   │   ├── agent-factory.ts  # 共享 Agent 上下文工厂
+│   │   ├── case-store.ts     # 案件数据存储（SQLite）
+│   │   ├── case-state-machine.ts # 案件生命周期状态机
+│   │   ├── workflow-store.ts # 工作流模板存储（SQLite）
+│   │   └── db.ts             # PostgreSQL 数据库访问
+│   ├── shared/               # 共享定义
+│   │   ├── constants.ts      # 常量（质量阈值、超时等）
+│   │   └── types.ts          # 共享类型
+│   ├── adapters/             # 外部适配器
+│   │   └── llm.ts            # LLM 适配器（OpenAI-compatible API）
+│   ├── templates/            # 专利文件模板
+│   └── tui/                  # TUI 面板组件
+└── tests/                    # 测试
 ```
 
-> **说明**：Plugin 通过 npm `workspace:` 或 `file:` 协议直接引用本地 YunPat 包（`/Users/xujian/projects/YunPat/packages/*`），无需复制代码。YunPat 的 `knowledge-base/`（4,385 文件）通过 `@yunpat/patent-knowledge` 包访问，无需在 Plugin 中重复存储。
+> **动态加载机制**（`yunpat-loader.ts`）：
+> - 通过 `YUNPAT_PATH` 环境变量定位 YunPat 根目录
+> - `loadYunPatModule(moduleName)` 使用动态 `import()` 加载模块，路径解析策略：package.json main → dist/index.js → src/index.ts
+> - 模块缓存（`moduleCache`）防止重复加载；并发安全（`loadingPromises`）防止并发加载
+> - 加载失败时返回 `null`，工具自动降级为 DB/KB 查询或 LLM 纯推理
+>
+> **AGENT_CONFIGS 注册表**（`agent-runner.ts`）：集中定义所有 YunPat Agent 的模块路径和类名映射，工具通过 `runAgentSafely(config)` 统一调用。
+>
+> **三层降级链**：Agent（动态加载 YunPat）→ DB/KB（PostgreSQL + Obsidian 知识库）→ LLM（纯推理）
 
 #### 17.2 Tool 开发规范
 
@@ -1767,11 +1789,12 @@ CREATE TABLE patent_tasks (
 
 ---
 
-*宪法版本: v0.7-draft*
+*宪法版本: v0.8-draft*
 *创建日期: 2026-05-07*
-*修订日期: 2026-05-07*
-*状态: 草案，已适配 OpenCode 架构，已映射 YunPat 实际代码资产*
+*修订日期: 2026-05-08*
+*状态: 草案，已适配实际动态加载架构，偏差消除中*
 *变更记录:*
+- *v0.8 — 架构偏差消除：第十六条融合架构更新为运行时动态加载模式（YUNPAT_PATH + import()），替代原规划的构建时依赖；第十七条 Plugin 目录结构更新为实际结构（services/hooks/workflows/utils/shared）；新增动态加载规范说明（三层降级链、AGENT_CONFIGS 注册表、模块路径约定）*
 - *v0.7 — 全面适配 OpenCode 架构：技术栈从 Rust 改为 TypeScript/Bun/Effect；编排层从显式 Orchestrator 改为 OpenCode Session Runtime + Plugin Hooks；Agent 注册从动态 AgentRegistry 改为 Plugin Tool + Skill 指令；交互层从单一 TUI 扩展为 TUI/Desktop/Web/VSCode 多平台；Case 概念改为 Project/Session 语义映射；新增第七章数据模型映射；第五章重写为 Plugin 开发规范 + 技术约束；第四章完全重写为 OpenCode Plugin 架构接口；第三章第十条全部 22 个共享智能体映射更新为准确的 YunPat 包名（@yunpat/agent-researcher, @yunpat/agent-patent-writer 等）；融合架构明确为"YunPat 现有代码封装为 OpenCode Plugin"，复用 49 个包、29 个智能体、4,385 文件知识库*
 - *v0.6 — 多模型供应商支持（DeepSeek/智谱GLM/月之暗面Kimi/豆包/本地模型 5 供应商）；强制多模态（专利附图分析/OA PDF 解析/技术图纸理解）；强制嵌入模型（语义检索/向量召回/知识库索引）；可选 Rerank；本地模型优先级 oMLX > Ollama > vLLM；共享智能体扩展至 22 个（+PatentImageAnalyzer/DocumentParser/EmbeddingService/RerankService）；AgentContext 统一 ModelProvider 接口；StageOutput 新增 MultimodalContent；ModelProviderConfig/ProviderConfig/ModelConfig 接口定义；懒加载规则*
 - *v0.5 — 重写全部 5 个场景智能体为编排流程（5步骤/子智能体调用/分析框架/策略矩阵/文档模板）；共享智能体扩展至 18 个（含完整输入/输出规范）；编排层新增 OrchestrationFlow 模型 + MCP Bridge 接口；第十六条新增分层选型原则；Case 数据结构定义；移除补正模式*

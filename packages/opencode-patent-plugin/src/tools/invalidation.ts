@@ -12,6 +12,7 @@ import { searchLegalRules, searchPatentJudgments, searchPatents } from "../utils
 import { queryInvalidationFromKB, queryJudgmentFromKB } from "../utils/obsidian-kb.js"
 import { extractPatentKeywords } from "../utils/patent-keywords.js"
 import { invalidationAttackTemplate, invalidationDefendTemplate } from "../templates/invalidation.js"
+import { createFlow, advance, getState, getCurrentStep, formatStepResult, reset as resetFlow } from "../services/workflow-orchestrator.js"
 
 /**
  * 注册无效宣告工具集
@@ -31,9 +32,10 @@ export async function registerInvalidationTools(pluginContext: PatentPluginConte
         - attack: 撰写无效宣告请求书（攻方）
         - defend: 撰写无效答辩意见（守方）
         - evidence: 检索现有技术证据
+        - workflow: 多步骤编排模式（自动推进 4 步流程）
       `,
       args: {
-        action: tool.schema.enum(["parse", "analyze", "attack", "defend", "evidence"]).describe("无效动作"),
+        action: tool.schema.enum(["parse", "analyze", "attack", "defend", "evidence", "workflow"]).describe("无效动作"),
         target_patent: tool.schema.string().describe("目标专利的权利要求书或专利号"),
         role: tool.schema.enum(["attacker", "defender"]).optional().describe("角色：attacker（无效请求人）或 defender（专利权人）"),
         evidence: tool.schema.string().optional().describe("证据材料（对比文件、公知常识等）"),
@@ -56,6 +58,7 @@ export async function registerInvalidationTools(pluginContext: PatentPluginConte
         } = args
 
         switch (action) {
+          case "workflow": return await invalidationWorkflow(target_patent, role, evidence, extraContext, pluginContext, ctx.sessionID)
           case "parse": return await invalidationParse(target_patent, pluginContext)
           case "analyze": return await invalidationAnalyze(target_patent, role, evidence, pluginContext)
           case "attack": return await invalidationAttack(target_patent, evidence, extraContext, pluginContext)
@@ -343,4 +346,42 @@ async function invalidationEvidence(targetPatent: string, pluginContext: PatentP
  */
 function extractInvalidationKeywords(text: string): string[] {
   return extractPatentKeywords(text)
+}
+
+/**
+ * 无效宣告工作流编排
+ */
+async function invalidationWorkflow(
+  targetPatent: string,
+  role: string,
+  evidence: string,
+  extraContext: string,
+  pluginContext: PatentPluginContext,
+  sessionId: string,
+): Promise<string> {
+  let state = getState(sessionId)
+  if (!state || state.status === "completed" || state.workflowType !== "invalidation") {
+    if (state) resetFlow(sessionId)
+    state = createFlow("invalidation", sessionId)
+  }
+
+  if (state.status === "paused") {
+    return `[WORKFLOW_STEP_COMPLETE]\n工作流已暂停。请确认上一步结果后回复「继续」以推进。\n\n当前步骤：${state.currentStep + 1}/${state.totalSteps}`
+  }
+
+  const step = getCurrentStep(state)
+  if (!step) return "工作流已完成"
+
+  let output: string
+  switch (step.action) {
+    case "parse": output = await invalidationParse(targetPatent, pluginContext); break
+    case "analyze": output = await invalidationAnalyze(targetPatent, role, evidence, pluginContext); break
+    case "attack": output = await invalidationAttack(targetPatent, evidence, extraContext, pluginContext); break
+    case "defend": output = await invalidationDefend(targetPatent, evidence, extraContext, pluginContext); break
+    case "evidence": output = await invalidationEvidence(targetPatent, pluginContext); break
+    default: output = `未知步骤: ${step.action}`
+  }
+
+  state = advance(sessionId, step.action, output)
+  return formatStepResult(state, step, output)
 }
