@@ -684,7 +684,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("preserves reasoning providerMetadata even when assistant model differs", async () => {
+  test("converts reasoning to text when assistant model differs", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -721,7 +721,7 @@ describe("session.message-v2.toModelMessage", () => {
       {
         role: "assistant",
         content: [
-          { type: "reasoning", text: "reasoning trace", providerOptions: { anthropic: { signature: "sig-abc" } } },
+          { type: "text", text: "reasoning trace" },
         ],
       },
     ])
