@@ -1591,6 +1591,12 @@
     align-items: center;
     gap: 8px;
   }
+
+  :where([data-dock-surface="shell"]) {
+    background-color: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 [data-component="question-answers"] {

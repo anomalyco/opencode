@@ -386,10 +386,6 @@ html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] {
   }
 }
 
-html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] [data-dock-surface="shell"] {
-  background-color: color-mix(in srgb, #452e50 72%, transparent);
-}
-
 /* Buttons / cards / dialogs: bump radii to feel softer under arc */
 html[data-theme="arc"] [data-component="button"] {
   border-radius: var(--radius-lg);
@@ -518,16 +514,6 @@ html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
       background-color: #C4B5FD;
       border-color: #8B5CF6;
     }
-  }
-
-  /* The dock-surface="shell" inside question inherits --dock-shell-bg
-     which in light mode is a translucent white that muddies the lavender
-     background. Override with an opaque soft violet that blends with
-     the question card. */
-  html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] [data-dock-surface="shell"] {
-    background-color: rgba(237, 218, 254, 0.72);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 }
 
