@@ -811,6 +811,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         )
       }
 
+      if (["opus-4-5", "opus-4.5"].some((v) => model.api.id.includes(v))) {
+        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { effort }]))
+      }
+
       return {
         high: {
           thinking: {

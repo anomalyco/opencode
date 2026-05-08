@@ -3128,53 +3128,50 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/anthropic", () => {
-    test("sonnet 4.6 returns adaptive thinking options", () => {
-      const model = createMockModel({
-        id: "anthropic/claude-sonnet-4-6",
-        providerID: "anthropic",
-        api: {
-          id: "claude-sonnet-4-6",
-          url: "https://api.anthropic.com",
-          npm: "@ai-sdk/anthropic",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
-      expect(result.high).toEqual({
-        thinking: {
-          type: "adaptive",
-        },
-        effort: "high",
-      })
-    })
-
-    test("opus 4.7 returns adaptive thinking options with xhigh", () => {
-      const model = createMockModel({
-        id: "anthropic/claude-opus-4-7",
-        providerID: "anthropic",
-        api: {
-          id: "claude-opus-4-7",
-          url: "https://api.anthropic.com",
-          npm: "@ai-sdk/anthropic",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
-      expect(result.xhigh).toEqual({
-        thinking: {
-          type: "adaptive",
-          display: "summarized",
-        },
-        effort: "xhigh",
-      })
-      expect(result.max).toEqual({
-        thinking: {
-          type: "adaptive",
-          display: "summarized",
-        },
-        effort: "max",
-      })
-    })
+    for (const testCase of [
+      {
+        name: "opus 4.5",
+        apiIds: ["claude-opus-4-5-20251101", "claude-opus-4.5-20251101"],
+        efforts: ["low", "medium", "high"],
+        expectedHigh: { effort: "high" },
+      },
+      {
+        name: "sonnet 4.6",
+        apiIds: ["claude-sonnet-4-6", "claude-sonnet-4.6"],
+        efforts: ["low", "medium", "high", "max"],
+        expectedHigh: { thinking: { type: "adaptive" }, effort: "high" },
+      },
+      {
+        name: "opus 4.6",
+        apiIds: ["claude-opus-4-6", "claude-opus-4.6"],
+        efforts: ["low", "medium", "high", "max"],
+        expectedHigh: { thinking: { type: "adaptive" }, effort: "high" },
+      },
+      {
+        name: "opus 4.7",
+        apiIds: ["claude-opus-4-7", "claude-opus-4.7"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      },
+    ]) {
+      for (const apiId of testCase.apiIds) {
+        test(`${testCase.name} ${apiId} returns supported reasoning efforts`, () => {
+          const result = ProviderTransform.variants(
+            createMockModel({
+              id: `anthropic/${apiId}`,
+              providerID: "anthropic",
+              api: {
+                id: apiId,
+                url: "https://api.anthropic.com",
+                npm: "@ai-sdk/anthropic",
+              },
+            }),
+          )
+          expect(Object.keys(result)).toEqual(testCase.efforts)
+          expect(result.high).toEqual(testCase.expectedHigh)
+        })
+      }
+    }
 
     test("github copilot opus 4.7 returns only medium reasoning effort", () => {
       const model = createMockModel({
