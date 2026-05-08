@@ -41,6 +41,8 @@ const TAB_CONTENT_GAP = 1
 const MIN_COLUMN_WIDTH = 28
 const MAX_COLUMN_WIDTH = 44
 const PANEL_HEIGHT_RATIO = 0.3
+const MIN_PANEL_HEIGHT = 8
+const MAX_PANEL_HEIGHT = 16
 const PANEL_TOP_PADDING = 1
 const FOOTER_HEIGHT = 1
 const FOOTER_MARGIN = 1
@@ -198,7 +200,9 @@ function WhichKeyPanel(props: {
   const pendingMode = createMemo(() => visible() && pendingActive())
   const left = 0
   const width = createMemo(() => Math.max(1, dimensions().width))
-  const panelHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height * PANEL_HEIGHT_RATIO)))
+  const panelHeight = createMemo(() =>
+    Math.max(MIN_PANEL_HEIGHT, Math.min(MAX_PANEL_HEIGHT, Math.floor(dimensions().height * PANEL_HEIGHT_RATIO))),
+  )
   const contentWidth = createMemo(() => Math.max(1, width() - 2))
   const columns = createMemo(() =>
     Math.max(1, Math.min(3, Math.floor((contentWidth() + COLUMN_GAP) / (MAX_COLUMN_WIDTH + COLUMN_GAP)) || 1)),
