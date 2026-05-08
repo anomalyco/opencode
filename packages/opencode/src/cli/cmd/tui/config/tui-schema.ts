@@ -91,6 +91,7 @@ const GlobalKeymapSection = {
 const WhichKeyKeymapSection = {
   "tui-which-key.toggle": keymapBinding("ctrl+alt+k"),
   "tui-which-key.layout.toggle": keymapBinding("ctrl+alt+shift+k"),
+  "tui-which-key.pending.toggle": keymapBinding("ctrl+alt+shift+p"),
   "tui-which-key.group.previous": keymapBinding("ctrl+alt+left"),
   "tui-which-key.group.next": keymapBinding("ctrl+alt+right"),
   "tui-which-key.scroll.up": keymapBinding("ctrl+alt+up,ctrl+alt+p"),

@@ -10,6 +10,7 @@ import type { InternalTuiPlugin } from "../../plugin/internal"
 const command = {
   toggle: "tui-which-key.toggle",
   toggleLayout: "tui-which-key.layout.toggle",
+  togglePending: "tui-which-key.pending.toggle",
   groupPrevious: "tui-which-key.group.previous",
   groupNext: "tui-which-key.group.next",
   scrollUp: "tui-which-key.scroll.up",
@@ -21,7 +22,8 @@ const command = {
 } as const
 
 const LAYER_PRIORITY = 900
-const toggleCommands = [command.toggle, command.toggleLayout] as const
+const KV_PENDING_PREVIEW = "which_key_pending_preview"
+const toggleCommands = [command.toggle, command.toggleLayout, command.togglePending] as const
 const scrollCommands = [command.scrollUp, command.scrollDown, command.pageUp, command.pageDown, command.home, command.end] as const
 const panelCommands = [
   command.groupPrevious,
@@ -151,6 +153,7 @@ function WhichKeyPanel(props: {
   api: TuiPluginApi
   layout: Layout
   mode: () => Layout
+  pendingPreview: () => boolean
   pinned: () => boolean
 }) {
   const dimensions = useTerminalDimensions()
@@ -158,8 +161,10 @@ function WhichKeyPanel(props: {
   const [activeGroup, setActiveGroup] = createSignal<string | undefined>()
   const pending = useKeymapSelector((keymap) => keymap.getPendingSequence())
   const active = useKeymapSelector((keymap) => keymap.getActiveKeys({ includeMetadata: true }))
-  const pendingMode = createMemo(() => pending().length > 0)
-  const visible = createMemo(() => props.pinned() || (pending().length > 0 && active().length > 0))
+  const pendingMode = createMemo(() =>
+    props.mode() === "overlay" && props.pendingPreview() && pending().length > 0 && active().length > 0,
+  )
+  const visible = createMemo(() => props.pinned() || pendingMode())
   const left = 0
   const width = createMemo(() => Math.max(1, dimensions().width))
   const panelHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height * PANEL_HEIGHT_RATIO)))
@@ -477,6 +482,7 @@ function WhichKeyPanel(props: {
 const tui: TuiPlugin = async (api) => {
   const [pinned, setPinned] = createSignal(false)
   const [layout, setLayout] = createSignal<Layout>("dock")
+  const [pendingPreview, setPendingPreview] = createSignal(api.kv.get(KV_PENDING_PREVIEW, false))
 
   api.keymap.registerLayer({
     priority: LAYER_PRIORITY,
@@ -499,6 +505,18 @@ const tui: TuiPlugin = async (api) => {
           setLayout((value) => (value === "dock" ? "overlay" : "dock"))
         },
       },
+      {
+        name: command.togglePending,
+        title: "Toggle pending key preview",
+        desc: "Automatically show which-key for pending key sequences in overlay mode",
+        category: "System",
+        run() {
+          setPendingPreview((value) => {
+            api.kv.set(KV_PENDING_PREVIEW, !value)
+            return !value
+          })
+        },
+      },
     ],
     bindings: api.tuiConfig.keymap.pick("which_key", toggleCommands),
   })
@@ -512,6 +530,7 @@ const tui: TuiPlugin = async (api) => {
               api={api}
               layout="overlay"
               mode={layout}
+              pendingPreview={pendingPreview}
               pinned={pinned}
             />
           </Show>
@@ -524,6 +543,7 @@ const tui: TuiPlugin = async (api) => {
               api={api}
               layout="dock"
               mode={layout}
+              pendingPreview={pendingPreview}
               pinned={pinned}
             />
           </Show>
