@@ -88,6 +88,20 @@ const GlobalKeymapSection = {
   "terminal.title.toggle": keymapBinding("none"),
 }
 
+const WhichKeyKeymapSection = {
+  "tui-which-key.toggle": keymapBinding("ctrl+alt+k"),
+  "tui-which-key.layout.toggle": keymapBinding("ctrl+alt+shift+k"),
+  "tui-which-key.pending.toggle": keymapBinding("ctrl+alt+shift+p"),
+  "tui-which-key.group.previous": keymapBinding("ctrl+alt+left,ctrl+alt+["),
+  "tui-which-key.group.next": keymapBinding("ctrl+alt+right,ctrl+alt+]"),
+  "tui-which-key.scroll.up": keymapBinding("ctrl+alt+up,ctrl+alt+p"),
+  "tui-which-key.scroll.down": keymapBinding("ctrl+alt+down,ctrl+alt+n"),
+  "tui-which-key.page.up": keymapBinding("ctrl+alt+pageup"),
+  "tui-which-key.page.down": keymapBinding("ctrl+alt+pagedown"),
+  "tui-which-key.home": keymapBinding("ctrl+alt+home"),
+  "tui-which-key.end": keymapBinding("ctrl+alt+end"),
+}
+
 const SessionKeymapSection = {
   "session.share": keymapBinding("none"),
   "session.rename": keymapBinding("ctrl+r"),
@@ -231,6 +245,7 @@ const HomeTipsKeymapSection = {
 
 const KeymapSectionsShape = {
   global: keymapSection(GlobalKeymapSection),
+  which_key: keymapSection(WhichKeyKeymapSection),
   session: keymapSection(SessionKeymapSection),
   prompt: keymapSection(PromptKeymapSection),
   autocomplete: keymapSection(AutocompleteKeymapSection),
@@ -246,6 +261,7 @@ const KeymapSectionsShape = {
 
 const KeymapSectionsInputShape = {
   global: keymapSectionInput(GlobalKeymapSection).optional(),
+  which_key: keymapSectionInput(WhichKeyKeymapSection).optional(),
   session: keymapSectionInput(SessionKeymapSection).optional(),
   prompt: keymapSectionInput(PromptKeymapSection).optional(),
   autocomplete: keymapSectionInput(AutocompleteKeymapSection).optional(),
@@ -271,6 +287,7 @@ export type KeymapInfo = {
 
 export const KeymapSectionGroups = {
   global: "Global",
+  which_key: "System",
   session: "Session",
   prompt: "Prompt",
   autocomplete: "Autocomplete",

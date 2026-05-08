@@ -156,3 +156,45 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })
+
+test("loads disabled-by-default internal plugin inactive and activates on demand", async () => {
+  await using tmp = await tmpdir()
+  const config = createTuiResolvedConfig()
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const api = createTuiPluginApi()
+
+  try {
+    await TuiPluginRuntime.init({ api, config })
+
+    expect(TuiPluginRuntime.list().find((item) => item.id === "internal:plugin-manager")).toMatchObject({
+      enabled: true,
+      active: true,
+    })
+    expect(TuiPluginRuntime.list().find((item) => item.id === "tui-which-key")).toEqual({
+      id: "tui-which-key",
+      source: "internal",
+      spec: "tui-which-key",
+      target: "tui-which-key",
+      enabled: false,
+      active: false,
+    })
+
+    await expect(TuiPluginRuntime.activatePlugin("tui-which-key")).resolves.toBe(true)
+    expect(TuiPluginRuntime.list().find((item) => item.id === "tui-which-key")).toEqual({
+      id: "tui-which-key",
+      source: "internal",
+      spec: "tui-which-key",
+      target: "tui-which-key",
+      enabled: true,
+      active: true,
+    })
+    expect(api.kv.get("plugin_enabled", {})).toEqual({
+      "tui-which-key": true,
+    })
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})

@@ -20,20 +20,27 @@ export async function resolveEditorTags(opts: {
   const matches = Array.from(opts.content.matchAll(FILE_REGEX));
   if (matches.length === 0) return { content: opts.content, parts: [] };
 
+  const occurrences = matches
+    .map((m) =>
+      m.index === undefined ? undefined : { tag: m[0], originalIndex: m.index },
+    )
+    .filter((m): m is { tag: string; originalIndex: number } => m !== undefined);
+
   const known = new Set(
     opts.currentParts
-      .filter(
-        (
-          p,
-        ): p is PromptInfo["parts"][number] & {
-          source: { text: { value: string } };
-        } => p.type === "file" && p.source?.text?.value != null,
-      )
-      .map((p) => p.source.text.value)
+      .flatMap((p) => {
+        if (p.type === "file" && p.source?.text?.value != null) {
+          return [p.source.text.value];
+        }
+        if (p.type === "agent" && p.source?.value != null) {
+          return [p.source.value];
+        }
+        return [];
+      })
       .filter((v) => opts.content.includes(v)),
   );
   const unknowns = [
-    ...new Set(matches.map((m) => m[0]).filter((t) => !known.has(t))),
+    ...new Set(occurrences.map((m) => m.tag).filter((t) => !known.has(t))),
   ];
   if (unknowns.length === 0) return { content: opts.content, parts: [] };
 
@@ -47,18 +54,53 @@ export async function resolveEditorTags(opts: {
 
   const parts: PromptInfo["parts"] = [];
 
+  type Replacement = {
+    originalIndex: number;
+    oldLen: number;
+    newText: string;
+    filePath: string;
+  };
+
+  const finalizeParts = (content: string, replacements: Replacement[]) =>
+    parts.map((part) => {
+      if (part.type !== "agent" || !part.source) return part;
+
+      const source = part.source;
+      const shift = replacements
+        .filter((r) => r.originalIndex < source.start)
+        .reduce((sum, r) => sum + r.newText.length - r.oldLen, 0);
+      const finalIndex = source.start + shift;
+      const finalStart = Bun.stringWidth(content.slice(0, finalIndex));
+
+      return {
+        type: "agent" as const,
+        name: part.name,
+        source: {
+          start: finalStart,
+          end: finalStart + Bun.stringWidth(source.value),
+          value: source.value,
+        },
+      };
+    });
+
   // Agent parts — positions stay relative to original content
   for (const tag of agentTags) {
-    const pos = opts.content.indexOf(tag);
-    if (pos === -1) continue;
-    parts.push({
-      type: "agent",
-      name: tag.slice(1),
-      source: { start: pos, end: pos + tag.length, value: tag },
-    });
+    for (const occurrence of occurrences.filter((m) => m.tag === tag)) {
+      parts.push({
+        type: "agent",
+        name: tag.slice(1),
+        source: {
+          start: occurrence.originalIndex,
+          end: occurrence.originalIndex + tag.length,
+          value: tag,
+        },
+      });
+    }
   }
 
-  if (fileTagItems.length === 0) return { content: opts.content, parts };
+  if (fileTagItems.length === 0) {
+    return { content: opts.content, parts: finalizeParts(opts.content, []) };
+  }
 
   // Show dialog and resolve each file tag to a real file path
   const resolvedRef: { current: { tag: string; filePath: string | null }[] } = {
@@ -78,60 +120,55 @@ export async function resolveEditorTags(opts: {
     );
   });
 
-  type Replacement = {
-    originalPos: number;
-    oldLen: number;
-    newText: string;
-    filePath: string;
-  };
-
   // Collect replacements with original positions
   const replacements: Replacement[] = [];
   for (const item of resolved) {
-    if (!item.filePath) continue;
+    const filePath = item.filePath;
+    if (!filePath) continue;
 
-    const pos = opts.content.indexOf(item.tag);
-    if (pos === -1) continue;
-
-    replacements.push({
-      originalPos: pos,
-      oldLen: item.tag.length,
-      newText: "@" + item.filePath,
-      filePath: item.filePath,
-    });
+    replacements.push(
+      ...occurrences
+        .filter((m) => m.tag === item.tag)
+        .map((occurrence) => ({
+          originalIndex: occurrence.originalIndex,
+          oldLen: item.tag.length,
+          newText: "@" + filePath,
+          filePath,
+        })),
+    );
   }
 
-  if (replacements.length === 0) return { content: opts.content, parts };
+  if (replacements.length === 0) {
+    return { content: opts.content, parts: finalizeParts(opts.content, []) };
+  }
 
   // Apply replacements to content right-to-left
   const sortedByPosDesc = [...replacements].sort(
-    (a, b) => b.originalPos - a.originalPos,
+    (a, b) => b.originalIndex - a.originalIndex,
   );
-  let content = opts.content;
-  for (const r of sortedByPosDesc) {
-    content =
-      content.slice(0, r.originalPos) +
+  const content = sortedByPosDesc.reduce(
+    (acc, r) =>
+      acc.slice(0, r.originalIndex) +
       r.newText +
-      content.slice(r.originalPos + r.oldLen);
-  }
+      acc.slice(r.originalIndex + r.oldLen),
+    opts.content,
+  );
 
   // Compute final positions via cumulative shift
-  // Sort replacements by originalPos ASC to compute cumulative shift up to any point
+  // Sort replacements by originalIndex ASC to compute cumulative shift up to any point
   const sortedByPosAsc = [...replacements].sort(
-    (a, b) => a.originalPos - b.originalPos,
+    (a, b) => a.originalIndex - b.originalIndex,
   );
   const baseDir = opts.directory.replace(/\/+$/, "");
 
   for (const r of sortedByPosAsc) {
     // Cumulative shift from all replacements BEFORE this one
-    let shift = 0;
-    for (const prev of sortedByPosAsc) {
-      if (prev.originalPos >= r.originalPos) break;
-      shift += prev.newText.length - prev.oldLen;
-    }
-
-    const finalStart = r.originalPos + shift;
-    const finalEnd = finalStart + r.newText.length;
+    const shift = sortedByPosAsc
+      .filter((prev) => prev.originalIndex < r.originalIndex)
+      .reduce((sum, prev) => sum + prev.newText.length - prev.oldLen, 0);
+    const finalIndex = r.originalIndex + shift;
+    const finalStart = Bun.stringWidth(content.slice(0, finalIndex));
+    const finalEnd = finalStart + Bun.stringWidth(r.newText);
 
     const fullPath = path.isAbsolute(r.filePath)
       ? r.filePath
@@ -151,33 +188,7 @@ export async function resolveEditorTags(opts: {
     });
   }
 
-  // Recompute agent part positions in the final content by applying cumulative shift
-  const finalAgentParts: PromptInfo["parts"] = [];
-  for (const part of parts) {
-    if (part.type !== "agent" || !part.source) {
-      finalAgentParts.push(part);
-      continue;
-    }
-
-    const s = part.source;
-    let shift = 0;
-    for (const r of sortedByPosAsc) {
-      if (r.originalPos >= s.start) break;
-      shift += r.newText.length - r.oldLen;
-    }
-
-    finalAgentParts.push({
-      type: "agent",
-      name: part.name,
-      source: {
-        start: s.start + shift,
-        end: s.start + shift + s.value.length,
-        value: s.value,
-      },
-    });
-  }
-
-  return { content, parts: finalAgentParts };
+  return { content, parts: finalizeParts(content, sortedByPosAsc) };
 }
 
 function TagFlow(props: {
