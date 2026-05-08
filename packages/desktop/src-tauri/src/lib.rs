@@ -501,10 +501,26 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app, event| {
-            if let RunEvent::Exit = event {
-                tracing::info!("Received Exit");
-
-                kill_sidecar(app.clone());
+            match &event {
+                RunEvent::Exit => {
+                    tracing::info!("Received Exit");
+                    kill_sidecar(app.clone());
+                }
+                // FORK: 关 GUI ≠ 退主进程(C0.5.2)— 飞书 adapter 长驻 [feat: feishu-bridge]
+                RunEvent::WindowEvent { label, event: window_event, .. }
+                    if label == MainWindow::LABEL =>
+                {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = window_event {
+                        if !system_tray::is_quitting() {
+                            api.prevent_close();
+                            if let Some(w) = app.get_webview_window(MainWindow::LABEL) {
+                                let _ = w.hide();
+                            }
+                            tracing::debug!("close requested → hidden(主进程仍跑)");
+                        }
+                    }
+                }
+                _ => {}
             }
         });
 }

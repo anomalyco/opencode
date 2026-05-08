@@ -6,7 +6,10 @@
 // 在编译时嵌入(macro 自带 PNG 解码 → RGBA),运行时通过 set_tray_status() 切换 —
 // 不依赖文件 IO,跨平台一致。
 
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 use tauri::{
     AppHandle, Manager, Runtime,
     image::Image,
@@ -96,6 +99,34 @@ pub fn current_status() -> TrayStatus {
 }
 
 // ============================================================
+// 主进程退出意图标志(C0.5.2)
+// ============================================================
+//
+// 关 GUI ≠ 退主进程:WindowEvent::CloseRequested 默认拦截 → window.hide()。
+// 仅 tray 菜单"退出 DeskFox"调 request_quit() 后才放行真退。
+
+static IS_QUITTING: AtomicBool = AtomicBool::new(false);
+
+/// 标记"已请求退出主进程"。
+///
+/// tray 菜单 / Tauri command "exit_app" 调一次,后续 CloseRequested 不再拦截,
+/// app.exit(0) 进 RunEvent::Exit 完整退出流程(kill_sidecar + 资源回收)。
+pub fn request_quit() {
+    IS_QUITTING.store(true, Ordering::SeqCst);
+}
+
+/// 是否已请求退出。CloseRequested 用此判断要不要 prevent_close。
+pub fn is_quitting() -> bool {
+    IS_QUITTING.load(Ordering::SeqCst)
+}
+
+/// 测试用:重置 quit flag。
+#[cfg(test)]
+pub fn reset_quit_flag() {
+    IS_QUITTING.store(false, Ordering::SeqCst);
+}
+
+// ============================================================
 // 单测
 // ============================================================
 
@@ -139,5 +170,20 @@ mod tests {
         // 第一次调用 / 测试隔离前提下,应返默认状态
         // 注:并行测试可能让此 test 看到其它 test 修改后的状态,所以只验"是合法 enum"
         let _ = current_status();
+    }
+
+    #[test]
+    fn quit_flag_默认_false() {
+        reset_quit_flag();
+        assert!(!is_quitting());
+    }
+
+    #[test]
+    fn quit_flag_request_后_true() {
+        reset_quit_flag();
+        request_quit();
+        assert!(is_quitting());
+        // cleanup,不影响其它并行 test
+        reset_quit_flag();
     }
 }
