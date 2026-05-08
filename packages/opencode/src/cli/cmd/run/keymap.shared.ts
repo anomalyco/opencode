@@ -3,6 +3,8 @@ import { Keymap, type Binding, type KeySequencePart } from "@opentui/keymap"
 import { registerDefaultKeys, registerLeader } from "@opentui/keymap/addons"
 import { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras"
 
+type ParsedBindingInput = Pick<Binding, "key" | "event">
+
 export type ParsedBinding = {
   sequence: KeySequencePart[]
   event: "press" | "release"
@@ -113,7 +115,7 @@ function formatOptions(leader: string) {
   } as const
 }
 
-function splitBinding(binding: Binding) {
+function splitBinding(binding: ParsedBindingInput) {
   if (typeof binding.key !== "string" || !binding.key.includes(",")) {
     return [binding]
   }
@@ -128,13 +130,13 @@ function splitBinding(binding: Binding) {
     }))
 }
 
-export function parseBindings(bindings: readonly Binding[], leader: string): ParsedBinding[] {
+export function parseBindings(bindings: readonly ParsedBindingInput[], leader: string): ParsedBinding[] {
   const parser = createParser(leader)
 
   try {
     return bindings.flatMap((binding) =>
       splitBinding(binding).map((item) => ({
-        sequence: structuredClone(parser.keymap.parseKeySequence(item.key)),
+        sequence: Array.from(parser.keymap.parseKeySequence(item.key)),
         event: item.event ?? "press",
       })),
     )
@@ -143,10 +145,10 @@ export function parseBindings(bindings: readonly Binding[], leader: string): Par
   }
 }
 
-export function formatBinding(bindings: readonly Binding[], leader: string) {
+export function formatBinding(bindings: readonly ParsedBindingInput[], leader: string) {
   return formatKeySequence(parseBindings(bindings, leader)[0]?.sequence, formatOptions(leader))
 }
 
-export function formatBindings(bindings: readonly Binding[], leader: string) {
+export function formatBindings(bindings: readonly ParsedBindingInput[], leader: string) {
   return formatCommandBindings(parseBindings(bindings, leader), formatOptions(leader))
 }

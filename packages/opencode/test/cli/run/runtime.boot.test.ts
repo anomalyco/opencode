@@ -1,14 +1,19 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
+import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
 import { OpencodeClient, type Provider } from "@opencode-ai/sdk/v2"
-import { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import { TuiConfig, type Resolved } from "@/cli/cmd/tui/config/tui"
 import { formatBindings } from "@/cli/cmd/run/keymap.shared"
+import { KeymapSectionNames, keymapBindingDefaults, type KeymapSection } from "@/cli/cmd/tui/config/tui-schema"
 import { ConfigKeybinds } from "@/config/keybinds"
 import {
   resolveDiffStyle,
   resolveFooterKeybinds,
   resolveModelInfo,
 } from "@/cli/cmd/run/runtime.boot"
+
+type RunBinding = Binding<Renderable, KeyEvent>
 
 function model(id: string, providerID: string, context: number, variants?: Record<string, Record<string, never>>) {
   return {
@@ -70,48 +75,33 @@ function config(input?: {
   leaderTimeout?: number
   diff_style?: "auto" | "stacked"
   bindings?: Partial<{
-    commandList: Binding[]
-    variantCycle: Binding[]
-    interrupt: Binding[]
-    historyPrevious: Binding[]
-    historyNext: Binding[]
-    inputClear: Binding[]
-    inputSubmit: Binding[]
-    inputNewline: Binding[]
+    commandList: RunBinding[]
+    variantCycle: RunBinding[]
+    interrupt: RunBinding[]
+    historyPrevious: RunBinding[]
+    historyNext: RunBinding[]
+    inputClear: RunBinding[]
+    inputSubmit: RunBinding[]
+    inputNewline: RunBinding[]
   }>
-}) {
-  const lookup = new Map<string, Binding[]>()
+}): Resolved {
+  const bind = input?.bindings
   const sections = {
-    global: [] as Binding[],
-    session: [] as Binding[],
-    prompt: [] as Binding[],
-    autocomplete: [] as Binding[],
-    input: [] as Binding[],
-    dialog_select: [] as Binding[],
-    dialog_actions: [] as Binding[],
-    model: [] as Binding[],
-    permission: [] as Binding[],
-    question: [] as Binding[],
-    plugins: [] as Binding[],
-    home_tips: [] as Binding[],
-  }
-
-  const set = (section: string, command: string, value: Binding[] | undefined) => {
-    if (!value) {
-      return
-    }
-
-    lookup.set(`${section}:${command}`, value)
-  }
-
-  set("global", "command.palette.show", input?.bindings?.commandList)
-  set("global", "variant.cycle", input?.bindings?.variantCycle)
-  set("prompt", "session.interrupt", input?.bindings?.interrupt)
-  set("prompt", "prompt.history.previous", input?.bindings?.historyPrevious)
-  set("prompt", "prompt.history.next", input?.bindings?.historyNext)
-  set("prompt", "prompt.clear", input?.bindings?.inputClear)
-  set("input", "input.submit", input?.bindings?.inputSubmit)
-  set("input", "input.newline", input?.bindings?.inputNewline)
+    global: Object.fromEntries([
+      ...(bind?.commandList ? [["command.palette.show", bind.commandList] as const] : []),
+      ...(bind?.variantCycle ? [["variant.cycle", bind.variantCycle] as const] : []),
+    ]),
+    prompt: Object.fromEntries([
+      ...(bind?.interrupt ? [["session.interrupt", bind.interrupt] as const] : []),
+      ...(bind?.historyPrevious ? [["prompt.history.previous", bind.historyPrevious] as const] : []),
+      ...(bind?.historyNext ? [["prompt.history.next", bind.historyNext] as const] : []),
+      ...(bind?.inputClear ? [["prompt.clear", bind.inputClear] as const] : []),
+    ]),
+    input: Object.fromEntries([
+      ...(bind?.inputSubmit ? [["input.submit", bind.inputSubmit] as const] : []),
+      ...(bind?.inputNewline ? [["input.newline", bind.inputNewline] as const] : []),
+    ]),
+  } satisfies BindingSectionsConfig<Renderable, KeyEvent>
 
   return {
     diff_style: input?.diff_style,
@@ -119,16 +109,10 @@ function config(input?: {
     keymap: {
       leader: input?.leader ?? "ctrl+x",
       leader_timeout: input?.leaderTimeout ?? 2000,
-      sections,
-      get(section: string, command: string) {
-        return lookup.get(`${section}:${command}`)
-      },
-      pick() {
-        return []
-      },
-      omit() {
-        return []
-      },
+      ...resolveBindingSections<Renderable, KeyEvent, typeof sections, KeymapSection>(sections, {
+        sections: KeymapSectionNames,
+        bindingDefaults: keymapBindingDefaults,
+      }),
     },
   }
 }

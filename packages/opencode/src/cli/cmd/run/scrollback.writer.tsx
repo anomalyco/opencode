@@ -330,7 +330,6 @@ export function entryWriter(input: {
   opts?: ScrollbackOptions
 }): ScrollbackWriter {
   return createScrollbackWriter(
-    // @ts-expect-error OpenTUI JSX element is valid for createScrollbackWriter.
     (ctx) => (
       <RunEntryContent
         commit={input.commit}

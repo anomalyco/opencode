@@ -11,6 +11,7 @@
 //     → stream.ts bridges to footer API
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
+import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
 import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
 
@@ -260,17 +261,19 @@ export type QuestionReply = Parameters<OpencodeClient["question"]["reply"]>[0]
 
 export type QuestionReject = Parameters<OpencodeClient["question"]["reject"]>[0]
 
+type FooterBinding = Binding<Renderable, KeyEvent>
+
 export type FooterKeybinds = {
   leader: string
   leaderTimeout: number
-  commandList: readonly Binding[]
-  variantCycle: readonly Binding[]
-  interrupt: readonly Binding[]
-  historyPrevious: readonly Binding[]
-  historyNext: readonly Binding[]
-  inputClear: readonly Binding[]
-  inputSubmit: readonly Binding[]
-  inputNewline: readonly Binding[]
+  commandList: readonly FooterBinding[]
+  variantCycle: readonly FooterBinding[]
+  interrupt: readonly FooterBinding[]
+  historyPrevious: readonly FooterBinding[]
+  historyNext: readonly FooterBinding[]
+  inputClear: readonly FooterBinding[]
+  inputSubmit: readonly FooterBinding[]
+  inputNewline: readonly FooterBinding[]
 }
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"

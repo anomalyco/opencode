@@ -229,7 +229,8 @@ function completedTool(input: {
       status: "completed",
       input: input.body,
       output: input.output ?? "",
-      ...(input.metadata ? { metadata: input.metadata } : {}),
+      title: input.tool,
+      metadata: input.metadata ?? {},
       time: {
         start: 1,
         end: 2,
@@ -658,7 +659,7 @@ describe("run stream transport", () => {
         callID: "call-question-race-1",
       },
     }
-    const pending = defer<Awaited<ReturnType<typeof ok<typeof request>>>>()
+    const pending = defer<Awaited<ReturnType<typeof ok<(typeof request)[]>>>>()
     let questionCalls = 0
     const transport = await createSessionTransport({
       sdk: sdk({
