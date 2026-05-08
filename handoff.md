@@ -2,11 +2,11 @@
 
 ## Current State
 - Branch: `rebase/upstream-sync` (based on `upstream/dev`)
-- Latest commit: `d6b648157` (`feat: add serve auto-resume worker`)
+- Latest commit: `bb95c60ee` (`fix: keep TTS on Effect HttpApi backend`)
 - Active todos:
   - `rebase-ui` — done
   - `rebase-tts` — done
-  - `rebase-review` — pending
+  - `rebase-review` — done
   - `rebase-autopilot` — pending
   - `rebase-session` — done
   - `rebase-infra` — pending
@@ -39,13 +39,30 @@
   - `packages/opencode`: `bun typecheck`
   - `packages/opencode`: `bun test test/server/httpapi-bridge.test.ts test/tts/route.test.ts test/tts/edge.test.ts test/session/auto-resume.test.ts`
 
-## Execution Plan
-1. **Commit HttpApi/TTS parity fix**
-   - Commit the 4 files listed above once final smoke verification is complete.
+## Completed in This Iteration
+- Committed HttpApi/TTS parity fix:
+  - commit `bb95c60ee`
+  - `/tts/edge` is now served from Effect HttpApi (no Hono bypass in `createHttpApi`).
+  - OpenAPI parity tests for HttpApi bridge are passing again.
+- Verified app-level fork ports:
+  - `packages/app`: `bun test src/pages/session/auto-review.test.ts src/utils/recent-session.test.ts`
 
-2. **Port auto-review group cleanly**
-   - Confirm auto-review files already included in commit `38405e57a` still match upstream model/session APIs.
-   - Add only missing wiring points if needed; avoid broad layout rewrites.
+## Verification Snapshot
+- Passing:
+  - `packages/opencode`: `bun typecheck`
+  - `packages/app`: `bun run build`
+  - `bun install`
+  - targeted tests for HttpApi/TTS/auto-resume and app auto-review/recent-session
+- Full `packages/opencode` test suite currently reports 4 failures, all outside touched files:
+  - `ModelsDev Service > get() returns {} when disk empty and fetch disabled`
+  - three `Project.fromDirectory with bare repos` tests
+
+## Execution Plan
+1. **Resolve/triage remaining full-suite failures**
+   - Investigate the 4 failing tests (`ModelsDev`, `Project.fromDirectory bare repos`) and confirm baseline vs introduced behavior.
+
+2. **Port autopilot + infra groups (deferred heavy work)**
+   - Effect-native rewrites only; avoid direct fork file copy.
 
 3. **Port session resilience incrementally**
    - Integrate `session/auto-resume.ts` into upstream `serve` flow using Effect-compatible patterns.
