@@ -4,6 +4,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "e
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { ApiNotFoundError } from "../errors"
 import { described } from "./metadata"
 
 const root = "/tui"
@@ -155,7 +156,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("selectSession", TuiPaths.selectSession, {
           payload: TuiEvent.SessionSelect.properties,
           success: described(Schema.Boolean, "Session selected successfully"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.selectSession",
