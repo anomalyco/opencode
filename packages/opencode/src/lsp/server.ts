@@ -1965,6 +1965,84 @@ export const HLS: Info = {
   },
 }
 
+export const CircleCILS: Info = {
+  id: "circleci",
+  extensions: [".yaml", ".yml"],
+  root: async (file, ctx) => {
+    const relative = path.relative(ctx.directory, file)
+    if (!relative.startsWith(".circleci" + path.sep) && !relative.startsWith(".circleci/")) return undefined
+    return ctx.directory
+  },
+  async spawn(root, _ctx, flags) {
+    const suffix = process.platform === "win32" ? ".exe" : ""
+    const binName = "circleci-yaml-language-server" + suffix
+    const managedBin = path.join(Global.Path.bin, binName)
+    const versionFile = managedBin + ".version"
+
+    let bin: string | undefined = which("circleci-yaml-language-server") ?? undefined
+
+    if (bin) {
+      return { process: spawn(bin, ["-stdio"], { cwd: root }) }
+    }
+
+    if (flags.disableLspDownload) return
+
+    const fetchLatestRelease = async () => {
+      const response = await fetch(
+        "https://api.github.com/repos/CircleCI-Public/circleci-yaml-language-server/releases/latest",
+      )
+      if (!response.ok) return undefined
+      return (await response.json()) as {
+        tag_name?: string
+        assets?: { name?: string; browser_download_url?: string }[]
+      }
+    }
+
+    const downloadBinary = async (release: {
+      tag_name?: string
+      assets?: { name?: string; browser_download_url?: string }[]
+    }) => {
+      const cciArch = process.arch === "arm64" ? "arm64" : "amd64"
+      const cciPlatform = process.platform === "win32" ? "windows" : process.platform
+      const assetName = `${cciPlatform}-${cciArch}-lsp${suffix}`
+
+      const asset = (release.assets ?? []).find((a) => a.name === assetName)
+      if (!asset?.browser_download_url) return undefined
+
+      const downloadResponse = await fetch(asset.browser_download_url)
+      if (!downloadResponse.ok || !downloadResponse.body) return undefined
+
+      await Filesystem.writeStream(managedBin, downloadResponse.body)
+
+      if (process.platform !== "win32") {
+        await fs.chmod(managedBin, 0o755).catch(() => {})
+      }
+
+      await fs.writeFile(versionFile, release.tag_name ?? "unknown").catch(() => {})
+      return managedBin
+    }
+
+    if (await pathExists(managedBin)) {
+      bin = managedBin
+
+      const installedVersion = await fs.readFile(versionFile, "utf-8").catch(() => undefined)
+      fetchLatestRelease()
+        .then(async (release) => {
+          if (!release?.tag_name || release.tag_name === installedVersion) return
+          await downloadBinary(release)
+        })
+        .catch(() => {})
+    } else {
+      const release = await fetchLatestRelease()
+      if (!release) return
+      bin = await downloadBinary(release)
+      if (!bin) return
+    }
+
+    return { process: spawn(bin, ["-stdio"], { cwd: root }) }
+  },
+}
+
 export const JuliaLS: Info = {
   id: "julials",
   extensions: [".jl"],
