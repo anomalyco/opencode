@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { LLM, LLMClient, Provider } from "@opencode-ai/llm"
 import { Route, Protocol } from "@opencode-ai/llm/route"
 import { Provider as ProviderSubpath } from "@opencode-ai/llm/provider"
-import { OpenAI, OpenAICompatible, OpenRouter, XAI } from "@opencode-ai/llm/providers"
+import { Cloudflare, OpenAI, OpenAICompatible, OpenRouter, XAI } from "@opencode-ai/llm/providers"
 import * as GitHubCopilot from "@opencode-ai/llm/providers/github-copilot"
 import { OpenAIChat, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm/protocols"
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
@@ -27,6 +27,10 @@ describe("public exports", () => {
     expect(OpenAI.apis.responses).toBe(OpenAI.responses)
     expect(OpenAI.apis.responsesWebSocket).toBe(OpenAI.responsesWebSocket)
     expect(OpenAICompatible.deepseek.model).toBeFunction()
+    expect(Cloudflare.model).toBeFunction()
+    expect(Cloudflare.provider.model).toBe(Cloudflare.model)
+    expect(Cloudflare.aiGateway).toBeFunction()
+    expect(Cloudflare.workersAI).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
     expect(OpenRouter.provider.model).toBe(OpenRouter.model)
     expect(XAI.model).toBeFunction()

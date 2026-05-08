@@ -17,8 +17,12 @@ type Provider = {
     readonly name: string
     readonly label?: string
     readonly optional?: boolean
+    readonly secret?: boolean
   }>
+  readonly validate?: (env: Env) => Effect.Effect<string | undefined, unknown, HttpClient.HttpClient>
 }
+
+type Env = Record<string, string>
 
 const PROVIDERS: ReadonlyArray<Provider> = [
   {
@@ -27,6 +31,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "core",
     note: "Native OpenAI Chat / Responses recorded tests",
     vars: [{ name: "OPENAI_API_KEY" }],
+    validate: (env) => validateBearer("https://api.openai.com/v1/models", Redacted.make(env.OPENAI_API_KEY)),
   },
   {
     id: "anthropic",
@@ -34,6 +39,14 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "core",
     note: "Native Anthropic Messages recorded tests",
     vars: [{ name: "ANTHROPIC_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get("https://api.anthropic.com/v1/models").pipe(
+        HttpClientRequest.setHeaders({
+          "anthropic-version": "2023-06-01",
+          "x-api-key": Redacted.value(Redacted.make(env.ANTHROPIC_API_KEY)),
+        }),
+        executeRequest,
+      ),
   },
   {
     id: "google",
@@ -41,6 +54,10 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "core",
     note: "Native Gemini recorded tests",
     vars: [{ name: "GOOGLE_GENERATIVE_AI_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(env.GOOGLE_GENERATIVE_AI_API_KEY)}`,
+      ).pipe(executeRequest),
   },
   {
     id: "bedrock",
@@ -54,6 +71,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
       { name: "BEDROCK_RECORDING_REGION", optional: true },
       { name: "BEDROCK_MODEL_ID", optional: true },
     ],
+    validate: (env) => validateBedrock(env),
   },
   {
     id: "groq",
@@ -61,6 +79,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "canary",
     note: "Fast OpenAI-compatible canary for text/tool streaming",
     vars: [{ name: "GROQ_API_KEY" }],
+    validate: (env) => validateBearer("https://api.groq.com/openai/v1/models", Redacted.make(env.GROQ_API_KEY)),
   },
   {
     id: "openrouter",
@@ -68,6 +87,12 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "canary",
     note: "Router canary for OpenAI-compatible text/tool streaming",
     vars: [{ name: "OPENROUTER_API_KEY" }],
+    validate: (env) =>
+      validateChat({
+        url: "https://openrouter.ai/api/v1/chat/completions",
+        token: Redacted.make(env.OPENROUTER_API_KEY),
+        model: "openai/gpt-4o-mini",
+      }),
   },
   {
     id: "xai",
@@ -75,6 +100,41 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "canary",
     note: "OpenAI-compatible xAI chat endpoint",
     vars: [{ name: "XAI_API_KEY" }],
+    validate: (env) => validateBearer("https://api.x.ai/v1/models", Redacted.make(env.XAI_API_KEY)),
+  },
+  {
+    id: "cloudflare-ai-gateway",
+    label: "Cloudflare AI Gateway",
+    tier: "canary",
+    note: "Cloudflare Unified/OpenAI-compatible gateway; supports provider/model ids like workers-ai/@cf/...",
+    vars: [
+      { name: "CLOUDFLARE_ACCOUNT_ID", label: "Cloudflare account ID", secret: false },
+      { name: "CLOUDFLARE_GATEWAY_ID", label: "Cloudflare AI Gateway ID (defaults to default)", optional: true, secret: false },
+      { name: "CLOUDFLARE_API_TOKEN", label: "Cloudflare AI Gateway token" },
+    ],
+    validate: (env) =>
+      validateChat({
+        url: `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}/${encodeURIComponent(env.CLOUDFLARE_GATEWAY_ID || "default")}/compat/chat/completions`,
+        token: Redacted.make(env.CLOUDFLARE_API_TOKEN),
+        model: "workers-ai/@cf/meta/llama-3.1-8b-instruct",
+        headers: { "cf-aig-authorization": `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
+      }),
+  },
+  {
+    id: "cloudflare-workers-ai",
+    label: "Cloudflare Workers AI",
+    tier: "canary",
+    note: "Direct Workers AI OpenAI-compatible endpoint; supports model ids like @cf/meta/...",
+    vars: [
+      { name: "CLOUDFLARE_ACCOUNT_ID", label: "Cloudflare account ID", secret: false },
+      { name: "CLOUDFLARE_API_KEY", label: "Cloudflare Workers AI API token" },
+    ],
+    validate: (env) =>
+      validateChat({
+        url: `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}/ai/v1/chat/completions`,
+        token: Redacted.make(env.CLOUDFLARE_API_KEY),
+        model: "@cf/meta/llama-3.1-8b-instruct",
+      }),
   },
   {
     id: "deepseek",
@@ -82,6 +142,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "compatible",
     note: "Existing OpenAI-compatible recorded tests",
     vars: [{ name: "DEEPSEEK_API_KEY" }],
+    validate: (env) => validateBearer("https://api.deepseek.com/models", Redacted.make(env.DEEPSEEK_API_KEY)),
   },
   {
     id: "togetherai",
@@ -89,6 +150,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "compatible",
     note: "Existing OpenAI-compatible text/tool recorded tests",
     vars: [{ name: "TOGETHER_AI_API_KEY" }],
+    validate: (env) => validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_AI_API_KEY)),
   },
   {
     id: "mistral",
@@ -96,6 +158,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "optional",
     note: "OpenAI-compatible bridge; native reasoning parity is follow-up work",
     vars: [{ name: "MISTRAL_API_KEY" }],
+    validate: (env) => validateBearer("https://api.mistral.ai/v1/models", Redacted.make(env.MISTRAL_API_KEY)),
   },
   {
     id: "perplexity",
@@ -103,6 +166,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "optional",
     note: "OpenAI-compatible bridge; citations/search metadata are follow-up work",
     vars: [{ name: "PERPLEXITY_API_KEY" }],
+    validate: (env) => validateBearer("https://api.perplexity.ai/models", Redacted.make(env.PERPLEXITY_API_KEY)),
   },
   {
     id: "venice",
@@ -110,6 +174,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "optional",
     note: "OpenAI-compatible bridge",
     vars: [{ name: "VENICE_API_KEY" }],
+    validate: (env) => validateBearer("https://api.venice.ai/api/v1/models", Redacted.make(env.VENICE_API_KEY)),
   },
   {
     id: "cerebras",
@@ -117,6 +182,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "optional",
     note: "OpenAI-compatible bridge",
     vars: [{ name: "CEREBRAS_API_KEY" }],
+    validate: (env) => validateBearer("https://api.cerebras.ai/v1/models", Redacted.make(env.CEREBRAS_API_KEY)),
   },
   {
     id: "deepinfra",
@@ -124,6 +190,8 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "optional",
     note: "OpenAI-compatible bridge",
     vars: [{ name: "DEEPINFRA_API_KEY" }],
+    validate: (env) =>
+      validateBearer("https://api.deepinfra.com/v1/openai/models", Redacted.make(env.DEEPINFRA_API_KEY)),
   },
   {
     id: "fireworks",
@@ -131,6 +199,8 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     tier: "optional",
     note: "OpenAI-compatible bridge",
     vars: [{ name: "FIREWORKS_API_KEY" }],
+    validate: (env) =>
+      validateBearer("https://api.fireworks.ai/inference/v1/models", Redacted.make(env.FIREWORKS_API_KEY)),
   },
   {
     id: "baseten",
@@ -153,8 +223,6 @@ const envPath = path.resolve(process.cwd(), option("--env") ?? ".env.local")
 const checkOnly = hasFlag("--check")
 const providerOption = option("--providers")
 const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY)
-
-type Env = Record<string, string>
 
 const envNames = Array.from(new Set(PROVIDERS.flatMap((provider) => provider.vars.map((item) => item.name))))
 
@@ -256,11 +324,13 @@ const upsertEnv = (contents: string, values: Env) => {
 }
 
 const providerRequiredStatus = (provider: Provider, fileEnv: Env) => {
-  const required = provider.vars.filter((item) => !item.optional)
+  const required = requiredVars(provider)
   if (required.some((item) => status(item.name, fileEnv) === "missing")) return "missing"
   if (required.some((item) => status(item.name, fileEnv) === "shell")) return "set in shell"
   return "already added"
 }
+
+const requiredVars = (provider: Provider) => provider.vars.filter((item) => !item.optional)
 
 const processEnv = (): Env =>
   Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
@@ -296,10 +366,11 @@ const validateChat = (input: {
   readonly url: string
   readonly token: Redacted.Redacted<string>
   readonly model: string
+  readonly headers?: Record<string, string>
 }) =>
   ProviderShared.jsonPost({
     url: input.url,
-    headers: { authorization: `Bearer ${Redacted.value(input.token)}` },
+    headers: { ...input.headers, authorization: `Bearer ${Redacted.value(input.token)}` },
     body: ProviderShared.encodeJson({
       model: input.model,
       messages: [{ role: "user", content: "Reply with exactly: ok" }],
@@ -308,71 +379,27 @@ const validateChat = (input: {
     }),
   }).pipe(executeRequest)
 
-const validateProvider = Effect.fn("RecordingEnv.validateProvider")(function* (provider: Provider, env: Env) {
-  const check = Effect.gen(function* () {
-    if (provider.id === "openai")
-      return yield* validateBearer("https://api.openai.com/v1/models", Redacted.make(env.OPENAI_API_KEY))
-    if (provider.id === "anthropic") {
-      return yield* HttpClientRequest.get("https://api.anthropic.com/v1/models").pipe(
-        HttpClientRequest.setHeaders({
-          "anthropic-version": "2023-06-01",
-          "x-api-key": Redacted.value(Redacted.make(env.ANTHROPIC_API_KEY)),
-        }),
-        executeRequest,
-      )
-    }
-    if (provider.id === "google") {
-      return yield* HttpClientRequest.get(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(env.GOOGLE_GENERATIVE_AI_API_KEY)}`,
-      ).pipe(executeRequest)
-    }
-    if (provider.id === "bedrock") {
-      const request = yield* Effect.promise(() =>
-        new AwsV4Signer({
-          url: `https://bedrock.${env.BEDROCK_RECORDING_REGION || "us-east-1"}.amazonaws.com/foundation-models`,
-          method: "GET",
-          service: "bedrock",
-          region: env.BEDROCK_RECORDING_REGION || "us-east-1",
-          accessKeyId: env.AWS_ACCESS_KEY_ID,
-          secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-          sessionToken: env.AWS_SESSION_TOKEN || undefined,
-        }).sign(),
-      )
-      return yield* HttpClientRequest.get(request.url.toString()).pipe(
-        HttpClientRequest.setHeaders(Object.fromEntries(request.headers.entries())),
-        executeRequest,
-      )
-    }
-    if (provider.id === "groq")
-      return yield* validateBearer("https://api.groq.com/openai/v1/models", Redacted.make(env.GROQ_API_KEY))
-    if (provider.id === "openrouter") {
-      return yield* validateChat({
-        url: "https://openrouter.ai/api/v1/chat/completions",
-        token: Redacted.make(env.OPENROUTER_API_KEY),
-        model: "openai/gpt-4o-mini",
-      })
-    }
-    if (provider.id === "xai")
-      return yield* validateBearer("https://api.x.ai/v1/models", Redacted.make(env.XAI_API_KEY))
-    if (provider.id === "deepseek")
-      return yield* validateBearer("https://api.deepseek.com/models", Redacted.make(env.DEEPSEEK_API_KEY))
-    if (provider.id === "togetherai")
-      return yield* validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_AI_API_KEY))
-    if (provider.id === "mistral")
-      return yield* validateBearer("https://api.mistral.ai/v1/models", Redacted.make(env.MISTRAL_API_KEY))
-    if (provider.id === "perplexity")
-      return yield* validateBearer("https://api.perplexity.ai/models", Redacted.make(env.PERPLEXITY_API_KEY))
-    if (provider.id === "venice")
-      return yield* validateBearer("https://api.venice.ai/api/v1/models", Redacted.make(env.VENICE_API_KEY))
-    if (provider.id === "cerebras")
-      return yield* validateBearer("https://api.cerebras.ai/v1/models", Redacted.make(env.CEREBRAS_API_KEY))
-    if (provider.id === "deepinfra")
-      return yield* validateBearer("https://api.deepinfra.com/v1/openai/models", Redacted.make(env.DEEPINFRA_API_KEY))
-    if (provider.id === "fireworks")
-      return yield* validateBearer("https://api.fireworks.ai/inference/v1/models", Redacted.make(env.FIREWORKS_API_KEY))
-    return "no lightweight validator"
+const validateBedrock = (env: Env) =>
+  Effect.gen(function* () {
+    const request = yield* Effect.promise(() =>
+      new AwsV4Signer({
+        url: `https://bedrock.${env.BEDROCK_RECORDING_REGION || "us-east-1"}.amazonaws.com/foundation-models`,
+        method: "GET",
+        service: "bedrock",
+        region: env.BEDROCK_RECORDING_REGION || "us-east-1",
+        accessKeyId: env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+        sessionToken: env.AWS_SESSION_TOKEN || undefined,
+      }).sign(),
+    )
+    return yield* HttpClientRequest.get(request.url.toString()).pipe(
+      HttpClientRequest.setHeaders(Object.fromEntries(request.headers.entries())),
+      executeRequest,
+    )
   })
-  return yield* check.pipe(
+
+const validateProvider = Effect.fn("RecordingEnv.validateProvider")(function* (provider: Provider, env: Env) {
+  return yield* (provider.validate?.(env) ?? Effect.succeed("no lightweight validator")).pipe(
     Effect.catch((error) => {
       if (error instanceof Error) return Effect.succeed(error.message)
       return Effect.succeed(String(error))
@@ -411,6 +438,54 @@ const writeEnvFile = Effect.fn("RecordingEnv.writeFile")(function* (contents: st
 
 const prompt = <A>(run: () => Promise<A | symbol>) => Effect.promise(run).pipe(Effect.map(exitIfCancel))
 
+const chooseConfigurableProviders = Effect.fn("RecordingEnv.chooseConfigurableProviders")(function* (
+  providers: ReadonlyArray<Provider>,
+  fileEnv: Env,
+) {
+  const configurable = providers.filter((provider) => requiredVars(provider).length > 0)
+  const selected = yield* prompt<ReadonlyArray<string>>(() =>
+    prompts.multiselect({
+      message: "Select provider credentials to add or override",
+      options: configurable.map((provider) => ({
+        value: provider.id,
+        label: provider.label,
+        hint: `${providerRequiredStatus(provider, fileEnv)} - ${requiredVars(provider)
+          .map((item) => item.name)
+          .join(", ")}`,
+      })),
+      initialValues: configurable
+        .filter((provider) => providerRequiredStatus(provider, fileEnv) === "missing")
+        .map((provider) => provider.id),
+    }),
+  )
+  return configurable.filter((provider) => selected.includes(provider.id))
+})
+
+const promptEnvVar = (item: Provider["vars"][number]) =>
+  prompt<string>(() => {
+    const input = {
+      message: item.label ?? item.name,
+      validate: (input: string | undefined) =>
+        !input || input.length === 0 ? "Leave blank by pressing Esc/cancel, or paste a value" : undefined,
+    }
+    return item.secret === false ? prompts.text(input) : prompts.password(input)
+  })
+
+const promptProviderValues = Effect.fn("RecordingEnv.promptProviderValues")(function* (
+  providers: ReadonlyArray<Provider>,
+) {
+  const values: Env = {}
+  for (const provider of providers) {
+    prompts.log.info(`${provider.label}: ${provider.note}`)
+    for (const item of requiredVars(provider)) {
+      if (values[item.name]) continue
+      const value = yield* promptEnvVar(item)
+      if (value !== "") values[item.name] = value
+    }
+  }
+  return values
+})
+
 const main = Effect.fn("RecordingEnv.main")(function* () {
   prompts.intro("LLM recording credentials")
   const contents = yield* readEnvFile()
@@ -426,40 +501,8 @@ const main = Effect.fn("RecordingEnv.main")(function* () {
     return
   }
 
-  const values: Env = {}
-  const configurableProviders = providers.filter((provider) => provider.vars.some((item) => !item.optional))
-
-  const selected = yield* prompt<ReadonlyArray<string>>(() =>
-    prompts.multiselect({
-      message: "Select provider credentials to add or override",
-      options: configurableProviders.map((provider) => ({
-        value: provider.id,
-        label: provider.label,
-        hint: `${providerRequiredStatus(provider, fileEnv)} - ${provider.vars
-          .filter((item) => !item.optional)
-          .map((item) => item.name)
-          .join(", ")}`,
-      })),
-      initialValues: configurableProviders
-        .filter((provider) => providerRequiredStatus(provider, fileEnv) === "missing")
-        .map((provider) => provider.id),
-    }),
-  )
-
-  const selectedProviders = configurableProviders.filter((provider) => selected.includes(provider.id))
-  for (const provider of selectedProviders) {
-    prompts.log.info(`${provider.label}: ${provider.note}`)
-    for (const item of provider.vars.filter((item) => !item.optional)) {
-      const value = yield* prompt<string>(() =>
-        prompts.password({
-          message: item.label ?? item.name,
-          validate: (input) =>
-            !input || input.length === 0 ? "Leave blank by pressing Esc/cancel, or paste a value" : undefined,
-        }),
-      )
-      if (value !== "") values[item.name] = value
-    }
-  }
+  const selectedProviders = yield* chooseConfigurableProviders(providers, fileEnv)
+  const values = yield* promptProviderValues(selectedProviders)
 
   if (Object.keys(values).length === 0) {
     prompts.outro("No changes")
