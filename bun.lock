@@ -302,6 +302,7 @@
       "devDependencies": {
         "@cloudflare/workers-types": "catalog:",
         "@tailwindcss/vite": "catalog:",
+        "@types/bun": "catalog:",
         "@types/luxon": "catalog:",
         "@typescript/native-preview": "catalog:",
         "tailwindcss": "catalog:",
