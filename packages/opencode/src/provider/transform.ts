@@ -502,8 +502,10 @@ const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 const OPENAI_GPT5_1_EFFORTS = ["none", ...WIDELY_SUPPORTED_EFFORTS]
 const OPENAI_GPT5_2_PLUS_EFFORTS = [...OPENAI_GPT5_1_EFFORTS, "xhigh"]
+const OPENAI_GPT5_PRO_EFFORTS = ["high"]
 const OPENAI_GPT5_PRO_2_PLUS_EFFORTS = ["medium", "high", "xhigh"]
-const OPENAI_GPT5_CODEX_2_PLUS_EFFORTS = [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+const OPENAI_GPT5_CODEX_XHIGH_EFFORTS = [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+const OPENAI_GPT5_CODEX_3_PLUS_EFFORTS = ["none", ...OPENAI_GPT5_CODEX_XHIGH_EFFORTS]
 
 // OpenAI rolled out the `none` reasoning_effort tier on this date (Responses API).
 // Models released before it 400 on `reasoning_effort: "none"`, so we only expose
@@ -518,6 +520,7 @@ const OPENAI_XHIGH_EFFORT_RELEASE_DATE = "2025-12-04"
 // Anchored to start-of-string or "/" so it doesn't false-match "gpt-50" or "gpt-5o".
 const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
 const GPT5_VERSION_RE = /(?:^|\/)gpt-5[.-](\d+)(?:[.-]|$)/
+const GPT5_PRO_RE = /(?:^|\/)gpt-5[.-]?pro(?:[.-]|$)/
 const GPT5_VERSIONED_PRO_RE = /(?:^|\/)gpt-5[.-]\d+[.-]pro(?:[.-]|$)/
 
 function gpt5Version(apiId: string) {
@@ -532,17 +535,22 @@ function versionedGpt5ReasoningEfforts(apiId: string) {
   return OPENAI_GPT5_2_PLUS_EFFORTS
 }
 
+function gpt5CodexReasoningEfforts(apiId: string) {
+  if (!GPT5_FAMILY_RE.test(apiId) || !apiId.includes("codex")) return undefined
+  const version = gpt5Version(apiId)
+  if (version !== undefined && version >= 3) return OPENAI_GPT5_CODEX_3_PLUS_EFFORTS
+  if (apiId.includes("codex-max") || (version !== undefined && version >= 2)) return OPENAI_GPT5_CODEX_XHIGH_EFFORTS
+  return WIDELY_SUPPORTED_EFFORTS
+}
+
 // Computes the reasoning_effort tiers an OpenAI (or OpenAI-compatible upstream
-// routed through it, e.g. cf-ai-gateway) model exposes. Returns null for models
-// with no tunable effort knob (gpt-5-pro). Effort order: weakest to strongest.
-function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | null {
+// routed through it, e.g. cf-ai-gateway) model exposes. Effort order: weakest
+// to strongest.
+function openaiReasoningEfforts(apiId: string, releaseDate: string) {
   const id = apiId.toLowerCase()
-  if (id === "gpt-5-pro" || id === "openai/gpt-5-pro") return null
-  const version = gpt5Version(id)
-  if (id.includes("codex")) {
-    if (version !== undefined && version >= 2) return OPENAI_GPT5_CODEX_2_PLUS_EFFORTS
-    return WIDELY_SUPPORTED_EFFORTS
-  }
+  if (GPT5_PRO_RE.test(id)) return OPENAI_GPT5_PRO_EFFORTS
+  const codexEfforts = gpt5CodexReasoningEfforts(id)
+  if (codexEfforts) return codexEfforts
   const versionedEfforts = versionedGpt5ReasoningEfforts(id)
   // GPT-5.1 replaced GPT-5's `minimal` effort with `none`; GPT-5.2+
   // additionally accepts `xhigh`. Model pages list the supported subset.
@@ -555,7 +563,9 @@ function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | 
 }
 
 function openaiCompatibleReasoningEfforts(id: string) {
-  return versionedGpt5ReasoningEfforts(id.toLowerCase()) ?? OPENAI_EFFORTS
+  const apiId = id.toLowerCase()
+  if (GPT5_PRO_RE.test(apiId)) return OPENAI_GPT5_PRO_EFFORTS
+  return gpt5CodexReasoningEfforts(apiId) ?? versionedGpt5ReasoningEfforts(apiId) ?? OPENAI_EFFORTS
 }
 
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
@@ -621,7 +631,6 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // models that support it.
       if (model.api.id.startsWith("openai/")) {
         const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
-        if (!efforts) return {}
         return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
       }
       return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
@@ -750,7 +759,6 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@ai-sdk/openai": {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
       const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
-      if (!efforts) return {}
       return Object.fromEntries(
         efforts.map((effort) => [
           effort,

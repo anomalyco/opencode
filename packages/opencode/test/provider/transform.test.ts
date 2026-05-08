@@ -2466,7 +2466,11 @@ describe("ProviderTransform.variants", () => {
 
     for (const testCase of [
       { id: "openai/gpt-5.4", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { id: "openai/gpt-5-pro", efforts: ["high"] },
       { id: "openai/gpt-5.5-pro", efforts: ["medium", "high", "xhigh"] },
+      { id: "openai/gpt-5.2-codex", efforts: ["low", "medium", "high", "xhigh"] },
+      { id: "openai/gpt-5.3-codex", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { id: "openai/gpt-5.3-codex-max", efforts: ["none", "low", "medium", "high", "xhigh"] },
     ]) {
       test(`${testCase.id} returns supported OpenAI reasoning efforts`, () => {
         const result = ProviderTransform.variants(
@@ -2674,7 +2678,11 @@ describe("ProviderTransform.variants", () => {
 
     for (const testCase of [
       { id: "openai/gpt-5-5", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { id: "openai/gpt-5-pro", efforts: ["high"] },
       { id: "openai/gpt-5-5-pro", efforts: ["medium", "high", "xhigh"] },
+      { id: "openai/gpt-5-2-codex", efforts: ["low", "medium", "high", "xhigh"] },
+      { id: "openai/gpt-5-3-codex", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { id: "openai/gpt-5-3-codex-max", efforts: ["none", "low", "medium", "high", "xhigh"] },
     ]) {
       test(`${testCase.id} returns supported OpenAI reasoning efforts`, () => {
         const result = ProviderTransform.variants(
@@ -2989,7 +2997,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/openai", () => {
-    test("gpt-5-pro returns empty object", () => {
+    test("gpt-5-pro returns only high effort", () => {
       const model = createMockModel({
         id: "gpt-5-pro",
         providerID: "openai",
@@ -3000,7 +3008,7 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(result).toEqual({})
+      expect(Object.keys(result)).toEqual(["high"])
     })
 
     test("standard openai models return custom efforts with reasoningSummary", () => {
@@ -3058,6 +3066,13 @@ describe("ProviderTransform.variants", () => {
       { id: "gpt-5.4", releaseDate: "2026-03-05", efforts: ["none", "low", "medium", "high", "xhigh"] },
       { id: "gpt-5.5", modelID: "gpt-5-5", releaseDate: "2026-04-23", efforts: ["none", "low", "medium", "high", "xhigh"] },
       { id: "gpt-5.4-pro", releaseDate: "2026-03-05", efforts: ["medium", "high", "xhigh"] },
+      { id: "gpt-5.5-pro", releaseDate: "2026-04-23", efforts: ["medium", "high", "xhigh"] },
+      { id: "gpt-5-codex", releaseDate: "2025-09-23", efforts: ["low", "medium", "high"] },
+      { id: "gpt-5.1-codex", releaseDate: "2025-11-13", efforts: ["low", "medium", "high"] },
+      { id: "gpt-5.1-codex-max", releaseDate: "2025-11-13", efforts: ["low", "medium", "high", "xhigh"] },
+      { id: "gpt-5.2-codex", releaseDate: "2025-12-11", efforts: ["low", "medium", "high", "xhigh"] },
+      { id: "gpt-5.3-codex", releaseDate: "2026-01-22", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { id: "gpt-5.3-codex-max", releaseDate: "2026-01-22", efforts: ["none", "low", "medium", "high", "xhigh"] },
     ]) {
       test(`${testCase.id} returns supported reasoning efforts`, () => {
         const result = ProviderTransform.variants(
@@ -3554,6 +3569,8 @@ describe("ProviderTransform.variants", () => {
     for (const testCase of [
       { id: "openai/gpt-5.4", efforts: ["none", "low", "medium", "high", "xhigh"] },
       { id: "openai/gpt-5.2-codex", efforts: ["low", "medium", "high", "xhigh"] },
+      { id: "openai/gpt-5.3-codex", efforts: ["none", "low", "medium", "high", "xhigh"] },
+      { id: "openai/gpt-5-pro", efforts: ["high"] },
       { id: "openai/gpt-5.2-pro", efforts: ["medium", "high", "xhigh"] },
     ]) {
       test(`${testCase.id} returns supported reasoning efforts`, () => {
