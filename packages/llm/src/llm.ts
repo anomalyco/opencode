@@ -1,3 +1,4 @@
+import { Effect, JsonSchema, Schema, Stream } from "effect"
 import {
   LLMClient,
   modelCapabilities,
@@ -9,6 +10,9 @@ import {
 import {
   GenerationOptions,
   HttpOptions,
+  InvalidProviderOutputReason,
+  LLMError,
+  LLMEvent,
   LLMRequest,
   Message,
   SystemPart,
@@ -18,6 +22,7 @@ import {
   ToolCallPart,
   ToolResultPart,
 } from "./schema"
+import { make as makeTool, type ToolSchema } from "./tool"
 
 export type CapabilitiesInput = ModelCapabilitiesInput
 
@@ -111,3 +116,98 @@ export const request = (input: RequestInput) => {
 
 export const updateRequest = (input: LLMRequest, patch: Partial<RequestInput>) =>
   request({ ...requestInput(input), ...patch })
+
+const GENERATE_OBJECT_TOOL_NAME = "generate_object"
+
+const GENERATE_OBJECT_TOOL_DESCRIPTION = "Return the structured result by calling this tool."
+
+type GenerateObjectBase = Omit<RequestInput, "tools" | "toolChoice" | "responseFormat">
+
+export interface GenerateObjectOptions<S extends ToolSchema<any>> extends GenerateObjectBase {
+  readonly schema: S
+}
+
+export interface GenerateObjectDynamicOptions extends GenerateObjectBase {
+  /** Raw JSON Schema object describing the expected output shape. */
+  readonly inputSchema: JsonSchema.JsonSchema
+}
+
+const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
+  options: GenerateObjectBase,
+  tool: ReturnType<typeof makeTool>,
+) {
+  const baseRequest = request(options)
+  const generateRequest = LLMRequest.update(baseRequest, {
+    toolChoice: ToolChoice.named(GENERATE_OBJECT_TOOL_NAME),
+  })
+  const events = yield* LLMClient.stream({
+    request: generateRequest,
+    tools: { [GENERATE_OBJECT_TOOL_NAME]: tool },
+    toolExecution: "none",
+  }).pipe(Stream.runCollect)
+  const call = Array.from(events).find(
+    (event) => LLMEvent.is.toolCall(event) && event.name === GENERATE_OBJECT_TOOL_NAME,
+  )
+  if (!call || !LLMEvent.is.toolCall(call))
+    return yield* new LLMError({
+      module: "LLM",
+      method: "generateObject",
+      reason: new InvalidProviderOutputReason({
+        message: `generateObject: model did not call the forced \`${GENERATE_OBJECT_TOOL_NAME}\` tool`,
+      }),
+    })
+  return yield* tool._decode(call.input).pipe(
+    Effect.mapError(
+      (error) =>
+        new LLMError({
+          module: "LLM",
+          method: "generateObject",
+          reason: new InvalidProviderOutputReason({
+            message: `generateObject: tool input failed schema decode: ${error.message}`,
+          }),
+        }),
+    ),
+  )
+})
+
+/**
+ * Run a model and decode its output against `schema`. Works on every protocol
+ * because it forces a synthetic tool call internally — provider-native JSON
+ * modes are intentionally avoided so behaviour is uniform.
+ *
+ * Two input modes:
+ *
+ * 1. `schema: EffectSchema<T>` — output is decoded and typed as `T`. Decode
+ *    failures surface as `LLMError`.
+ * 2. `inputSchema: JSONSchema` — output is `unknown`. Use when the schema is
+ *    only available at runtime (MCP, plugin manifests). Caller validates.
+ */
+export function generateObject<S extends ToolSchema<any>>(
+  options: GenerateObjectOptions<S>,
+): Effect.Effect<Schema.Schema.Type<S>, LLMError>
+export function generateObject(options: GenerateObjectDynamicOptions): Effect.Effect<unknown, LLMError>
+export function generateObject(
+  options: GenerateObjectOptions<ToolSchema<any>> | GenerateObjectDynamicOptions,
+) {
+  if ("schema" in options) {
+    const { schema, ...rest } = options
+    return runGenerateObject(
+      rest,
+      makeTool({
+        description: GENERATE_OBJECT_TOOL_DESCRIPTION,
+        parameters: schema,
+        success: Schema.Unknown as ToolSchema<unknown>,
+        execute: () => Effect.void,
+      }),
+    )
+  }
+  const { inputSchema, ...rest } = options
+  return runGenerateObject(
+    rest,
+    makeTool({
+      description: GENERATE_OBJECT_TOOL_DESCRIPTION,
+      inputSchema,
+      execute: () => Effect.void,
+    }),
+  )
+}

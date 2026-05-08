@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, JsonSchema, Schema } from "effect"
 import type { ToolDefinition as ToolDefinitionClass } from "./schema"
 import { ToolDefinition, ToolFailure } from "./schema"
 
@@ -51,19 +51,49 @@ export type AnyExecutableTool = ExecutableTool<ToolSchema<any>, ToolSchema<any>>
 
 export type ExecutableTools = Record<string, AnyExecutableTool>
 
+type TypedToolConfig = {
+  readonly description: string
+  readonly parameters: ToolSchema<any>
+  readonly success: ToolSchema<any>
+  readonly execute?: ToolExecute<ToolSchema<any>, ToolSchema<any>>
+}
+
+type DynamicToolConfig = {
+  readonly description: string
+  readonly inputSchema: JsonSchema.JsonSchema
+  readonly execute?: (params: unknown) => Effect.Effect<unknown, ToolFailure>
+}
+
 /**
- * Constructs a typed tool. The Schema codecs and JSON-schema-shaped
- * `ToolDefinition` are derived once at this call site so the runtime can
- * reuse them across every invocation without recomputing.
+ * Constructs a tool. Two input modes:
  *
- * ```ts
- * const getWeather = Tool.make({
- *   description: "Get current weather",
- *   parameters: Schema.Struct({ city: Schema.String }),
- *   success: Schema.Struct({ temperature: Schema.Number }),
- *   execute: ({ city }) => Effect.succeed({ temperature: 22 }),
- * })
- * ```
+ * 1. **Typed** — pass Effect `parameters` and `success` Schemas; inputs and
+ *    outputs are statically typed and decoded/encoded automatically.
+ *
+ *    ```ts
+ *    Tool.make({
+ *      description: "Get current weather",
+ *      parameters: Schema.Struct({ city: Schema.String }),
+ *      success: Schema.Struct({ temperature: Schema.Number }),
+ *      execute: ({ city }) => Effect.succeed({ temperature: 22 }),
+ *    })
+ *    ```
+ *
+ * 2. **Dynamic** — pass raw JSON Schema as `inputSchema`. Use this when the
+ *    schema comes from an external source (MCP server, plugin manifest,
+ *    dynamic config) and is not known at compile time. Inputs are typed as
+ *    `unknown`; the handler is responsible for any validation it needs.
+ *
+ *    ```ts
+ *    Tool.make({
+ *      description: "Look something up",
+ *      inputSchema: { type: "object", properties: { ... } },
+ *      execute: (params) => Effect.succeed(...),
+ *    })
+ *    ```
+ *
+ * In both modes the produced tool flows through `toDefinitions(...)` and the
+ * runtime identically.
  */
 export function make<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
   readonly description: string
@@ -77,12 +107,32 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
   readonly success: Success
   readonly execute?: undefined
 }): Tool<Parameters, Success>
-export function make<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(config: {
+export function make(config: {
   readonly description: string
-  readonly parameters: Parameters
-  readonly success: Success
-  readonly execute?: ToolExecute<Parameters, Success>
-}): Tool<Parameters, Success> {
+  readonly inputSchema: JsonSchema.JsonSchema
+  readonly execute: (params: unknown) => Effect.Effect<unknown, ToolFailure>
+}): AnyExecutableTool
+export function make(config: {
+  readonly description: string
+  readonly inputSchema: JsonSchema.JsonSchema
+  readonly execute?: undefined
+}): AnyTool
+export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
+  if ("inputSchema" in config) {
+    return {
+      description: config.description,
+      parameters: Schema.Unknown as ToolSchema<unknown>,
+      success: Schema.Unknown as ToolSchema<unknown>,
+      execute: config.execute,
+      _decode: Effect.succeed,
+      _encode: Effect.succeed,
+      _definition: new ToolDefinition({
+        name: "",
+        description: config.description,
+        inputSchema: config.inputSchema,
+      }),
+    }
+  }
   return {
     description: config.description,
     parameters: config.parameters,
@@ -124,10 +174,10 @@ export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> 
       }),
   )
 
-const toJsonSchema = (schema: Schema.Top): Record<string, unknown> => {
+const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
   const document = Schema.toJsonSchemaDocument(schema)
-  if (Object.keys(document.definitions).length === 0) return document.schema as Record<string, unknown>
-  return { ...document.schema, $defs: document.definitions } as Record<string, unknown>
+  if (Object.keys(document.definitions).length === 0) return document.schema
+  return { ...document.schema, $defs: document.definitions }
 }
 
 export { ToolFailure }
