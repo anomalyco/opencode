@@ -864,7 +864,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled,
-      bindings: tuiConfig.keybinds.get("prompt.paste") ?? [],
+      bindings: tuiConfig.keybinds.get("prompt.paste"),
     }
   })
 
@@ -872,7 +872,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
-      bindings: tuiConfig.keybinds.get("prompt.clear") ?? [],
+      bindings: tuiConfig.keybinds.get("prompt.clear"),
     }
   })
 
@@ -956,7 +956,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: tuiConfig.keybinds.get("prompt.history.previous") ?? [],
+      bindings: tuiConfig.keybinds.get("prompt.history.previous"),
     }
   })
 
@@ -994,7 +994,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: tuiConfig.keybinds.get("prompt.history.next") ?? [],
+      bindings: tuiConfig.keybinds.get("prompt.history.next"),
     }
   })
 

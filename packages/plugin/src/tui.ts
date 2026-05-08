@@ -288,7 +288,8 @@ export type TuiState = {
 
 type TuiBindingLookupView = {
   readonly bindings: ReadonlyArray<Binding<Renderable, KeyEvent>>
-  get: (command: string) => ReadonlyArray<Binding<Renderable, KeyEvent>> | undefined
+  get: (command: string) => ReadonlyArray<Binding<Renderable, KeyEvent>>
+  has: (command: string) => boolean
   gather: (name: string, commands: readonly string[]) => ReadonlyArray<Binding<Renderable, KeyEvent>>
   pick: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
   omit: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]

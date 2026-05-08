@@ -314,7 +314,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           "dialog.select.end",
           "dialog.select.submit",
         ]),
-        ...enabledActions.flatMap((item) => tuiConfig.keybinds.get(item.command) ?? []),
+        ...enabledActions.flatMap((item) => tuiConfig.keybinds.get(item.command)),
         ...(props.bindings ?? []).filter((binding) => {
           if (typeof binding.cmd !== "string") return true
           return enabledActions.some((item) => item.command === binding.cmd)

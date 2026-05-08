@@ -472,14 +472,14 @@ test("keybinds accept OpenTUI binding specs", async () => {
     cmd: "prompt.editor",
     group: "Explicit",
   })
-  expect(config.keybinds.get("prompt.autocomplete.next")).toBeUndefined()
+  expect(config.keybinds.get("prompt.autocomplete.next")).toEqual([])
   expect(config.keybinds.get("plugins.list")?.[0]?.key).toBe("ctrl+shift+p")
 })
 
 wintest("defaults Ctrl+Z to input undo on Windows", async () => {
   await using tmp = await tmpdir()
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+  expect(config.keybinds.get("terminal.suspend")).toEqual([])
   expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
 })
 
@@ -490,7 +490,7 @@ wintest("keeps explicit input undo overrides on Windows", async () => {
     },
   })
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+  expect(config.keybinds.get("terminal.suspend")).toEqual([])
   expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+y")
 })
 
@@ -502,7 +502,7 @@ wintest("ignores terminal suspend bindings on Windows", async () => {
   })
 
   const config = await getTuiConfig(tmp.path)
-  expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+  expect(config.keybinds.get("terminal.suspend")).toEqual([])
   expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
 })
 
@@ -511,7 +511,7 @@ test("applies Windows keybind defaults", async () => {
     await using tmp = await tmpdir()
 
     const config = await getTuiConfig(tmp.path)
-    expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+    expect(config.keybinds.get("terminal.suspend")).toEqual([])
     expect(config.keybinds.get("input.undo")?.[0]?.key).toBe("ctrl+z,ctrl+-,super+z")
   })
 })
@@ -532,7 +532,7 @@ test("ignores explicit keybind terminal suspend binding on Windows", async () =>
     })
 
     const config = await getTuiConfig(tmp.path)
-    expect(config.keybinds.get("terminal.suspend")).toBeUndefined()
+    expect(config.keybinds.get("terminal.suspend")).toEqual([])
   })
 })
 

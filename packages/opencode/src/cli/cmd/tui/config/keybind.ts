@@ -365,7 +365,8 @@ export type Keybinds = z.output<typeof Keybinds>
 export type KeybindOverrides = z.output<typeof KeybindOverrides>
 export type BindingLookupView = {
   readonly bindings: readonly Binding<Renderable, KeyEvent>[]
-  get(command: string): readonly Binding<Renderable, KeyEvent>[] | undefined
+  get(command: string): readonly Binding<Renderable, KeyEvent>[]
+  has(command: string): boolean
   gather(name: string, commands: readonly string[]): readonly Binding<Renderable, KeyEvent>[]
   pick(name: string, commands: readonly string[]): Binding<Renderable, KeyEvent>[]
   omit(name: string, commands: readonly string[]): Binding<Renderable, KeyEvent>[]

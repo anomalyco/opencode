@@ -102,7 +102,7 @@ export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRende
   const offCommaBindings = addons.registerCommaBindings(keymap)
   const offBaseLayout = addons.registerBaseLayoutFallback(keymap)
   const offLeader = addons.registerTimedLeader(keymap, {
-    trigger: config.keybinds.get(LEADER_TOKEN) ?? TuiKeybind.LeaderDefault,
+    trigger: config.keybinds.get(LEADER_TOKEN),
     name: LEADER_TOKEN,
     timeoutMs: config.leader_timeout,
   })

@@ -94,14 +94,14 @@ function footerKeybinds(config: Config | undefined): FooterKeybinds {
   return {
     leader: leaderKey(config),
     leaderTimeout: config.leader_timeout,
-    commandList: config.keybinds.get("command.palette.show") ?? [],
-    variantCycle: config.keybinds.get("variant.cycle") ?? [],
-    interrupt: config.keybinds.get("session.interrupt") ?? [],
-    historyPrevious: config.keybinds.get("prompt.history.previous") ?? [],
-    historyNext: config.keybinds.get("prompt.history.next") ?? [],
-    inputClear: config.keybinds.get("prompt.clear") ?? [],
-    inputSubmit: config.keybinds.get("input.submit") ?? [],
-    inputNewline: config.keybinds.get("input.newline") ?? [],
+    commandList: config.keybinds.get("command.palette.show"),
+    variantCycle: config.keybinds.get("variant.cycle"),
+    interrupt: config.keybinds.get("session.interrupt"),
+    historyPrevious: config.keybinds.get("prompt.history.previous"),
+    historyNext: config.keybinds.get("prompt.history.next"),
+    inputClear: config.keybinds.get("prompt.clear"),
+    inputSubmit: config.keybinds.get("input.submit"),
+    inputNewline: config.keybinds.get("input.newline"),
   }
 }
 
