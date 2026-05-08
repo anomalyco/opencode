@@ -33,6 +33,7 @@ const panelCommands = [
   command.end,
 ] as const
 const COLUMN_GAP = 4
+const TAB_GAP = 3
 const MIN_COLUMN_WIDTH = 28
 const MAX_COLUMN_WIDTH = 44
 const PANEL_HEIGHT_RATIO = 0.3
@@ -326,30 +327,29 @@ function WhichKeyPanel(props: {
         flexDirection="column"
       >
         <Show when={groups().length > 0}>
-          <box flexDirection="row" justifyContent="center" gap={1} paddingRight={1}>
+          <box width="100%" flexDirection="row" justifyContent="center" gap={TAB_GAP} paddingRight={1} flexShrink={0}>
             <For each={groups()}>
               {(group) => {
                 const selected = createMemo(() => currentGroup()?.label === group.label)
                 return (
-                  <text
-                    fg={selected() ? look().tabText : look().muted}
-                    wrapMode="none"
-                    truncate
+                  <box
+                    paddingLeft={1}
+                    paddingRight={1}
+                    backgroundColor={selected() ? look().tab : undefined}
                     onMouseDown={() => {
                       setActiveGroup(group.label)
                       setOffset(0)
                     }}
                   >
-                    <span
-                      style={{
-                        fg: selected() ? look().tabText : look().muted,
-                        bg: selected() ? look().tab : undefined,
-                        bold: selected(),
-                      }}
+                    <text
+                      fg={selected() ? look().tabText : look().muted}
+                      attributes={selected() ? TextAttributes.BOLD : undefined}
+                      wrapMode="none"
+                      truncate
                     >
-                      {selected() ? ` ${group.label} ` : group.label}
-                    </span>
-                  </text>
+                      {group.label}
+                    </text>
+                  </box>
                 )
               }}
             </For>
