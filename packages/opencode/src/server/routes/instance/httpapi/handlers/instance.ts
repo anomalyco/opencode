@@ -1,5 +1,6 @@
 import { Agent } from "@/agent/agent"
 import { Command } from "@/command"
+import { Config } from "@/config/config"
 import * as InstanceState from "@/effect/instance-state"
 import { Format } from "@/format"
 import { Global } from "@opencode-ai/core/global"
@@ -47,6 +48,10 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
     })
 
     const getVcsDiff = Effect.fn("InstanceHttpApi.vcsDiff")(function* (ctx: { query: { mode: Vcs.Mode } }) {
+      const cfg = yield* Config.Service
+      const config = yield* cfg.get()
+      if (config.experimental?.disable_vcs_diff) return [] satisfies Vcs.FileDiff[]
+
       return yield* vcs.diff(ctx.query.mode)
     })
 

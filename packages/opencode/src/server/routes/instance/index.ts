@@ -11,6 +11,7 @@ import { InstanceRuntime } from "@/project/instance-runtime"
 import { Vcs } from "@/project/vcs"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
+import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import { LSP } from "@/lsp/lsp"
 import { Command } from "@/command"
@@ -288,6 +289,10 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): H
       ),
       async (c) =>
         jsonRequest("InstanceRoutes.vcs.diff", c, function* () {
+          const cfg = yield* Config.Service
+          const config = yield* cfg.get()
+          if (config.experimental?.disable_vcs_diff) return [] satisfies Vcs.FileDiff[]
+
           const vcs = yield* Vcs.Service
           return yield* vcs.diff(c.req.valid("query").mode)
         }),

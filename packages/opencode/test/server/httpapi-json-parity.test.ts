@@ -95,6 +95,32 @@ afterEach(async () => {
 
 describe("HttpApi JSON parity", () => {
   it.live(
+    "returns empty VCS diff when disabled in config",
+    withTmp(
+      {
+        git: true,
+        config: {
+          experimental: {
+            disable_vcs_diff: true,
+          },
+          formatter: false,
+          lsp: false,
+        },
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => Bun.write(`${tmp.path}/changed.txt`, "hello\n"))
+
+          const headers = { "x-opencode-directory": tmp.path }
+          const path = `${InstancePaths.vcsDiff}?mode=git`
+
+          expect(yield* readJson("legacy disabled vcs diff", app(false), path, headers)).toEqual([])
+          expect(yield* readJson("httpapi disabled vcs diff", app(true), path, headers)).toEqual([])
+        }),
+    ),
+  )
+
+  it.live(
     "matches legacy JSON shape for safe GET endpoints",
     withTmp(
       {
