@@ -11,6 +11,7 @@ import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { isExtraAgentDirectory, mainDomain } from "@/pages/layout/extra-agents"
+import { workspaceKey } from "@/pages/layout/helpers"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 
@@ -414,9 +415,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const roots = createMemo(() => {
       const map = new Map<string, string>()
+      const worktrees = new Set(globalSync.data.project.map((project) => workspaceKey(project.worktree)))
       for (const project of globalSync.data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
+          const key = workspaceKey(sandbox)
+          if (worktrees.has(key)) {
+            console.debug("[layout] ignoring sandbox root alias for project worktree", {
+              sandbox,
+              root: project.worktree,
+            })
+            continue
+          }
           map.set(sandbox, project.worktree)
         }
       }

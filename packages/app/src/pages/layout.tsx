@@ -86,6 +86,7 @@ import {
   errorMessage,
   latestProjectSession,
   latestRootSession,
+  projectOwner,
   sortedProjectSessions,
   sortedRootSessions,
   waitForMatch,
@@ -121,6 +122,11 @@ import { TrellisTasksPanel } from "./layout/trellis-tasks-panel"
 const USE_NEW_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 export default function Layout(props: ParentProps) {
+  type CurrentProject = LocalProject & {
+    root: string
+    entry: string
+  }
+
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
@@ -532,13 +538,11 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    const key = workspaceKey(directory)
     const projects = layout.projects.list()
-    const project = projects.find(
-      (item) => workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
-    )
-    if (project) return { project, root: project.worktree }
+    const owner = projectOwner(directory, projects)
+    if (owner) return { project: owner.project, root: owner.root }
 
+    const key = workspaceKey(directory)
     const known = Object.entries(store.workspaceOrder).find(
       ([root, dirs]) => workspaceKey(root) === key || dirs.some((item) => workspaceKey(item) === key),
     )
@@ -552,11 +556,16 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  const activeProject = createMemo(() => resolveProject(routeDir()))
-  const currentProject = createMemo(() => activeProject()?.project)
-  const currentProjectRoot = createMemo(() => activeProject()?.root)
-  const currentProjectEntry = createMemo(() => activeProject()?.extra ?? currentProjectRoot())
-  const railCurrentProject = createMemo(() => (onConfigRoute() ? undefined : currentProjectRoot()))
+  const currentProject = createMemo(() => {
+    const active = resolveProject(routeDir())
+    if (!active?.project) return
+    return {
+      ...active.project,
+      root: active.root,
+      entry: active.extra ?? active.root,
+    } satisfies CurrentProject
+  })
+  const railCurrentProject = createMemo(() => (onConfigRoute() ? undefined : currentProject()?.root))
   const currentProjectDirs = createMemo(() => {
     const project = currentProject()
     if (!project) return [] as string[]
@@ -630,10 +639,7 @@ export default function Layout(props: ParentProps) {
     const projects = layout.projects.list()
     for (const [directory, expanded] of Object.entries(store.workspaceExpanded)) {
       if (!expanded) continue
-      const key = pathKey(directory)
-      const project = projects.find(
-        (item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
-      )
+      const project = projectOwner(directory, projects)?.project
       if (!project) continue
       if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
       setStore("workspaceExpanded", directory, false)
@@ -953,7 +959,7 @@ export default function Layout(props: ParentProps) {
     const projects = layout.projects.list()
     if (projects.length === 0) return
 
-    const current = currentProjectRoot()
+    const current = currentProject()?.root
     const fallback = routeDir() ? projectRoot(routeDir()) : undefined
     const active = current ?? fallback
     const index = active ? projects.findIndex((project) => project.worktree === active) : -1
@@ -1158,7 +1164,7 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+t",
         disabled: layout.projects.list().length === 0 && enabledExtraAgents(server.list).length === 0,
         onSelect: () => {
-          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} current={currentProjectEntry} />, undefined, {
+          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} current={() => currentProject()?.entry} />, undefined, {
             modal: false,
             preventScroll: false,
           })
@@ -1602,7 +1608,7 @@ export default function Layout(props: ParentProps) {
   }
 
   function activeProjectRoot(directory: string) {
-    return currentProject()?.worktree ?? projectRoot(directory)
+    return currentProject()?.root ?? projectRoot(directory)
   }
 
   function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
@@ -1771,9 +1777,9 @@ export default function Layout(props: ParentProps) {
 
   function closeProject(directory: string) {
     const list = layout.projects.list()
-    const key = pathKey(directory)
-    const index = list.findIndex((x) => pathKey(x.worktree) === key)
-    const active = pathKey(currentProject()?.worktree ?? "") === key
+    const key = workspaceKey(directory)
+    const index = list.findIndex((x) => workspaceKey(x.worktree) === key)
+    const active = workspaceKey(currentProject()?.root ?? "") === key
     if (index === -1) return
 
     if (!active) {
@@ -2314,7 +2320,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(
     on(
-      () => [pageReady(), routeDir(), params.id, currentProjectRoot(), switching()] as const,
+      () => [pageReady(), routeDir(), params.id, currentProject()?.root, switching()] as const,
       ([ready, dir, id, root, pending]) => {
         if (!ready || !dir || !root || !pending) return
         if (workspaceKey(root) !== workspaceKey(pending)) return
@@ -2363,7 +2369,7 @@ export default function Layout(props: ParentProps) {
   createEffect(
     on(
       () => {
-        return [pageReady(), routeSlug(), params.id, currentProject()?.worktree, routeDir()] as const
+        return [pageReady(), routeSlug(), params.id, currentProject()?.root, routeDir()] as const
       },
       ([ready, slug, id, root, dir]) => {
         if (!ready || !slug || !dir) {
@@ -2506,7 +2512,7 @@ export default function Layout(props: ParentProps) {
     const local = project.worktree
     const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
-    const directory = workspaceKey(active?.worktree ?? "") === workspaceKey(project.worktree) ? routeDir() : undefined
+    const directory = workspaceKey(active?.root ?? "") === workspaceKey(project.worktree) ? routeDir() : undefined
     const extra =
       directory && pathKey(directory) !== pathKey(local) && !dirs.some((item) => pathKey(item) === pathKey(directory))
         ? directory
@@ -3999,7 +4005,7 @@ export default function Layout(props: ParentProps) {
       renderPanel={() =>
         tasksPanelActive() ? (
           <TrellisTasksPanel
-            directory={() => sidebarProject()?.worktree ?? currentProjectRoot() ?? routeDir()}
+            directory={() => sidebarProject()?.root ?? routeDir()}
             width={panel}
             mobile={mobile}
             onBack={() => setStore("sidebarPanel", "project")}

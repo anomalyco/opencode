@@ -91,7 +91,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 export const label = (dir: string | undefined, list: Project[]) => {
   if (!dir) return undefined
-  const hit = list.find((item) => item.worktree === dir || item.sandboxes?.includes(dir))
+  const hit = list.find((item) => item.worktree === dir) ?? list.find((item) => item.sandboxes?.includes(dir))
   if (hit) return hit.name || getFilename(hit.worktree)
   return getFilename(dir)
 }

@@ -175,6 +175,38 @@ Use context when:
 - Theme settings
 - i18n translations
 
+### Convention: Project Ownership Resolution
+
+**What**: When a route directory must be mapped to a project, use the shared `projectOwner(directory, projects)` helper from `packages/app/src/pages/layout/helpers.ts`.
+
+**Why**: Project rail selection, session list loading, child-store bootstrap, and project labels must agree on the same owner. A directory can temporarily appear both as a real project `worktree` and as stale `sandboxes` metadata on another project. Exact `worktree` matches must win before any sandbox match.
+
+**Contract**:
+- Input: `directory: string | undefined`, `projects: { worktree: string; sandboxes?: string[] }[]`.
+- Output: `{ project, root, directory, sandbox } | undefined`.
+- Rule: exact normalized `worktree` match first; only fall back to `sandboxes` when no project owns the directory as its `worktree`.
+- Derived state: layout code should expose the active project as one object with `root` and `entry` fields, not as separate `currentProject()` and `currentProjectRoot()` memos.
+- Debugging: log ignored stale sandbox ownership with `console.debug` so mismatched project metadata is observable.
+
+**Good**:
+```typescript
+const owner = projectOwner(directory, layout.projects.list())
+if (!owner) return
+return { ...owner.project, root: owner.root, entry: owner.root }
+```
+
+**Bad**:
+```typescript
+return layout.projects.list().find((project) => project.worktree === directory || project.sandboxes?.includes(directory))
+const currentProject = createMemo(() => activeProject()?.project)
+const currentProjectRoot = createMemo(() => activeProject()?.root)
+```
+
+**Tests Required**:
+- Exact worktree wins when another project also lists the same path as a sandbox.
+- Sandbox ownership still works when no exact project worktree exists.
+- Project rail selection receives the resolved owner root and only compares exact project roots.
+
 ### When to Use Props
 
 Use props when:

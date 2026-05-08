@@ -20,6 +20,7 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
+import { projectOwner } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
@@ -62,7 +63,7 @@ export function SessionHeader() {
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
-    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+    return projectOwner(directory, layout.projects.list())?.project
   })
   const name = createMemo(() => {
     const current = project()

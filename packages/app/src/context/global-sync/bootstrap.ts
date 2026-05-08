@@ -17,9 +17,7 @@ import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
-import { QueryClient, queryOptions } from "@tanstack/solid-query"
-import { loadMcpQuery } from "../global-sync"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { projectOwner } from "@/pages/layout/helpers"
 
 // Minimal type for bootstrap - actual GlobalStore has more fields (rootByDomain, projectByDomain, etc.)
 // but bootstrap only needs to set these core fields
@@ -173,7 +171,7 @@ function groupBySession<T extends { id: string; sessionID: string }>(input: T[])
 }
 
 function projectID(directory: string, projects: Project[]) {
-  return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))?.id
+  return projectOwner(directory, projects)?.project.id
 }
 
 function mergeSession(setStore: SetStoreFunction<State>, session: Session) {

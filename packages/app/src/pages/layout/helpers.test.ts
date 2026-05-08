@@ -15,6 +15,7 @@ import {
   hasProjectPermissions,
   latestProjectSession,
   latestRootSession,
+  projectOwner,
   sortedProjectSessions,
   latestWorkspaceSession,
   waitForMatch,
@@ -118,13 +119,39 @@ describe("layout workspace helpers", () => {
 
   test("matches selected project against normalized workspace paths", () => {
     expect(projectSelected("/tmp/demo///", "/tmp/demo")).toBe(true)
-    expect(projectSelected("C:\\tmp\\sandbox\\\\", "C:/tmp/root", ["C:/tmp/sandbox"])).toBe(true)
     expect(projectSelected("/tmp/other", "/tmp/demo", ["/tmp/sandbox"])).toBe(false)
   })
 
   test("does not select a project from unrelated sandbox metadata", () => {
     const tile = { worktree: "/p", sandboxes: ["/q/sandbox"] } satisfies Partial<Project>
     expect(projectSelected("/c", tile.worktree!, tile.sandboxes)).toBe(false)
+  })
+
+  test("does not select a project from stale sandbox metadata after owner resolution", () => {
+    expect(projectSelected("/repo", "/old", ["/repo"])).toBe(false)
+  })
+
+  test("prefers exact project worktree over stale sandbox ownership", () => {
+    const projects = [
+      { worktree: "/old", sandboxes: ["/repo"] },
+      { worktree: "/repo", sandboxes: [] },
+    ]
+
+    const owner = projectOwner("/repo", projects)
+
+    expect(owner?.root).toBe("/repo")
+    expect(owner?.project.worktree).toBe("/repo")
+    expect(owner?.sandbox).toBe(false)
+  })
+
+  test("falls back to sandbox ownership only without a project worktree match", () => {
+    const projects = [{ worktree: "/repo", sandboxes: ["/repo-wt"] }]
+
+    const owner = projectOwner("/repo-wt", projects)
+
+    expect(owner?.root).toBe("/repo")
+    expect(owner?.directory).toBe("/repo-wt")
+    expect(owner?.sandbox).toBe(true)
   })
 
   test("preserves posix and drive roots in workspace key", () => {
