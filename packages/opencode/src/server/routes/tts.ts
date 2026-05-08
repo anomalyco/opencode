@@ -27,12 +27,12 @@ export const TtsRoutes = lazy(() =>
     validator(
       "json",
       z.object({
-        text: z.string().min(1).max(4096),
+        text: z.string().trim().min(1).max(4096),
       }),
     ),
     async (c) => {
       const body = c.req.valid("json")
-      const audio = await synth(body.text.trim())
+      const audio = await synth(body.text)
       return new Response(audio, {
         headers: {
           "Content-Type": "audio/mpeg",

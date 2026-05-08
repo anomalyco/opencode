@@ -22,6 +22,16 @@ describe("server tts route", () => {
     expect(res.status).toBe(400)
   })
 
+  test("returns 400 for whitespace text", async () => {
+    const app = Server.Legacy().app
+    const res = await app.request("/tts/edge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "   " }),
+    })
+    expect(res.status).toBe(400)
+  })
+
   test(
     "returns audio/mpeg for valid text",
     async () => {

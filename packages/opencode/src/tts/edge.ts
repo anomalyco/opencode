@@ -1,4 +1,4 @@
-import { mkdtemp, stat, unlink } from "node:fs/promises"
+import { mkdtemp, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { EdgeTTS } from "node-edge-tts"
@@ -35,11 +35,11 @@ export async function synth(text: string) {
     timeout: typeof edge?.timeout_ms === "number" ? edge.timeout_ms : defaults.timeout_ms,
   })
 
-  await tts.ttsPromise(text, file)
-  const info = await stat(file)
-  if (!info.size) throw new Error("Edge TTS produced empty audio file")
-
-  const audio = await Bun.file(file).arrayBuffer()
-  await unlink(file).catch(() => {})
-  return new Uint8Array(audio)
+  return (async () => {
+    await tts.ttsPromise(text, file)
+    const info = await stat(file)
+    if (!info.size) throw new Error("Edge TTS produced empty audio file")
+    const audio = await Bun.file(file).arrayBuffer()
+    return new Uint8Array(audio)
+  })().finally(() => rm(dir, { recursive: true, force: true }).catch(() => {}))
 }

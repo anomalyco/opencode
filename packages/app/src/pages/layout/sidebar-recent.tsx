@@ -4,6 +4,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type GlobalSession, type Session } from "@opencode-ai/sdk/v2/client"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { organizeRecentSessions } from "@/utils/recent-session"
@@ -106,7 +107,7 @@ export const RecentSidebarPanel = (props: {
     timer = setTimeout(() => setStore("search", val), 300)
   }
 
-  const slug = (_session: GlobalSession) => "recent"
+  const slug = (session: GlobalSession) => base64Encode(session.directory)
   const archiveSession = async (session: Session) => {
     await props.sessionProps.archiveSession(session)
 
