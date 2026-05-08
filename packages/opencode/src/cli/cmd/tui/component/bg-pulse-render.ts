@@ -100,7 +100,14 @@ function mixChannel(base: number, overlay: number, alpha: number) {
   return Math.round(base + (overlay - base) * clamp(alpha))
 }
 
-function writeLogoTint(buffer: Uint16Array, offset: number, base: Rgb, primary: Rgb, primaryMix: number, peakMix: number) {
+function writeLogoTint(
+  buffer: Uint16Array,
+  offset: number,
+  base: Rgb,
+  primary: Rgb,
+  primaryMix: number,
+  peakMix: number,
+) {
   const p = clamp(primaryMix)
   const q = clamp(peakMix)
   const r = mixChannel(mixChannel(base[0], primary[0], p), 255, q)
