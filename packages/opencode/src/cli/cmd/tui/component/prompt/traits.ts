@@ -8,6 +8,11 @@ export interface PromptTraitsInput {
   autocompleteVisible: boolean
 }
 
+export type PromptTraits = EditorTraits & {
+  owner: "opencode"
+  role: "prompt"
+}
+
 /**
  * Compute the textarea editor traits for the prompt.
  *
@@ -16,7 +21,7 @@ export interface PromptTraitsInput {
  * editing mode — only `disabled` should suspend the textarea, otherwise
  * users can type in shell mode but cannot delete or move the cursor.
  */
-export function computePromptTraits(input: PromptTraitsInput): EditorTraits {
+export function computePromptTraits(input: PromptTraitsInput): PromptTraits {
   const capture =
     input.mode === "normal"
       ? input.autocompleteVisible
@@ -27,5 +32,7 @@ export function computePromptTraits(input: PromptTraitsInput): EditorTraits {
     capture,
     suspend: input.disabled,
     status: input.mode === "shell" ? "SHELL" : undefined,
+    owner: "opencode",
+    role: "prompt",
   }
 }

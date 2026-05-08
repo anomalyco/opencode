@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { useBindings } from "../keymap"
 
 export function DialogSessionDeleteFailed(props: {
   session: string
@@ -40,19 +40,15 @@ export function DialogSessionDeleteFailed(props: {
     if (!props.onDone) dialog.clear()
   }
 
-  useKeyboard((evt) => {
-    if (evt.name === "return") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      void confirm()
-    }
-    if (evt.name === "left" || evt.name === "up") {
-      setStore("active", "delete")
-    }
-    if (evt.name === "right" || evt.name === "down") {
-      setStore("active", "restore")
-    }
-  })
+  useBindings(() => ({
+    bindings: [
+      { key: "return", cmd: () => void confirm() },
+      { key: "left", cmd: () => setStore("active", "delete") },
+      { key: "up", cmd: () => setStore("active", "delete") },
+      { key: "right", cmd: () => setStore("active", "restore") },
+      { key: "down", cmd: () => setStore("active", "restore") },
+    ],
+  }))
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>

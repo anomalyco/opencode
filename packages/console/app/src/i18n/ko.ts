@@ -354,8 +354,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "API 키가 누락되었습니다.",
   "zen.api.error.invalidApiKey": "유효하지 않은 API 키입니다.",
   "zen.api.error.subscriptionQuotaExceeded": "구독 할당량을 초과했습니다. {{retryIn}} 후 다시 시도해 주세요.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "구독 할당량을 초과했습니다. 무료 모델은 계속 사용할 수 있습니다.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "5시간 사용 한도에 도달했습니다. {{retryIn}} 후 초기화됩니다. 이 모델을 지금 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "주간 사용 한도에 도달했습니다. {{retryIn}} 후 초기화됩니다. 이 모델을 지금 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "월간 사용 한도에 도달했습니다. {{retryIn}} 후 초기화됩니다. 이 모델을 지금 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "결제 수단이 없습니다. 결제 수단을 추가하세요: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "잔액이 부족합니다. 결제 관리를 여기서 하세요: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":

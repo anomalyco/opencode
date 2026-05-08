@@ -1,3 +1,4 @@
+import { MainLogger } from "electron-log"
 import log from "electron-log/main.js"
 import { readFileSync, readdirSync, statSync, unlinkSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -5,11 +6,14 @@ import { dirname, join } from "node:path"
 const MAX_LOG_AGE_DAYS = 7
 const TAIL_LINES = 1000
 
+let logger: MainLogger
+export const getLogger = () => logger
+
 export function initLogging() {
   log.transports.file.maxSize = 5 * 1024 * 1024
   initConsoleTransport()
   cleanup()
-  return log
+  return (logger = log)
 }
 
 export function tail(): string {
