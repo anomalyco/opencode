@@ -13,6 +13,7 @@ import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { List } from "@opencode-ai/ui/list"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import type { MarkdownStage } from "@opencode-ai/ui/markdown"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -55,10 +56,20 @@ type MessageComment = {
 const emptyMessages: MessageType[] = []
 const idle = { type: "idle" as const }
 const estimatedTurnHeight = 680
+const gap = 48
 const windowOverscan = 1600
 const windowThreshold = 24
-const SCROLL_WARN_MS = 16
 const MEASURE_WARN_MS = 24
+const HEIGHT_SHIFT_WARN = 120
+const SPACER_SHIFT_WARN = 400
+const IDLE_QUEUE_MS = 300
+const scrollDebugKey = "opencode.session.scroll.debug"
+
+function probe(id?: string) {
+  if (typeof window === "undefined") return false
+  const flag = window.localStorage.getItem(scrollDebugKey)
+  return flag === "1" || (!!id && flag === id)
+}
 
 type MathMode = "turn" | "markdown"
 
@@ -83,6 +94,11 @@ function snap(node: HTMLDivElement) {
     max: Math.round(max),
     gap: Math.round(max - node.scrollTop),
   }
+}
+
+function inset(node: HTMLElement) {
+  const raw = getComputedStyle(node).getPropertyValue("--session-title-inset").trim()
+  return Number.parseFloat(raw) || 0
 }
 
 const turnMessages = (messages: MessageType[], id: string) => {
@@ -215,6 +231,7 @@ export function MessageTimeline(props: {
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
   currentMessageId?: string
+  seekingMessageId?: string
   onJumpToMessage: (message: UserMessage) => void
   anchor: (id: string) => string
 }) {
@@ -237,30 +254,167 @@ export function MessageTimeline(props: {
   let windowFrame: number | undefined
   let bottomFrame: number | undefined
   let mutationFrame: number | undefined
+  let pinFrame: number | undefined
+  let pinSource = "unknown"
+  let blank: number | undefined
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
   let windowAdjustVersion = 0
   const turnHeights = new Map<string, number>()
-
-  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
-  const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
-  const averageTurnHeight = () => {
-    if (turnHeights.size === 0) return estimatedTurnHeight
-    let total = 0
-    for (const value of turnHeights.values()) total += value
-    return Math.max(estimatedTurnHeight / 2, total / turnHeights.size)
-  }
-  const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? averageTurnHeight()
-  const totalHeight = createMemo(() => rendered().reduce((sum, id) => sum + estimateTurnHeight(id), 0))
-  const [windowed, setWindowed] = createStore({
-    start: 0,
-    end: Infinity,
-    top: 0,
-    bottom: 0,
-  })
+  const [revision, setRevision] = createSignal(0)
+  const [stageMark, setStageMark] = createSignal(0)
+  const stageByTurn = new Map<string, Map<string, MarkdownStage>>()
+  const upgraded = new Set<string>()
+  let skipped = 0
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return emptyMessages
     return sync.data.message[id] ?? emptyMessages
+  })
+
+  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
+  const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
+  const estimates = createMemo(() => {
+    const ids = new Set(rendered())
+    const map = new Map<string, number>()
+    let id: string | undefined
+    let text = 0
+    let code = 0
+    let math = 0
+    let part = 0
+    let tool = 0
+
+    const save = () => {
+      if (!id || !ids.has(id)) return
+      const next = Math.max(280, Math.min(1800, 220 + text / 6 + code * 160 + math * 120 + part * 18 + tool * 90))
+      map.set(id, next)
+    }
+
+    for (const msg of sessionMessages()) {
+      if (msg.role === "user") {
+        save()
+        id = msg.id
+        text = 0
+        code = 0
+        math = 0
+        part = 0
+        tool = 0
+      }
+      if (!id) continue
+
+      const parts = sync.data.part[msg.id] ?? []
+      part += parts.length
+      tool += parts.filter((item) => item.type !== "text").length
+      const body = parts
+        .filter((item): item is TextPart => item.type === "text" && !(item as TextPart).synthetic)
+        .map((item) => item.text)
+        .join("\n")
+      text += body.length
+      code += body.match(/```/g)?.length ?? 0
+      math += (body.match(/\$\$|\\\[|\\\(/g)?.length ?? 0) + (body.match(/(?:^|\s)\$[^$\n]+\$/g)?.length ?? 0)
+    }
+    save()
+
+    return map
+  })
+
+  const follow = (root: HTMLDivElement, src: string) => {
+    if (props.hasScrollGesture()) {
+      const now = Date.now()
+      if (now - skipped > 300) {
+        debug("follow:held", { source: src })
+        console.debug("[timeline] follow held", { src })
+        skipped = now
+      }
+      return
+    }
+
+    const max = Math.max(0, root.scrollHeight - root.clientHeight)
+    const dist = max - root.scrollTop
+    root.scrollTop = root.scrollHeight
+    debug("follow:write", { source: src, dist: Math.round(dist) })
+    props.onScheduleScrollState(root)
+  }
+  const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? estimates()?.get(id) ?? estimatedTurnHeight
+  const slot = (id: string, index: number, size: number) => estimateTurnHeight(id) + (index < size - 1 ? gap : 0)
+  const offset = (ids: string[], end: number) => {
+    let sum = 0
+    for (let i = 0; i < end; i++) sum += slot(ids[i]!, i, ids.length)
+    return sum
+  }
+  const totalHeight = createMemo(() => {
+    revision()
+    return offset(rendered(), rendered().length)
+  })
+  const visible = (node: HTMLElement) => {
+    const root = viewport
+    if (!root) return true
+    const box = root.getBoundingClientRect()
+    const rect = node.getBoundingClientRect()
+    return rect.bottom > box.top && rect.top < box.bottom
+  }
+  const debug = (src: string, extra?: Record<string, unknown>) => {
+    if (!probe(sessionID())) return
+    const root = viewport
+    const data = root ? snap(root) : undefined
+    const body = contentRef
+    const list = body?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
+    const first = root?.querySelector<HTMLElement>("[data-message-id]")
+    const last = root ? [...root.querySelectorAll<HTMLElement>("[data-message-id]")].at(-1) : undefined
+    const box = root?.getBoundingClientRect()
+    const a = first?.getBoundingClientRect()
+    const b = last?.getBoundingClientRect()
+    console.debug("[timeline-scroll]", {
+      src,
+      id: sessionID(),
+      live: props.live,
+      bottom: props.scroll.bottom,
+      overflow: props.scroll.overflow,
+      gesture: props.hasScrollGesture(),
+      seeking: props.seekingMessageId || "none",
+      current: props.currentMessageId || "none",
+      active: activeMessageID() || "none",
+      top: data?.top ?? "none",
+      max: data?.max ?? "none",
+      gap: data?.gap ?? "none",
+      height: data?.height ?? "none",
+      client: data?.client ?? "none",
+      body: body ? Math.round(body.getBoundingClientRect().height) : "none",
+      list: list ? Math.round(list.getBoundingClientRect().height) : "none",
+      margin: list ? getComputedStyle(list).marginTop : "none",
+      first: first?.dataset.messageId || "none",
+      firstTop: a && box ? Math.round(a.top - box.top) : "none",
+      last: last?.dataset.messageId || "none",
+      lastBottom: b && box ? Math.round(b.bottom - box.top) : "none",
+      window: `[${windowed.start},${windowed.end}]`,
+      spacerTop: Math.round(windowed.top),
+      spacerBottom: Math.round(windowed.bottom),
+      total: Math.round(totalHeight()),
+      measured: turnHeights.size,
+      visible: visibleRendered().length,
+      ...extra,
+    })
+  }
+  const trace = (stage: string, id?: string, extra = "") => {
+    const root = viewport
+    const data = root ? snap(root) : undefined
+    const key = id && typeof CSS !== "undefined" ? CSS.escape(id) : id
+    const node = key ? root?.querySelector<HTMLElement>(`[data-message-id="${key}"]`) : undefined
+    const box = root?.getBoundingClientRect()
+    const rect = node?.getBoundingClientRect()
+    const top = rect && box ? Math.round(rect.top - box.top) : "none"
+    const bottom = rect && box ? Math.round(rect.bottom - box.top) : "none"
+    const height = rect ? Math.round(rect.height) : "none"
+    const index = id ? (renderedIndex().get(id) ?? "none") : "none"
+    console.debug(
+      `[jump] stage=${stage} id=${id || "none"} index=${index} current=${props.currentMessageId || "none"} seeking=${props.seekingMessageId || "none"} scrollTop=${data?.top ?? "none"} scrollHeight=${data?.height ?? "none"} clientHeight=${data?.client ?? "none"} max=${data?.max ?? "none"} gap=${data?.gap ?? "none"} window=[${windowed.start},${windowed.end}] spacerTop=${Math.round(windowed.top)} spacerBottom=${Math.round(windowed.bottom)} total=${Math.round(totalHeight())} measured=${turnHeights.size} visible=${visibleRendered().length} nodeTop=${top} nodeBottom=${bottom} nodeHeight=${height}${extra ? ` ${extra}` : ""}`,
+    )
+  }
+  const [windowed, setWindowed] = createStore({
+    start: 0,
+    end: Infinity,
+    top: 0,
+    bottom: 0,
   })
   const pendingMessage = createMemo(() => active(sessionMessages()))
   const [jump, setJump] = createSignal(false)
@@ -350,9 +504,19 @@ export function MessageTimeline(props: {
     const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
     if (!node) return
     const box = root.getBoundingClientRect()
+    const anchorTop = node.getBoundingClientRect().top - box.top
+
+    const abnormalThreshold = root.clientHeight * 10
+    if (Math.abs(anchorTop) > abnormalThreshold) {
+      console.warn(
+        `[captureMessageAnchor] ABNORMAL anchor position: id=${id} top=${anchorTop.toFixed(2)} threshold=${abnormalThreshold.toFixed(2)} - DOM may not be ready, skipping anchor`,
+      )
+      return undefined
+    }
+
     return {
       id,
-      top: node.getBoundingClientRect().top - box.top,
+      top: anchorTop,
     }
   }
 
@@ -362,15 +526,13 @@ export function MessageTimeline(props: {
     const target = root.clientHeight + windowOverscan
     while (end > 0 && covered < target) {
       end -= 1
-      covered += estimateTurnHeight(ids[end]!)
+      covered += slot(ids[end]!, end, ids.length)
     }
 
-    let top = 0
-    for (let i = 0; i < end; i++) top += estimateTurnHeight(ids[i]!)
     return {
       start: end,
       end: ids.length,
-      top,
+      top: offset(ids, end),
       bottom: 0,
     }
   }
@@ -407,7 +569,7 @@ export function MessageTimeline(props: {
     let offset = 0
     let start = 0
     while (start < ids.length) {
-      const next = offset + estimateTurnHeight(ids[start]!)
+      const next = offset + slot(ids[start]!, start, ids.length)
       if (next >= min) break
       offset = next
       start += 1
@@ -416,9 +578,17 @@ export function MessageTimeline(props: {
     let end = start
     let tail = offset
     while (end < ids.length) {
-      tail += estimateTurnHeight(ids[end]!)
+      tail += slot(ids[end]!, end, ids.length)
       end += 1
       if (tail >= max) break
+    }
+
+    if (start >= ids.length) {
+      const next = tailWindow(ids, root)
+      console.warn(
+        `[buildWindow] scrollTop exceeded estimated range: scrollTop=${scrollTop.toFixed(2)} totalEstimate=${offset.toFixed(2)} actualHeight=${scrollHeight.toFixed(2)} - using tail window=[${next.start},${next.end}] spacerTop=${Math.round(next.top)} spacerBottom=${Math.round(next.bottom)}`,
+      )
+      return next
     }
 
     const clampedStart = Math.max(0, Math.min(start, ids.length - 1))
@@ -434,6 +604,58 @@ export function MessageTimeline(props: {
       start: clampedStart,
       end: clampedEnd,
       top: offset,
+      bottom: Math.max(0, totalHeight() - tail),
+    }
+  }
+
+  const buildTargetWindow = (id: string) => {
+    const root = viewport
+    const ids = rendered()
+    const index = renderedIndex().get(id)
+
+    if (!root || index === undefined || ids.length <= windowThreshold) {
+      return {
+        start: 0,
+        end: ids.length,
+        top: 0,
+        bottom: 0,
+      }
+    }
+
+    const span = root.clientHeight + windowOverscan * 3
+    let start = index
+    let end = index + 1
+    let covered = slot(ids[index]!, index, ids.length)
+
+    while (covered < span && (start > 0 || end < ids.length)) {
+      const a = start > 0 ? slot(ids[start - 1]!, start - 1, ids.length) : -1
+      const b = end < ids.length ? slot(ids[end]!, end, ids.length) : -1
+
+      if (a >= b && start > 0) {
+        start -= 1
+        covered += a
+        continue
+      }
+
+      if (end < ids.length) {
+        covered += b
+        end += 1
+        continue
+      }
+
+      if (start > 0) {
+        start -= 1
+        covered += a
+      }
+    }
+
+    const top = offset(ids, start)
+    const tail = offset(ids, end)
+
+    return {
+      start,
+      end,
+      top,
       bottom: Math.max(0, totalHeight() - tail),
     }
   }
@@ -463,10 +685,8 @@ export function MessageTimeline(props: {
 
     const start = Math.min(next.start, index)
     const end = Math.max(next.end, index + 1)
-    let top = 0
-    for (let i = 0; i < start; i++) top += estimateTurnHeight(ids[i]!)
-    let tail = top
-    for (let i = start; i < end; i++) tail += estimateTurnHeight(ids[i]!)
+    const top = offset(ids, start)
+    const tail = offset(ids, end)
     return {
       start,
       end,
@@ -476,21 +696,49 @@ export function MessageTimeline(props: {
   }
 
   const applyWindow = () => {
-    const viewportAnchor = captureWindowAnchor()
-    const targetId = activeMessageID() ?? viewportAnchor?.id
-    const targetAnchor = captureMessageAnchor(targetId)
-    const scrollAnchor = props.currentMessageId ? (targetAnchor ?? viewportAnchor) : viewportAnchor
-    const next = syncWindow(buildWindow(), targetId)
-    const same = sameWindow(next)
-    if (same) return
-
     const root = viewport
     const before = root ? snap(root) : undefined
-    const prev = { start: windowed.start, end: windowed.end, top: windowed.top, bottom: windowed.bottom }
+    const seek = props.seekingMessageId
+    debug("window:before", { seek: seek || "none" })
+    if (seek) trace("apply-before", seek)
+    const pinned = !props.seekingMessageId && !!before && before.gap <= 16
+    const viewportAnchor = pinned ? undefined : captureWindowAnchor()
+    const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
+    const targetAnchor = captureMessageAnchor(targetId)
+    const scrollAnchor =
+      seek && root && targetId ? { id: targetId, top: inset(root) } : props.currentMessageId ? targetAnchor : viewportAnchor
 
-    setWindowed(next)
+    const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
+    const next = syncWindow(base, pinned ? undefined : targetId)
+    const same = sameWindow(next)
+    if (seek) {
+      trace(
+        "apply-window",
+        seek,
+        `base=[${base.start},${base.end}] baseTop=${Math.round(base.top)} baseBottom=${Math.round(base.bottom)} next=[${next.start},${next.end}] nextTop=${Math.round(next.top)} nextBottom=${Math.round(next.bottom)} same=${same} pinned=${pinned} target=${targetId || "none"} anchor=${scrollAnchor?.id || "none"}`,
+      )
+    }
+    if (same && !seek) {
+      if (pinned && root) {
+        root.scrollTop = root.scrollHeight
+        props.onScheduleScrollState(root)
+        debug("window:pinned-same")
+      }
+      return
+    }
+
+    if (!same) {
+      const prev = { start: windowed.start, end: windowed.end, top: windowed.top, bottom: windowed.bottom }
+      const top = Math.round(next.top - prev.top)
+      const bottom = Math.round(next.bottom - prev.bottom)
+      const shift = Math.max(Math.abs(top), Math.abs(bottom))
+      if (seek && shift > SPACER_SHIFT_WARN) trace("spacer-shift", seek, `deltaTop=${top} deltaBottom=${bottom}`)
+      setWindowed(next)
+    }
+
+    audit(props.seekingMessageId ? "seek-window" : "apply-window")
     const adjustVersion = ++windowAdjustVersion
-    if (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId) {
+    if (!seek && (pinned || (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId))) {
       requestAnimationFrame(() => {
         if (adjustVersion !== windowAdjustVersion) return
         const root = viewport
@@ -498,10 +746,13 @@ export function MessageTimeline(props: {
         if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
         root.scrollTop = root.scrollHeight
         props.onScheduleScrollState(root)
+        debug("window:bottom-write")
       })
       return
     }
-    if (!scrollAnchor) return
+    if (!scrollAnchor) {
+      return
+    }
 
     requestAnimationFrame(() => {
       if (adjustVersion !== windowAdjustVersion) return
@@ -510,30 +761,20 @@ export function MessageTimeline(props: {
       const key = typeof CSS === "undefined" ? scrollAnchor.id : CSS.escape(scrollAnchor.id)
       const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
       if (!node) {
-        console.warn(
-          `[applyWindow] anchor node not found in DOM: id=${scrollAnchor.id} windowStart=${windowed.start} windowEnd=${windowed.end}`,
-        )
+        if (seek) trace("anchor-missing", seek, `anchor=${scrollAnchor.id}`)
         return
       }
       const box = root.getBoundingClientRect()
       const top = node.getBoundingClientRect().top - box.top
       const delta = top - scrollAnchor.top
+
       if (Math.abs(delta) <= 1) return
       const prevTop = root.scrollTop
       root.scrollTop += delta
       const after = snap(root)
-      if (Math.abs(delta) > 24 || after.top < prevTop - 24) {
-        console.warn("[timeline] anchor scroll write", {
-          delta: Math.round(delta),
-          before,
-          after,
-          prev,
-          next,
-          anchor: scrollAnchor,
-          target: targetId,
-          current: props.currentMessageId,
-        })
-      }
+      debug("window:anchor-write", { delta: Math.round(delta), prevTop: Math.round(prevTop), afterTop: after.top })
+
+      if (seek) trace("anchor-write", seek, `delta=${Math.round(delta)} prevTop=${Math.round(prevTop)} afterTop=${after.top} anchor=${scrollAnchor.id} target=${targetId || "none"}`)
       props.onScheduleScrollState(root)
     })
   }
@@ -564,59 +805,152 @@ export function MessageTimeline(props: {
     return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
   })
 
-  createEffect(
-    on(
-      () =>
-        [
-          visibleRendered().at(0),
-          visibleRendered().at(-1),
-          visibleRendered().length,
-          windowed.top,
-          windowed.bottom,
-          activeMessageID(),
-          isWorking(),
-        ] as const,
-      ([first, last, size, top, bottom, activeID, busy], prev) => {
-        if (!prev) return
-        if (
-          prev[0] === first &&
-          prev[1] === last &&
-          prev[2] === size &&
-          prev[3] === top &&
-          prev[4] === bottom &&
-          prev[5] === activeID &&
-          prev[6] === busy
-        ) {
-          return
-        }
-        console.debug("[timeline] rendered slice", {
-          first,
-          last,
-          size,
-          top: Math.round(top),
-          bottom: Math.round(bottom),
-          active: activeID,
-          working: busy,
-          activeVisible: !!activeID && visibleRendered().includes(activeID),
-          prevFirst: prev[0],
-          prevLast: prev[1],
-          prevSize: prev[2],
-          prevTop: Math.round(prev[3]),
-          prevBottom: Math.round(prev[4]),
+  const turnStage = (id: string): MarkdownStage => {
+    stageMark()
+    if (upgraded.has(id)) return "full"
+    const map = stageByTurn.get(id)
+    if (!map || map.size === 0) return "lite"
+    let rank = 0
+    for (const value of map.values()) {
+      if (value === "full") rank = Math.max(rank, 2)
+      else if (value === "structure") rank = Math.max(rank, 1)
+    }
+    if (rank === 2) return "full"
+    if (rank === 1) return "structure"
+    return "lite"
+  }
+
+  const idleTargets = createMemo(() => {
+    if (props.seekingMessageId) return [] as string[]
+    if (isWorking()) return [] as string[]
+
+    const ids = rendered()
+    const start = Math.max(0, windowed.start - 1)
+    const end = Math.min(ids.length, windowed.end + 1)
+    return ids.slice(start, end).filter((id) => turnStage(id) !== "full").slice(0, 3)
+  })
+
+  const audit = (source: string) => {
+    if (blank !== undefined) return
+    blank = requestAnimationFrame(() => {
+      blank = undefined
+      const root = viewport
+      const ids = rendered()
+      if (!root || !canWindow() || ids.length <= windowThreshold) return
+
+      const box = root.getBoundingClientRect()
+      const nodes = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
+      const hit = nodes.filter((node) => {
+        const rect = node.getBoundingClientRect()
+        return rect.bottom > box.top && rect.top < box.bottom
+      })
+      if (hit.length > 0) return
+
+      if (props.seekingMessageId) {
+        trace(
+          "blank",
+          props.seekingMessageId,
+          `source=${source} first=${visibleRendered().at(0) || "none"} last=${visibleRendered().at(-1) || "none"} rendered=${ids.length}`,
+        )
+        console.debug(`[virtual] blank rescue: id=${props.seekingMessageId} rendered=${ids.length}`)
+        windowAdjustVersion += 1
+        setWindowed({
+          start: 0,
+          end: ids.length,
+          top: 0,
+          bottom: 0,
         })
-      },
-      { defer: true },
-    ),
-  )
+        return
+      }
+      scheduleWindow()
+    })
+  }
+
+  const pin = (source: string) => {
+    const root = viewport
+    if (!root) {
+      debug("pin:skip", { source, reason: "root" })
+      return
+    }
+    if (props.seekingMessageId || props.currentMessageId) {
+      debug("pin:skip", { source, reason: "target" })
+      return
+    }
+    if (!props.live) {
+      debug("pin:skip", { source, reason: "live" })
+      return
+    }
+    if (props.hasScrollGesture()) {
+      debug("pin:skip", { source, reason: "gesture" })
+      return
+    }
+    if (root.clientHeight <= 0 || root.scrollHeight <= 0) {
+      debug("pin:skip", { source, reason: "size" })
+      return
+    }
+
+    const top = Math.max(0, root.scrollHeight - root.clientHeight)
+    const dist = top - root.scrollTop
+    if (Math.abs(dist) <= 1) {
+      debug("pin:skip", { source, reason: "close", dist: Math.round(dist) })
+      return
+    }
+
+    root.scrollTop = top
+    debug("pin:write", { source, dist: Math.round(dist) })
+    console.debug(
+      `[timeline] bottom pin: source=${source} dist=${Math.round(dist)} top=${Math.round(root.scrollTop)} scrollHeight=${Math.round(root.scrollHeight)} clientHeight=${Math.round(root.clientHeight)}`,
+    )
+    props.onScheduleScrollState(root)
+  }
+
+  const schedulePin = (source: string) => {
+    pinSource = source
+    if (pinFrame !== undefined) return
+    pinFrame = requestAnimationFrame(() => {
+      pinFrame = undefined
+      pin(pinSource)
+    })
+  }
+
   createEffect(
     on(rendered, () => {
       const ids = new Set(rendered())
+      let changed = false
       for (const id of turnHeights.keys()) {
-        if (!ids.has(id)) turnHeights.delete(id)
+        if (!ids.has(id)) {
+          turnHeights.delete(id)
+          changed = true
+        }
       }
+      for (const id of stageByTurn.keys()) {
+        if (!ids.has(id)) {
+          stageByTurn.delete(id)
+          upgraded.delete(id)
+          changed = true
+        }
+      }
+      if (changed) setRevision((value) => value + 1)
+      if (changed) setStageMark((value) => value + 1)
       scheduleWindow()
     }),
   )
+
+  createEffect(() => {
+    const ids = idleTargets()
+    if (idleTimer !== undefined) clearTimeout(idleTimer)
+    if (ids.length === 0) return
+
+    idleTimer = setTimeout(() => {
+      idleTimer = undefined
+      const id = idleTargets()[0]
+      if (!id || upgraded.has(id)) return
+      console.debug(`[markdown] idle upgrade: id=${id} queue=${idleTargets().join(",")}`)
+      upgraded.add(id)
+      setStageMark((value) => value + 1)
+      scheduleWindow()
+    }, IDLE_QUEUE_MS)
+  })
 
   createEffect(() => {
     if (canWindow()) return
@@ -637,25 +971,17 @@ export function MessageTimeline(props: {
 
   createEffect(() => {
     if (!isWorking()) return
-    if (!props.live && !props.scroll.bottom) return
+    if (props.seekingMessageId) return
+    if (!props.live) return
 
     const step = () => {
       bottomFrame = undefined
       const root = viewport
       if (!root) return
       if (!isWorking()) return
-      if (!props.live && !props.scroll.bottom) return
-      const time = performance.now()
-      root.scrollTop = root.scrollHeight
-      props.onScheduleScrollState(root)
-      const took = performance.now() - time
-      if (took > SCROLL_WARN_MS) {
-        console.warn("[timeline] slow scroll lock", {
-          height: Math.round(root.scrollHeight),
-          top: Math.round(root.scrollTop),
-          took: Math.round(took),
-        })
-      }
+      if (props.seekingMessageId) return
+      if (!props.live) return
+      follow(root, "frame")
       bottomFrame = requestAnimationFrame(step)
     }
 
@@ -671,13 +997,34 @@ export function MessageTimeline(props: {
     if (windowFrame !== undefined) cancelAnimationFrame(windowFrame)
     if (bottomFrame !== undefined) cancelAnimationFrame(bottomFrame)
     if (mutationFrame !== undefined) cancelAnimationFrame(mutationFrame)
+    if (pinFrame !== undefined) cancelAnimationFrame(pinFrame)
+    if (blank !== undefined) cancelAnimationFrame(blank)
+    if (idleTimer !== undefined) clearTimeout(idleTimer)
+  })
+
+  createEffect(() => {
+    const body = contentRef
+    if (!body) return
+
+    const sync = () => {
+      debug("content-resize")
+      pin("content-resize")
+      schedulePin("content-resize")
+    }
+
+    const observer = new ResizeObserver(sync)
+    observer.observe(body)
+    if (body.firstElementChild instanceof HTMLElement) observer.observe(body.firstElementChild)
+
+    onCleanup(() => observer.disconnect())
   })
 
   createEffect(() => {
     const body = contentRef
     if (!body) return
     if (!isWorking()) return
-    if (!props.live && !props.scroll.bottom) return
+    if (props.seekingMessageId) return
+    if (!props.live) return
 
     let queued = false
     const flush = () => {
@@ -686,18 +1033,9 @@ export function MessageTimeline(props: {
       const root = viewport
       if (!root) return
       if (!isWorking()) return
-      if (!props.live && !props.scroll.bottom) return
-      const time = performance.now()
-      root.scrollTop = root.scrollHeight
-      props.onScheduleScrollState(root)
-      const took = performance.now() - time
-      if (took > SCROLL_WARN_MS) {
-        console.warn("[timeline] slow mutation scroll", {
-          height: Math.round(root.scrollHeight),
-          top: Math.round(root.scrollTop),
-          took: Math.round(took),
-        })
-      }
+      if (props.seekingMessageId) return
+      if (!props.live) return
+      follow(root, "mutation")
     }
     const schedule = () => {
       if (queued) return
@@ -705,8 +1043,17 @@ export function MessageTimeline(props: {
       mutationFrame = requestAnimationFrame(flush)
     }
 
+    const activeID = activeMessageID()
+    let target: Element = body
+    if (activeID) {
+      const key = typeof CSS === "undefined" ? activeID : CSS.escape(activeID)
+      const el = body.querySelector(`[data-message-id="${key}"]`)
+      if (el) target = el
+      else if (body.lastElementChild) target = body.lastElementChild
+    }
+
     const observer = new MutationObserver(schedule)
-    observer.observe(body, {
+    observer.observe(target, {
       childList: true,
       subtree: true,
       characterData: true,
@@ -757,13 +1104,7 @@ export function MessageTimeline(props: {
   createEffect(
     on(activeMessageID, (id, prev) => {
       if (id === prev) return
-      console.debug("[timeline] active message", {
-        prev,
-        next: id,
-        rendered: props.renderedUserMessages.length,
-        live: props.live,
-        bottom: props.scroll.bottom,
-      })
+      if (props.seekingMessageId) trace("active-change", props.seekingMessageId, `prev=${prev || "none"} next=${id || "none"}`)
       windowAdjustVersion += 1
       scheduleWindow()
     }),
@@ -794,27 +1135,6 @@ export function MessageTimeline(props: {
     return messages.find((item) => item.id === id)
   })
 
-  createEffect(
-    on(
-      () => [canWindow(), windowed.start, windowed.end, props.renderedUserMessages.length] as const,
-      ([can, start, end, size], prev) => {
-        if (prev && prev[0] === can && prev[1] === start && prev[2] === end && prev[3] === size) return
-        if (!prev) return
-        console.debug("[timeline] window state", {
-          can,
-          start,
-          end,
-          size,
-          prevCan: prev[0],
-          prevStart: prev[1],
-          prevEnd: prev[2],
-          prevSize: prev[3],
-        })
-      },
-      { defer: true },
-    ),
-  )
-
   // UI-specific memo: reuses the sync computation for the message list
   const currentMessage = _virtualizationSync
   const info = createMemo(() => {
@@ -826,7 +1146,13 @@ export function MessageTimeline(props: {
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  // Keep previous header state while session data is loading between
+  // route changes, to prevent --session-title-inset from 64px→0px flash.
+  const showHeader = createMemo((prev?: boolean) => {
+    if (!info() && sessionID()) return prev ?? false
+    return !!(titleValue() || parentID())
+  })
+
   const [title, setTitle] = createStore({
     draft: "",
     editing: false,
@@ -1142,6 +1468,7 @@ export function MessageTimeline(props: {
   }
 
   const jumpTo = (message: UserMessage) => {
+    trace("click", message.id, `bottom=${props.scroll.bottom} live=${props.live}`)
     setJump(false)
     props.onJumpToMessage(message)
   }
@@ -1174,6 +1501,298 @@ export function MessageTimeline(props: {
     )
   }
 
+  function Header() {
+    return (
+      <div
+        data-session-title
+        classList={{
+          "absolute top-0 left-0 right-0 z-40 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
+          "w-full": true,
+          "pb-4": true,
+          "pl-2 pr-3 md:pl-4 md:pr-3": true,
+        }}
+        style={itemStyle(props.centered)}
+      >
+        <div class="h-12 w-full flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
+            <Show when={parentID()}>
+              <IconButton
+                tabIndex={-1}
+                icon="arrow-left"
+                variant="ghost"
+                onClick={navigateParent}
+                aria-label={language.t("common.goBack")}
+              />
+            </Show>
+            <div class="flex items-center min-w-0 grow-1">
+              <div
+                class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                style={{
+                  width: isWorking() ? "16px" : "0px",
+                  "margin-right": isWorking() ? "8px" : "0px",
+                }}
+                aria-hidden="true"
+              >
+                <Show when={workingStatus() !== "hidden"}>
+                  <div
+                    class="transition-opacity duration-200 ease-out"
+                    classList={{ "opacity-0": workingStatus() === "hiding" }}
+                  >
+                    <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
+                  </div>
+                </Show>
+              </div>
+              <Show when={titleValue() || title.editing}>
+                <Show
+                  when={title.editing}
+                  fallback={
+                    <h1 class="text-14-medium text-text-strong truncate grow-1 min-w-0" onDblClick={openTitleEditor}>
+                      {titleValue()}
+                    </h1>
+                  }
+                >
+                  <InlineInput
+                    ref={(el) => {
+                      titleRef = el
+                    }}
+                    value={title.draft}
+                    disabled={titleMutation.isPending}
+                    class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
+                    style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
+                    onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      event.stopPropagation()
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        void saveTitleEditor()
+                        return
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault()
+                        closeTitleEditor()
+                      }
+                    }}
+                    onBlur={closeTitleEditor}
+                  />
+                </Show>
+              </Show>
+            </div>
+          </div>
+          <Show when={sessionID()}>
+            {(id) => (
+              <div class="shrink-0 flex items-center gap-2">
+                <SessionContextUsage placement="bottom" />
+                <Show when={props.renderedUserMessages.length > 0}>
+                  <Popover
+                    open={jump()}
+                    onOpenChange={setJump}
+                    placement="bottom-end"
+                    trigger={
+                      <Tooltip placement="bottom" value={language.t("command.message.next.description")}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          class="size-6"
+                          aria-label={language.t("command.message.next.description")}
+                        >
+                          <Icon name="bullet-list" size="small" />
+                        </Button>
+                      </Tooltip>
+                    }
+                    class="w-[320px] max-w-[min(320px,calc(100vw-24px))] p-2"
+                  >
+                    <List
+                      class="p-0"
+                      style={{ "max-height": "min(600px, 80vh)" }}
+                      items={props.renderedUserMessages}
+                      key={(message) => message.id}
+                      current={currentMessage()}
+                      onSelect={(message) => message && jumpTo(message)}
+                    >
+                      {(message) => (
+                        <>
+                          <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" class="mr-3" />
+                          <div data-slot="list-item-label" class="truncate text-left">
+                            {label(message, sync.data.part[message.id] ?? [])}
+                          </div>
+                        </>
+                      )}
+                    </List>
+                  </Popover>
+                </Show>
+                <DropdownMenu
+                  gutter={4}
+                  placement="bottom-end"
+                  open={title.menuOpen}
+                  onOpenChange={(open) => {
+                    setTitle("menuOpen", open)
+                    if (open) return
+                  }}
+                >
+                  <DropdownMenu.Trigger
+                    as={IconButton}
+                    icon="dot-grid"
+                    variant="ghost"
+                    class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                    classList={{
+                      "bg-surface-base-active": share.open || title.pendingShare,
+                    }}
+                    aria-label={language.t("common.moreOptions")}
+                    aria-expanded={title.menuOpen || share.open || title.pendingShare}
+                    ref={(el: HTMLButtonElement) => {
+                      more = el
+                    }}
+                  />
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      style={{ "min-width": "104px" }}
+                      onCloseAutoFocus={(event) => {
+                        if (title.pendingRename) {
+                          event.preventDefault()
+                          setTitle("pendingRename", false)
+                          openTitleEditor()
+                          return
+                        }
+                        if (title.pendingShare) {
+                          event.preventDefault()
+                          requestAnimationFrame(() => {
+                            setShare({ open: true, dismiss: null })
+                            setTitle("pendingShare", false)
+                          })
+                        }
+                      }}
+                    >
+                      <DropdownMenu.Item
+                        onSelect={() => {
+                          setTitle("pendingRename", true)
+                          setTitle("menuOpen", false)
+                        }}
+                      >
+                        <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <Show when={shareEnabled()}>
+                        <DropdownMenu.Item
+                          onSelect={() => {
+                            setTitle({ pendingShare: true, menuOpen: false })
+                          }}
+                        >
+                          <DropdownMenu.ItemLabel>{language.t("session.share.action.share")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                      </Show>
+                      <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
+                        <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}>
+                        <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu>
+
+                <KobaltePopover
+                  open={share.open}
+                  anchorRef={() => more}
+                  placement="bottom-end"
+                  gutter={4}
+                  modal={false}
+                  onOpenChange={(open) => {
+                    if (open) setShare("dismiss", null)
+                    setShare("open", open)
+                  }}
+                >
+                  <KobaltePopover.Portal>
+                    <KobaltePopover.Content
+                      data-component="popover-content"
+                      style={{ "min-width": "320px" }}
+                      onEscapeKeyDown={(event) => {
+                        setShare({ dismiss: "escape", open: false })
+                        event.preventDefault()
+                        event.stopPropagation()
+                      }}
+                      onPointerDownOutside={() => {
+                        setShare({ dismiss: "outside", open: false })
+                      }}
+                      onFocusOutside={() => {
+                        setShare({ dismiss: "outside", open: false })
+                      }}
+                      onCloseAutoFocus={(event) => {
+                        if (share.dismiss === "outside") event.preventDefault()
+                        setShare("dismiss", null)
+                      }}
+                    >
+                      <div class="flex flex-col p-3">
+                        <div class="flex flex-col gap-1">
+                          <div class="text-13-medium text-text-strong">{language.t("session.share.popover.title")}</div>
+                          <div class="text-12-regular text-text-weak">
+                            {shareUrl()
+                              ? language.t("session.share.popover.description.shared")
+                              : language.t("session.share.popover.description.unshared")}
+                          </div>
+                        </div>
+                        <div class="mt-3 flex flex-col gap-2">
+                          <Show
+                            when={shareUrl()}
+                            fallback={
+                              <Button
+                                size="large"
+                                variant="primary"
+                                class="w-full"
+                                onClick={shareSession}
+                                disabled={shareMutation.isPending}
+                              >
+                                {shareMutation.isPending
+                                  ? language.t("session.share.action.publishing")
+                                  : language.t("session.share.action.publish")}
+                              </Button>
+                            }
+                          >
+                            <div class="flex flex-col gap-2">
+                              <TextField
+                                value={shareUrl() ?? ""}
+                                readOnly
+                                copyable
+                                copyKind="link"
+                                tabIndex={-1}
+                                class="w-full"
+                              />
+                              <div class="grid grid-cols-2 gap-2">
+                                <Button
+                                  size="large"
+                                  variant="secondary"
+                                  class="w-full shadow-none border border-border-weak-base"
+                                  onClick={unshareSession}
+                                  disabled={unshareMutation.isPending}
+                                >
+                                  {unshareMutation.isPending
+                                    ? language.t("session.share.action.unpublishing")
+                                    : language.t("session.share.action.unpublish")}
+                                </Button>
+                                <Button
+                                  size="large"
+                                  variant="primary"
+                                  class="w-full"
+                                  onClick={viewShare}
+                                  disabled={unshareMutation.isPending}
+                                >
+                                  {language.t("session.share.action.view")}
+                                </Button>
+                              </div>
+                            </div>
+                          </Show>
+                        </div>
+                      </div>
+                    </KobaltePopover.Content>
+                  </KobaltePopover.Portal>
+                </KobaltePopover>
+              </div>
+            )}
+          </Show>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Show
       when={!props.mobileChanges}
@@ -1194,6 +1813,9 @@ export function MessageTimeline(props: {
             <Icon name="arrow-down-to-line" />
           </button>
         </div>
+        <Show when={showHeader()}>
+          <Header />
+        </Show>
         <ScrollView
           viewportRef={(el) => {
             viewport = el
@@ -1239,6 +1861,7 @@ export function MessageTimeline(props: {
             const root = e.currentTarget
             const shouldWin = shouldWindow()
             props.onScheduleScrollState(e.currentTarget)
+            audit("scroll")
             const gesture = props.hasScrollGesture()
             // Programmatic scroll corrections also emit scroll events. Only let
             // real user gestures drive the auto-scroll state machine, otherwise
@@ -1253,6 +1876,7 @@ export function MessageTimeline(props: {
           onClick={props.onAutoScrollInteraction}
           class="relative min-w-0 w-full h-full"
           style={{
+            "--session-title-inset": showHeader() ? "64px" : "0px",
             "--session-title-height": showHeader() ? "40px" : "0px",
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
@@ -1264,314 +1888,19 @@ export function MessageTimeline(props: {
             }}
             class="min-w-0 w-full"
           >
-            <Show when={showHeader()}>
-              <div
-                data-session-title
-                classList={{
-                  "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
-                  "w-full": true,
-                  "pb-4": true,
-                  "pl-2 pr-3 md:pl-4 md:pr-3": true,
-                }}
-                style={itemStyle(props.centered)}
-              >
-                <div class="h-12 w-full flex items-center justify-between gap-2">
-                  <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
-                    <Show when={parentID()}>
-                      <IconButton
-                        tabIndex={-1}
-                        icon="arrow-left"
-                        variant="ghost"
-                        onClick={navigateParent}
-                        aria-label={language.t("common.goBack")}
-                      />
-                    </Show>
-                    <div class="flex items-center min-w-0 grow-1">
-                      <div
-                        class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                        style={{
-                          width: isWorking() ? "16px" : "0px",
-                          "margin-right": isWorking() ? "8px" : "0px",
-                        }}
-                        aria-hidden="true"
-                      >
-                        <Show when={workingStatus() !== "hidden"}>
-                          <div
-                            class="transition-opacity duration-200 ease-out"
-                            classList={{ "opacity-0": workingStatus() === "hiding" }}
-                          >
-                            <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
-                          </div>
-                        </Show>
-                      </div>
-                      <Show when={titleValue() || title.editing}>
-                        <Show
-                          when={title.editing}
-                          fallback={
-                            <h1
-                              class="text-14-medium text-text-strong truncate grow-1 min-w-0"
-                              onDblClick={openTitleEditor}
-                            >
-                              {titleValue()}
-                            </h1>
-                          }
-                        >
-                          <InlineInput
-                            ref={(el) => {
-                              titleRef = el
-                            }}
-                            value={title.draft}
-                            disabled={titleMutation.isPending}
-                            class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
-                            style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
-                            onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                            onKeyDown={(event) => {
-                              event.stopPropagation()
-                              if (event.key === "Enter") {
-                                event.preventDefault()
-                                void saveTitleEditor()
-                                return
-                              }
-                              if (event.key === "Escape") {
-                                event.preventDefault()
-                                closeTitleEditor()
-                              }
-                            }}
-                            onBlur={closeTitleEditor}
-                          />
-                        </Show>
-                      </Show>
-                    </div>
-                  </div>
-                  <Show when={sessionID()}>
-                    {(id) => (
-                      <div class="shrink-0 flex items-center gap-2">
-                        <SessionContextUsage placement="bottom" />
-                        <Show when={props.renderedUserMessages.length > 0}>
-                          <Popover
-                            open={jump()}
-                            onOpenChange={setJump}
-                            placement="bottom-end"
-                            trigger={
-                              <Tooltip placement="bottom" value={language.t("command.message.next.description")}>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  class="size-6"
-                                  aria-label={language.t("command.message.next.description")}
-                                >
-                                  <Icon name="bullet-list" size="small" />
-                                </Button>
-                              </Tooltip>
-                            }
-                            class="w-[320px] max-w-[min(320px,calc(100vw-24px))] p-2"
-                          >
-                            <List
-                              class="p-0"
-                              items={props.renderedUserMessages}
-                              key={(message) => message.id}
-                              current={currentMessage()}
-                              onSelect={(message) => message && jumpTo(message)}
-                            >
-                              {(message) => (
-                                <>
-                                  <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" class="mr-3" />
-                                  <div data-slot="list-item-label" class="truncate text-left">
-                                    {label(message, sync.data.part[message.id] ?? [])}
-                                  </div>
-                                </>
-                              )}
-                            </List>
-                          </Popover>
-                        </Show>
-                        <DropdownMenu
-                          gutter={4}
-                          placement="bottom-end"
-                          open={title.menuOpen}
-                          onOpenChange={(open) => {
-                            setTitle("menuOpen", open)
-                            if (open) return
-                          }}
-                        >
-                          <DropdownMenu.Trigger
-                            as={IconButton}
-                            icon="dot-grid"
-                            variant="ghost"
-                            class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                            classList={{
-                              "bg-surface-base-active": share.open || title.pendingShare,
-                            }}
-                            aria-label={language.t("common.moreOptions")}
-                            aria-expanded={title.menuOpen || share.open || title.pendingShare}
-                            ref={(el: HTMLButtonElement) => {
-                              more = el
-                            }}
-                          />
-                          <DropdownMenu.Portal>
-                            <DropdownMenu.Content
-                              style={{ "min-width": "104px" }}
-                              onCloseAutoFocus={(event) => {
-                                if (title.pendingRename) {
-                                  event.preventDefault()
-                                  setTitle("pendingRename", false)
-                                  openTitleEditor()
-                                  return
-                                }
-                                if (title.pendingShare) {
-                                  event.preventDefault()
-                                  requestAnimationFrame(() => {
-                                    setShare({ open: true, dismiss: null })
-                                    setTitle("pendingShare", false)
-                                  })
-                                }
-                              }}
-                            >
-                              <DropdownMenu.Item
-                                onSelect={() => {
-                                  setTitle("pendingRename", true)
-                                  setTitle("menuOpen", false)
-                                }}
-                              >
-                                <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                              <Show when={shareEnabled()}>
-                                <DropdownMenu.Item
-                                  onSelect={() => {
-                                    setTitle({ pendingShare: true, menuOpen: false })
-                                  }}
-                                >
-                                  <DropdownMenu.ItemLabel>
-                                    {language.t("session.share.action.share")}
-                                  </DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                              </Show>
-                              <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
-                                <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Separator />
-                              <DropdownMenu.Item
-                                onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
-                              >
-                                <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                          </DropdownMenu.Portal>
-                        </DropdownMenu>
-
-                        <KobaltePopover
-                          open={share.open}
-                          anchorRef={() => more}
-                          placement="bottom-end"
-                          gutter={4}
-                          modal={false}
-                          onOpenChange={(open) => {
-                            if (open) setShare("dismiss", null)
-                            setShare("open", open)
-                          }}
-                        >
-                          <KobaltePopover.Portal>
-                            <KobaltePopover.Content
-                              data-component="popover-content"
-                              style={{ "min-width": "320px" }}
-                              onEscapeKeyDown={(event) => {
-                                setShare({ dismiss: "escape", open: false })
-                                event.preventDefault()
-                                event.stopPropagation()
-                              }}
-                              onPointerDownOutside={() => {
-                                setShare({ dismiss: "outside", open: false })
-                              }}
-                              onFocusOutside={() => {
-                                setShare({ dismiss: "outside", open: false })
-                              }}
-                              onCloseAutoFocus={(event) => {
-                                if (share.dismiss === "outside") event.preventDefault()
-                                setShare("dismiss", null)
-                              }}
-                            >
-                              <div class="flex flex-col p-3">
-                                <div class="flex flex-col gap-1">
-                                  <div class="text-13-medium text-text-strong">
-                                    {language.t("session.share.popover.title")}
-                                  </div>
-                                  <div class="text-12-regular text-text-weak">
-                                    {shareUrl()
-                                      ? language.t("session.share.popover.description.shared")
-                                      : language.t("session.share.popover.description.unshared")}
-                                  </div>
-                                </div>
-                                <div class="mt-3 flex flex-col gap-2">
-                                  <Show
-                                    when={shareUrl()}
-                                    fallback={
-                                      <Button
-                                        size="large"
-                                        variant="primary"
-                                        class="w-full"
-                                        onClick={shareSession}
-                                        disabled={shareMutation.isPending}
-                                      >
-                                        {shareMutation.isPending
-                                          ? language.t("session.share.action.publishing")
-                                          : language.t("session.share.action.publish")}
-                                      </Button>
-                                    }
-                                  >
-                                    <div class="flex flex-col gap-2">
-                                      <TextField
-                                        value={shareUrl() ?? ""}
-                                        readOnly
-                                        copyable
-                                        copyKind="link"
-                                        tabIndex={-1}
-                                        class="w-full"
-                                      />
-                                      <div class="grid grid-cols-2 gap-2">
-                                        <Button
-                                          size="large"
-                                          variant="secondary"
-                                          class="w-full shadow-none border border-border-weak-base"
-                                          onClick={unshareSession}
-                                          disabled={unshareMutation.isPending}
-                                        >
-                                          {unshareMutation.isPending
-                                            ? language.t("session.share.action.unpublishing")
-                                            : language.t("session.share.action.unpublish")}
-                                        </Button>
-                                        <Button
-                                          size="large"
-                                          variant="primary"
-                                          class="w-full"
-                                          onClick={viewShare}
-                                          disabled={unshareMutation.isPending}
-                                        >
-                                          {language.t("session.share.action.view")}
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </Show>
-                                </div>
-                              </div>
-                            </KobaltePopover.Content>
-                          </KobaltePopover.Portal>
-                        </KobaltePopover>
-                      </div>
-                    )}
-                  </Show>
-                </div>
-              </div>
-            </Show>
             <div
               role="log"
               data-slot="session-turn-list"
-              class="flex flex-col items-start justify-start pb-16 transition-[margin]"
+              data-virtualized={canWindow() ? "true" : undefined}
+              class="flex flex-col items-start justify-start pb-16"
               classList={{
                 "w-full": true,
-                "flex flex-col gap-12": true,
-                "mt-0.5": props.centered,
-                "mt-0": !props.centered,
               }}
-              style={itemStyle(props.centered)}
+              style={{
+                ...itemStyle(props.centered),
+                gap: "0px",
+                "margin-top": showHeader() ? "64px" : props.centered ? "0.125rem" : "0px",
+              }}
             >
               <Show when={props.historyMore}>
                 <div class="w-full flex justify-center">
@@ -1609,11 +1938,29 @@ export function MessageTimeline(props: {
   function TimelineItem(item: { messageID: string; index: number }) {
     const active = createMemo(() => activeMessageID() === item.messageID)
     const eager = createMemo(() => active() || item.index >= rendered().length - 3)
-    const highlight = createMemo<"full" | "defer">(() => (active() ? "full" : "defer"))
+    const near = createMemo(() => {
+      const start = Math.max(0, windowed.start - 2)
+      const end = Math.min(rendered().length, windowed.end + 2)
+      return item.index >= start && item.index < end
+    })
+    const seek = createMemo(() => props.seekingMessageId === item.messageID)
+    const stage = createMemo<MarkdownStage>(() => {
+      stageMark()
+      if (seek() || active()) return "full"
+      if (upgraded.has(item.messageID)) return "full"
+      if (near()) return "structure"
+      return "lite"
+    })
+    const highlight = createMemo<"full" | "defer">(() => {
+      if (stage() !== "lite") return "full"
+      return "defer"
+    })
     const math = createMemo<"full" | "defer">(() => {
       if (mathMode() !== "turn") return "full"
-      return eager() ? "full" : "defer"
+      if (stage() === "full") return "full"
+      return "defer"
     })
+    const skipRender = createMemo(() => isWorking() && !eager() && !near())
     const messages = createMemo<MessageType[]>((prev?: MessageType[]) => {
       if (active()) return turnMessages(sessionMessages(), item.messageID)
       const next = turnMessages(sessionMessages(), item.messageID)
@@ -1629,20 +1976,41 @@ export function MessageTimeline(props: {
 
     const measure = () => {
       const time = performance.now()
-      const next = rootRef?.offsetHeight
+      const node = rootRef
+      const next = node?.offsetHeight
       if (!next) return
       const prev = turnHeights.get(item.messageID)
+      const base = prev ?? estimatedTurnHeight
+      if (!visible(node) && next < base - HEIGHT_SHIFT_WARN) {
+        if (seek()) {
+          trace(
+            "measure-ignored-shrink",
+            item.messageID,
+            `prev=${Math.round(base)} next=${Math.round(next)} delta=${Math.round(next - base)}`,
+          )
+        }
+        return
+      }
       if (prev !== undefined && Math.abs(prev - next) <= 1) return
       turnHeights.set(item.messageID, next)
+      setRevision((value) => value + 1)
+      const delta = prev === undefined ? 0 : Math.round(next - prev)
+      if (prev !== undefined && Math.abs(delta) > HEIGHT_SHIFT_WARN) {
+        if (seek()) {
+          trace("measure-target", item.messageID, `prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta}`)
+        }
+      }
       scheduleWindow()
+      debug("measure", {
+        message: item.messageID,
+        prev: prev === undefined ? "none" : Math.round(prev),
+        next: Math.round(next),
+        delta,
+      })
+      schedulePin("turn-measure")
       const took = performance.now() - time
-      if (took > MEASURE_WARN_MS) {
-        console.warn("[timeline] slow measure", {
-          msg: item.messageID,
-          height: Math.round(next),
-          prev: prev === undefined ? undefined : Math.round(prev),
-          took: Math.round(took),
-        })
+      if (seek() && took > MEASURE_WARN_MS) {
+        trace("measure-slow", item.messageID, `height=${Math.round(next)} took=${Math.round(took)}`)
       }
     }
 
@@ -1671,26 +2039,13 @@ export function MessageTimeline(props: {
     createEffect(() => {
       if (!active()) return
       if (!isWorking()) return
-      console.debug("[timeline] active item mounted", {
-        msg: item.messageID,
-        index: item.index,
-        visible: visibleRendered().includes(item.messageID),
-      })
+      if (seek()) trace("target-mounted", item.messageID)
     })
 
     onCleanup(() => stop?.())
     onCleanup(() => {
       if (!active()) return
-      console.warn("[timeline] active item unmounted", {
-        msg: item.messageID,
-        index: item.index,
-        working: isWorking(),
-        visibleSize: visibleRendered().length,
-        first: visibleRendered().at(0),
-        last: visibleRendered().at(-1),
-        top: Math.round(windowed.top),
-        bottom: Math.round(windowed.bottom),
-      })
+      if (seek()) trace("target-unmounted", item.messageID)
     })
 
     return (
@@ -1709,8 +2064,12 @@ export function MessageTimeline(props: {
         data-message-id={item.messageID}
         classList={{
           "min-w-0 w-full max-w-full": true,
+          "turn-content-skip": skipRender(),
         }}
-        style={itemStyle(props.centered)}
+        style={{
+          ...itemStyle(props.centered),
+          "margin-bottom": item.index < rendered().length - 1 ? `${gap}px` : "0px",
+        }}
       >
         <Show when={commentCount() > 0}>
           <div class="w-full px-4 md:px-5 pb-2">
@@ -1766,6 +2125,25 @@ export function MessageTimeline(props: {
           markdownViewport={viewport}
           markdownHighlight={highlight()}
           markdownMath={math()}
+          markdownStage={stage()}
+          onMarkdownStage={(key, next) => {
+            const prev = stageByTurn.get(item.messageID)
+            if (!prev && next) {
+              stageByTurn.set(item.messageID, new Map([[key, next]]))
+              setStageMark((value) => value + 1)
+              return
+            }
+            if (!prev) return
+            if (next === undefined) {
+              if (!prev.delete(key)) return
+              if (prev.size === 0) stageByTurn.delete(item.messageID)
+              setStageMark((value) => value + 1)
+              return
+            }
+            if (prev.get(key) === next) return
+            prev.set(key, next)
+            setStageMark((value) => value + 1)
+          }}
           classes={{
             root: "min-w-0 w-full relative",
             content: "flex flex-col justify-between !overflow-visible",

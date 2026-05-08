@@ -22,6 +22,8 @@ type Entry = {
   html: string
 }
 
+export type MarkdownStage = "lite" | "structure" | "full"
+
 type MarkedApi = ReturnType<typeof useMarked>
 
 const max = 200
@@ -75,7 +77,7 @@ function clip(text: string, size = 40) {
 }
 
 function view(node: HTMLElement) {
-  return node.closest(".scroll-view__viewport,[data-slot='session-turn-content']") as HTMLElement | null
+  return node.closest("[data-slot='scroll-view-viewport'],[data-slot='session-turn-content']") as HTMLElement | null
 }
 
 function snap(node: HTMLElement | null) {
@@ -609,6 +611,8 @@ export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
     cacheKey?: string
+    stage?: MarkdownStage
+    onStage?: (key: string, stage: MarkdownStage | undefined) => void
     plain?: boolean
     eager?: boolean
     viewport?: HTMLElement
@@ -624,6 +628,8 @@ export function Markdown(
   const [local, others] = splitProps(props, [
     "text",
     "cacheKey",
+    "stage",
+    "onStage",
     "plain",
     "eager",
     "viewport",
@@ -639,28 +645,40 @@ export function Markdown(
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const [ready, setReady] = createSignal(true)
-  const [seen, setSeen] = createSignal(!!local.eager)
-  const [mathSeen, setMathSeen] = createSignal(!!local.eager || local.math !== "defer")
+  const eager = createMemo(() => local.stage ? local.stage !== "lite" : !!local.eager)
+  const mathMode = createMemo<"full" | "defer">(() => {
+    if (local.stage === "full") return "full"
+    if (local.stage === "structure") return "defer"
+    return local.math ?? "full"
+  })
+  const [seen, setSeen] = createSignal(eager())
+  const [mathSeen, setMathSeen] = createSignal(eager() || mathMode() !== "defer")
   const labels = createMemo(() => ({
     copy: i18n.t("ui.message.copy"),
     copied: i18n.t("ui.message.copied"),
   }))
 
-  const visible = createMemo(() => local.eager || seen())
-  const mathReady = createMemo(() => local.math !== "defer" || local.eager || mathSeen())
+  const visible = createMemo(() => eager() || seen())
+  const mathReady = createMemo(() => mathMode() !== "defer" || eager() || mathSeen())
   const mode = createMemo<"full" | "fast" | "lite" | "plain">(() => {
     if (local.plain) return "plain"
     if (local.streaming) return "fast"
     if (!visible()) return "lite"
     return "full"
   })
+  const stage = createMemo<MarkdownStage>(() => {
+    if (mode() === "lite") return "lite"
+    if (mathReady()) return "full"
+    return "structure"
+  })
+  const key = createMemo(() => local.cacheKey ?? (checksum(normalize(local.text)) || `len:${local.text.length}`))
 
   const src = createMemo(() => {
     if (!ready()) return
     const markdown = local.text
     const normalized = normalize(markdown)
     const hash = checksum(normalized)
-    const cache = cacheMode({ highlight: local.highlight, chunked: local.chunked, math: local.math })
+    const cache = cacheMode({ highlight: local.highlight, chunked: local.chunked, math: mathMode() })
     const current = mode()
     const key = hash ? `${cache}:${current}:${hash}` : undefined
     return {
@@ -720,6 +738,7 @@ export function Markdown(
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
   let live = true
+  let domMathMode: "full" | "defer" | undefined
   let info = {
     key: local.cacheKey ?? "",
     text: local.text.length,
@@ -756,7 +775,7 @@ export function Markdown(
 
   createEffect(
     on(
-      () => [root(), local.viewport, local.eager] as const,
+      () => [root(), local.viewport, eager()] as const,
       ([container, viewport, eager]) => {
         if (!container || eager) {
           if (eager) setSeen(true)
@@ -787,7 +806,7 @@ export function Markdown(
 
   createEffect(
     on(
-      () => [root(), local.viewport, local.eager, local.math] as const,
+      () => [root(), local.viewport, eager(), mathMode()] as const,
       ([container, viewport, eager, math]) => {
         if (!container || eager || math !== "defer") {
           setMathSeen(true)
@@ -807,7 +826,7 @@ export function Markdown(
           },
           {
             root: viewport,
-            rootMargin: "200px 0px",
+            rootMargin: "0px 0px",
           },
         )
         observer.observe(container)
@@ -815,6 +834,16 @@ export function Markdown(
       },
     ),
   )
+
+  createEffect(() => {
+    const next = stage()
+    const id = key()
+    local.onStage?.(id, next)
+  })
+
+  onCleanup(() => {
+    local.onStage?.(key(), undefined)
+  })
 
   createEffect(() => {
     const container = root()
@@ -834,8 +863,12 @@ export function Markdown(
     const prevHtml = container.dataset.html ?? ""
     const isStreaming = local.streaming
     const chunked = local.chunked
-    const pane = isStreaming ? view(container) : null
-    const before = isStreaming ? snap(pane) : undefined
+    const upgrading = !isStreaming && domMathMode === "defer" && src()?.math === "full"
+    const pane = (isStreaming || upgrading) ? view(container) : null
+    const before = (isStreaming || upgrading) ? snap(pane) : undefined
+    const upgradeHeight = upgrading && pane ? container.offsetHeight : 0
+    const upgradeBox = upgrading && pane ? container.getBoundingClientRect() : undefined
+    const paneBox = upgrading && pane ? pane.getBoundingClientRect() : undefined
     const time = performance.now()
 
     if (isStreaming && prevHtml && content.length < prevHtml.length) {
@@ -886,6 +919,14 @@ export function Markdown(
         }
       }
 
+      // Mode upgrade scroll compensation (defer → full, KaTeX rendering)
+      if (upgrading && pane && upgradeBox && paneBox && upgradeHeight) {
+        const delta = container.offsetHeight - upgradeHeight
+        if (delta > 0 && upgradeBox.bottom <= paneBox.top) {
+          pane.scrollTop += delta
+        }
+      }
+
       if (copySetupTimer) clearTimeout(copySetupTimer)
       copySetupTimer = setTimeout(() => {
         if (!live || !container.isConnected) {
@@ -899,6 +940,9 @@ export function Markdown(
         copyCleanup = setupCodeCopy(container, next)
         setLabels(container, next)
       }, 150)
+
+      const m = src()?.math
+      domMathMode = m === "full" || m === "defer" ? m : undefined
     }
 
     // Fast-append path: during streaming, if new HTML starts with the previous HTML,
@@ -1009,6 +1053,7 @@ export function Markdown(
   return (
     <div
       data-component="markdown"
+      data-markdown-stage={stage()}
       classList={{
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,

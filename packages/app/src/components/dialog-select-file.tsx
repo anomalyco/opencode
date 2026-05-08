@@ -12,6 +12,7 @@ import { formatKeybind, useCommand, type CommandOption } from "@/context/command
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
+import { projectOwner } from "@/pages/layout/helpers"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -288,7 +289,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
-    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+    return projectOwner(directory, layout.projects.list())?.project
   })
   const workspaces = createMemo(() => {
     const directory = projectDirectory()

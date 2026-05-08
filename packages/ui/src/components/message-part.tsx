@@ -5,6 +5,7 @@ import {
   createSignal,
   For,
   Match,
+  on,
   Show,
   Switch,
   onMount,
@@ -44,6 +45,7 @@ import { ToolErrorCard } from "./tool-error-card"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
+import type { MarkdownStage } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
@@ -147,6 +149,8 @@ export interface MessageProps {
   markdownViewport?: HTMLDivElement
   markdownHighlight?: "full" | "defer"
   markdownMath?: "full" | "defer"
+  markdownStage?: MarkdownStage
+  onMarkdownStage?: (key: string, stage: MarkdownStage | undefined) => void
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -167,6 +171,8 @@ export interface MessagePartProps {
   markdownViewport?: HTMLDivElement
   markdownHighlight?: "full" | "defer"
   markdownMath?: "full" | "defer"
+  markdownStage?: MarkdownStage
+  onMarkdownStage?: (key: string, stage: MarkdownStage | undefined) => void
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -589,6 +595,8 @@ export function AssistantParts(props: {
   markdownViewport?: HTMLDivElement
   markdownHighlight?: "full" | "defer"
   markdownMath?: "full" | "defer"
+  markdownStage?: MarkdownStage
+  onMarkdownStage?: (key: string, stage: MarkdownStage | undefined) => void
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -671,6 +679,8 @@ export function AssistantParts(props: {
                   markdownViewport={props.markdownViewport}
                   markdownHighlight={props.markdownHighlight}
                   markdownMath={props.markdownMath}
+                  markdownStage={props.markdownStage}
+                  onMarkdownStage={props.onMarkdownStage}
                 />
               )}
             </Show>
@@ -993,6 +1003,8 @@ export function UserMessageDisplay(props: {
   markdownViewport?: HTMLDivElement
   markdownHighlight?: "full" | "defer"
   markdownMath?: "full" | "defer"
+  markdownStage?: MarkdownStage
+  onMarkdownStage?: (key: string, stage: MarkdownStage | undefined) => void
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -1128,6 +1140,8 @@ export function UserMessageDisplay(props: {
               <Markdown
                 text={text()}
                 cacheKey={textPart()?.id}
+                stage={props.markdownStage}
+                onStage={props.onMarkdownStage}
                 eager={props.markdownEager}
                 viewport={props.markdownViewport}
                 highlight={props.markdownHighlight}
@@ -1239,6 +1253,8 @@ export function UserMessageDisplay(props: {
           <div data-slot="user-message-skill-content">
             <Markdown
               text={skillTemplatePart()!.text}
+              stage={props.markdownStage}
+              onStage={props.onMarkdownStage}
               eager={props.markdownEager}
               viewport={props.markdownViewport}
               highlight={props.markdownHighlight}
@@ -1251,14 +1267,16 @@ export function UserMessageDisplay(props: {
         <div data-slot="user-message-hooks">
           <For each={hooks()}>
             {(part) => (
-              <Part
-                part={part}
-                message={props.message}
-                markdownEager={props.markdownEager}
-                markdownViewport={props.markdownViewport}
-                markdownHighlight={props.markdownHighlight}
-                markdownMath={props.markdownMath}
-              />
+                <Part
+                  part={part}
+                  message={props.message}
+                  markdownEager={props.markdownEager}
+                  markdownViewport={props.markdownViewport}
+                  markdownHighlight={props.markdownHighlight}
+                  markdownMath={props.markdownMath}
+                  markdownStage={props.markdownStage}
+                  onMarkdownStage={props.onMarkdownStage}
+                />
             )}
           </For>
         </div>
@@ -1283,6 +1301,8 @@ export function Part(props: MessagePartProps) {
         markdownViewport={props.markdownViewport}
         markdownHighlight={props.markdownHighlight}
         markdownMath={props.markdownMath}
+        markdownStage={props.markdownStage}
+        onMarkdownStage={props.onMarkdownStage}
       />
     </Show>
   )
@@ -1300,6 +1320,8 @@ export interface ToolProps {
   locked?: boolean
   markdownEager?: boolean
   markdownViewport?: HTMLDivElement
+  markdownStage?: MarkdownStage
+  onMarkdownStage?: (key: string, stage: MarkdownStage | undefined) => void
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -1440,6 +1462,9 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
               markdownEager={props.markdownEager}
+              markdownViewport={props.markdownViewport}
+              markdownStage={props.markdownStage}
+              onMarkdownStage={props.onMarkdownStage}
             />
           </Match>
         </Switch>
@@ -1609,6 +1634,8 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
           <Markdown
             text={body()}
             cacheKey={plain() ? `${part.id}:stream` : part.id}
+            stage={props.markdownStage}
+            onStage={props.onMarkdownStage}
             plain={plain()}
             streaming={plain()}
             instant={streaming()}
@@ -1650,13 +1677,28 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const i18n = useI18n()
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
-  const [open, setOpen] = createSignal(true)
+  const [open, setOpen] = createSignal(false)
   const streaming = createMemo(() => {
     if (props.message.role !== "assistant") return false
     return typeof (props.message as AssistantMessage).time.completed !== "number"
   })
   const title = createMemo(() =>
     streaming() ? i18n.t("ui.messagePart.reasoning.thinking") : i18n.t("ui.messagePart.reasoning.thought"),
+  )
+
+  const previewText = createMemo(() => {
+    const content = text()
+    if (!content) return ""
+    const lines = content.split("\n")
+    return lines.slice(-3).join("\n")
+  })
+
+  createEffect(
+    on(streaming, (now, prev) => {
+      if (prev === true && now === false) {
+        setOpen(false)
+      }
+    }),
   )
 
   return (
@@ -1673,18 +1715,33 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
             <Collapsible.Arrow />
           </div>
         </Collapsible.Trigger>
-        <Collapsible.Content>
-          <div data-component="reasoning-part">
+        <Show when={streaming() && !open()}>
+          <div data-component="reasoning-part" data-mode="preview">
             <Markdown
-              text={text()}
-              cacheKey={part.id}
-              streaming={streaming()}
-              eager={props.markdownEager}
-              viewport={props.markdownViewport}
-              highlight={props.markdownHighlight}
-              math={props.markdownMath}
+              text={previewText()}
+              cacheKey={`${part.id}:preview`}
+              stage={props.markdownStage}
+              onStage={props.onMarkdownStage}
+              plain={true}
             />
           </div>
+        </Show>
+        <Collapsible.Content>
+          <Show when={open()}>
+            <div data-component="reasoning-part" data-mode="full">
+              <Markdown
+                text={text()}
+                cacheKey={part.id}
+                stage={props.markdownStage}
+                onStage={props.onMarkdownStage}
+                streaming={streaming()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                highlight={props.markdownHighlight}
+                math={streaming() ? "defer" : props.markdownMath}
+              />
+            </div>
+          </Show>
         </Collapsible.Content>
       </Collapsible>
     </Show>
@@ -1838,7 +1895,13 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} eager={props.markdownEager} viewport={props.markdownViewport} />
+              <Markdown
+                text={output()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                stage={props.markdownStage}
+                onStage={props.onMarkdownStage}
+              />
             </div>
           )}
         </Show>
@@ -1865,7 +1928,13 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} eager={props.markdownEager} viewport={props.markdownViewport} />
+              <Markdown
+                text={output()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                stage={props.markdownStage}
+                onStage={props.onMarkdownStage}
+              />
             </div>
           )}
         </Show>
@@ -1895,7 +1964,13 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} eager={props.markdownEager} viewport={props.markdownViewport} />
+              <Markdown
+                text={output()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                stage={props.markdownStage}
+                onStage={props.onMarkdownStage}
+              />
             </div>
           )}
         </Show>
@@ -2050,7 +2125,13 @@ ToolRegistry.register({
         <Show when={props.output && !pending()}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={String(output())} eager={props.markdownEager} viewport={props.markdownViewport} />
+              <Markdown
+                text={String(output())}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                stage={props.markdownStage}
+                onStage={props.onMarkdownStage}
+              />
             </div>
           )}
         </Show>
@@ -2094,7 +2175,13 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={String(output())} eager={props.markdownEager} viewport={props.markdownViewport} />
+              <Markdown
+                text={String(output())}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                stage={props.markdownStage}
+                onStage={props.onMarkdownStage}
+              />
             </div>
           )}
         </Show>

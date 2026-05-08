@@ -6,6 +6,18 @@ type SessionStore = {
   path: { directory: string }
 }
 
+export type ProjectOwnerInput = {
+  worktree: string
+  sandboxes?: string[]
+}
+
+export type ProjectOwner<T extends ProjectOwnerInput> = {
+  project: T
+  root: string
+  directory: string
+  sandbox: boolean
+}
+
 export const workspaceKey = (directory: string) => {
   const value = directory.replaceAll("\\", "/")
   const drive = value.match(/^([A-Za-z]:)\/+$/)
@@ -18,6 +30,44 @@ export const canonicalWorkspaceDir = (route: string, canonical?: string) => {
   if (!canonical) return route
   if (workspaceKey(route) !== workspaceKey(canonical)) return route
   return canonical
+}
+
+export function projectOwner<T extends ProjectOwnerInput>(directory: string | undefined, projects: T[]) {
+  if (!directory) return
+  const key = workspaceKey(directory)
+  if (!key) return
+
+  const exact = projects.find((item) => workspaceKey(item.worktree) === key)
+  if (exact) {
+    const stale = projects.find(
+      (item) =>
+        workspaceKey(item.worktree) !== key && item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
+    )
+    if (stale) {
+      console.debug("[layout] project owner ignored sandbox because worktree matched first", {
+        directory,
+        worktree: exact.worktree,
+        sandboxOf: stale.worktree,
+      })
+    }
+    return {
+      project: exact,
+      root: exact.worktree,
+      directory: exact.worktree,
+      sandbox: false,
+    } satisfies ProjectOwner<T>
+  }
+
+  for (const item of projects) {
+    const sandbox = item.sandboxes?.find((entry) => workspaceKey(entry) === key)
+    if (!sandbox) continue
+    return {
+      project: item,
+      root: item.worktree,
+      directory: sandbox,
+      sandbox: true,
+    } satisfies ProjectOwner<T>
+  }
 }
 
 export async function waitForMatch<T>(

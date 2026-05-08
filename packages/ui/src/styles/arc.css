@@ -41,13 +41,17 @@ html[data-theme="arc"] {
   --card-elevation:
     0 0 0 0.5px rgba(167, 139, 250, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.25);
 
-  /* Per-project rail hues — used by commit 4 to give each project a soft tint */
-  --rail-hue-1: linear-gradient(180deg, #3d4860 0%, #333d50 100%); /* indigo */
-  --rail-hue-2: linear-gradient(180deg, #404d44 0%, #374039 100%); /* moss */
-  --rail-hue-3: linear-gradient(180deg, #4e404b 0%, #44373d 100%); /* rose */
-  --rail-hue-4: linear-gradient(180deg, #4b493d 0%, #413f34 100%); /* sand */
-  --rail-hue-5: linear-gradient(180deg, #404d50 0%, #374043 100%); /* sea */
-  --rail-hue-6: linear-gradient(180deg, #3e3e4d 0%, #353543 100%); /* cloud */
+  /* Per-project rail hues — flat mid-saturated tones (no gradient).
+     A flat fill reads cleaner: the tile becomes a single confident
+     color block, and the white letter on top has the best possible
+     contrast across the whole face — same reasoning as the light-mode
+     rail hues below. */
+  --rail-hue-1: #384358; /* indigo */
+  --rail-hue-2: #3c473f; /* moss */
+  --rail-hue-3: #493c44; /* rose */
+  --rail-hue-4: #464439; /* sand */
+  --rail-hue-5: #3c474a; /* sea */
+  --rail-hue-6: #3a3a48; /* cloud */
 }
 
 /* ─── Light mode ─── */
@@ -346,6 +350,42 @@ html[data-theme="arc"] [data-dock-surface="shell"][data-slot="prompt-shell"] {
   border-radius: var(--radius-2xl);
 }
 
+/* Question tool (dark) — the default light-dark(#fff6be, #2a2307) background
+   produces a deep amber-brown that clashes with Arc's violet-tinged palette.
+   Replace with a warm-violet ramp that harmonises with Arc's primary
+   (#9B7AE8) and warm purple-gray chrome (#4a3d47). Shifted toward
+   magenta to avoid reading as blue: #3a2448 → #583060 → #8b4f9e → #c084d0. */
+html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] {
+  background-color: #3a2448;
+
+  [data-slot="option-description"] {
+    color: #c084d0;
+  }
+
+  [data-slot="question-option"]:hover:not([data-picked="true"]) {
+    background-color: rgba(255, 255, 255, 0.06);
+  }
+
+  [data-slot="question-option"][data-focused="true"]:not([data-picked="true"]) {
+    background-color: rgba(192, 132, 208, 0.15);
+    border-color: rgba(192, 132, 208, 0.4);
+  }
+
+  [data-slot="question-option"][data-picked="true"] {
+    background-color: rgba(192, 132, 208, 0.22);
+    border-color: rgba(192, 132, 208, 0.5);
+  }
+
+  [data-slot="question-option-box"][data-picked="true"] {
+    border-color: #c084d0;
+    background-color: #c084d0;
+
+    [data-component="icon"] {
+      color: #3a2448;
+    }
+  }
+}
+
 /* Buttons / cards / dialogs: bump radii to feel softer under arc */
 html[data-theme="arc"] [data-component="button"] {
   border-radius: var(--radius-lg);
@@ -456,26 +496,27 @@ html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
   }
 
   /* Question tool — the default light-dark(#fff6be, #2a2307)
-     background produces a pale cream-yellow that has poor contrast
-     with the amber-tinted description text (--amber-darkalpha-10 =
-     #ffce48f9) and even --text-strong (#1A1625) reads faintly on it.
-     Replace with a richer warm-ochre that fits Arc's violet-tinged
-     palette while giving dark text a WCAG-passing contrast ratio. */
+     background produces a pale cream-yellow that clashes with Arc's
+     violet-tinged palette. Replace with a lavender-to-violet ramp
+     that harmonises with Arc's primary (#6B46E5) and dusty-mauve
+     chrome (#756b7e), while giving dark text a WCAG-passing contrast
+     ratio. Palette inspired by the "Purple Dream" scale:
+     #EDE9FE → #C4B5FD → #A78BFA → #8B5CF6 → #7C3AED. */
   html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] {
-    background-color: #f0dca4;
+    background-color: #EDE9FE;
 
     [data-slot="option-description"] {
-      color: #6b4f1e;
+      color: #5B21B6;
     }
 
     [data-slot="question-option"][data-focused="true"]:not([data-picked="true"]) {
-      background-color: #e8cf8a;
-      border-color: #b8972f;
+      background-color: #DDD6FE;
+      border-color: #A78BFA;
     }
 
     [data-slot="question-option"][data-picked="true"] {
-      background-color: #ddd0a0;
-      border-color: #a68830;
+      background-color: #C4B5FD;
+      border-color: #8B5CF6;
     }
   }
 }

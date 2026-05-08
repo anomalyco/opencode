@@ -27,7 +27,7 @@ import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode, checksum } from "@opencode-ai/util/encode"
-import { useNavigate, useSearchParams } from "@solidjs/router"
+import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
@@ -68,6 +68,13 @@ import { formatServerError } from "@/utils/server-errors"
 const emptyUserMessages: UserMessage[] = []
 const scrollBottomThreshold = 16
 const emptyFollowups: (FollowupDraft & { id: string })[] = []
+const scrollDebugKey = "opencode.session.scroll.debug"
+
+function probe(id?: string) {
+  if (typeof window === "undefined") return false
+  const flag = window.localStorage.getItem(scrollDebugKey)
+  return flag === "1" || (!!id && flag === id)
+}
 
 type ChangeMode = "git" | "branch" | "session" | "turn"
 type VcsMode = "git" | "branch"
@@ -89,6 +96,7 @@ export default function Page() {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
+  const location = useLocation()
   const sdk = useSDK()
   const settings = useSettings()
   const sessionHistory = useSessionHistory()
@@ -114,6 +122,7 @@ export default function Page() {
 
   const [ui, setUi] = createStore({
     pendingMessage: undefined as string | undefined,
+    seekingMessageId: undefined as string | undefined,
     reviewSnap: false,
     scrollGesture: 0,
     mode: "live" as ScrollMode,
@@ -517,6 +526,9 @@ export default function Page() {
     const base = current ? msgs.findIndex((m) => m.id === current) : msgs.length
     const currentIndex = base === -1 ? msgs.length : base
     const targetIndex = currentIndex + offset
+    console.debug(
+      `[session] message offset navigation: offset=${offset} current=${current || "none"} currentIndex=${currentIndex} targetIndex=${targetIndex} total=${msgs.length}`,
+    )
     if (targetIndex < 0 || targetIndex > msgs.length) return
 
     if (targetIndex === msgs.length) {
@@ -596,6 +608,41 @@ export default function Page() {
   }
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
+
+  const debug = (src: string, el = scroller, extra?: Record<string, unknown>) => {
+    if (!probe(params.id)) return
+    if (!el) {
+      console.debug("[session-scroll]", { src, id: params.id, missing: true, ...extra })
+      return
+    }
+
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    const list = content?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
+    const head = document.querySelector<HTMLElement>("[data-session-title]")
+    console.debug("[session-scroll]", {
+      src,
+      id: params.id,
+      mode: ui.mode,
+      live: live(),
+      bottom: ui.scroll.bottom,
+      overflow: ui.scroll.overflow,
+      scrolled: autoScroll.userScrolled(),
+      gesture: hasScrollGesture(),
+      seeking: ui.seekingMessageId || "none",
+      current: store.messageId || "none",
+      top: Math.round(el.scrollTop),
+      max: Math.round(max),
+      gap: Math.round(max - el.scrollTop),
+      height: Math.round(el.scrollHeight),
+      client: Math.round(el.clientHeight),
+      content: content ? Math.round(content.getBoundingClientRect().height) : "none",
+      list: list ? Math.round(list.getBoundingClientRect().height) : "none",
+      margin: list ? getComputedStyle(list).marginTop : "none",
+      head: head ? Math.round(head.getBoundingClientRect().height) : "none",
+      dock: dockHeight,
+      ...extra,
+    })
+  }
 
   createEffect(
     on([() => sdk.directory, () => params.id] as const, ([, id]) => {
@@ -1179,18 +1226,20 @@ export default function Page() {
     bottomThreshold: scrollBottomThreshold,
     resize: "off",
   })
-  const live = () => ui.mode === "live"
+  const live = () => ui.mode === "live" && !autoScroll.userScrolled()
   const enterLive = () => {
     if (ui.mode === "live") return
     setUi("mode", "live")
   }
-  const enterAnchored = (id?: string) => {
+  const enterAnchored = () => {
     if (ui.mode === "anchored") return
     setUi("mode", "anchored")
   }
 
   const handleTimelineAutoScroll = () => {
+    debug("timeline-scroll:before")
     autoScroll.handleScroll()
+    debug("timeline-scroll:after")
   }
 
   // Streaming stability depends on locking the outer timeline directly to the
@@ -1198,8 +1247,13 @@ export default function Page() {
   // content height is already changing every frame.
   const lockBottom = (el: HTMLDivElement, source: string) => {
     const next = Math.max(0, el.scrollHeight - el.clientHeight)
-    if (Math.abs(el.scrollTop - next) <= 1) return
+    const dist = next - el.scrollTop
+    if (Math.abs(dist) <= 1) {
+      debug("lock-bottom:skip", el, { source, dist: Math.round(dist) })
+      return
+    }
     el.scrollTop = next
+    debug("lock-bottom:write", el, { source, dist: Math.round(dist) })
   }
 
   let scrollStateFrame: number | undefined
@@ -1207,6 +1261,8 @@ export default function Page() {
   let fillFrame: number | undefined
   let initialScrollKey: string | undefined
   let initialScrollFrame: number | undefined
+
+  const hasScrollTarget = () => !!location.hash || !!ui.pendingMessage || !!ui.seekingMessageId || !!store.messageId
 
   const clamp = (el: HTMLDivElement, reason = "clamp") => {
     const max = Math.max(0, el.scrollHeight - el.clientHeight)
@@ -1221,26 +1277,36 @@ export default function Page() {
     () => {
       const root = scroller
       if (!root) return
+      debug("content-resize:before", root)
       clamp(root, "content:resize:clamp")
       // Deferred markdown/math expansion can increase content height after the
       // stream is already idle. If the viewport was still at the bottom before
       // that resize, keep it pinned instead of letting the tail drift upward.
-      if (live() || ui.scroll.bottom) {
+      if (live() && !hasScrollGesture()) {
         lockBottom(root, "content:resize:lock-bottom")
       }
+      debug("content-resize:after", root)
       scheduleScrollState(root)
     },
   )
 
   const updateScrollState = (el: HTMLDivElement) => {
     if (!el.isConnected || el.clientHeight <= 0 || el.scrollHeight <= 0) return
+    debug("state:before", el)
+    if (live() && !hasScrollGesture() && !ui.seekingMessageId && !store.messageId) {
+      lockBottom(el, "state:live-lock")
+    }
     const top = clamp(el)
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
     const bottom = !overflow || max - top <= scrollBottomThreshold
 
-    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
+    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) {
+      debug("state:same", el, { nextOverflow: overflow, nextBottom: bottom })
+      return
+    }
     setUi("scroll", { overflow, bottom })
+    debug("state:update", el, { nextOverflow: overflow, nextBottom: bottom })
   }
 
   const scheduleScrollState = (el: HTMLDivElement) => {
@@ -1279,6 +1345,7 @@ export default function Page() {
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
+    setUi("seekingMessageId", undefined)
     enterLive()
     autoScroll.forceScrollToBottom()
     clearMessageHash()
@@ -1301,13 +1368,22 @@ export default function Page() {
           initialScrollFrame = requestAnimationFrame(() => {
             initialScrollFrame = undefined
             if (sessionKey() !== key) return
+            if (hasScrollTarget()) {
+              console.debug(
+                `[session] initial bottom skipped: key=${key} hash=${location.hash || "none"} pending=${ui.pendingMessage || "none"} seeking=${ui.seekingMessageId || "none"} current=${store.messageId || "none"}`,
+              )
+              initialScrollKey = undefined
+              return
+            }
             const el = scroller
             if (!el) return
+            debug("initial:before", el, { key })
             setStore("messageId", undefined)
             enterLive()
             clearMessageHash()
             lockBottom(el, "initial-scroll:bottom")
             scheduleScrollState(el)
+            debug("initial:after", el, { key })
             initialScrollKey = undefined
           })
         })
@@ -1320,8 +1396,9 @@ export default function Page() {
     on(
       autoScroll.userScrolled,
       (scrolled) => {
+        debug("user-scrolled:change", scroller, { scrolled })
         if (scrolled) {
-          enterAnchored(store.messageId ?? cursor())
+          enterAnchored()
           return
         }
         enterLive()
@@ -1336,8 +1413,10 @@ export default function Page() {
     on(
       () => ui.scroll.bottom,
       (bottom, prev) => {
+        debug("bottom:change", scroller, { prev, bottom })
         if (!bottom) return
         if (prev === undefined || prev === bottom) return
+        if (ui.seekingMessageId) return
         if (ui.mode !== "live") {
           enterLive()
           setStore("messageId", undefined)
@@ -1354,21 +1433,14 @@ export default function Page() {
     scroller = el
     autoScroll.scrollRef(el)
     if (!el) return
-    let prevTop = el.scrollTop
-    const onScroll = () => {
-      const nextTop = el.scrollTop
-      prevTop = nextTop
-    }
-    el.addEventListener("scroll", onScroll, { passive: true })
-    onCleanup(() => {
-      el.removeEventListener("scroll", onScroll)
-    })
+    debug("scroll-ref", el)
     scheduleScrollState(el)
     fill()
   }
 
   const markUserScroll = () => {
     scrollMark += 1
+    debug("user-scroll", scroller, { mark: scrollMark })
   }
 
   const loadEarlier = async () => {
@@ -1702,7 +1774,7 @@ export default function Page() {
       const el = scroller
       const delta = next - dockHeight
       const gap = el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0
-      const stick = el ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta) : false
+      const stick = el && !ui.seekingMessageId ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta) : false
 
       dockHeight = next
 
@@ -1732,6 +1804,7 @@ export default function Page() {
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
+    setSeekingMessage: (value) => setUi("seekingMessageId", value),
     setActiveMessage,
     enterLive,
     enterAnchored,
@@ -1839,6 +1912,7 @@ export default function Page() {
                     }}
                     renderedUserMessages={visibleUserMessages()}
                     currentMessageId={store.messageId}
+                    seekingMessageId={ui.seekingMessageId}
                     onJumpToMessage={(message) => {
                       autoScroll.pause()
                       scrollToMessage(message, "auto")

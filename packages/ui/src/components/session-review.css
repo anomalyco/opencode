@@ -7,9 +7,10 @@
   [data-slot="session-review-scroll"] {
     flex: 1 1 auto;
     min-height: 0;
+    overscroll-behavior: contain; /* Prevent scroll chaining to parent */
   }
 
-  .scroll-view__viewport {
+  [data-slot="scroll-view-viewport"] {
     display: flex;
     flex-direction: column;
   }
