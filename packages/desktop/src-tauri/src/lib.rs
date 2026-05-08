@@ -4,6 +4,8 @@ mod constants;
 mod local_asset;
 // FORK: DeskFox system tray + 主进程常驻骨架 [feat: feishu-bridge] 2026-05-08
 mod system_tray;
+// FORK: 飞书 adapter 主进程接入(spawn + Tauri commands)[feat: feishu-bridge] 2026-05-08
+mod feishu_adapter;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 #[cfg(target_os = "linux")]
@@ -490,6 +492,9 @@ pub fn run() {
                 tracing::warn!("failed to build system tray: {err}");
             }
 
+            // FORK: 飞书 adapter 状态初始化(C1.3,Phase 2+ 真 spawn)[feat: feishu-bridge]
+            feishu_adapter::init(app.handle());
+
             Ok(())
         });
 
@@ -558,7 +563,11 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             // FORK: tray 状态切换 + 主窗口控制 + 退出 [feat: feishu-bridge] 2026-05-08
             system_tray::set_tray_status_cmd,
             system_tray::show_main_window_cmd,
-            system_tray::quit_app_cmd
+            system_tray::quit_app_cmd,
+            // FORK: 飞书 adapter OAuth 接入 [feat: feishu-bridge] 2026-05-08
+            feishu_adapter::feishu_oauth_start,
+            feishu_adapter::feishu_oauth_poll,
+            feishu_adapter::feishu_adapter_status
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
