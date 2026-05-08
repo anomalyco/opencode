@@ -2,6 +2,8 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
-    "noUncheckedIndexedAccess": false
+    "noUncheckedIndexedAccess": false,
+    "skipLibCheck": true,
+    "lib": ["es2022", "dom", "dom.iterable"]
   }
 }

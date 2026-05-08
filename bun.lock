@@ -32,6 +32,8 @@
       "version": "0.0.1",
       "dependencies": {
         "@larksuiteoapi/node-sdk": "1.50.0",
+        "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/sdk": "workspace:*",
         "axios": "1.7.9",
         "qrcode-terminal": "0.12.0",
         "zod": "catalog:",

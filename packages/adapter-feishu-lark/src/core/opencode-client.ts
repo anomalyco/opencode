@@ -22,6 +22,13 @@ export interface OpencodeClientOptions {
   auth?: { username: string; password: string }
   /** 默认 timeout(ms) */
   timeoutMs?: number
+  /**
+   * opencode workspace directory — 通过 `x-opencode-directory` header 路由 instance。
+   *
+   * opencode 是多 instance 设计,每个 instance 跟 directory 绑死;不传此 header → "No context found"。
+   * 飞书桥接默认用 `~/.opencode/feishu-workspace`(独立于 DeskFox 主窗口的 user-selected project)。
+   */
+  directory?: string
 }
 
 export interface SessionCreateRequest {
@@ -76,6 +83,7 @@ export class OpencodeClient {
   private readonly baseURL: string
   private readonly authHeader: string | null
   private readonly timeoutMs: number
+  private readonly directoryHeader: string | null
 
   constructor(options: OpencodeClientOptions) {
     // 去掉末尾 /
@@ -87,6 +95,25 @@ export class OpencodeClient {
       this.authHeader = null
     }
     this.timeoutMs = options.timeoutMs ?? 30_000
+    // x-opencode-directory header 值(URL-encoded,跟 SDK 一致)
+    this.directoryHeader = options.directory
+      ? encodeURIComponent(options.directory)
+      : null
+  }
+
+  /** 暴露 baseURL 给同包内 pipeline 模块自己拼 /event SSE 用 */
+  get baseURLPublic(): string {
+    return this.baseURL
+  }
+
+  /** 暴露 authHeader 给同包内 pipeline 模块用 */
+  get authHeaderPublic(): string | null {
+    return this.authHeader
+  }
+
+  /** 暴露 directory header(URL-encoded)给同包内 pipeline 模块用 */
+  get directoryHeaderPublic(): string | null {
+    return this.directoryHeader
   }
 
   /** 从 env var 构造(adapter 启动时主进程注入)*/
@@ -116,6 +143,7 @@ export class OpencodeClient {
       "Content-Type": "application/json",
     }
     if (this.authHeader) headers["Authorization"] = this.authHeader
+    if (this.directoryHeader) headers["x-opencode-directory"] = this.directoryHeader
 
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), this.timeoutMs)
@@ -215,6 +243,7 @@ export class OpencodeClient {
 
     const headers: Record<string, string> = { Accept: "text/event-stream" }
     if (this.authHeader) headers["Authorization"] = this.authHeader
+    if (this.directoryHeader) headers["x-opencode-directory"] = this.directoryHeader
 
     void (async () => {
       try {

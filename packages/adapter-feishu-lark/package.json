@@ -9,6 +9,7 @@
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts",
     "./core/*": "./src/core/*.ts",
     "./feishu/*": "./src/feishu/*.ts"
   },
@@ -26,6 +27,8 @@
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "1.50.0",
+    "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*",
     "axios": "1.7.9",
     "qrcode-terminal": "0.12.0",
     "zod": "catalog:"
