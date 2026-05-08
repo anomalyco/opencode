@@ -35,6 +35,7 @@ const MIN_COLUMN_WIDTH = 28
 const MAX_COLUMN_WIDTH = 44
 const PANEL_HEIGHT_RATIO = 0.3
 const PANEL_TOP_PADDING = 1
+const HEADER_SIDE_WIDTH = 5
 const FOOTER_HEIGHT = 1
 const FOOTER_MARGIN = 1
 
@@ -46,6 +47,7 @@ type Skin = {
   panel: Color
   text: Color
   muted: Color
+  subtle: Color
   key: Color
   accent: Color
   tab: Color
@@ -90,6 +92,7 @@ function skin(api: TuiPluginApi): Skin {
     panel: ink(api, "backgroundMenu", "#1c1c1c"),
     text: ink(api, "text", "#f0f0f0"),
     muted: ink(api, "textMuted", "#a5a5a5"),
+    subtle: ink(api, "borderSubtle", "#6f6f6f"),
     key: ink(api, "warning", "#ffd75f"),
     accent: ink(api, "primary", "#5f87ff"),
     tab: ink(api, "primary", "#5f87ff"),
@@ -166,13 +169,15 @@ function WhichKeyPanel(props: {
   const entries = createMemo(() => active().map((item) => activeKeyEntry(props.api, item)))
   const groups = createMemo(() => grouped(entries()))
   const tabsVisible = createMemo(() => !pendingMode() && groups().length > 0)
+  const headerVisible = createMemo(() => tabsVisible() || pendingMode())
   const footerVisible = createMemo(() => !pendingMode())
   const rows = createMemo(() =>
     Math.max(
       1,
       panelHeight() -
         PANEL_TOP_PADDING -
-        (tabsVisible() ? 1 + TAB_CONTENT_GAP : 0) -
+        (headerVisible() ? 1 : 0) -
+        (tabsVisible() ? TAB_CONTENT_GAP : 0) -
         (footerVisible() ? FOOTER_MARGIN + FOOTER_HEIGHT : 0),
     ),
   )
@@ -201,16 +206,11 @@ function WhichKeyPanel(props: {
     return columnsItems
   })
   const rowIndexes = createMemo(() => Array.from({ length: rows() }, (_, index) => index))
-  const position = createMemo(() => {
-    if (!entries().length) return "0 bindings"
-    return `page ${Math.floor(offset() / pageSize()) + 1}/${Math.max(1, Math.ceil(items().length / pageSize()))}  ${pendingMode() ? entries().length : activeEntries().length} bindings`
-  })
   const trigger = commandShortcut(props.api, command.toggle)
   const modeTrigger = commandShortcut(props.api, command.toggleLayout)
-  const scrollUpTrigger = commandShortcut(props.api, command.scrollUp)
-  const scrollDownTrigger = commandShortcut(props.api, command.scrollDown)
   const upActive = createMemo(() => offset() > 0)
   const downActive = createMemo(() => offset() < maxOffset())
+  const scrollable = createMemo(() => maxOffset() > 0)
   const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
   const look = createMemo(() => skin(props.api))
   const columnWidth = createMemo(() =>
@@ -352,33 +352,47 @@ function WhichKeyPanel(props: {
         flexShrink={0}
         flexDirection="column"
       >
-        <Show when={tabsVisible()}>
-          <box width="100%" flexDirection="row" justifyContent="center" gap={TAB_GAP} paddingRight={1} flexShrink={0}>
-            <For each={groups()}>
-              {(group) => {
-                const selected = createMemo(() => currentGroup()?.label === group.label)
-                return (
-                  <box
-                    paddingLeft={1}
-                    paddingRight={1}
-                    backgroundColor={selected() ? look().tab : undefined}
-                    onMouseDown={() => {
-                      setActiveGroup(group.label)
-                      setOffset(0)
-                    }}
-                  >
-                    <text
-                      fg={selected() ? look().tabText : look().muted}
-                      attributes={selected() ? TextAttributes.BOLD : undefined}
-                      wrapMode="none"
-                      truncate
-                    >
-                      {group.label}
-                    </text>
-                  </box>
-                )
-              }}
-            </For>
+        <Show when={headerVisible()}>
+          <box width="100%" flexDirection="row" flexShrink={0}>
+            <box width={HEADER_SIDE_WIDTH} flexShrink={0} />
+            <box flexGrow={1} minWidth={0} flexDirection="row" justifyContent="center" gap={TAB_GAP}>
+              <Show when={tabsVisible()}>
+                <For each={groups()}>
+                  {(group) => {
+                    const selected = createMemo(() => currentGroup()?.label === group.label)
+                    return (
+                      <box
+                        paddingLeft={1}
+                        paddingRight={1}
+                        backgroundColor={selected() ? look().tab : undefined}
+                        onMouseDown={() => {
+                          setActiveGroup(group.label)
+                          setOffset(0)
+                        }}
+                      >
+                        <text
+                          fg={selected() ? look().tabText : look().muted}
+                          attributes={selected() ? TextAttributes.BOLD : undefined}
+                          wrapMode="none"
+                          truncate
+                        >
+                          {group.label}
+                        </text>
+                      </box>
+                    )
+                  }}
+                </For>
+              </Show>
+            </box>
+            <box width={HEADER_SIDE_WIDTH} flexShrink={0} alignItems="flex-end">
+              <Show when={scrollable()}>
+                <text wrapMode="none">
+                  <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
+                  <span style={{ fg: look().muted }}> </span>
+                  <span style={{ fg: downActive() ? look().text : look().muted }}>↓</span>
+                </text>
+              </Show>
+            </box>
           </box>
         </Show>
         <Show when={tabsVisible()}>
@@ -437,19 +451,17 @@ function WhichKeyPanel(props: {
         </box>
         <Show when={footerVisible()}>
           <box height={FOOTER_MARGIN} flexShrink={0} />
-          <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
-            <text fg={look().text} wrapMode="none">
-              toggle <span style={{ fg: look().muted }}>{trigger() || command.toggle}</span>
-            </text>
-            <text fg={look().text} wrapMode="none">
-              <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
-              <span style={{ fg: downActive() ? look().text : look().muted }}>↓</span>
-              {"  "}
-              {nextMode()} <span style={{ fg: look().muted }}>{modeTrigger() || command.toggleLayout}</span>
-              {"  scroll "}
-              <span style={{ fg: look().muted }}>{scrollUpTrigger() || command.scrollUp}</span>/
-              <span style={{ fg: look().muted }}>{scrollDownTrigger() || command.scrollDown}</span>
-            </text>
+          <box width="100%" flexDirection="row" justifyContent="space-between" flexShrink={0}>
+            <box>
+              <text fg={look().text} wrapMode="none">
+                toggle <span style={{ fg: look().subtle }}>{trigger() || command.toggle}</span>
+              </text>
+            </box>
+            <box>
+              <text fg={look().text} wrapMode="none">
+                {nextMode()} <span style={{ fg: look().subtle }}>{modeTrigger() || command.toggleLayout}</span>
+              </text>
+            </box>
           </box>
         </Show>
       </box>
