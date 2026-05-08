@@ -472,15 +472,22 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
     commands: [
       {
         name: "permission.reject.cancel",
+        title: "Cancel permission rejection",
+        category: "Permission",
         run() {
           props.onCancel()
         },
       },
     ],
     bindings: [
-      { key: "escape", cmd: () => props.onCancel() },
+      { key: "escape", desc: "Cancel permission rejection", group: "Permission", cmd: () => props.onCancel() },
       ...keymapConfig.pick("permission", ["permission.reject.cancel"]),
-      { key: "return", cmd: () => props.onConfirm(input.plainText) },
+      {
+        key: "return",
+        desc: "Confirm permission rejection",
+        group: "Permission",
+        cmd: () => props.onConfirm(input.plainText),
+      },
     ],
   }))
 
@@ -562,6 +569,8 @@ function Prompt<const T extends Record<string, string>>(props: {
     commands: [
       {
         name: "permission.prompt.escape",
+        title: "Reject permission",
+        category: "Permission",
         run() {
           if (!props.escapeKey) return
           props.onSelect(props.escapeKey)
@@ -569,6 +578,8 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         name: "permission.prompt.fullscreen",
+        title: "Toggle permission fullscreen",
+        category: "Permission",
         run() {
           if (!props.fullscreen) return
           setStore("expanded", (v) => !v)
@@ -578,6 +589,8 @@ function Prompt<const T extends Record<string, string>>(props: {
     bindings: [
       {
         key: "left",
+        desc: "Previous permission option",
+        group: "Permission",
         cmd: () => {
           const idx = keys.indexOf(store.selected)
           const next = keys[(idx - 1 + keys.length) % keys.length]
@@ -586,6 +599,8 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         key: "h",
+        desc: "Previous permission option",
+        group: "Permission",
         cmd: () => {
           const idx = keys.indexOf(store.selected)
           const next = keys[(idx - 1 + keys.length) % keys.length]
@@ -594,6 +609,8 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         key: "right",
+        desc: "Next permission option",
+        group: "Permission",
         cmd: () => {
           const idx = keys.indexOf(store.selected)
           const next = keys[(idx + 1) % keys.length]
@@ -602,14 +619,30 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         key: "l",
+        desc: "Next permission option",
+        group: "Permission",
         cmd: () => {
           const idx = keys.indexOf(store.selected)
           const next = keys[(idx + 1) % keys.length]
           setStore("selected", next)
         },
       },
-      { key: "return", cmd: () => props.onSelect(store.selected) },
-      ...(props.escapeKey ? [{ key: "escape", cmd: () => props.onSelect(props.escapeKey!) }] : []),
+      {
+        key: "return",
+        desc: "Select permission option",
+        group: "Permission",
+        cmd: () => props.onSelect(store.selected),
+      },
+      ...(props.escapeKey
+        ? [
+            {
+              key: "escape",
+              desc: "Reject permission",
+              group: "Permission",
+              cmd: () => props.onSelect(props.escapeKey!),
+            },
+          ]
+        : []),
       ...(props.escapeKey ? keymapConfig.pick("permission", ["permission.prompt.escape"]) : []),
       ...(props.fullscreen ? keymapConfig.pick("permission", ["permission.prompt.fullscreen"]) : []),
     ],

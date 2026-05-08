@@ -25,12 +25,15 @@ const LAYER_PRIORITY = 900
 const KV_LAYOUT = "which_key_layout"
 const KV_PENDING_PREVIEW = "which_key_pending_preview"
 const toggleCommands = [command.toggle, command.toggleLayout, command.togglePending] as const
-const scrollCommands = [command.scrollUp, command.scrollDown, command.pageUp, command.pageDown, command.home, command.end] as const
-const panelCommands = [
-  command.groupPrevious,
-  command.groupNext,
-  ...scrollCommands,
+const scrollCommands = [
+  command.scrollUp,
+  command.scrollDown,
+  command.pageUp,
+  command.pageDown,
+  command.home,
+  command.end,
 ] as const
+const panelCommands = [command.groupPrevious, command.groupNext, ...scrollCommands] as const
 const COLUMN_GAP = 4
 const TAB_GAP = 3
 const MIN_TAB_GAP = 1
@@ -108,11 +111,7 @@ function activeKeyLabel(active: ActiveKey<Renderable, KeyEvent>) {
   const group = text(active.bindingAttrs?.group)
   if (active.continues && group) return group
   return (
-    text(active.commandAttrs?.title) ??
-    text(active.bindingAttrs?.desc) ??
-    text(active.commandAttrs?.desc) ??
-    (typeof active.command === "string" ? active.command : undefined) ??
-    UNKNOWN
+    text(active.commandAttrs?.title) ?? text(active.bindingAttrs?.desc) ?? text(active.commandAttrs?.desc) ?? UNKNOWN
   )
 }
 
@@ -183,8 +182,8 @@ function WhichKeyPanel(props: {
   const [activeGroup, setActiveGroup] = createSignal<string | undefined>()
   const pending = useKeymapSelector((keymap) => keymap.getPendingSequence())
   const active = useKeymapSelector((keymap) => keymap.getActiveKeys({ includeMetadata: true }))
-  const pendingMode = createMemo(() =>
-    props.mode() === "overlay" && props.pendingPreview() && pending().length > 0 && active().length > 0,
+  const pendingMode = createMemo(
+    () => props.mode() === "overlay" && props.pendingPreview() && pending().length > 0 && active().length > 0,
   )
   const visible = createMemo(() => props.pinned() || pendingMode())
   const left = 0
@@ -244,7 +243,10 @@ function WhichKeyPanel(props: {
     if (itemCount <= 1) return 0
     const tabWidth = groups().reduce((sum, group) => sum + group.label.length + 2, 0)
     const arrowWidth = scrollable() ? 3 : 0
-    return Math.max(MIN_TAB_GAP, Math.min(TAB_GAP, Math.floor((contentWidth() - tabWidth - arrowWidth) / (itemCount - 1))))
+    return Math.max(
+      MIN_TAB_GAP,
+      Math.min(TAB_GAP, Math.floor((contentWidth() - tabWidth - arrowWidth) / (itemCount - 1))),
+    )
   })
   const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
   const look = createMemo(() => skin(props.api))
@@ -458,7 +460,11 @@ function WhichKeyPanel(props: {
                                 {(binding) => (
                                   <>
                                     <box flexGrow={1} minWidth={0}>
-                                      <text fg={binding().continues ? look().accent : look().muted} wrapMode="none" truncate>
+                                      <text
+                                        fg={binding().continues ? look().accent : look().muted}
+                                        wrapMode="none"
+                                        truncate
+                                      >
                                         {binding().label}
                                       </text>
                                     </box>
@@ -556,26 +562,14 @@ const tui: TuiPlugin = async (api) => {
       app() {
         return (
           <Show when={mode() === "overlay"}>
-            <WhichKeyPanel
-              api={api}
-              layout="overlay"
-              mode={mode}
-              pendingPreview={pendingPreview}
-              pinned={pinned}
-            />
+            <WhichKeyPanel api={api} layout="overlay" mode={mode} pendingPreview={pendingPreview} pinned={pinned} />
           </Show>
         )
       },
       app_bottom() {
         return (
           <Show when={mode() === "dock"}>
-            <WhichKeyPanel
-              api={api}
-              layout="dock"
-              mode={mode}
-              pendingPreview={pendingPreview}
-              pinned={pinned}
-            />
+            <WhichKeyPanel api={api} layout="dock" mode={mode} pendingPreview={pendingPreview} pinned={pinned} />
           </Show>
         )
       },
