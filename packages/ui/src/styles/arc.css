@@ -350,6 +350,46 @@ html[data-theme="arc"] [data-dock-surface="shell"][data-slot="prompt-shell"] {
   border-radius: var(--radius-2xl);
 }
 
+/* Question tool (dark) — the default light-dark(#fff6be, #2a2307) background
+   produces a deep amber-brown that clashes with Arc's violet-tinged palette.
+   Replace with a warm-violet ramp that harmonises with Arc's primary
+   (#9B7AE8) and warm purple-gray chrome (#4a3d47). Shifted toward
+   magenta to avoid reading as blue: #3a2448 → #583060 → #8b4f9e → #c084d0. */
+html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] {
+  background-color: #3a2448;
+
+  [data-slot="option-description"] {
+    color: #c084d0;
+  }
+
+  [data-slot="question-option"]:hover:not([data-picked="true"]) {
+    background-color: rgba(255, 255, 255, 0.06);
+  }
+
+  [data-slot="question-option"][data-focused="true"]:not([data-picked="true"]) {
+    background-color: rgba(192, 132, 208, 0.15);
+    border-color: rgba(192, 132, 208, 0.4);
+  }
+
+  [data-slot="question-option"][data-picked="true"] {
+    background-color: rgba(192, 132, 208, 0.22);
+    border-color: rgba(192, 132, 208, 0.5);
+  }
+
+  [data-slot="question-option-box"][data-picked="true"] {
+    border-color: #c084d0;
+    background-color: #c084d0;
+
+    [data-component="icon"] {
+      color: #3a2448;
+    }
+  }
+}
+
+html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] [data-dock-surface="shell"] {
+  background-color: color-mix(in srgb, #452e50 72%, transparent);
+}
+
 /* Buttons / cards / dialogs: bump radii to feel softer under arc */
 html[data-theme="arc"] [data-component="button"] {
   border-radius: var(--radius-lg);
@@ -456,27 +496,38 @@ html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
   }
 
   /* Question tool — the default light-dark(#fff6be, #2a2307)
-     background produces a pale cream-yellow that has poor contrast
-     with the amber-tinted description text (--amber-darkalpha-10 =
-     #ffce48f9) and even --text-strong (#1A1625) reads faintly on it.
-     Replace with a richer warm-ochre that fits Arc's violet-tinged
-     palette while giving dark text a WCAG-passing contrast ratio. */
+     background produces a pale cream-yellow that clashes with Arc's
+     violet-tinged palette. Replace with a lavender-to-violet ramp
+     that harmonises with Arc's primary (#6B46E5) and dusty-mauve
+     chrome (#756b7e), while giving dark text a WCAG-passing contrast
+     ratio. Palette inspired by the "Purple Dream" scale:
+     #EDE9FE → #C4B5FD → #A78BFA → #8B5CF6 → #7C3AED. */
   html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] {
-    background-color: #f0dca4;
+    background-color: #EDE9FE;
 
     [data-slot="option-description"] {
-      color: #6b4f1e;
+      color: #5B21B6;
     }
 
     [data-slot="question-option"][data-focused="true"]:not([data-picked="true"]) {
-      background-color: #e8cf8a;
-      border-color: #b8972f;
+      background-color: #DDD6FE;
+      border-color: #A78BFA;
     }
 
     [data-slot="question-option"][data-picked="true"] {
-      background-color: #ddd0a0;
-      border-color: #a68830;
+      background-color: #C4B5FD;
+      border-color: #8B5CF6;
     }
+  }
+
+  /* The dock-surface="shell" inside question inherits --dock-shell-bg
+     which in light mode is a translucent white that muddies the lavender
+     background. Override with an opaque soft violet that blends with
+     the question card. */
+  html[data-theme="arc"] [data-component="dock-prompt"][data-kind="question"] [data-dock-surface="shell"] {
+    background-color: rgba(237, 218, 254, 0.72);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
