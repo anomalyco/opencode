@@ -68,6 +68,13 @@ import { formatServerError } from "@/utils/server-errors"
 const emptyUserMessages: UserMessage[] = []
 const scrollBottomThreshold = 16
 const emptyFollowups: (FollowupDraft & { id: string })[] = []
+const scrollDebugKey = "opencode.session.scroll.debug"
+
+function probe(id?: string) {
+  if (typeof window === "undefined") return false
+  const flag = window.localStorage.getItem(scrollDebugKey)
+  return flag === "1" || (!!id && flag === id)
+}
 
 type ChangeMode = "git" | "branch" | "session" | "turn"
 type VcsMode = "git" | "branch"
@@ -601,6 +608,41 @@ export default function Page() {
   }
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
+
+  const debug = (src: string, el = scroller, extra?: Record<string, unknown>) => {
+    if (!probe(params.id)) return
+    if (!el) {
+      console.debug("[session-scroll]", { src, id: params.id, missing: true, ...extra })
+      return
+    }
+
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    const list = content?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
+    const head = document.querySelector<HTMLElement>("[data-session-title]")
+    console.debug("[session-scroll]", {
+      src,
+      id: params.id,
+      mode: ui.mode,
+      live: live(),
+      bottom: ui.scroll.bottom,
+      overflow: ui.scroll.overflow,
+      scrolled: autoScroll.userScrolled(),
+      gesture: hasScrollGesture(),
+      seeking: ui.seekingMessageId || "none",
+      current: store.messageId || "none",
+      top: Math.round(el.scrollTop),
+      max: Math.round(max),
+      gap: Math.round(max - el.scrollTop),
+      height: Math.round(el.scrollHeight),
+      client: Math.round(el.clientHeight),
+      content: content ? Math.round(content.getBoundingClientRect().height) : "none",
+      list: list ? Math.round(list.getBoundingClientRect().height) : "none",
+      margin: list ? getComputedStyle(list).marginTop : "none",
+      head: head ? Math.round(head.getBoundingClientRect().height) : "none",
+      dock: dockHeight,
+      ...extra,
+    })
+  }
 
   createEffect(
     on([() => sdk.directory, () => params.id] as const, ([, id]) => {
@@ -1184,7 +1226,7 @@ export default function Page() {
     bottomThreshold: scrollBottomThreshold,
     resize: "off",
   })
-  const live = () => ui.mode === "live"
+  const live = () => ui.mode === "live" && !autoScroll.userScrolled()
   const enterLive = () => {
     if (ui.mode === "live") return
     setUi("mode", "live")
@@ -1195,7 +1237,9 @@ export default function Page() {
   }
 
   const handleTimelineAutoScroll = () => {
+    debug("timeline-scroll:before")
     autoScroll.handleScroll()
+    debug("timeline-scroll:after")
   }
 
   // Streaming stability depends on locking the outer timeline directly to the
@@ -1203,8 +1247,13 @@ export default function Page() {
   // content height is already changing every frame.
   const lockBottom = (el: HTMLDivElement, source: string) => {
     const next = Math.max(0, el.scrollHeight - el.clientHeight)
-    if (Math.abs(el.scrollTop - next) <= 1) return
+    const dist = next - el.scrollTop
+    if (Math.abs(dist) <= 1) {
+      debug("lock-bottom:skip", el, { source, dist: Math.round(dist) })
+      return
+    }
     el.scrollTop = next
+    debug("lock-bottom:write", el, { source, dist: Math.round(dist) })
   }
 
   let scrollStateFrame: number | undefined
@@ -1228,26 +1277,36 @@ export default function Page() {
     () => {
       const root = scroller
       if (!root) return
+      debug("content-resize:before", root)
       clamp(root, "content:resize:clamp")
       // Deferred markdown/math expansion can increase content height after the
       // stream is already idle. If the viewport was still at the bottom before
       // that resize, keep it pinned instead of letting the tail drift upward.
-      if (live()) {
+      if (live() && !hasScrollGesture()) {
         lockBottom(root, "content:resize:lock-bottom")
       }
+      debug("content-resize:after", root)
       scheduleScrollState(root)
     },
   )
 
   const updateScrollState = (el: HTMLDivElement) => {
     if (!el.isConnected || el.clientHeight <= 0 || el.scrollHeight <= 0) return
+    debug("state:before", el)
+    if (live() && !hasScrollGesture() && !ui.seekingMessageId && !store.messageId) {
+      lockBottom(el, "state:live-lock")
+    }
     const top = clamp(el)
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
     const bottom = !overflow || max - top <= scrollBottomThreshold
 
-    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
+    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) {
+      debug("state:same", el, { nextOverflow: overflow, nextBottom: bottom })
+      return
+    }
     setUi("scroll", { overflow, bottom })
+    debug("state:update", el, { nextOverflow: overflow, nextBottom: bottom })
   }
 
   const scheduleScrollState = (el: HTMLDivElement) => {
@@ -1318,11 +1377,13 @@ export default function Page() {
             }
             const el = scroller
             if (!el) return
+            debug("initial:before", el, { key })
             setStore("messageId", undefined)
             enterLive()
             clearMessageHash()
             lockBottom(el, "initial-scroll:bottom")
             scheduleScrollState(el)
+            debug("initial:after", el, { key })
             initialScrollKey = undefined
           })
         })
@@ -1335,6 +1396,7 @@ export default function Page() {
     on(
       autoScroll.userScrolled,
       (scrolled) => {
+        debug("user-scrolled:change", scroller, { scrolled })
         if (scrolled) {
           enterAnchored()
           return
@@ -1351,6 +1413,7 @@ export default function Page() {
     on(
       () => ui.scroll.bottom,
       (bottom, prev) => {
+        debug("bottom:change", scroller, { prev, bottom })
         if (!bottom) return
         if (prev === undefined || prev === bottom) return
         if (ui.seekingMessageId) return
@@ -1370,12 +1433,14 @@ export default function Page() {
     scroller = el
     autoScroll.scrollRef(el)
     if (!el) return
+    debug("scroll-ref", el)
     scheduleScrollState(el)
     fill()
   }
 
   const markUserScroll = () => {
     scrollMark += 1
+    debug("user-scroll", scroller, { mark: scrollMark })
   }
 
   const loadEarlier = async () => {
