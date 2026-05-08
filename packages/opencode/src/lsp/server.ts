@@ -187,14 +187,19 @@ export const ESLint: Info = {
       }
       await fs.rename(extractedPath, finalPath)
 
-      const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm"
-      await Process.run([npmCmd, "install"], { cwd: finalPath })
-      await Process.run([npmCmd, "run", "compile"], { cwd: finalPath })
+      const npmBin = which("npm") ?? (process.platform === "win32" ? "npm.cmd" : "npm")
+      await Process.run([npmBin, "install"], { cwd: finalPath })
+      await Process.run([npmBin, "run", "compile"], { cwd: finalPath })
 
       log.info("installed VS Code ESLint server", { serverPath })
     }
 
-    const proc = spawn("node", [serverPath, "--stdio"], {
+    const nodeBin = which("node")
+    if (!nodeBin) {
+      log.info("node not found, please install node first")
+      return
+    }
+    const proc = spawn(nodeBin, [serverPath, "--stdio"], {
       cwd: root,
       env: {
         ...process.env,
