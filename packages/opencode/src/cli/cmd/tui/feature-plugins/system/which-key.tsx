@@ -143,7 +143,15 @@ function activeKeyEntry(api: TuiPluginApi, active: ActiveKey<Renderable, KeyEven
 function grouped(entries: Entry[]): Group[] {
   const map = new Map<string, Entry[]>()
   for (const entry of entries) map.set(entry.group, [...(map.get(entry.group) ?? []), entry])
-  return [...map].map(([label, entries]) => ({ label, entries }))
+  return [...map]
+    .map(([label, entries]) => ({
+      label,
+      entries: entries.toSorted(
+        (a, b) =>
+          Number(b.continues) - Number(a.continues) || a.label.localeCompare(b.label) || a.key.localeCompare(b.key),
+      ),
+    }))
+    .toSorted((a, b) => a.label.localeCompare(b.label))
 }
 
 function commandShortcut(api: TuiPluginApi, name: string) {
