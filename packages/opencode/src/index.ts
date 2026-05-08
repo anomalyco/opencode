@@ -60,7 +60,7 @@ function show(out: string) {
   const text = out.trimStart()
   if (!text.startsWith("opencode ")) {
     process.stderr.write(UI.logo() + EOL + EOL)
-    process.stderr.write(text)
+    process.stderr.write(text.endsWith(EOL) ? text : text + EOL)
     return
   }
   process.stderr.write(out.endsWith(EOL) ? out : out + EOL)
