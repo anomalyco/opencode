@@ -678,6 +678,7 @@ export const dict = {
   "session.share.action.view": "查看",
   "session.share.copy.copied": "已复制",
   "session.share.copy.copyLink": "复制链接",
+  "session.copyInfo": "复制会话信息",
   "session.restore": "恢复",
   "session.restore.failed.title": "恢复会话失败",
 

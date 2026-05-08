@@ -3,6 +3,7 @@ import { Avatar } from "@opencode-ai/ui/avatar"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { showToast } from "@opencode-ai/ui/toast"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
@@ -202,6 +203,39 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => hoverAllowed())
   const tooltip = createMemo(() => !props.reduced && (props.mobile || !props.sidebarExpanded()))
+  const copy = () => {
+    const text = `Session ID: ${props.session.id}\nProject path: ${props.session.directory}`
+    const clip = typeof navigator === "undefined" ? undefined : navigator.clipboard
+    console.debug("[sidebar-session] copy info", { id: props.session.id, dir: props.session.directory })
+    if (!clip?.writeText) {
+      console.debug("[sidebar-session] clipboard unavailable", { id: props.session.id })
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: "Clipboard unavailable",
+      })
+      return
+    }
+    void clip.writeText(text).then(
+      () => {
+        console.debug("[sidebar-session] copied info", { id: props.session.id, dir: props.session.directory })
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("session.share.copy.copied"),
+          description: text,
+        })
+      },
+      (err: unknown) => {
+        console.debug("[sidebar-session] copy failed", { id: props.session.id, err })
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      },
+    )
+  }
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -287,46 +321,74 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
       <div class="shrink-0 flex items-center gap-1">
         <div
-          class="overflow-hidden"
+          class="overflow-hidden flex items-center gap-1"
           classList={{
             "transition-[width,opacity]": !props.reduced,
-            "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+            "w-[52px] opacity-100 pointer-events-auto": !!props.mobile,
             "w-0 opacity-0 pointer-events-none": !props.mobile || !!props.reduced,
-            "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto":
+            "group-hover/session:w-[52px] group-hover/session:opacity-100 group-hover/session:pointer-events-auto":
               !props.reduced,
-            "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto":
+            "group-focus-within/session:w-[52px] group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto":
               !props.reduced,
           }}
         >
           <Show
             when={!props.reduced}
             fallback={
-              <IconButton
-                icon="archive"
-                variant="ghost"
-                class="size-6 rounded-md"
-                aria-label={language.t("common.archive")}
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  void props.archiveSession(props.session)
-                }}
-              />
+              <>
+                <IconButton
+                  icon="copy"
+                  variant="ghost"
+                  class="size-6 rounded-md shrink-0"
+                  aria-label={language.t("session.copyInfo")}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    copy()
+                  }}
+                />
+                <IconButton
+                  icon="archive"
+                  variant="ghost"
+                  class="size-6 rounded-md shrink-0"
+                  aria-label={language.t("common.archive")}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    void props.archiveSession(props.session)
+                  }}
+                />
+              </>
             }
           >
-            <Tooltip value={language.t("common.archive")} placement="top">
-              <IconButton
-                icon="archive"
-                variant="ghost"
-                class="size-6 rounded-md"
-                aria-label={language.t("common.archive")}
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  void props.archiveSession(props.session)
-                }}
-              />
-            </Tooltip>
+            <>
+              <Tooltip value={language.t("session.copyInfo")} placement="top">
+                <IconButton
+                  icon="copy"
+                  variant="ghost"
+                  class="size-6 rounded-md shrink-0"
+                  aria-label={language.t("session.copyInfo")}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    copy()
+                  }}
+                />
+              </Tooltip>
+              <Tooltip value={language.t("common.archive")} placement="top">
+                <IconButton
+                  icon="archive"
+                  variant="ghost"
+                  class="size-6 rounded-md shrink-0"
+                  aria-label={language.t("common.archive")}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    void props.archiveSession(props.session)
+                  }}
+                />
+              </Tooltip>
+            </>
           </Show>
         </div>
         <Show when={detail()}>
