@@ -868,8 +868,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       <Show when={Flag.OPENCODE_SHOW_TTFD}>
         <TimeToFirstDraw />
       </Show>
-      <box flexGrow={1} minHeight={0} flexDirection="column">
-        <Show when={ready()}>
+      <Show when={ready()}>
+        <box flexGrow={1} minHeight={0} flexDirection="column">
           <Switch>
             <Match when={route.data.type === "home"}>
               <Home />
@@ -878,13 +878,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
               <Session />
             </Match>
           </Switch>
-        </Show>
-        {plugin()}
-      </box>
-      <box flexShrink={0}>
-        <TuiPluginRuntime.Slot name="app_bottom" />
-      </box>
-      <TuiPluginRuntime.Slot name="app" />
+          {plugin()}
+        </box>
+        <box flexShrink={0}>
+          <TuiPluginRuntime.Slot name="app_bottom" />
+        </box>
+        <TuiPluginRuntime.Slot name="app" />
+      </Show>
       <StartupLoading ready={ready} />
     </box>
   )
