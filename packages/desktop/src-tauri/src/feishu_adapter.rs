@@ -266,6 +266,172 @@ pub fn feishu_adapter_status(state: State<'_, AdapterState>) -> bool {
 }
 
 // ============================================================
+// 账户管理(C1.6)— save / list / delete
+// ============================================================
+
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
+pub struct SaveAccountRequest {
+    pub domain: String,
+    pub app_id: String,
+    pub app_secret: String,
+    pub open_id: String,
+    pub account_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
+pub struct AccountSummary {
+    pub account_id: String,
+    pub app_id: String,
+    pub open_id: String,
+    pub domain: String,
+    pub agent: String,
+    pub enabled: Option<bool>,
+}
+
+/// adapter wire request 转 camelCase
+#[derive(Serialize)]
+struct SaveAccountWire<'a> {
+    domain: &'a str,
+    #[serde(rename = "appId")]
+    app_id: &'a str,
+    #[serde(rename = "appSecret")]
+    app_secret: &'a str,
+    #[serde(rename = "openId")]
+    open_id: &'a str,
+    #[serde(rename = "accountId", skip_serializing_if = "Option::is_none")]
+    account_id: Option<&'a str>,
+}
+
+#[derive(Deserialize)]
+struct SaveAccountWireResponse {
+    #[serde(rename = "accountId")]
+    account_id: String,
+    #[serde(rename = "appId")]
+    app_id: String,
+    #[serde(rename = "openId")]
+    open_id: String,
+    domain: String,
+    agent: String,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feishu_save_account(
+    state: State<'_, AdapterState>,
+    request: SaveAccountRequest,
+) -> Result<AccountSummary, String> {
+    let ready = current_ready(&state)?;
+    let wire = SaveAccountWire {
+        domain: &request.domain,
+        app_id: &request.app_id,
+        app_secret: &request.app_secret,
+        open_id: &request.open_id,
+        account_id: request.account_id.as_deref(),
+    };
+    let r: SaveAccountWireResponse = post_json(&ready, "/accounts/save", &wire).await?;
+    Ok(AccountSummary {
+        account_id: r.account_id,
+        app_id: r.app_id,
+        open_id: r.open_id,
+        domain: r.domain,
+        agent: r.agent,
+        enabled: None,
+    })
+}
+
+#[derive(Deserialize)]
+struct ListAccountsWire {
+    accounts: Vec<ListAccountWireItem>,
+}
+
+#[derive(Deserialize)]
+struct ListAccountWireItem {
+    #[serde(rename = "accountId")]
+    account_id: String,
+    #[serde(rename = "appId")]
+    app_id: String,
+    #[serde(rename = "openId")]
+    open_id: String,
+    domain: String,
+    agent: String,
+    enabled: Option<bool>,
+}
+
+/// HTTP GET 简版(reqwest GET + Basic auth)
+async fn get_json<TRes>(ready: &AdapterReady, path: &str) -> Result<TRes, String>
+where
+    TRes: for<'de> Deserialize<'de>,
+{
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("client build error: {e}"))?;
+    let res = client
+        .get(format!("{}{}", ready.url, path))
+        .header("Authorization", auth_header(ready))
+        .send()
+        .await
+        .map_err(|e| format!("adapter http error: {e}"))?;
+    let status = res.status();
+    let text = res.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!("adapter HTTP {}: {}", status.as_u16(), text));
+    }
+    serde_json::from_str(&text).map_err(|e| format!("parse error: {e} / body: {text}"))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feishu_list_accounts(
+    state: State<'_, AdapterState>,
+) -> Result<Vec<AccountSummary>, String> {
+    let ready = current_ready(&state)?;
+    let r: ListAccountsWire = get_json(&ready, "/accounts").await?;
+    Ok(r.accounts
+        .into_iter()
+        .map(|w| AccountSummary {
+            account_id: w.account_id,
+            app_id: w.app_id,
+            open_id: w.open_id,
+            domain: w.domain,
+            agent: w.agent,
+            enabled: w.enabled,
+        })
+        .collect())
+}
+
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
+pub struct DeleteAccountRequest {
+    pub account_id: String,
+}
+
+#[derive(Deserialize)]
+struct DeleteWireResponse {
+    deleted: bool,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feishu_delete_account(
+    state: State<'_, AdapterState>,
+    request: DeleteAccountRequest,
+) -> Result<bool, String> {
+    let ready = current_ready(&state)?;
+    #[derive(Serialize)]
+    struct WireReq<'a> {
+        #[serde(rename = "accountId")]
+        account_id: &'a str,
+    }
+    let r: DeleteWireResponse = post_json(
+        &ready,
+        "/accounts/delete",
+        &WireReq { account_id: &request.account_id },
+    )
+    .await?;
+    Ok(r.deleted)
+}
+
+// ============================================================
 // 单测
 // ============================================================
 

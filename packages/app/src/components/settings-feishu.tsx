@@ -1,27 +1,41 @@
-// FORK: 飞书桥接 Settings Tab(C1.4)— 账户管理 v1 占位 [feat: feishu-bridge] 2026-05-08
+// FORK: 飞书桥接 Settings Tab — 账户管理(C1.4 + C1.6 已绑定列表)[feat: feishu-bridge] 2026-05-08
 //
-// v1 范围(本 commit C1.4):
+// 范围:
 //   - 标题 + 描述
-//   - adapter ready 状态检查 + 未就绪提示
-//   - "尚未绑定" 空态 + "添加飞书账号" 按钮
-//   - 真扫码弹窗在 C1.5 接入
+//   - adapter ready 状态检查
+//   - 已绑定账号列表(C1.6,从 ~/.opencode/feishu-config.json load)
+//   - "添加飞书账号" 按钮 → 扫码弹窗
+//   - 删除按钮(C1.6)
 //
-// 后续(Phase 3+):已绑定账号列表 + 删除 + 群组配置 + 健康检查子 Tab
+// 后续(Phase 3+):群组配置子 Tab / 健康检查子 Tab
 
-import { type Component, createSignal, onMount, Show } from "solid-js"
+import { createResource, type Component, createSignal, onMount, Show, For } from "solid-js"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
-import { feishuAdapterStatus } from "@/utils/feishu-config"
+import {
+  feishuAdapterStatus,
+  feishuDeleteAccount,
+  feishuListAccounts,
+  type AccountSummary,
+} from "@/utils/feishu-config"
 
 export const SettingsFeishu: Component = () => {
   const language = useLanguage()
   const dialog = useDialog()
   const [adapterReady, setAdapterReady] = createSignal<boolean | null>(null)
+  const [accounts, { refetch }] = createResource<AccountSummary[]>(async () => {
+    try {
+      return await feishuListAccounts()
+    } catch {
+      return []
+    }
+  })
 
   onMount(async () => {
     try {
       const ready = await feishuAdapterStatus()
       setAdapterReady(ready)
+      if (ready) refetch()
     } catch {
       setAdapterReady(false)
     }
@@ -29,8 +43,17 @@ export const SettingsFeishu: Component = () => {
 
   const openBindDialog = () => {
     void import("./feishu-bind-dialog").then((x) => {
-      dialog.show(() => <x.FeishuBindDialog />)
+      dialog.show(() => <x.FeishuBindDialog onBound={() => refetch()} />)
     })
+  }
+
+  const handleDelete = async (accountId: string) => {
+    try {
+      await feishuDeleteAccount(accountId)
+      refetch()
+    } catch (err) {
+      console.warn("[feishu-bridge] delete failed:", err)
+    }
   }
 
   return (
@@ -55,24 +78,66 @@ export const SettingsFeishu: Component = () => {
         </div>
       </Show>
 
-      {/* 账户列表区:v1 占位"尚未绑定"空态 */}
+      {/* 账号列表区 */}
       <Show when={adapterReady() !== false}>
-        <div class="bg-surface-base rounded-md p-6 flex flex-col items-center gap-3">
-          <p class="text-13-medium">
-            {language.t("settings.feishu.account.empty.title")}
-          </p>
-          <p class="text-12-regular text-text-weak text-center">
-            {language.t("settings.feishu.account.empty.description")}
-          </p>
-          <button
-            type="button"
-            class="px-3 py-1.5 bg-surface-strong rounded-md text-13-medium hover:bg-surface-stronger disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={adapterReady() !== true}
-            onClick={openBindDialog}
-          >
-            {language.t("settings.feishu.account.add")}
-          </button>
-        </div>
+        <Show
+          when={(accounts() ?? []).length > 0}
+          fallback={
+            <div class="bg-surface-base rounded-md p-6 flex flex-col items-center gap-3">
+              <p class="text-13-medium">
+                {language.t("settings.feishu.account.empty.title")}
+              </p>
+              <p class="text-12-regular text-text-weak text-center">
+                {language.t("settings.feishu.account.empty.description")}
+              </p>
+              <button
+                type="button"
+                class="px-3 py-1.5 bg-surface-strong rounded-md text-13-medium hover:bg-surface-stronger disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={adapterReady() !== true}
+                onClick={openBindDialog}
+              >
+                {language.t("settings.feishu.account.add")}
+              </button>
+            </div>
+          }
+        >
+          <div class="flex flex-col gap-3">
+            <For each={accounts() ?? []}>
+              {(acc) => (
+                <div class="bg-surface-base rounded-md p-3 flex items-center justify-between gap-3">
+                  <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="text-13-medium truncate">{acc.account_id}</span>
+                      <span class="text-11-regular text-text-weak">
+                        {acc.domain === "feishu"
+                          ? language.t("settings.feishu.bind.domain.feishu")
+                          : language.t("settings.feishu.bind.domain.lark")}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-3 text-11-regular text-text-weak">
+                      <span class="truncate">openId: {acc.open_id}</span>
+                      <span>agent: {acc.agent}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="px-3 py-1 rounded-md text-12-medium text-text-warning hover:bg-surface-strong"
+                    onClick={() => void handleDelete(acc.account_id)}
+                  >
+                    {language.t("settings.feishu.account.delete")}
+                  </button>
+                </div>
+              )}
+            </For>
+            <button
+              type="button"
+              class="self-start px-3 py-1.5 bg-surface-strong rounded-md text-13-medium hover:bg-surface-stronger"
+              onClick={openBindDialog}
+            >
+              {language.t("settings.feishu.account.add")}
+            </button>
+          </div>
+        </Show>
       </Show>
     </div>
   )

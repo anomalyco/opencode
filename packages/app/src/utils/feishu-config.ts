@@ -57,3 +57,43 @@ export async function feishuOauthPoll(sessionId: string): Promise<OauthPollRespo
     request: { session_id: sessionId },
   })
 }
+
+// ============================================================
+// 账户 CRUD(C1.6)
+// ============================================================
+
+export interface AccountSummary {
+  account_id: string
+  app_id: string
+  open_id: string
+  domain: FeishuDomain
+  agent: string
+  enabled?: boolean
+}
+
+export interface SaveAccountInput {
+  domain: FeishuDomain
+  app_id: string
+  app_secret: string
+  open_id: string
+  account_id?: string
+}
+
+/** OAuth 成功后调,把凭证落到 ~/.opencode/feishu-config.json(SecretRef file mode 0600)*/
+export async function feishuSaveAccount(input: SaveAccountInput): Promise<AccountSummary> {
+  return await invoke<AccountSummary>("feishu_save_account", {
+    request: input,
+  })
+}
+
+/** 已绑定账号列表 */
+export async function feishuListAccounts(): Promise<AccountSummary[]> {
+  return await invoke<AccountSummary[]>("feishu_list_accounts")
+}
+
+/** 删除账号(同时删 SecretRef 文件)*/
+export async function feishuDeleteAccount(accountId: string): Promise<boolean> {
+  return await invoke<boolean>("feishu_delete_account", {
+    request: { account_id: accountId },
+  })
+}

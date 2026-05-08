@@ -32,6 +32,7 @@ import { useLanguage } from "@/context/language"
 import {
   feishuOauthPoll,
   feishuOauthStart,
+  feishuSaveAccount,
   type FeishuDomain,
   type OauthPollResponse,
   type OauthStartResponse,
@@ -48,7 +49,7 @@ function defaultDomainFor(locale: string): FeishuDomain {
   return locale === "zh" || locale === "zht" ? "feishu" : "lark"
 }
 
-export const FeishuBindDialog: Component = () => {
+export const FeishuBindDialog: Component<{ onBound?: () => void }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const [domain, setDomain] = createSignal<FeishuDomain>(defaultDomainFor(language.locale()))
@@ -111,8 +112,22 @@ export const FeishuBindDialog: Component = () => {
         switch (r.status) {
           case "success":
             stopAllTimers()
+            // 凭证落盘 — appSecret 走 SecretRef file mode(0600)
+            if (r.app_id && r.app_secret && r.open_id) {
+              try {
+                await feishuSaveAccount({
+                  domain: domain(),
+                  app_id: r.app_id,
+                  app_secret: r.app_secret,
+                  open_id: r.open_id,
+                })
+                props.onBound?.() // 通知 settings-feishu 刷新列表
+              } catch (saveErr) {
+                console.warn("[feishu-bridge] save account failed:", saveErr)
+                // 落盘失败不阻断:OAuth success 仍展示给 user,后续重试 / 重新绑定即可
+              }
+            }
             setPhase({ kind: "success", result: r })
-            // TODO Phase 3:落 SecretRef + 通知 settings 刷新
             console.log("[feishu-bridge] OAuth success:", {
               appId: r.app_id,
               openId: r.open_id,

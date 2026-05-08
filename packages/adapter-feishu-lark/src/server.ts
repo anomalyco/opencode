@@ -20,6 +20,12 @@ import {
   type FeishuDomain,
   type PollResult,
 } from "./feishu/oauth"
+import {
+  deleteAccount,
+  listAccounts,
+  saveAccount,
+  type SaveAccountInput,
+} from "./feishu/account-store"
 
 // ============================================================
 // 类型
@@ -181,6 +187,89 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
           502,
         )
       }
+    }
+
+    // ============================================================
+    // 账户 CRUD(C1.6)
+    // ============================================================
+
+    if (req.method === "POST" && url.pathname === "/accounts/save") {
+      let body: Partial<SaveAccountInput>
+      try {
+        body = (await req.json()) as Partial<SaveAccountInput>
+      } catch {
+        return jsonResponse({ error: "invalid_json" }, 400)
+      }
+      if (!body.appId || !body.appSecret || !body.openId) {
+        return jsonResponse(
+          { error: "missing_fields", message: "appId / appSecret / openId required" },
+          400,
+        )
+      }
+      if (body.domain !== "feishu" && body.domain !== "lark") {
+        return jsonResponse(
+          { error: "invalid_domain", message: "domain must be feishu|lark" },
+          400,
+        )
+      }
+      try {
+        const r = saveAccount({
+          accountId: body.accountId,
+          domain: body.domain,
+          appId: body.appId,
+          appSecret: body.appSecret,
+          openId: body.openId,
+        })
+        // 返回 account 时去除 SecretRef 内部细节,仅给 GUI 显示用的安全摘要
+        return jsonResponse(
+          {
+            accountId: r.accountId,
+            appId: r.account.appId,
+            openId: r.account.openId,
+            domain: r.account.domain,
+            agent: r.account.agent,
+          },
+          200,
+        )
+      } catch (err) {
+        return jsonResponse(
+          { error: "save_failed", message: (err as Error).message },
+          500,
+        )
+      }
+    }
+
+    if (req.method === "GET" && url.pathname === "/accounts") {
+      try {
+        const list = listAccounts().map(({ accountId, account }) => ({
+          accountId,
+          appId: account.appId,
+          openId: account.openId,
+          domain: account.domain,
+          agent: account.agent,
+          enabled: account.enabled,
+        }))
+        return jsonResponse({ accounts: list }, 200)
+      } catch (err) {
+        return jsonResponse(
+          { error: "list_failed", message: (err as Error).message },
+          500,
+        )
+      }
+    }
+
+    if (req.method === "POST" && url.pathname === "/accounts/delete") {
+      let body: { accountId?: string }
+      try {
+        body = (await req.json()) as { accountId?: string }
+      } catch {
+        return jsonResponse({ error: "invalid_json" }, 400)
+      }
+      if (!body.accountId) {
+        return jsonResponse({ error: "missing_account_id" }, 400)
+      }
+      const r = deleteAccount(body.accountId)
+      return jsonResponse({ deleted: r }, 200)
     }
 
     return jsonResponse({ error: "not_found" }, 404)

@@ -567,7 +567,11 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             // FORK: 飞书 adapter OAuth 接入 [feat: feishu-bridge] 2026-05-08
             feishu_adapter::feishu_oauth_start,
             feishu_adapter::feishu_oauth_poll,
-            feishu_adapter::feishu_adapter_status
+            feishu_adapter::feishu_adapter_status,
+            // FORK: 飞书账户 CRUD(C1.6 写盘)[feat: feishu-bridge] 2026-05-08
+            feishu_adapter::feishu_save_account,
+            feishu_adapter::feishu_list_accounts,
+            feishu_adapter::feishu_delete_account
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
