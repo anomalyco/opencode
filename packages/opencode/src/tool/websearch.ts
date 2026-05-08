@@ -45,11 +45,6 @@ export function webSearchProviderLabel(provider: unknown) {
   return "Web Search"
 }
 
-export function webSearchToolLabel(provider: unknown, sessionID: string) {
-  if (provider === "parallel" || provider === "exa") return webSearchProviderLabel(provider)
-  return webSearchProviderLabel(selectWebSearchProvider(sessionID))
-}
-
 export function webSearchModelName(extra: Tool.Context["extra"]) {
   const model = extra?.model
   if (!model || typeof model !== "object") return undefined

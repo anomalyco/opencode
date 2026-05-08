@@ -20,7 +20,7 @@ import { ReadTool } from "../../tool/read"
 import { WebFetchTool } from "../../tool/webfetch"
 import { EditTool } from "../../tool/edit"
 import { WriteTool } from "../../tool/write"
-import { WebSearchTool, webSearchToolLabel } from "../../tool/websearch"
+import { WebSearchTool, webSearchProviderLabel } from "../../tool/websearch"
 import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
 import { ShellTool } from "../../tool/shell"
@@ -148,7 +148,7 @@ function edit(info: ToolProps<typeof EditTool>) {
 function websearch(info: ToolProps<typeof WebSearchTool>) {
   inline({
     icon: "◈",
-    title: `${webSearchToolLabel(info.metadata.provider, info.part.sessionID)} "${info.input.query}"`,
+    title: `${webSearchProviderLabel(info.metadata.provider)} "${info.input.query}"`,
   })
 }
 
@@ -471,7 +471,7 @@ export const RunCommand = effectCmd({
                   icon: "✗",
                   title:
                     part.tool === "websearch"
-                      ? `${webSearchToolLabel(props<typeof WebSearchTool>(part).metadata.provider, part.sessionID)} failed`
+                      ? `${webSearchProviderLabel(props<typeof WebSearchTool>(part).metadata.provider)} failed`
                       : `${part.tool} failed`,
                 })
                 UI.error(part.state.error)

@@ -8,7 +8,7 @@ import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@open
 import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import { webSearchToolLabel } from "@/tool/websearch"
+import { webSearchProviderLabel } from "@/tool/websearch"
 import path from "path"
 import stripAnsi from "strip-ansi"
 import type {
@@ -775,7 +775,7 @@ function CodeSearch(props: ToolProps) {
 }
 
 function WebSearch(props: ToolProps) {
-  const label = createMemo(() => webSearchToolLabel(props.metadata.provider, props.sessionID))
+  const label = createMemo(() => webSearchProviderLabel(props.metadata.provider))
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={toolComplete(props.part)} part={props.part}>
       {label()} "{stringValue(props.input.query) ?? pendingInput(props.part)}"{" "}

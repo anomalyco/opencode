@@ -5,7 +5,6 @@ import {
   selectWebSearchProvider,
   webSearchModelName,
   webSearchProviderLabel,
-  webSearchToolLabel,
 } from "../../src/tool/websearch"
 import { ProviderID } from "../../src/provider/schema"
 import { webSearchEnabled } from "../../src/tool/registry"
@@ -51,8 +50,6 @@ describe("websearch provider", () => {
     expect(webSearchProviderLabel("parallel")).toBe("Parallel Web Search")
     expect(webSearchProviderLabel("exa")).toBe("Exa Web Search")
     expect(webSearchProviderLabel(undefined)).toBe("Web Search")
-    expect(webSearchToolLabel("parallel", SESSION_ID)).toBe("Parallel Web Search")
-    expect(webSearchToolLabel(undefined, SESSION_ID)).toBe(webSearchProviderLabel(selectWebSearchProvider(SESSION_ID)))
   })
 
   test("uses the provider API model id for Parallel analytics", () => {

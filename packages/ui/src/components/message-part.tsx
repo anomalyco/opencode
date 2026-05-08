@@ -323,21 +323,10 @@ function webSearchProviderLabel(provider: unknown) {
   return "Web Search"
 }
 
-function fallbackWebSearchProvider(sessionID: unknown) {
-  if (typeof sessionID !== "string") return undefined
-  return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
-}
-
-function webSearchToolLabel(provider: unknown, sessionID?: string) {
-  if (provider === "parallel" || provider === "exa") return webSearchProviderLabel(provider)
-  return webSearchProviderLabel(fallbackWebSearchProvider(sessionID))
-}
-
 export function getToolInfo(
   tool: string,
   input: any = {},
   metadata: Record<string, unknown> | undefined = {},
-  sessionID?: string,
 ): ToolInfo {
   const i18n = useI18n()
   switch (tool) {
@@ -374,7 +363,7 @@ export function getToolInfo(
     case "websearch":
       return {
         icon: "window-cursor",
-        title: webSearchToolLabel(metadata?.provider, sessionID),
+        title: webSearchProviderLabel(metadata?.provider),
         subtitle: input.query,
       }
     case "task": {
@@ -717,7 +706,6 @@ function contextToolDetail(part: ToolPart): string | undefined {
     part.tool,
     part.state.input ?? {},
     "metadata" in part.state ? part.state.metadata : undefined,
-    part.sessionID,
   )
   if (info.subtitle) return info.subtitle
   if (part.state.status === "error") return part.state.error
@@ -774,7 +762,6 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
         part.tool,
         input,
         "metadata" in part.state ? part.state.metadata : undefined,
-        part.sessionID,
       )
       return {
         title: info.title,
@@ -1380,7 +1367,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   error={error()}
                   title={
                     part().tool === "websearch"
-                      ? webSearchToolLabel(partMetadata().provider, part().sessionID)
+                      ? webSearchProviderLabel(partMetadata().provider)
                       : undefined
                   }
                   defaultOpen={props.defaultOpen}
@@ -1724,7 +1711,7 @@ ToolRegistry.register({
       if (typeof value !== "string") return ""
       return value
     })
-    const title = createMemo(() => webSearchToolLabel(props.metadata.provider, props.sessionID))
+    const title = createMemo(() => webSearchProviderLabel(props.metadata.provider))
 
     return (
       <BasicTool

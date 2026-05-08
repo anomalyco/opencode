@@ -45,7 +45,7 @@ import type { GrepTool } from "@/tool/grep"
 import type { EditTool } from "@/tool/edit"
 import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
-import { webSearchToolLabel, type WebSearchTool } from "@/tool/websearch"
+import { webSearchProviderLabel, type WebSearchTool } from "@/tool/websearch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
@@ -1952,7 +1952,7 @@ function WebSearch(props: ToolProps<typeof WebSearchTool>) {
   const metadata = props.metadata as { numResults?: number; provider?: unknown }
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={props.input.query} part={props.part}>
-      {webSearchToolLabel(metadata.provider, props.part.sessionID)} "{props.input.query}"{" "}
+      {webSearchProviderLabel(metadata.provider)} "{props.input.query}"{" "}
       <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
     </InlineTool>
   )
