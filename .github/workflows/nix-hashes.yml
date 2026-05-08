@@ -41,10 +41,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Nix
-        uses: nixbuild/nix-quick-install-action@v34
+        uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
 
       - name: Compute node_modules hash
         id: hash
@@ -72,7 +72,7 @@ jobs:
           echo "Computed hash for ${SYSTEM}: $HASH"
 
       - name: Upload hash
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hash-${{ matrix.system }}
           path: hash.txt
@@ -85,7 +85,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -102,7 +102,7 @@ jobs:
           git pull --rebase --autostash origin "$GITHUB_REF_NAME"
 
       - name: Download hash artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: hashes
           pattern: hash-*

@@ -21,12 +21,12 @@ jobs:
       issues: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./.github/actions/setup-bun
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@latest
+        uses: anomalyco/opencode/github@8ba2a9171597262df9d19516c82a5e14f18f5c63 # v1.14.41
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_PERMISSION: '{"bash": "deny"}'

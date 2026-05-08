@@ -37,12 +37,12 @@ jobs:
         shell: bash
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
 
@@ -55,7 +55,7 @@ jobs:
           git config --global user.name "opencode"
 
       - name: Cache Turbo
-        uses: actions/cache@v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: node_modules/.cache/turbo
           key: turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-${{ github.sha }}
@@ -70,7 +70,7 @@ jobs:
 
       - name: Publish unit reports
         if: always()
-        uses: mikepenz/action-junit-report@v6
+        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0
         with:
           report_paths: packages/*/.artifacts/unit/junit.xml
           check_name: "unit results (${{ matrix.settings.name }})"
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload unit artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
           include-hidden-files: true
@@ -106,12 +106,12 @@ jobs:
         shell: bash
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
 
@@ -126,7 +126,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ github.workspace }}/.playwright-browsers
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
@@ -150,7 +150,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
           if-no-files-found: ignore
