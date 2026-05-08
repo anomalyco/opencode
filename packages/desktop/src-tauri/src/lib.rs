@@ -554,7 +554,11 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             text_file::write_text_file,
             text_file::get_file_mtime,
             text_file::read_binary_file_base64,
-            text_file::write_binary_file_absolute_base64 // FORK: 文件树外部 OS 文件拖入 2026-04-28
+            text_file::write_binary_file_absolute_base64, // FORK: 文件树外部 OS 文件拖入 2026-04-28
+            // FORK: tray 状态切换 + 主窗口控制 + 退出 [feat: feishu-bridge] 2026-05-08
+            system_tray::set_tray_status_cmd,
+            system_tray::show_main_window_cmd,
+            system_tray::quit_app_cmd
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
