@@ -1,4 +1,5 @@
 import path from "path"
+import { fileURLToPath } from "url"
 import { Global } from "@opencode-ai/core/global"
 
 export type Reference = {
@@ -67,6 +68,22 @@ function build(input: { host: string; segments: string[]; remote?: string; proto
   } satisfies Reference
 }
 
+function buildFile(input: { url: URL; remote: string }) {
+  const filePath = path.normalize(fileURLToPath(input.url))
+  const segments = filePath.split(/[\\/]+/).filter(Boolean)
+  if (!segments.length) return null
+  return {
+    host: "file",
+    path: filePath,
+    segments: segments.map((segment) => segment.replace(/:$/, "")),
+    owner: undefined,
+    repo: trimGitSuffix(segments[segments.length - 1]),
+    remote: input.remote,
+    label: filePath,
+    protocol: "file:",
+  } satisfies Reference
+}
+
 export function parseRepositoryReference(input: string) {
   const cleaned = normalize(input)
   if (!cleaned) return null
@@ -90,8 +107,9 @@ export function parseRepositoryReference(input: string) {
 
   try {
     const url = new URL(cleaned)
+    if (url.protocol === "file:") return buildFile({ url, remote: cleaned })
     const pathname = parts(url.pathname)
-    const host = url.protocol === "file:" ? "file" : url.host
+    const host = url.host
     return build({
       host,
       segments: pathname,
