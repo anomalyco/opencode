@@ -267,6 +267,8 @@ export type SessionStatus =
       attempt: number
       message: string
       action?: {
+        reason: string
+        provider: string
         title: string
         message: string
         label: string
