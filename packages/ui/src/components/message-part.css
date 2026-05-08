@@ -645,6 +645,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     max-height: 240px;
+    overscroll-behavior: contain; /* Prevent scroll chaining to parent */
 
     scrollbar-width: none;
     &::-webkit-scrollbar {
