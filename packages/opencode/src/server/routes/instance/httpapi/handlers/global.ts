@@ -6,6 +6,7 @@ import { Installation } from "@/installation"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
+import { synth } from "@/tts/edge"
 import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -146,6 +147,31 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return HttpServerResponse.jsonUnsafe(result.body, { status: result.status })
     })
 
+    const ttsEdgeInput = Schema.Struct({ text: Schema.String })
+    const ttsEdge = Effect.fn("GlobalHttpApi.ttsEdge")(function* (ctx: { request: HttpServerRequest.HttpServerRequest }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      const json = parseBody(body)
+      if (json === undefined) {
+        return HttpServerResponse.jsonUnsafe({ error: "Invalid request body" }, { status: 400 })
+      }
+      const payload = yield* Schema.decodeUnknownEffect(ttsEdgeInput)(json).pipe(
+        Effect.map((payload) => ({ valid: true as const, payload })),
+        Effect.catch(() => Effect.succeed({ valid: false as const })),
+      )
+      if (!payload.valid) {
+        return HttpServerResponse.jsonUnsafe({ error: "Invalid request body" }, { status: 400 })
+      }
+      const text = payload.payload.text.trim()
+      if (!text) return HttpServerResponse.jsonUnsafe({ error: "Invalid request body" }, { status: 400 })
+      const audio = yield* Effect.promise(() => synth(text))
+      return HttpServerResponse.raw(audio, {
+        headers: {
+          "Content-Type": "audio/mpeg",
+          "Cache-Control": "no-store",
+        },
+      })
+    })
+
     return handlers
       .handle("health", health)
       .handleRaw("event", event)
@@ -153,5 +179,6 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       .handle("configUpdate", configUpdate)
       .handle("dispose", dispose)
       .handleRaw("upgrade", upgradeRaw)
+      .handleRaw("ttsEdge", ttsEdge)
   }),
 )

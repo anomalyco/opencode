@@ -92,13 +92,8 @@ function withBackend<T extends { app: ServerApp; runtime: unknown }>(selection: 
 
 function createHttpApi(corsOptions?: CorsOptions) {
   const handler = ExperimentalHttpApiServer.webHandler(corsOptions).handler
-  const tts = new Hono().route("/tts", TtsRoutes())
   const app: ServerApp = {
-    fetch: (request: Request) => {
-      const url = new URL(request.url)
-      if (url.pathname.startsWith("/tts")) return tts.fetch(request)
-      return handler(request, ExperimentalHttpApiServer.context)
-    },
+    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
     request(input, init) {
       return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
     },

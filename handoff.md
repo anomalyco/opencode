@@ -2,15 +2,15 @@
 
 ## Current State
 - Branch: `rebase/upstream-sync` (based on `upstream/dev`)
-- Latest commit: `243ffdb7b` (`fix: stabilize recent session routing and TTS handling`)
+- Latest commit: `d6b648157` (`feat: add serve auto-resume worker`)
 - Active todos:
-  - `rebase-ui` — in progress
-  - `rebase-tts` — in progress
+  - `rebase-ui` — done
+  - `rebase-tts` — done
   - `rebase-review` — pending
   - `rebase-autopilot` — pending
-  - `rebase-session` — pending
+  - `rebase-session` — done
   - `rebase-infra` — pending
-  - `rebase-verify` — pending
+  - `rebase-verify` — in progress
 
 ## Completed Since Last Update
 - UI recent routing fix:
@@ -26,21 +26,22 @@
   - `packages/opencode`: `bun test test/tts/route.test.ts test/tts/edge.test.ts`
 
 ## In Progress
-- Session resilience MVP wiring (uncommitted):
-  - `packages/opencode/src/cli/cmd/serve-autoresume.ts` (new)
-    - scans recent sessions globally
-    - picks `unanswered` / `interrupted` actions via `pickAction`
-    - resumes inside `InstanceStore.provide({ directory })`
-    - provides `WorkspaceRef` and skips busy sessions
-  - `packages/opencode/src/cli/cmd/serve.ts`
-    - starts auto-resume worker in background (`Effect.scoped(...forkScoped...)`)
-- Validation already green for current in-progress code:
+- Verification + regression cleanup (uncommitted):
+  - `packages/opencode/src/server/server.ts`
+    - removed `/tts` Hono bypass from `createHttpApi` (this caused HttpApi parity drift).
+  - `packages/opencode/src/server/routes/instance/httpapi/groups/global.ts`
+    - added `POST /tts/edge` endpoint to Effect HttpApi schema (`tts.edge`).
+  - `packages/opencode/src/server/routes/instance/httpapi/handlers/global.ts`
+    - added raw handler for `/tts/edge` with body validation + MP3 response.
+  - `packages/opencode/src/server/routes/instance/httpapi/public.ts`
+    - excluded `/tts/*` from injected instance query params to match legacy Hono OpenAPI shape.
+- Validation green for current in-progress code:
   - `packages/opencode`: `bun typecheck`
-  - `packages/opencode`: `bun test test/session/auto-resume.test.ts test/tts/route.test.ts test/tts/edge.test.ts`
+  - `packages/opencode`: `bun test test/server/httpapi-bridge.test.ts test/tts/route.test.ts test/tts/edge.test.ts test/session/auto-resume.test.ts`
 
 ## Execution Plan
-1. **Commit session resilience MVP**
-   - Commit `serve-autoresume.ts` + `serve.ts` once final review is complete.
+1. **Commit HttpApi/TTS parity fix**
+   - Commit the 4 files listed above once final smoke verification is complete.
 
 2. **Port auto-review group cleanly**
    - Confirm auto-review files already included in commit `38405e57a` still match upstream model/session APIs.
@@ -55,10 +56,10 @@
    - Keep each logical area in separate commits to simplify review/rebase.
 
 5. **Verification gate before push**
-   - `cd packages/opencode && bun typecheck`
-   - `cd packages/app && bun run build`
-   - `bun run install:local`
-   - `cd packages/opencode && bun test`
+    - `cd packages/opencode && bun typecheck`
+    - `cd packages/app && bun run build`
+    - `bun install` (repo has no `install:local` script)
+    - `cd packages/opencode && bun test`
 
 6. **Publish + tracking**
    - Push `rebase/upstream-sync` to fork.

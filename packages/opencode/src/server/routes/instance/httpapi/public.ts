@@ -122,7 +122,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
   delete spec.components?.securitySchemes
 
   for (const [path, item] of Object.entries(spec.paths ?? {})) {
-    const isInstanceRoute = !path.startsWith("/global/") && !path.startsWith("/auth/")
+    const isInstanceRoute = !path.startsWith("/global/") && !path.startsWith("/auth/") && !path.startsWith("/tts/")
     for (const method of ["get", "post", "put", "delete", "patch"] as const) {
       const operation = item[method]
       if (!operation) continue
