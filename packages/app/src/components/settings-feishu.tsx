@@ -9,21 +9,29 @@
 // 后续(Phase 3+):已绑定账号列表 + 删除 + 群组配置 + 健康检查子 Tab
 
 import { type Component, createSignal, onMount, Show } from "solid-js"
-import { invoke } from "@tauri-apps/api/core"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { feishuAdapterStatus } from "@/utils/feishu-config"
 
 export const SettingsFeishu: Component = () => {
   const language = useLanguage()
+  const dialog = useDialog()
   const [adapterReady, setAdapterReady] = createSignal<boolean | null>(null)
 
   onMount(async () => {
     try {
-      const ready = await invoke<boolean>("feishu_adapter_status")
+      const ready = await feishuAdapterStatus()
       setAdapterReady(ready)
     } catch {
       setAdapterReady(false)
     }
   })
+
+  const openBindDialog = () => {
+    void import("./feishu-bind-dialog").then((x) => {
+      dialog.show(() => <x.FeishuBindDialog />)
+    })
+  }
 
   return (
     <div class="flex flex-col gap-6 p-4 max-w-2xl">
@@ -60,10 +68,7 @@ export const SettingsFeishu: Component = () => {
             type="button"
             class="px-3 py-1.5 bg-surface-strong rounded-md text-13-medium hover:bg-surface-stronger disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={adapterReady() !== true}
-            onClick={() => {
-              // TODO C1.5:打开扫码弹窗
-              console.log("[feishu-bridge] add account clicked — C1.5 will wire up bind dialog")
-            }}
+            onClick={openBindDialog}
           >
             {language.t("settings.feishu.account.add")}
           </button>
