@@ -14,6 +14,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
+import { EncodedIO } from "@/util/encoded-io"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -44,7 +45,10 @@ export const WriteTool = Tool.define(
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)
-          const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
+          // Encoding.read strips UTF-8 BOMs so derive the BOM flag from the
+          // detected encoding label instead of the decoded text.
+          const pre = exists ? yield* EncodedIO.read(filepath) : { text: "", encoding: "utf-8" }
+          const source = { bom: pre.encoding === "utf-8-bom", text: pre.text, encoding: pre.encoding }
           const next = Bom.split(params.content)
           const desiredBom = source.bom || next.bom
           const contentOld = source.text
@@ -61,7 +65,7 @@ export const WriteTool = Tool.define(
             },
           })
 
-          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
+          yield* EncodedIO.write(filepath, Bom.join(contentNew, desiredBom), source.encoding)
           if (yield* format.file(filepath)) {
             yield* Bom.syncFile(fs, filepath, desiredBom)
           }

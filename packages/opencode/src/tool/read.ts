@@ -1,8 +1,10 @@
 import { Effect, Option, Schema, Scope } from "effect"
 import { NonNegativeInt } from "@/util/schema"
-import { createReadStream } from "fs"
 import * as path from "path"
+import type { Readable } from "stream"
 import { createInterface } from "readline"
+import { Encoding } from "@/util/encoding"
+import { TextStream } from "@/util/text-stream"
 import * as Tool from "./tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { LSP } from "@/lsp/lsp"
@@ -138,6 +140,10 @@ export const ReadTool = Tool.define(
       }
 
       if (bytes.length === 0) return false
+
+      // UTF-16/32 BOM: NUL bytes are legitimate, skip the NUL/control-char heuristic
+      const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      if (Encoding.hasUtf16Bom(buf, bytes.length) || Encoding.hasUtf32Bom(buf, bytes.length)) return false
 
       let nonPrintableCount = 0
       for (let i = 0; i < bytes.length; i++) {
@@ -294,8 +300,14 @@ export const ReadTool = Tool.define(
   }),
 )
 
+// Routed through TextStream.withFallback so plain UTF-8 files stream straight
+// from disk and stop at the line/byte cap, while non-UTF-8 files fall back to
+// a buffered iconv decode for correctness.
 async function lines(filepath: string, opts: { limit: number; offset: number }) {
-  const stream = createReadStream(filepath, { encoding: "utf8" })
+  return TextStream.withFallback(filepath, (stream) => readLines(stream, opts))
+}
+
+async function readLines(stream: Readable, opts: { limit: number; offset: number }) {
   const rl = createInterface({
     input: stream,
     // Note: we use the crlfDelay option to recognize all instances of CR LF

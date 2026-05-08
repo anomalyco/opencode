@@ -151,6 +151,8 @@
     "gray-matter": "4.0.3",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
+    "chardet": "2.1.1",
+    "iconv-lite": "0.7.2",
     "ignore": "7.0.5",
     "immer": "11.1.4",
     "jsonc-parser": "3.3.1",
