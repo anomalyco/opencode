@@ -18,8 +18,11 @@ const optimistic: Array<{
 const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
+const promptedSessions: string[] = []
+const sessionSyncs: string[] = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const toasts: Array<{ title?: string; description?: string }> = []
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
@@ -45,7 +48,10 @@ const clientFor = (directory: string) => {
         return { data: undefined }
       },
       prompt: async () => ({ data: undefined }),
-      promptAsync: async () => ({ data: undefined }),
+      promptAsync: async (input: { sessionID: string }) => {
+        promptedSessions.push(input.sessionID)
+        return { data: undefined }
+      },
       command: async () => ({ data: undefined }),
       abort: async () => ({ data: undefined }),
     },
@@ -71,7 +77,10 @@ beforeAll(async () => {
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
-    showToast: () => 0,
+    showToast: (input: { title?: string; description?: string }) => {
+      toasts.push(input)
+      return 0
+    },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -130,7 +139,7 @@ beforeAll(async () => {
         directory: "/repo/main",
         client: rootClient,
         url: "http://localhost:4096",
-        createClient(opts: any) {
+        createClient(opts: { directory: string }) {
           return clientFor(opts.directory)
         },
       }
@@ -142,6 +151,14 @@ beforeAll(async () => {
     useSync: () => ({
       data: { command: [] },
       session: {
+        async sync(sessionID: string) {
+          sessionSyncs.push(sessionID)
+          if (sessionID === "session-hydrate") {
+            storedSessions["/repo/main"] = [{ id: sessionID, title: "Hydrated session" }]
+            return
+          }
+          if (sessionID === "session-missing") throw new Error("session not found")
+        },
         optimistic: {
           add: (value: {
             directory?: string
@@ -208,9 +225,12 @@ beforeEach(() => {
   optimistic.length = 0
   optimisticSeeded.length = 0
   promoted.length = 0
+  promptedSessions.length = 0
   params = {}
+  sessionSyncs.length = 0
   sentShell.length = 0
   syncedDirectories.length = 0
+  toasts.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
@@ -313,6 +333,74 @@ describe("prompt submit worktree selection", () => {
         model: { providerID: "provider", modelID: "model", variant: "high" },
       },
     })
+  })
+
+  test("hydrates existing session route before treating missing local info as failure", async () => {
+    params = { id: "session-hydrate" }
+
+    const submit = createPromptSubmit({
+      info: () => storedSessions["/repo/main"]?.find((item) => item.id === "session-hydrate"),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(sessionSyncs).toEqual(["session-hydrate"])
+    expect(toasts).toEqual([])
+    expect(optimistic).toHaveLength(1)
+    expect(promptedSessions).toEqual(["session-hydrate"])
+  })
+
+  test("does not send prompts for genuinely missing existing sessions", async () => {
+    params = { id: "session-missing" }
+
+    const submit = createPromptSubmit({
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await Promise.resolve()
+
+    expect(sessionSyncs).toEqual(["session-missing"])
+    expect(optimistic).toHaveLength(0)
+    expect(promptedSessions).toEqual([])
+    expect(toasts).toEqual([
+      {
+        title: "prompt.toast.promptSendFailed.title",
+        description: "session not found",
+      },
+    ])
   })
 
   test("seeds new sessions before optimistic prompts are added", async () => {

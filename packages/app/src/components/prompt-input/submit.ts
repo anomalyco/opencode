@@ -381,6 +381,20 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
       }
     }
+    if (!session && !isNewSession && params.id) {
+      const synced = await sync.session
+        .sync(params.id)
+        .then(() => true)
+        .catch((err) => {
+          showToast({
+            title: language.t("prompt.toast.promptSendFailed.title"),
+            description: errorMessage(err),
+          })
+          return false
+        })
+      if (!synced) return
+      session = input.info()
+    }
     if (!session) {
       showToast({
         title: language.t("prompt.toast.promptSendFailed.title"),
