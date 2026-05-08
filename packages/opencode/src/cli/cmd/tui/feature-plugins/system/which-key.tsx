@@ -109,7 +109,7 @@ function skin(api: TuiPluginApi): Skin {
 
 function activeKeyLabel(active: ActiveKey<Renderable, KeyEvent>) {
   const group = text(active.bindingAttrs?.group)
-  if (active.continues && group) return group
+  if (active.continues) return group ?? text(active.tokenName) ?? UNKNOWN
   return (
     text(active.commandAttrs?.title) ?? text(active.bindingAttrs?.desc) ?? text(active.commandAttrs?.desc) ?? UNKNOWN
   )
