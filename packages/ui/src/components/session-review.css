@@ -7,6 +7,7 @@
   [data-slot="session-review-scroll"] {
     flex: 1 1 auto;
     min-height: 0;
+    overscroll-behavior: contain; /* Prevent scroll chaining to parent */
   }
 
   [data-slot="scroll-view-viewport"] {
