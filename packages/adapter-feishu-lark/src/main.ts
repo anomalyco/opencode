@@ -9,6 +9,8 @@
 //         packages/desktop/src-tauri/sidecars/feishu-adapter-<target-triple>
 //         build pipeline 改造留 backlog(Phase 7 之前完成)
 
+import { listAccounts } from "./feishu/account-store"
+import { WSSClientManager, type ImMessageEvent } from "./feishu/wss-client"
 import { startServer } from "./server"
 
 const handle = startServer({
@@ -20,6 +22,42 @@ const handle = startServer({
   password: process.env.FEISHU_ADAPTER_PASSWORD,
 })
 
+// ============================================================
+// WSS 长连接 — adapter 启动时按已绑定 accounts 起连接
+// ============================================================
+
+const wssManager = new WSSClientManager(async (event: ImMessageEvent) => {
+  // C2.WSS:先只 console.log,验证事件能到 adapter
+  // C2.PIPELINE 时此处接 message-pipeline:event → opencode prompt_async → SSE 回写
+  console.log(
+    JSON.stringify({
+      tag: "feishu-message-received",
+      accountId: event.accountId,
+      chatId: event.chatId,
+      chatType: event.chatType,
+      messageId: event.messageId,
+      messageType: event.messageType,
+      senderOpenId: event.senderOpenId,
+      mentions: event.mentions,
+      contentPreview: event.content.slice(0, 200),
+    }),
+  )
+})
+
+void (async () => {
+  try {
+    const accounts = listAccounts()
+    if (accounts.length === 0) {
+      console.log("[adapter] no accounts bound, WSS not started")
+      return
+    }
+    await wssManager.sync(accounts)
+    console.log(`[adapter] WSS clients started: ${wssManager.size}/${accounts.length}`)
+  } catch (err) {
+    console.error("[adapter] WSS init error:", err)
+  }
+})()
+
 const cleanup = () => {
   handle.stop()
   process.exit(0)
@@ -27,6 +65,3 @@ const cleanup = () => {
 
 process.on("SIGTERM", cleanup)
 process.on("SIGINT", cleanup)
-
-// 防 Bun 主线程退出 — server 持有 listener 即足够,但显式 keep-alive 更稳
-// (server.stop() 时 unref'd timer 会让 process 自然 exit)
