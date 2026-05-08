@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { parseResponse } from "../../src/tool/mcp-websearch"
-import {
-  selectWebSearchProvider,
-  webSearchModelName,
-  webSearchProviderLabel,
-} from "../../src/tool/websearch"
+import { selectWebSearchProvider, webSearchModelName, webSearchProviderLabel } from "../../src/tool/websearch"
 import { ProviderID } from "../../src/provider/schema"
 import { webSearchEnabled } from "../../src/tool/registry"
 
@@ -83,7 +79,9 @@ describe("websearch MCP response parser", () => {
   })
 
   test("parses SSE JSON-RPC responses", async () => {
-    await expect(Effect.runPromise(parseResponse(`event: message\ndata: ${payload}\n\n`))).resolves.toBe("search results")
+    await expect(Effect.runPromise(parseResponse(`event: message\ndata: ${payload}\n\n`))).resolves.toBe(
+      "search results",
+    )
   })
 
   test("ignores non-JSON SSE data frames", async () => {

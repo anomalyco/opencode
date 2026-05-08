@@ -759,11 +759,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     }
     default: {
-      const info = getToolInfo(
-        part.tool,
-        input,
-        "metadata" in part.state ? part.state.metadata : undefined,
-      )
+      const info = getToolInfo(part.tool, input, "metadata" in part.state ? part.state.metadata : undefined)
       return {
         title: info.title,
         subtitle: info.subtitle || contextToolDetail(part),
@@ -1366,11 +1362,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                 <ToolErrorCard
                   tool={part().tool}
                   error={error()}
-                  title={
-                    part().tool === "websearch"
-                      ? webSearchProviderLabel(partMetadata().provider)
-                      : undefined
-                  }
+                  title={part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider) : undefined}
                   defaultOpen={props.defaultOpen}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
