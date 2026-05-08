@@ -4,6 +4,8 @@ import { dirname, extname, join } from "node:path"
 import util from "node:util"
 
 const execFilePromise = util.promisify(execFile)
+type ExecFileResult = Awaited<ReturnType<typeof execFilePromise>>
+type ExecFile = (file: string, args?: readonly string[]) => Promise<ExecFileResult>
 
 const exists = (path: string) =>
   access(path)
@@ -55,10 +57,14 @@ async function checkMacosApp(appName: string) {
     .catch(() => false)
 }
 
-async function resolveWindowsAppPath(appName: string): Promise<string | null> {
+export async function resolveWindowsAppPath(
+  appName: string,
+  runExecFile: ExecFile = execFilePromise,
+): Promise<string | null> {
   let output: string
   try {
-    output = execFilePromise("where", [appName]).toString()
+    const result = await runExecFile("where", [appName])
+    output = result.stdout.toString()
   } catch {
     return null
   }
