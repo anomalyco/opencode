@@ -74,6 +74,8 @@ type Group = {
   entries: Entry[]
 }
 
+type HeaderItem = { type: "tab"; group: Group } | { type: "scroll" }
+
 type GroupHeader = {
   type: "group"
   label: string
@@ -238,14 +240,20 @@ function WhichKeyPanel(props: {
   const upActive = createMemo(() => offset() > 0)
   const downActive = createMemo(() => offset() < maxOffset())
   const scrollable = createMemo(() => maxOffset() > 0)
+  const headerItems = createMemo<HeaderItem[]>(() => [
+    ...(tabsVisible() ? groups().map((group) => ({ type: "tab" as const, group })) : []),
+    ...(scrollable() ? [{ type: "scroll" as const }] : []),
+  ])
   const tabGap = createMemo(() => {
-    const itemCount = groups().length + (scrollable() ? 1 : 0)
+    const itemCount = headerItems().length
     if (itemCount <= 1) return 0
-    const tabWidth = groups().reduce((sum, group) => sum + group.label.length + 2, 0)
-    const arrowWidth = scrollable() ? 3 : 0
+    const itemWidth = headerItems().reduce(
+      (sum, item) => sum + (item.type === "tab" ? item.group.label.length + 2 : 3),
+      0,
+    )
     return Math.max(
       MIN_TAB_GAP,
-      Math.min(TAB_GAP, Math.floor((contentWidth() - tabWidth - arrowWidth) / (itemCount - 1))),
+      Math.min(TAB_GAP, Math.floor((contentWidth() - itemWidth) / (itemCount - 1))),
     )
   })
   const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
@@ -391,42 +399,46 @@ function WhichKeyPanel(props: {
       >
         <Show when={headerVisible()}>
           <box width="100%" flexDirection="row" justifyContent="center" gap={tabGap()} flexShrink={0}>
-            <Show when={tabsVisible()}>
-              <For each={groups()}>
-                {(group) => {
-                  const selected = createMemo(() => currentGroup()?.label === group.label)
-                  return (
-                    <box
-                      paddingLeft={1}
-                      paddingRight={1}
-                      flexShrink={0}
-                      backgroundColor={selected() ? look().tab : undefined}
-                      onMouseDown={() => {
-                        setActiveGroup(group.label)
-                        setOffset(0)
-                      }}
-                    >
-                      <text
-                        fg={selected() ? look().tabText : look().muted}
-                        attributes={selected() ? TextAttributes.BOLD : undefined}
-                        wrapMode="none"
-                      >
-                        {group.label}
+            <For each={headerItems()}>
+              {(item) => (
+                <Show
+                  when={item.type === "tab" ? item.group : undefined}
+                  fallback={
+                    <box flexShrink={0}>
+                      <text wrapMode="none">
+                        <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
+                        <span style={{ fg: look().muted }}> </span>
+                        <span style={{ fg: downActive() ? look().text : look().muted }}>↓</span>
                       </text>
                     </box>
-                  )
-                }}
-              </For>
-            </Show>
-            <Show when={scrollable()}>
-              <box flexShrink={0}>
-                <text wrapMode="none">
-                  <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
-                  <span style={{ fg: look().muted }}> </span>
-                  <span style={{ fg: downActive() ? look().text : look().muted }}>↓</span>
-                </text>
-              </box>
-            </Show>
+                  }
+                >
+                  {(group) => {
+                    const selected = createMemo(() => currentGroup()?.label === group().label)
+                    return (
+                      <box
+                        paddingLeft={1}
+                        paddingRight={1}
+                        flexShrink={0}
+                        backgroundColor={selected() ? look().tab : undefined}
+                        onMouseDown={() => {
+                          setActiveGroup(group().label)
+                          setOffset(0)
+                        }}
+                      >
+                        <text
+                          fg={selected() ? look().tabText : look().muted}
+                          attributes={selected() ? TextAttributes.BOLD : undefined}
+                          wrapMode="none"
+                        >
+                          {group().label}
+                        </text>
+                      </box>
+                    )
+                  }}
+                </Show>
+              )}
+            </For>
           </box>
         </Show>
         <Show when={tabsVisible()}>
