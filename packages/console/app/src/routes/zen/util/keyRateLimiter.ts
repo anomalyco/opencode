@@ -13,7 +13,7 @@ export function createRateLimiter(
   if (!zenApiKey) return
   const dict = i18n(localeFromRequest(request))
 
-  const LIMIT = rateLimit ?? 300
+  const LIMIT = rateLimit ?? 500
   const yyyyMMddHHmm = new Date(Date.now())
     .toISOString()
     .replace(/[^0-9]/g, "")
