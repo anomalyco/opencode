@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
+import { extractResponseText, formatGithubFooter, formatPromptTooLargeError } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
@@ -194,5 +194,30 @@ describe("formatPromptTooLargeError", () => {
     expect(result).toInclude("img1.png (3 KB)")
     expect(result).toInclude("img2.jpg (6 KB)")
     expect(result).toInclude("img3.gif (9 KB)")
+  })
+})
+
+describe("formatGithubFooter", () => {
+  test("uses canonical share URL returned by share service", () => {
+    const result = formatGithubFooter({
+      runUrl: "/anomalyco/opencode/actions/runs/123",
+      share: { id: "uaFpXIla", url: "https://opncd.ai/share/uaFpXIla" },
+      image: true,
+      session: { title: "Fix GitHub share links", version: "1.2.3" },
+      providerID: "openai",
+      modelID: "gpt-5",
+    })
+
+    expect(result).toContain("[opencode session](https://opncd.ai/share/uaFpXIla)")
+    expect(result).toContain('<a href="https://opncd.ai/share/uaFpXIla">')
+    expect(result).toContain("id=uaFpXIla")
+    expect(result).not.toContain("https://opencode.ai/s/")
+    expect(result).not.toContain("/s/uaFpXIla")
+  })
+
+  test("omits share link when sharing is unavailable", () => {
+    const result = formatGithubFooter({ runUrl: "/anomalyco/opencode/actions/runs/123" })
+
+    expect(result).toBe("\n\n[github run](/anomalyco/opencode/actions/runs/123)")
   })
 })

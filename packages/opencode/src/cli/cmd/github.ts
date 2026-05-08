@@ -181,6 +181,35 @@ export function formatPromptTooLargeError(files: { filename: string; content: st
   return `PROMPT_TOO_LARGE: The prompt exceeds the model's context limit.${fileDetails}`
 }
 
+export function formatGithubFooter(input: {
+  runUrl: string
+  share?: { id: string; url: string } | undefined
+  image?: boolean | undefined
+  session?: { title: string; version: string } | undefined
+  providerID?: string | undefined
+  modelID?: string | undefined
+}) {
+  const image = (() => {
+    if (!input.share?.url) return ""
+    if (!input.share.id) return ""
+    if (!input.image) return ""
+    if (!input.session || !input.providerID || !input.modelID) return ""
+
+    const titleAlt = encodeURIComponent(input.session.title.substring(0, 50))
+    const title64 = Buffer.from(input.session.title.substring(0, 700), "utf8").toString("base64")
+
+    return `<a href="${input.share.url}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${input.providerID}/${input.modelID}&version=${input.session.version}&id=${input.share.id}" /></a>\n`
+  })()
+  const shareUrl = input.share?.url ? `[opencode session](${input.share.url})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+  return `\n\n${image}${shareUrl}[github run](${input.runUrl})`
+}
+
+function parseShareId(url: string) {
+  const pathname = url.split("?").at(0)
+  if (!pathname) return ""
+  return pathname.split("/").filter(Boolean).at(-1) ?? ""
+}
+
 export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
@@ -478,14 +507,13 @@ export const GithubRunCommand = effectCmd({
           ? (payload as IssueCommentEvent | IssuesEvent).issue.number
           : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
-      const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
       let appToken: string
       let octoRest: Octokit
       let octoGraph: typeof graphql
       let gitConfig: string
       let session: { id: SessionID; title: string; version: string }
-      let shareId: string | undefined
+      let shareInfo: { id: string; url: string } | undefined
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
       const triggerCommentId = isCommentEvent
@@ -560,13 +588,17 @@ export const GithubRunCommand = effectCmd({
           }),
         )
         subscribeSessionEvents()
-        shareId = await (async () => {
+        shareInfo = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
-          await Effect.runPromise(sessionShare.share(session.id))
-          return session.id.slice(-8)
+          const result = await Effect.runPromise(sessionShare.share(session.id))
+          if (!result.url) return
+          return { id: parseShareId(result.url), url: result.url }
         })()
         console.log("opencode session", session.id)
+        if (shareInfo?.url) {
+          console.log("Share link:", shareInfo.url)
+        }
 
         // Handle event types:
         // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only
@@ -624,7 +656,8 @@ export const GithubRunCommand = effectCmd({
               const summary = await summarize(response)
               await pushToLocalBranch(summary, uncommittedChanges)
             }
-            const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
+            const shareUrl = shareInfo?.url
+            const hasShared = shareUrl ? prData.comments.nodes.some((c) => c.body.includes(shareUrl)) : false
             await createComment(`${response}${footer({ image: !hasShared })}`)
             await removeReaction(commentType)
           }
@@ -642,7 +675,8 @@ export const GithubRunCommand = effectCmd({
               const summary = await summarize(response)
               await pushToForkBranch(summary, prData, uncommittedChanges)
             }
-            const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
+            const shareUrl = shareInfo?.url
+            const hasShared = shareUrl ? prData.comments.nodes.some((c) => c.body.includes(shareUrl)) : false
             await createComment(`${response}${footer({ image: !hasShared })}`)
             await removeReaction(commentType)
           }
@@ -1392,17 +1426,14 @@ export const GithubRunCommand = effectCmd({
       }
 
       function footer(opts?: { image?: boolean }) {
-        const image = (() => {
-          if (!shareId) return ""
-          if (!opts?.image) return ""
-
-          const titleAlt = encodeURIComponent(session.title.substring(0, 50))
-          const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
-
-          return `<a href="${shareBaseUrl}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
-        })()
-        const shareUrl = shareId ? `[opencode session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
-        return `\n\n${image}${shareUrl}[github run](${runUrl})`
+        return formatGithubFooter({
+          runUrl,
+          share: shareInfo,
+          image: opts?.image,
+          session,
+          providerID,
+          modelID,
+        })
       }
 
       async function fetchRepo() {
