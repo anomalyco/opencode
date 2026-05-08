@@ -513,6 +513,11 @@ const OPENAI_XHIGH_EFFORT_RELEASE_DATE = "2025-12-04"
 //   "gpt-5", "gpt-5-nano", "gpt-5.4", "openai/gpt-5.4-codex".
 // Anchored to start-of-string or "/" so it doesn't false-match "gpt-50" or "gpt-5o".
 const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
+const GPT5_VERSION_RE = /(?:^|\/)gpt-5[.-](\d+)(?:[.-]|$)/
+
+function gpt5Version(apiId: string) {
+  return Number(GPT5_VERSION_RE.exec(apiId)?.[1]) || undefined
+}
 
 // Computes the reasoning_effort tiers an OpenAI (or OpenAI-compatible upstream
 // routed through it, e.g. cf-ai-gateway) model exposes. Returns null for models
@@ -524,11 +529,26 @@ function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | 
     if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
     return [...WIDELY_SUPPORTED_EFFORTS]
   }
+  const version = gpt5Version(id)
+  if (version !== undefined) {
+    // GPT-5.1 replaced GPT-5's `minimal` effort with `none`; GPT-5.2+
+    // additionally accepts `xhigh`. Model pages list the supported subset.
+    const efforts = ["none", ...WIDELY_SUPPORTED_EFFORTS]
+    if (version >= 2) efforts.push("xhigh")
+    return efforts
+  }
   const efforts = [...WIDELY_SUPPORTED_EFFORTS]
   if (GPT5_FAMILY_RE.test(id)) efforts.unshift("minimal")
   if (releaseDate >= OPENAI_NONE_EFFORT_RELEASE_DATE) efforts.unshift("none")
   if (releaseDate >= OPENAI_XHIGH_EFFORT_RELEASE_DATE) efforts.push("xhigh")
   return efforts
+}
+
+function openaiCompatibleReasoningEfforts(id: string) {
+  const version = gpt5Version(id.toLowerCase())
+  if (version === undefined) return OPENAI_EFFORTS
+  if (version === 1) return ["none", ...WIDELY_SUPPORTED_EFFORTS]
+  return ["none", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 }
 
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
@@ -577,8 +597,13 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
   switch (model.api.npm) {
     case "@openrouter/ai-sdk-provider":
-      if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("claude")) return {}
-      return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
+      if (!id.includes("gpt") && !id.includes("gemini-3") && !id.includes("claude")) return {}
+      return Object.fromEntries(
+        (id.includes("gpt") ? openaiCompatibleReasoningEfforts(id) : OPENAI_EFFORTS).map((effort) => [
+          effort,
+          { reasoning: { effort } },
+        ]),
+      )
 
     case "ai-gateway-provider": {
       // Cloudflare AI Gateway routes every upstream through its OpenAI-compatible
@@ -652,7 +677,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           ]),
         )
       }
-      return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+      return Object.fromEntries(
+        openaiCompatibleReasoningEfforts(model.api.id).map((effort) => [effort, { reasoningEffort: effort }]),
+      )
 
     case "@ai-sdk/github-copilot":
       if (model.id.includes("gemini")) {
@@ -701,7 +728,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
       if (id === "o1-mini") return {}
       const azureEfforts = ["low", "medium", "high"]
-      if (id.includes("gpt-5-") || id === "gpt-5") {
+      if ((id.includes("gpt-5-") || id === "gpt-5") && gpt5Version(id) === undefined) {
         azureEfforts.unshift("minimal")
       }
       return Object.fromEntries(

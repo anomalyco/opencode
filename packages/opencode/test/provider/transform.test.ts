@@ -2464,6 +2464,20 @@ describe("ProviderTransform.variants", () => {
       expect(result.high).toEqual({ reasoning: { effort: "high" } })
     })
 
+    test("gpt-5.4 models do not include minimal effort", () => {
+      const model = createMockModel({
+        id: "openai/gpt-5.4",
+        providerID: "openrouter",
+        api: {
+          id: "openai/gpt-5.4",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
+    })
+
     test("gemini-3 returns OPENAI_EFFORTS with reasoning", () => {
       const model = createMockModel({
         id: "openrouter/gemini-3-5-pro",
@@ -2650,6 +2664,20 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+
+    test("gpt-5.5 models do not include minimal effort", () => {
+      const model = createMockModel({
+        id: "openai/gpt-5-5",
+        providerID: "gateway",
+        api: {
+          id: "openai/gpt-5-5",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
     })
   })
 
@@ -2929,6 +2957,34 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
     })
+
+    test("gpt-5.5 does not add minimal effort", () => {
+      const model = createMockModel({
+        id: "gpt-5-5",
+        providerID: "azure",
+        api: {
+          id: "gpt-5-5",
+          url: "https://azure.com",
+          npm: "@ai-sdk/azure",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
+
+    test("gpt-5.4 does not add minimal effort", () => {
+      const model = createMockModel({
+        id: "gpt-5-4",
+        providerID: "azure",
+        api: {
+          id: "gpt-5-4",
+          url: "https://azure.com",
+          npm: "@ai-sdk/azure",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
   })
 
   describe("@ai-sdk/openai", () => {
@@ -2996,7 +3052,22 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
     })
 
-    test("dotted gpt-5.x ids include 'minimal' (regression: matcher used to miss gpt-5.4)", () => {
+    test("gpt-5.1 uses none instead of minimal", () => {
+      const model = createMockModel({
+        id: "gpt-5.1",
+        providerID: "openai",
+        api: {
+          id: "gpt-5.1",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2025-11-13",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
+    })
+
+    test("dotted gpt-5.4 ids do not include 'minimal'", () => {
       const model = createMockModel({
         id: "gpt-5.4",
         providerID: "openai",
@@ -3008,7 +3079,22 @@ describe("ProviderTransform.variants", () => {
         release_date: "2026-03-05",
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-5.5 ids do not include 'minimal'", () => {
+      const model = createMockModel({
+        id: "gpt-5-5",
+        providerID: "openai",
+        api: {
+          id: "gpt-5.5",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2026-04-23",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
     })
 
     test("gpt-50 (lookalike) does not get gpt-5 family treatment", () => {
@@ -3486,11 +3572,11 @@ describe("ProviderTransform.variants", () => {
         release_date: releaseDate,
       })
 
-    test("openai gpt-5.4 includes xhigh effort (regression: variant=xhigh used to be silently ignored)", () => {
+    test("openai gpt-5.4 includes xhigh effort without minimal", () => {
       const result = ProviderTransform.variants(cfModel("openai/gpt-5.4", "2026-03-05"))
       expect(result.xhigh).toEqual({ reasoningEffort: "xhigh" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
-      expect(Object.keys(result)).toContain("minimal")
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
     })
 
     test("openai gpt-5.2-codex includes xhigh", () => {
