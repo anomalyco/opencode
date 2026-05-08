@@ -44,7 +44,7 @@ export const layer = Layer.effect(
       yield* state.assertNotBusy(input.sessionID)
       const all = yield* sessions.messages({ sessionID: input.sessionID })
       let lastUser: MessageV2.User | undefined
-      const session = yield* sessions.get(input.sessionID)
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
 
       let rev: Session.Info["revert"]
       const patches: Snapshot.Patch[] = []
@@ -75,8 +75,8 @@ export const layer = Layer.effect(
       rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
       if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
       yield* snap.revert(patches)
-      if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot as string)
-      const range = all.filter((msg) => msg.info.id >= rev!.messageID)
+      if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
+      const range = all.filter((msg) => msg.info.id >= rev.messageID)
       const diffs = yield* summary.computeDiff({ messages: range })
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
       yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
@@ -89,17 +89,17 @@ export const layer = Layer.effect(
           files: diffs.length,
         },
       })
-      return yield* sessions.get(input.sessionID)
+      return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
     })
 
     const unrevert = Effect.fn("SessionRevert.unrevert")(function* (input: { sessionID: SessionID }) {
       log.info("unreverting", input)
       yield* state.assertNotBusy(input.sessionID)
-      const session = yield* sessions.get(input.sessionID)
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (!session.revert) return session
-      if (session.revert.snapshot) yield* snap.restore(session.revert!.snapshot!)
+      if (session.revert.snapshot) yield* snap.restore(session.revert.snapshot)
       yield* sessions.clearRevert(input.sessionID)
-      return yield* sessions.get(input.sessionID)
+      return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
     })
 
     const cleanup = Effect.fn("SessionRevert.cleanup")(function* (session: Session.Info) {

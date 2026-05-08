@@ -22,6 +22,19 @@ describe("util.error", () => {
     expect(data.code).toBe("E_BAD")
   })
 
+  test("never returns bare {} for opaque object errors", () => {
+    // Plain empty object — what the SDK threw before we wrapped it.
+    expect(errorFormat({})).not.toBe("{}")
+    expect(errorFormat({})).toContain("no message")
+
+    // Object with only non-enumerable own properties (JSON.stringify drops them).
+    class OpaqueError {}
+    const opaque = new OpaqueError()
+    Object.defineProperty(opaque, "secret", { value: "hidden", enumerable: false })
+    expect(errorFormat(opaque)).not.toBe("{}")
+    expect(errorFormat(opaque)).toContain("OpaqueError")
+  })
+
   test("handles opaque throwables with custom toString", () => {
     const err = {
       toString() {

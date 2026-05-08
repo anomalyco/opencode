@@ -8,12 +8,9 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { WorkspaceAdapterEntry } from "@/control-plane/types"
 import { zodObject } from "@/util/effect-zod"
 import { Instance } from "@/project/instance"
+import { Vcs } from "@/project/vcs"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
-import * as Log from "@opencode-ai/core/util/log"
-import { errorData } from "@/util/error"
-
-const log = Log.create({ service: "server.workspace" })
 
 export const WorkspaceRoutes = lazy(() =>
   new Hono()
@@ -96,6 +93,23 @@ export const WorkspaceRoutes = lazy(() =>
         return c.json(await AppRuntime.runPromise(Workspace.Service.use((svc) => svc.list(Instance.project))))
       },
     )
+    .post(
+      "/sync-list",
+      describeRoute({
+        summary: "Sync workspace list",
+        description: "Register missing workspaces returned by workspace adapters.",
+        operationId: "experimental.workspace.syncList",
+        responses: {
+          204: {
+            description: "Workspace list synced",
+          },
+        },
+      }),
+      async (c) => {
+        await AppRuntime.runPromise(Workspace.Service.use((svc) => svc.syncList(Instance.project)))
+        return c.body(null, 204)
+      },
+    )
     .get(
       "/status",
       describeRoute({
@@ -151,60 +165,64 @@ export const WorkspaceRoutes = lazy(() =>
       },
     )
     .post(
-      "/:id/session-restore",
+      "/warp",
       describeRoute({
-        summary: "Restore session into workspace",
-        description: "Replay a session's sync events into the target workspace in batches.",
-        operationId: "experimental.workspace.sessionRestore",
+        summary: "Warp session into workspace",
+        description: "Move a session's sync history into the target workspace, or detach it to the local project.",
+        operationId: "experimental.workspace.warp",
         responses: {
-          200: {
-            description: "Session replay started",
-            content: {
-              "application/json": {
-                schema: resolver(
-                  z.object({
-                    total: z.number().int().min(0),
-                  }),
-                ),
-              },
-            },
+          204: {
+            description: "Session warped",
           },
           ...errors(400),
         },
       }),
-      validator("param", z.object({ id: zodObject(Workspace.Info).shape.id })),
-      validator("json", Workspace.SessionRestoreInput.zodObject.omit({ workspaceID: true })),
+      validator(
+        "json",
+        z.object({
+          id: zodObject(Workspace.Info).shape.id.nullable(),
+          sessionID: Workspace.SessionWarpInput.zodObject.shape.sessionID,
+          copyChanges: z.boolean().optional(),
+        }),
+      ),
       async (c) => {
-        const { id } = c.req.valid("param")
-        const body = c.req.valid("json") as Omit<Workspace.SessionRestoreInput, "workspaceID">
-        log.info("session restore route requested", {
-          workspaceID: id,
-          sessionID: body.sessionID,
-          directory: Instance.directory,
-        })
-        try {
-          const result = await AppRuntime.runPromise(
-            Workspace.Service.use((svc) =>
-              svc.sessionRestore({
-                workspaceID: id,
-                ...body,
-              }),
-            ),
-          )
-          log.info("session restore route complete", {
-            workspaceID: id,
-            sessionID: body.sessionID,
-            total: result.total,
-          })
-          return c.json(result)
-        } catch (err) {
-          log.error("session restore route failed", {
-            workspaceID: id,
-            sessionID: body.sessionID,
-            error: errorData(err),
-          })
-          throw err
-        }
+        const body = c.req.valid("json")
+        return AppRuntime.runPromise(
+          Workspace.Service.use((workspace) =>
+            workspace.sessionWarp({
+              workspaceID: body.id,
+              sessionID: body.sessionID,
+              copyChanges: body.copyChanges,
+            }),
+          ).pipe(
+            Effect.match({
+              onFailure: (error) => {
+                if (error instanceof Vcs.PatchApplyError) {
+                  return c.json(
+                    {
+                      name: "VcsApplyError",
+                      data: {
+                        message: error.message,
+                        reason: error.reason,
+                      },
+                    },
+                    400,
+                  )
+                }
+                return c.json(
+                  {
+                    name: "WorkspaceWarpError",
+                    data: {
+                      message: error.message,
+                    },
+                  },
+                  400,
+                )
+              },
+              onSuccess: () => c.body(null, 204),
+            }),
+          ),
+        )
       },
     ),
 )

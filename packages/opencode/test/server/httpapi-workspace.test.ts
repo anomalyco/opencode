@@ -14,6 +14,8 @@ import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { WorkspaceRef } from "../../src/effect/instance-ref"
@@ -23,9 +25,11 @@ void Log.init({ print: false })
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const it = testEffect(
-  Layer.mergeAll(NodeServices.layer, Project.defaultLayer, Session.defaultLayer, Workspace.defaultLayer),
+const workspaceLayer = Workspace.defaultLayer.pipe(
+  Layer.provide(InstanceStore.defaultLayer),
+  Layer.provide(InstanceBootstrap.defaultLayer),
 )
+const it = testEffect(Layer.mergeAll(NodeServices.layer, Project.defaultLayer, Session.defaultLayer, workspaceLayer))
 
 function request(path: string, directory: string, init: RequestInit = {}, httpApi = true) {
   return Effect.promise(() => {
@@ -51,6 +55,36 @@ function localAdapter(directory: string): WorkspaceAdapter {
       await mkdir(directory, { recursive: true })
     },
     async remove() {},
+    target() {
+      return {
+        type: "local" as const,
+        directory,
+      }
+    },
+  }
+}
+
+function listedAdapter(directory: string, type: string): WorkspaceAdapter {
+  return {
+    name: "Listed Test",
+    description: "List a local test workspace",
+    configure(info) {
+      return { ...info, name: "unused", directory }
+    },
+    async create() {},
+    async remove() {},
+    list() {
+      return [
+        {
+          type,
+          name: "listed-test",
+          branch: "listed/main",
+          directory,
+          extra: { listed: true },
+          projectID: Instance.project.id,
+        },
+      ]
+    },
     target() {
       return {
         type: "local" as const,
@@ -168,22 +202,19 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "local-test", branch: null, extra: null }),
+        body: JSON.stringify({ type: "local-test", branch: null }),
       })
       expect(created.status).toBe(200)
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
       expect(workspace).toMatchObject({ type: "local-test", name: "local-test" })
 
       const session = yield* Session.Service.use((svc) => svc.create({})).pipe(provideInstance(dir))
-      const restored = yield* request(WorkspacePaths.sessionRestore.replace(":id", workspace.id), dir, {
+      const warped = yield* request(WorkspacePaths.warp, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionID: session.id }),
+        body: JSON.stringify({ id: workspace.id, sessionID: session.id }),
       })
-      expect(restored.status).toBe(200)
-      expect((yield* Effect.promise(() => restored.json())) as { total: number }).toMatchObject({
-        total: expect.any(Number),
-      })
+      expect(warped.status).toBe(204)
 
       const removed = yield* request(WorkspacePaths.remove.replace(":id", workspace.id), dir, { method: "DELETE" })
       expect(removed.status).toBe(200)
@@ -192,6 +223,30 @@ describe("workspace HttpApi", () => {
       const listed = yield* request(WorkspacePaths.list, dir)
       expect(listed.status).toBe(200)
       expect(yield* Effect.promise(() => listed.json())).toEqual([])
+    }),
+  )
+
+  it.live("serves list sync endpoint", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const type = `listed-${Math.random().toString(36).slice(2)}`
+      registerAdapter(project.project.id, type, listedAdapter(path.join(dir, ".listed"), type))
+
+      const response = yield* request(WorkspacePaths.syncList, dir, { method: "POST" })
+
+      expect(response.status).toBe(204)
+      const listed = yield* request(WorkspacePaths.list, dir)
+      expect(yield* Effect.promise(() => listed.json())).toMatchObject([
+        {
+          type,
+          name: "listed-test",
+          branch: "listed/main",
+          directory: path.join(dir, ".listed"),
+          extra: { listed: true },
+        },
+      ])
     }),
   )
 
@@ -212,7 +267,6 @@ describe("workspace HttpApi", () => {
       expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
         type: "local-test",
         name: "local-test",
-        extra: null,
       })
     }),
   )
@@ -257,7 +311,6 @@ describe("workspace HttpApi", () => {
       expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
         type: "local-test",
         name: "local-test",
-        extra: null,
       })
     }),
   )
@@ -272,7 +325,7 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "local-target", branch: null, extra: null }),
+        body: JSON.stringify({ type: "local-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
 
@@ -327,7 +380,7 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "remote-target", branch: null, extra: null }),
+        body: JSON.stringify({ type: "remote-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
 
@@ -394,7 +447,7 @@ describe("workspace HttpApi", () => {
       const created = yield* request(WorkspacePaths.list, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "remote-session-target", branch: null, extra: null }),
+        body: JSON.stringify({ type: "remote-session-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
       const session = yield* Session.Service.use((svc) => svc.create()).pipe(
