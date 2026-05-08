@@ -399,6 +399,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       {
         name: "command.palette.show",
         title: "Show command palette",
+        category: "System",
         hidden: true,
         run: () => {
           command.show()
