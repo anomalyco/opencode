@@ -425,7 +425,7 @@ test("resolves keybind lookup from canonical keybinds", async () => {
   })
 
   const config = await getTuiConfig(tmp.path)
-  expect(config.leader).toBe("ctrl+g")
+  expect(config.keybinds.get("leader")?.[0]?.key).toEqual({ name: "g", ctrl: true })
   expect(config.leader_timeout).toBe(1234)
   expect(config.keybinds.get("command.palette.show")?.[0]?.key).toBe("alt+p")
   expect(config.keybinds.get("session.new")?.[0]?.key).toBe("<leader>n")

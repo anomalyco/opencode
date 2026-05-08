@@ -35,7 +35,6 @@ type Acc = {
 
 export type Resolved = Omit<Info, "keybinds" | "leader_timeout"> & {
   keybinds: TuiKeybind.BindingLookupView
-  leader: string
   leader_timeout: number
   // Internal resolved plugin list used by runtime loading.
   plugin_origins?: ConfigPlugin.Origin[]
@@ -188,14 +187,12 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     ]).join(",")
   }
   const parsedKeybinds = TuiKeybind.Keybinds.parse(keybinds)
-  const leader = TuiKeybind.leaderKey(parsedKeybinds.leader, "ctrl+x")
   const result: Resolved = {
     ...acc.result,
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(parsedKeybinds), {
       commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
-    leader,
     leader_timeout: acc.result.leader_timeout ?? KeymapLeaderTimeoutDefault,
     plugin_origins: acc.plugin_origins.length ? acc.plugin_origins : undefined,
   }

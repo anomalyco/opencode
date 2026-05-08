@@ -92,15 +92,12 @@ function config(input?: {
     ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
     ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
   })
-  const leader = TuiKeybind.leaderKey(keybinds.leader, "ctrl+x")
-
   return {
     diff_style: input?.diff_style,
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
       commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
-    leader,
     leader_timeout: input?.leaderTimeout ?? 2000,
   }
 }

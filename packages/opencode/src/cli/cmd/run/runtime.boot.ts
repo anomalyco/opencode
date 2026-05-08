@@ -6,6 +6,7 @@
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
 import { Context, Effect, Layer } from "effect"
+import { stringifyKeyStroke } from "@opentui/keymap"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { makeRuntime } from "@/effect/run-service"
 import { reusePendingTask } from "./runtime.shared"
@@ -78,13 +79,19 @@ function emptySessionInfo(): SessionInfo {
   }
 }
 
+function leaderKey(config: Config) {
+  const key = config.keybinds.get("leader")?.[0]?.key
+  if (!key) return "ctrl+x"
+  return typeof key === "string" ? key : stringifyKeyStroke(key)
+}
+
 function footerKeybinds(config: Config | undefined): FooterKeybinds {
   if (!config) {
     return DEFAULT_KEYBINDS
   }
 
   return {
-    leader: config.leader,
+    leader: leaderKey(config),
     leaderTimeout: config.leader_timeout,
     commandList: config.keybinds.get("command.palette.show") ?? [],
     variantCycle: config.keybinds.get("variant.cycle") ?? [],

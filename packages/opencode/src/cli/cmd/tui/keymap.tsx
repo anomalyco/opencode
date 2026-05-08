@@ -1,5 +1,6 @@
 import { type CliRenderer } from "@opentui/core"
 import * as addons from "@opentui/keymap/addons/opentui"
+import { stringifyKeyStroke } from "@opentui/keymap"
 import {
   formatCommandBindings as formatCommandBindingsExtra,
   formatKeySequence as formatKeySequenceExtra,
@@ -63,10 +64,22 @@ const inputCommands = [
   "input.submit",
 ] as const
 
+function leaderBinding(config: TuiConfig.Resolved) {
+  return config.keybinds.get(LEADER_TOKEN) ?? "ctrl+x"
+}
+
+function leaderDisplay(config: TuiConfig.Resolved) {
+  const trigger = leaderBinding(config)
+  if (typeof trigger === "string") return trigger
+  const key = trigger[0]?.key
+  if (!key) return "ctrl+x"
+  return typeof key === "string" ? key : stringifyKeyStroke(key)
+}
+
 function formatOptions(config: TuiConfig.Resolved) {
   return {
     tokenDisplay: {
-      [LEADER_TOKEN]: config.leader,
+      [LEADER_TOKEN]: leaderDisplay(config),
     },
     keyNameAliases: {
       pageup: "pgup",
@@ -94,7 +107,7 @@ export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRende
   const offCommaBindings = addons.registerCommaBindings(keymap)
   const offBaseLayout = addons.registerBaseLayoutFallback(keymap)
   const offLeader = addons.registerTimedLeader(keymap, {
-    trigger: config.leader,
+    trigger: leaderBinding(config),
     name: LEADER_TOKEN,
     timeoutMs: config.leader_timeout,
   })

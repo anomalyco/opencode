@@ -16,7 +16,7 @@ import type {
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
 import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
-import type { Binding, KeyLike, Keymap } from "@opentui/keymap"
+import type { Binding, Keymap } from "@opentui/keymap"
 import {
   createBindingLookup as createKeymapBindingLookup,
   type BindingConfig,
@@ -296,7 +296,6 @@ type TuiBindingLookupView = {
 
 type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
   NonNullable<PluginConfig["tui"]> & {
-    leader: string
     leader_timeout: number
     plugin_enabled?: Record<string, boolean>
     keybinds: TuiBindingLookupView

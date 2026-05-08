@@ -5,7 +5,7 @@ import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { TuiKeybind } from "../../src/cli/cmd/tui/config/keybind"
 
 type PluginSpec = string | [string, Record<string, unknown>]
-type ResolvedInput = Omit<TuiConfig.Resolved, "keybinds" | "leader" | "leader_timeout"> & {
+type ResolvedInput = Omit<TuiConfig.Resolved, "keybinds" | "leader_timeout"> & {
   keybinds?: Partial<TuiKeybind.Keybinds>
   leader_timeout?: number
 }
@@ -20,11 +20,9 @@ export function createTuiResolvedKeybinds(input: Partial<TuiKeybind.Keybinds> = 
 
 export function createTuiResolvedConfig(input: ResolvedInput = {}): TuiConfig.Resolved {
   const keybinds = TuiKeybind.Keybinds.parse(input.keybinds ?? {})
-  const leader = TuiKeybind.leaderKey(keybinds.leader, "ctrl+x")
   return {
     ...input,
     keybinds: createTuiResolvedKeybinds(keybinds),
-    leader,
     leader_timeout: input.leader_timeout ?? 2000,
   }
 }

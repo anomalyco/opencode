@@ -1,7 +1,7 @@
 export * as TuiKeybind from "./keybind"
 
 import type { KeyEvent, Renderable } from "@opentui/core"
-import { stringifyKeyStroke, type Binding } from "@opentui/keymap"
+import type { Binding } from "@opentui/keymap"
 import type { BindingCommandMap, BindingConfig, BindingDefaults, BindingValue } from "@opentui/keymap/extras"
 import z from "zod"
 
@@ -218,7 +218,6 @@ export const KeybindOverrides = z.strictObject(KeybindOverrideShape).describe("T
 export const Descriptions = Object.fromEntries(
   Object.entries(Definitions).map(([name, item]) => [name, item.description]),
 ) as Record<KeybindName, string>
-export const Commands = Object.keys(Definitions).filter((name) => name !== "leader") as Exclude<KeybindName, "leader">[]
 export const CommandMap = {
   app_exit: "app.exit",
   app_debug: "app.debug",
@@ -360,7 +359,6 @@ const CommandDescriptions = Object.fromEntries(
 
 export type Keybinds = z.output<typeof Keybinds>
 export type KeybindOverrides = z.output<typeof KeybindOverrides>
-export type KeybindValue = z.output<typeof BindingValueSchema>
 export type BindingLookupView = {
   readonly bindings: readonly Binding<Renderable, KeyEvent>[]
   get(command: string): readonly Binding<Renderable, KeyEvent>[] | undefined
@@ -370,7 +368,7 @@ export type BindingLookupView = {
 }
 
 export function toBindingConfig(keybinds: Keybinds): BindingConfig<Renderable, KeyEvent> {
-  return Object.fromEntries(Commands.map((command) => [command, keybinds[command]])) as BindingConfig<
+  return Object.fromEntries(Object.entries(keybinds)) as BindingConfig<
     Renderable,
     KeyEvent
   >
@@ -381,12 +379,4 @@ export function bindingDefaults(): BindingDefaults<Renderable, KeyEvent> {
     if (binding.desc !== undefined) return
     return { desc: CommandDescriptions[command] }
   }
-}
-
-export function leaderKey(value: KeybindValue | undefined, fallback: string): string {
-  if (value === undefined || value === false || value === "none") return fallback
-  if (Array.isArray(value)) return leaderKey(value[0], fallback)
-  if (typeof value === "string") return value
-  if ("key" in value) return typeof value.key === "string" ? value.key : stringifyKeyStroke(value.key)
-  return stringifyKeyStroke(value)
 }
