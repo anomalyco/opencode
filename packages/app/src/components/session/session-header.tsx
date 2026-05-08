@@ -23,6 +23,7 @@ import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
+import { clipboardWrite } from "@/utils/clipboard"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
 
@@ -256,17 +257,18 @@ export function SessionHeader() {
   const copyPath = () => {
     const directory = projectDirectory()
     if (!directory) return
-    navigator.clipboard
-      .writeText(directory)
-      .then(() => {
+    clipboardWrite(directory).then((copied) => {
+      if (copied) {
         showToast({
           variant: "success",
           icon: "circle-check",
           title: language.t("session.share.copy.copied"),
           description: directory,
         })
-      })
-      .catch((err: unknown) => showRequestError(language, err))
+      } else {
+        showRequestError(language, new Error("clipboard write failed"))
+      }
+    })
   }
 
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)

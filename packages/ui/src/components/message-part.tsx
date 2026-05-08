@@ -30,6 +30,7 @@ import {
   QuestionAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
+import { clipboardWrite } from "../clipboard"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 import { useDialog } from "../context/dialog"
@@ -1042,7 +1043,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const handleCopy = async () => {
     const content = text()
     if (!content) return
-    await navigator.clipboard.writeText(content)
+    await clipboardWrite(content)
     setState("copied", true)
     setTimeout(() => setState("copied", false), 2000)
   }
@@ -1462,7 +1463,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const handleCopy = async () => {
     const content = text()
     if (!content) return
-    await navigator.clipboard.writeText(content)
+    await clipboardWrite(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -1801,7 +1802,7 @@ ToolRegistry.register({
     const handleCopy = async () => {
       const content = text()
       if (!content) return
-      await navigator.clipboard.writeText(content)
+      await clipboardWrite(content)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }

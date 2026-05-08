@@ -17,6 +17,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { clipboardWrite } from "@/utils/clipboard"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
@@ -132,29 +133,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (sessionID) return permission.isAutoAccepting(sessionID, sdk.directory)
     return permission.isAutoAcceptingDirectory(sdk.directory)
   }
-  const write = async (value: string) => {
-    const body = typeof document === "undefined" ? undefined : document.body
-    if (body) {
-      const textarea = document.createElement("textarea")
-      textarea.value = value
-      textarea.setAttribute("readonly", "")
-      textarea.style.position = "fixed"
-      textarea.style.opacity = "0"
-      textarea.style.pointerEvents = "none"
-      body.appendChild(textarea)
-      textarea.select()
-      const copied = document.execCommand("copy")
-      body.removeChild(textarea)
-      if (copied) return true
-    }
-
-    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-    if (!clipboard?.writeText) return false
-    return clipboard.writeText(value).then(
-      () => true,
-      () => false,
-    )
-  }
+  const write = (value: string) => clipboardWrite(value)
 
   const copyShare = async (url: string, existing: boolean) => {
     if (!(await write(url))) {
