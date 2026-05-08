@@ -1576,6 +1576,10 @@ export type Config = {
    */
   model?: string
   /**
+   * Default runtime to use for new prompts when none is specified
+   */
+  runtime?: "codex" | "opencode"
+  /**
    * Small model to use for tasks like title generation in the format of provider/model
    */
   small_model?: string

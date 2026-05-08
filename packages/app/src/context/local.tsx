@@ -142,7 +142,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       handoff.delete(key)
     })
 
-    const runtimeValue = () => scope()?.runtime ?? "codex"
+    const configuredRuntime = () => {
+      const value = sync.data.config.runtime
+      if (value === "codex" || value === "opencode") return value
+      return undefined
+    }
+
+    const runtimeValue = () => scope()?.runtime ?? configuredRuntime() ?? "codex"
 
     const configuredModel = () => {
       if (!sync.data.config.model) return
@@ -419,7 +425,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
-            runtime: msg.runtime ?? "codex",
+            runtime: msg.runtime ?? configuredRuntime() ?? "codex",
             variant: msg.model.variant ?? null,
           })
         },

@@ -30,7 +30,7 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
-import { ConfigMarkdown } from "../config"
+import { Config, ConfigMarkdown } from "../config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { SessionProcessor } from "./processor"
@@ -104,8 +104,12 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const cfg = yield* Config.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
+    })
+    const defaultRuntime = Effect.fnUntraced(function* () {
+      return (yield* cfg.get()).runtime ?? "codex"
     })
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       const run = yield* runner()
@@ -950,7 +954,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           modelID: model.modelID,
           variant,
         },
-        runtime: input.runtime ?? "codex",
+        runtime: input.runtime ?? (yield* defaultRuntime()),
         system: input.system,
         format: input.format,
       }
@@ -1789,6 +1793,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(ToolRegistry.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
     Layer.provide(Provider.defaultLayer),
+    Layer.provide(Config.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Plugin.defaultLayer),

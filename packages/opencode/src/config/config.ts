@@ -142,6 +142,9 @@ export const Info = Schema.Struct({
   model: Schema.optional(ConfigModelID).annotate({
     description: "Model to use in the format of provider/model, eg anthropic/claude-2",
   }),
+  runtime: Schema.optional(Schema.Literals(["codex", "opencode"])).annotate({
+    description: "Default runtime to use for new prompts when none is specified",
+  }),
   small_model: Schema.optional(ConfigModelID).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
   }),

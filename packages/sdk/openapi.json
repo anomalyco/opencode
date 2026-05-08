@@ -11620,6 +11620,11 @@
             "description": "Model to use in the format of provider/model, eg anthropic/claude-2",
             "type": "string"
           },
+          "runtime": {
+            "description": "Default runtime to use for new prompts when none is specified",
+            "type": "string",
+            "enum": ["codex", "opencode"]
+          },
           "small_model": {
             "description": "Small model to use for tasks like title generation in the format of provider/model",
             "type": "string"

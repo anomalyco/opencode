@@ -1,16 +1,34 @@
+import type { Config } from "@opencode-ai/sdk/v2/client"
+import { Button } from "@opencode-ai/ui/button"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { type Component, For, Show } from "solid-js"
+import { showToast } from "@opencode-ai/ui/toast"
+import { createMemo, type Component, For, type JSX, Show } from "solid-js"
+import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
-import { popularProviders } from "@/hooks/use-providers"
+import { popularProviders, useProviders } from "@/hooks/use-providers"
+import { ModelSelectorPopover } from "./dialog-select-model"
 import { SettingsList } from "./settings-list"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
+type ModelKey = { providerID: string; modelID: string }
+
+type Runtime = "codex" | "opencode"
+const runtimeOptions: Runtime[] = ["codex", "opencode"]
+
+function parseConfigModel(value: string | undefined) {
+  if (!value) return
+  const [providerID, ...rest] = value.split("/")
+  const modelID = rest.join("/")
+  if (!providerID || !modelID) return
+  return { providerID, modelID }
+}
 
 const ListLoadingState: Component<{ label: string }> = (props) => {
   return (
@@ -33,7 +51,75 @@ const ListEmptyState: Component<{ message: string; filter: string }> = (props) =
 
 export const SettingsModels: Component = () => {
   const language = useLanguage()
+  const globalSync = useGlobalSync()
   const models = useModels()
+  const providers = useProviders()
+
+  const handleConfigError = (err: unknown, rollback: () => void) => {
+    rollback()
+    showToast({
+      title: language.t("common.requestFailed"),
+      description: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  const updateConfig = (config: Config, rollback: () => void) => {
+    void globalSync.updateConfig(config).catch((err: unknown) => handleConfigError(err, rollback))
+  }
+
+  const currentRuntime = createMemo<Runtime>(() => {
+    const value = globalSync.data.config.runtime
+    if (value === "codex" || value === "opencode") return value
+    return "codex"
+  })
+
+  const setRuntime = (runtime: Runtime) => {
+    const before = globalSync.data.config.runtime
+    globalSync.set("config", "runtime", runtime)
+    updateConfig({ runtime }, () => globalSync.set("config", "runtime", before))
+  }
+
+  const configuredDefaultModel = createMemo(() => {
+    const model = parseConfigModel(globalSync.data.config.model)
+    if (!model) return
+    return models.find(model)
+  })
+
+  const currentDefaultModel = createMemo(() => {
+    const configured = configuredDefaultModel()
+    if (configured) return configured
+
+    const defaults = providers.default()
+    for (const provider of providers.connected()) {
+      const configuredModel = defaults[provider.id]
+      const found = configuredModel ? models.find({ providerID: provider.id, modelID: configuredModel }) : undefined
+      if (found) return found
+
+      const first = Object.values(provider.models)[0]
+      if (!first) continue
+      const fallback = models.find({ providerID: provider.id, modelID: first.id })
+      if (fallback) return fallback
+    }
+  })
+
+  const setDefaultModel = (model: ModelKey | undefined, options?: { recent?: boolean }) => {
+    if (!model) return
+    const before = globalSync.data.config.model
+    const next = `${model.providerID}/${model.modelID}`
+    globalSync.set("config", "model", next)
+    models.setVisibility(model, true)
+    if (options?.recent) models.recent.push(model)
+    updateConfig({ model: next }, () => globalSync.set("config", "model", before))
+  }
+
+  const defaultModelState = {
+    current: currentDefaultModel,
+    list: models.list,
+    set: setDefaultModel,
+    visible: models.visible,
+  }
+
+  const runtimeLabel = (runtime: Runtime) => (runtime === "codex" ? "Codex" : "OpenCode")
 
   const list = useFilteredList<ModelItem>({
     items: (_filter) => models.list(),
@@ -84,6 +170,59 @@ export const SettingsModels: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 max-w-[720px]">
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.models.section.defaults")}</h3>
+          <SettingsList>
+            <SettingsRow
+              title={language.t("settings.models.defaultRunner.title")}
+              description={language.t("settings.models.defaultRunner.description")}
+            >
+              <Select
+                data-action="settings-default-runtime"
+                options={runtimeOptions}
+                current={currentRuntime()}
+                value={(runtime) => runtime}
+                label={runtimeLabel}
+                onSelect={(runtime) => {
+                  if (!runtime) return
+                  setRuntime(runtime)
+                }}
+                variant="secondary"
+                size="small"
+                triggerVariant="settings"
+                triggerStyle={{ "min-width": "160px" }}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.models.defaultModel.title")}
+              description={language.t("settings.models.defaultModel.description")}
+            >
+              <ModelSelectorPopover
+                model={defaultModelState}
+                triggerAs={Button}
+                triggerProps={{
+                  variant: "secondary",
+                  size: "small",
+                  class: "min-w-0 max-w-[260px] text-12-regular text-text-base group",
+                  "data-action": "settings-default-model",
+                }}
+              >
+                <Show when={currentDefaultModel()?.provider.id}>
+                  <ProviderIcon
+                    id={currentDefaultModel()?.provider.id ?? ""}
+                    class="size-4 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity duration-150"
+                  />
+                </Show>
+                <span class="truncate">
+                  {currentDefaultModel()?.name ?? language.t("settings.models.defaultModel.empty")}
+                </span>
+                <Icon name="chevron-down" size="small" class="shrink-0" />
+              </ModelSelectorPopover>
+            </SettingsRow>
+          </SettingsList>
+        </div>
+
         <Show
           when={!list.grouped.loading}
           fallback={
@@ -132,6 +271,18 @@ export const SettingsModels: Component = () => {
           </Show>
         </Show>
       </div>
+    </div>
+  )
+}
+
+const SettingsRow: Component<{ title: string; description: string; children: JSX.Element }> = (props) => {
+  return (
+    <div class="flex flex-wrap items-center gap-4 py-3 border-b border-border-weak-base last:border-none sm:flex-nowrap">
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span class="text-14-medium text-text-strong">{props.title}</span>
+        <span class="text-12-regular text-text-weak">{props.description}</span>
+      </div>
+      <div class="flex w-full justify-end sm:w-auto sm:shrink-0">{props.children}</div>
     </div>
   )
 }

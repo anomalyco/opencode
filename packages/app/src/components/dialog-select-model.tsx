@@ -16,7 +16,7 @@ import { useLanguage } from "@/context/language"
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
-type ModelState = ReturnType<typeof useLocal>["model"]
+type ModelState = Pick<ReturnType<typeof useLocal>["model"], "current" | "list" | "set" | "visible">
 
 const ModelList: Component<{
   provider?: string
