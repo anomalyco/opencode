@@ -554,6 +554,7 @@ function gpt5ChatReasoningEfforts(apiId: string) {
 // to strongest.
 function openaiReasoningEfforts(apiId: string, releaseDate: string) {
   const id = apiId.toLowerCase()
+  if (id.includes("deep-research")) return ["medium"]
   const chatEfforts = gpt5ChatReasoningEfforts(id)
   if (chatEfforts) return chatEfforts
   if (GPT5_PRO_RE.test(id)) return OPENAI_GPT5_PRO_EFFORTS
