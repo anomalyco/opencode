@@ -1,0 +1,32 @@
+# For explanation of these and other settings see:
+# https://chrisant996.github.io/clink/clink.html
+
+# name: Expand envvars when completing
+# type: boolean
+match.expand_envvars = True
+
+# name: Sets how command history expansion is applied
+# type: enum
+# options: off,on,not_squoted,not_dquoted,not_quoted
+history.expand_mode = not_dquoted
+
+# name: Skip adding lines prefixed with whitespace
+# type: boolean
+history.ignore_space = True
+
+# name: The number of history lines to save
+# type: integer
+history.max_lines = 25000
+
+# name: Share history between instances
+# type: boolean
+history.shared = False
+
+# name: Auto-answer terminate prompt
+# type: enum
+# options: off,answer_yes,answer_no
+cmd.auto_answer = answer_yes
+
+# name: Doskey completions
+# type: color
+color.doskey = yellow

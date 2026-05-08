@@ -1,0 +1,11 @@
+REGEDIT4
+
+; Show properties for current item
+; Checkbox 'AltEnter' in ConEmu settings must be On.
+; Plugin 'EMenu' must be installed.
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\AltEnter]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\AltEnter]
+"Description"="Hotkey to execute properties command: Alt-Enter"
+"Sequence"="Esc r c l k _ c m d : p r o p e r t i e s Enter"
+"DisableOutput"=dword:00000001

@@ -1,0 +1,56 @@
+
+FarMacro
+  Descr="Editor: Clipboard actions menu"
+  Key="MsRClick"
+  Area="Dialog Editor"
+{{
+  %CopyLine="Copy whole line";
+  %CopyWord="Copy single word";
+  %Paste="Paste from clipboard";
+
+  $if (Editor)
+    MsLClick CtrlU $SelWord
+  $else // Dialog
+    %dx=dlg.getvalue(0,2); %dy=dlg.getvalue(0,3); %c=dlg.getvalue(0,0);
+    $if (%c<1) $Exit $end
+    %i=1;
+    $while (%i<=%c)
+      %t=dlg.getvalue(%i,1);
+      $if (%t==4/*DI_EDIT*/ || %t==6/*DI_EDIT*/)
+        %f=dlg.getvalue(%i,8);
+        $if (!(%f & 0xD0000000/*hidden,nofocus,...*/))
+          $if ((%dy+dlg.GetValue(%i,3))==MsY)
+            $if (((%dx+dlg.GetValue(%i,2))<=MsX) && ((%dx+dlg.GetValue(%i,4))>=MsX))
+              dlg.SetFocus(%i)
+              %c=0;
+            $end
+          $end
+        $end
+      $end
+      %i=%i+1;
+    $end
+    $if (%c!=0)
+      MsRClick $Exit
+    $end
+  $end
+
+  %Menu=%CopyLine+"\n";
+  $if (Editor.SelValue!="")
+    %Menu=%Menu+%CopyWord+"\n";
+  $end
+  %Menu=%Menu+%Paste;
+  
+  %s = Menu.Show(%Menu,"",0x3,"",MsX,MsY+1);
+  $if (%s=="") $Exit $end
+
+  $if (%s==%CopyLine)
+    $if (Dialog) Home $else editor.Pos(1,2,1) $end ShiftEnd
+    CtrlIns $Exit
+  $end
+  $if (%s==%CopyWord)
+    CtrlIns $Exit
+  $end
+  $if (%s==%Paste)
+    ShiftIns $Exit
+  $end
+}}

@@ -1,0 +1,50 @@
+
+// This is sample macro-file for MacroLib plugin for Far Manager 3.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+// Show output of last console command
+// Checkbox 'Long console output' must be checked in
+// ConEmu Settings -> Features
+
+// OpenType=1 - Open in editor, OpenType=2 - Open in viewer
+const OpenType = 1
+
+const ConEmu   = "4b675d80-1d4a-4ea9-8436-fdc23f2fc14b"
+
+farmacro
+  Descr="ConEmu: Show console output in editor"
+  Area="Shell"
+  Key="CtrlO"
+{{
+  callplugin(#%ConEmu,#%OpenType) CtrlEnd
+}}
+
+farmacro
+  Descr="ConEmu: Return to panels from console output"
+  Area="Editor.'*.tmp'"
+  Area="Viewer.'*.tmp'"
+  Key="CtrlO"
+{{
+  $if (Editor) %f=Editor.FileName; $else %f=Viewer.FileName; $end
+  $if (lcase(fsplit(%f,8))!=".tmp" || ucase(substr(fsplit(%f,4),0,3))!="CEM")
+    $AKey
+    $Exit
+  $end
+  // Was editor modified?
+  %m=0; $if (Editor) $if (Editor.State & 0x40) %m=1; $end $end
+  // Close
+  Esc
+  // Skip save confirmation
+  $if (%m && Dialog) Right Enter $end
+}}
+
+farmacro
+  Descr="Hide/Show panels (standard FAR CtrlO)"
+  Area="Shell Editor Viewer"
+  Key="CtrlAltO"
+  DisableOutput=0
+{{
+  CtrlO
+}}

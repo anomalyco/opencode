@@ -1,0 +1,9 @@
+.Language=Russian,Russian (Русский)
+
+// Plugin title
+"ConEmu Background"
+"Плагин &включен"
+"&Путь к файлу настроек (Background.xml)"
+"&Следить за изменениями xml-файла"
+"OK"
+"Отмена"

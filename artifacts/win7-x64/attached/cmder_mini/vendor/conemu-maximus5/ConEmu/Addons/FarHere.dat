@@ -1,0 +1,88 @@
+;
+; This file was adapted for ConEmu by Maximus5.
+;
+;
+; "Far Here" PowerToy
+;
+; Thanks for great Far Manager! There is a little add-on for windows, 
+; Just install this .inf, right click on any dir, in explorer, and select 
+; 'Far Here'. To uninstall - Control Panel->Add Remove programs->Far Here 
+; power toy.  All you need is change one line - FarHereLocation
+; (last line in .inf) to point to far.exe. Works with Win 9x and NT.
+;
+;  To install:
+;
+;  Locate farhere.inf with explorer
+;  Right click and select "install"
+
+; Please change the last line (FarHereLocation) to point to far.exe.
+;
+; Works well with Win 9x and NT. Right click on directory and 
+; select from menu 'Far Here'.
+;
+; Send comments to gincius@voras.ktu.lt
+; 
+[version]
+signature="$CHICAGO$"
+[FarHereInstall]
+CopyFiles = FarHere.Files.Inf
+AddReg    = FarHere.Reg
+[DefaultInstall]
+CopyFiles = FarHere.Files.Inf
+AddReg    = FarHere.Reg
+[DefaultInstall.ntx86]
+CopyFiles = FarHere.Files.Inf
+AddReg    = FarHere.Reg.NT
+[DefaultUnInstall]
+DelFiles  = FarHere.Files.Inf
+DelReg    = FarHere.Remove.Reg
+[DefaultUnInstall.ntx86]
+DelFiles  = FarHere.Files.Inf
+DelReg    = FarHere.Remove.Reg.NT
+[SourceDisksNames]
+55="Far Here","",1
+[SourceDisksFiles]
+FARHERE.INF=55
+[DestinationDirs]
+FarHere.Files.Inf = 17
+[FarHere.Files.Inf]
+FARHERE.INF
+[FarHere.Reg]
+HKLM,%UDHERE%
+HKLM,%UDHERE%,DisplayName,,"%FarHereName%"
+HKLM,%UDHERE%,UninstallString,,"%10%\rundll.exe setupx.dll,InstallHinfSection DefaultUninstall 132 %17%\FarHere.inf"
+HKCR,Directory\Shell\FarHere,,,"%FarHereAccel%"
+HKCR,Directory\Shell\FarHere\command,,,"%FarHereLocation% ""%1"""
+HKCR,Drive\Shell\FarHere,,,"%FarHereAccel%"
+HKCR,Drive\Shell\FarHere\command,,,"%FarHereLocation% ""%1"""
+HKCR,*\Shell\FarHere,,,"%FarHereAccel%"
+HKCR,*\Shell\FarHere\command,,,"%FarHereLocation% ""%1"""
+[FarHere.Reg.NT]
+HKLM,%UDHERE%
+HKLM,%UDHERE%,DisplayName,,"%FarHereName%"
+HKLM,%UDHERE%,UninstallString,,"rundll32.exe syssetup.dll,SetupInfObjectInstallAction DefaultUninstall 132 %17%\FarHere.inf"
+HKCR,Directory\Shell\FarHere,,,"%FarHereAccel%"
+HKCR,Directory\Shell\FarHere\command,,,"%FarHereLocation% ""%1"""
+HKCR,Drive\Shell\FarHere,,,"%FarHereAccel%"
+HKCR,Drive\Shell\FarHere\command,,,"%FarHereLocation% ""%1"""
+HKCR,*\Shell\FarHere,,,"%FarHereAccel%"
+HKCR,*\Shell\FarHere\command,,,"%FarHereLocation% ""%1"""
+[FarHere.Remove.Reg.NT]
+HKLM,%UDHERE%
+HKLM,%UDHERE%,DisplayName,,"%FarHereName%"
+HKLM,%UDHERE%,UninstallString,,"rundll32.exe syssetup.dll,SetupInfObjectInstallAction DefaultUninstall 132 %17%\FarHere.inf"
+HKCR,Directory\Shell\FarHere
+HKCR,Drive\Shell\FarHere
+HKCR,*\Shell\FarHere
+[FarHere.Remove.Reg]
+HKLM,%UDHERE%
+HKLM,%UDHERE%,DisplayName,,"%FarHereName%"
+HKLM,%UDHERE%,UninstallString,,"%10%\rundll.exe setupx.dll,InstallHinfSection DefaultUninstall 132 %17%\FarHere.inf"
+HKCR,Directory\Shell\FarHere
+HKCR,Drive\Shell\FarHere
+HKCR,*\Shell\FarHere
+[Strings]
+FarHereName="Far Here Power Toy"
+FarHereAccel="Fa&r Here"
+UDHERE="Software\Microsoft\Windows\CurrentVersion\Uninstall\FarHere"
+;FarHereLocation="c:\Program Files\far\far.exe" ;; DON'T Uncomment this line. Use FarHereInstall.cmd

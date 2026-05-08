@@ -1,0 +1,18 @@
+﻿
+// This is sample macro-file for MacroLib plugin for Far Manager 2.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+//include "Consts.fmi"
+const ConEmu   = 0x43454D55
+
+macro Descr="ConEmu: Test GuiMacro" Key="AltShiftF12"
+{{
+  F11
+  $if (menu.select("ConEmu",2) > 0)
+    Enter ~
+  $else
+    MsgBox("Error","ConEmu plugin was not found in the list")
+  $end
+}}

@@ -1,0 +1,11 @@
+REGEDIT4
+
+; Description.
+; Switch ConEmu tabs visibility
+
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Common\CtrlShiftT]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Common\CtrlShiftT]
+"Sequence"="F11 $if (menu.Select(\"ConEmu\",2)<=0) MsgBox(\"ConEmu\",\"Plugin was not found in list!\",1) $Exit $end Enter 3"
+"Description"="Switch ConEmu tabs visibility"
+"DisableOutput"=dword:00000001

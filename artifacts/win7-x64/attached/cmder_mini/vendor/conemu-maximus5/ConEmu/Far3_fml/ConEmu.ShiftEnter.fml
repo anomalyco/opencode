@@ -1,0 +1,104 @@
+
+// This is sample macro-file for MacroLib plugin for Far Manager 3.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+// Run 'File under cursor' or 'Command line' in new console of ConEmu.
+// 'Press enter to close console' will be displayed after command completion.
+// Note! If you want to disable this confirmation,
+//       set 'DisableCloseConfirm = 1'
+
+const DisableCloseConfirm = 0
+
+// AltEnter   - run command and activate new ConEmu tab
+// Note! You must enable "Alt+Enter" option in ConEmu Settings->Keys.
+
+// ShiftEnter - run command in background ConEmu tab
+// Note! If you want to activate new tab on ShiftEnter,
+//       set 'UseBackgroundTab = 0'
+
+const UseBackgroundTab = 1
+
+
+// While starting command in background tab, there is a flicker on panels.
+// If you want to disable flicker, set 'DisableFlicker = 1'.
+// Note! ConEmu plugin is reqired for 'DisableFlicker = 1'.
+
+const DisableFlicker = 0
+
+
+farmacro
+  Descr="Run <File under cursor> or <Command line> in new console of ConEmu" 
+  Key="ShiftEnter AltEnter"
+  Area="Shell Search ShellACompl"
+{{
+  //history.enable(0xff)
+  
+  %add = " -new_console";
+  $if (akey(1,1)=="ShiftEnter" && #%UseBackgroundTab)
+    %add = %add + ":b";
+    $if (#%DisableCloseConfirm) %add = %add + ":n"; $end
+  $else
+    // AltEnter creates foreground console(tab)
+    $if (#%DisableCloseConfirm) %add = %add + ":n"; $end
+    //%add = %add + ":s40V"; // split vertically for example
+  $end
+  
+  %oldcmd = "";
+  $if (Search)
+    // Save and clear command line - about to execute panel(!) item
+    %oldcmd = CmdLine.Value; %oldpos = CmdLine.CurPos;
+    Esc Esc // First - close search, second - clear command line
+  $end
+  
+  $if (!CmdLine.Empty)
+    $if (Macro.Area=="Shell.AutoCompletion")
+      Esc // Close autocompletion
+    $end
+    
+    $if (CmdLine.Value=="." || CmdLine.Value==".." || CmdLine.Value=="...")
+      ShiftEnter
+      $Exit
+    $else
+      $if (Macro.Area=="Shell.AutoCompletion")
+        Del // Remove autocompletion selection
+      $end
+      //CtrlEnd - fails, couse of AutoCompletion
+      $Rep(CmdLine.ItemCount) CtrlD $end
+      //Append "-new_console" if not exists
+      $if (index(CmdLine.Value,"-new_console")<0) print(%add) $end
+    $end
+  $else $if (APanel.FilePanel && !APanel.Plugin && !APanel.Empty && !APanel.Folder && len(APanel.Current)>4)
+    %exec = ucase(env("PATHEXT"));
+    $if (%exec=="") %exec = ".COM;.EXE;.BAT;.CMD"; $end
+    %ext = ucase(fsplit(APanel.Current,8));
+    $if (%ext!="" && index(";"+%exec+";",";"+%ext+";")>=0)
+      CtrlEnter
+      Del // Remove possible autocompletion selection
+      //Append "-new_console"
+      print(%add)
+    $else
+      $if (akey(1,1)=="ShiftEnter") ShiftEnter $end
+      $Exit
+    $end
+  $else
+    $if (akey(1,1)=="ShiftEnter") ShiftEnter $end
+    $Exit
+  $end $end
+
+  Del // Remove possible autocompletion selection
+  
+  $if (#%DisableFlicker && Plugin.Call("4B675D80-1D4A-4EA9-8436-FDC23F2FC14B","IsConEmu"))
+    $Rep(CmdLine.ItemCount) CtrlS $end
+    print("ConEmu:run:")
+  $end
+  
+  Enter // Execute
+  
+  // Restore old command line state (running file from Panel in QSearch mode)
+  $if (%oldcmd != "")
+    print(%oldcmd)
+    $if (%oldpos>=1 && %oldpos<=CmdLine.ItemCount) CtrlHome $Rep(%oldpos-1) CtrlD $end $end
+  $end
+}}

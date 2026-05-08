@@ -1,0 +1,36 @@
+.Language=Russian,Russian (Русский)
+
+// Plugin title
+"ConEmu Panel Views"
+// Panel modes
+"Режим эскизов"
+// Panel modes
+"Режим плитки"
+// Panel modes
+"Режим иконок"
+// Panel modes
+"Отключить"
+// Column titles
+"Эскизы"
+"Плитка"
+// Some strings for Tiles mode
+"Папка"
+"Ссылка"
+"Связь"
+// Error messages
+"ConEmu PanelViews\nПлагин ConEmu не найден,\nThumbnails недоступны."
+"ConEmu PanelViews\nОбнаружена старая версия плагина ConEmu,\nThumbnails недоступны."
+"ConEmu PanelViews\nThumbnails недоступны в 'чистом' Far.\nFar Manager был запущен без ConEmu?"
+"ConEmu PanelViews\nДля работы корректной работы плагина\nнеобходимо включить флажок в настройке панели:\n[x] Показывать заголовки колонок"
+"ConEmu PanelViews\nДля отображения иконок необходимо\nразрешить символы пометок в режимах панелей\n(добавить флаг 'M' к колонке 'N')\OK"
+"ConEmu PanelViews\nДля отображения иконок необходимоустановить\nсборку Far 3 bis build 2579 или выше\OK"
+"ConEmu PanelViews\nОшибка создания потока DisplayThread\nErrCode=0x%08X"
+"ConEmu PanelViews\nИстекло время ожидания активации DisplayThread"
+"ConEmu PanelViews\nОшибка посылки сообщения в DisplayThread\nErrCode=0x%08X"
+"ConEmu PanelViews\nПоток DisplayThread был завершен\nCode=0x%08X"
+"ConEmu PanelViews\nНе удалось зарегистрировать класс\nErrCode=0x%08X"
+"ConEmu PanelViews\nНе удалось создать окно панели\nErrCode=0x%08X"
+"ConEmu PanelViews\nНе удалось зарегистрировать вид в ConEmu\nErrCode=%i"
+"ConEmu PanelViews\nВнутренняя ошибка. Запрошен неизвестный режим панели."
+"ConEmu PanelViews\nВнутренняя ошибка. Получена некорректная структура настроек."
+"ConEmu PanelViews\nВ терминальном режиме ConEmu недоступен\nПроверьте переменную окружения TERM\nOK"

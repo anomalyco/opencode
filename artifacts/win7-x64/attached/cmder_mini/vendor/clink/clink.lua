@@ -1,0 +1,5 @@
+-- This file is intentionally blank.
+--
+-- The old clink.lua file is no longer used, and this blank file ensures if a
+-- new clink version is copied over an old clink version, it won't accidentally
+-- use an obsolete leftover clink.lua file.

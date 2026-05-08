@@ -1,0 +1,34 @@
+
+// This is sample macro-file for MacroLib plugin for Far Manager 3.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+// Switch visibility of ConEmu Panel Views
+// You may customize Panel Views display in ConEmu Settings -> Views
+
+const ConEmuTh = "bd454d48-448e-46cc-909d-b6cf789c2d65"
+
+farmacro
+  Descr="ConEmuTh: Switch Thumbnails view on active panel"
+  Area="Shell"
+  Key="CtrlShiftF1"
+{{
+  callplugin(#%ConEmuTh,1)
+}}
+
+farmacro
+  Descr="ConEmuTh: Switch Tiles view on active panel"
+  Area="Shell"
+  Key="CtrlShiftF2"
+{{
+  callplugin(#%ConEmuTh,2)
+}}
+
+farmacro
+  Descr="ConEmu: Turn off Tiles or Thumbnails on active panel"
+  Area="Shell"
+  //Key="CtrlAltF2"
+{{
+  callplugin(#%ConEmuTh,256)
+}}

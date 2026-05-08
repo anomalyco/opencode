@@ -1,0 +1,11 @@
+REGEDIT4
+
+; Description.
+; Create new console with ConEmu debugger on this instance of FAR
+
+
+[-HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\CtrlAltD]
+[HKEY_CURRENT_USER\Software\Far2\KeyMacros\Shell\CtrlAltD]
+"Sequence"="callplugin(0x43454D55,8)"
+"Description"="Create new console with ConEmu debugger on this instance of FAR"
+"DisableOutput"=dword:00000001

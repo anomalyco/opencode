@@ -1,0 +1,10 @@
+{
+  "name": "opencode-windows-x64",
+  "version": "1.4.6",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ]
+}

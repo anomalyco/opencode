@@ -1,0 +1,7 @@
+return {
+    default = {
+        coverage = true,
+        verbose = true,
+        lpath = "./modules/?.lua"
+    }
+}

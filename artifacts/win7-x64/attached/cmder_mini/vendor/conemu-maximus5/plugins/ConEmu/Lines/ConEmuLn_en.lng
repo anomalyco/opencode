@@ -1,0 +1,15 @@
+.Language=English,English
+
+// Plugin title
+"ConEmu Underlines"
+"&Enable plugin"
+"&Panels (0xBBGGRR):"
+"&Editor (0xBBGGRR):"
+"&Viewer (0xBBGGRR):"
+"Drawing style:"
+"&Underlines"
+"&Stripes"
+"&Hilight plugin panels"
+"&Back color (0xBBGGRR):"
+"OK"
+"Cancel"

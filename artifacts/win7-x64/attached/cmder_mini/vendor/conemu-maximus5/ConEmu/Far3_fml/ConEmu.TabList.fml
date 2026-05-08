@@ -1,0 +1,25 @@
+
+// This is sample macro-file for MacroLib plugin for Far Manager 3.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+// Show all windows list from all consoles
+
+const ConEmu   = "4b675d80-1d4a-4ea9-8436-fdc23f2fc14b"
+
+farmacro
+  Descr="ConEmu: Show all windows list from all consoles"
+  Area="Shell QView Info Tree Search Dialog Editor Viewer"
+  Key="F12"
+{{
+  $if (Plugin.Menu(#%ConEmu)) T $end
+}}
+
+farmacro
+  Descr="ConEmu: Standard Far windows list"
+  Area="Shell QView Info Tree Search Dialog Editor Viewer"
+  Key="CtrlShiftF12"
+{{
+  F12
+}}

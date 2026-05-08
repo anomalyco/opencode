@@ -1,0 +1,26 @@
+
+// This is sample macro-file for MacroLib plugin for Far Manager 2.x
+// You can download plugin here:
+// http://code.google.com/p/far-plugins/wiki/MacroLib
+
+
+// Note! This is just an example of calling GuiMacro from Far Manager
+// Note! Ctrl+Wheel may be already binded in ConEmu Keys&Macro settings
+
+// Increase/decrease font size in ConEmu window with Alt+Wheel
+
+const ConEmu   = "4b675d80-1d4a-4ea9-8436-fdc23f2fc14b"
+
+farmacro
+  Descr="ConEmu: Increase ConEmu font size"
+  Key="AltMsWheelUp"
+{{
+  callplugin(#%ConEmu,"FontSetSize(1,2)")
+}}
+
+farmacro
+  Descr="ConEmu: Decrease ConEmu font size"
+  Key="AltMsWheelDown"
+{{
+  callplugin(#%ConEmu,"FontSetSize(1,-2)")
+}}

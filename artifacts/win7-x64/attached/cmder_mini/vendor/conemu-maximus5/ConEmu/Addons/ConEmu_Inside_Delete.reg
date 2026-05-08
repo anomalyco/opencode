@@ -1,0 +1,6 @@
+REGEDIT4
+
+[-HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\ConEmu inside]
+[-HKEY_CURRENT_USER\Software\Classes\Directory\shell\ConEmu inside]
+[-HKEY_CURRENT_USER\Software\Classes\Drive\shell\ConEmu inside]
+[-HKEY_CURRENT_USER\Software\Classes\*\shell\ConEmu inside]

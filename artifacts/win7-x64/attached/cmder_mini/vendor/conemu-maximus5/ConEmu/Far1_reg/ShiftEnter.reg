@@ -1,0 +1,20 @@
+REGEDIT4
+
+; Description.
+; Run 'File under cursor' or 'Command line' in new console of ConEmu.
+; 'Press enter to close console' will be displayed after command completion.
+; Note! If you want to disable this confirmation, add ":n" after "-new_console"
+;       below. I.e. " -new_console:bn" or " -new_console:n".
+
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\ShiftEnter]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\ShiftEnter]
+"Sequence"="$if (!CmdLine.Empty) $if (CmdLine.Value==\".\" || CmdLine.Value==\"..\" || CmdLine.Value==\"...\") ShiftEnter $else End $Text \" -new_console\" Enter $end $else $if (APanel.FilePanel && !APanel.Plugin && !APanel.Empty && !APanel.Folder && len(APanel.Current)>4) %exec = ucase(env(\"PATHEXT\")); $if (%exec==\"\") %exec = \".COM;.EXE;.BAT;.CMD\"; $end %ext = ucase(fsplit(APanel.Current,8)); $if (%ext!=\"\" && index(\";\"+%exec+\";\",\";\"+%ext+\";\")>=0) CtrlEnter $Text \" -new_console\" Enter $else ShiftEnter $end $else ShiftEnter $end $end"
+"Description"="Run <Command line> or <File under cursor> in new console of ConEmu"
+"DisableOutput"=dword:00000001
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Search\ShiftEnter]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Search\ShiftEnter]
+"Sequence"="Esc $if (Shell && !Tree) CtrlEnter $Text \"-new_console\" Enter $else ShiftEnter $end"
+"DisableOutput"=dword:00000001
+"Description"="Run <File under cursor> in new console of ConEmu"

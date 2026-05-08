@@ -1,0 +1,11 @@
+REGEDIT4
+
+; Description.
+; Autoattach Far manager to ConEmu GUI at startup
+
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlAltDel]
+"Sequence"="F11 $if (menu.Select(\"ConEmu\",2)<=0) MsgBox(\"ConEmu\",\"Plugin was not found in list!\",1) $Exit $end Enter $if (menu.select(\"7.\",1)>0) Enter $else Esc $end"
+"RunAfterFARStart"=dword:00000001
+"DisableOutput"=dword:00000001
+"Description"="Autoattach FAR to ConEmu GUI"
+

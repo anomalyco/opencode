@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Rename this file to "ConEmu.xml" to enable portable mode.
+	You may place "ConEmu.xml" file AFTER ConEmu starts,
+	so You can save settings to xml, loaded from registry,
+	and vice versa.
+-->
+<key name="Software">
+	<key name="ConEmu">
+		<key name=".Vanilla">
+			<value name="StartType" type="hex" data="02"/>
+			<value name="StartTasksName" type="string" data="{cmd}"/>
+
+			<!--Use slightly modified Monokai color scheme by default-->
+			<value name="ColorTable00" type="dword" data="00222827"/>
+			<value name="ColorTable01" type="dword" data="009e5401"/>
+			<value name="ColorTable02" type="dword" data="0004aa74"/>
+			<value name="ColorTable03" type="dword" data="00a6831a"/>
+			<value name="ColorTable04" type="dword" data="003403a7"/>
+			<value name="ColorTable05" type="dword" data="009c5689"/>
+			<value name="ColorTable06" type="dword" data="0049b6b6"/>
+			<value name="ColorTable07" type="dword" data="00cacaca"/>
+			<value name="ColorTable08" type="dword" data="007c7c7c"/>
+			<value name="ColorTable09" type="dword" data="00f58303"/>
+			<value name="ColorTable10" type="dword" data="0006d08d"/>
+			<value name="ColorTable11" type="dword" data="00e5c258"/>
+			<value name="ColorTable12" type="dword" data="004b04f3"/>
+			<value name="ColorTable13" type="dword" data="00b87da8"/>
+			<value name="ColorTable14" type="dword" data="0081cccc"/>
+			<value name="ColorTable15" type="dword" data="00ffffff"/>
+			<value name="SingleInstance" type="hex" data="01"/>
+			<value name="Multi.DupConfirm" type="hex" data="00"/>
+			<value name="Multi.DetachConfirm" type="hex" data="00"/>
+			<value name="AlphaValue" type="hex" data="d9"/>
+
+			<!--Value ‘00’ forces ‘Fast configuration’ dialog to be shown on first start-->
+			<value name="KeyboardHooks" type="hex" data="00"/>
+
+			<value name="AlphaValueSeparate" type="hex" data="00"/>
+			<value name="ConWnd Width" type="dword" data="02000046"/>
+			<value name="ConWnd Height" type="dword" data="02000028"/>
+			<value name="Cascaded" type="hex" data="01"/>
+			<value name="AutoSaveSizePos" type="hex" data="00"/>
+			<value name="IntegralSize" type="hex" data="00"/>
+			<value name="QuakeStyle" type="hex" data="01"/>
+			<value name="QuakeAnimation" type="dword" data="0000012c"/>
+			<value name="HideCaptionAlwaysFrame" type="hex" data="00"/>
+			<value name="Min2Tray" type="hex" data="01"/>
+			<value name="StatusBar.Show" type="hex" data="00"/>
+			<!--TabBar will be shown if more than one tab is created-->
+			<value name="Tabs" type="hex" data="02"/>
+			<!--Two following settings will make a 6-pixel pad around console working area-->
+			<value name="TryToCenter" type="hex" data="01"/>
+			<value name="CenterConsolePad" type="dword" data="00000006"/>
+			<!--Update settings are default and disabled-->
+			<value name="Update.CheckOnStartup" type="hex" data="00"/>
+			<value name="Update.CheckHourly" type="hex" data="00"/>
+			<value name="Update.UseBuilds" type="hex" data="02"/>
+			<!--Few hotkeys are redefined-->
+			<key name="HotKeys">
+				<value name="KeyMacroVersion" type="hex" data="02"/>
+				<!--Sets a single ‘tilda’ or ‘`’ key for ConEmu slide up/down-->
+				<value name="MinimizeRestore" type="dword" data="808080c0"/>
+				<value name="Multi.Recreate" type="dword" data="00105bc0"/>
+				<value name="Multi.Scroll" type="dword" data="00005b53"/>
+				<value name="DuplicateRootKey" type="dword" data="00005bbb"/>
+				<value name="Multi.ShowTabsList" type="dword" data="8080807b"/>
+				<!--Ctrl+D will type ‘exit’ followed by ‘Enter’, user have to disable it if using clink-->
+				<value name="KeyMacro01" type="dword" data="00001144"/>
+				<value name="KeyMacro01.Text" type="string" data="print(&quot;exit\n&quot;)"/>
+			</key>
+		</key>
+	</key>
+</key>

@@ -1,0 +1,16 @@
+REGEDIT4
+
+; Description.
+; Show console output in editor (ConEmu)
+
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlO]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlO]
+"Sequence"="F11 $if (menu.Select(\"ConEmu\",2)<=0) MsgBox(\"ConEmu\",\"Plugin was not found in list!\",1) $Exit $end Enter Enter CtrlEnd"
+"Description"="Show console output in editor (ConEmu)"
+"DisableOutput"=dword:00000001
+
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlAltO]
+"Sequence"="CtrlO"
+"Description"="Hide/Show panels (standard FAR CtrlO)"
+"DisableOutput"=dword:00000001

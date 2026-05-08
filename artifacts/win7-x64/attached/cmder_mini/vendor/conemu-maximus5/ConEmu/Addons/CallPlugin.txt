@@ -1,0 +1,21 @@
+You may use next commands in FAR2 macroses.
+
+callplugin(0x43454D55,1)  Show output of last console program in FAR editor
+
+callplugin(0x43454D55,2)  Show output of last console program in FAR viewer
+
+callplugin(0x43454D55,3)  Switch ConEmu tabs visibility
+
+callplugin(0x43454D55,4)  Switch next tab
+
+callplugin(0x43454D55,5)  Switch previous tab
+
+callplugin(0x43454D55,6)  Apply last tab switch. This must be called when
+                          'Lazy tab switch' ConEmu option is turned on.
+
+callplugin(0x43454D55,7)  Attach to ConEmu FAR window, started w/o ConEmu.
+
+
+
+-------------------------------------------------------
+callplugin(0x43454D55,8)  Start ConEmu debug log window

@@ -1,0 +1,27 @@
+ConEmu is ‘portable’ by default, it uses ‘ConEmu.xml’ file
+to store all settings. But Windows Registry is supported too.
+
+If you see error «XML setting file can not be used!»,
+it means, interface IID_IXMLDOMDocument is not registered
+in the system.
+Just copy here files «msxml3.dll» and «msxml3r.dll».
+Better to take the files from the Windows XP - they have
+fewer dependencies, and they will work in Windows 2000.
+
+* https://conemu.github.io/en/SettingsFast.html
+* https://conemu.github.io/en/Settings.html
+
+============================================================
+ConEmu «портабелен» по умолчанию и хранит все настройки в
+файле «ConEmu.xml». Но реестр Windows также поддерживается.
+
+Если попытке использовании «ConEmu.xml» появляется ошибка
+«XML setting file can not be used!», значит в системе
+не зарегистрирован интерфейс IID_IXMLDOMDocument.
+Чтобы его не регистрировать, скопируйте в этот каталог
+файлы «msxml3.dll» и «msxml3r.dll». Файлы лучше брать из
+Windows XP - в них меньше зависимостей и они будут работать
+в Windows 2000. 
+
+* https://conemu.github.io/en/SettingsFast.html
+* https://conemu.github.io/en/Settings.html

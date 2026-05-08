@@ -1,0 +1,18 @@
+REGEDIT4
+
+; Description.
+; Switch ConEmu Panel Views mode.
+
+
+; Far1
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlShiftF1]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlShiftF1]
+"Sequence"="F11 $if (menu.Select(\"ConEmu Panel Views\",2)<=0) MsgBox(\"ConEmu Panel Views\",\"Plugin was not found in list!\",1) $Exit $end Enter Home Enter"
+"Description"="Switch Thumbnails view on active panel"
+"DisableOutput"=dword:00000001
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlShiftF2]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlShiftF2]
+"Sequence"="F11 $if (menu.Select(\"ConEmu Panel Views\",2)<=0) MsgBox(\"ConEmu Panel Views\",\"Plugin was not found in list!\",1) $Exit $end Enter End Enter"
+"Description"="Switch Thumbnail view on active panel"
+"DisableOutput"=dword:00000001

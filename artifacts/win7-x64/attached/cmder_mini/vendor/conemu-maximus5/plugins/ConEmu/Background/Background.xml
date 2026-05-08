@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+=== configuration ===
+	description:
+		root node, one per file
+	child nodes:
+		window
+
+=== window ===
+	attributes:
+		type
+			may be "PANELS", "EDITOR", "VIEWER"
+	child nodes:
+		panel, disabled, color, title, img
+		Note: "color, title, img" nodes may exists only in EDITOR/VIEWER
+
+=== disabled ===
+	syntax:
+		<disabled/>
+	description:
+		turn off coloring of this item
+
+=== panel ===
+	attributes:
+		type
+			values: "DRIVE", "PLUGIN", "INFO", "QVIEW", "TREE"
+		pathtype [optional]
+			"TEMP" means "%TEMP%" or X:\...\TEMP\...
+		pathmatch [optional]
+			one or several standard masks, delimited with "|"
+			example: pathmatch="*/.svn/*|*/.git/*|*/.hg/*|*/.bzr/*|*/CVS/*"
+		drivetype [optional]
+			may be used with type="DRIVE" only
+			values: "REMOVABLE", "REMOTE", "CDROM", "RAMDISK", "FIXED"
+		format [optional]
+			may be used with type="PLUGIN" only
+			one or several standard masks, delimited with "|"
+			each mask will be compared with panel [A|P]Panel.Prefix or [A|P]Panel.Format
+	child nodes:
+		disabled, color, space, title, img
+	
+=== color ===
+	attributes:
+		rgb
+			color value RRGGBB, you can use hexadecimal or decimal formats
+			example, light green
+			hexadecimal: rgb="#00FF00"
+			or decimal:  rgb="65280"
+		bgr
+			color value BBGGRR (WinAPI COLORREF), hexadecimal or decimal formats
+			example, light red
+			hexadecimal: bgr="#0000FF"
+			or decimal:  bgr="255"
+		rgb_light, bgr_light
+			color of drive used space
+		rgb_dark, bgr_dark
+			color of sprites and drive free space
+		shift
+			values: "yes", "no"
+			"yes" enables color 'rotation' of drive letter
+
+=== space ===
+	description:
+		drive used/free space bar, which located in status area
+		see also: rgb_light, bgr_light, rgb_dark, bgr_dark
+	attributes:
+		type
+			"small", "large", "off"
+
+=== title ===
+	syntax:
+		<title>token[+token[+token[...]]</title>
+		where 'token' may be verbatim string,
+		or one of predefined 'variables'
+			PanelFormat - [A|P]Panel.Prefix or [A|P]Panel.Format
+			Volume      - drive letter with colon
+			VolumeSize  - drive size
+			VolumeFree  - free drive space
+	example:
+		<title>Volume+" "+VolumeSize</title>
+
+=== img ===
+	attributes:
+		ref
+			full or relative (of plugin folder) path to 'sprite'
+			environment variables allowed
+
+-->
+
+<configuration>
+	<window type="PANELS">
+		<!--Temp folder-->
+		<panel type="DRIVE" pathtype="TEMP">
+			<color rgb="#663300"/> <!--Brown-->
+			<space type="small"/>
+			<title>"Temporary files"</title>
+			<img ref="img/trash.png"/>
+		</panel>
+		<!--Repositories-->
+		<panel type="DRIVE" pathmatch="*/.svn/*|*/.git/*|*/.hg/*|*/.bzr/*|*/CVS/*">
+			<color rgb="#333333"/> <!--DarkGray-->
+			<title>PathMatch</title>
+			<img ref="img/caution.png"/>
+		</panel>
+		<!--Drives-->
+		<panel type="DRIVE" drivetype="REMOVABLE">
+			<color rgb="#8cd900" shift="yes"/>
+			<title>Volume+" "+VolumeSize</title>
+			<img ref="img/drive_removable.png"/>
+		</panel>
+		<panel type="DRIVE" drivetype="REMOTE">
+			<color rgb="#e600ff" shift="yes"/>
+			<title>Volume+" "+VolumeSize</title>
+			<img ref="img/drive_network.png"/>
+		</panel>
+		<panel type="DRIVE" drivetype="CDROM">
+			<color rgb="#ff007e" shift="yes"/>
+			<title>Volume+" "+VolumeSize</title>
+			<img ref="img/drive_cdrom.png"/>
+		</panel>
+		<panel type="DRIVE" drivetype="RAMDISK">
+			<color rgb="#808000" shift="yes"/>
+			<title>Volume+" "+VolumeSize</title>
+			<img ref="img/drive_ramdisk.png"/>
+		</panel>
+		<panel type="DRIVE" drivetype="FIXED">
+			<color rgb="#0000ff" shift="yes"/>
+			<title>Volume+" "+VolumeSize</title>
+			<img ref="img/drive_fixed.png"/>
+		</panel>
+		<!--All other drive types-->
+		<panel type="DRIVE">
+			<color rgb="#0000ff" shift="yes"/>
+			<title>Volume+" "+VolumeSize</title>
+			<img ref="img/drive_fixed.png"/>
+		</panel>
+
+		<!--RegEditor or RegBrowser-->
+		<panel type="PLUGIN" format="reg|reg2">
+			<color bgr="#808080"/>
+			<title>"Registry"</title>
+			<img ref="img/caution.png"/>
+		</panel>
+		<!--Temp panel-->
+		<panel type="PLUGIN" format="tmp">
+			<color bgr="#808080"/>
+			<title>"Temp panel"</title>
+			<img ref="img/plugin.png"/>
+		</panel>
+		<!--Network-->
+		<panel type="PLUGIN" format="Network|net:netg">
+			<color bgr="#808080"/>
+			<title>"Network"</title>
+			<img ref="img/network.png"/>
+		</panel>
+		<!--'MultiArc' plugin provides format as e.g. 'ZIP archive', 'RAR archive'-->
+		<panel type="PLUGIN" format="* archive">
+			<color bgr="#808080"/>
+			<title>PanelFormat</title>
+			<img ref="img/archive.png"/>
+		</panel>
+		<!--'arclite' plugin (MultiArc replacement) uses 'arc' constant-->
+		<panel type="PLUGIN" format="arc">
+			<color bgr="#808080"/>
+			<title>PanelFormat+" archive"</title>
+			<img ref="img/archive.png"/>
+		</panel>
+		<!--Other plugin panels-->
+		<panel type="PLUGIN">
+			<color bgr="#808080"/>
+			<title>PanelFormat</title>
+			<img ref="img/plugin.png"/>
+		</panel>
+
+		<!--Other panel types-->
+		<panel type="INFO">
+			<disabled/>
+		</panel>
+		<panel type="QVIEW">
+			<disabled/>
+		</panel>
+		<panel type="TREE">
+			<disabled/>
+		</panel>
+		<!--Finally, unknown panel type-->
+		<panel>
+			<!--Standard panel background-->
+			<disabled/>
+		</panel>
+	</window>
+	
+	<!--Other Far window types, not supported yet-->
+	<!--
+	<window type="EDITOR">
+		<disabled/>
+	</window>
+	<window type="VIEWER">
+		<disabled/>
+	</window>
+	-->
+</configuration>

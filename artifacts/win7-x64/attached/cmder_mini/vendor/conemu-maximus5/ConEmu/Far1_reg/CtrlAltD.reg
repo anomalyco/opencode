@@ -1,0 +1,11 @@
+REGEDIT4
+
+; Description.
+; Create new console with ConEmu debugger on this instance of FAR
+
+
+[-HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlAltD]
+[HKEY_CURRENT_USER\Software\Far\KeyMacros\Shell\CtrlAltD]
+"Sequence"="F11 $if (menu.Select(\"ConEmu\",2)<=0) MsgBox(\"ConEmu\",\"Plugin was not found in list!\",1) $Exit $end Enter 8"
+"Description"="Create new console with ConEmu debugger on this instance of FAR"
+"DisableOutput"=dword:00000001

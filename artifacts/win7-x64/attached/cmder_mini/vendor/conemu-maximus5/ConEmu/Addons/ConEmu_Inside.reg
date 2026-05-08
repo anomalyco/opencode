@@ -1,0 +1,36 @@
+REGEDIT4
+
+;; Replace example path to yours specific location
+;; If you hold «Shift» while clicking «ConEmu inside»
+;; Tab will be created «As administrator»
+;;
+;; Btw, not relate to ConEmu, but interesting.
+;; Explorer has 'hidden' item "Open command window here" :)
+;; To display it, hold Shift when activating menu.
+;;
+;; One more tip. To display ConEmu system menu - right click
+;; on the leftmost part of ConEmu status bar.
+
+[HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\ConEmu inside]
+"Icon"="C:\\Program Files\\ConEmu\\ConEmu.exe,1"
+
+[HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\ConEmu inside\command]
+@="\"C:\\Program Files\\ConEmu\\ConEmu.exe\" /inside /config shell /cmd powershell -cur_console:n"
+
+[HKEY_CURRENT_USER\Software\Classes\Directory\shell\ConEmu inside]
+"Icon"="C:\\Program Files\\ConEmu\\ConEmu.exe,1"
+
+[HKEY_CURRENT_USER\Software\Classes\Directory\shell\ConEmu inside\command]
+@="\"C:\\Program Files\\ConEmu\\ConEmu.exe\" /inside /config shell /dir \"%1\" /cmd powershell -cur_console:n"
+
+[HKEY_CURRENT_USER\Software\Classes\Drive\shell\ConEmu inside]
+"Icon"="C:\\Program Files\\ConEmu\\ConEmu.exe,1"
+
+[HKEY_CURRENT_USER\Software\Classes\Drive\shell\ConEmu inside\command]
+@="\"C:\\Program Files\\ConEmu\\ConEmu.exe\" /inside /config shell /dir \"%1\" /cmd powershell -cur_console:n"
+
+[HKEY_CURRENT_USER\Software\Classes\*\shell\ConEmu inside]
+"Icon"="C:\\Program Files\\ConEmu\\ConEmu.exe,1"
+
+[HKEY_CURRENT_USER\Software\Classes\*\shell\ConEmu inside\command]
+@="\"C:\\Program Files\\ConEmu\\ConEmu.exe\" /inside /config shell /cmd powershell -cur_console:n"
