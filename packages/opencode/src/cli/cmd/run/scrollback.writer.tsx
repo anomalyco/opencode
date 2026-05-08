@@ -1,6 +1,6 @@
 import { createScrollbackWriter } from "@opentui/solid"
 import { TextRenderable, type ColorInput, type ScrollbackRenderContext, type ScrollbackWriter } from "@opentui/core"
-import { createMemo } from "solid-js"
+import { Match, Switch, createMemo } from "solid-js"
 import { entryBody, entryFlags } from "./entry.body"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolFiletype, toolStructuredFinal } from "./tool"
@@ -141,186 +141,157 @@ export function RunEntryContent(props: {
     return next?.kind === "question" ? next : undefined
   })
 
-  const text_body = text()
-  if (text_body) {
-    return (
-      <text width="100%" wrapMode="word" fg={style().fg} attributes={style().attrs}>
-        {text_body.content}
-      </text>
-    )
-  }
-
-  const code_body = code()
-  if (code_body) {
-    return (
-      <code
-        width="100%"
-        wrapMode="word"
-        filetype={code_body.filetype}
-        drawUnstyledText={false}
-        streaming={streaming()}
-        syntaxStyle={syntax()}
-        content={code_body.content}
-        fg={color()}
-      />
-    )
-  }
-
-  const code_snap = code_snapshot()
-  if (code_snap) {
-    return (
-      <box width="100%" flexDirection="column" gap={1}>
-        <text width="100%" wrapMode="word" fg={theme().block.muted}>
-          {code_snap.title}
+  return (
+    <Switch fallback={null}>
+      <Match when={text()}>
+        <text width="100%" wrapMode="word" fg={style().fg} attributes={style().attrs}>
+          {text()!.content}
         </text>
-        <box width="100%" paddingLeft={1}>
-          <line_number width="100%" fg={theme().block.muted} minWidth={3} paddingRight={1}>
-            <code
-              width="100%"
-              wrapMode="char"
-              filetype={toolFiletype(code_snap.file)}
-              streaming={false}
-              syntaxStyle={syntax()}
-              content={code_snap.content}
-              fg={theme().block.text}
-            />
-          </line_number>
-        </box>
-      </box>
-    )
-  }
-
-  const diff_snap = diff_snapshot()
-  if (diff_snap) {
-    return (
-      <box width="100%" flexDirection="column" gap={1}>
-        {diff_snap.items.map((item) => (
-          <box width="100%" flexDirection="column" gap={1}>
-            <text width="100%" wrapMode="word" fg={theme().block.muted}>
-              {item.title}
-            </text>
-            {item.diff.trim() ? (
-              <box width="100%" paddingLeft={1}>
-                <diff
-                  diff={item.diff}
-                  view="unified"
-                  filetype={toolFiletype(item.file)}
-                  syntaxStyle={syntax()}
-                  showLineNumbers={true}
-                  width="100%"
-                  wrapMode="word"
-                  fg={theme().block.text}
-                  addedBg={diffBg(theme().block.diffAddedBg)}
-                  removedBg={diffBg(theme().block.diffRemovedBg)}
-                  contextBg={diffBg(theme().block.diffContextBg)}
-                  addedSignColor={theme().block.diffHighlightAdded}
-                  removedSignColor={theme().block.diffHighlightRemoved}
-                  lineNumberFg={theme().block.diffLineNumber}
-                  lineNumberBg={diffBg(theme().block.diffContextBg)}
-                  addedLineNumberBg={diffBg(theme().block.diffAddedLineNumberBg)}
-                  removedLineNumberBg={diffBg(theme().block.diffRemovedLineNumberBg)}
-                />
-              </box>
-            ) : (
-              <text width="100%" wrapMode="word" fg={theme().block.diffRemoved}>
-                -{item.deletions ?? 0} line{item.deletions === 1 ? "" : "s"}
-              </text>
-            )}
-          </box>
-        ))}
-      </box>
-    )
-  }
-
-  const task_snap = task_snapshot()
-  if (task_snap) {
-    return (
-      <box width="100%" flexDirection="column" gap={1}>
-        <text width="100%" wrapMode="word" fg={theme().block.muted}>
-          {task_snap.title}
-        </text>
-        <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
-          {task_snap.rows.map((row) => (
-            <text width="100%" wrapMode="word" fg={theme().block.text}>
-              {row}
-            </text>
-          ))}
-          {task_snap.tail ? (
-            <text width="100%" wrapMode="word" fg={theme().block.muted}>
-              {task_snap.tail}
-            </text>
-          ) : null}
-        </box>
-      </box>
-    )
-  }
-
-  const todo_snap = todo_snapshot()
-  if (todo_snap) {
-    return (
-      <box width="100%" flexDirection="column" gap={1}>
-        <text width="100%" wrapMode="word" fg={theme().block.muted}>
-          # Todos
-        </text>
-        <box width="100%" flexDirection="column" gap={0}>
-          {todo_snap.items.map((item) => (
-            <text width="100%" wrapMode="word" fg={todoColor(theme(), item.status)}>
-              {todoText(item)}
-            </text>
-          ))}
-          {todo_snap.tail ? (
-            <text width="100%" wrapMode="word" fg={theme().block.muted}>
-              {todo_snap.tail}
-            </text>
-          ) : null}
-        </box>
-      </box>
-    )
-  }
-
-  const question_snap = question_snapshot()
-  if (question_snap) {
-    return (
-      <box width="100%" flexDirection="column" gap={1}>
-        <text width="100%" wrapMode="word" fg={theme().block.muted}>
-          # Questions
-        </text>
+      </Match>
+      <Match when={code()}>
+        <code
+          width="100%"
+          wrapMode="word"
+          filetype={code()!.filetype}
+          drawUnstyledText={false}
+          streaming={streaming()}
+          syntaxStyle={syntax()}
+          content={code()!.content}
+          fg={color()}
+        />
+      </Match>
+      <Match when={code_snapshot()}>
         <box width="100%" flexDirection="column" gap={1}>
-          {question_snap.items.map((item) => (
-            <box width="100%" flexDirection="column" gap={0}>
+          <text width="100%" wrapMode="word" fg={theme().block.muted}>
+            {code_snapshot()!.title}
+          </text>
+          <box width="100%" paddingLeft={1}>
+            <line_number width="100%" fg={theme().block.muted} minWidth={3} paddingRight={1}>
+              <code
+                width="100%"
+                wrapMode="char"
+                filetype={toolFiletype(code_snapshot()!.file)}
+                streaming={false}
+                syntaxStyle={syntax()}
+                content={code_snapshot()!.content}
+                fg={theme().block.text}
+              />
+            </line_number>
+          </box>
+        </box>
+      </Match>
+      <Match when={diff_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          {diff_snapshot()!.items.map((item) => (
+            <box width="100%" flexDirection="column" gap={1}>
               <text width="100%" wrapMode="word" fg={theme().block.muted}>
-                {item.question}
+                {item.title}
               </text>
-              <text width="100%" wrapMode="word" fg={theme().block.text}>
-                {item.answer}
-              </text>
+              {item.diff.trim() ? (
+                <box width="100%" paddingLeft={1}>
+                  <diff
+                    diff={item.diff}
+                    view="unified"
+                    filetype={toolFiletype(item.file)}
+                    syntaxStyle={syntax()}
+                    showLineNumbers={true}
+                    width="100%"
+                    wrapMode="word"
+                    fg={theme().block.text}
+                    addedBg={diffBg(theme().block.diffAddedBg)}
+                    removedBg={diffBg(theme().block.diffRemovedBg)}
+                    contextBg={diffBg(theme().block.diffContextBg)}
+                    addedSignColor={theme().block.diffHighlightAdded}
+                    removedSignColor={theme().block.diffHighlightRemoved}
+                    lineNumberFg={theme().block.diffLineNumber}
+                    lineNumberBg={diffBg(theme().block.diffContextBg)}
+                    addedLineNumberBg={diffBg(theme().block.diffAddedLineNumberBg)}
+                    removedLineNumberBg={diffBg(theme().block.diffRemovedLineNumberBg)}
+                  />
+                </box>
+              ) : (
+                <text width="100%" wrapMode="word" fg={theme().block.diffRemoved}>
+                  -{item.deletions ?? 0} line{item.deletions === 1 ? "" : "s"}
+                </text>
+              )}
             </box>
           ))}
-          {question_snap.tail ? (
-            <text width="100%" wrapMode="word" fg={theme().block.muted}>
-              {question_snap.tail}
-            </text>
-          ) : null}
         </box>
-      </box>
-    )
-  }
-
-  const markdown_body = markdown()
-  if (markdown_body) {
-    return (
-      <markdown
-        width="100%"
-        syntaxStyle={syntax()}
-        streaming={streaming()}
-        content={markdown_body.content}
-        fg={color()}
-        tableOptions={{ widthMode: "content" }}
-      />
-    )
-  }
-
-  return null
+      </Match>
+      <Match when={task_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          <text width="100%" wrapMode="word" fg={theme().block.muted}>
+            {task_snapshot()!.title}
+          </text>
+          <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
+            {task_snapshot()!.rows.map((row) => (
+              <text width="100%" wrapMode="word" fg={theme().block.text}>
+                {row}
+              </text>
+            ))}
+            {task_snapshot()!.tail ? (
+              <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                {task_snapshot()!.tail}
+              </text>
+            ) : null}
+          </box>
+        </box>
+      </Match>
+      <Match when={todo_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          <text width="100%" wrapMode="word" fg={theme().block.muted}>
+            # Todos
+          </text>
+          <box width="100%" flexDirection="column" gap={0}>
+            {todo_snapshot()!.items.map((item) => (
+              <text width="100%" wrapMode="word" fg={todoColor(theme(), item.status)}>
+                {todoText(item)}
+              </text>
+            ))}
+            {todo_snapshot()!.tail ? (
+              <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                {todo_snapshot()!.tail}
+              </text>
+            ) : null}
+          </box>
+        </box>
+      </Match>
+      <Match when={question_snapshot()}>
+        <box width="100%" flexDirection="column" gap={1}>
+          <text width="100%" wrapMode="word" fg={theme().block.muted}>
+            # Questions
+          </text>
+          <box width="100%" flexDirection="column" gap={1}>
+            {question_snapshot()!.items.map((item) => (
+              <box width="100%" flexDirection="column" gap={0}>
+                <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                  {item.question}
+                </text>
+                <text width="100%" wrapMode="word" fg={theme().block.text}>
+                  {item.answer}
+                </text>
+              </box>
+            ))}
+            {question_snapshot()!.tail ? (
+              <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                {question_snapshot()!.tail}
+              </text>
+            ) : null}
+          </box>
+        </box>
+      </Match>
+      <Match when={markdown()}>
+        <markdown
+          width="100%"
+          syntaxStyle={syntax()}
+          streaming={streaming()}
+          content={markdown()!.content}
+          fg={color()}
+          tableOptions={{ widthMode: "content" }}
+        />
+      </Match>
+    </Switch>
+  )
 }
 
 export function entryWriter(input: {
