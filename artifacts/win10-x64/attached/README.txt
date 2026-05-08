@@ -8,7 +8,7 @@
    - 将 YOUR_LLM_SERVER:8080/v1 替换为真实大模型服务地址
    - 将 your-model-name 替换为实际模型名称
    - 设置接口密钥: set ENTERPRISE_API_KEY=sk-your-key-here（run.bat里去掉注释或者修改opencode.json）
-2. 双击 run.bat 启动
+2. 双击 lingxicode.bat 启动
 
 环境变量说明
 --------------------
@@ -25,6 +25,7 @@ opencode.exe           - CLI 主程序（含 Bun 运行时 + 内嵌解析器）
 parsers/               - tree-sitter 离线解析器（外置备用）
 run.bat                - 快速启动脚本
 config/                - 配置模板目录
+plugins/               - 插件扩展目录
 
 日志
 --------------------
