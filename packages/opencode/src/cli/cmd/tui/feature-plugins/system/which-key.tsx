@@ -30,6 +30,7 @@ const panelCommands = [
 ] as const
 const COLUMN_GAP = 4
 const TAB_GAP = 3
+const MIN_TAB_GAP = 1
 const TAB_CONTENT_GAP = 1
 const MIN_COLUMN_WIDTH = 28
 const MAX_COLUMN_WIDTH = 44
@@ -211,6 +212,13 @@ function WhichKeyPanel(props: {
   const upActive = createMemo(() => offset() > 0)
   const downActive = createMemo(() => offset() < maxOffset())
   const scrollable = createMemo(() => maxOffset() > 0)
+  const headerSideWidth = createMemo(() => (scrollable() ? HEADER_SIDE_WIDTH : 0))
+  const tabGap = createMemo(() => {
+    if (groups().length <= 1) return 0
+    const tabWidth = groups().reduce((sum, group) => sum + group.label.length + 2, 0)
+    const available = Math.max(0, width() - 2 - headerSideWidth() * 2)
+    return Math.max(MIN_TAB_GAP, Math.min(TAB_GAP, Math.floor((available - tabWidth) / (groups().length - 1))))
+  })
   const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
   const look = createMemo(() => skin(props.api))
   const columnWidth = createMemo(() =>
@@ -354,8 +362,8 @@ function WhichKeyPanel(props: {
       >
         <Show when={headerVisible()}>
           <box width="100%" flexDirection="row" flexShrink={0}>
-            <box width={HEADER_SIDE_WIDTH} flexShrink={0} />
-            <box flexGrow={1} minWidth={0} flexDirection="row" justifyContent="center" gap={TAB_GAP}>
+            <box width={headerSideWidth()} flexShrink={0} />
+            <box flexGrow={1} minWidth={0} flexDirection="row" justifyContent="center" gap={tabGap()}>
               <Show when={tabsVisible()}>
                 <For each={groups()}>
                   {(group) => {
@@ -364,6 +372,7 @@ function WhichKeyPanel(props: {
                       <box
                         paddingLeft={1}
                         paddingRight={1}
+                        flexShrink={0}
                         backgroundColor={selected() ? look().tab : undefined}
                         onMouseDown={() => {
                           setActiveGroup(group.label)
@@ -374,7 +383,6 @@ function WhichKeyPanel(props: {
                           fg={selected() ? look().tabText : look().muted}
                           attributes={selected() ? TextAttributes.BOLD : undefined}
                           wrapMode="none"
-                          truncate
                         >
                           {group.label}
                         </text>
@@ -384,7 +392,7 @@ function WhichKeyPanel(props: {
                 </For>
               </Show>
             </box>
-            <box width={HEADER_SIDE_WIDTH} flexShrink={0} alignItems="flex-end">
+            <box width={headerSideWidth()} flexShrink={0} alignItems="flex-end">
               <Show when={scrollable()}>
                 <text wrapMode="none">
                   <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
