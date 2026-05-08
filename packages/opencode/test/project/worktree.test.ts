@@ -217,7 +217,7 @@ describe("Worktree", () => {
             const directory = yield* Effect.promise(() => fs.realpath(target).catch(() => target))
 
             expect(list).toContainEqual({
-              name: path.basename(parent),
+              name: path.basename(parent).toLowerCase(),
               branch,
               directory,
             })
