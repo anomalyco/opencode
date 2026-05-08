@@ -361,13 +361,13 @@ export const layer: Layer.Layer<
       }
 
       const primary = yield* canonical(ctx.worktree)
-      const primaryName = pathSvc.basename(primary)
+      const primaryName = pathSvc.basename(primary).toLowerCase()
       return yield* Effect.forEach(parseWorktreeList(result.text), (entry) =>
         Effect.gen(function* () {
           if (!entry.path) return undefined
           const directory = yield* canonical(entry.path)
           if (directory === primary) return undefined
-          const name = pathSvc.basename(directory)
+          const name = pathSvc.basename(directory).toLowerCase()
           return {
             name: name === primaryName ? pathSvc.basename(pathSvc.dirname(directory)) : name,
             directory,
