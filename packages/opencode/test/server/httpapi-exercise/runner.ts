@@ -6,7 +6,7 @@ import { ModelID, ProviderID } from "../../../src/provider/schema"
 import type { MessageV2 } from "../../../src/session/message-v2"
 import { MessageID, PartID } from "../../../src/session/schema"
 import { stable } from "./assertions"
-import { call } from "./backend"
+import { call, callAuthProbe } from "./backend"
 import { original } from "./environment"
 import { runtime } from "./runtime"
 import type {
@@ -32,6 +32,8 @@ export function runScenario(options: Options) {
 }
 
 function runActive(options: Options, scenario: ActiveScenario) {
+  if (options.mode === "auth") return runAuth(scenario)
+
   if (options.mode === "parity" && scenario.mutates && scenario.compare !== "none") {
     return Effect.gen(function* () {
       const effect = yield* runBackend("effect", scenario)
@@ -51,6 +53,21 @@ function runActive(options: Options, scenario: ActiveScenario) {
       }
     }),
   )
+}
+
+function runAuth(scenario: ActiveScenario) {
+  return Effect.gen(function* () {
+    const effect = yield* callAuthProbe("effect", scenario)
+    const legacy = yield* callAuthProbe("legacy", scenario)
+    if (scenario.auth === "protected") {
+      if (effect.status !== 401) throw new Error(`effect auth expected 401, got ${effect.status}`)
+      if (legacy.status !== 401) throw new Error(`legacy auth expected 401, got ${legacy.status}`)
+      return
+    }
+
+    if (effect.status === 401) throw new Error("effect auth expected public access, got 401")
+    if (legacy.status === 401) throw new Error("legacy auth expected public access, got 401")
+  })
 }
 
 function runBackend(backend: "effect" | "legacy", scenario: ActiveScenario) {
@@ -73,7 +90,10 @@ function withContext<A, E>(scenario: ActiveScenario, use: (ctx: SeededContext<un
         : undefined
       return { dir, llm }
     }),
-    (ctx) => Effect.promise(async () => void (await ctx.dir?.[Symbol.asyncDispose]())).pipe(Effect.ignore),
+    (ctx) =>
+      Effect.promise(async () => {
+        await ctx.dir?.[Symbol.asyncDispose]()
+      }).pipe(Effect.ignore),
   ).pipe(
     Effect.flatMap((context) =>
       Effect.gen(function* () {

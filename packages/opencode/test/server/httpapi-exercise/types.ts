@@ -10,10 +10,11 @@ export const Methods = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const
 
 export type Method = (typeof Methods)[number]
 export type OpenApiMethod = (typeof OpenApiMethods)[number]
-export type Mode = "effect" | "parity" | "coverage"
+export type Mode = "effect" | "parity" | "coverage" | "auth"
 export type Backend = "effect" | "legacy"
 export type Comparison = "none" | "status" | "json"
 export type CaptureMode = "full" | "stream"
+export type AuthPolicy = "protected" | "public" | "public-bypass" | "ticket-bypass"
 export type ProjectOptions = { git?: boolean; config?: Partial<Config.Info>; llm?: boolean }
 export type OpenApiSpec = { paths?: Record<string, Partial<Record<OpenApiMethod, unknown>>> }
 export type JsonObject = Record<string, unknown>
@@ -79,6 +80,7 @@ export type ActiveScenario = {
   capture: CaptureMode
   mutates: boolean
   reset: boolean
+  auth: AuthPolicy
 }
 
 export type BuilderState<S> = {
@@ -91,6 +93,7 @@ export type BuilderState<S> = {
   capture: CaptureMode
   mutates: boolean
   reset: boolean
+  auth: AuthPolicy
 }
 
 export type TodoScenario = {
