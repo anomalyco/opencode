@@ -306,16 +306,6 @@ $manifest = @{
 }
 
 # Collect file info
-if (Test-Path (Join-Path $OutputDirBin "opencode.exe")) {
-    $exeItem = Get-Item (Join-Path $OutputDirBin "opencode.exe")
-    $manifest.files["opencode.exe"] = @{
-        size = $exeItem.Length
-        sha256 = Get-SHA256 $exeItem.FullName
-    }
-    $manifest.checksums["opencode.exe"] = $manifest.files["opencode.exe"].sha256
-    Write-Ok "SHA256(opencode.exe): $($manifest.files['opencode.exe'].sha256)"
-}
-
 if ($zipSize -gt 0 -and (Test-Path $ZipPath)) {
     $zipSha = Get-SHA256 $ZipPath
     $manifest.files[$ZipName] = @{
