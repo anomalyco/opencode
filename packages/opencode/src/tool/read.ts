@@ -1,9 +1,10 @@
 import { Effect, Option, Schema, Scope } from "effect"
 import { NonNegativeInt } from "@/util/schema"
 import * as path from "path"
-import { Readable } from "stream"
+import type { Readable } from "stream"
 import { createInterface } from "readline"
 import { Encoding } from "@/util/encoding"
+import { TextStream } from "@/util/text-stream"
 import * as Tool from "./tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { LSP } from "@/lsp/lsp"
@@ -299,9 +300,14 @@ export const ReadTool = Tool.define(
   }),
 )
 
+// Routed through TextStream.withFallback so plain UTF-8 files stream straight
+// from disk and stop at the line/byte cap, while non-UTF-8 files fall back to
+// a buffered iconv decode for correctness.
 async function lines(filepath: string, opts: { limit: number; offset: number }) {
-  const encoded = await Encoding.read(filepath)
-  const stream = Readable.from([encoded.text])
+  return TextStream.withFallback(filepath, (stream) => readLines(stream, opts))
+}
+
+async function readLines(stream: Readable, opts: { limit: number; offset: number }) {
   const rl = createInterface({
     input: stream,
     // Note: we use the crlfDelay option to recognize all instances of CR LF
