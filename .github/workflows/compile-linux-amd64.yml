@@ -38,7 +38,7 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: false
           OPENCODE_CHANNEL: compile
-          OPENCODE_MODELS_URL: https://models.opencode.ai
+          OPENCODE_MODELS_URL: https://models.dev
 
       - name: Verify Binary
         run: |
