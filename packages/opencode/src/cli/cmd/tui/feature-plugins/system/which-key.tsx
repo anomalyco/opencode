@@ -164,8 +164,9 @@ function WhichKeyPanel(props: {
   const left = 0
   const width = createMemo(() => Math.max(1, dimensions().width))
   const panelHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height * PANEL_HEIGHT_RATIO)))
+  const contentWidth = createMemo(() => Math.max(1, width() - 2))
   const columns = createMemo(() =>
-    Math.max(1, Math.min(3, Math.floor((width() - 2 + COLUMN_GAP) / (MIN_COLUMN_WIDTH + COLUMN_GAP)) || 1)),
+    Math.max(1, Math.min(3, Math.floor((contentWidth() + COLUMN_GAP) / (MAX_COLUMN_WIDTH + COLUMN_GAP)) || 1)),
   )
   const entries = createMemo(() => active().map((item) => activeKeyEntry(props.api, item)))
   const groups = createMemo(() => grouped(entries()))
@@ -222,7 +223,7 @@ function WhichKeyPanel(props: {
   const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
   const look = createMemo(() => skin(props.api))
   const columnWidth = createMemo(() =>
-    Math.max(1, Math.min(MAX_COLUMN_WIDTH, Math.floor((width() - 2 - (columns() - 1) * COLUMN_GAP) / columns()))),
+    Math.max(1, Math.min(MAX_COLUMN_WIDTH, Math.floor((contentWidth() - (columns() - 1) * COLUMN_GAP) / columns()))),
   )
   const clamp = (value: number) => Math.max(0, Math.min(maxOffset(), value))
   const scroll = (delta: number) => setOffset((value) => clamp(value + delta))
