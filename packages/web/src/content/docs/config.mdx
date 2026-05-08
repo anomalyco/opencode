@@ -525,16 +525,26 @@ You can also define commands using markdown files in `~/.config/opencode/command
 
 ---
 
-### Keybinds
+### Keymap
 
-Customize keybinds in `tui.json`.
+Customize TUI keyboard shortcuts in `tui.json` with `keymap`.
 
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
-  "keybinds": {}
+  "keymap": {
+    "sections": {
+      "global": {
+        "command.palette.show": "ctrl+p"
+      }
+    }
+  }
 }
 ```
+
+`keymap` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
+
+The older `keybinds` field is deprecated and only applies when `keymap` is not present.
 
 [Learn more here](/docs/keybinds).
 
@@ -575,7 +585,16 @@ Notice that this only works if it was not installed using a package manager such
 
 ### Formatters
 
-You can configure code formatters through the `formatter` option.
+You can enable and configure code formatters through the `formatter` option. Omit it to keep formatters disabled.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true
+}
+```
+
+Use an object to keep built-ins enabled while configuring overrides or custom formatters.
 
 ```json title="opencode.json"
 {
@@ -596,6 +615,34 @@ You can configure code formatters through the `formatter` option.
 ```
 
 [Learn more about formatters here](/docs/formatters).
+
+---
+
+### LSP Servers
+
+You can enable and configure LSP servers through the `lsp` option. Omit it to keep LSP disabled.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true
+}
+```
+
+Use an object to keep built-ins enabled while configuring overrides or custom LSP servers.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+[Learn more about LSP servers here](/docs/lsp).
 
 ---
 

@@ -1,39 +1,38 @@
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
-import { listAdaptors } from "@/control-plane/adaptors"
+import { Effect } from "effect"
+import { listAdapters } from "@/control-plane/adapters"
 import { Workspace } from "@/control-plane/workspace"
-import { WorkspaceAdaptorEntry } from "@/control-plane/types"
+import { AppRuntime } from "@/effect/app-runtime"
+import { WorkspaceAdapterEntry } from "@/control-plane/types"
 import { zodObject } from "@/util/effect-zod"
 import { Instance } from "@/project/instance"
+import { Vcs } from "@/project/vcs"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
-import * as Log from "@opencode-ai/core/util/log"
-import { errorData } from "@/util/error"
-
-const log = Log.create({ service: "server.workspace" })
 
 export const WorkspaceRoutes = lazy(() =>
   new Hono()
     .get(
-      "/adaptor",
+      "/adapter",
       describeRoute({
-        summary: "List workspace adaptors",
-        description: "List all available workspace adaptors for the current project.",
-        operationId: "experimental.workspace.adaptor.list",
+        summary: "List workspace adapters",
+        description: "List all available workspace adapters for the current project.",
+        operationId: "experimental.workspace.adapter.list",
         responses: {
           200: {
-            description: "Workspace adaptors",
+            description: "Workspace adapters",
             content: {
               "application/json": {
-                schema: resolver(z.array(zodObject(WorkspaceAdaptorEntry))),
+                schema: resolver(z.array(zodObject(WorkspaceAdapterEntry))),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json(await listAdaptors(Instance.project.id))
+        return c.json(await listAdapters(Instance.project.id))
       },
     )
     .post(
@@ -62,10 +61,14 @@ export const WorkspaceRoutes = lazy(() =>
       ),
       async (c) => {
         const body = c.req.valid("json") as Omit<Workspace.CreateInput, "projectID">
-        const workspace = await Workspace.create({
-          projectID: Instance.project.id,
-          ...body,
-        })
+        const workspace = await AppRuntime.runPromise(
+          Workspace.Service.use((svc) =>
+            svc.create({
+              projectID: Instance.project.id,
+              ...body,
+            }),
+          ),
+        )
         return c.json(workspace)
       },
     )
@@ -87,7 +90,7 @@ export const WorkspaceRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(Workspace.list(Instance.project))
+        return c.json(await AppRuntime.runPromise(Workspace.Service.use((svc) => svc.list(Instance.project))))
       },
     )
     .get(
@@ -108,8 +111,11 @@ export const WorkspaceRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const ids = new Set(Workspace.list(Instance.project).map((item) => item.id))
-        return c.json(Workspace.status().filter((item) => ids.has(item.workspaceID)))
+        const result = await AppRuntime.runPromise(
+          Workspace.Service.use((svc) => Effect.all([svc.list(Instance.project), svc.status()])),
+        )
+        const ids = new Set(result[0].map((item) => item.id))
+        return c.json(result[1].filter((item) => ids.has(item.workspaceID)))
       },
     )
     .delete(
@@ -138,60 +144,68 @@ export const WorkspaceRoutes = lazy(() =>
       ),
       async (c) => {
         const { id } = c.req.valid("param")
-        return c.json(await Workspace.remove(id))
+        return c.json(await AppRuntime.runPromise(Workspace.Service.use((svc) => svc.remove(id))))
       },
     )
     .post(
-      "/:id/session-restore",
+      "/warp",
       describeRoute({
-        summary: "Restore session into workspace",
-        description: "Replay a session's sync events into the target workspace in batches.",
-        operationId: "experimental.workspace.sessionRestore",
+        summary: "Warp session into workspace",
+        description: "Move a session's sync history into the target workspace, or detach it to the local project.",
+        operationId: "experimental.workspace.warp",
         responses: {
-          200: {
-            description: "Session replay started",
-            content: {
-              "application/json": {
-                schema: resolver(
-                  z.object({
-                    total: z.number().int().min(0),
-                  }),
-                ),
-              },
-            },
+          204: {
+            description: "Session warped",
           },
           ...errors(400),
         },
       }),
-      validator("param", z.object({ id: zodObject(Workspace.Info).shape.id })),
-      validator("json", Workspace.SessionRestoreInput.zodObject.omit({ workspaceID: true })),
+      validator(
+        "json",
+        z.object({
+          id: zodObject(Workspace.Info).shape.id.nullable(),
+          sessionID: Workspace.SessionWarpInput.zodObject.shape.sessionID,
+          copyChanges: z.boolean().optional(),
+        }),
+      ),
       async (c) => {
-        const { id } = c.req.valid("param")
-        const body = c.req.valid("json") as Omit<Workspace.SessionRestoreInput, "workspaceID">
-        log.info("session restore route requested", {
-          workspaceID: id,
-          sessionID: body.sessionID,
-          directory: Instance.directory,
-        })
-        try {
-          const result = await Workspace.sessionRestore({
-            workspaceID: id,
-            ...body,
-          })
-          log.info("session restore route complete", {
-            workspaceID: id,
-            sessionID: body.sessionID,
-            total: result.total,
-          })
-          return c.json(result)
-        } catch (err) {
-          log.error("session restore route failed", {
-            workspaceID: id,
-            sessionID: body.sessionID,
-            error: errorData(err),
-          })
-          throw err
-        }
+        const body = c.req.valid("json")
+        return AppRuntime.runPromise(
+          Workspace.Service.use((workspace) =>
+            workspace.sessionWarp({
+              workspaceID: body.id,
+              sessionID: body.sessionID,
+              copyChanges: body.copyChanges,
+            }),
+          ).pipe(
+            Effect.match({
+              onFailure: (error) => {
+                if (error instanceof Vcs.PatchApplyError) {
+                  return c.json(
+                    {
+                      name: "VcsApplyError",
+                      data: {
+                        message: error.message,
+                        reason: error.reason,
+                      },
+                    },
+                    400,
+                  )
+                }
+                return c.json(
+                  {
+                    name: "WorkspaceWarpError",
+                    data: {
+                      message: error.message,
+                    },
+                  },
+                  400,
+                )
+              },
+              onSuccess: () => c.body(null, 204),
+            }),
+          ),
+        )
       },
     ),
 )

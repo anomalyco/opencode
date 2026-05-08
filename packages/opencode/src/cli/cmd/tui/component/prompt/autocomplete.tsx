@@ -1,4 +1,4 @@
-import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
+import type { BoxRenderable, TextareaRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
 import path from "path"
@@ -12,11 +12,12 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import { useCommandDialog } from "@tui/component/dialog-command"
+import { useCommandPalette } from "../../context/command-palette"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
+import { useBindings } from "../../keymap"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -52,7 +53,6 @@ function extractLineRange(input: string) {
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
-  onKeyDown: (e: KeyEvent) => void
   visible: false | "@" | "/"
 }
 
@@ -82,12 +82,14 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
-  const command = useCommandDialog()
+  const command = useCommandPalette()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const tuiConfig = useTuiConfig()
-
+  const {
+    keymap: { sections },
+  } = tuiConfig
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
@@ -282,7 +284,7 @@ export function Autocomplete(props: {
     const { filename, part } = createFilePart(item, lineRange)
     const index = store.visible === "@" ? store.index : props.input().cursorOffset
 
-    command.keybinds(true)
+    command.suspend(false)
     setStore("visible", false)
     setStore("index", index)
     insertPart(filename, part)
@@ -520,8 +522,54 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   }
 
+  useBindings(() => ({
+    target: props.input,
+    enabled: () => Boolean(store.visible),
+    commands: [
+      {
+        name: "prompt.autocomplete.prev",
+        run() {
+          setStore("input", "keyboard")
+          move(-1)
+        },
+      },
+      {
+        name: "prompt.autocomplete.next",
+        run() {
+          setStore("input", "keyboard")
+          move(1)
+        },
+      },
+      {
+        name: "prompt.autocomplete.hide",
+        run() {
+          hide()
+        },
+      },
+      {
+        name: "prompt.autocomplete.select",
+        run() {
+          select()
+        },
+      },
+      {
+        name: "prompt.autocomplete.complete",
+        run() {
+          const selected = options()[store.selected]
+          if (selected?.isDirectory) {
+            expandDirectory()
+            return
+          }
+
+          select()
+        },
+      },
+    ],
+    bindings: sections.autocomplete,
+  }))
+
   function show(mode: "@" | "/") {
-    command.keybinds(false)
+    command.suspend(true)
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
@@ -538,7 +586,7 @@ export function Autocomplete(props: {
         draft.input = props.input().plainText
       })
     }
-    command.keybinds(true)
+    command.suspend(false)
     setStore("visible", false)
   }
 
@@ -591,60 +639,6 @@ export function Autocomplete(props: {
         if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
           show("@")
           setStore("index", idx)
-        }
-      },
-      onKeyDown(e: KeyEvent) {
-        if (store.visible) {
-          const name = e.name?.toLowerCase()
-          const ctrlOnly = e.ctrl && !e.meta && !e.shift
-          const isNavUp = name === "up" || (ctrlOnly && name === "p")
-          const isNavDown = name === "down" || (ctrlOnly && name === "n")
-
-          if (isNavUp) {
-            setStore("input", "keyboard")
-            move(-1)
-            e.preventDefault()
-            return
-          }
-          if (isNavDown) {
-            setStore("input", "keyboard")
-            move(1)
-            e.preventDefault()
-            return
-          }
-          if (name === "escape") {
-            hide()
-            e.preventDefault()
-            return
-          }
-          if (name === "return") {
-            select()
-            e.preventDefault()
-            return
-          }
-          if (name === "tab") {
-            const selected = options()[store.selected]
-            if (selected?.isDirectory) {
-              expandDirectory()
-            } else {
-              select()
-            }
-            e.preventDefault()
-            return
-          }
-        }
-        if (!store.visible) {
-          if (e.name === "@") {
-            const cursorOffset = props.input().cursorOffset
-            const charBeforeCursor =
-              cursorOffset === 0 ? undefined : props.input().getTextRange(cursorOffset - 1, cursorOffset)
-            const canTrigger = charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor)
-            if (canTrigger) show("@")
-          }
-
-          if (e.name === "/") {
-            if (props.input().cursorOffset === 0) show("/")
-          }
         }
       },
     })

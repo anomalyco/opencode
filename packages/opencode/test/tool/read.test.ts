@@ -13,13 +13,13 @@ import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const ctx = {
@@ -255,28 +255,28 @@ describe("tool.read env file permissions", () => {
 })
 
 describe("tool.read truncation", () => {
-  it.live("truncates large file by bytes and sets truncated metadata", () =>
+  it.instance("truncates large file by bytes and sets truncated metadata", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
+      const test = yield* TestInstance
       const base = yield* load(path.join(FIXTURES_DIR, "models-api.json"))
       const target = 60 * 1024
       const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
-      yield* put(path.join(dir, "large.json"), content)
+      yield* put(path.join(test.directory, "large.json"), content)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "large.json") })
+      const result = yield* run({ filePath: path.join(test.directory, "large.json") })
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Output capped at")
       expect(result.output).toContain("Use offset=")
     }),
   )
 
-  it.live("truncates by line count when limit is specified", () =>
+  it.instance("truncates by line count when limit is specified", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
+      const test = yield* TestInstance
       const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
-      yield* put(path.join(dir, "many-lines.txt"), lines)
+      yield* put(path.join(test.directory, "many-lines.txt"), lines)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "many-lines.txt"), limit: 10 })
+      const result = yield* run({ filePath: path.join(test.directory, "many-lines.txt"), limit: 10 })
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Showing lines 1-10 of 100")
       expect(result.output).toContain("Use offset=11")
@@ -286,12 +286,12 @@ describe("tool.read truncation", () => {
     }),
   )
 
-  it.live("does not truncate small file", () =>
+  it.instance("does not truncate small file", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
-      yield* put(path.join(dir, "small.txt"), "hello world")
+      const test = yield* TestInstance
+      yield* put(path.join(test.directory, "small.txt"), "hello world")
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "small.txt") })
+      const result = yield* run({ filePath: path.join(test.directory, "small.txt") })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file")
     }),
@@ -438,6 +438,24 @@ root_type Monster;`
       expect(result.attachments).toBeUndefined()
       expect(result.output).toContain("namespace MyGame")
       expect(result.output).toContain("table Monster")
+    }),
+  )
+
+  it.live("falls through unsupported image mime types to text", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const cases = [
+        ["image.bmp", "BM text content"],
+        ["photo.tiff", "II text content"],
+        ["photo.avif", "avif text content"],
+      ] as const
+
+      for (const item of cases) {
+        yield* put(path.join(dir, item[0]), item[1])
+        const result = yield* exec(dir, { filePath: path.join(dir, item[0]) })
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain(item[1])
+      }
     }),
   )
 })

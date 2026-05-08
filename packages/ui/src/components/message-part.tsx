@@ -356,12 +356,6 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: i18n.t("ui.tool.websearch"),
         subtitle: input.query,
       }
-    case "codesearch":
-      return {
-        icon: "code",
-        title: i18n.t("ui.tool.codesearch"),
-        subtitle: input.query,
-      }
     case "task": {
       const type =
         typeof input.subagent_type === "string" && input.subagent_type
@@ -1711,32 +1705,6 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
-  name: "codesearch",
-  render(props) {
-    const i18n = useI18n()
-    const query = createMemo(() => {
-      const value = props.input.query
-      if (typeof value !== "string") return ""
-      return value
-    })
-
-    return (
-      <BasicTool
-        {...props}
-        icon="code"
-        trigger={{
-          title: i18n.t("ui.tool.codesearch"),
-          subtitle: query(),
-          subtitleClass: "exa-tool-query",
-        }}
-      >
-        <ExaOutput output={props.output} />
-      </BasicTool>
-    )
-  },
-})
-
-ToolRegistry.register({
   name: "task",
   render(props) {
     const data = useData()
@@ -1938,11 +1906,11 @@ ToolRegistry.register({
                   mode="diff"
                   before={{
                     name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.before || props.input.oldString,
+                    contents: props.metadata?.filediff?.before || props.input.oldString || "",
                   }}
                   after={{
                     name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.after || props.input.newString,
+                    contents: props.metadata?.filediff?.after || props.input.newString || "",
                   }}
                 />
               </div>

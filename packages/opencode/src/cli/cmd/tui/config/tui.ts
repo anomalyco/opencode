@@ -1,12 +1,14 @@
 export * as TuiConfig from "./tui"
 
-import z from "zod"
+import type z from "zod"
+import type { KeyEvent, Renderable } from "@opentui/core"
+import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { TuiInfo } from "./tui-schema"
+import { KeymapConfig, TuiInfo, TuiJsonSchemaInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@opencode-ai/core/global"
@@ -20,27 +22,29 @@ import { Filesystem } from "@/util/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
+import { LegacyKeymapTransform } from "./legacy-keymap-transform"
+import { KeymapSectionNames, keymapBindingDefaults, type KeymapInfo, type KeymapSection } from "./tui-schema"
 
 const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiInfo
+export const JsonSchemaInfo = TuiJsonSchemaInfo
+export type Info = z.output<typeof Info>
 
 type Acc = {
   result: Info
+  plugin_origins: ConfigPlugin.Origin[]
 }
 
-type State = {
-  config: Info
-  deps: Array<Fiber.Fiber<void, AppFileSystem.Error>>
-}
-
-export type Info = z.output<typeof Info> & {
+export type Resolved = Omit<Info, "keybinds" | "keymap"> & {
+  keybinds: ConfigKeybinds.Keybinds
+  keymap: KeymapInfo
   // Internal resolved plugin list used by runtime loading.
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
 export interface Interface {
-  readonly get: () => Effect.Effect<Info>
+  readonly get: () => Effect.Effect<Resolved>
   readonly waitForDependencies: () => Effect.Effect<void>
 }
 
@@ -68,29 +72,73 @@ function normalize(raw: Record<string, unknown>) {
   }
 }
 
-async function resolvePlugins(config: Info, configFilepath: string) {
-  if (!config.plugin) return config
-  for (let i = 0; i < config.plugin.length; i++) {
-    config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], configFilepath)
-  }
-  return config
-}
-
-async function mergeFile(acc: Acc, file: string, ctx: { directory: string }) {
-  const data = await loadFile(file)
-  acc.result = mergeDeep(acc.result, data)
-  if (!data.plugin?.length) return
-
-  const scope = pluginScope(file, ctx)
-  const plugins = ConfigPlugin.deduplicatePluginOrigins([
-    ...(acc.result.plugin_origins ?? []),
-    ...data.plugin.map((spec) => ({ spec, scope, source: file })),
-  ])
-  acc.result.plugin = plugins.map((item) => item.spec)
-  acc.result.plugin_origins = plugins
-}
-
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
+  const afs = yield* AppFileSystem.Service
+
+  const resolvePlugins = (config: Info, configFilepath: string): Effect.Effect<Info> =>
+    Effect.gen(function* () {
+      const plugins = config.plugin
+      if (!plugins) return config
+      for (let i = 0; i < plugins.length; i++) {
+        plugins[i] = yield* Effect.promise(() => ConfigPlugin.resolvePluginSpec(plugins[i], configFilepath))
+      }
+      return config
+    })
+
+  const load = (text: string, configFilepath: string): Effect.Effect<Info> =>
+    Effect.gen(function* () {
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute({ text, type: "path", path: configFilepath, missing: "empty" }),
+      )
+      const data = ConfigParse.jsonc(expanded, configFilepath)
+      if (!isRecord(data)) return {} as Info
+      // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
+      // (mirroring the old opencode.json shape) still get their settings applied.
+      const validated = ConfigParse.schema(Info, normalize(data), configFilepath)
+      return yield* resolvePlugins(validated, configFilepath)
+    }).pipe(
+      // catchCause (not tapErrorCause + orElseSucceed) because ConfigParse.jsonc/.schema
+      // can sync-throw — those become defects, which orElseSucceed wouldn't catch.
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          log.warn("invalid tui config", { path: configFilepath, cause })
+          return {} as Info
+        }),
+      ),
+    )
+
+  const loadFile = (filepath: string): Effect.Effect<Info> =>
+    Effect.gen(function* () {
+      // Silent-swallow non-NotFound read errors (perms, EISDIR, IO) → log + skip.
+      // Matches how parse/schema/plugin failures in load() are handled — every
+      // broken-config path degrades gracefully rather than crashing TUI startup.
+      const text = yield* afs.readFileStringSafe(filepath).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            log.warn("failed to read tui config", { path: filepath, cause })
+            return undefined
+          }),
+        ),
+      )
+      if (!text) return {} as Info
+      return yield* load(text, filepath)
+    })
+
+  const mergeFile = (acc: Acc, file: string) =>
+    Effect.gen(function* () {
+      const data = yield* loadFile(file)
+      acc.result = mergeDeep(acc.result, data)
+      if (!data.plugin?.length) return
+
+      const scope = pluginScope(file, ctx)
+      const plugins = ConfigPlugin.deduplicatePluginOrigins([
+        ...acc.plugin_origins,
+        ...data.plugin.map((spec) => ({ spec, scope, source: file })),
+      ])
+      acc.result.plugin = plugins.map((item) => item.spec)
+      acc.plugin_origins = plugins
+    })
+
   // Every config dir we may read from: global config dir, any `.opencode`
   // folders between cwd and home, and OPENCODE_CONFIG_DIR.
   const directories = yield* ConfigPaths.directories(ctx.directory)
@@ -100,23 +148,24 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
 
   const acc: Acc = {
     result: {},
+    plugin_origins: [],
   }
 
   // 1. Global tui config (lowest precedence).
   for (const file of ConfigPaths.fileInDirectory(Global.Path.config, "tui")) {
-    yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
+    yield* mergeFile(acc, file)
   }
 
   // 2. Explicit OPENCODE_TUI_CONFIG override, if set.
   if (Flag.OPENCODE_TUI_CONFIG) {
     const configFile = Flag.OPENCODE_TUI_CONFIG
-    yield* Effect.promise(() => mergeFile(acc, configFile, ctx)).pipe(Effect.orDie)
+    yield* mergeFile(acc, configFile)
     log.debug("loaded custom tui config", { path: configFile })
   }
 
   // 3. Project tui files, applied root-first so the closest file wins.
   for (const file of projectFiles) {
-    yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
+    yield* mergeFile(acc, file)
   }
 
   // 4. `.opencode` directories (and OPENCODE_CONFIG_DIR) discovered while
@@ -127,7 +176,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   for (const dir of dirs) {
     if (!dir.endsWith(".opencode") && dir !== Flag.OPENCODE_CONFIG_DIR) continue
     for (const file of ConfigPaths.fileInDirectory(dir, "tui")) {
-      yield* Effect.promise(() => mergeFile(acc, file, ctx)).pipe(Effect.orDie)
+      yield* mergeFile(acc, file)
     }
   }
 
@@ -140,11 +189,33 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(","),
     ]).join(",")
   }
-  acc.result.keybinds = ConfigKeybinds.Keybinds.parse(keybinds)
+  const parsedKeybinds = ConfigKeybinds.Keybinds.parse(keybinds)
+  const keymapInput = acc.result.keymap ?? LegacyKeymapTransform.create(acc.result.keybinds ?? {})
+  const keymapConfig = KeymapConfig.parse(keymapInput)
+  const keymap = {
+    leader: !keymapConfig.leader || keymapConfig.leader === "none" ? "ctrl+x" : keymapConfig.leader,
+    leader_timeout: keymapConfig.leader_timeout,
+    ...resolveBindingSections<Renderable, KeyEvent, BindingSectionsConfig<Renderable, KeyEvent>, KeymapSection>(
+      keymapConfig.sections,
+      {
+        sections: KeymapSectionNames,
+        bindingDefaults: keymapBindingDefaults,
+      },
+    ),
+  }
+  const result: Resolved = {
+    ...acc.result,
+    keybinds: parsedKeybinds,
+    plugin_origins: acc.plugin_origins.length ? acc.plugin_origins : undefined,
+    // `keybinds` is deprecated and will be removed in opencode v2.0. Keep it
+    // only as the legacy fallback; once `keymap` is configured, ignore
+    // `keybinds` for keymap resolution.
+    keymap,
+  }
 
   return {
-    config: acc.result,
-    dirs: acc.result.plugin?.length ? dirs : [],
+    config: result,
+    dirs: result.plugin?.length ? dirs : [],
   }
 })
 
@@ -191,30 +262,4 @@ export async function waitForDependencies() {
 
 export async function get() {
   return runPromise((svc) => svc.get())
-}
-
-async function loadFile(filepath: string): Promise<Info> {
-  const text = await ConfigPaths.readFile(filepath)
-  if (!text) return {}
-  return load(text, filepath).catch((error) => {
-    log.warn("failed to load tui config", { path: filepath, error })
-    return {}
-  })
-}
-
-async function load(text: string, configFilepath: string): Promise<Info> {
-  return ConfigVariable.substitute({ text, type: "path", path: configFilepath, missing: "empty" })
-    .then((expanded) => ConfigParse.jsonc(expanded, configFilepath))
-    .then((data) => {
-      if (!isRecord(data)) return {}
-
-      // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
-      // (mirroring the old opencode.json shape) still get their settings applied.
-      return ConfigParse.schema(Info, normalize(data), configFilepath)
-    })
-    .then((data) => resolvePlugins(data, configFilepath))
-    .catch((error) => {
-      log.warn("invalid tui config", { path: configFilepath, error })
-      return {}
-    })
 }

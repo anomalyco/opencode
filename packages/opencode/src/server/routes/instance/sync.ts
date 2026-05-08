@@ -12,9 +12,13 @@ import { eq } from "drizzle-orm"
 import { EventTable } from "@/sync/event.sql"
 import { lazy } from "@/util/lazy"
 import * as Log from "@opencode-ai/core/util/log"
-import { startWorkspaceSyncing } from "@/control-plane/workspace"
+import { Workspace } from "@/control-plane/workspace"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Instance } from "@/project/instance"
 import { errors } from "../../error"
+import { Session } from "@/session/session"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
+import { SessionID } from "@/session/schema"
 
 const ReplayEvent = z.object({
   id: z.string(),
@@ -22,6 +26,9 @@ const ReplayEvent = z.object({
   seq: z.number().int().min(0),
   type: z.string(),
   data: z.record(z.string(), z.unknown()),
+})
+const SessionPayload = z.object({
+  sessionID: SessionID.zod,
 })
 
 const log = Log.create({ service: "server.sync" })
@@ -46,7 +53,9 @@ export const SyncRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        startWorkspaceSyncing(Instance.project.id)
+        void AppRuntime.runPromise(
+          Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(Instance.project.id)),
+        )
         return c.json(true)
       },
     )
@@ -91,7 +100,7 @@ export const SyncRoutes = lazy(() =>
           last: events.at(-1)?.seq,
           directory: body.directory,
         })
-        SyncEvent.replayAll(events)
+        await AppRuntime.runPromise(SyncEvent.use.replayAll(events))
 
         log.info("sync replay complete", {
           sessionID: source,
@@ -102,6 +111,47 @@ export const SyncRoutes = lazy(() =>
 
         return c.json({
           sessionID: source,
+        })
+      },
+    )
+    .post(
+      "/steal",
+      describeRoute({
+        summary: "Steal session into workspace",
+        description: "Update a session to belong to the current workspace through the sync event system.",
+        operationId: "sync.steal",
+        responses: {
+          200: {
+            description: "Session stolen into workspace",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPayload),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", SessionPayload),
+      async (c) => {
+        const body = c.req.valid("json")
+        const workspaceID = WorkspaceContext.workspaceID
+        if (!workspaceID) throw new Error("Cannot steal session without workspace context")
+
+        SyncEvent.run(Session.Event.Updated, {
+          sessionID: body.sessionID,
+          info: {
+            workspaceID,
+          },
+        })
+
+        log.info("sync session stolen", {
+          sessionID: body.sessionID,
+          workspaceID,
+        })
+
+        return c.json({
+          sessionID: body.sessionID,
         })
       },
     )
