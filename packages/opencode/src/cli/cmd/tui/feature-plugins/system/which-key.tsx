@@ -36,6 +36,7 @@ const MAX_COLUMN_WIDTH = 44
 const PANEL_HEIGHT_RATIO = 0.3
 const PANEL_TOP_PADDING = 1
 const FOOTER_HEIGHT = 1
+const FOOTER_MARGIN = 1
 
 type Layout = "dock" | "overlay"
 
@@ -172,7 +173,7 @@ function WhichKeyPanel(props: {
       panelHeight() -
         PANEL_TOP_PADDING -
         (tabsVisible() ? 1 + TAB_CONTENT_GAP : 0) -
-        (footerVisible() ? FOOTER_HEIGHT : 0),
+        (footerVisible() ? FOOTER_MARGIN + FOOTER_HEIGHT : 0),
     ),
   )
   const pageSize = createMemo(() => rows() * columns())
@@ -208,6 +209,9 @@ function WhichKeyPanel(props: {
   const modeTrigger = commandShortcut(props.api, command.toggleLayout)
   const scrollUpTrigger = commandShortcut(props.api, command.scrollUp)
   const scrollDownTrigger = commandShortcut(props.api, command.scrollDown)
+  const upActive = createMemo(() => offset() > 0)
+  const downActive = createMemo(() => offset() < maxOffset())
+  const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
   const look = createMemo(() => skin(props.api))
   const columnWidth = createMemo(() =>
     Math.max(1, Math.min(MAX_COLUMN_WIDTH, Math.floor((width() - 2 - (columns() - 1) * COLUMN_GAP) / columns()))),
@@ -432,14 +436,19 @@ function WhichKeyPanel(props: {
           </Show>
         </box>
         <Show when={footerVisible()}>
-          <box flexDirection="row" justifyContent="space-between">
-            <text fg={look().muted} wrapMode="none">
-              {props.pinned() ? `toggle ${trigger() || command.toggle}` : trigger()}
+          <box height={FOOTER_MARGIN} flexShrink={0} />
+          <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
+            <text fg={look().text} wrapMode="none">
+              toggle <span style={{ fg: look().muted }}>{trigger() || command.toggle}</span>
             </text>
-            <text fg={look().muted} wrapMode="none">
-              {`${position()}  ${props.mode()} ${modeTrigger() || command.toggleLayout}  scroll ${
-                scrollUpTrigger() || command.scrollUp
-              }/${scrollDownTrigger() || command.scrollDown}`}
+            <text fg={look().text} wrapMode="none">
+              <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
+              <span style={{ fg: downActive() ? look().text : look().muted }}>↓</span>
+              {"  "}
+              {nextMode()} <span style={{ fg: look().muted }}>{modeTrigger() || command.toggleLayout}</span>
+              {"  scroll "}
+              <span style={{ fg: look().muted }}>{scrollUpTrigger() || command.scrollUp}</span>/
+              <span style={{ fg: look().muted }}>{scrollDownTrigger() || command.scrollDown}</span>
             </text>
           </box>
         </Show>
