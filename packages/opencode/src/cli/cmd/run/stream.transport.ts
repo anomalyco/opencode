@@ -1,8 +1,9 @@
-// SDK event subscription and prompt turn coordination.
+// Global event subscription and prompt turn coordination.
 //
-// Creates a long-lived event stream subscription and feeds every event
-// through the session-data reducer. The reducer produces scrollback commits
-// and footer patches, which get forwarded to the footer through stream.ts.
+// Creates a long-lived global event stream subscription and feeds relevant
+// events for the current session tree through the reducers. The reducers
+// produce scrollback commits and footer patches, which get forwarded to the
+// footer through stream.ts.
 //
 // Prompt turns are one-at-a-time: runPromptTurn() sends the prompt to the
 // SDK, arms a deferred Wait, and resolves when the session becomes idle.
@@ -14,7 +15,7 @@
 // The tick counter prevents stale idle events from resolving the wrong turn.
 // We also re-check live session status before resolving an idle event so a
 // delayed idle from an older turn cannot complete a newer busy turn.
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import {
@@ -62,6 +63,7 @@ type Trace = {
 
 type StreamInput = {
   sdk: OpencodeClient
+  directory?: string
   sessionID: string
   thinking: boolean
   limits: () => Record<string, number>
@@ -149,6 +151,40 @@ function isEvent(value: unknown): value is Event {
   const type = Reflect.get(value, "type")
   const properties = Reflect.get(value, "properties")
   return typeof type === "string" && !!properties && typeof properties === "object"
+}
+
+function isGlobalEvent(value: unknown): value is GlobalEvent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false
+  }
+
+  const payload = Reflect.get(value, "payload")
+  return !!payload && typeof payload === "object"
+}
+
+function globalPayloadEvent(value: unknown): Event | undefined {
+  if (!isGlobalEvent(value)) {
+    return undefined
+  }
+
+  const payload = value.payload
+  if (payload.type === "sync") {
+    return undefined
+  }
+
+  return isEvent(payload) ? payload : undefined
+}
+
+function isMatchingDisposeEvent(value: unknown, directory: string | undefined): boolean {
+  if (!directory || !isGlobalEvent(value)) {
+    return false
+  }
+
+  if (value.directory !== directory) {
+    return false
+  }
+
+  return value.payload.type === "server.instance.disposed"
 }
 
 function active(event: Event, sessionID: string): boolean {
@@ -371,7 +407,7 @@ function createLayer(input: StreamInput) {
         const events = yield* Scope.provide(scope)(
           Effect.acquireRelease(
             Effect.promise(() =>
-              input.sdk.event.subscribe(undefined, {
+              input.sdk.global.event({
                 signal: abort.signal,
               }),
             ),
@@ -397,7 +433,6 @@ function createLayer(input: StreamInput) {
           blockers: new Map(),
         }
         const recovering = new Set<string>()
-
         const currentSubagentState = () => {
           if (state.selectedSubagent && !state.subagent.tabs.has(state.selectedSubagent)) {
             state.selectedSubagent = undefined
@@ -526,6 +561,38 @@ function createLayer(input: StreamInput) {
             Effect.orElseSucceed(() => []),
           )
 
+        const bootstrapSubagentHistory = Effect.fn("RunStreamTransport.bootstrapSubagentHistory")(
+          function* (sessions: string[]) {
+            yield* Effect.forEach(
+              sessions,
+              (sessionID) =>
+                messages(sessionID, SUBAGENT_CALL_BOOTSTRAP_LIMIT).pipe(
+                  Effect.tap((messagesList) =>
+                    Effect.sync(() => {
+                      if (
+                        !bootstrapSubagentCalls({
+                          data: state.subagent,
+                          sessionID,
+                          messages: messagesList,
+                          thinking: input.thinking,
+                          limits: input.limits(),
+                        })
+                      ) {
+                        return
+                      }
+
+                      syncFooter([], undefined, currentSubagentState())
+                    }),
+                  ),
+                ),
+              {
+                concurrency: 4,
+                discard: true,
+              },
+            )
+          },
+        )
+
         const bootstrap = Effect.fn("RunStreamTransport.bootstrap")(function* () {
           const [messagesList, children, permissions, questions] = yield* Effect.all(
             [
@@ -566,33 +633,6 @@ function createLayer(input: StreamInput) {
             questions,
           })
 
-          const sessions = [
-            ...new Set(
-              listSubagentPermissions(state.subagent)
-                .filter((item) => item.tool && item.metadata?.input === undefined)
-                .map((item) => item.sessionID),
-            ),
-          ]
-          yield* Effect.forEach(
-            sessions,
-            (sessionID) =>
-              messages(sessionID, SUBAGENT_CALL_BOOTSTRAP_LIMIT).pipe(
-                Effect.tap((messagesList) =>
-                  Effect.sync(() => {
-                    bootstrapSubagentCalls({
-                      data: state.subagent,
-                      sessionID,
-                      messages: messagesList,
-                    })
-                  }),
-                ),
-              ),
-            {
-              concurrency: "unbounded",
-              discard: true,
-            },
-          )
-
           for (const request of [
             ...state.data.permissions,
             ...listSubagentPermissions(state.subagent),
@@ -605,6 +645,13 @@ function createLayer(input: StreamInput) {
           const snapshot = currentSubagentState()
           traceTabs(input.trace, [], snapshot.tabs)
           syncFooter([], undefined, snapshot)
+
+          const sessions = [...state.subagent.tabs.keys()]
+          if (sessions.length === 0) {
+            return
+          }
+
+          yield* bootstrapSubagentHistory(sessions).pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
         })
 
         const idle = Effect.fn("RunStreamTransport.idle")((fallback: boolean) =>
@@ -700,11 +747,22 @@ function createLayer(input: StreamInput) {
                   return
                 }
 
-                if (!isEvent(item)) {
+                if (isMatchingDisposeEvent(item, input.directory)) {
+                  yield* fail(new Error("instance disposed"))
+                  yield* closeScope()
                   return
                 }
 
-                const event = item
+                const event = globalPayloadEvent(item)
+                if (!event) {
+                  return
+                }
+
+                const sessionID = sid(event)
+                if (sessionID !== input.sessionID && (!sessionID || !state.subagent.tabs.has(sessionID))) {
+                  return
+                }
+
                 input.trace?.write("recv.event", event)
                 trackBlocker(event)
 
@@ -754,7 +812,7 @@ function createLayer(input: StreamInput) {
             Effect.ensuring(
               Effect.gen(function* () {
                 if (!abort.signal.aborted && !state.fault) {
-                  yield* fail(new Error("session event stream closed"))
+                  yield* fail(new Error("global event stream closed"))
                 }
                 closeStream()
               }),
