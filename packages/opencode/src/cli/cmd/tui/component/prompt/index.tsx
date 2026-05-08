@@ -34,6 +34,7 @@ import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import * as Editor from "@tui/util/editor"
+import { resolveEditorTags } from "../dialog-editor-tags"
 import { useExit } from "../../context/exit"
 import * as Clipboard from "../../util/clipboard"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
@@ -520,7 +521,18 @@ export function Prompt(props: PromptProps) {
           const content = await Editor.open({ value, renderer })
           if (!content) return
 
-          input.setText(content)
+          // Resolve @-tags from editor content into file/agent parts
+          const resolved = await resolveEditorTags({
+            content,
+            currentParts: nonTextParts,
+            directory: sync.path.directory || process.cwd(),
+            dialog,
+            agentNames: sync.data.agent.filter((a) => !a.hidden && a.mode !== "primary").map((a) => a.name),
+          })
+
+          const finalContent = resolved.content
+
+          input.setText(finalContent)
 
           // Update positions for nonTextParts based on their location in new content
           // Filter out parts whose virtual text was deleted
@@ -537,7 +549,7 @@ export function Prompt(props: PromptProps) {
 
               if (!virtualText) return part
 
-              const newStart = content.indexOf(virtualText)
+              const newStart = finalContent.indexOf(virtualText)
               // if the virtual text is deleted, remove the part
               if (newStart === -1) return null
 
@@ -572,14 +584,16 @@ export function Prompt(props: PromptProps) {
             })
             .filter((part) => part !== null)
 
+          const allParts = [...updatedNonTextParts, ...resolved.parts]
+
           setStore("prompt", {
-            input: content,
+            input: finalContent,
             // keep only the non-text parts because the text parts were
             // already expanded inline
-            parts: updatedNonTextParts,
+            parts: allParts,
           })
-          restoreExtmarksFromParts(updatedNonTextParts)
-          input.cursorOffset = Bun.stringWidth(content)
+          restoreExtmarksFromParts(allParts)
+          input.cursorOffset = Bun.stringWidth(finalContent)
         },
       },
       {
