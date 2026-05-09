@@ -70,6 +70,42 @@ import { OpencodeKeymapProvider, registerOpencodeKeymap, useBindings, useOpencod
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
+const appBindingCommands = [
+  "command.palette.show",
+  "session.list",
+  "session.new",
+  "model.list",
+  "model.cycle_recent",
+  "model.cycle_recent_reverse",
+  "model.cycle_favorite",
+  "model.cycle_favorite_reverse",
+  "agent.list",
+  "mcp.list",
+  "agent.cycle",
+  "agent.cycle.reverse",
+  "variant.cycle",
+  "variant.list",
+  "provider.connect",
+  "console.org.switch",
+  "opencode.status",
+  "theme.switch",
+  "theme.switch_mode",
+  "theme.mode.lock",
+  "help.show",
+  "docs.open",
+  "app.exit",
+  "app.debug",
+  "app.console",
+  "app.heap_snapshot",
+  "terminal.suspend",
+  "terminal.title.toggle",
+  "app.toggle.animations",
+  "app.toggle.file_context",
+  "app.toggle.diffwrap",
+  "app.toggle.paste_summary",
+  "app.toggle.session_directory_filter",
+] as const
+
 function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
 
@@ -215,9 +251,6 @@ export function tui(input: {
 
 function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -749,7 +782,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useBindings(() => ({
     enabled: command.matcher,
-    bindings: sections.global,
+    bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
   }))
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {

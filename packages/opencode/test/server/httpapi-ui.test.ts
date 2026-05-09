@@ -22,7 +22,6 @@ import { Server } from "../../src/server/server"
 void Log.init({ print: false })
 
 const original = {
-  OPENCODE_EXPERIMENTAL_HTTPAPI: Flag.OPENCODE_EXPERIMENTAL_HTTPAPI,
   OPENCODE_DISABLE_EMBEDDED_WEB_UI: Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI,
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
   OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
@@ -31,7 +30,6 @@ const original = {
 }
 
 afterEach(() => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = original.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
@@ -117,7 +115,6 @@ function httpClient(response: Response, onRequest?: (request: HttpClientRequest.
 
 describe("HttpApi UI fallback", () => {
   test("serves the web UI through the experimental backend", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
     let proxiedUrl: string | undefined
 
@@ -137,7 +134,6 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("strips upstream transfer encoding headers from proxied assets", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
     let proxiedUrl: string | undefined
 
@@ -189,7 +185,6 @@ describe("HttpApi UI fallback", () => {
   // forwarded through the proxy while the proxy itself re-frames the body,
   // causing browsers to fail with `ERR_INVALID_CHUNKED_ENCODING`.
   test("strips upstream transfer-encoding header from proxied assets", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
 
     const response = await Effect.runPromise(
@@ -232,7 +227,6 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("serves embedded UI assets when Bun can read them but access reports missing", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     let readPath: string | undefined
 
     const response = await Effect.runPromise(
@@ -262,7 +256,6 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("allows embedded UI terminal wasm and theme preload CSP", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     const script = 'document.documentElement.dataset.theme = "dark"'
 
     const response = await Effect.runPromise(
@@ -294,15 +287,12 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("keeps matched API routes ahead of the UI fallback", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-
     const response = await Server.Default().app.request("/session/nope")
 
     expect(response.status).toBe(404)
   })
 
   test("requires server password for the web UI", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
 
     const response = await uiApp({ password: "secret", username: "opencode" }).request("/")
@@ -312,7 +302,6 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("accepts auth token for the web UI", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
 
     const response = await uiApp({
@@ -326,7 +315,6 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("accepts basic auth for the web UI", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
 
     const response = await uiApp({ password: "secret", username: "opencode" }).request("/", {
@@ -342,7 +330,6 @@ describe("HttpApi UI fallback", () => {
   // server returning 401 breaks PWA install. These specific public assets
   // should bypass auth.
   test("serves the PWA manifest without auth even when a server password is set", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
 
     for (const path of ["/site.webmanifest", "/web-app-manifest-192x192.png", "/web-app-manifest-512x512.png"]) {
@@ -356,8 +343,6 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("allows web UI preflight without auth", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-
     const response = await app({ password: "secret", username: "opencode" }).request("/", {
       method: "OPTIONS",
       headers: {

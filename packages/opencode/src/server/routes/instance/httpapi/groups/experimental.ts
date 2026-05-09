@@ -3,7 +3,7 @@ import { MCP } from "@/mcp"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { Session } from "@/session/session"
 import { Worktree } from "@/worktree"
-import { NonNegativeInt } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -82,6 +82,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
       .add(
         HttpApiEndpoint.get("console", ExperimentalPaths.console, {
           success: described(ConsoleStateResponse, "Active Console provider metadata"),
+          error: HttpApiError.InternalServerError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.console.get",
@@ -91,6 +92,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.get("consoleOrgs", ExperimentalPaths.consoleOrgs, {
           success: described(ConsoleOrgList, "Switchable Console orgs"),
+          error: HttpApiError.InternalServerError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.console.listOrgs",
