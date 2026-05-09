@@ -167,6 +167,9 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       runCommand() {
         return { ok: true } as const
       },
+      dispatchCommand() {
+        return { ok: true } as const
+      },
     } as unknown as HostPluginApi["keymap"])
 
   function kvGet(name: string): unknown
@@ -181,6 +184,37 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     app: {
       get version() {
         return opts.app?.version ?? "0.0.0-test"
+      },
+    },
+    command: {
+      register(cb) {
+        const commands = cb()
+        return keymap.registerLayer({
+          commands: commands.map((item) => ({
+            namespace: "palette",
+            name: item.value,
+            title: item.title,
+            desc: item.description,
+            category: item.category,
+            suggested: item.suggested,
+            hidden: item.hidden,
+            enabled: item.enabled,
+            slashName: item.slash?.name,
+            slashAliases: item.slash?.aliases,
+            run() {
+              item.onSelect?.()
+            },
+          })),
+          bindings: commands.flatMap((item) =>
+            item.keybind ? [{ key: item.keybind, cmd: item.value, desc: item.title }] : [],
+          ),
+        })
+      },
+      trigger(value) {
+        keymap.dispatchCommand(value)
+      },
+      show() {
+        keymap.dispatchCommand("command.palette.show")
       },
     },
     keys: {

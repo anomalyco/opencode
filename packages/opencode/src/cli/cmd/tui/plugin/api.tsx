@@ -17,6 +17,7 @@ import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Keymap from "../keymap"
+import { createCommandShim } from "./command-shim"
 
 type RouteEntry = {
   key: symbol
@@ -191,6 +192,10 @@ function appApi(): TuiPluginApi["app"] {
   }
 }
 
+function warnCommandShim(api: string, replacement: string) {
+  console.warn("[tui.plugin] deprecated TUI plugin API", { api, replacement })
+}
+
 export function createTuiApi(input: Input): TuiPluginApi {
   const lifecycle: TuiPluginApi["lifecycle"] = {
     signal: new AbortController().signal,
@@ -200,6 +205,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
   }
   return {
     app: appApi(),
+    command: createCommandShim(input.keymap, warnCommandShim),
     keys: {
       formatSequence(parts) {
         return Keymap.formatKeySequence(parts, input.tuiConfig)

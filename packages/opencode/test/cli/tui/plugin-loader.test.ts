@@ -939,6 +939,143 @@ test("manual onDispose for plugin keymap layers stays idempotent", async () => {
   }
 })
 
+test("supports deprecated api.command shim with one-time warnings", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "command-shim-plugin.ts")
+      const spec = pathToFileURL(file).href
+      const marker = path.join(dir, "command-shim.txt")
+
+      await Bun.write(
+        file,
+        `import fs from "fs"
+
+export default {
+  id: "demo.command.shim",
+  tui: async (api, options) => {
+    api.command.register(() => [
+      {
+        title: "Legacy command",
+        value: "demo.command.shim.run",
+        description: "Legacy description",
+        category: "Plugin",
+        keybind: "ctrl+shift+y",
+        suggested: true,
+        hidden: false,
+        enabled: true,
+        slash: { name: "legacy", aliases: ["old"] },
+        onSelect: () => fs.appendFileSync(options.marker, "run\\n"),
+      },
+    ])
+    api.command.register(() => [])
+    api.command.trigger("demo.command.shim.run")
+    api.command.trigger("demo.command.shim.run")
+    api.command.show()
+    api.command.show()
+  },
+}
+`,
+      )
+
+      return { spec, marker }
+    },
+  })
+
+  const layers: Array<{
+    commands?: Array<{
+      name: string
+      run?: () => void
+      [key: string]: unknown
+    }>
+    bindings?: Array<{ key: string; cmd?: string; desc?: string }>
+  }> = []
+  const dispatched: string[] = []
+  let drop = 0
+  const keymap = {
+    registerLayer(layer: (typeof layers)[number]) {
+      layers.push(layer)
+      return () => {
+        drop += 1
+      }
+    },
+    dispatchCommand(command: string) {
+      dispatched.push(command)
+      const match = layers
+        .flatMap((layer) => layer.commands ?? [])
+        .find((item) => item.name === command)
+      match?.run?.()
+      return match ? ({ ok: true } as const) : ({ ok: false, reason: "not-found" } as const)
+    },
+  } as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["keymap"]
+  const warn = spyOn(console, "warn").mockImplementation(() => {})
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ keymap }),
+      config: createTuiResolvedConfig({
+        plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
+        plugin_origins: [
+          {
+            spec: [tmp.extra.spec, { marker: tmp.extra.marker }],
+            scope: "local",
+            source: path.join(tmp.path, "tui.json"),
+          },
+        ],
+      }),
+    })
+
+    const layer = layers.find((item) => item.commands?.some((command) => command.name === "demo.command.shim.run"))
+    const command = layer?.commands?.find((item) => item.name === "demo.command.shim.run")
+    expect(command).toMatchObject({
+      namespace: "palette",
+      name: "demo.command.shim.run",
+      title: "Legacy command",
+      desc: "Legacy description",
+      category: "Plugin",
+      suggested: true,
+      hidden: false,
+      enabled: true,
+      slashName: "legacy",
+      slashAliases: ["old"],
+    })
+    expect(layer?.bindings).toEqual([{ key: "ctrl+shift+y", cmd: "demo.command.shim.run", desc: "Legacy command" }])
+    expect(dispatched).toEqual([
+      "demo.command.shim.run",
+      "demo.command.shim.run",
+      "command.palette.show",
+      "command.palette.show",
+    ])
+    await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("run\nrun\n")
+
+    expect(
+      warn.mock.calls
+        .filter((call) => call[0] === "[tui.plugin] deprecated TUI plugin API")
+        .map((call) => call[1]),
+    ).toEqual([
+      {
+        api: "api.command.register",
+        replacement: "api.keymap.registerLayer({ commands, bindings })",
+      },
+      {
+        api: "api.command.trigger",
+        replacement: "api.keymap.dispatchCommand(name)",
+      },
+      {
+        api: "api.command.show",
+        replacement: 'api.keymap.dispatchCommand("command.palette.show")',
+      },
+    ])
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(drop).toBeGreaterThan(0)
+    cwd.mockRestore()
+    wait.mockRestore()
+    warn.mockRestore()
+  }
+})
+
 test("updates installed theme when plugin metadata changes", async () => {
   await using tmp = await tmpdir<{
     spec: string

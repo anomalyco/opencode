@@ -39,6 +39,7 @@ import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
 import { ConfigPlugin } from "@/config/plugin"
+import { createCommandShim } from "./command-shim"
 
 ensureRuntimePluginSupport({ additional: keymapRuntimeModules })
 
@@ -135,6 +136,10 @@ function fail(message: string, data: Record<string, unknown>) {
 function warn(message: string, data: Record<string, unknown>) {
   log.warn(message, data)
   console.warn(`[tui.plugin] ${message}`, data)
+}
+
+function warnCommandShim(api: string, replacement: string) {
+  warn("deprecated TUI plugin API", { api, replacement })
 }
 
 function createScopedKeymap(keymap: TuiPluginApi["keymap"], scope: PluginScope): TuiPluginApi["keymap"] {
@@ -576,6 +581,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
 
   return {
     app: api.app,
+    command: createCommandShim(keymap, warnCommandShim),
     keys: api.keys,
     keymap,
     route,

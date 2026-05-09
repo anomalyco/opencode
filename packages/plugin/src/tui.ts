@@ -77,6 +77,38 @@ export type TuiKeys = {
 
 export type TuiKeymap = Keymap<Renderable, KeyEvent>
 
+/**
+ * @deprecated Use `api.keymap.registerLayer({ commands, bindings })` instead.
+ */
+export type TuiCommand = {
+  title: string
+  value: string
+  description?: string
+  category?: string
+  keybind?: string
+  suggested?: boolean
+  hidden?: boolean
+  enabled?: boolean
+  slash?: {
+    name: string
+    aliases?: string[]
+  }
+  onSelect?: () => void
+}
+
+/**
+ * @deprecated Use `api.keymap.registerLayer`, `api.keymap.dispatchCommand`, and
+ * `api.keymap.dispatchCommand("command.palette.show")` instead.
+ */
+export type TuiCommandApi = {
+  /** @deprecated Use `api.keymap.registerLayer({ commands, bindings })` instead. */
+  register: (cb: () => TuiCommand[]) => () => void
+  /** @deprecated Use `api.keymap.dispatchCommand(name)` instead. */
+  trigger: (value: string) => void
+  /** @deprecated Use `api.keymap.dispatchCommand("command.palette.show")` instead. */
+  show: () => void
+}
+
 export type TuiDialogProps = {
   size?: "medium" | "large" | "xlarge"
   onClose: () => void
@@ -461,6 +493,11 @@ export type TuiWorkspace = {
 
 export type TuiPluginApi = {
   app: TuiApp
+  /**
+   * @deprecated Use `api.keymap.registerLayer`, `api.keymap.dispatchCommand`, and
+   * `api.keymap.dispatchCommand("command.palette.show")` instead.
+   */
+  command: TuiCommandApi
   keys: TuiKeys
   keymap: TuiKeymap
   route: {
