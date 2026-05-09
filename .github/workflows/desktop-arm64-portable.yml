@@ -2,138 +2,46 @@ name: desktop-arm64-portable
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version override (optional)"
-        required: false
-        type: string
-      channel:
-        description: "Build channel"
-        required: false
-        type: choice
-        default: "prod"
-        options:
-          - dev
-          - beta
-          - prod
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version }}
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
-  build-windows-arm64-portable:
+  build:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
-        with:
-          install-flags: --os=win --cpu=arm64
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: Determine version
-        id: version
-        shell: pwsh
-        run: |
-          if ("${{ inputs.version }}" -ne "") {
-            $version = "${{ inputs.version }}"
-          } else {
-            $version = (git describe --tags --abbrev=0 2>$null) -replace "^v", ""
-            if (-not $version) {
-              $version = "0.0.0-dev"
-            }
-          }
-          Write-Host "Version: $version"
-          Write-Host "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-
-      - name: Install all dependencies
+      - name: Install dependencies
         run: bun install
 
       - name: Prepare desktop package
         working-directory: packages/desktop
-        shell: pwsh
         run: |
-          $env:OPENCODE_VERSION = "${{ steps.version.outputs.version }}"
-          $env:OPENCODE_CHANNEL = "${{ inputs.channel }}"
           $env:RUST_TARGET = "aarch64-pc-windows-msvc"
           bun ./scripts/prepare.ts
 
-      - name: Install dependencies
+      - name: Install desktop deps
         working-directory: packages/desktop
         run: bun install
 
-      - name: Build desktop application
+      - name: Build desktop
         working-directory: packages/desktop
         run: bun run build
-        env:
-          OPENCODE_CHANNEL: ${{ inputs.channel }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
-          VITE_SENTRY_ENVIRONMENT: ${{ inputs.channel }}
 
-      - name: Build portable executable
+      - name: Package portable EXE
         working-directory: packages/desktop
         run: npx electron-builder --win --arm64 --publish never --config electron-builder.config.ts
         timeout-minutes: 60
-        env:
-          OPENCODE_CHANNEL: ${{ inputs.channel }}
 
-      - name: Find portable EXE
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem -Path "packages/desktop/dist" -Filter "*portable*.exe" -Recurse | Select-Object -First 1
-          if ($exe) {
-            Write-Host "Found portable EXE: $($exe.FullName)"
-            Write-Host "exe=$($exe.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-          } else {
-            Write-Host "No portable EXE found, listing dist contents:"
-            Get-ChildItem -Path "packages/desktop/dist" | ForEach-Object { Write-Host $_.Name }
-            Write-Host "Searching for any exe files..."
-            Get-ChildItem -Path "packages/desktop/dist" -Filter "*.exe" -Recurse | ForEach-Object { Write-Host $_.FullName }
-          }
-
-      - name: Sign portable EXE
-        if: vars.AZURE_TRUSTED_SIGNING_ENDPOINT != ''
-        working-directory: packages/desktop
-        shell: pwsh
-        run: |
-          $exePath = "${{ github.workspace }}\packages\desktop\dist\${{ steps.find-exe.outputs.exe }}"
-          if (Test-Path $exePath) {
-            az trusted-signing sign --endpoint ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }} --account-name ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }} --certificate-profile-name ${{ vars.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }} --file $exePath
-          }
-
-      - name: Verify signature
-        if: vars.AZURE_TRUSTED_SIGNING_ENDPOINT != ''
-        shell: pwsh
-        run: |
-          $exePath = "${{ github.workspace }}\packages\desktop\dist\${{ steps.find-exe.outputs.exe }}"
-          $sig = Get-AuthenticodeSignature $exePath
-          if ($sig.Status -ne "Valid") {
-            throw "Invalid signature: $($sig.Status)"
-          }
-          Write-Host "Signature verified successfully"
-
-      - name: Upload portable EXE as artifact
+      - name: Upload portable EXE
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-desktop-windows-arm64-portable
-          path: |
-            packages/desktop/dist/*portable*.exe
-          retention-days: 30
-
-      - name: Upload all build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: opencode-desktop-build-arm64
-          path: |
-            packages/desktop/dist/*
+          name: opencode-desktop-win-arm64-portable
+          path: packages/desktop/dist/*portable*.exe
           retention-days: 7
