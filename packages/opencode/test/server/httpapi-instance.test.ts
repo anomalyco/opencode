@@ -48,6 +48,23 @@ const it = testEffect(Layer.mergeAll(testStateLayer, httpApiServerLayer))
 const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
 
 describe("instance HttpApi", () => {
+  it.live("serves the OpenAPI document", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.get("/doc")
+
+      expect(response.status).toBe(200)
+      expect(response.headers["content-type"]).toContain("application/json")
+      expect(yield* response.json).toMatchObject({
+        openapi: expect.any(String),
+        info: expect.any(Object),
+        paths: expect.objectContaining({
+          "/global/health": expect.any(Object),
+          "/session": expect.any(Object),
+        }),
+      })
+    }),
+  )
+
   it.live("serves path and VCS read endpoints", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
