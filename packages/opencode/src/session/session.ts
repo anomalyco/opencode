@@ -42,6 +42,19 @@ import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schem
 
 const log = Log.create({ service: "session" })
 
+function windowsDirectoryVariants(directory: string) {
+  if (!/^[a-zA-Z]:[\\/]/.test(directory) && !directory.startsWith("\\\\") && !directory.startsWith("//")) {
+    return [directory]
+  }
+  return Array.from(new Set([directory, directory.replaceAll("/", "\\"), directory.replaceAll("\\", "/")]))
+}
+
+function directoryCondition(directory: string) {
+  const variants = windowsDirectoryVariants(directory)
+  if (variants.length === 1) return eq(SessionTable.directory, directory)
+  return or(...variants.map((item) => eq(SessionTable.directory, item)))!
+}
+
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
 
@@ -829,13 +842,13 @@ function* listByProject(
 
       conditions.push(
         input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          ? or(...conds, and(isNull(SessionTable.path), directoryCondition(input.directory))!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(directoryCondition(input.directory))
     }
   }
   if (input.roots) {
@@ -876,7 +889,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+    conditions.push(directoryCondition(input.directory))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
