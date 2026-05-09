@@ -156,11 +156,12 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
 )
 
 const openApiDocument = OpenApi.fromApi(PublicApi)
-const openApiDocumentJson = JSON.stringify(openApiDocument)
 
 const docRoute = HttpRouter.use((router) =>
-  router.add("GET", "/doc", () =>
-    Effect.succeed(HttpServerResponse.text(openApiDocumentJson, { headers: { "content-type": "application/json" } })),
+  router.add(
+    "GET",
+    "/doc",
+    () => Effect.succeed(HttpServerResponse.jsonUnsafe(openApiDocument)),
   ),
 ).pipe(Layer.provide(authOnlyRouterLayer))
 
