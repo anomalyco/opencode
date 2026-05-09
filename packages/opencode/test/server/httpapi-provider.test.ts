@@ -128,7 +128,12 @@ describe("provider HttpApi", () => {
           headers,
         })
         expect(apiLegacy).toEqual({ status: 200, body: "" })
-        expect(apiHttpApi).toEqual(apiLegacy)
+        // #26474 changed the HTTP API authorize handler to serialize an
+        // undefined service result as JSON `null` instead of an empty body
+        // so clients can `.json()` parse the response uniformly. The legacy
+        // Hono path still emits an empty body (`c.json(undefined)`); the new
+        // backend's body diverges intentionally.
+        expect(apiHttpApi).toEqual({ status: 200, body: "null" })
 
         const oauthLegacy = yield* requestAuthorize({
           app: legacy,
