@@ -635,6 +635,25 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   }
 }
 
+function computeBaseIndentLength(text: string): number {
+  const nonEmptyLines = text.split("\n").filter((l) => l.trim().length > 0)
+  if (nonEmptyLines.length === 0) return 0
+  return Math.min(...nonEmptyLines.map((l) => l.match(/^(\s*)/)?.[1].length ?? 0))
+}
+
+function applyIndentDelta(text: string, delta: number): string {
+  if (delta === 0) return text
+  return text
+    .split("\n")
+    .map((l) => {
+      if (l.trim().length === 0) return l
+      if (delta > 0) return " ".repeat(delta) + l
+      const indent = l.match(/^(\s*)/)?.[1].length ?? 0
+      return l.slice(Math.min(-delta, indent))
+    })
+    .join("\n")
+}
+
 export function trimDiff(diff: string): string {
   const lines = diff.split("\n")
   const contentLines = lines.filter(
@@ -677,6 +696,7 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   let notFound = true
+  let isExactReplacer = true
 
   for (const replacer of [
     SimpleReplacer,
@@ -693,13 +713,19 @@ export function replace(content: string, oldString: string, newString: string, r
       const index = content.indexOf(search)
       if (index === -1) continue
       notFound = false
+      // When a fallback replacer fires, the LLM's oldString had wrong indentation.
+      // Adjust newString to match the indentation level of the matched file block.
+      const replacement = isExactReplacer
+        ? newString
+        : applyIndentDelta(newString, computeBaseIndentLength(search) - computeBaseIndentLength(newString))
       if (replaceAll) {
-        return content.replaceAll(search, newString)
+        return content.replaceAll(search, replacement)
       }
       const lastIndex = content.lastIndexOf(search)
       if (index !== lastIndex) continue
-      return content.substring(0, index) + newString + content.substring(index + search.length)
+      return content.substring(0, index) + replacement + content.substring(index + search.length)
     }
+    isExactReplacer = false
   }
 
   if (notFound) {

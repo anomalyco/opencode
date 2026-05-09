@@ -1,8 +1,8 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
-import { EditTool } from "../../src/tool/edit"
+import { EditTool, replace } from "../../src/tool/edit"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { LSP } from "@/lsp/lsp"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -529,5 +529,56 @@ describe("tool.edit", () => {
         expect(yield* load(filepath)).toBe("top = 1\nmiddle = keep\nbottom = 2\n")
       }),
     )
+  })
+})
+
+describe("replace() indentation adjustment", () => {
+  test("corrects 3-space newString to 2-space when IndentationFlexibleReplacer fires", () => {
+    const content = 'source "amazon-ebs" "base" {\n  ami_name = "base"\n  instance_type = "t3.micro"\n}'
+    // oldString has 3-space indent (wrong) — SimpleReplacer will miss, fallback fires
+    const oldString = '   ami_name = "base"\n   instance_type = "t3.micro"'
+    // newString also has 3-space indent (wrong)
+    const newString = '   ami_name = "new-base"\n   instance_type = "t3.micro"\n   ssh_username = "ubuntu"'
+    const result = replace(content, oldString, newString)
+    // Expect 2-space indentation (matching the file)
+    expect(result).toBe(
+      'source "amazon-ebs" "base" {\n  ami_name = "new-base"\n  instance_type = "t3.micro"\n  ssh_username = "ubuntu"\n}',
+    )
+  })
+
+  test("corrects 4-space newString to 2-space when LineTrimmedReplacer fires", () => {
+    const content = "block {\n  key = old\n}"
+    const oldString = "    key = old" // 4-space (wrong), trimmed match fires
+    const newString = "    key = new\n    extra = val" // 4-space (wrong)
+    const result = replace(content, oldString, newString)
+    expect(result).toBe("block {\n  key = new\n  extra = val\n}")
+  })
+
+  test("does not adjust newString when SimpleReplacer matches (exact oldString)", () => {
+    // LLM intentionally de-indents — trust newString as-is
+    const content = "outer {\n  inner = old\n}"
+    const oldString = "  inner = old" // exact match
+    const newString = "inner = moved" // intentionally de-indented to 0
+    const result = replace(content, oldString, newString)
+    expect(result).toBe("outer {\ninner = moved\n}")
+  })
+
+  test("is a no-op when newString indentation already matches file", () => {
+    const content = "block {\n  key = old\n}"
+    const oldString = "   key = old" // 3-space (wrong), fallback fires
+    const newString = "  key = new" // 2-space (already correct)
+    const result = replace(content, oldString, newString)
+    expect(result).toBe("block {\n  key = new\n}")
+  })
+
+  test("preserves relative indentation within newString after adjustment", () => {
+    const content = "source {\n  block {\n    key = old\n  }\n}"
+    // oldString at 6-space (wrong; file has 4-space for inner block)
+    const oldString = "      key = old"
+    // newString at 6-space with nested deeper line at 8-space
+    const newString = "      key = new\n        nested = val"
+    const result = replace(content, oldString, newString)
+    // delta is -2 (6→4); relative 2-space offset between lines is preserved
+    expect(result).toBe("source {\n  block {\n    key = new\n      nested = val\n  }\n}")
   })
 })
