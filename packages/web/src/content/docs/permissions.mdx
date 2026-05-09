@@ -60,6 +60,10 @@ For most permissions, you can use an object to apply different actions based on 
       "rm *": "deny",
       "grep *": "allow"
     },
+    "read": {
+      "*": "allow",
+      "secrets/**": "deny"
+    },
     "edit": {
       "*": "deny",
       "packages/web/src/content/docs/*.mdx": "allow"
@@ -67,6 +71,8 @@ For most permissions, you can use an object to apply different actions based on 
   }
 }
 ```
+
+For path-based permissions (`read`, `edit`), patterns match against the file path **relative to the project worktree** with forward slashes, so `"src/**"` works the same way for both. To gate paths outside the worktree, see [External Directories](#external-directories).
 
 Rules are evaluated by pattern match, with the **last matching rule winning**. A common pattern is to put the catch-all `"*"` rule first, and more specific rules after it.
 

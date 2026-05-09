@@ -78,7 +78,6 @@ const fail = Effect.fn("ReadToolTest.fail")(function* (
   throw new Error("expected read to fail")
 })
 
-const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
 const put = Effect.fn("ReadToolTest.put")(function* (p: string, content: string | Buffer | Uint8Array) {
@@ -155,7 +154,7 @@ describe("tool.read external_directory permission", () => {
         yield* exec(dir, { filePath: alt }, next)
         const read = items.find((item) => item.permission === "read")
         expect(read).toBeDefined()
-        expect(read!.patterns).toEqual([full(target)])
+        expect(read!.patterns).toEqual(["test.txt"])
       }),
     )
   }
@@ -197,6 +196,61 @@ describe("tool.read external_directory permission", () => {
       yield* exec(dir, { filePath: path.join(dir, "internal.txt") }, next)
       const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeUndefined()
+    }),
+  )
+})
+
+describe("tool.read permission patterns", () => {
+  it.live("emits worktree-relative pattern for files inside the project", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "src", "foo.ts"), "hello")
+
+      const { items, next } = asks()
+
+      yield* exec(dir, { filePath: path.join(dir, "src", "foo.ts") }, next)
+      const read = items.find((item) => item.permission === "read")
+      expect(read).toBeDefined()
+      expect(read!.patterns).toEqual(["src/foo.ts"])
+    }),
+  )
+
+  it.live("normalizes backslashes to forward slashes in pattern", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "a", "b", "c.txt"), "x")
+
+      const { items, next } = asks()
+
+      yield* exec(dir, { filePath: path.join(dir, "a", "b", "c.txt") }, next)
+      const read = items.find((item) => item.permission === "read")
+      expect(read).toBeDefined()
+      expect(read!.patterns[0]).not.toContain("\\")
+      expect(read!.patterns).toEqual(["a/b/c.txt"])
+    }),
+  )
+
+  it.live("relative read patterns match worktree-relative deny rules from config", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "src", "secret.ts"), "hidden")
+
+      const { items, next } = asks()
+
+      yield* exec(dir, { filePath: path.join(dir, "src", "secret.ts") }, next)
+      const read = items.find((item) => item.permission === "read")
+      expect(read).toBeDefined()
+
+      // Simulates a user-written rule: { permission: { read: { "src/**": "deny" } } }.
+      // Before this fix, `read` emitted the absolute filepath as the pattern, so
+      // worktree-relative deny rules silently failed to match. After the fix, this
+      // assertion holds — matching how `edit`/`write`/`apply_patch` already behave.
+      const ruleset = Permission.fromConfig({
+        read: { "src/**": "deny" },
+      })
+      for (const pattern of read!.patterns) {
+        expect(Permission.evaluate("read", pattern, ruleset).action).toBe("deny")
+      }
     }),
   )
 })
