@@ -7,6 +7,7 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { registerAdapter } from "../../src/control-plane/adapters"
+import { WorkspaceID } from "../../src/control-plane/schema"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
@@ -199,6 +200,40 @@ describe("HttpApi instance context middleware", () => {
       expect(yield* response.json).toMatchObject({
         directory: workspaceDir,
         workspaceID: workspace.id,
+      })
+    }),
+  )
+
+  it.live("uses configured workspace id instead of routing to requested workspaces", () =>
+    Effect.gen(function* () {
+      const originalWorkspaceID = Flag.OPENCODE_WORKSPACE_ID
+      const fixedWorkspaceID = WorkspaceID.ascending()
+      Flag.OPENCODE_WORKSPACE_ID = fixedWorkspaceID
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Flag.OPENCODE_WORKSPACE_ID = originalWorkspaceID
+        }),
+      )
+
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-local")
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "instance-context-fixed-workspace-ref",
+        directory: workspaceDir,
+      })
+      yield* serveProbe()
+
+      const response = yield* HttpClientRequest.get(`/probe?workspace=${workspace.id}`).pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", dir),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: dir,
+        workspaceID: fixedWorkspaceID,
       })
     }),
   )
