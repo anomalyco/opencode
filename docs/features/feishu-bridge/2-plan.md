@@ -1,7 +1,7 @@
 ---
 feat-id: feishu-bridge
-status: in-progress
-related: ./1-spec.md ./2-plan.md ./3-changelog.md
+status: done
+related: ./1-spec.md ./2-plan.md ./3-changelog.md ./architecture.md
 ---
 
 # feishu-bridge — 2-plan(实施计划)
