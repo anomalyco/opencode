@@ -62,7 +62,7 @@ const getBase = (): Configuration => ({
     signtoolOptions: {
       sign: signWindows,
     },
-    target: ["nsis"],
+    target: ["nsis", "portable"],
     verifyUpdateCodeSignature: false,
   },
   nsis: {
@@ -70,6 +70,9 @@ const getBase = (): Configuration => ({
     perMachine: false,
     installerIcon: `resources/icons/icon.ico`,
     installerHeaderIcon: `resources/icons/icon.ico`,
+  },
+  portable: {
+    artifactName: "opencode-desktop-${os}-${arch}-portable.${ext}",
   },
   linux: {
     icon: `resources/icons`,
