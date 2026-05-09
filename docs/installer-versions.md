@@ -14,6 +14,31 @@
 
 
 
+## [Windows] 2026.5.9.1 - 2026-05-09 10:19
+
+**主题**:MD → Word 导出第二轮迭代 — 全面保真度提升([feat: md-export-word-iter-2](features/md-export-word-iter-2/3-changelog.md),merge `ae96d138b`)
+
+**包含 commit**(6 笔):
+- `185ad127c` feat(desktop): fetch_url_base64 后端命令(远端图片走 Tauri reqwest)
+- `194172129` chore(deps): 加 katex@0.16.45 + mathml2omml@0.5.0(数学公式 OMML 路径)
+- `f5b22a840` feat(ui): viewer marked 4 个扩展(<mark>/emoji/heading anchor/嵌套 link 图片)
+- `a8030f1f3` feat(md-export-word): docx 主体 — 15+ helper(HTML 标签/Alerts/blockquote/图片/表格/数学/目录跳转)
+- `bfb6ca503` test(md-export-word): 单测 72 → 147
+- `b2740f19a` docs(features): 三文档 + 索引
+
+**用户可见亮点**:
+- HTML 标签全转 Word 元素 + GFM Alerts 5 类彩色独立块 + blockquote 同段一体
+- 远程图片自动嵌入 / 表格全边框 + header 灰底 / Mermaid 居中
+- **数学公式 LaTeX → Word 原生公式可编辑可矢量**(KaTeX→MathML→OMML 路径)
+- 目录 Ctrl+点击跳转 / ==高亮== 黄底 / GFM emoji shortcode / Word default 字号行距
+
+**已知 deferred**(2 项,详见 OPENCODE-PLAN/需求池/):积分公式 ∫ 后占位框 + save dialog 默认按钮
+
+**Installer 路径**:`build/installer/DeskFox-2026.5.9.1.exe`(GitHub Actions CI 产出)
+**回退方法**:`git revert ae96d138b`
+
+---
+
 ## [macOS] 2026.5.7.1 — 2026-05-07 14:18
 
 (to be filled: commits / plugin / installer path after ship)
