@@ -155,14 +155,16 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
   ]),
 )
 
-const openApiDocument = OpenApi.fromApi(PublicApi)
-const openApiDocumentJson = JSON.stringify(openApiDocument)
+// `OpenApi.fromApi` is non-trivial; defer until /doc is actually hit so
+// processes that never serve it (CLI, scripts) don't pay at module load.
+// `HttpServerResponse.jsonUnsafe` runs JSON.stringify eagerly, so caching
+// the response also caches the serialized body — every /doc request reuses
+// the same Uint8Array instead of re-stringifying the spec.
+const docResponse = lazy(() => HttpServerResponse.jsonUnsafe(OpenApi.fromApi(PublicApi)))
 
-const docRoute = HttpRouter.use((router) =>
-  router.add("GET", "/doc", () =>
-    Effect.succeed(HttpServerResponse.text(openApiDocumentJson, { headers: { "content-type": "application/json" } })),
-  ),
-).pipe(Layer.provide(authOnlyRouterLayer))
+const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effect.succeed(docResponse()))).pipe(
+  Layer.provide(authOnlyRouterLayer),
+)
 
 const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {

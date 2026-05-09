@@ -1,10 +1,11 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
-import { Config, Effect, FileSystem, Layer, Path } from "effect"
+import { Config, Context, Effect, FileSystem, Layer, Path } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { WorkspaceID } from "../../src/control-plane/schema"
+import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
@@ -52,6 +53,7 @@ const httpApiServerLayer = servedRoutes.pipe(
 )
 
 const it = testEffect(Layer.mergeAll(testStateLayer, httpApiServerLayer))
+const handlerContext = Context.empty() as Context.Context<unknown>
 
 const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
 
@@ -92,6 +94,65 @@ describe("instance HttpApi", () => {
 
       expect(response.status).toBe(200)
       expect(JSON.parse(response.headers[FenceHeader] ?? "{}")).not.toEqual({})
+    }),
+  )
+
+  it.live("does not emit sync fence headers for fixed-workspace reads or no-op mutations", () =>
+    Effect.gen(function* () {
+      const originalWorkspaceID = Flag.OPENCODE_WORKSPACE_ID
+      Flag.OPENCODE_WORKSPACE_ID = WorkspaceID.ascending()
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Flag.OPENCODE_WORKSPACE_ID = originalWorkspaceID
+        }),
+      )
+
+      const dir = yield* tmpdirScoped({ git: true })
+      const read = yield* HttpClientRequest.get(InstancePaths.path).pipe(directoryHeader(dir), HttpClient.execute)
+      const log = yield* HttpClientRequest.post(ControlPaths.log).pipe(
+        directoryHeader(dir),
+        HttpClientRequest.bodyJson({ service: "fence-test", level: "info", message: "noop" }),
+        Effect.flatMap(HttpClient.execute),
+      )
+
+      expect(read.status).toBe(200)
+      expect(read.headers[FenceHeader]).toBeUndefined()
+      expect(log.status).toBe(200)
+      expect(log.headers[FenceHeader]).toBeUndefined()
+    }),
+  )
+
+  it.live("rejects malformed permission and question request ids", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const request = (path: string, init?: RequestInit) =>
+        Effect.promise(() =>
+          ExperimentalHttpApiServer.webHandler().handler(
+            new Request(`http://localhost${path}`, {
+              ...init,
+              headers: { "x-opencode-directory": dir, "content-type": "application/json", ...init?.headers },
+            }),
+            handlerContext,
+          ),
+        )
+      const [permission, questionReply, questionReject] = yield* Effect.all(
+        [
+          request("/permission/invalid-permission-id/reply", {
+            method: "POST",
+            body: JSON.stringify({ reply: "once" }),
+          }),
+          request("/question/invalid-question-id/reply", {
+            method: "POST",
+            body: JSON.stringify({ answers: [["Yes"]] }),
+          }),
+          request("/question/invalid-question-id/reject", { method: "POST" }),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      expect(permission.status).toBe(400)
+      expect(questionReply.status).toBe(400)
+      expect(questionReject.status).toBe(400)
     }),
   )
 

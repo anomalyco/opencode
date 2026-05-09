@@ -6,7 +6,7 @@ import { Newtype } from "@/util/schema"
 
 export class PermissionID extends Newtype<PermissionID>()(
   "PermissionID",
-  Schema.String.annotate({ [ZodOverride]: Identifier.schema("permission") }),
+  Schema.String.check(Schema.isStartsWith("per")).annotate({ [ZodOverride]: Identifier.schema("permission") }),
 ) {
   static ascending(id?: string): PermissionID {
     return this.make(Identifier.ascending("permission", id))
