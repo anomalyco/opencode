@@ -572,6 +572,10 @@ function math(el: Element) {
   )
 }
 
+function stable(el: Element) {
+  return math(el) || el.querySelector(".katex,.katex-display,.katex-html,.katex-mathml") !== null
+}
+
 // Debounce delay before upgrading from fast parse to full parse (with shiki)
 const HIGHLIGHT_DEBOUNCE_MS = 600
 const HIGHLIGHT_IDLE_TIMEOUT_MS = 4_000
@@ -615,7 +619,7 @@ export function Markdown(
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const [ready, setReady] = createSignal(true)
-  const eager = createMemo(() => local.stage ? local.stage !== "lite" : !!local.eager)
+  const eager = createMemo(() => (local.stage ? local.stage !== "lite" : !!local.eager))
   const mathMode = createMemo<"full" | "defer">(() => {
     if (local.stage === "full") return "full"
     if (local.stage === "structure") return "defer"
@@ -834,8 +838,8 @@ export function Markdown(
     const isStreaming = local.streaming
     const chunked = local.chunked
     const upgrading = !isStreaming && domMathMode === "defer" && src()?.math === "full"
-    const pane = (isStreaming || upgrading) ? view(container) : null
-    const before = (isStreaming || upgrading) ? snap(pane) : undefined
+    const pane = isStreaming || upgrading ? view(container) : null
+    const before = isStreaming || upgrading ? snap(pane) : undefined
     const upgradeHeight = upgrading && pane ? container.offsetHeight : 0
     const upgradeBox = upgrading && pane ? container.getBoundingClientRect() : undefined
     const paneBox = upgrading && pane ? pane.getBoundingClientRect() : undefined
@@ -985,7 +989,14 @@ export function Markdown(
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
         if (fromEl.isEqualNode(toEl)) return false
-        if (math(fromEl) && math(toEl)) return false
+        if (stable(fromEl) && stable(toEl) && fromEl.textContent === toEl.textContent) {
+          console.debug("[markdown] skip stable math subtree", {
+            key: local.cacheKey ?? "",
+            tag: fromEl.tagName,
+            text: local.text.length,
+          })
+          return false
+        }
         return true
       },
     })
