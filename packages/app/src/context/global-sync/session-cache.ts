@@ -8,7 +8,7 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 
-export const SESSION_CACHE_LIMIT = 40
+export const SESSION_CACHE_LIMIT = 200
 
 type SessionCache = {
   session_status: Record<string, SessionStatus | undefined>
