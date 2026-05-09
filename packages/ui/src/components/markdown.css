@@ -113,10 +113,9 @@
     font-style: normal;
   }
 
-  /* Horizontal Rule - Invisible spacing only */
   hr {
     border: none;
-    height: 0;
+    border-top: 1px solid var(--markdown-horizontal-rule);
     margin: 40px 0;
   }
 
