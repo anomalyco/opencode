@@ -5,13 +5,16 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQueryFields } from "../middleware/workspace-routing"
 import { ApiNotFoundError } from "../errors"
 import { described } from "./metadata"
 
 const root = "/pty"
 export const Params = Schema.Struct({ ptyID: PtyID })
-export const CursorQuery = Schema.Struct({ cursor: Schema.optional(Schema.String) })
+export const CursorQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  cursor: Schema.optional(Schema.String),
+})
 export const ShellItem = Schema.Struct({
   path: Schema.String,
   name: Schema.String,

@@ -9120,7 +9120,7 @@
             "enum": ["added", "deleted", "modified"]
           }
         },
-        "required": ["file", "additions", "deletions"],
+        "required": ["additions", "deletions"],
         "additionalProperties": false
       },
       "ProviderAuthError": {
