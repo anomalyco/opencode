@@ -8,7 +8,8 @@ const TIMEOUT = 5_000
 type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
 
 export function resolveUserShell(envShell: string | undefined, loginShell: string | null | undefined) {
-  return envShell || loginShell || "/bin/sh"
+  const resolvedLoginShell = loginShell && loginShell !== "unknown" ? loginShell : undefined
+  return envShell || resolvedLoginShell || "/bin/sh"
 }
 
 export function getUserShell() {

@@ -37,6 +37,7 @@ describe("shell env", () => {
   test("resolveUserShell falls back to the login shell before /bin/sh", () => {
     expect(resolveUserShell("/custom/env-shell", "/bin/zsh")).toBe("/custom/env-shell")
     expect(resolveUserShell(undefined, "/bin/zsh")).toBe("/bin/zsh")
+    expect(resolveUserShell(undefined, "unknown")).toBe("/bin/sh")
     expect(resolveUserShell(undefined, undefined)).toBe("/bin/sh")
   })
 
