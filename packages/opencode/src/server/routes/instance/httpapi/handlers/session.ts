@@ -278,7 +278,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
     }) {
+      const instance = yield* InstanceState.context
+      const workspace = yield* InstanceState.workspaceID
       yield* promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
+        Effect.provideService(InstanceRef, instance),
+        Effect.provideService(WorkspaceRef, workspace),
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
             yield* Effect.logError("prompt_async failed", { sessionID: ctx.params.sessionID, cause })
