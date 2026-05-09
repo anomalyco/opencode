@@ -137,3 +137,5 @@ let dir = dirs::home_dir()?.join(".config").join("opencode");  // ~/.config/open
 **验证**:Mac 端 cargo check 通过(Win cfg 分支 cfg-gated dead code,Mac 不参与编译);Win 端实测要等 Win user 拉新 dev build。
 
 **为什么这笔没跟主 commit 一起**:主 commit 已 push 完才发现的 Win 兼容性 review 漏掉,follow-up 单独 commit 走 fix 分支(同 feat-id 标记 `[feat: feishu-bridge-ship-packaging]`)。本笔 changelog 当时漏补,user 提醒后 docs 分支补落盘 — 教训:**bug-repro 类的 commit 不仅 commit message 标 tag,changelog follow-up 段同步落地**。
+
+> **2026-05-10 续笔修正**:本 follow-up 基于错误假设(以为 xdg-basedir 在 Win 用 `%APPDATA%`)。实际 `xdg-basedir@5.1.0` 三平台一致 `$XDG_CONFIG_HOME` 或 `~/.config`,**没有 Win 特殊分支**。Win 端实测后此笔注入仍命不中 sidecar 路径(`%APPDATA%\Roaming\opencode\` 跟 `~/.config/opencode/` 不重叠),且 `file://` URL 还有反斜杠 + `\\?\` UNC 前缀第二个 bug。两 bug 真正修复见独立 follow-up feat [`feishu-plugin-install-win-path`](../feishu-plugin-install-win-path/3-changelog.md)(commit `7f65c691e`,Win 端 user 实测扫码绑定通)。教训:**修跨平台 bug 不靠目标平台实测就 commit + push 是漏洞,Win 端 fork-only 改动应让 Win 端 review 闸把守**。
