@@ -23,11 +23,12 @@ function span(id: string, value: { value: string; start: number; end: number }) 
   }
 }
 
-function diff(kind: string, diffs: { file: string; patch: string }[] | undefined) {
+function diff(kind: string, diffs: { file: string; patch?: string }[] | undefined) {
   return diffs?.map((item, i) => ({
     ...item,
     file: redact(`${kind}-file`, String(i), item.file),
-    patch: redact(`${kind}-patch`, String(i), item.patch),
+    patch:
+      item.patch === undefined ? undefined : redact(`${kind}-patch`, String(i), item.patch),
   }))
 }
 

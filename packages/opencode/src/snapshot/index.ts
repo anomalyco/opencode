@@ -21,7 +21,8 @@ export type Patch = typeof Patch.Type
 
 export const FileDiff = Schema.Struct({
   file: Schema.String,
-  patch: Schema.String,
+  /** Older sessions (e.g. migrated summaries) may omit full patch text. */
+  patch: Schema.optional(Schema.String),
   additions: NonNegativeInt,
   deletions: NonNegativeInt,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
