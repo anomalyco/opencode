@@ -82,6 +82,7 @@ import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
 import { errorLayer } from "./middleware/error"
+import { fenceLayer } from "./middleware/fence"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -173,6 +174,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
   return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
     Layer.provide([
       errorLayer,
+      fenceLayer,
       cors(corsOptions),
       runtime,
       Account.defaultLayer,
