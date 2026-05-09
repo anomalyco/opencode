@@ -91,6 +91,15 @@ export class MessagePipeline {
       `[pipeline ${this.opts.accountId}] msg from chat=${event.chatId}: "${text.slice(0, 100)}"`,
     )
 
+    // 立即给 user 消息加 reaction(表情回复),让 user 知道"消息已收到正在响应"
+    // best-effort fire-and-forget,失败不阻断主流程
+    void this.ackMessage(event.messageId).catch((err) =>
+      console.warn(
+        `[pipeline ${this.opts.accountId}] ack reaction failed:`,
+        (err as Error).message,
+      ),
+    )
+
     // 仅复用 *本 sidecar lifecycle 内* 创建的 session(in-memory cache)。
     // 历史 session(sidecar 上次启动前创建的)因 opencode 内部 InstanceState 不预 load
     // 而对 GET /session/{id}/message 路由返 401,导致拉不到 reply。
@@ -299,6 +308,18 @@ export class MessagePipeline {
       body: {
         time: { archived: Date.now() },
       },
+    })
+  }
+
+  /**
+   * 给 user 的消息加 emoji reaction,告诉 user "消息收到、正在响应"。
+   * 同 OpenClaw 飞书桥接默认 ack 行为(避免 LLM 慢响应时 user 不知 plugin 是不是死了)。
+   * "OK" 是飞书内置 emoji_type 之一,显示成 ✅ 类似的勾选标记。
+   */
+  private async ackMessage(messageId: string): Promise<void> {
+    await this.larkClient.im.v1.messageReaction.create({
+      data: { reaction_type: { emoji_type: "OK" } },
+      path: { message_id: messageId },
     })
   }
 
