@@ -33,6 +33,7 @@ import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -320,6 +321,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
 export default function Page() {
   const globalSync = useGlobalSync()
+  const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const local = useLocal()
   const file = useFile()
@@ -1778,6 +1780,15 @@ export default function Page() {
 
   onMount(() => {
     makeEventListener(document, "keydown", handleKeyDown)
+  })
+
+  onMount(() => {
+    const unsub = globalSDK.event.reconnect(() => {
+      const id = params.id
+      if (!id) return
+      void sync.session.sync(id, { force: true })
+    })
+    onCleanup(unsub)
   })
 
   onCleanup(() => {

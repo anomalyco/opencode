@@ -43,11 +43,15 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const emitter = createGlobalEmitter<{
       [key: string]: Event
     }>()
+    const reconnectEmitter = createGlobalEmitter<{
+      reconnect: { at: number }
+    }>()
 
     type Queued = { directory: string; payload: Event }
     const FLUSH_FRAME_MS = 16
     const STREAM_YIELD_MS = 8
     const RECONNECT_DELAY_MS = 250
+    const RECONNECT_DEBOUNCE_MS = 1_000
 
     let queue: Queued[] = []
     let buffer: Queued[] = []
@@ -80,6 +84,8 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       queue.length = 0
       coalesced.clear()
       staleDeltas.clear()
+      const reconnected = reconnectQueued
+      reconnectQueued = false
 
       last = Date.now()
       batch(() => {
@@ -93,6 +99,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       })
 
       buffer.length = 0
+      if (reconnected) reconnectEmitter.emit("reconnect", { at: Date.now() })
     }
 
     const schedule = () => {
@@ -109,10 +116,12 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let run: Promise<void> | undefined
     let started = false
     const HEARTBEAT_TIMEOUT_MS = 15_000
-    let lastEventAt = Date.now()
+    let lastReconnect = 0
+    let hidden = false
+    let connected = false
+    let reconnectQueued = false
     let heartbeat: ReturnType<typeof setTimeout> | undefined
     const resetHeartbeat = () => {
-      lastEventAt = Date.now()
       if (heartbeat) clearTimeout(heartbeat)
       heartbeat = setTimeout(() => {
         attempt?.abort()
@@ -123,6 +132,14 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       clearTimeout(heartbeat)
       heartbeat = undefined
     }
+    const forceReconnect = () => {
+      if (!started) return
+      if (!attempt) return
+      const now = Date.now()
+      if (now - lastReconnect < RECONNECT_DEBOUNCE_MS) return
+      lastReconnect = now
+      attempt.abort()
+    }
 
     const start = () => {
       if (started) return run
@@ -131,7 +148,6 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
         while (!abort.signal.aborted && started) {
           attempt = new AbortController()
-          lastEventAt = Date.now()
           const onAbort = () => {
             attempt?.abort()
           }
@@ -161,6 +177,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               }
 
               const payload = event.payload as Event
+              if (directory === "global" && payload.type === "server.connected") {
+                if (connected) reconnectQueued = true
+                connected = true
+              }
 
               const k = key(directory, payload)
               if (k) {
@@ -215,10 +235,16 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     onMount(() => {
       makeEventListener(document, "visibilitychange", () => {
-        if (document.visibilityState !== "visible") return
-        if (!started) return
-        if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
-        attempt?.abort()
+        if (document.visibilityState === "hidden") {
+          hidden = true
+          return
+        }
+        if (!hidden) return
+        hidden = false
+        forceReconnect()
+      })
+      makeEventListener(window, "pageshow", (event) => {
+        if (event.persisted) forceReconnect()
       })
     })
 
@@ -241,6 +267,8 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         on: emitter.on.bind(emitter),
         listen: emitter.listen.bind(emitter),
         start,
+        reconnect: (handler: (event: { at: number }) => void) =>
+          reconnectEmitter.on("reconnect", handler),
       },
       createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
         const s = server.current

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
-import { applyOptimisticAdd, applyOptimisticRemove, mergeOptimisticPage } from "./sync"
+import { applyOptimisticAdd, applyOptimisticRemove, mergeOptimisticPage, runInflight } from "./sync"
 
 type Text = Extract<Part, { type: "text" }>
 
@@ -20,6 +20,16 @@ const textPart = (id: string, sessionID: string, messageID: string): Text => ({
   type: "text",
   text: id,
 })
+
+const deferred = () => {
+  let resolve = () => {}
+  return {
+    promise: new Promise<void>((done) => {
+      resolve = done
+    }),
+    resolve,
+  }
+}
 
 describe("sync optimistic reducers", () => {
   test("applyOptimisticAdd inserts message in sorted order and stores parts", () => {
@@ -119,5 +129,57 @@ describe("sync optimistic reducers", () => {
       { id: "prt_1", type: "text", text: "server" },
       { id: "prt_2", type: "text", text: "prt_2" },
     ])
+  })
+})
+
+describe("runInflight", () => {
+  test("runs a forced task after an existing non-force task", async () => {
+    const pending = deferred()
+    const calls: string[] = []
+    const map = new Map<string, Promise<void>>()
+    const forced = new Set<string>()
+
+    const first = runInflight(map, "session", async () => {
+      calls.push("normal")
+      await pending.promise
+    })
+    const second = runInflight(
+      map,
+      "session",
+      async () => {
+        calls.push("force")
+      },
+      { force: true, forced },
+    )
+
+    expect(calls).toEqual(["normal"])
+    pending.resolve()
+    await Promise.all([first, second])
+    expect(calls).toEqual(["normal", "force"])
+  })
+
+  test("still runs a forced task after an existing non-force task fails", async () => {
+    const pending = deferred()
+    const calls: string[] = []
+    const map = new Map<string, Promise<void>>()
+    const forced = new Set<string>()
+
+    const first = runInflight(map, "session", async () => {
+      calls.push("normal")
+      await pending.promise
+      throw new Error("failed")
+    })
+    const second = runInflight(
+      map,
+      "session",
+      async () => {
+        calls.push("force")
+      },
+      { force: true, forced },
+    )
+
+    pending.resolve()
+    await Promise.all([first.catch(() => {}), second])
+    expect(calls).toEqual(["normal", "force"])
   })
 })

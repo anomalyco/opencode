@@ -21,13 +21,23 @@ function sortParts(parts: Part[]) {
   return parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
 }
 
-function runInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
+export function runInflight(
+  map: Map<string, Promise<void>>,
+  key: string,
+  task: () => Promise<void>,
+  options?: { force?: boolean; forced?: Set<string> },
+): Promise<void> {
   const pending = map.get(key)
-  if (pending) return pending
+  if (pending) {
+    if (!options?.force || options.forced?.has(key)) return pending
+    return pending.catch(() => {}).then(() => runInflight(map, key, task, options))
+  }
   const promise = task().finally(() => {
     map.delete(key)
+    options?.forced?.delete(key)
   })
   map.set(key, promise)
+  if (options?.force) options.forced?.add(key)
   return promise
 }
 
@@ -184,6 +194,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const initialMessagePageSize = 80
     const historyMessagePageSize = 200
     const inflight = new Map<string, Promise<void>>()
+    const inflightForce = new Set<string>()
     const inflightDiff = new Map<string, Promise<void>>()
     const inflightTodo = new Map<string, Promise<void>>()
     const optimistic = new Map<string, Map<string, OptimisticItem>>()
@@ -497,7 +508,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                   })
 
             await Promise.all([sessionReq, messagesReq])
-          })
+          }, { force: opts?.force, forced: inflightForce })
         },
         async diff(sessionID: string, opts?: { force?: boolean }) {
           const directory = sdk.directory
