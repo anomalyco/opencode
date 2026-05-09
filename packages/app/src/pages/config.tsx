@@ -59,7 +59,7 @@ function isKnownSection(value: string): boolean {
   return extraAgents.some((agent) => agent.configSection === value)
 }
 
-type SkillGroup = "opencode" | "claude" | "project" | "external"
+type SkillGroup = "opencode" | "claude" | "project" | "external" | "plugin"
 
 type DocItem = {
   id: string
@@ -216,10 +216,34 @@ function file(path: string) {
 
 function origin(path: string) {
   const next = norm(path)
+  if (next.includes("/.agents/agent/") || next.includes("/.agents/agents/")) return ".agents"
+  if (next.includes("/.opencode/agent/") || next.includes("/.opencode/agents/")) return ".opencode"
   if (next.includes("/.claude/skills/")) return ".claude"
   if (next.includes("/.agents/skills/")) return ".agents"
   if (next.includes("/.opencode/skill/") || next.includes("/.opencode/skills/")) return ".opencode"
   return "skill"
+}
+
+function rel(root: string, path: string) {
+  const base = norm(root)
+  const next = norm(path)
+  if (next === base) return name(next)
+  if (!next.startsWith(base + "/")) return name(next)
+  return next.slice(base.length + 1)
+}
+
+function stem(path: string) {
+  return path.replace(/\.(?:md|mdx|d\.ts|ts|js|mjs|cjs)$/i, "")
+}
+
+function pkg(spec: string) {
+  if (spec.startsWith("file://")) return
+  if (spec.includes("\\") || spec.startsWith("/") || /^[A-Za-z]:\//.test(spec)) return
+  const last = spec.lastIndexOf("@")
+  if (last > 0) {
+    return { name: spec.slice(0, last), version: spec.slice(last + 1) || "latest" }
+  }
+  return { name: spec, version: "latest" }
 }
 
 function bucket(path: string, input: { skills?: string; claude?: string; project?: ReturnType<typeof owner> }) {
@@ -2004,7 +2028,7 @@ export default function ConfigPage() {
     ]
   })
 
-  const agents = createMemo<DocItem[]>(() =>
+  const globalAgents = createMemo<DocItem[]>(() =>
     (space()?.agents ?? []).map((item) => ({
       id: `agent:${item.path}`,
       label: item.name,
@@ -2012,6 +2036,8 @@ export default function ConfigPage() {
       editable: true,
       source: "opencode",
       note: t("config.agents.note"),
+      group: "opencode" as const,
+      origin: ".opencode",
     })),
   )
 
@@ -2087,6 +2113,180 @@ export default function ConfigPage() {
 
     return walk(root)
   }
+
+  const scanAgents = async (
+    root: string,
+    extra: Pick<DocItem, "source" | "group" | "project" | "origin" | "root">,
+    opts?: { code?: boolean },
+  ) => {
+    if (!platform.listConfigDirectory) return [] as DocItem[]
+    console.debug("[config] scan agent prompts", { root, source: extra.source, origin: extra.origin })
+
+    const walk = async (dir: string): Promise<DocItem[]> => {
+      const list = await platform.listConfigDirectory?.(dir).catch(() => [])
+      if (!list?.length) return []
+
+      return Promise.all(
+        sortTree(list).map(async (item) => {
+          if (item.kind === "directory") return walk(item.path)
+          const match = opts?.code ? /\.(?:mdx?|d\.ts|[cm]?[jt]s)$/i : /\.mdx?$/i
+          if (!match.test(item.path)) return []
+
+          const label = stem(rel(root, item.path))
+
+          return [
+            {
+              id: `agent:${item.path}`,
+              label,
+              path: item.path,
+              editable: file(item.path),
+              note:
+                extra.group === "plugin" && opts?.code
+                  ? "Plugin agent prompt source file."
+                  : extra.group === "plugin"
+                    ? "Plugin agent prompt file."
+                    : t("config.agents.note"),
+              ...extra,
+            },
+          ]
+        }),
+      ).then((list) => list.flat())
+    }
+
+    const list = await walk(root)
+    console.debug("[config] scan agent prompts done", { root, count: list.length })
+    return list
+  }
+
+  const [diskAgents] = createResource(
+    () => [state.agentRev, opened()] as const,
+    async ([, list]) => {
+      return Promise.all(
+        list.map(async (item) => {
+          const label = item.name ?? name(item.worktree)
+          const roots = Array.from(new Set([item.worktree, ...(item.sandboxes ?? [])]))
+
+          return Promise.all(
+            roots.map(async (dir) => {
+              const extra = dir === item.worktree ? undefined : name(dir)
+              const suffix = extra ? ` · ${extra}` : ""
+
+              return Promise.all([
+                scanAgents(join(dir, ".opencode", "agent"), {
+                  source: "project",
+                  group: "project",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.opencode${suffix}`,
+                }),
+                scanAgents(join(dir, ".opencode", "agents"), {
+                  source: "project",
+                  group: "project",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.opencode${suffix}`,
+                }),
+                scanAgents(join(dir, ".agents", "agent"), {
+                  source: "external",
+                  group: "plugin",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.agents${suffix}`,
+                }),
+                scanAgents(join(dir, ".agents", "agents"), {
+                  source: "external",
+                  group: "plugin",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.agents${suffix}`,
+                }),
+              ]).then((list) => list.flat())
+            }),
+          ).then((list) => list.flat())
+        }),
+      ).then((list) => list.flat())
+    },
+  )
+
+  const [pluginAgents] = createResource(
+    () => [state.agentRev, globalSync.data.path.home, cfg().plugin] as const,
+    async ([, home, plugins]) => {
+      const cache = home ? join(home, ".cache", "opencode") : undefined
+      if (!cache || !plugins?.length) return [] as DocItem[]
+
+      return Promise.all(
+        plugins
+          .map(pkg)
+          .filter((item): item is { name: string; version: string } => !!item)
+          .flatMap((item) => [
+            {
+              root: join(cache, "node_modules", item.name),
+              name: item.name,
+            },
+            {
+              root: join(cache, "packages", `${item.name}@${item.version}`, "node_modules", item.name),
+              name: item.name,
+            },
+          ])
+          .map(async (item) => {
+            console.debug("[config] scan plugin agent roots", { plugin: item.name, root: item.root })
+            return Promise.all([
+              scanAgents(join(item.root, "agent"), {
+                source: "external",
+                group: "plugin",
+                origin: item.name,
+                root: item.root,
+              }),
+              scanAgents(join(item.root, "agents"), {
+                source: "external",
+                group: "plugin",
+                origin: item.name,
+                root: item.root,
+              }),
+              scanAgents(join(item.root, "dist", "agents"), {
+                source: "external",
+                group: "plugin",
+                origin: item.name,
+                root: item.root,
+              }),
+            ]).then((list) => list.flat())
+          }),
+      ).then((list) => list.flat())
+    },
+  )
+
+  const runtimeAgents = createMemo<DocItem[]>(() => {
+    const names = new Set([...globalAgents(), ...(diskAgents() ?? []), ...(pluginAgents() ?? [])].map((item) => item.label))
+    return (loaded() ?? [])
+      .filter((item) => !item.native && !item.hidden && !names.has(item.name))
+      .map((item) => ({
+        id: `agent-runtime:${item.name}`,
+        label: item.name,
+        path: `runtime:${item.name}`,
+        editable: false,
+        source: "external",
+        group: "plugin" as const,
+        origin: "runtime",
+        note: item.description ?? "Loaded runtime agent from config or plugin.",
+        content: item.prompt ?? "No prompt content is available for this runtime agent.",
+      }))
+  })
+
+  const agents = createMemo<DocItem[]>(() => {
+    const seen = new Set<string>()
+    return [...globalAgents(), ...(diskAgents() ?? []), ...(pluginAgents() ?? []), ...runtimeAgents()]
+      .filter((item) => {
+        const key = norm(item.path)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .sort((a, b) => (a.group ?? "").localeCompare(b.group ?? "") || a.label.localeCompare(b.label))
+  })
+
+  const agentOpenCode = createMemo(() => agents().filter((item) => item.group === "opencode"))
+  const agentProject = createMemo(() => agents().filter((item) => item.group === "project"))
+  const agentPlugin = createMemo(() => agents().filter((item) => item.group === "plugin"))
 
   const [diskClaude] = createResource(
     () => [state.skillRev, claudeRoot()] as const,
@@ -2420,7 +2620,12 @@ export default function ConfigPage() {
     if (!item) return undefined
     return dir(item.path)
   })
-  const agentWait = createMemo(() => state.section === "agents" && loaded.loading && agents().length === 0)
+  const agentWait = createMemo(
+    () =>
+      state.section === "agents" &&
+      (loaded.loading || diskAgents.loading || pluginAgents.loading) &&
+      agents().length === 0,
+  )
   const skillWait = createMemo(
     () =>
       state.section === "skills" &&
@@ -2658,6 +2863,7 @@ export default function ConfigPage() {
 
   async function open(item: DocItem) {
     const run = ++openRun
+    console.debug("[config] open doc", { id: item.id, path: item.path, source: item.source, group: item.group })
     setState("pick", item.id)
     const cached = item.content ?? cache.get(item.path)
     if (cached !== undefined) {
@@ -2677,6 +2883,7 @@ export default function ConfigPage() {
   async function save() {
     const item = currentDoc()
     if (!item?.editable || !platform.writeConfigFile) return
+    console.debug("[config] save doc", { id: item.id, path: item.path, source: item.source, group: item.group })
     await platform
       .writeConfigFile(item.path, state.text)
       .then(() => {
@@ -2694,6 +2901,7 @@ export default function ConfigPage() {
 
   async function reload() {
     if (!platform.reloadBackend) return
+    console.debug("[config] reload backend")
     await platform
       .reloadBackend()
       .then(async () => {
@@ -3592,23 +3800,91 @@ export default function ConfigPage() {
                         when={!agentWait()}
                         fallback={<Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />}
                       >
-                        <For each={agents()}>
-                          {(item) => {
-                            return (
-                              <ListButton
-                                active={state.pick === item.id}
-                                title={item.label}
-                                note={
-                                  loadedMap().get(item.label)?.description ||
-                                  loadedMap().get(item.label)?.mode ||
-                                  item.note
-                                }
-                                meta={short(item.path, space()?.agentsRoot)}
-                                onClick={() => void open(item)}
-                              />
-                            )
-                          }}
-                        </For>
+                        <div class="flex flex-col gap-3">
+                          <Show when={agentOpenCode().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.skills.group.opencode")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {agentOpenCode().length}
+                                </div>
+                              </div>
+                              <For each={agentOpenCode()}>
+                                {(item) => (
+                                  <ListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    note={
+                                      loadedMap().get(item.label)?.description ||
+                                      loadedMap().get(item.label)?.mode ||
+                                      item.note
+                                    }
+                                    meta={short(item.path, space()?.agentsRoot)}
+                                    onClick={() => void open(item)}
+                                  />
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+
+                          <Show when={agentProject().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.skills.group.project")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {agentProject().length}
+                                </div>
+                              </div>
+                              <For each={agentProject()}>
+                                {(item) => (
+                                  <ListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    note={
+                                      loadedMap().get(item.label)?.description ||
+                                      loadedMap().get(item.label)?.mode ||
+                                      item.note
+                                    }
+                                    meta={[item.project, item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
+                                    onClick={() => void open(item)}
+                                  />
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+
+                          <Show when={agentPlugin().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.plugins.title")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {agentPlugin().length}
+                                </div>
+                              </div>
+                              <For each={agentPlugin()}>
+                                {(item) => (
+                                  <ListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    note={
+                                      loadedMap().get(item.label)?.description ||
+                                      loadedMap().get(item.label)?.mode ||
+                                      item.note
+                                    }
+                                    meta={[item.project, item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
+                                    onClick={() => void open(item)}
+                                  />
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+                        </div>
                       </Show>
                     </Match>
 
@@ -4026,7 +4302,8 @@ export default function ConfigPage() {
                     onInput={(value) => setState("text", value)}
                     onSave={() => void save()}
                     onReload={() => void reload()}
-                    onOpenFolder={currentDoc() ? openFolder : undefined}
+                    onOpenFolder={file(currentDoc()?.path ?? "") ? openFolder : undefined}
+                    onCopyPath={file(currentDoc()?.path ?? "") ? copyPath : undefined}
                     extra={
                       <Show when={currentAgent()}>
                         <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
