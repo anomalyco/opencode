@@ -1,9 +1,15 @@
 <svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
   <!-- DeskFox tray template icon — macOS 模板模式专用(纯黑 + alpha,系统反色适配) -->
-  <!-- 简化的 fox 头廓形 — 双耳尖向上 + 脸三角向下,16-22px tray 一眼识别 -->
-  <g transform="translate(128, 133) scale(1.4)" fill="#000000">
-    <path d="M -68,-10 L -36,-72 L -18,-12 Z"/>
-    <path d="M 68,-10 L 36,-72 L 18,-12 Z"/>
-    <path d="M -68,-10 L 68,-10 L 0,68 Z"/>
+  <!-- scale 1.7(放大占 PNG ~85%)+ fill-rule=evenodd 让眼/嘴在脸内部"挖洞" -->
+  <!-- 覆盖区域 = 脸三角 ∩ (眼/嘴) → evenodd 视为 hole(透明) -->
+  <g transform="translate(128, 128) scale(1.7)" fill="#000000">
+    <path fill-rule="evenodd" d="
+      M -68,-10 L -36,-72 L -18,-12 Z
+      M 68,-10 L 36,-72 L 18,-12 Z
+      M -68,-10 L 68,-10 L 0,68 Z
+      M -22,4 m -5,0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0 Z
+      M 22,4 m -5,0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0 Z
+      M -22,18 L 22,18 L 0,52 Z
+    "/>
   </g>
 </svg>
