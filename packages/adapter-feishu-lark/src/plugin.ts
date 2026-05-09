@@ -30,7 +30,9 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import { listAccounts } from "./feishu/account-store"
+import { readSecret } from "./core/secret-ref"
+import { listAccounts, saveAccount } from "./feishu/account-store"
+import { fetchBotName } from "./feishu/bot-info"
 import { ChatSessionStore } from "./feishu/chat-session-store"
 import { MessagePipeline } from "./feishu/message-pipeline"
 import { PromptDispatcher } from "./feishu/prompt-dispatcher"
@@ -203,6 +205,45 @@ async function syncAccounts(): Promise<void> {
   console.log(
     `[feishu-plugin] synced: WSS=${wssManager.size}/${accounts.length} pipelines=${pipelines.size}`,
   )
+
+  // 后台 best-effort 刷新 bot 名(每个 account 调一次飞书 API,有变化就回写 config)
+  // 失败 / 网络不通保留旧值,不阻断;sidecar 重启 = 自然刷新触发点
+  void refreshBotNamesInBackground(accounts)
+}
+
+/**
+ * 对每个 enabled account 拉一次最新 bot 名。
+ * 跟 db 里的不同(包括 user 飞书后台改名)→ 回写 config。失败保留旧值不覆盖。
+ */
+async function refreshBotNamesInBackground(
+  accounts: ReturnType<typeof listAccounts>,
+): Promise<void> {
+  for (const { accountId, account } of accounts) {
+    if (!account.enabled) continue
+    try {
+      const appSecret = readSecret(account.appSecret)
+      const newName = await fetchBotName(account.domain, account.appId, appSecret)
+      if (newName && newName !== (account.botName ?? "")) {
+        // 用 saveAccount 写回(它会复用 existing 字段,只更新 botName)
+        saveAccount({
+          accountId,
+          domain: account.domain,
+          appId: account.appId,
+          appSecret, // 明文,saveAccount 会再走 SecretRef 落盘(idempotent)
+          openId: account.openId,
+          botName: newName,
+        })
+        console.log(
+          `[feishu-plugin] bot name refreshed: ${accountId} "${account.botName ?? ""}" → "${newName}"`,
+        )
+      }
+    } catch (err) {
+      console.warn(
+        `[feishu-plugin] bot name refresh failed for ${accountId}:`,
+        (err as Error).message,
+      )
+    }
+  }
 }
 
 // 默认 export = plugin 函数(opencode plugin loader 期望 default 或 server export)

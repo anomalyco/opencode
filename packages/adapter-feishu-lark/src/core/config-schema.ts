@@ -83,6 +83,8 @@ export const FeishuAccountSchema = z.object({
   appSecret: SecretRefSchema,
   /** 主用户 openId */
   openId: z.string().min(1),
+  /** 飞书 bot 应用名(显示用,saveAccount 时拉一次落盘;空字符串表未拉到 / 网络失败) */
+  botName: z.string().optional(),
   /** 域名:feishu(国内) / lark(国际)*/
   domain: FeishuDomainSchema,
   /** 长连接模式(锁定 websocket) */

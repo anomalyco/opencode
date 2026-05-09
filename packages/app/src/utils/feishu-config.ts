@@ -75,6 +75,7 @@ export interface AccountSummary {
   agent: string
   enabled?: boolean
   model?: ModelRef | null
+  bot_name?: string | null
 }
 
 /** opencode `/config/providers` 响应形状(Rust JSON value 直传) */

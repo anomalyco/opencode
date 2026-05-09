@@ -90,6 +90,8 @@ export interface SaveAccountInput {
   appId: string
   appSecret: string // 明文,本函数内自动落到 SecretRef
   openId: string
+  /** 飞书 bot 应用名(可选;saveAccount 时一次性拉,失败为空)*/
+  botName?: string
   /** 可选:覆盖默认配置文件路径(测试用)*/
   configPath?: string
 }
@@ -124,6 +126,7 @@ export function saveAccount(input: SaveAccountInput): SavedAccount {
     appId: input.appId,
     appSecret: secretRef,
     openId: input.openId,
+    botName: input.botName ?? existing?.botName,
     domain: input.domain,
     connectionMode: "websocket",
     requireMention: existing?.requireMention ?? true,

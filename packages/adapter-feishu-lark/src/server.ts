@@ -27,6 +27,7 @@ import {
   updateAccountModel,
   type SaveAccountInput,
 } from "./feishu/account-store"
+import { fetchBotName } from "./feishu/bot-info"
 
 // ============================================================
 // 类型
@@ -240,12 +241,21 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
         )
       }
       try {
+        // 拉一次 bot 名(best-effort,失败为空字符串,不阻断 saveAccount)
+        const botName = await fetchBotName(body.domain, body.appId, body.appSecret).catch(
+          (err) => {
+            console.warn("[server] bot info fetch failed during save:", err)
+            return ""
+          },
+        )
+
         const r = saveAccount({
           accountId: body.accountId,
           domain: body.domain,
           appId: body.appId,
           appSecret: body.appSecret,
           openId: body.openId,
+          botName: botName || undefined,
         })
         // 触发 hot-reload(plugin 内 listAccounts + wssManager.sync)
         try {
@@ -261,6 +271,7 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
             openId: r.account.openId,
             domain: r.account.domain,
             agent: r.account.agent,
+            botName: r.account.botName ?? "",
           },
           200,
         )
@@ -282,6 +293,7 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
           agent: account.agent,
           enabled: account.enabled,
           model: account.model ?? null,
+          botName: account.botName ?? "",
         }))
         return jsonResponse({ accounts: list }, 200)
       } catch (err) {
@@ -380,6 +392,28 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
         return jsonResponse(
           { error: "simulate_failed", message: (err as Error).message },
           500,
+        )
+      }
+    }
+
+    // POST /bot-info — 用 (domain, appId, appSecret) 调 lark/飞书 API 拿 bot 名字
+    if (req.method === "POST" && url.pathname === "/bot-info") {
+      let body: { domain?: FeishuDomain; appId?: string; appSecret?: string }
+      try {
+        body = (await req.json()) as typeof body
+      } catch {
+        return jsonResponse({ error: "invalid_json" }, 400)
+      }
+      if (!body.domain || !body.appId || !body.appSecret) {
+        return jsonResponse({ error: "missing_fields" }, 400)
+      }
+      try {
+        const botName = await fetchBotName(body.domain, body.appId, body.appSecret)
+        return jsonResponse({ botName }, 200)
+      } catch (err) {
+        return jsonResponse(
+          { error: "bot_info_failed", message: (err as Error).message },
+          502,
         )
       }
     }

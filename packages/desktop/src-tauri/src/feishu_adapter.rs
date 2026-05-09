@@ -333,6 +333,7 @@ pub struct AccountSummary {
     pub agent: String,
     pub enabled: Option<bool>,
     pub model: Option<ModelRef>,
+    pub bot_name: Option<String>,
 }
 
 /// adapter wire request 转 camelCase
@@ -359,6 +360,8 @@ struct SaveAccountWireResponse {
     open_id: String,
     domain: String,
     agent: String,
+    #[serde(rename = "botName", default)]
+    bot_name: Option<String>,
 }
 
 #[tauri::command]
@@ -384,6 +387,7 @@ pub async fn feishu_save_account(
         agent: r.agent,
         enabled: None,
         model: None,
+        bot_name: r.bot_name,
     })
 }
 
@@ -470,6 +474,8 @@ struct ListAccountWireItem {
     agent: String,
     enabled: Option<bool>,
     model: Option<ListAccountModelWire>,
+    #[serde(rename = "botName", default)]
+    bot_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -523,6 +529,7 @@ pub async fn feishu_list_accounts(
                 provider_id: m.provider_id,
                 model_id: m.model_id,
             }),
+            bot_name: w.bot_name,
         })
         .collect())
 }
