@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import path from "path"
-import { LSP } from "../lsp"
+import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./lsp.txt"
-import { Instance } from "../project/instance"
+import { InstanceState } from "@/effect/instance-state"
 import { pathToFileURL } from "url"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -23,8 +23,8 @@ const operations = [
 export const Parameters = Schema.Struct({
   operation: Schema.Literals(operations).annotate({ description: "The LSP operation to perform" }),
   filePath: Schema.optional(Schema.String).annotate({ description: "The absolute or relative path to the file. Required for all operations except workspaceSymbol." }),
-  line: Schema.optional(Schema.Number).annotate({ description: "The line number (1-based, as shown in editors). Required for: goToDefinition, findReferences, hover, goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls." }),
-  character: Schema.optional(Schema.Number).annotate({ description: "The character offset (1-based, as shown in editors). Required for: goToDefinition, findReferences, hover, goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls." }),
+  line: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).annotate({ description: "The line number (1-based, as shown in editors). Required for: goToDefinition, findReferences, hover, goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls." }),
+  character: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).annotate({ description: "The character offset (1-based, as shown in editors). Required for: goToDefinition, findReferences, hover, goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls." }),
   query: Schema.optional(Schema.String).annotate({ description: "Search query. Required for workspaceSymbol operation." }),
 })
 
@@ -57,7 +57,8 @@ export const LspTool = Tool.define(
             throw new Error(`filePath is required for operation '${args.operation}'`)
           }
 
-          const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
+          const instance = yield* InstanceState.context
+          const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(instance.directory, args.filePath)
           yield* assertExternalDirectoryEffect(ctx, file)
           const meta =
             args.operation === "documentSymbol"
@@ -79,7 +80,7 @@ export const LspTool = Tool.define(
           yield* lsp.touchFile(file, "document")
 
           const uri = pathToFileURL(file).href
-          const relPath = path.relative(Instance.worktree, file)
+          const relPath = path.relative(instance.worktree, file)
 
           if (args.operation === "documentSymbol") {
             const result: unknown[] = yield* lsp.documentSymbol(uri)

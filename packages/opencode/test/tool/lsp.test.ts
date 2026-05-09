@@ -4,17 +4,18 @@ import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { LSP } from "../../src/lsp"
+import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { MessageID, SessionID } from "../../src/session/schema"
-import { Tool, Truncate } from "../../src/tool"
+import { Tool } from "@/tool/tool"
+import { Truncate } from "@/tool/truncate"
 import { LspTool } from "../../src/tool/lsp"
-import { provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const ctx = {
@@ -208,10 +209,10 @@ describe("tool.lsp", () => {
               const file = path.join(dir, "test.ts")
               yield* put(file)
 
-              const err1 = yield* fail(dir, { operation: op, line: 1, character: 0 }, ctx)
+              const err1 = yield* fail(dir, { operation: op, line: 1, character: 1 }, ctx)
               expect(err1.message).toContain("filePath is required")
 
-              const err2 = yield* fail(dir, { operation: op, filePath: file, character: 0 }, ctx)
+              const err2 = yield* fail(dir, { operation: op, filePath: file, character: 1 }, ctx)
               expect(err2.message).toContain("line and character are required")
 
               const err3 = yield* fail(dir, { operation: op, filePath: file, line: 1 }, ctx)
