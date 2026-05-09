@@ -685,6 +685,7 @@ export const RunCommand = effectCmd({
                 err = String(props.error.data.message)
               }
               error = error ? error + EOL + err : err
+              process.exitCode = 1
               if (emit("error", { error: props.error })) continue
               UI.error(err)
             }
