@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import type { ModelMessage } from "ai"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import type { Provider } from "../../src/provider/provider"
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -1489,10 +1491,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
   test("filters empty content for bedrock provider", () => {
     const bedrockModel = {
       ...anthropicModel,
-      id: "amazon-bedrock/anthropic.claude-opus-4-6",
+      id: "amazon-bedrock/anthropic.claude-sonnet-4-5",
       providerID: "amazon-bedrock",
       api: {
-        id: "anthropic.claude-opus-4-6",
+        id: "anthropic.claude-sonnet-4-5",
         url: "https://bedrock-runtime.us-east-1.amazonaws.com",
         npm: "@ai-sdk/amazon-bedrock",
       },
@@ -1646,6 +1648,79 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
         { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
       ],
     })
+  })
+
+  test("strips trailing assistant prefill for Claude Opus 4.7", () => {
+    const model: Provider.Model = {
+      id: ModelID.make("anthropic/claude-opus-4-7"),
+      providerID: ProviderID.make("anthropic"),
+      api: { id: "claude-opus-4-7", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+      name: "Claude Opus 4.7",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+      limit: { context: 200000, output: 32000 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-01-01",
+    }
+    const msgs: ModelMessage[] = [
+      { role: "user", content: "start" },
+      { role: "assistant", content: "orphaned assistant text" },
+    ]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(ProviderTransform.supportsAssistantPrefill(model)).toBe(false)
+    expect(result).toHaveLength(1)
+    expect(result[result.length - 1].role).toBe("user")
+  })
+
+  test("keeps text-only assistant prefill when Claude thinking is disabled", () => {
+    const msgs: ModelMessage[] = [
+      { role: "user", content: "start" },
+      { role: "assistant", content: "supported prefill" },
+    ]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[result.length - 1].role).toBe("assistant")
+  })
+
+  test("strips text-only assistant prefill for Claude thinking requests", () => {
+    const msgs: ModelMessage[] = [
+      { role: "user", content: "start" },
+      { role: "assistant", content: "thinking prefill" },
+    ]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, { thinking: { type: "enabled", budgetTokens: 1024 } })
+
+    expect(result).toHaveLength(1)
+    expect(result[result.length - 1].role).toBe("user")
+  })
+
+  test("keeps trailing assistant tool calls for Claude thinking requests", () => {
+    const msgs: ModelMessage[] = [
+      { role: "user", content: "start" },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } }],
+      },
+    ]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, { thinking: { type: "enabled", budgetTokens: 1024 } })
+
+    expect(result).toHaveLength(2)
+    expect(result[result.length - 1].role).toBe("assistant")
   })
 })
 

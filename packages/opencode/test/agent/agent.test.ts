@@ -527,6 +527,27 @@ test("Agent.get returns undefined for non-existent agent", async () => {
   })
 })
 
+test("Agent.get resolves display-name agents by short alias", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        "\u200B\u200B\u200B\u200BAtlas - Plan Executor": {
+          name: "\u200B\u200B\u200B\u200BAtlas - Plan Executor",
+          description: "Atlas",
+          mode: "primary",
+        },
+      },
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const atlas = await load(tmp.path, (svc) => svc.get("atlas"))
+      expect(atlas?.description).toBe("Atlas")
+    },
+  })
+})
+
 test("default permission includes doom_loop and external_directory as ask", async () => {
   await using tmp = await tmpdir()
   await WithInstance.provide({

@@ -56,11 +56,40 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+export function supportsAssistantPrefill(model: Provider.Model): boolean {
+  const id = `${model.id} ${model.api.id}`.toLowerCase()
+  if (!id.includes("claude")) return true
+  return ![
+    "opus-4-6",
+    "opus-4.6",
+    "opus-4-7",
+    "opus-4.7",
+    "sonnet-4-6",
+    "sonnet-4.6",
+    "sonnet-4-7",
+    "sonnet-4.7",
+  ].some((version) => id.includes(version))
+}
+
+function stripTrailingAssistant(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>): ModelMessage[] {
+  const stripAllAssistantPrefill = !supportsAssistantPrefill(model)
+  const stripThinkingTextPrefill = options.thinking != null && `${model.id} ${model.api.id}`.toLowerCase().includes("claude")
+  if (!stripAllAssistantPrefill && !stripThinkingTextPrefill) return msgs
+
+  while (msgs.length > 0) {
+    const last = msgs[msgs.length - 1]
+    if (last.role !== "assistant") break
+    if (!stripAllAssistantPrefill && Array.isArray(last.content) && last.content.some((part) => part.type === "tool-call")) break
+    msgs = msgs.slice(0, -1)
+  }
+  return msgs
+}
+
 // TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
-  _options: Record<string, unknown>,
+  options: Record<string, unknown>,
 ): ModelMessage[] {
   const sanitizeToolResultOutput = (content: ToolResultPart) => {
     if (content.output.type === "text" || content.output.type === "error-text") {
@@ -301,6 +330,8 @@ function normalizeMessages(
       }
     })
   }
+
+  msgs = stripTrailingAssistant(msgs, model, options)
 
   if (
     typeof model.capabilities.interleaved === "object" &&

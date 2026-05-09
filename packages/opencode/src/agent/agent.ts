@@ -30,6 +30,12 @@ import { withStatics, type DeepMutable } from "@/util/schema"
 type ReferenceEntry = NonNullable<Config.Info["reference"]>[string]
 type ResolvedReference = { kind: "git"; repository: string; branch?: string } | { kind: "local"; path: string }
 
+function agentLookupKeys(name: string) {
+  const normalized = name.replace(/[\u200B\u200C\u200D\uFEFF]/g, "").trim().toLowerCase()
+  const short = normalized.split(" - ")[0]?.trim()
+  return new Set([normalized, short].filter((key): key is string => Boolean(key)))
+}
+
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
@@ -389,6 +395,14 @@ export const layer = Layer.effect(
         }
 
         const get = Effect.fnUntraced(function* (agent: string) {
+          const exact = agents[agent]
+          if (exact) return exact
+
+          const requested = agentLookupKeys(agent)
+          for (const [key, value] of Object.entries(agents)) {
+            const candidates = new Set([...agentLookupKeys(key), ...agentLookupKeys(value.name)])
+            if ([...requested].some((alias) => candidates.has(alias))) return value
+          }
           return agents[agent]
         })
 
