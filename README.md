@@ -67,6 +67,38 @@ Beyond chat, DeskFox **previews diverse file formats right in the main UI** — 
 
 Right-click any file tab → "Add to chat" to drop its content into the current conversation — ask the AI to explain, rewrite, or summarize.
 
+## 📤 Markdown → Word export
+
+Right-click any `.md` file tab → **"Export to Word"** converts your Markdown notes into a native `.docx` document. The export is **high-fidelity** — formatting, structure, images, and even math formulas all carry over to Word with shareable polish.
+
+**What carries over:**
+
+| Markdown source | What you get in Word |
+|---|---|
+| `# Heading 1` ~ `###### Heading 6` | Native heading hierarchy with font-size ladder |
+| `**bold**` `*italic*` `~~strikethrough~~` `<u>underline</u>` | Native inline formatting |
+| `` `inline code` `` | Mint-green pill background, monospace font |
+| ` ```lang ... ``` ` fenced code blocks | Syntax-highlighted box (200+ languages, GitHub-light theme) |
+| `==highlighted text==` | Yellow highlight background |
+| `E = mc<sup>2</sup>`, `H<sub>2</sub>O` | Unicode superscript / subscript |
+| `:rocket:` `:tada:` `:warning:` (80+ shortcodes) | Native color emoji 🚀🎉⚠️ |
+| `> blockquote` (multi-line) | Indented block, gray background, left bar visually unified across paragraphs |
+| `> [!NOTE/TIP/WARNING/CAUTION/IMPORTANT]` GFM Alerts | 5 color-coded callout blocks (blue / green / yellow / red / purple) matching GitHub style |
+| `- unordered`, `1. ordered`, `- [x] task list` | Native Word lists (multi-level nesting supported) |
+| `\| col1 \| col2 \|` tables | Full-grid bordered tables, shaded header row, breathing space above & below |
+| `[text](https://...)` external link | Clickable Word hyperlink |
+| `[Section](#section-anchor)` internal anchor | **Ctrl+click navigation** to the target heading inside Word |
+| `![](./local.png)` local image | Embedded directly in the `.docx` file (no broken paths) |
+| `![](https://...)` remote image | Auto-fetched and embedded as a native Word image |
+| `<img src="...">` HTML image | Same as above |
+| `<p align="center">`, `<div align="center">` | Centered paragraphs |
+| `<details><summary>...` collapsible block | Bold summary + body as plain paragraphs |
+| `<span style="background:#X;color:#Y">badge</span>` | Text with colored background + colored font |
+| ` ```mermaid ... ``` ` flowcharts / sequence / class / Gantt / pie | Rendered as centered images in Word |
+| `$inline math$`, `$$display math$$` LaTeX | **Native Word math objects** — double-click to edit in Word's equation editor; vector quality, font-size aware |
+
+**Why it matters** — your AI-generated notes, meeting agendas, draft manuscripts, technical docs, study notes can all be exported and shared with colleagues / clients who only use Word, **without losing formatting**.
+
 ## 📥 Download
 
 | Platform | Global (GitHub) | China mirror (Gitee) |
