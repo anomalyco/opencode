@@ -57,9 +57,15 @@
   - `ModelsDev Service > get() returns {} when disk empty and fetch disabled`
   - three `Project.fromDirectory with bare repos` tests
 
+## Failure Triage (baseline vs regression)
+- Confirmed via cross-check on `upstream/dev`: all 4 failing tests reproduce as environment/baseline issues, not branch regressions.
+- Details:
+  - `ModelsDev Service` failure depends on local generated artifact `packages/opencode/src/provider/models-snapshot.js` (gitignored). Fresh worktree without this file passes.
+  - bare-repo `Project.fromDirectory` failures are tied to local git config (`safe.bareRepository=explicit`) blocking test worktree creation.
+
 ## Execution Plan
 1. **Resolve/triage remaining full-suite failures**
-   - Investigate the 4 failing tests (`ModelsDev`, `Project.fromDirectory bare repos`) and confirm baseline vs introduced behavior.
+   - completed: confirmed as baseline/environment, not introduced by rebase branch changes.
 
 2. **Port autopilot + infra groups (deferred heavy work)**
    - Effect-native rewrites only; avoid direct fork file copy.
