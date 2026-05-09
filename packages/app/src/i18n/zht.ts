@@ -1026,6 +1026,8 @@ export const dict = {
   "settings.feishu.description": "透過 Lark / 飛書 與你的 AI agent 對話。",
   "settings.feishu.adapter.notReady": "Lark 橋接服務尚未啟動。",
   "settings.feishu.adapter.notReady.hint": "Phase 2+ 會自動啟動 sidecar。目前測試期請設定 FEISHU_ADAPTER_URL / USERNAME / PASSWORD 環境變數後重啟 DeskFox。",
+  "settings.feishu.noDefaultModel.title": "尚未設定預設 LLM model",
+  "settings.feishu.noDefaultModel.hint": "可以照常綁定 Lark 帳號,但收到 Lark 訊息時若沒有預設 model,DeskFox 無法回覆。請到 Settings → Providers 設定一個 provider 的 API key,build agent 的預設 model 會自動完成。",
   "settings.feishu.account.empty.title": "尚未綁定 Lark 帳號",
   "settings.feishu.account.empty.description": "綁定你的第一個 Lark / 飛書 帳號即可開始接收訊息。",
   "settings.feishu.account.add": "新增 Lark 帳號",

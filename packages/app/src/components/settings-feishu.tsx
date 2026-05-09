@@ -16,6 +16,7 @@ import {
   feishuAdapterStatus,
   feishuDeleteAccount,
   feishuListAccounts,
+  feishuListProviders,
   type AccountSummary,
 } from "@/utils/feishu-config"
 
@@ -32,6 +33,9 @@ export const SettingsFeishu: Component = () => {
   // ⚠️ 用 createSignal + 手动 fetch(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
   // 同 file-tabs.tsx:1179 注释的处理方式
   const [accounts, setAccounts] = createSignal<AccountSummary[]>([])
+  // null=loading,true=user 配过 build agent 的默认 model,false=完全没配 → 飞书消息进来会失败
+  // 检测 logic 跟 feishu-edit-account-dialog.tsx:69 的 buildDefault 判断对齐
+  const [hasDefaultModel, setHasDefaultModel] = createSignal<boolean | null>(null)
 
   const refetch = async () => {
     try {
@@ -41,11 +45,25 @@ export const SettingsFeishu: Component = () => {
     }
   }
 
+  const checkDefaultModel = async () => {
+    try {
+      const data = await feishuListProviders()
+      setHasDefaultModel(Boolean(data.default?.build))
+    } catch {
+      // 拿不到 providers 多半是 plugin server 本身就异常,adapter notReady 已会显示
+      // 这里不二次报警,留 null(不渲染 warning)
+      setHasDefaultModel(null)
+    }
+  }
+
   onMount(async () => {
     try {
       const ready = await feishuAdapterStatus()
       setAdapterReady(ready)
-      if (ready) await refetch()
+      if (ready) {
+        await refetch()
+        await checkDefaultModel()
+      }
     } catch {
       setAdapterReady(false)
     }
@@ -107,6 +125,18 @@ export const SettingsFeishu: Component = () => {
           </p>
           <p class="text-12-regular text-text-weak">
             {language.t("settings.feishu.adapter.notReady.hint")}
+          </p>
+        </div>
+      </Show>
+
+      {/* 默认 LLM model 未配置警告 — 飞书消息进来会失败,即使绑了账号也是死循环 */}
+      <Show when={adapterReady() === true && hasDefaultModel() === false}>
+        <div class="bg-surface-warning rounded-md p-4 flex flex-col gap-1.5">
+          <p class="text-13-medium">
+            {language.t("settings.feishu.noDefaultModel.title")}
+          </p>
+          <p class="text-12-regular text-text-weak">
+            {language.t("settings.feishu.noDefaultModel.hint")}
           </p>
         </div>
       </Show>
