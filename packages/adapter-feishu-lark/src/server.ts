@@ -24,6 +24,7 @@ import {
   deleteAccount,
   listAccounts,
   saveAccount,
+  updateAccountModel,
   type SaveAccountInput,
 } from "./feishu/account-store"
 
@@ -49,6 +50,32 @@ export interface ServerOptions {
   onReady?: (info: ServerReadyData) => void
   /** 测试用:fetchImpl 注入下游 OAuth 调用 */
   oauthFetchImpl?: typeof globalThis.fetch
+  /**
+   * 账号 save / delete 后触发(plugin 模式 hot-reload WSS 用)。
+   * server 端只负责通知,具体 sync 逻辑由调用方决定(通常 = listAccounts + wssManager.sync)。
+   */
+  onAccountsChanged?: () => void | Promise<void>
+  /**
+   * 列 opencode 已配置的 LLM providers + models(给 GUI 选 per-account model 用)。
+   * plugin 模式下传一个 callback 用 input.client.config.providers() 拿;
+   * 不传时 server `/providers` endpoint 返 503。
+   */
+  onListProviders?: () => Promise<unknown>
+  /**
+   * 测试 / debug:模拟飞书消息直接进 pipeline,不需要真飞书发消息。
+   * body { accountId, chatId, chatType, messageType, content } → 调对应 pipeline.testHandle。
+   * plugin 模式下传一个 callback,内部转给 pipelines.get(accountId).testHandle(event)。
+   */
+  onSimulateMessage?: (event: {
+    accountId: string
+    chatId: string
+    chatType: string
+    messageType: string
+    messageId: string
+    content: string
+  }) => Promise<void>
+  /** debug:调 SDK session.messages,返 raw response 详情(查 401 等错) */
+  onDebugFetchMessages?: (accountId: string, sessionID: string) => Promise<unknown>
 }
 
 interface ServerHandle {
@@ -220,6 +247,12 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
           appSecret: body.appSecret,
           openId: body.openId,
         })
+        // 触发 hot-reload(plugin 内 listAccounts + wssManager.sync)
+        try {
+          await options.onAccountsChanged?.()
+        } catch (err) {
+          console.warn("[server] onAccountsChanged after save:", err)
+        }
         // 返回 account 时去除 SecretRef 内部细节,仅给 GUI 显示用的安全摘要
         return jsonResponse(
           {
@@ -248,12 +281,121 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
           domain: account.domain,
           agent: account.agent,
           enabled: account.enabled,
+          model: account.model ?? null,
         }))
         return jsonResponse({ accounts: list }, 200)
       } catch (err) {
         return jsonResponse(
           { error: "list_failed", message: (err as Error).message },
           500,
+        )
+      }
+    }
+
+    // POST /accounts/update-model — body: { accountId, model: {providerID, modelID} | null }
+    if (req.method === "POST" && url.pathname === "/accounts/update-model") {
+      let body: {
+        accountId?: string
+        model?: { providerID?: string; modelID?: string } | null
+      }
+      try {
+        body = (await req.json()) as typeof body
+      } catch {
+        return jsonResponse({ error: "invalid_json" }, 400)
+      }
+      if (!body.accountId) {
+        return jsonResponse({ error: "missing_account_id" }, 400)
+      }
+      const model = body.model
+      const cleanModel =
+        model && model.providerID && model.modelID
+          ? { providerID: model.providerID, modelID: model.modelID }
+          : null
+      const r = updateAccountModel(body.accountId, cleanModel)
+      if (!r) {
+        return jsonResponse({ error: "account_not_found" }, 404)
+      }
+      // 触发 onAccountsChanged,plugin 重建 MessagePipeline 让新 model hot 生效
+      try {
+        await options.onAccountsChanged?.()
+      } catch (err) {
+        console.warn("[server] onAccountsChanged after update-model:", err)
+      }
+      return jsonResponse({ updated: true, model: cleanModel }, 200)
+    }
+
+    // GET /debug/fetch-messages?accountId=xxx&sessionID=ses_xxx — 调 SDK session.messages
+    if (req.method === "GET" && url.pathname === "/debug/fetch-messages") {
+      if (!options.onDebugFetchMessages) {
+        return jsonResponse({ error: "debug_unavailable" }, 503)
+      }
+      const accountId = url.searchParams.get("accountId")
+      const sessionID = url.searchParams.get("sessionID")
+      if (!accountId || !sessionID) {
+        return jsonResponse({ error: "missing_params" }, 400)
+      }
+      try {
+        const r = await options.onDebugFetchMessages(accountId, sessionID)
+        return jsonResponse({ ok: true, debug: r }, 200)
+      } catch (err) {
+        return jsonResponse(
+          { error: "debug_failed", message: (err as Error).message },
+          500,
+        )
+      }
+    }
+
+    // POST /debug/simulate-message — 测试 / debug 入口,模拟飞书消息进 pipeline
+    if (req.method === "POST" && url.pathname === "/debug/simulate-message") {
+      if (!options.onSimulateMessage) {
+        return jsonResponse({ error: "simulate_unavailable" }, 503)
+      }
+      let body: {
+        accountId?: string
+        chatId?: string
+        chatType?: string
+        messageType?: string
+        messageId?: string
+        text?: string
+      }
+      try {
+        body = (await req.json()) as typeof body
+      } catch {
+        return jsonResponse({ error: "invalid_json" }, 400)
+      }
+      if (!body.accountId || !body.chatId || !body.text) {
+        return jsonResponse({ error: "missing_fields" }, 400)
+      }
+      try {
+        await options.onSimulateMessage({
+          accountId: body.accountId,
+          chatId: body.chatId,
+          chatType: body.chatType ?? "p2p",
+          messageType: body.messageType ?? "text",
+          messageId: body.messageId ?? `om_simulate_${Date.now()}`,
+          content: JSON.stringify({ text: body.text }),
+        })
+        return jsonResponse({ ok: true }, 200)
+      } catch (err) {
+        return jsonResponse(
+          { error: "simulate_failed", message: (err as Error).message },
+          500,
+        )
+      }
+    }
+
+    // GET /providers — 转发 opencode 已配 providers / models 列表(给 GUI 选)
+    if (req.method === "GET" && url.pathname === "/providers") {
+      if (!options.onListProviders) {
+        return jsonResponse({ error: "providers_unavailable" }, 503)
+      }
+      try {
+        const data = await options.onListProviders()
+        return jsonResponse({ data }, 200)
+      } catch (err) {
+        return jsonResponse(
+          { error: "list_providers_failed", message: (err as Error).message },
+          502,
         )
       }
     }
@@ -269,6 +411,13 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
         return jsonResponse({ error: "missing_account_id" }, 400)
       }
       const r = deleteAccount(body.accountId)
+      if (r) {
+        try {
+          await options.onAccountsChanged?.()
+        } catch (err) {
+          console.warn("[server] onAccountsChanged after delete:", err)
+        }
+      }
       return jsonResponse({ deleted: r }, 200)
     }
 
