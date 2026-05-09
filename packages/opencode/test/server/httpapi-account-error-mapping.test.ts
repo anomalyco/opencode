@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Layer } from "effect"
 
 // Account.orgsByAccount() can fail with AccountServiceError when the
 // upstream Anthropic Console API is unreachable. The HTTP API used to
@@ -17,22 +17,10 @@ import { Effect, Layer, Option } from "effect"
 
 const ORIG = await import("../../src/account/account")
 
-const failingAccountLayer = Layer.succeed(
-  ORIG.Service,
-  ORIG.Service.of({
-    active: () => Effect.succeed(Option.none()),
-    activeOrg: () => Effect.succeed(Option.none()),
-    list: () => Effect.succeed([]),
-    orgsByAccount: () => Effect.fail(new ORIG.AccountServiceError({ message: "simulated upstream failure" })),
-    remove: () => Effect.void,
-    use: () => Effect.void,
-    orgs: () => Effect.succeed([]),
-    config: () => Effect.succeed(Option.none()),
-    token: () => Effect.succeed(Option.none()),
-    login: () => Effect.fail(new ORIG.AccountServiceError({ message: "unused" })),
-    poll: () => Effect.fail(new ORIG.AccountServiceError({ message: "unused" })),
-  }),
-)
+const failingAccountLayer = Layer.mock(ORIG.Service, {
+  orgsByAccount: () =>
+    Effect.fail(new ORIG.AccountServiceError({ message: "simulated upstream failure" })),
+})
 
 const mocked = {
   ...ORIG,

@@ -142,3 +142,19 @@ Use `provideTmpdirInstance(...)` or `tmpdirScoped()` plus `provideInstance(...)`
 - Yield services directly with `yield* MyService.Service` or `yield* MyTool`.
 - Avoid custom `ManagedRuntime`, `attach(...)`, or ad hoc `run(...)` wrappers when `testEffect(...)` already provides the runtime.
 - When a test needs instance-local state, prefer `it.instance(...)` over manual `Instance.provide(...)` inside Promise-style tests.
+
+### Partial Service Stubs
+
+When a test only needs to override one or two methods of a service, prefer `Layer.mock` over a hand-rolled `Layer.succeed(Service, Service.of({ ... }))`. `Layer.mock` lets you supply just the methods that matter — anything else throws an `UnimplementedError` defect if the test accidentally calls it, which is exactly the signal you want.
+
+```typescript
+import { Effect, Layer } from "effect"
+import { Account } from "@/account/account"
+
+const failingAccountLayer = Layer.mock(Account.Service, {
+  orgsByAccount: () =>
+    Effect.fail(new Account.AccountServiceError({ message: "simulated upstream failure" })),
+})
+```
+
+This is much shorter than stubbing every method with `Effect.void` / `Effect.succeed(...)` placeholders, and it keeps the test focused on the behaviour under test.
