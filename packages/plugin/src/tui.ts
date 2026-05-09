@@ -497,7 +497,7 @@ export type TuiPluginApi = {
    * @deprecated Use `api.keymap.registerLayer`, `api.keymap.dispatchCommand`, and
    * `api.keymap.dispatchCommand("command.palette.show")` instead.
    */
-  command: TuiCommandApi
+  command?: TuiCommandApi
   keys: TuiKeys
   keymap: TuiKeymap
   route: {
