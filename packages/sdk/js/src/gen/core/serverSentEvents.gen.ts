@@ -5,6 +5,13 @@ import type { Config } from "./types.gen.js"
 export type ServerSentEventsOptions<TData = unknown> = Omit<RequestInit, "method"> &
   Pick<Config, "method" | "responseTransformer" | "responseValidator"> & {
     /**
+     * Fetch API implementation. You can use this option to provide a custom
+     * fetch instance.
+     *
+     * @default globalThis.fetch
+     */
+    fetch?: (request: Request) => ReturnType<typeof fetch>
+    /**
      * Callback invoked when a network or parsing error occurs during streaming.
      *
      * This option applies only if the endpoint returns a stream of events.
@@ -64,6 +71,7 @@ export type ServerSentEventsResult<TData = unknown, TReturn = void, TNext = unkn
 }
 
 export const createSseClient = <TData = unknown>({
+  fetch: fetchFn,
   onSseError,
   onSseEvent,
   responseTransformer,
@@ -75,6 +83,9 @@ export const createSseClient = <TData = unknown>({
   url,
   ...options
 }: ServerSentEventsOptions): ServerSentEventsResult<TData> => {
+  // fetch must be assigned to a local variable, otherwise it would throw the error:
+  // TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation
+  const _fetch = fetchFn ?? globalThis.fetch
   let lastEventId: string | undefined
 
   const sleep = sseSleepFn ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)))
@@ -99,7 +110,7 @@ export const createSseClient = <TData = unknown>({
       }
 
       try {
-        const response = await fetch(url, { ...options, headers, signal })
+        const response = await _fetch(new Request(url, { ...options, headers, signal }))
 
         if (!response.ok) throw new Error(`SSE failed: ${response.status} ${response.statusText}`)
 
