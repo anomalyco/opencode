@@ -1,7 +1,7 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer, Queue } from "effect"
+import { Context, Effect, Layer, Queue, Ref } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -28,6 +28,7 @@ import {
   WorkspaceRouteContext,
   workspaceRouterMiddleware,
 } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
+import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { Database } from "../../src/storage/db"
 import { resetDatabase } from "../fixture/db"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -286,6 +287,64 @@ describe("HttpApi workspace routing middleware", () => {
       expect(forwarded?.headers["x-target-auth"]).toBe("secret")
       expect(forwarded?.headers["x-opencode-directory"]).toBeUndefined()
       expect(forwarded?.headers["x-opencode-workspace"]).toBeUndefined()
+    }),
+  )
+
+  it.live("waits for sync fence headers from remote workspace HTTP responses", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceID = WorkspaceID.ascending()
+      const type = "remote-http-fence-target"
+      const waited = yield* Ref.make<{ workspaceID: WorkspaceID; state: Record<string, number> } | undefined>(undefined)
+
+      const remoteUrl = yield* startRemoteWorkspaceHttpServer(() =>
+        HttpServerResponse.json(
+          { proxied: true },
+          { status: 202, headers: { [FenceHeader]: JSON.stringify({ aggregate: 3 }) } },
+        ),
+      )
+      registerAdapter(project.project.id, type, remoteAdapter(path.join(dir, `.${type}`), `${remoteUrl}/base`))
+
+      const workspace = Workspace.Service.of({
+        create: () => Effect.die("unused"),
+        sessionWarp: () => Effect.die("unused"),
+        list: () => Effect.die("unused"),
+        syncList: () => Effect.die("unused"),
+        get: (id) =>
+          Effect.succeed(
+            id === workspaceID
+              ? {
+                  id: workspaceID,
+                  type,
+                  branch: null,
+                  name: "remote-http-fence-target",
+                  directory: null,
+                  extra: null,
+                  projectID: project.project.id,
+                  timeUsed: Date.now(),
+                }
+              : undefined,
+          ),
+        remove: () => Effect.die("unused"),
+        status: () => Effect.die("unused"),
+        isSyncing: () => Effect.succeed(true),
+        waitForSync: (id, state) => Ref.set(waited, { workspaceID: id, state }),
+        startWorkspaceSyncing: () => Effect.die("unused"),
+      })
+
+      yield* HttpRouter.add("PATCH", "/probe", HttpServerResponse.text("route called")).pipe(
+        Layer.provide(workspaceRoutingTestLayer),
+        Layer.provide(Layer.succeed(Workspace.Service, workspace)),
+        HttpRouter.serve,
+        Layer.build,
+      )
+
+      const response = yield* HttpClientRequest.patch(`/probe?workspace=${workspaceID}`).pipe(HttpClient.execute)
+
+      expect(response.status).toBe(202)
+      expect(yield* response.json).toEqual({ proxied: true })
+      expect(yield* Ref.get(waited)).toEqual({ workspaceID, state: { aggregate: 3 } })
     }),
   )
 

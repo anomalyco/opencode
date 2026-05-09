@@ -1,5 +1,5 @@
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Cause, Effect } from "effect"
+import { Cause, Duration, Effect } from "effect"
 import { TestLLMServer } from "../../lib/llm-server"
 import type { Config } from "../../../src/config/config"
 import { ModelID, ProviderID } from "../../../src/provider/schema"
@@ -24,6 +24,10 @@ export function runScenario(options: Options) {
   return (scenario: Scenario) => {
     if (scenario.kind === "todo") return Effect.succeed({ status: "skip", scenario } as Result)
     return runActive(options, scenario).pipe(
+      Effect.timeoutOrElse({
+        duration: options.scenarioTimeout,
+        orElse: () => Effect.die(new Error(`scenario timed out after ${Duration.format(options.scenarioTimeout)}`)),
+      }),
       Effect.as({ status: "pass", scenario } as Result),
       Effect.catchCause((cause) => Effect.succeed({ status: "fail" as const, scenario, message: Cause.pretty(cause) })),
       Effect.scoped,
@@ -36,20 +40,32 @@ function runActive(options: Options, scenario: ActiveScenario) {
 
   if (options.mode === "parity" && scenario.mutates && scenario.compare !== "none") {
     return Effect.gen(function* () {
-      const effect = yield* runBackend("effect", scenario)
-      const legacy = yield* runBackend("legacy", scenario)
+      const effect = yield* runBackend(options, "effect", scenario)
+      const legacy = yield* runBackend(options, "legacy", scenario)
+      yield* trace(options, scenario, "compare start")
       yield* compare(scenario, effect, legacy)
+      yield* trace(options, scenario, "compare done")
     })
   }
 
-  return withContext(scenario, (ctx) =>
+  return withContext(options, scenario, "shared", (ctx) =>
     Effect.gen(function* () {
+      yield* trace(options, scenario, "effect request start")
       const effect = yield* call("effect", scenario, ctx)
+      yield* trace(options, scenario, `effect response ${effect.status}`)
+      yield* trace(options, scenario, "effect expect start")
       yield* scenario.expect(ctx, ctx.state, effect)
+      yield* trace(options, scenario, "effect expect done")
       if (options.mode === "parity" && scenario.compare !== "none") {
+        yield* trace(options, scenario, "legacy request start")
         const legacy = yield* call("legacy", scenario, ctx)
+        yield* trace(options, scenario, `legacy response ${legacy.status}`)
+        yield* trace(options, scenario, "legacy expect start")
         yield* scenario.expect(ctx, ctx.state, legacy)
+        yield* trace(options, scenario, "legacy expect done")
+        yield* trace(options, scenario, "compare start")
         yield* compare(scenario, effect, legacy)
+        yield* trace(options, scenario, "compare done")
       }
     }),
   )
@@ -57,61 +73,89 @@ function runActive(options: Options, scenario: ActiveScenario) {
 
 function runAuth(scenario: ActiveScenario) {
   return Effect.gen(function* () {
-    const effect = yield* callAuthProbe("effect", scenario)
-    const legacy = yield* callAuthProbe("legacy", scenario)
+    const effect = yield* callAuthProbe("effect", scenario, "missing")
+    const legacy = yield* callAuthProbe("legacy", scenario, "missing")
     if (scenario.auth === "protected") {
       if (effect.status !== 401) throw new Error(`effect auth expected 401, got ${effect.status}`)
       if (legacy.status !== 401) throw new Error(`legacy auth expected 401, got ${legacy.status}`)
+      const effectAuthed = yield* callAuthProbe("effect", scenario, "valid")
+      const legacyAuthed = yield* callAuthProbe("legacy", scenario, "valid")
+      if (effectAuthed.status === 401) throw new Error("effect auth rejected valid credentials")
+      if (legacyAuthed.status === 401) throw new Error("legacy auth rejected valid credentials")
       return
     }
 
     if (effect.status === 401) throw new Error("effect auth expected public access, got 401")
     if (legacy.status === 401) throw new Error("legacy auth expected public access, got 401")
+    if (effect.timedOut) throw new Error("effect auth expected public access, probe timed out")
+    if (legacy.timedOut) throw new Error("legacy auth expected public access, probe timed out")
   })
 }
 
-function runBackend(backend: "effect" | "legacy", scenario: ActiveScenario) {
-  return withContext(scenario, (ctx) =>
+function runBackend(options: Options, backend: "effect" | "legacy", scenario: ActiveScenario) {
+  return withContext(options, scenario, backend, (ctx) =>
     Effect.gen(function* () {
+      yield* trace(options, scenario, `${backend} request start`)
       const result = yield* call(backend, scenario, ctx)
+      yield* trace(options, scenario, `${backend} response ${result.status}`)
+      yield* trace(options, scenario, `${backend} expect start`)
       yield* scenario.expect(ctx, ctx.state, result)
+      yield* trace(options, scenario, `${backend} expect done`)
       return result
     }),
   )
 }
 
-function withContext<A, E>(scenario: ActiveScenario, use: (ctx: SeededContext<unknown>) => Effect.Effect<A, E>) {
+function withContext<A, E>(
+  options: Options,
+  scenario: ActiveScenario,
+  label: string,
+  use: (ctx: SeededContext<unknown>) => Effect.Effect<A, E>,
+) {
   return Effect.acquireRelease(
     Effect.gen(function* () {
+      yield* trace(options, scenario, `${label} context acquire start`)
       const llm = scenario.project?.llm ? yield* TestLLMServer : undefined
       const project = scenario.project
       const dir = project
         ? yield* Effect.promise(async () => (await runtime()).tmpdir(projectOptions(project, llm?.url)))
         : undefined
+      yield* trace(options, scenario, `${label} context acquire done`)
       return { dir, llm }
     }),
     (ctx) =>
-      Effect.promise(async () => {
-        await ctx.dir?.[Symbol.asyncDispose]()
-      }).pipe(Effect.ignore),
+      Effect.gen(function* () {
+        yield* trace(options, scenario, `${label} tmpdir cleanup start`)
+        yield* Effect.promise(async () => {
+          await ctx.dir?.[Symbol.asyncDispose]()
+        }).pipe(Effect.ignore)
+        yield* trace(options, scenario, `${label} tmpdir cleanup done`)
+      }),
   ).pipe(
     Effect.flatMap((context) =>
       Effect.gen(function* () {
+        yield* trace(options, scenario, `${label} runtime start`)
         const modules = yield* Effect.promise(() => runtime())
+        yield* trace(options, scenario, `${label} runtime done`)
         const path = context.dir?.path
         const instance = path
-          ? yield* modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
-              Effect.provide(modules.AppLayer),
-              Effect.catchCause((cause) =>
-                Effect.sleep("100 millis").pipe(
-                  Effect.andThen(
-                    modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
-                      Effect.provide(modules.AppLayer),
+          ? yield* trace(options, scenario, `${label} instance load start`).pipe(
+              Effect.andThen(
+                modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
+                  Effect.provide(modules.AppLayer),
+                  Effect.catchCause((cause) =>
+                    Effect.sleep("100 millis").pipe(
+                      Effect.andThen(
+                        modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
+                          Effect.provide(modules.AppLayer),
+                        ),
+                      ),
+                      Effect.catchCause(() => Effect.failCause(cause)),
                     ),
                   ),
-                  Effect.catchCause(() => Effect.failCause(cause)),
                 ),
               ),
+              Effect.tap(() => trace(options, scenario, `${label} instance load done`)),
             )
           : undefined
         const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -184,12 +228,24 @@ function withContext<A, E>(scenario: ActiveScenario, use: (ctx: SeededContext<un
           llmWait: (count) => Effect.suspend(() => llm().wait(count)),
           tuiRequest: (request) => Effect.sync(() => modules.Tui.submitTuiRequest(request)),
         }
+        yield* trace(options, scenario, `${label} seed start`)
         const state = yield* scenario.seed(base)
-        return yield* use({ ...base, state })
+        yield* trace(options, scenario, `${label} seed done`)
+        yield* trace(options, scenario, `${label} use start`)
+        const result = yield* use({ ...base, state })
+        yield* trace(options, scenario, `${label} use done`)
+        return result
       }).pipe(Effect.ensuring(context.llm ? context.llm.reset : Effect.void)),
     ),
     Effect.ensuring(scenario.reset ? resetState : Effect.void),
   )
+}
+
+function trace(options: Options, scenario: ActiveScenario, phase: string) {
+  return Effect.sync(() => {
+    if (!options.trace) return
+    console.log(`[trace] ${scenario.name}: ${phase}`)
+  })
 }
 
 function projectOptions(

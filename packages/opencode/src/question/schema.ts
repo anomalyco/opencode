@@ -6,7 +6,7 @@ import { Newtype } from "@/util/schema"
 
 export class QuestionID extends Newtype<QuestionID>()(
   "QuestionID",
-  Schema.String.annotate({ [ZodOverride]: Identifier.schema("question") }),
+  Schema.String.check(Schema.isStartsWith("que")).annotate({ [ZodOverride]: Identifier.schema("question") }),
 ) {
   static ascending(id?: string): QuestionID {
     return this.make(Identifier.ascending("question", id))

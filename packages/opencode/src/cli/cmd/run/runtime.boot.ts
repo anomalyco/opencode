@@ -6,7 +6,9 @@
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
 import { Context, Effect, Layer } from "effect"
+import { stringifyKeyStroke } from "@opentui/keymap"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import { TuiKeybind } from "@/cli/cmd/tui/config/keybind"
 import { makeRuntime } from "@/effect/run-service"
 import { reusePendingTask } from "./runtime.shared"
 import { resolveSession, sessionHistory } from "./session.shared"
@@ -14,7 +16,7 @@ import type { FooterKeybinds, RunDiffStyle, RunInput, RunPrompt, RunProvider } f
 import { pickVariant } from "./variant.shared"
 
 const DEFAULT_KEYBINDS: FooterKeybinds = {
-  leader: "ctrl+x",
+  leader: TuiKeybind.LeaderDefault,
   leaderTimeout: 2000,
   commandList: [{ key: "ctrl+p" }],
   variantCycle: [{ key: "ctrl+t" }],
@@ -78,22 +80,28 @@ function emptySessionInfo(): SessionInfo {
   }
 }
 
+function leaderKey(config: Config) {
+  const key = config.keybinds.get("leader")?.[0]?.key
+  if (!key) return TuiKeybind.LeaderDefault
+  return typeof key === "string" ? key : stringifyKeyStroke(key)
+}
+
 function footerKeybinds(config: Config | undefined): FooterKeybinds {
   if (!config) {
     return DEFAULT_KEYBINDS
   }
 
   return {
-    leader: config.keymap.leader,
-    leaderTimeout: config.keymap.leader_timeout,
-    commandList: config.keymap.get("global", "command.palette.show") ?? [],
-    variantCycle: config.keymap.get("global", "variant.cycle") ?? [],
-    interrupt: config.keymap.get("prompt", "session.interrupt") ?? [],
-    historyPrevious: config.keymap.get("prompt", "prompt.history.previous") ?? [],
-    historyNext: config.keymap.get("prompt", "prompt.history.next") ?? [],
-    inputClear: config.keymap.get("prompt", "prompt.clear") ?? [],
-    inputSubmit: config.keymap.get("input", "input.submit") ?? [],
-    inputNewline: config.keymap.get("input", "input.newline") ?? [],
+    leader: leaderKey(config),
+    leaderTimeout: config.leader_timeout,
+    commandList: config.keybinds.get("command.palette.show"),
+    variantCycle: config.keybinds.get("variant.cycle"),
+    interrupt: config.keybinds.get("session.interrupt"),
+    historyPrevious: config.keybinds.get("prompt.history.previous"),
+    historyNext: config.keybinds.get("prompt.history.next"),
+    inputClear: config.keybinds.get("prompt.clear"),
+    inputSubmit: config.keybinds.get("input.submit"),
+    inputNewline: config.keybinds.get("input.newline"),
   }
 }
 

@@ -18,8 +18,9 @@ import type {
 import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
 import type { Binding, Keymap } from "@opentui/keymap"
 import {
-  resolveBindingSections as resolveKeymapBindingSections,
-  type BindingSectionsConfig,
+  createBindingLookup as createKeymapBindingLookup,
+  type BindingConfig,
+  type CreateBindingLookupOptions,
   type KeySequenceFormatPart,
   type SequenceBindingLike,
 } from "@opentui/keymap/extras"
@@ -31,22 +32,21 @@ export { stringifyKeySequence, stringifyKeyStroke } from "@opentui/keymap"
 export type { Binding, KeyLike, KeySequencePart, KeyStringifyInput, StringifyOptions } from "@opentui/keymap"
 export { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras"
 export type {
-  BindingSectionsConfig,
+  BindingConfig,
+  BindingLookup,
   BindingValue,
+  CreateBindingLookupOptions,
   FormatCommandBindingsOptions,
   FormatKeySequenceOptions,
   KeySequenceFormatPart,
   SequenceBindingLike,
 } from "@opentui/keymap/extras"
 
-export function resolveBindingSections<Section extends string>(
-  config: BindingSectionsConfig<Renderable, KeyEvent> | undefined,
-  options: { sections: readonly Section[] },
+export function createBindingLookup(
+  config: BindingConfig<Renderable, KeyEvent> | undefined,
+  options?: CreateBindingLookupOptions<Renderable, KeyEvent>,
 ) {
-  return resolveKeymapBindingSections<Renderable, KeyEvent, BindingSectionsConfig<Renderable, KeyEvent>, Section>(
-    config ?? {},
-    options,
-  )
+  return createKeymapBindingLookup<Renderable, KeyEvent>(config ?? {}, options)
 }
 
 export type TuiRouteCurrent =
@@ -286,17 +286,20 @@ export type TuiState = {
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }
 
-type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> &
+type TuiBindingLookupView = {
+  readonly bindings: ReadonlyArray<Binding<Renderable, KeyEvent>>
+  get: (command: string) => ReadonlyArray<Binding<Renderable, KeyEvent>>
+  has: (command: string) => boolean
+  gather: (name: string, commands: readonly string[]) => ReadonlyArray<Binding<Renderable, KeyEvent>>
+  pick: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
+  omit: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
+}
+
+type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
   NonNullable<PluginConfig["tui"]> & {
+    leader_timeout: number
     plugin_enabled?: Record<string, boolean>
-    keymap: {
-      leader: string
-      leader_timeout: number
-      sections: Record<string, ReadonlyArray<Binding<Renderable, KeyEvent>>>
-      get: (section: string, cmd: string) => ReadonlyArray<Binding<Renderable, KeyEvent>> | undefined
-      pick: (section: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
-      omit: (section: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
-    }
+    keybinds: TuiBindingLookupView
   }
 
 export type TuiApp = {

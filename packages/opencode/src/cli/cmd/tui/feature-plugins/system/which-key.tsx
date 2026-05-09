@@ -8,17 +8,17 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 
 const command = {
-  toggle: "tui-which-key.toggle",
-  toggleLayout: "tui-which-key.layout.toggle",
-  togglePending: "tui-which-key.pending.toggle",
-  groupPrevious: "tui-which-key.group.previous",
-  groupNext: "tui-which-key.group.next",
-  scrollUp: "tui-which-key.scroll.up",
-  scrollDown: "tui-which-key.scroll.down",
-  pageUp: "tui-which-key.page.up",
-  pageDown: "tui-which-key.page.down",
-  home: "tui-which-key.home",
-  end: "tui-which-key.end",
+  toggle: "which-key.toggle",
+  toggleLayout: "which-key.layout.toggle",
+  togglePending: "which-key.pending.toggle",
+  groupPrevious: "which-key.group.previous",
+  groupNext: "which-key.group.next",
+  scrollUp: "which-key.scroll.up",
+  scrollDown: "which-key.scroll.down",
+  pageUp: "which-key.page.up",
+  pageDown: "which-key.page.down",
+  home: "which-key.home",
+  end: "which-key.end",
 } as const
 
 const LAYER_PRIORITY = 900
@@ -112,8 +112,7 @@ function skin(api: TuiPluginApi): Skin {
 }
 
 function activeKeyLabel(active: ActiveKey<Renderable, KeyEvent>) {
-  const group = text(active.bindingAttrs?.group)
-  if (active.continues) return group ?? text(active.tokenName) ?? UNKNOWN
+  if (active.continues) return text(active.tokenName) ?? text(active.display) ?? UNKNOWN
   return (
     text(active.commandAttrs?.title) ?? text(active.bindingAttrs?.desc) ?? text(active.commandAttrs?.desc) ?? UNKNOWN
   )
@@ -361,7 +360,9 @@ function WhichKeyPanel(props: {
         },
       },
     ],
-    bindings: props.api.tuiConfig.keymap.pick("which_key", pendingMode() ? scrollCommands : panelCommands),
+    bindings: pendingMode()
+      ? props.api.tuiConfig.keybinds.gather("which-key.scroll", scrollCommands)
+      : props.api.tuiConfig.keybinds.gather("which-key.panel", panelCommands),
   }))
 
   createEffect(() => {
@@ -571,7 +572,7 @@ const tui: TuiPlugin = async (api) => {
         },
       },
     ],
-    bindings: api.tuiConfig.keymap.pick("which_key", toggleCommands),
+    bindings: api.tuiConfig.keybinds.gather("which-key.toggle", toggleCommands),
   })
 
   api.slots.register({
@@ -599,7 +600,7 @@ const tui: TuiPlugin = async (api) => {
 }
 
 const plugin: InternalTuiPlugin = {
-  id: "tui-which-key",
+  id: "which-key",
   enabled: false,
   tui,
 }

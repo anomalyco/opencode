@@ -1,3 +1,4 @@
+import { Duration } from "effect"
 import { indent, pad } from "./assertions"
 import type { Options, Result, Scenario } from "./types"
 
@@ -23,7 +24,7 @@ export function printHeader(
   console.log(`${color.dim}db=${paths.database}${color.reset}`)
   console.log(`${color.dim}global=${paths.global}${color.reset}`)
   console.log(
-    `${color.dim}mode=${options.mode} selected=${selected.length} effectRoutes=${effectRoutes.length} missing=${missing.length} extra=${extra.length} onlyEffect=${effectRoutes.filter((route) => !honoRoutes.includes(route)).length} onlyHono=${honoRoutes.filter((route) => !effectRoutes.includes(route)).length}${color.reset}`,
+    `${color.dim}mode=${options.mode} selected=${selected.length} scenarioTimeout=${Duration.format(options.scenarioTimeout)} effectRoutes=${effectRoutes.length} missing=${missing.length} extra=${extra.length} onlyEffect=${effectRoutes.filter((route) => !honoRoutes.includes(route)).length} onlyHono=${honoRoutes.filter((route) => !effectRoutes.includes(route)).length}${color.reset}`,
   )
   console.log("")
 }
