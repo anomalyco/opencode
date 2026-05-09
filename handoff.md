@@ -9,11 +9,27 @@
   - `rebase-review` — done
   - `rebase-autopilot` — done
   - `rebase-session` — done
-  - `rebase-infra` — in progress
+  - `rebase-infra` — done
   - `rebase-verify` — in progress
 
 ## Latest Update
-- Infra memory-pressure port started and validated:
+- Scheduler/cron heartbeat runtime committed:
+  - commit `fbf48f48d`
+  - includes scheduler subsystem + `cron` CLI/tool wiring + serve startup integration.
+  - regression fixed while porting:
+    - resolved `ToolRegistry` init cycle by lazy-loading `CronTool` in `tool/registry.ts`.
+  - validation:
+    - `packages/opencode`: `bun typecheck`
+    - `packages/opencode`: `bun test test/scheduler/index.test.ts test/scheduler/store.test.ts test/tool/cron.test.ts`
+    - `packages/opencode`: `bun test test/tool/registry.test.ts test/session/instruction.test.ts`
+    - `packages/app`: `bun run build`
+
+- Full verification snapshot after scheduler commit:
+  - `packages/opencode`: `bun test` => `2590 pass / 11 skip / 2 todo / 4 fail`
+  - same 4 baseline/environment failures as before (`ModelsDev` + 3 bare-repo tests), no new regressions from this branch.
+
+- Infra memory-pressure hardening committed:
+  - commit `f61a0fd33`
   - added bounded log retention/trimming in `packages/core/src/util/log.ts` (128MB cap across `.log/.ndjson` with active-log tail trim).
   - switched PTY scrollback from monolithic string buffer to bounded chunk retention in `packages/opencode/src/pty/index.ts`.
   - added snapshot memory-artifact retention helper (`packages/opencode/src/diagnostic/memory.ts`) and tests.
