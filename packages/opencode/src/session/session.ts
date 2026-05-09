@@ -37,8 +37,8 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
+import { zod } from "@/util/effect-zod"
+import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "session" })
 
@@ -487,6 +487,14 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     const storage = yield* Storage.Service
     const sync = yield* SyncEvent.Service
 
+    const normalizeDirectory = (directory: string) => {
+      const normalized = directory.replaceAll("\\", "/")
+      if (/^\/+$/.test(normalized)) return normalized
+      const driveMatch = normalized.match(/^([A-Za-z]:)\/+$/)
+      if (driveMatch) return `${driveMatch[1]}/`
+      return normalized.replace(/\/+$/, "")
+    }
+
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
       title?: string
@@ -504,7 +512,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
         slug: Slug.create(),
         version: InstallationVersion,
         projectID: ctx.project.id,
-        directory: input.directory,
+        directory: normalizeDirectory(input.directory),
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
