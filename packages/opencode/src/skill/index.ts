@@ -28,6 +28,7 @@ const SKILL_PATTERN = "**/SKILL.md"
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
+  disableModelInvocation: Schema.optional(Schema.Boolean),
   location: Schema.String,
   content: Schema.String,
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -93,7 +94,13 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
 
   if (!md) return
 
-  const parsed = z.object({ name: z.string(), description: z.string().optional() }).safeParse(md.data)
+  const parsed = z
+    .object({
+      name: z.string(),
+      description: z.string().optional(),
+      "disable-model-invocation": z.boolean().optional(),
+    })
+    .safeParse(md.data)
   if (!parsed.success) return
 
   if (state.skills[parsed.data.name]) {
@@ -108,6 +115,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
   state.skills[parsed.data.name] = {
     name: parsed.data.name,
     description: parsed.data.description,
+    disableModelInvocation: parsed.data["disable-model-invocation"],
     location: match,
     content: md.content,
   }
@@ -251,7 +259,9 @@ export const layer = Layer.effect(
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
       const s = yield* InstanceState.get(state)
-      const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+      const list = Object.values(s.skills)
+        .filter((skill) => !skill.disableModelInvocation)
+        .toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })

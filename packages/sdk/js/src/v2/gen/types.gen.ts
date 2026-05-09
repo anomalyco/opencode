@@ -4244,6 +4244,7 @@ export type AppSkillsResponses = {
   200: Array<{
     name: string
     description?: string
+    disableModelInvocation?: boolean
     location: string
     content: string
   }>

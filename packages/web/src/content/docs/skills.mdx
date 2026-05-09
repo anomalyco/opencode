@@ -41,8 +41,12 @@ Only these fields are recognized:
 - `license` (optional)
 - `compatibility` (optional)
 - `metadata` (optional, string-to-string map)
+- `disable-model-invocation` (optional, boolean)
 
 Unknown frontmatter fields are ignored.
+
+Set `disable-model-invocation: true` to hide a skill from the model's available skills catalog.
+The skill can still be loaded when explicitly requested by name.
 
 ---
 

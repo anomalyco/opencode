@@ -142,6 +142,46 @@ description: Second test skill.
     ),
   )
 
+  it.live("hides skills with disabled model invocation from available catalog", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".opencode", "skill", "visible-skill", "SKILL.md"),
+                `---
+name: visible-skill
+description: Visible to the model.
+---
+
+# Visible Skill
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skill", "manual-skill", "SKILL.md"),
+                `---
+name: manual-skill
+description: Only load when explicitly requested.
+disable-model-invocation: true
+---
+
+# Manual Skill
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          expect((yield* skill.all()).map((item) => item.name).toSorted()).toEqual(["manual-skill", "visible-skill"])
+          expect((yield* skill.get("manual-skill"))?.name).toBe("manual-skill")
+          expect((yield* skill.available()).map((item) => item.name)).toEqual(["visible-skill"])
+          expect(Skill.fmt(yield* skill.available(), { verbose: true })).not.toContain("manual-skill")
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("skips skills with missing frontmatter", () =>
     provideTmpdirInstance(
       (dir) =>
