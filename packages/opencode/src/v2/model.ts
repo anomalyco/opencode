@@ -1,4 +1,4 @@
-import { withStatics } from "@/util/schema"
+import { withStatics } from "@opencode-ai/core/schema"
 import { Array, Context, Effect, HashMap, Layer, Option, Order, pipe, Schema } from "effect"
 import { DateTimeUtcFromMillis } from "effect/Schema"
 

@@ -22,8 +22,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath } from "../project/instance-context"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@opencode-ai/core/schema"
 import { ConfigAgent } from "./agent"
 import { ConfigCommand } from "./command"
 import { ConfigFormatter } from "./formatter"
@@ -307,7 +307,7 @@ export const Info = Schema.Struct({
     })),
   )
 
-// Uses the shared `DeepMutable` from `@/util/schema`. See the definition
+// Uses the shared `DeepMutable` from `@opencode-ai/core/schema`. See the definition
 // there for why the local variant is needed over `Types.DeepMutable` from
 // effect-smol (the upstream version collapses `unknown` to `{}`).
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {

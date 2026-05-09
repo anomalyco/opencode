@@ -8,7 +8,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQueryFields } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const PathInfo = Schema.Struct({
@@ -20,6 +20,7 @@ const PathInfo = Schema.Struct({
 }).annotate({ identifier: "Path" })
 
 export const VcsDiffQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
   mode: Vcs.Mode,
 })
 

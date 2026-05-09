@@ -1,5 +1,5 @@
 import { Effect, Option, Schema, Scope } from "effect"
-import { NonNegativeInt } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { createReadStream } from "fs"
 import * as path from "path"
 import { createInterface } from "readline"

@@ -3,12 +3,12 @@ import { MCP } from "@/mcp"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { Session } from "@/session/session"
 import { Worktree } from "@/worktree"
-import { NonNegativeInt } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQueryFields } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const ConsoleStateResponse = Schema.Struct({
@@ -43,6 +43,7 @@ const ToolListItem = Schema.Struct({
 }).annotate({ identifier: "ToolListItem" })
 const ToolList = Schema.Array(ToolListItem).annotate({ identifier: "ToolList" })
 export const ToolListQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
   provider: ProviderID,
   model: ModelID,
 })
@@ -55,7 +56,7 @@ const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
 )
 const WorktreeList = Schema.Array(Schema.String)
 export const SessionListQuery = Schema.Struct({
-  directory: Schema.optional(Schema.String),
+  ...WorkspaceRoutingQueryFields,
   roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   cursor: Schema.optional(Schema.NumberFromString),
