@@ -134,6 +134,7 @@ export const layer = Layer.effect(
         .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
         .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
       const next = diffs.map((item) => {
+        if (item.file === undefined) return item
         const file = unquoteGitPath(item.file)
         if (file === item.file) return item
         return { ...item, file }

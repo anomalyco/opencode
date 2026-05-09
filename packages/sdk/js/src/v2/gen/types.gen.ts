@@ -119,7 +119,7 @@ export type PermissionRequest = {
 }
 
 export type SnapshotFileDiff = {
-  file: string
+  file?: string
   patch?: string
   additions: number
   deletions: number
