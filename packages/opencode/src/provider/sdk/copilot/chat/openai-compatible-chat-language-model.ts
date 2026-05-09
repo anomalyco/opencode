@@ -545,25 +545,23 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                     })
                   }
 
-                  if (toolCallDelta.function?.name == null) {
-                    throw new InvalidResponseDataError({
-                      data: toolCallDelta,
-                      message: `Expected 'function.name' to be a string.`,
+                  // Per OpenAI streaming spec, function.name may be null in non-first chunks
+                  // Some providers (vLLM, etc.) send name: null even in the first chunk
+                  // We allow this and send tool-input-start only when name is available
+                  if (toolCallDelta.function?.name != null) {
+                    controller.enqueue({
+                      type: "tool-input-start",
+                      id: toolCallDelta.id,
+                      toolName: toolCallDelta.function.name,
                     })
                   }
-
-                  controller.enqueue({
-                    type: "tool-input-start",
-                    id: toolCallDelta.id,
-                    toolName: toolCallDelta.function.name,
-                  })
 
                   toolCalls[index] = {
                     id: toolCallDelta.id,
                     type: "function",
                     function: {
-                      name: toolCallDelta.function.name,
-                      arguments: toolCallDelta.function.arguments ?? "",
+                      name: toolCallDelta.function?.name ?? "",
+                      arguments: toolCallDelta.function?.arguments ?? "",
                     },
                     hasFinished: false,
                   }
@@ -607,6 +605,17 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
                 if (toolCall.hasFinished) {
                   continue
+                }
+
+                // Update name if it arrives in a later chunk (some providers send it late)
+                if (toolCallDelta.function?.name != null && toolCall.function!.name === "") {
+                  toolCall.function!.name = toolCallDelta.function.name
+                  // Send tool-input-start now that we have the name
+                  controller.enqueue({
+                    type: "tool-input-start",
+                    id: toolCall.id,
+                    toolName: toolCallDelta.function.name,
+                  })
                 }
 
                 if (toolCallDelta.function?.arguments != null) {
