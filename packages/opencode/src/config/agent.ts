@@ -129,10 +129,19 @@ export async function load(dir: string) {
     const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
     const name = configEntryNameFromPath(item, patterns)
 
+    const bodyPrompt = md.content.trim()
+    const frontmatterPrompt = md.data.prompt
+
+    // Warn if both body and frontmatter prompt are present (ambiguous)
+    if (bodyPrompt && frontmatterPrompt) {
+      log.warn(`Agent ${name}: both YAML 'prompt:' and non-empty body present. Body takes precedence.`)
+    }
+
     const config = {
       name,
       ...md.data,
-      prompt: md.content.trim(),
+      // Use body if present, otherwise fall back to frontmatter prompt
+      prompt: bodyPrompt || frontmatterPrompt || "",
     }
     result[config.name] = ConfigParse.effectSchema(Info, config, item)
   }
@@ -158,10 +167,19 @@ export async function loadMode(dir: string) {
     })
     if (!md) continue
 
+    const bodyPrompt = md.content.trim()
+    const frontmatterPrompt = md.data.prompt
+
+    // Warn if both body and frontmatter prompt are present (ambiguous)
+    if (bodyPrompt && frontmatterPrompt) {
+      log.warn(`Mode ${configEntryNameFromPath(item, [])}: both YAML 'prompt:' and non-empty body present. Body takes precedence.`)
+    }
+
     const config = {
       name: configEntryNameFromPath(item, []),
       ...md.data,
-      prompt: md.content.trim(),
+      // Use body if present, otherwise fall back to frontmatter prompt
+      prompt: bodyPrompt || frontmatterPrompt || "",
     }
     const parsed = Schema.decodeUnknownExit(Info)(config, { errors: "all", propertyOrder: "original" })
     if (Exit.isSuccess(parsed)) {
