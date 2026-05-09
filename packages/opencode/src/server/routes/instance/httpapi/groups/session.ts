@@ -25,8 +25,12 @@ const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
     encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
   }),
 )
-export const ListQuery = Schema.Struct({
+const WorkspaceRoutingQuery = {
   directory: Schema.optional(Schema.String),
+  workspace: Schema.optional(Schema.String),
+}
+export const ListQuery = Schema.Struct({
+  ...WorkspaceRoutingQuery,
   scope: Schema.optional(Schema.Literals(["project"])),
   path: Schema.optional(Schema.String),
   roots: Schema.optional(QueryBoolean),
@@ -36,6 +40,7 @@ export const ListQuery = Schema.Struct({
 })
 export const DiffQuery = Schema.Struct(Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]))
 export const MessagesQuery = Schema.Struct({
+  ...WorkspaceRoutingQuery,
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
   before: Schema.optional(Schema.String),
 })
