@@ -69,7 +69,7 @@ export const SettingsFeishu: Component = () => {
   }
 
   return (
-    <div class="flex flex-col gap-6 p-4 max-w-2xl">
+    <div class="flex flex-col gap-6 h-full overflow-y-auto no-scrollbar p-4 max-w-2xl">
       {/* 标题 */}
       <div class="flex flex-col gap-1.5">
         <h2 class="text-16-medium">{language.t("settings.feishu.title")}</h2>
