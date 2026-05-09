@@ -1,0 +1,9 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- DeskFox tray template icon — macOS 模板模式专用(纯黑 + alpha,系统反色适配) -->
+  <!-- 简化的 fox 头廓形 — 双耳尖向上 + 脸三角向下,16-22px tray 一眼识别 -->
+  <g transform="translate(128, 133) scale(1.4)" fill="#000000">
+    <path d="M -68,-10 L -36,-72 L -18,-12 Z"/>
+    <path d="M 68,-10 L 36,-72 L 18,-12 Z"/>
+    <path d="M -68,-10 L 68,-10 L 0,68 Z"/>
+  </g>
+</svg>
