@@ -1,0 +1,48 @@
+name: Build Windows Binary
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install cross-platform native modules
+        run: |
+          cd packages/opencode
+          bun install --os="*" --cpu="*" @opentui/core@$(bun -e "console.log(require('./package.json').dependencies['@opentui/core'])")
+          bun install --os="*" --cpu="*" @parcel/watcher@$(bun -e "console.log(require('./package.json').dependencies['@parcel/watcher'])")
+
+      - name: Build all targets
+        run: |
+          cd packages/opencode
+          bun run script/build.ts --skip-install
+        env:
+          OPENCODE_VERSION: "0.0.0-local"
+
+      - name: Upload Windows x64
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-windows-x64
+          path: packages/opencode/dist/opencode-windows-x64/
+
+      - name: Upload Windows x64-baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-windows-x64-baseline
+          path: packages/opencode/dist/opencode-windows-x64-baseline/
+
+      - name: Upload Windows arm64
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-windows-arm64
+          path: packages/opencode/dist/opencode-windows-arm64/

@@ -1,5 +1,5 @@
 import z from "zod"
-import { and } from "drizzle-orm"
+import { and, or } from "drizzle-orm"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
@@ -21,6 +21,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
 import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
 import { serviceUse } from "@/effect/service-use"
+import { realpathSync } from "fs"
 
 const log = Log.create({ service: "project" })
 
@@ -344,11 +345,22 @@ export const layer: Layer.Layer<
       )
 
       if (data.id !== ProjectID.global) {
+        const dirs = [data.worktree]
+        if (process.platform === "win32") {
+          try {
+            const real = realpathSync(data.worktree)
+            if (real !== data.worktree) dirs.push(real)
+          } catch {}
+        }
+        const dirCondition =
+          dirs.length > 1
+            ? or(...dirs.map((d) => eq(SessionTable.directory, d)))!
+            : eq(SessionTable.directory, data.worktree)
         yield* db((d) =>
           d
             .update(SessionTable)
             .set({ project_id: data.id })
-            .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+            .where(and(eq(SessionTable.project_id, ProjectID.global), dirCondition))
             .run(),
         )
       }

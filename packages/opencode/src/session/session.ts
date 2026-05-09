@@ -1,4 +1,5 @@
 import { Slug } from "@opencode-ai/core/util/slug"
+import { realpathSync } from "fs"
 import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
@@ -53,6 +54,17 @@ export function isDefaultTitle(title: string) {
   return new RegExp(
     `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
   ).test(title)
+}
+
+function directoryMatchCondition(directory: string): SQL {
+  if (process.platform !== "win32") return eq(SessionTable.directory, directory)
+  const alternatives = [directory]
+  try {
+    const real = realpathSync(directory)
+    if (real !== directory && !alternatives.includes(real)) alternatives.push(real)
+  } catch {}
+  if (alternatives.length === 1) return eq(SessionTable.directory, directory)
+  return or(...alternatives.map((d) => eq(SessionTable.directory, d)))!
 }
 
 type SessionRow = typeof SessionTable.$inferSelect
@@ -829,13 +841,13 @@ function* listByProject(
 
       conditions.push(
         input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          ? or(...conds, and(isNull(SessionTable.path), directoryMatchCondition(input.directory))!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(directoryMatchCondition(input.directory))
     }
   }
   if (input.roots) {
@@ -876,7 +888,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+    conditions.push(directoryMatchCondition(input.directory))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))

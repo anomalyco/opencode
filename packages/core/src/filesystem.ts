@@ -194,11 +194,21 @@ export namespace AppFileSystem {
     return lookup(p) || "application/octet-stream"
   }
 
+  function isDriveLetterPath(p: string): boolean {
+    return p.length >= 2 && /^[A-Za-z]:/.test(p)
+  }
+
+  function isUNCPath(p: string): boolean {
+    return p.startsWith("\\\\") || p.startsWith("//")
+  }
+
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
     const resolved = pathResolve(windowsPath(p))
     try {
-      return realpathSync.native(resolved)
+      const real = realpathSync.native(resolved)
+      if (isDriveLetterPath(resolved) && isUNCPath(real)) return resolved
+      return real
     } catch {
       return resolved
     }
@@ -216,9 +226,11 @@ export namespace AppFileSystem {
   export function resolve(p: string): string {
     const resolved = pathResolve(windowsPath(p))
     try {
-      return normalizePath(realpathSync(resolved))
+      const real = realpathSync(resolved)
+      if (process.platform === "win32" && isDriveLetterPath(resolved) && isUNCPath(real)) return normalizePath(resolved)
+      return normalizePath(real)
     } catch (e: any) {
-      if (e?.code === "ENOENT") return normalizePath(resolved)
+      if (process.platform === "win32" || e?.code === "ENOENT") return normalizePath(resolved)
       throw e
     }
   }
