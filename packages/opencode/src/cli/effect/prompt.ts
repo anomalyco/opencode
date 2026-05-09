@@ -28,6 +28,9 @@ export const text = (opts: Parameters<typeof prompts.text>[0]) =>
 export const password = (opts: Parameters<typeof prompts.password>[0]) =>
   Effect.promise(() => prompts.password(opts)).pipe(Effect.map((result) => optional(result)))
 
+export const confirm = (opts: Parameters<typeof prompts.confirm>[0]) =>
+  Effect.promise(() => prompts.confirm(opts)).pipe(Effect.map((result) => optional(result)))
+
 export const spinner = () => {
   const s = prompts.spinner()
   return {
@@ -35,3 +38,5 @@ export const spinner = () => {
     stop: (msg: string, code?: number) => Effect.sync(() => s.stop(msg, code)),
   }
 }
+
+export * as Prompt from "./prompt"
