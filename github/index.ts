@@ -120,7 +120,7 @@ let octoGraph: typeof graphql
 let commentId: number
 let gitConfig: string
 let session: { id: string; title: string; version: string }
-let shareId: string | undefined
+let shareUrl: string | undefined
 let exitCode = 0
 type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
 
@@ -146,15 +146,15 @@ try {
   const repoData = await fetchRepo()
   session = await client.session.create<true>().then((r) => r.data)
   await subscribeSessionEvents()
-  shareId = await (async () => {
+  shareUrl = await (async () => {
     if (useEnvShare() === false) return
     if (!useEnvShare() && repoData.data.private) return
-    await client.session.share<true>({ path: session })
-    return session.id.slice(-8)
+    const result = await client.session.share<true>({ path: session })
+    return result.data?.share?.url
   })()
   console.log("opencode session", session.id)
-  if (shareId) {
-    console.log("Share link:", `${useShareUrl()}/s/${shareId}`)
+  if (shareUrl) {
+    console.log("Share link:", shareUrl)
   }
 
   // Handle 3 cases
@@ -172,7 +172,7 @@ try {
         const summary = await summarize(response)
         await pushToLocalBranch(summary)
       }
-      const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
+      const hasShared = shareUrl ? prData.comments.nodes.some((c) => c.body.includes(shareUrl)) : false
       await updateComment(`${response}${footer({ image: !hasShared })}`)
     }
     // Fork PR
@@ -184,7 +184,7 @@ try {
         const summary = await summarize(response)
         await pushToForkBranch(summary, prData)
       }
-      const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
+      const hasShared = shareUrl ? prData.comments.nodes.some((c) => c.body.includes(shareUrl)) : false
       await updateComment(`${response}${footer({ image: !hasShared })}`)
     }
   }
@@ -815,16 +815,17 @@ function footer(opts?: { image?: boolean }) {
   const { providerID, modelID } = useEnvModel()
 
   const image = (() => {
-    if (!shareId) return ""
+    if (!shareUrl) return ""
     if (!opts?.image) return ""
 
     const titleAlt = encodeURIComponent(session.title.substring(0, 50))
     const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
+    const shareId = shareUrl.split("/").pop() || ""
 
-    return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
+    return `<a href="${shareUrl}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
   })()
-  const shareUrl = shareId ? `[opencode session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
-  return `\n\n${image}${shareUrl}[github run](${useEnvRunUrl()})`
+  const shareLinkText = shareUrl ? `[opencode session](${shareUrl})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+  return `\n\n${image}${shareLinkText}[github run](${useEnvRunUrl()})`
 }
 
 async function fetchRepo() {
