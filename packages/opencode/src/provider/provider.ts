@@ -1,5 +1,6 @@
 import os from "os"
 import fuzzysort from "fuzzysort"
+import { Agent as UndiciAgent } from "undici"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
@@ -82,6 +83,23 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
     headers: new Headers(res.headers),
     status: res.status,
     statusText: res.statusText,
+  })
+}
+
+function toUndiciTimeout(value: unknown) {
+  if (value === false) return 0
+  if (typeof value === "number" && value > 0) return value
+  return undefined
+}
+
+function createUndiciDispatcher(timeout: unknown) {
+  if (typeof process !== "object" || (process.versions as Record<string, string | undefined>).bun) return undefined
+
+  const headersTimeout = toUndiciTimeout(timeout)
+  if (headersTimeout === undefined) return undefined
+
+  return new UndiciAgent({
+    headersTimeout,
   })
 }
 
@@ -1478,6 +1496,7 @@ const layer: Layer.Layer<
         const customFetch = options["fetch"]
         const chunkTimeout = options["chunkTimeout"]
         delete options["chunkTimeout"]
+        const dispatcher = customFetch ? undefined : createUndiciDispatcher(options["timeout"])
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
@@ -1513,9 +1532,10 @@ const layer: Layer.Layer<
 
           const res = await fetchFn(input, {
             ...opts,
+            ...(dispatcher ? { dispatcher } : {}),
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
-          })
+          } as BunFetchRequestInit)
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
