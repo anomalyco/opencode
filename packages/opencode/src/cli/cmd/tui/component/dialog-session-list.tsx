@@ -28,7 +28,7 @@ export function DialogSessionList() {
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
-  const deleteHint = useCommandShortcut("dialog.action.delete")
+  const deleteHint = useCommandShortcut("session.delete")
 
   const [searchResults, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
@@ -190,7 +190,7 @@ export function DialogSessionList() {
       }}
       actions={[
         {
-          command: "dialog.action.delete",
+          command: "session.delete",
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
@@ -238,7 +238,7 @@ export function DialogSessionList() {
           },
         },
         {
-          command: "dialog.action.rename",
+          command: "session.rename",
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)

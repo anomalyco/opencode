@@ -117,6 +117,42 @@ function goUpsellKeys(action: SessionRetry.Retryable["action"]) {
   }
 }
 
+const sessionBindingCommands = [
+  "session.share",
+  "session.rename",
+  "session.timeline",
+  "session.fork",
+  "session.compact",
+  "session.unshare",
+  "session.undo",
+  "session.redo",
+  "session.sidebar.toggle",
+  "session.toggle.conceal",
+  "session.toggle.timestamps",
+  "session.toggle.thinking",
+  "session.toggle.actions",
+  "session.toggle.scrollbar",
+  "session.toggle.generic_tool_output",
+  "session.page.up",
+  "session.page.down",
+  "session.line.up",
+  "session.line.down",
+  "session.half.page.up",
+  "session.half.page.down",
+  "session.first",
+  "session.last",
+  "session.messages_last_user",
+  "session.message.next",
+  "session.message.previous",
+  "messages.copy",
+  "session.copy",
+  "session.export",
+  "session.child.first",
+  "session.parent",
+  "session.child.next",
+  "session.child.previous",
+] as const
+
 const context = createContext<{
   width: number
   sessionID: string
@@ -144,9 +180,6 @@ export function Session() {
   const event = useEvent()
   const project = useProject()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
@@ -1015,7 +1048,7 @@ export function Session() {
 
   useBindings(() => ({
     enabled: command.matcher,
-    bindings: sections.session,
+    bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
   }))
 
   const revertInfo = createMemo(() => session()?.revert)
