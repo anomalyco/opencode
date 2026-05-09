@@ -285,10 +285,24 @@ pub async fn feishu_oauth_poll(
 }
 
 /// adapter 是否已就绪(GUI 在 OAuth 操作前 check)。
+///
+/// plugin 模式:state.ready 启动时 None,首次调用时 lazy-load
+/// `~/.opencode/feishu-plugin-server.json`(plugin 启动后写入)。
 #[tauri::command]
 #[specta::specta]
 pub fn feishu_adapter_status(state: State<'_, AdapterState>) -> bool {
-    state.ready.lock().map(|g| g.is_some()).unwrap_or(false)
+    if let Ok(g) = state.ready.lock() {
+        if g.is_some() {
+            return true;
+        }
+    }
+    if let Some(r) = load_ready_from_file() {
+        if let Ok(mut slot) = state.ready.lock() {
+            *slot = Some(r);
+        }
+        return true;
+    }
+    false
 }
 
 // ============================================================

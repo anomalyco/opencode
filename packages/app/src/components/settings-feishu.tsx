@@ -9,7 +9,7 @@
 //
 // 后续(Phase 3+):群组配置子 Tab / 健康检查子 Tab
 
-import { createResource, type Component, createSignal, onMount, Show, For } from "solid-js"
+import { type Component, createSignal, onMount, Show, For } from "solid-js"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import {
@@ -23,19 +23,23 @@ export const SettingsFeishu: Component = () => {
   const language = useLanguage()
   const dialog = useDialog()
   const [adapterReady, setAdapterReady] = createSignal<boolean | null>(null)
-  const [accounts, { refetch }] = createResource<AccountSummary[]>(async () => {
+  // ⚠️ 用 createSignal + 手动 fetch(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
+  // 同 file-tabs.tsx:1179 注释的处理方式
+  const [accounts, setAccounts] = createSignal<AccountSummary[]>([])
+
+  const refetch = async () => {
     try {
-      return await feishuListAccounts()
+      setAccounts(await feishuListAccounts())
     } catch {
-      return []
+      setAccounts([])
     }
-  })
+  }
 
   onMount(async () => {
     try {
       const ready = await feishuAdapterStatus()
       setAdapterReady(ready)
-      if (ready) refetch()
+      if (ready) await refetch()
     } catch {
       setAdapterReady(false)
     }
