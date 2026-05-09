@@ -4,8 +4,11 @@ import { describe, expect } from "bun:test"
 import { Config, Effect, FileSystem, Layer, Path } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
+import { WorkspaceID } from "../../src/control-plane/schema"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
+import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -62,6 +65,28 @@ describe("instance HttpApi", () => {
           "/session": expect.any(Object),
         }),
       })
+    }),
+  )
+
+  it.live("emits a sync fence header for fixed-workspace mutations", () =>
+    Effect.gen(function* () {
+      const originalWorkspaceID = Flag.OPENCODE_WORKSPACE_ID
+      Flag.OPENCODE_WORKSPACE_ID = WorkspaceID.ascending()
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Flag.OPENCODE_WORKSPACE_ID = originalWorkspaceID
+        }),
+      )
+
+      const dir = yield* tmpdirScoped({ git: true })
+      const response = yield* HttpClientRequest.post(SessionPaths.create).pipe(
+        directoryHeader(dir),
+        HttpClientRequest.bodyJson({ title: "fenced" }),
+        Effect.flatMap(HttpClient.execute),
+      )
+
+      expect(response.status).toBe(200)
+      expect(JSON.parse(response.headers[FenceHeader] ?? "{}")).not.toEqual({})
     }),
   )
 
