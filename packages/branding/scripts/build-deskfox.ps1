@@ -90,6 +90,10 @@ if ($needBuild) {
     Write-Output "[deskfox] sidecar updated: $sidecarPath ($size bytes)"
 }
 
+# 0.5. 打飞书桥接 plugin(进 installer 资源)
+# 让 installer 装完即可用 — runtime 由 lib.rs setup hook 把 plugin 路径注入 user opencode 配置
+& (Join-Path $PSScriptRoot "build-feishu-plugin.ps1")
+
 # 1. apply(按 env 选样式)
 & (Join-Path $PSScriptRoot "apply-icons.ps1") -Env $Env
 

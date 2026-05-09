@@ -136,6 +136,10 @@ else
     echo "[deskfox] sidecar up-to-date: $SIDECAR_PATH"
 fi
 
+# === 0.5. 打飞书桥接 plugin(进 installer 资源)===
+# 让 installer 装完即可用 — runtime 由 lib.rs setup hook 把 plugin 路径注入 user opencode 配置
+bash "$SCRIPT_DIR/build-feishu-plugin.sh"
+
 # === 1. apply icons(按 env 选样式)===
 bash "$SCRIPT_DIR/apply-icons.sh" -Env "$ENV"
 
