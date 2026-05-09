@@ -7,7 +7,7 @@ import type { MCP as MCPNS } from "../../src/mcp/index"
 
 // Per-client state for controlling mock behavior
 interface MockClientState {
-  tools: Array<{ name: string; description?: string; inputSchema: object }>
+  tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
   listToolsShouldFail: boolean
   listToolsError: string
@@ -137,6 +137,13 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
         throw new Error(this._state.listToolsError)
       }
       return { tools: this._state?.tools ?? [] }
+    }
+
+    async request(request: { method: string }) {
+      if (request.method === "tools/list") {
+        return { tools: this._state?.tools ?? [] }
+      }
+      throw new Error(`unsupported request: ${request.method}`)
     }
 
     async listPrompts() {
@@ -430,6 +437,39 @@ test(
         const tools = yield* mcp.tools()
         expect(Object.keys(tools).some((k) => k.includes("good_tool"))).toBe(true)
       }),
+  ),
+)
+
+test(
+  "falls back when tool output schema reference validation fails",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "stitch-like-server"
+      const serverState = getOrCreateClientState("stitch-like-server")
+      serverState.listToolsShouldFail = true
+      serverState.listToolsError = "can't resolve reference #/$defs/ScreenInstance from id #"
+      serverState.tools = [
+        {
+          name: "render_screen",
+          description: "renders a screen",
+          inputSchema: { type: "object", properties: { prompt: { type: "string" } }, required: ["prompt"] },
+          outputSchema: { type: "object", properties: { screen: { $ref: "#/$defs/ScreenInstance" } } },
+        },
+      ]
+
+      const addResult = yield* mcp.add("stitch-like-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
+
+      expect((addResult.status as any)["stitch-like-server"]?.status ?? (addResult.status as any).status).toBe(
+        "connected",
+      )
+
+      const tools = yield* mcp.tools()
+      expect(Object.keys(tools).some((key) => key.includes("render_screen"))).toBe(true)
+      expect(serverState.listToolsCalls).toBe(1)
+    }),
   ),
 )
 

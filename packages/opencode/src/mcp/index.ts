@@ -36,6 +36,24 @@ import { withStatics } from "@/util/schema"
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
 
+const TolerantToolSchema = z.looseObject({
+  name: z.string(),
+  description: z.string().optional(),
+  inputSchema: z
+    .object({
+      type: z.literal("object"),
+      properties: z.record(z.string(), z.unknown()).optional(),
+      required: z.array(z.string()).optional(),
+    })
+    .catchall(z.unknown()),
+  outputSchema: z.unknown().optional(),
+})
+
+const TolerantListToolsResultSchema = z.looseObject({
+  tools: z.array(TolerantToolSchema),
+  nextCursor: z.string().optional(),
+})
+
 export const Resource = Schema.Struct({
   name: Schema.String,
   uri: Schema.String,
@@ -119,6 +137,27 @@ function remoteURL(key: string, value: string) {
   log.warn("invalid remote mcp url", { key })
 }
 
+function isSchemaReferenceError(err: Error) {
+  return /can't resolve reference|schema.*reference|reference.*schema/i.test(err.message)
+}
+
+async function listTools(key: string, client: MCPClient, timeout: number) {
+  try {
+    return (await client.listTools(undefined, { timeout })).tools
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err))
+    if (!isSchemaReferenceError(error)) throw error
+
+    log.warn("failed to validate MCP tool output schemas, retrying without output schema validation", {
+      key,
+      error,
+    })
+
+    const result = await client.request({ method: "tools/list" }, TolerantListToolsResultSchema, { timeout })
+    return result.tools as MCPToolDef[]
+  }
+}
+
 // Convert MCP tool definition to AI SDK Tool type
 function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
   const inputSchema = mcpTool.inputSchema
@@ -152,10 +191,10 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
 
 function defs(key: string, client: MCPClient, timeout?: number) {
   return Effect.tryPromise({
-    try: () => withTimeout(client.listTools(), timeout ?? DEFAULT_TIMEOUT),
+    try: () => listTools(key, client, timeout ?? DEFAULT_TIMEOUT),
     catch: (err) => (err instanceof Error ? err : new Error(String(err))),
   }).pipe(
-    Effect.map((result) => result.tools),
+    Effect.map((tools) => tools),
     Effect.catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return Effect.succeed(undefined)
