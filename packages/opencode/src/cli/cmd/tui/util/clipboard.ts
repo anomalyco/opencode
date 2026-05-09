@@ -36,14 +36,29 @@ const getClipboardy = lazy(async () => {
  */
 function writeOsc52(text: string): void {
   if (!process.stdout.isTTY) return
+
   const base64 = Buffer.from(text).toString("base64")
   const osc52 = `\x1b]52;c;${base64}\x07`
-  // tmux and GNU screen require different OSC52 passthrough wrappers.
-  const sequence = process.env["TMUX"]
-    ? `\x1bPtmux;\x1b${osc52}\x1b\\`
-    : process.env["STY"]
-      ? `\x1bP${osc52}\x1b\\`
-      : osc52
+  let sequence = osc52
+
+  if (process.env["TMUX"]) {
+    // tmux requires OSC52 to be wrapped in its DCS passthrough format.
+    sequence = `\x1bPtmux;\x1b${osc52}\x1b\\`
+  } else if (process.env["STY"]) {
+    // GNU screen requires a different DCS passthrough wrapper, and its
+    // small passthrough size limit requires chunking for longer payloads.
+    // Using 700 byte chunks to stay below observed 800 byte limit.
+    const chunkSize = 700
+    sequence = `\x1bP\x1b]52;c;`
+
+    for (let i = 0; i < base64.length; i += chunkSize) {
+      if (i > 0) sequence += `\x1b\\\x1bP`
+      sequence += base64.slice(i, i + chunkSize)
+    }
+
+    sequence += `\x07\x1b\\`
+  }
+
   process.stdout.write(sequence)
 }
 
