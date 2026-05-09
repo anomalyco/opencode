@@ -394,8 +394,16 @@ describe("HttpApi SDK", () => {
         const missing = yield* capture(() => sdk.session.get({ sessionID }))
         const thrown = yield* captureThrown(() => sdk.session.get({ sessionID }, { throwOnError: true }))
 
+        // Result-tuple path: error body is preserved as-is so existing
+        // consumers reading `result.error.name` / `JSON.stringify(error)`
+        // keep working byte-for-byte.
         expect(missing.error).toEqual(expected)
-        expect(thrown).toEqual(expected)
+        // throwOnError path: SDK wraps the body in a real Error with the
+        // server's message, with the original parsed body preserved under
+        // `.cause.body`.
+        expect(thrown).toBeInstanceOf(Error)
+        expect((thrown as Error).message).toBe(expected.data.message)
+        expect(((thrown as Error).cause as { body: unknown }).body).toEqual(expected)
         return {
           status: missing.status,
           error: missing.error,
