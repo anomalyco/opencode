@@ -983,6 +983,7 @@ export const dict = {
   "fileTree.toast.copyPathSuccessBulk": "已复制 {{count}} 个路径",
   // FORK: md-export-pdf-word — viewer 右键导出 Word 菜单 i18n(PDF v1 drop)2026-05-05
   "fileViewer.menu.exportDocx": "导出为 Word",
+  "fileViewer.menu.exportDocxOnlyMd": "仅支持 Markdown(.md / .markdown)文件导出为 Word",
   "fileViewer.dialog.exportDocxTitle": "保存为 Word 文档",
   "fileViewer.toast.exportDocxSuccess": "已导出为 Word",
   "fileViewer.toast.exportDocxFail": "导出失败",
