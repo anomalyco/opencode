@@ -1986,6 +1986,13 @@ export default function ConfigPage() {
   const cfg = createMemo(() => globalSync.data.config)
   const t = language.t
 
+  function agentModeLabel(mode?: string) {
+    if (mode === "subagent") return t("config.agents.badge.subagent")
+    if (mode === "primary") return t("config.agents.badge.primary")
+    if (mode === "all") return t("config.agents.badge.all")
+    return t("config.agents.badge.agent")
+  }
+
   function back() {
     if (window.history.length > 1) {
       window.history.back()
@@ -3818,7 +3825,7 @@ export default function ConfigPage() {
                                     title={item.label}
                                     note={
                                       loadedMap().get(item.label)?.description ||
-                                      loadedMap().get(item.label)?.mode ||
+                                      agentModeLabel(loadedMap().get(item.label)?.mode) ||
                                       item.note
                                     }
                                     meta={short(item.path, space()?.agentsRoot)}
@@ -3846,7 +3853,7 @@ export default function ConfigPage() {
                                     title={item.label}
                                     note={
                                       loadedMap().get(item.label)?.description ||
-                                      loadedMap().get(item.label)?.mode ||
+                                      agentModeLabel(loadedMap().get(item.label)?.mode) ||
                                       item.note
                                     }
                                     meta={[item.project, item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
@@ -3874,7 +3881,7 @@ export default function ConfigPage() {
                                     title={item.label}
                                     note={
                                       loadedMap().get(item.label)?.description ||
-                                      loadedMap().get(item.label)?.mode ||
+                                      agentModeLabel(loadedMap().get(item.label)?.mode) ||
                                       item.note
                                     }
                                     meta={[item.project, item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
@@ -4307,7 +4314,7 @@ export default function ConfigPage() {
                     extra={
                       <Show when={currentAgent()}>
                         <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                          {loadedMap().get(currentAgent()!.label)?.mode ?? t("config.agents.badge.agent")}
+                          {agentModeLabel(loadedMap().get(currentAgent()!.label)?.mode)}
                         </span>
                       </Show>
                     }
