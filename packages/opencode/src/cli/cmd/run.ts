@@ -699,7 +699,6 @@ export const RunCommand = effectCmd({
 
             if (event.type === "permission.asked") {
               const permission = event.properties
-              if (permission.sessionID !== sessionID) continue
 
               if (args["dangerously-skip-permissions"]) {
                 await client.permission.reply({
