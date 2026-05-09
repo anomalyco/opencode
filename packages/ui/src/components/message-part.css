@@ -1,6 +1,8 @@
 [data-component="assistant-message"] {
   content-visibility: auto;
+  contain-intrinsic-size: auto 680px;
   contain: layout style;
+  transform: translateZ(0);
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -542,11 +544,7 @@
     left: 0;
     right: 0;
     height: 1.5em;
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      var(--background-stronger)
-    );
+    background: linear-gradient(to bottom, transparent, var(--background-stronger));
     pointer-events: none;
   }
 
