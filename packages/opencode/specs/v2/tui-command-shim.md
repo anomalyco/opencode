@@ -23,20 +23,12 @@ Delete `packages/opencode/src/cli/cmd/tui/plugin/command-shim.ts`.
 In `packages/opencode/src/cli/cmd/tui/plugin/api.tsx`, remove:
 
 - the `createCommandShim` import
-- `warnCommandShim` if nothing else uses it
 - the `command: createCommandShim(...)` field from `createTuiApi(...)`
 
 In `packages/opencode/src/cli/cmd/tui/plugin/runtime.ts`, remove:
 
 - the `createCommandShim` import
-- `warnCommandShim` if nothing else uses it
 - the `command: createCommandShim(...)` field from `pluginApi(...)`
-
-## Remove Fixture Placeholder
-
-In `packages/opencode/test/fixture/tui-plugin.ts`, remove the `command` placeholder from `createTuiPluginApi(...)` after `TuiPluginApi.command` is removed from the public type.
-
-Do not replace it with keymap-backed behavior in shared fixtures. Legacy command behavior should only exist in the v1 shim.
 
 ## Migration Target
 

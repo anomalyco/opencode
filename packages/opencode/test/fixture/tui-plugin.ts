@@ -167,9 +167,6 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       runCommand() {
         return { ok: true } as const
       },
-      dispatchCommand() {
-        return { ok: true } as const
-      },
     } as unknown as HostPluginApi["keymap"])
 
   function kvGet(name: string): unknown
