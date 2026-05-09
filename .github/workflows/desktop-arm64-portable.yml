@@ -26,13 +26,6 @@ permissions:
 jobs:
   build-windows-arm64-portable:
     runs-on: windows-2025
-    env:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
-      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,13 +33,6 @@ jobs:
         uses: ./.github/actions/setup-bun
         with:
           install-flags: --os=win --cpu=arm64
-
-      - name: Azure login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -113,17 +99,17 @@ jobs:
           }
 
       - name: Sign portable EXE
-        if: env.AZURE_TRUSTED_SIGNING_ENDPOINT != ''
+        if: vars.AZURE_TRUSTED_SIGNING_ENDPOINT != ''
         working-directory: packages/desktop
         shell: pwsh
         run: |
           $exePath = "${{ github.workspace }}\packages\desktop\dist\${{ steps.find-exe.outputs.exe }}"
           if (Test-Path $exePath) {
-            az trusted-signing sign --endpoint $env:AZURE_TRUSTED_SIGNING_ENDPOINT --account-name $env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME --certificate-profile-name $env:AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE --file $exePath
+            az trusted-signing sign --endpoint ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }} --account-name ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }} --certificate-profile-name ${{ vars.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }} --file $exePath
           }
 
       - name: Verify signature
-        if: env.AZURE_TRUSTED_SIGNING_ENDPOINT != ''
+        if: vars.AZURE_TRUSTED_SIGNING_ENDPOINT != ''
         shell: pwsh
         run: |
           $exePath = "${{ github.workspace }}\packages\desktop\dist\${{ steps.find-exe.outputs.exe }}"
