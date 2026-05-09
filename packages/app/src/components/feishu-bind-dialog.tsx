@@ -134,6 +134,8 @@ export const FeishuBindDialog: Component<{ onBound?: () => void }> = (props) => 
               appId: r.app_id,
               openId: r.open_id,
             })
+            // 1.2s 后自动关 dialog 回到列表(列表已经 onBound 触发 refetch)
+            setTimeout(() => dialog.close(), 1200)
             return
           case "denied":
             stopAllTimers()
@@ -198,7 +200,7 @@ export const FeishuBindDialog: Component<{ onBound?: () => void }> = (props) => 
 
   return (
     <Dialog title={language.t("settings.feishu.bind.title")}>
-      <div class="flex flex-col gap-4 p-4 min-w-md max-w-lg">
+      <div class="flex flex-col gap-4 p-4 min-w-md max-w-lg mx-auto items-stretch">
         <Switch>
           {/* 阶段 1:loading */}
           <Match when={phase().kind === "loading"}>
@@ -239,26 +241,6 @@ export const FeishuBindDialog: Component<{ onBound?: () => void }> = (props) => 
                     />
                   </Show>
 
-                  {/* user_code 大字 */}
-                  <div class="flex flex-col items-center gap-1">
-                    <span class="text-12-regular text-text-weak">
-                      {language.t("settings.feishu.bind.userCodeLabel")}
-                    </span>
-                    <span class="text-24-medium tracking-widest font-mono">
-                      {p.data.user_code}
-                    </span>
-                  </div>
-
-                  {/* verification_uri 链接(QR 解析失败时也能用)*/}
-                  <a
-                    href={p.data.verification_uri_complete}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-11-regular text-text-weak underline break-all text-center px-4"
-                  >
-                    {p.data.verification_uri_complete}
-                  </a>
-
                   <p class="text-12-regular text-text-weak">
                     {language.t("settings.feishu.bind.expiresIn", { secs: String(secsLeft()) })}
                   </p>
@@ -266,10 +248,10 @@ export const FeishuBindDialog: Component<{ onBound?: () => void }> = (props) => 
                     {language.t("settings.feishu.bind.statusPending")}
                   </p>
 
-                  {/* 切换到另一域名(default 错时 fallback)*/}
+                  {/* 域切换 — 默认按 locale 自动选(zh/zht=feishu, 其它=lark);user 自动判断错时手动切 */}
                   <button
                     type="button"
-                    class="text-11-regular text-text-weak hover:text-text-base underline"
+                    class="text-11-regular text-text-weak hover:text-text-base underline mt-1"
                     onClick={() => {
                       const next: FeishuDomain = domain() === "feishu" ? "lark" : "feishu"
                       void startBind(next)
@@ -279,19 +261,6 @@ export const FeishuBindDialog: Component<{ onBound?: () => void }> = (props) => 
                       ? language.t("settings.feishu.bind.switchToLark")
                       : language.t("settings.feishu.bind.switchToFeishu")}
                   </button>
-
-                  <div class="flex justify-end w-full mt-2">
-                    <button
-                      type="button"
-                      class="px-3 py-1.5 rounded-md text-13-medium bg-surface-base hover:bg-surface-strong"
-                      onClick={() => {
-                        stopAllTimers()
-                        dialog.close()
-                      }}
-                    >
-                      {language.t("settings.feishu.bind.cancel")}
-                    </button>
-                  </div>
                 </div>
               )
             })()}

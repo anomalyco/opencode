@@ -14,7 +14,7 @@ import { SettingsFeishu } from "./settings-feishu"
 // installer-versions.json 由 bump-installer-version.{ps1,sh} 在每次 bump 时同步更新对应平台 key
 import installerVersions from "@opencode-ai/branding/installer-versions.json"
 
-export const DialogSettings: Component = () => {
+export const DialogSettings: Component<{ defaultTab?: string }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
 
@@ -31,7 +31,7 @@ export const DialogSettings: Component = () => {
 
   return (
     <Dialog size="x-large" transition class="h-full">
-      <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
+      <Tabs orientation="vertical" variant="settings" defaultValue={props.defaultTab ?? "general"} class="h-full settings-dialog">
         <Tabs.List>
           <div class="flex flex-col justify-between h-full w-full">
             <div class="flex flex-col gap-3 w-full pt-3">
