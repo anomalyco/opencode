@@ -30,9 +30,14 @@
   - `Worktree > list > uses parent folder name when worktree basename matches the primary worktree` (`/t` vs `/T` path-case mismatch)
   - three `Project.fromDirectory with bare repos` tests (`safe.bareRepository=explicit`)
 - Pending user-requested publish/deploy actions:
-  - tag current `origin/dev`
-  - force-push rebased `rebase/upstream-sync` to `origin/dev`
-  - deploy/restart VM service and re-check original session page.
+  - tag current `origin/dev` ✅ (`dev-backup-20260509-031153`)
+  - force-push rebased `rebase/upstream-sync` to `origin/dev` ✅ (`333a6e07d`)
+  - deploy/restart VM service and re-check original session page ✅
+    - VM updated at `/home/azureuser/workspace/opencode-deploy-159-OhZXeN`
+    - Bun upgraded to `1.3.13`
+    - rebuilt SDK + app + opencode binary (`0.0.0-dev-202605091020`)
+    - restarted `opencode-serve` successfully
+    - original failing session URL now loads (no `l.client.vcs.diff is not a function` crash page)
 
 ## Latest Update
 - Scheduler/cron heartbeat runtime committed:
