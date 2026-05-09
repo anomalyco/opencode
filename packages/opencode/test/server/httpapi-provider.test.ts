@@ -1,7 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, FileSystem, Layer, Path } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
@@ -13,15 +12,13 @@ import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const it = testEffect(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))
 const providerID = "test-oauth-parity"
 const oauthURL = "https://example.com/oauth"
 const oauthInstructions = "Finish OAuth"
 
-function app(experimental: boolean) {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return experimental ? Server.Default().app : Server.Legacy().app
+function app() {
+  return Server.Default().app
 }
 
 function requestAuthorize(input: {
@@ -101,49 +98,37 @@ function withProviderProject<A, E, R>(self: (dir: string) => Effect.Effect<A, E,
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
   await resetDatabase()
 })
 
 describe("provider HttpApi", () => {
   it.live(
-    "matches legacy OAuth authorize response shapes",
+    "serves OAuth authorize response shapes",
     withProviderProject((dir) =>
       Effect.gen(function* () {
         const headers = { "x-opencode-directory": dir, "content-type": "application/json" }
-        const legacy = app(false)
-        const httpapi = app(true)
+        const server = app()
 
-        const apiLegacy = yield* requestAuthorize({
-          app: legacy,
+        const api = yield* requestAuthorize({
+          app: server,
           providerID,
           method: 0,
           headers,
         })
-        const apiHttpApi = yield* requestAuthorize({
-          app: httpapi,
-          providerID,
-          method: 0,
-          headers,
-        })
-        expect(apiLegacy).toEqual({ status: 200, body: "" })
-        expect(apiHttpApi).toEqual(apiLegacy)
+        // method 0 (api-key style) — authorize() resolves with no further
+        // redirect; #26474 changed the wire format to JSON `null` so clients
+        // can `.json()` parse uniformly instead of getting an empty body
+        // that throws.
+        expect(api).toEqual({ status: 200, body: "null" })
 
-        const oauthLegacy = yield* requestAuthorize({
-          app: legacy,
+        const oauth = yield* requestAuthorize({
+          app: server,
           providerID,
           method: 1,
           headers,
         })
-        const oauthHttpApi = yield* requestAuthorize({
-          app: httpapi,
-          providerID,
-          method: 1,
-          headers,
-        })
-        expect(oauthHttpApi).toEqual(oauthLegacy)
-        expect(JSON.parse(oauthHttpApi.body)).toEqual({
+        expect(JSON.parse(oauth.body)).toEqual({
           url: oauthURL,
           method: "code",
           instructions: oauthInstructions,

@@ -33,11 +33,6 @@
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
     },
-    "#hono": {
-      "bun": "./src/server/adapter.bun.ts",
-      "node": "./src/server/adapter.node.ts",
-      "default": "./src/server/adapter.bun.ts"
-    },
     "#httpapi-server": {
       "bun": "./src/server/httpapi-server.node.ts",
       "node": "./src/server/httpapi-server.node.ts",
@@ -74,8 +69,7 @@
     "prettier": "3.6.2",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",
-    "why-is-node-running": "3.2.2",
-    "zod-to-json-schema": "3.24.5"
+    "why-is-node-running": "3.2.2"
   },
   "dependencies": {
     "@actions/core": "1.11.1",
@@ -106,10 +100,6 @@
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
     "@gitlab/opencode-gitlab-auth": "1.3.3",
-    "@hono/node-server": "1.19.11",
-    "@hono/node-ws": "1.3.0",
-    "@hono/standard-validator": "0.1.5",
-    "@hono/zod-validator": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/sdk": "1.27.1",
     "@octokit/graphql": "9.0.2",
@@ -150,8 +140,6 @@
     "glob": "13.0.5",
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
-    "hono": "catalog:",
-    "hono-openapi": "catalog:",
     "ignore": "7.0.5",
     "immer": "11.1.4",
     "jsonc-parser": "3.3.1",
@@ -177,8 +165,7 @@
     "which": "6.0.1",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:",
-    "zod-to-json-schema": "3.24.5"
+    "zod": "catalog:"
   },
   "overrides": {
     "drizzle-orm": "catalog:"
