@@ -310,6 +310,7 @@ describe("HttpApi workspace routing middleware", () => {
         create: () => Effect.die("unused"),
         sessionWarp: () => Effect.die("unused"),
         list: () => Effect.die("unused"),
+        syncList: () => Effect.die("unused"),
         get: (id) =>
           Effect.succeed(
             id === workspaceID
