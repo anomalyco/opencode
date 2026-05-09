@@ -205,7 +205,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
   }
   return {
     app: appApi(),
-    command: createCommandShim(input.keymap, warnCommandShim),
+    command: createCommandShim(input.keymap, warnCommandShim, input.dialog, input.tuiConfig.keybinds),
     keys: {
       formatSequence(parts) {
         return Keymap.formatKeySequence(parts, input.tuiConfig)

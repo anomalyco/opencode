@@ -581,7 +581,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
 
   return {
     app: api.app,
-    command: createCommandShim(keymap, warnCommandShim),
+    command: createCommandShim(keymap, warnCommandShim, api.ui.dialog, api.tuiConfig.keybinds),
     keys: api.keys,
     keymap,
     route,

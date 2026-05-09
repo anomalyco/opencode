@@ -93,7 +93,7 @@ export type TuiCommand = {
     name: string
     aliases?: string[]
   }
-  onSelect?: () => void
+  onSelect?: (dialog?: TuiDialogStack) => void | Promise<void>
 }
 
 /**

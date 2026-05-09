@@ -966,6 +966,12 @@ export default {
         slash: { name: "legacy", aliases: ["old"] },
         onSelect: () => fs.appendFileSync(options.marker, "run\\n"),
       },
+      {
+        title: "Legacy configured keybind",
+        value: "demo.command.shim.configured",
+        keybind: "command_list",
+        onSelect: () => {},
+      },
     ])
     api.command.register(() => [])
     api.command.trigger("demo.command.shim.run")
@@ -1040,7 +1046,10 @@ export default {
       slashName: "legacy",
       slashAliases: ["old"],
     })
-    expect(layer?.bindings).toEqual([{ key: "ctrl+shift+y", cmd: "demo.command.shim.run", desc: "Legacy command" }])
+    expect(layer?.bindings?.map((item) => ({ key: item.key, cmd: item.cmd }))).toEqual([
+      { key: "ctrl+shift+y", cmd: "demo.command.shim.run" },
+      { key: "ctrl+p", cmd: "demo.command.shim.configured" },
+    ])
     expect(dispatched).toEqual([
       "demo.command.shim.run",
       "demo.command.shim.run",
