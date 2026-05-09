@@ -1476,9 +1476,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             continue
           }
 
+          const lastCompactionUserID = msgs.findLast(
+            (m) => m.info.role === "user" && m.parts.some((p) => p.type === "compaction"),
+          )?.info.id
           if (
             lastFinished &&
             lastFinished.summary !== true &&
+            (!lastCompactionUserID || lastFinished.id > lastCompactionUserID) &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })

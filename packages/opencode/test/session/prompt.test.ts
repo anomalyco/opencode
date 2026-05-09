@@ -2061,3 +2061,134 @@ it.live(
     ),
   30_000,
 )
+
+const seedDoubleCompact = Effect.fn("test.seedDoubleCompact")(function* (sessionID: SessionID) {
+  const session = yield* Session.Service
+
+  const u1 = yield* user(sessionID, "first request")
+
+  const a1: MessageV2.Assistant = {
+    id: MessageID.ascending(),
+    role: "assistant",
+    parentID: u1.id,
+    sessionID,
+    mode: "build",
+    agent: "build",
+    cost: 0,
+    path: { cwd: "/tmp", root: "/tmp" },
+    tokens: { input: 95_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: ref.modelID,
+    providerID: ref.providerID,
+    time: { created: Date.now() },
+    finish: "tool-calls",
+  }
+  yield* session.updateMessage(a1)
+  yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID: a1.id,
+    sessionID,
+    type: "text",
+    text: "pre-compact reply",
+  })
+
+  const c1 = yield* session.updateMessage({
+    id: MessageID.ascending(),
+    role: "user",
+    sessionID,
+    agent: "build",
+    model: ref,
+    time: { created: Date.now() },
+  })
+  yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID: c1.id,
+    sessionID,
+    type: "compaction",
+    auto: true,
+    tail_start_id: u1.id,
+  })
+
+  const s1: MessageV2.Assistant = {
+    id: MessageID.ascending(),
+    role: "assistant",
+    parentID: c1.id,
+    sessionID,
+    mode: "compaction",
+    agent: "compaction",
+    cost: 0,
+    path: { cwd: "/tmp", root: "/tmp" },
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: ref.modelID,
+    providerID: ref.providerID,
+    time: { created: Date.now() },
+    finish: "stop",
+    summary: true,
+  }
+  yield* session.updateMessage(s1)
+  yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID: s1.id,
+    sessionID,
+    type: "text",
+    text: "## Goal\n- summarized",
+  })
+
+  const ucont = yield* session.updateMessage({
+    id: MessageID.ascending(),
+    role: "user",
+    sessionID,
+    agent: "build",
+    model: ref,
+    time: { created: Date.now() },
+  })
+  yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID: ucont.id,
+    sessionID,
+    type: "text",
+    synthetic: true,
+    text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+  })
+
+  return { u1, a1, c1, s1, ucont }
+})
+
+const compactionMarkerCount = Effect.fn("test.compactionMarkerCount")(function* (sessionID: SessionID) {
+  const all = yield* MessageV2.filterCompactedEffect(sessionID)
+  return all.filter((m) => m.info.role === "user" && m.parts.some((p) => p.type === "compaction")).length
+})
+
+it.live(
+  "loop does not double-compact after a successful auto-compaction summary",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "double-compact-regression",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        yield* seedDoubleCompact(chat.id)
+        expect(yield* compactionMarkerCount(chat.id)).toBe(1)
+
+        yield* llm.text("done")
+
+        const result = yield* prompt
+          .loop({ sessionID: chat.id })
+          .pipe(Effect.timeout("8 seconds"), Effect.exit)
+
+        expect(Exit.isSuccess(result)).toBe(true)
+        if (Exit.isSuccess(result)) {
+          expect(result.value.info.role).toBe("assistant")
+          expect(result.value.parts.some((p) => p.type === "text" && p.text === "done")).toBe(true)
+        }
+
+        expect(yield* compactionMarkerCount(chat.id)).toBe(1)
+        expect(yield* llm.calls).toBe(1)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  30_000,
+)
