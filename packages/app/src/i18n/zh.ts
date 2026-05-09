@@ -1051,6 +1051,8 @@ export const dict = {
   "settings.feishu.account.modelLabel": "model",
   "settings.feishu.account.modelDefault": "(跟随默认)",
   "settings.feishu.edit.title": "编辑账号模型",
+  "settings.feishu.edit.description": "为飞书账号 {{account}} 选择对话使用的提供商和模型,留空跟随 DeskFox 全局默认。",
+  "settings.feishu.edit.saving": "保存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",
   "settings.feishu.edit.useDefault": "跟随 DeskFox 默认(推荐)",

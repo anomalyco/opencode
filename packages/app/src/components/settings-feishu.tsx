@@ -19,6 +19,12 @@ import {
   type AccountSummary,
 } from "@/utils/feishu-config"
 
+/** open_id 脱敏:头 8 字符 + ⋯ + 尾 4 字符,中间用星号代替(避免泄露完整身份标识)*/
+function maskOpenId(id: string): string {
+  if (id.length <= 14) return id
+  return `${id.slice(0, 8)}***${id.slice(-4)}`
+}
+
 export const SettingsFeishu: Component = () => {
   const language = useLanguage()
   const dialog = useDialog()
@@ -45,9 +51,17 @@ export const SettingsFeishu: Component = () => {
     }
   })
 
+  // 关闭子 dialog(bind / edit)后 re-show settings,回到飞书桥接 tab
+  // useDialog 当前不支持 dialog stack(show 时把上一个 dispose),只能这样补救
+  const reshowSettings = () => {
+    void import("./dialog-settings").then((m) => {
+      dialog.show(() => <m.DialogSettings defaultTab="feishu" />)
+    })
+  }
+
   const openBindDialog = () => {
     void import("./feishu-bind-dialog").then((x) => {
-      dialog.show(() => <x.FeishuBindDialog onBound={() => refetch()} />)
+      dialog.show(() => <x.FeishuBindDialog onBound={() => refetch()} />, reshowSettings)
     })
   }
 
@@ -62,13 +76,16 @@ export const SettingsFeishu: Component = () => {
 
   const handleEdit = (acc: AccountSummary) => {
     void import("./feishu-edit-account-dialog").then((x) => {
-      dialog.show(() => (
-        <x.FeishuEditAccountDialog
-          accountId={acc.account_id}
-          currentModel={acc.model ?? null}
-          onSaved={() => refetch()}
-        />
-      ))
+      dialog.show(
+        () => (
+          <x.FeishuEditAccountDialog
+            accountId={acc.account_id}
+            currentModel={acc.model ?? null}
+            onSaved={() => refetch()}
+          />
+        ),
+        reshowSettings,
+      )
     })
   }
 
@@ -123,7 +140,9 @@ export const SettingsFeishu: Component = () => {
                 <div class="bg-surface-base rounded-md p-3 flex items-center justify-between gap-3">
                   <div class="flex flex-col gap-0.5 min-w-0 flex-1">
                     <div class="flex items-center gap-2">
-                      <span class="text-13-medium truncate">{acc.account_id}</span>
+                      <span class="text-13-medium truncate">
+                        {acc.bot_name?.trim() || acc.account_id}
+                      </span>
                       <span class="text-11-regular text-text-weak">
                         {acc.domain === "feishu"
                           ? language.t("settings.feishu.bind.domain.feishu")
@@ -131,7 +150,7 @@ export const SettingsFeishu: Component = () => {
                       </span>
                     </div>
                     <div class="flex items-center gap-3 text-11-regular text-text-weak">
-                      <span class="truncate">openId: {acc.open_id}</span>
+                      <span class="truncate">openId: {maskOpenId(acc.open_id)}</span>
                       <span>agent: {acc.agent}</span>
                       <span>
                         {language.t("settings.feishu.account.modelLabel")}:{" "}
