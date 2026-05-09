@@ -533,7 +533,7 @@ function createGlobalSync() {
         directory,
         global: {
           config: globalStore.config,
-          project: projectBucket(),
+          project: projectBucket(domainFromDirectory(directory)),
           provider: globalStore.provider,
         },
         sdk,
