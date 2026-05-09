@@ -1,0 +1,45 @@
+/* [fork-only] 飞书账号编辑弹窗 — scoped Select 样式覆盖
+ * [feat: feishu-bridge] 2026-05-09
+ *
+ * Select 组件把 class 同时加在 trigger 和 Portal'd content 上(Kobalte Root 是 context provider,
+ * 不渲染 DOM,所以选择器走 trigger 自身 [data-slot="select-select-trigger"] + class)。
+ */
+
+/* trigger:显式 border 让框在白底上清晰可见(默认 box-shadow 12% 黑太淡看不出)+ value 左对齐 chevron 右对齐 */
+[data-slot="select-select-trigger"].feishu-edit-select {
+  background-color: var(--input-base);
+  border: 1px solid var(--border-weak-base);
+  box-shadow: none;
+  justify-content: space-between;
+}
+
+[data-slot="select-select-trigger"].feishu-edit-select [data-slot="select-select-trigger-value"] {
+  flex: 1;
+  text-align: left;
+}
+
+/* disabled:框还在,字灰,cursor not-allowed */
+[data-slot="select-select-trigger"].feishu-edit-select:disabled {
+  background-color: var(--input-base);
+  border: 1px solid var(--border-weak-base);
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+[data-slot="select-select-trigger"].feishu-edit-select:disabled
+  [data-slot="select-select-trigger-value"] {
+  color: var(--text-weaker);
+}
+
+[data-slot="select-select-trigger"].feishu-edit-select:disabled
+  [data-slot="select-select-trigger-icon"] {
+  color: var(--text-weaker);
+}
+
+/* popover content 宽度 = trigger 宽度(class 也落在 Portal'd content 上) */
+[data-component="select-content"].feishu-edit-select {
+  width: var(--kb-popper-anchor-width);
+  min-width: var(--kb-popper-anchor-width);
+  max-width: var(--kb-popper-anchor-width);
+}

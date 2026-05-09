@@ -1,10 +1,12 @@
 // FORK: 飞书账号编辑弹窗 — 选 per-account model
 // [feat: feishu-bridge] 2026-05-09
 
-import { type Component, createSignal, For, onMount, Show } from "solid-js"
+import { type Component, createMemo, createSignal, onMount, Show } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import "./feishu-edit-account-dialog.css"
 import { useLanguage } from "@/context/language"
 import {
   feishuListProviders,
@@ -50,6 +52,12 @@ export const FeishuEditAccountDialog: Component<{
     if (!p) return []
     return Object.values(p.models)
   }
+  const providerOptions = createMemo(() =>
+    providers().map((p) => ({ value: p.id, label: p.name || p.id })),
+  )
+  const modelOptions = createMemo(() =>
+    currentProviderModels().map((m) => ({ value: m.id, label: m.name || m.id })),
+  )
 
   // 全局默认 model — opencode config providers 返 { default: { build: "providerID/modelID" } }
   // 取 build agent 的 default(飞书 plugin 固定用 build agent)
@@ -93,111 +101,136 @@ export const FeishuEditAccountDialog: Component<{
   const canSave = () => !saving() && (useDefault() || (!!providerID() && !!modelID()))
 
   return (
-    <Dialog title={language.t("settings.feishu.edit.title")}>
-      <div class="flex flex-col gap-4 p-4 min-w-md max-w-lg">
+    <Dialog
+      title={language.t("settings.feishu.edit.title")}
+      description={language.t("settings.feishu.edit.description", { account: props.accountId })}
+    >
+      <div class="flex flex-col gap-6 px-5 pb-5">
         <Show
           when={!loading()}
           fallback={
-            <p class="text-13-regular text-text-weak text-center py-8">
+            <p class="text-14-regular text-text-weak py-4">
               {language.t("settings.feishu.bind.qrLoading")}
             </p>
           }
         >
           <Show when={loadError()}>
-            <p class="text-13-regular text-text-warning">
+            <p class="text-14-regular text-text-warning">
               {language.t("settings.feishu.edit.loadFailed", { msg: loadError() ?? "" })}
             </p>
           </Show>
 
           <Show when={!loadError() && providers().length === 0}>
-            <p class="text-13-regular text-text-warning">
+            <p class="text-14-regular text-text-warning">
               {language.t("settings.feishu.edit.noProviders")}
             </p>
           </Show>
 
           <Show when={!loadError() && providers().length > 0}>
-            {/* 模式选择 — checkbox + 动态 hint */}
-            <div class="flex flex-col gap-1">
-              <label class="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={useDefault()}
-                  onChange={(e) => setUseDefault(e.currentTarget.checked)}
-                />
-                <span class="text-13-medium">
-                  {language.t("settings.feishu.edit.useDefault")}
-                </span>
-              </label>
-              <p class="text-12-regular text-text-weak pl-6">
-                <Show
-                  when={useDefault()}
-                  fallback={language.t("settings.feishu.edit.useDefault.hintCustom")}
-                >
-                  {language.t("settings.feishu.edit.useDefault.hintFollow", {
-                    model: defaultModelLabel(),
-                  })}
-                </Show>
-              </p>
-            </div>
-
-            {/* provider + model — 始终显示,useDefault=true 时整体 disabled */}
-            <fieldset
-              class="flex flex-col gap-2.5 transition-opacity"
-              classList={{ "opacity-50": useDefault() }}
-              disabled={useDefault()}
+            <form
+              class="flex flex-col items-start gap-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void handleSave()
+              }}
             >
-              <label class="flex flex-col gap-1">
-                <span class="text-12-regular text-text-weak">
-                  {language.t("settings.feishu.edit.providerLabel")}
-                </span>
-                <select
-                  class="px-3 py-1.5 rounded-md text-13-regular bg-surface-base border border-surface-strong disabled:cursor-not-allowed"
-                  value={providerID()}
-                  onChange={(e) => handleProviderChange(e.currentTarget.value)}
-                >
-                  <option value="">{language.t("settings.feishu.edit.providerPlaceholder")}</option>
-                  <For each={providers()}>
-                    {(p) => <option value={p.id}>{p.name || p.id}</option>}
-                  </For>
-                </select>
-              </label>
+              {/* 模式选择 — checkbox + 动态 hint */}
+              <div class="flex flex-col gap-1 self-stretch">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={useDefault()}
+                    onChange={(e) => setUseDefault(e.currentTarget.checked)}
+                  />
+                  <span class="text-14-medium">
+                    {language.t("settings.feishu.edit.useDefault")}
+                  </span>
+                </label>
+                <p class="text-13-regular text-text-weak pl-6">
+                  <Show
+                    when={useDefault()}
+                    fallback={language.t("settings.feishu.edit.useDefault.hintCustom")}
+                  >
+                    {language.t("settings.feishu.edit.useDefault.hintFollow", {
+                      model: defaultModelLabel(),
+                    })}
+                  </Show>
+                </p>
+              </div>
 
-              <label class="flex flex-col gap-1">
-                <span class="text-12-regular text-text-weak">
-                  {language.t("settings.feishu.edit.modelLabel")}
-                </span>
-                <select
-                  class="px-3 py-1.5 rounded-md text-13-regular bg-surface-base border border-surface-strong disabled:cursor-not-allowed"
-                  value={modelID()}
-                  onChange={(e) => setModelID(e.currentTarget.value)}
-                  disabled={!providerID()}
-                >
-                  <option value="">{language.t("settings.feishu.edit.modelPlaceholder")}</option>
-                  <For each={currentProviderModels()}>
-                    {(m) => <option value={m.id}>{m.name || m.id}</option>}
-                  </For>
-                </select>
-              </label>
-            </fieldset>
+              {/* provider + model — 始终显示,disabled 时由 Select 自身处理(scoped CSS 保留 bg+border,字灰) */}
+              <div class="flex flex-col gap-3 self-stretch">
+                <div class="flex flex-col gap-1.5">
+                  <span
+                    class="text-13-regular"
+                    classList={{
+                      "text-text-weak": !useDefault(),
+                      "text-text-weaker": useDefault(),
+                    }}
+                  >
+                    {language.t("settings.feishu.edit.providerLabel")}
+                  </span>
+                  <Select
+                    class="feishu-edit-select"
+                    options={providerOptions()}
+                    current={providerOptions().find((o) => o.value === providerID())}
+                    value={(o) => o.value}
+                    label={(o) => o.label}
+                    onSelect={(o) => o && handleProviderChange(o.value)}
+                    placeholder={language.t("settings.feishu.edit.providerPlaceholder")}
+                    variant="secondary"
+                    size="small"
+                    triggerVariant="settings"
+                    triggerStyle={{ width: "100%" }}
+                    disabled={useDefault()}
+                  />
+                </div>
 
-            {/* error */}
-            <Show when={saveError()}>
-              <p class="text-13-regular text-text-warning">{saveError()}</p>
-            </Show>
+                <div class="flex flex-col gap-1.5">
+                  <span
+                    class="text-13-regular"
+                    classList={{
+                      "text-text-weak": !useDefault() && !!providerID(),
+                      "text-text-weaker": useDefault() || !providerID(),
+                    }}
+                  >
+                    {language.t("settings.feishu.edit.modelLabel")}
+                  </span>
+                  <Select
+                    class="feishu-edit-select"
+                    options={modelOptions()}
+                    current={modelOptions().find((o) => o.value === modelID())}
+                    value={(o) => o.value}
+                    label={(o) => o.label}
+                    onSelect={(o) => o && setModelID(o.value)}
+                    placeholder={language.t("settings.feishu.edit.modelPlaceholder")}
+                    variant="secondary"
+                    size="small"
+                    triggerVariant="settings"
+                    triggerStyle={{ width: "100%" }}
+                    disabled={useDefault() || !providerID()}
+                  />
+                </div>
+              </div>
 
-            {/* actions — primary 保存(强对比)+ ghost 取消(弱) */}
-            <div class="flex justify-end gap-2 pt-1">
-              <Button variant="ghost" onClick={() => dialog.close()} disabled={saving()}>
-                {language.t("settings.feishu.edit.cancel")}
-              </Button>
+              {/* error */}
+              <Show when={saveError()}>
+                <p class="text-14-regular text-text-warning">{saveError()}</p>
+              </Show>
+
+              {/* primary action — 左对齐,跟 dialog-connect-provider 一致 */}
               <Button
+                class="w-auto"
+                type="submit"
+                size="large"
                 variant="primary"
-                onClick={() => void handleSave()}
                 disabled={!canSave()}
               >
-                {language.t("settings.feishu.edit.save")}
+                {saving()
+                  ? language.t("settings.feishu.edit.saving")
+                  : language.t("settings.feishu.edit.save")}
               </Button>
-            </div>
+            </form>
           </Show>
         </Show>
       </div>
