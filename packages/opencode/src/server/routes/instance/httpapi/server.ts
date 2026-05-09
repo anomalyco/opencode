@@ -82,6 +82,7 @@ import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
 import { compressionLayer } from "./middleware/compression"
+import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
 import { fenceLayer } from "./middleware/fence"
 
@@ -176,6 +177,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
     Layer.provide([
       errorLayer,
       compressionLayer,
+      corsVaryFix,
       fenceLayer,
       cors(corsOptions),
       runtime,
