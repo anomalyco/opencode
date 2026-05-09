@@ -1,0 +1,4 @@
+- Summarize the structure and likely entrypoints of a cloned repository or local directory
+- Accepts either a cached repository reference or a directory path
+- Reports detected ecosystems, dependency files, package manager, likely entrypoints, and a compact structure tree
+- Use this after repo_clone to orient quickly before deeper Read, Glob, or Grep investigation

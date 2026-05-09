@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test"
 import { recentConnectedWorkspaces } from "../../../../src/cli/cmd/tui/component/dialog-workspace-create"
 
 describe("recentConnectedWorkspaces", () => {
-  test("returns unique connected workspaces after filtering missing and inactive entries", () => {
+  test("returns connected workspaces sorted by time used", () => {
     const workspaces = [
-      { id: "wrk_a", name: "alpha" },
-      { id: "wrk_b", name: "beta" },
-      { id: "wrk_c", name: "gamma" },
-      { id: "wrk_d", name: "delta" },
-      { id: "wrk_e", name: "epsilon" },
+      { id: "wrk_a", name: "alpha", timeUsed: 700 },
+      { id: "wrk_b", name: "beta", timeUsed: 800 },
+      { id: "wrk_c", name: "gamma", timeUsed: 400 },
+      { id: "wrk_d", name: "delta", timeUsed: 300 },
+      { id: "wrk_e", name: "epsilon", timeUsed: 200 },
     ]
     const status = {
       wrk_a: "connected",
@@ -19,17 +19,7 @@ describe("recentConnectedWorkspaces", () => {
     } as const
 
     const { recent } = recentConnectedWorkspaces({
-      sessions: [
-        { time: { updated: 900 } },
-        { workspaceID: "wrk_b", time: { updated: 800 } },
-        { workspaceID: "wrk_a", time: { updated: 700 } },
-        { workspaceID: "wrk_a", time: { updated: 600 } },
-        { workspaceID: "wrk_missing", time: { updated: 500 } },
-        { workspaceID: "wrk_c", time: { updated: 400 } },
-        { workspaceID: "wrk_d", time: { updated: 300 } },
-        { workspaceID: "wrk_e", time: { updated: 200 } },
-      ],
-      get: (workspaceID) => workspaces.find((workspace) => workspace.id === workspaceID),
+      workspaces,
       status: (workspaceID) => status[workspaceID as keyof typeof status],
     })
 

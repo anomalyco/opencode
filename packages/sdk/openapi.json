@@ -680,6 +680,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "InternalServerError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_InternalServerError"
+                }
+              }
+            }
           }
         },
         "description": "Get the active Console org name and the set of provider IDs managed by that Console org.",
@@ -754,6 +764,16 @@
                   "required": ["orgs"],
                   "additionalProperties": false,
                   "description": "Switchable Console orgs"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_InternalServerError"
                 }
               }
             }
@@ -1897,6 +1917,54 @@
         ]
       }
     },
+    "/vcs/status": {
+      "get": {
+        "tags": ["instance"],
+        "operationId": "vcs.status",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "VCS status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VcsFileStatus"
+                  },
+                  "description": "VCS status"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve changed files in the current working tree without patches.",
+        "summary": "Get VCS status",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/vcs/diff": {
       "get": {
         "tags": ["instance"],
@@ -1950,6 +2018,128 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.diff({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/vcs/diff/raw": {
+      "get": {
+        "tags": ["instance"],
+        "operationId": "vcs.diff.raw",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Raw VCS diff",
+            "content": {
+              "text/x-diff; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve a raw patch for current uncommitted changes.",
+        "summary": "Get raw VCS diff",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.diff.raw({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/vcs/apply": {
+      "post": {
+        "tags": ["instance"],
+        "operationId": "vcs.apply",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "VCS patch applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "applied": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["applied"],
+                  "additionalProperties": false,
+                  "description": "VCS patch applied"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VcsApplyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VcsApplyError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Apply a raw patch to the current working tree.",
+        "summary": "Apply VCS patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "patch": {
+                    "type": "string"
+                  }
+                },
+                "required": ["patch"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.apply({\n  ...\n})"
           }
         ]
       }
@@ -2095,7 +2285,7 @@
                         "type": "string"
                       }
                     },
-                    "required": ["name", "description", "location", "content"],
+                    "required": ["name", "location", "content"],
                     "additionalProperties": false
                   },
                   "description": "List of skills"
@@ -5591,22 +5781,22 @@
               }
             }
           },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          },
           "404": {
             "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_InternalServerError"
                 }
               }
             }
@@ -5662,22 +5852,22 @@
               }
             }
           },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          },
           "404": {
             "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_InternalServerError"
                 }
               }
             }
@@ -8247,6 +8437,43 @@
         ]
       }
     },
+    "/experimental/workspace/sync-list": {
+      "post": {
+        "tags": ["workspace"],
+        "operationId": "experimental.workspace.syncList",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Workspace list synced"
+          }
+        },
+        "description": "Register missing workspaces returned by workspace adapters.",
+        "summary": "Sync workspace list",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.syncList({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/workspace/status": {
       "get": {
         "tags": ["workspace"],
@@ -8396,11 +8623,18 @@
             "description": "Session warped"
           },
           "400": {
-            "description": "Bad request",
+            "description": "WorkspaceWarpError | VcsApplyError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkspaceWarpError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/VcsApplyError"
+                    }
+                  ]
                 }
               }
             }
@@ -8426,6 +8660,9 @@
                   },
                   "sessionID": {
                     "type": "string"
+                  },
+                  "copyChanges": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["id", "sessionID"],
@@ -8820,7 +9057,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^per"
           },
           "sessionID": {
             "type": "string"
@@ -9118,7 +9356,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que"
           },
           "sessionID": {
             "type": "string"
@@ -9150,7 +9389,8 @@
             "type": "string"
           },
           "requestID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que"
           },
           "answers": {
             "type": "array",
@@ -9169,7 +9409,8 @@
             "type": "string"
           },
           "requestID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que"
           }
         },
         "required": ["sessionID", "requestID"],
@@ -9220,6 +9461,31 @@
               },
               "message": {
                 "type": "string"
+              },
+              "action": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "link": {
+                    "type": "string"
+                  }
+                },
+                "required": ["reason", "provider", "title", "message", "label"],
+                "additionalProperties": false
               },
               "next": {
                 "type": "integer",
@@ -11069,6 +11335,44 @@
         "additionalProperties": false,
         "description": "Server configuration for opencode serve and web commands"
       },
+      "ReferenceConfigEntry": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "repository": {
+                "type": "string",
+                "description": "Git repository URL, host/path reference, or GitHub owner/repo shorthand"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["repository"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Absolute path, ~/ path, or workspace-relative path to a local reference directory"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ReferenceConfig": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/ReferenceConfigEntry"
+        }
+      },
       "PermissionActionConfig": {
         "type": "string",
         "enum": ["ask", "allow", "deny"]
@@ -11132,6 +11436,15 @@
               },
               "websearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "codesearch": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "repo_clone": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "repo_overview": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
               },
               "lsp": {
                 "$ref": "#/components/schemas/PermissionRuleConfig"
@@ -11609,6 +11922,9 @@
             },
             "additionalProperties": false
           },
+          "reference": {
+            "$ref": "#/components/schemas/ReferenceConfig"
+          },
           "watcher": {
             "type": "object",
             "properties": {
@@ -11717,6 +12033,9 @@
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "explore": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "scout": {
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "title": {
@@ -12226,6 +12545,17 @@
         "required": ["consoleManagedProviders", "switchableOrgCount"],
         "additionalProperties": false
       },
+      "effect_HttpApiError_InternalServerError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["InternalServerError"]
+          }
+        },
+        "required": ["_tag"],
+        "additionalProperties": false
+      },
       "ToolListItem": {
         "type": "object",
         "properties": {
@@ -12665,6 +12995,28 @@
         },
         "additionalProperties": false
       },
+      "VcsFileStatus": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "additions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deletions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "deleted", "modified"]
+          }
+        },
+        "required": ["file", "additions", "deletions", "status"],
+        "additionalProperties": false
+      },
       "VcsFileDiff": {
         "type": "object",
         "properties": {
@@ -12688,6 +13040,31 @@
           }
         },
         "required": ["file", "patch", "additions", "deletions"],
+        "additionalProperties": false
+      },
+      "VcsApplyError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["VcsApplyError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["non-git", "not-clean"]
+              }
+            },
+            "required": ["message", "reason"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "Command": {
@@ -13426,9 +13803,53 @@
           },
           "projectID": {
             "type": "string"
+          },
+          "timeUsed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
           }
         },
-        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID"],
+        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID", "timeUsed"],
+        "additionalProperties": false
+      },
+      "WorkspaceWarpError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["WorkspaceWarpError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "SyncEventMessageUpdated": {
@@ -15398,7 +15819,8 @@
                 "type": "string"
               },
               "requestID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^per"
               },
               "reply": {
                 "type": "string",

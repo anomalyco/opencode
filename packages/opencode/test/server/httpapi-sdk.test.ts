@@ -231,11 +231,44 @@ function withFakeLlm<A, E, R>(backend: Backend, run: (input: LlmProjectFixture) 
   }).pipe(Effect.provide(TestLLMServer.layer))
 }
 
+function withFakeLlmProject<A, E, R>(
+  backend: Backend,
+  options: { setup?: (dir: string) => Effect.Effect<void> },
+  run: (input: LlmProjectFixture) => Effect.Effect<A, E, R>,
+) {
+  return Effect.gen(function* () {
+    const llm = yield* TestLLMServer
+    return yield* withProject(
+      backend,
+      {
+        config: providerConfig(llm.url),
+        setup: options.setup,
+      },
+      (input) => run({ ...input, llm }),
+    )
+  }).pipe(Effect.provide(TestLLMServer.layer))
+}
+
 function writeStandardFiles(dir: string) {
   return Effect.all([
     call(() => Bun.write(path.join(dir, "hello.txt"), "hello")),
     call(() => Bun.write(path.join(dir, "needle.ts"), "export const needle = 'sdk-parity'\n")),
   ]).pipe(Effect.asVoid)
+}
+
+function writeProjectSkill(dir: string) {
+  return call(() =>
+    Bun.write(
+      path.join(dir, ".opencode", "skills", "project-rest-skill", "SKILL.md"),
+      `---
+name: project-rest-skill
+description: A project skill visible to REST API prompts.
+---
+
+# Project REST Skill
+`,
+    ),
+  ).pipe(Effect.asVoid)
 }
 
 function seedMessage(directory: string, sessionID: string) {
@@ -643,6 +676,36 @@ describe("HttpApi SDK", () => {
           persistedText: JSON.stringify(messages.data).includes("fake world"),
           userText: JSON.stringify(messages.data).includes("hello llm"),
         }
+      }),
+    ),
+  )
+
+  httpapi(
+    "includes project skills in REST API async prompt context",
+    withFakeLlmProject("httpapi", { setup: writeProjectSkill }, ({ sdk, llm }) =>
+      Effect.gen(function* () {
+        yield* llm.text("skill context ok", { usage: { input: 11, output: 7 } })
+        const session = yield* capture(() =>
+          sdk.session.create({
+            title: "project skill prompt",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          }),
+        )
+        const sessionID = String(record(session.data).id)
+        const prompt = yield* capture(() =>
+          sdk.session.promptAsync({
+            sessionID,
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "hello skill context" }],
+          }),
+        )
+        yield* llm.wait(1)
+        const inputs = yield* llm.inputs
+
+        expect(session.status).toBe(200)
+        expect(prompt.status).toBe(204)
+        expect(JSON.stringify(inputs[0])).toContain("project-rest-skill")
       }),
     ),
   )

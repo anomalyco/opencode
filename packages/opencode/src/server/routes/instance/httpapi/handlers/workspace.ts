@@ -1,10 +1,12 @@
 import { listAdapters } from "@/control-plane/adapters"
 import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
+import { Vcs } from "@/project/vcs"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { CreatePayload, WarpPayload } from "../groups/workspace"
+import { ApiVcsApplyError } from "../groups/instance"
+import { ApiWorkspaceWarpError, CreatePayload, WarpPayload } from "../groups/workspace"
 
 export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspace", (handlers) =>
   Effect.gen(function* () {
@@ -12,7 +14,7 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
 
     const adapters = Effect.fn("WorkspaceHttpApi.adapters")(function* () {
       const instance = yield* InstanceState.context
-      return yield* Effect.promise(() => listAdapters(instance.project.id))
+      return yield* Effect.sync(() => listAdapters(instance.project.id))
     })
 
     const list = Effect.fn("WorkspaceHttpApi.list")(function* () {
@@ -30,6 +32,10 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
         .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
     })
 
+    const syncList = Effect.fn("WorkspaceHttpApi.syncList")(function* () {
+      yield* workspace.syncList((yield* InstanceState.context).project)
+    })
+
     const status = Effect.fn("WorkspaceHttpApi.status")(function* () {
       const ids = new Set((yield* workspace.list((yield* InstanceState.context).project)).map((item) => item.id))
       return (yield* workspace.status()).filter((item) => ids.has(item.workspaceID))
@@ -44,14 +50,34 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
         .sessionWarp({
           workspaceID: ctx.payload.id,
           sessionID: ctx.payload.sessionID,
+          copyChanges: ctx.payload.copyChanges,
         })
-        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+        .pipe(
+          Effect.mapError((error) => {
+            if (error instanceof Vcs.PatchApplyError) {
+              return new ApiVcsApplyError({
+                name: "VcsApplyError",
+                data: {
+                  message: error.message,
+                  reason: error.reason,
+                },
+              })
+            }
+            return new ApiWorkspaceWarpError({
+              name: "WorkspaceWarpError",
+              data: {
+                message: error.message,
+              },
+            })
+          }),
+        )
     })
 
     return handlers
       .handle("adapters", adapters)
       .handle("list", list)
       .handle("create", create)
+      .handle("syncList", syncList)
       .handle("status", status)
       .handle("remove", remove)
       .handle("warp", warp)

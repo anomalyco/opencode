@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "openai-compatible-chat/togetherai-streams-tool-call",
+    "recordedAt": "2026-04-28T21:18:59.123Z",
+    "tags": ["prefix:openai-compatible-chat", "protocol:openai-compatible-chat", "provider:togetherai", "tool"]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.together.xyz/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"messages\":[{\"role\":\"system\",\"content\":\"Call tools exactly as requested.\"},{\"role\":\"user\",\"content\":\"Call get_weather with city exactly Paris.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}},\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream;charset=utf-8"
+        },
+        "body": "data: {\"id\":\"ogzjfRD-6Ng1vN-9f391a2bb8ca75e1\",\"object\":\"chat.completion.chunk\",\"created\":1777411135,\"choices\":[{\"index\":0,\"role\":\"assistant\",\"text\":\"\",\"logprobs\":null,\"finish_reason\":null,\"delta\":{\"token_id\":null,\"role\":\"assistant\",\"content\":\"\"}}],\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\"}\n\ndata: {\"id\":\"ogzjfRD-6Ng1vN-9f391a2bb8ca75e1\",\"object\":\"chat.completion.chunk\",\"created\":1777411135,\"choices\":[{\"index\":0,\"text\":\"\",\"logprobs\":null,\"finish_reason\":null,\"delta\":{\"token_id\":null,\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"index\":0,\"id\":\"call_yu1mxtmex7x48nximi9c8jpo\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]}}],\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\"}\n\ndata: {\"id\":\"ogzjfRD-6Ng1vN-9f391a2bb8ca75e1\",\"object\":\"chat.completion.chunk\",\"created\":1777411135,\"choices\":[{\"index\":0,\"text\":\"\",\"logprobs\":null,\"finish_reason\":\"tool_calls\",\"delta\":{\"token_id\":null,\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]}}],\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\"}\n\ndata: {\"id\":\"ogzjfRD-6Ng1vN-9f391a2bb8ca75e1\",\"object\":\"chat.completion.chunk\",\"created\":1777411135,\"choices\":[{\"index\":0,\"text\":\"\",\"logprobs\":null,\"finish_reason\":\"tool_calls\",\"seed\":9033012299842426000,\"delta\":{\"token_id\":128009,\"role\":\"assistant\",\"content\":\"\"}}],\"model\":\"meta-llama/Llama-3.3-70B-Instruct-Turbo\",\"usage\":{\"prompt_tokens\":194,\"completion_tokens\":19,\"total_tokens\":213,\"cached_tokens\":0}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

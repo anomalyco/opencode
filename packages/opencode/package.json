@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.14.40",
+  "version": "1.14.41",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -9,9 +9,9 @@
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
     "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "test:httpapi": "bun run script/httpapi-exercise.ts --mode coverage --fail-on-missing --fail-on-skip && bun run script/httpapi-exercise.ts --mode auth --fail-on-missing --fail-on-skip && bun run script/httpapi-exercise.ts --mode effect --fail-on-missing --fail-on-skip",
     "build": "bun run script/build.ts",
     "fix-node-pty": "bun run script/fix-node-pty.ts",
-    "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
     "db": "bun drizzle-kit"
@@ -125,6 +125,7 @@
     "@opentelemetry/sdk-trace-base": "2.6.1",
     "@opentelemetry/sdk-trace-node": "2.6.1",
     "@opentui/core": "catalog:",
+    "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
     "@parcel/watcher": "2.5.1",
     "@pierre/diffs": "catalog:",

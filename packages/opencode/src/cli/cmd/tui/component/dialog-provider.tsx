@@ -10,11 +10,11 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
-import { useKeyboard } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "@tui/util/provider-origin"
 import { useConnected } from "./use-connected"
+import { useBindings } from "../keymap"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -239,14 +239,22 @@ function AutoMethod(props: AutoMethodProps) {
   const sync = useSync()
   const toast = useToast()
 
-  useKeyboard((evt) => {
-    if (evt.name === "c" && !evt.ctrl && !evt.meta) {
-      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
-      Clipboard.copy(code)
-        .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-        .catch(toast.error)
-    }
-  })
+  useBindings(() => ({
+    bindings: [
+      {
+        key: "c",
+        desc: "Copy provider code",
+        group: "Dialog",
+        cmd: () => {
+          const code =
+            props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
+          Clipboard.copy(code)
+            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+            .catch(toast.error)
+        },
+      },
+    ],
+  }))
 
   onMount(async () => {
     const result = await sdk.client.provider.oauth.callback({

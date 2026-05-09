@@ -1,17 +1,24 @@
-import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import {
+  InputRenderable,
+  RGBA,
+  ScrollBoxRenderable,
+  TextAttributes,
+  type KeyEvent,
+  type Renderable,
+} from "@opentui/core"
+import type { Binding } from "@opentui/keymap"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
-import { useKeybind } from "@tui/context/keybind"
-import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../context/tui-config"
+import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
 
 export interface DialogSelectProps<T> {
   title: string
@@ -24,13 +31,14 @@ export interface DialogSelectProps<T> {
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
   renderFilter?: boolean
-  keybind?: {
-    keybind?: Keybind.Info
+  actions?: {
+    command: string
     title: string
     side?: "left" | "right"
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
+  bindings?: readonly Binding<Renderable, KeyEvent>[]
   current?: T
 }
 
@@ -80,6 +88,25 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   )
 
   let input: InputRenderable
+
+  const actions = createMemo(() => props.actions ?? [])
+  const actionBindings = useKeymapSelector((keymap) =>
+    keymap.getCommandBindings({
+      visibility: "registered",
+      commands: actions().map((item) => item.command),
+    }),
+  )
+
+  const actionLabels = createMemo(() => {
+    const labels = new Map<string, string>()
+
+    for (const action of actions()) {
+      const label = formatKeyBindings(actionBindings().get(action.command), tuiConfig)
+      if (label) labels.set(action.command, label)
+    }
+
+    return labels
+  })
 
   const filtered = createMemo(() => {
     if (props.skipFilter || props.renderFilter === false) return props.options.filter((x) => x.disabled !== true)
@@ -171,7 +198,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const option = selected()
     if (option) props.onMove?.(option)
     if (!scroll) return
-    const target = scroll.getChildren().find((child) => {
+    const target = scroll.getChildren().find((child: { id?: string }) => {
       return child.id === JSON.stringify(selected()?.value)
     })
     if (!target) return
@@ -192,36 +219,107 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
   }
 
-  const keybind = useKeybind()
-  useKeyboard((evt) => {
+  function submit() {
     setStore("input", "keyboard")
+    const option = selected()
+    if (!option) return
+    option.onSelect?.(dialog)
+    props.onSelect?.(option)
+  }
 
-    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
-    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
-    if (evt.name === "pageup") move(-10)
-    if (evt.name === "pagedown") move(10)
-    if (evt.name === "home") moveTo(0)
-    if (evt.name === "end") moveTo(flat().length - 1)
+  useBindings(() => {
+    const enabledActions = actions().filter((item) => !item.disabled)
 
-    if (evt.name === "return") {
-      const option = selected()
-      if (option) {
-        evt.preventDefault()
-        evt.stopPropagation()
-        if (option.onSelect) option.onSelect(dialog)
-        props.onSelect?.(option)
-      }
-    }
-
-    for (const item of props.keybind ?? []) {
-      if (item.disabled || !item.keybind) continue
-      if (Keybind.match(item.keybind, keybind.parse(evt))) {
-        const s = selected()
-        if (s) {
-          evt.preventDefault()
-          item.onTrigger(s)
-        }
-      }
+    return {
+      commands: [
+        {
+          name: "dialog.select.prev",
+          title: "Previous item",
+          category: "Dialog",
+          run() {
+            setStore("input", "keyboard")
+            move(-1)
+          },
+        },
+        {
+          name: "dialog.select.next",
+          title: "Next item",
+          category: "Dialog",
+          run() {
+            setStore("input", "keyboard")
+            move(1)
+          },
+        },
+        {
+          name: "dialog.select.page_up",
+          title: "Page up",
+          category: "Dialog",
+          run() {
+            setStore("input", "keyboard")
+            move(-10)
+          },
+        },
+        {
+          name: "dialog.select.page_down",
+          title: "Page down",
+          category: "Dialog",
+          run() {
+            setStore("input", "keyboard")
+            move(10)
+          },
+        },
+        {
+          name: "dialog.select.home",
+          title: "First item",
+          category: "Dialog",
+          run() {
+            setStore("input", "keyboard")
+            moveTo(0)
+          },
+        },
+        {
+          name: "dialog.select.end",
+          title: "Last item",
+          category: "Dialog",
+          run() {
+            setStore("input", "keyboard")
+            moveTo(flat().length - 1)
+          },
+        },
+        {
+          name: "dialog.select.submit",
+          title: "Select item",
+          category: "Dialog",
+          run: submit,
+        },
+        ...enabledActions.map((item) => ({
+          name: item.command,
+          title: item.title,
+          category: "Dialog",
+          run() {
+            setStore("input", "keyboard")
+            const option = selected()
+            if (!option) return
+            item.onTrigger(option)
+          },
+        })),
+      ],
+      bindings: [
+        ...tuiConfig.keybinds.gather("dialog.select", [
+          "dialog.select.prev",
+          "dialog.select.next",
+          "dialog.select.page_up",
+          "dialog.select.page_down",
+          "dialog.select.home",
+          "dialog.select.end",
+          "dialog.select.submit",
+        ]),
+        ...enabledActions.flatMap((item) => tuiConfig.keybinds.get(item.command)),
+        ...(props.bindings ?? []).filter((binding) => {
+          if (typeof binding.cmd !== "string") return true
+          return enabledActions.some((item) => item.command === binding.cmd)
+        }),
+      ],
     }
   })
 
@@ -236,9 +334,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
-  const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled && x.keybind) ?? [])
-  const left = createMemo(() => keybinds().filter((item) => item.side !== "right"))
-  const right = createMemo(() => keybinds().filter((item) => item.side === "right"))
+  const visibleActions = createMemo(() =>
+    actions()
+      .map((item) => ({ ...item, label: actionLabels().get(item.command) ?? "" }))
+      .filter((item) => !item.disabled && item.label),
+  )
+  const left = createMemo(() => visibleActions().filter((item) => item.side !== "right"))
+  const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 
   return (
     <box gap={1} paddingBottom={1}>
@@ -365,7 +467,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </For>
         </scrollbox>
       </Show>
-      <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
+      <Show when={visibleActions().length} fallback={<box flexShrink={0} />}>
         <box
           paddingRight={2}
           paddingLeft={4}
@@ -381,7 +483,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   <span style={{ fg: theme.text }}>
                     <b>{item.title}</b>{" "}
                   </span>
-                  <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
+                  <span style={{ fg: theme.textMuted }}>{item.label}</span>
                 </text>
               )}
             </For>
@@ -393,7 +495,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   <span style={{ fg: theme.text }}>
                     <b>{item.title}</b>{" "}
                   </span>
-                  <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
+                  <span style={{ fg: theme.textMuted }}>{item.label}</span>
                 </text>
               )}
             </For>
