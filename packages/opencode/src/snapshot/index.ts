@@ -21,7 +21,10 @@ export type Patch = typeof Patch.Type
 
 export const FileDiff = Schema.Struct({
   file: Schema.String,
-  patch: Schema.String,
+  // Optional because legacy/imported `summary_diffs` on disk may omit
+  // the patch text (see #26574). Required-Schema rejected the whole
+  // /session/<id>/diff response and broke session loading on Desktop.
+  patch: Schema.optional(Schema.String),
   additions: NonNegativeInt,
   deletions: NonNegativeInt,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),

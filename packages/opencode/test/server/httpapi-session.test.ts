@@ -364,8 +364,15 @@ describe("session HttpApi", () => {
           headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
           body: JSON.stringify({ title: "workspace session" }),
         })
+        const messages = yield* request(
+          `${pathFor(SessionPaths.messages, { sessionID: created.id })}?workspace=${workspace.id}`,
+          {
+            headers: { "x-opencode-directory": tmp.path },
+          },
+        )
 
         expect(created).toMatchObject({ id: created.id, workspaceID: workspace.id })
+        expect(messages.status).toBe(200)
         expect(
           yield* Effect.sync(() =>
             Database.use((db) =>
