@@ -935,6 +935,16 @@ export const ConfigProvidersResult = Schema.Struct({
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
+export function toPublicInfo(provider: Info): Info {
+  return JSON.parse(
+    JSON.stringify(provider, (_, value) => {
+      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
+      if (typeof value === "bigint") return value.toString()
+      return value
+    }),
+  )
+}
+
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
   return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
 }
@@ -1299,7 +1309,7 @@ const layer: Layer.Layer<
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
               () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
-              database[plugin.auth!.provider],
+              toPublicInfo(database[plugin.auth!.provider]),
             ),
           )
           const opts = options ?? {}

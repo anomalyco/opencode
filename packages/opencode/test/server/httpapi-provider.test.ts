@@ -21,6 +21,22 @@ function app() {
   return Server.Default().app
 }
 
+function providerListHasFetch(list: unknown) {
+  if (!Array.isArray(list)) return false
+  return list.some((item: unknown) => {
+    if (typeof item !== "object" || item === null || !("id" in item) || !("options" in item)) return false
+    if (item.id !== "google") return false
+    if (typeof item.options !== "object" || item.options === null) return false
+    return "fetch" in item.options
+  })
+}
+
+function hasProviderWithFetch(input: unknown, key: "all" | "providers") {
+  if (typeof input !== "object" || input === null) return false
+  if (key === "all") return "all" in input && providerListHasFetch(input.all)
+  return "providers" in input && providerListHasFetch(input.providers)
+}
+
 function requestAuthorize(input: {
   app: ReturnType<typeof app>
   providerID: string
@@ -67,6 +83,39 @@ function writeProviderAuthPlugin(dir: string) {
         "          }),",
         "        },",
         "      ],",
+        "    },",
+        "  }),",
+        "}",
+        "",
+      ].join("\n"),
+    )
+  })
+}
+
+function writeFunctionOptionsPlugin(dir: string) {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+
+    yield* fs.makeDirectory(path.join(dir, ".opencode", "plugin"), { recursive: true })
+    yield* fs.writeFileString(
+      path.join(dir, ".opencode", "plugin", "provider-function-options.ts"),
+      [
+        "export default {",
+        '  id: "test.provider-function-options",',
+        "  server: async () => ({",
+        "    auth: {",
+        '      provider: "google",',
+        "      loader: async (_getAuth, provider) => {",
+        "        for (const model of Object.values(provider.models ?? {})) {",
+        "          model.cost = { input: 0, output: 0 }",
+        "        }",
+        "        return {",
+        '        apiKey: "",',
+        "        fetch: async (input, init) => fetch(input, init),",
+        "        }",
+        "      },",
+        "      methods: [{ type: 'api', label: 'API key' }],",
         "    },",
         "  }),",
         "}",
@@ -135,5 +184,44 @@ describe("provider HttpApi", () => {
         })
       }),
     ),
+  )
+
+  it.live("serves provider lists when auth loaders add runtime fetch options", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const path = yield* Path.Path
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-test-" })
+      const previous = process.env.OPENCODE_AUTH_CONTENT
+
+      yield* fs.writeFileString(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", formatter: false, lsp: false }),
+      )
+      yield* writeFunctionOptionsPlugin(dir)
+      yield* Effect.sync(() => {
+        process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({
+          google: { type: "oauth", refresh: "dummy", access: "dummy", expires: 9999999999999 },
+        })
+      })
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (previous === undefined) delete process.env.OPENCODE_AUTH_CONTENT
+          if (previous !== undefined) process.env.OPENCODE_AUTH_CONTENT = previous
+        }),
+      )
+      const headers = { "x-opencode-directory": dir }
+      const providerResponse = yield* Effect.promise(() => Promise.resolve(app().request("/provider", { headers })))
+      const configResponse = yield* Effect.promise(() =>
+        Promise.resolve(app().request("/config/providers", { headers })),
+      )
+
+      expect(providerResponse.status).toBe(200)
+      expect(configResponse.status).toBe(200)
+
+      const providerBody = yield* Effect.promise(() => providerResponse.json())
+      const configBody = yield* Effect.promise(() => configResponse.json())
+      expect(hasProviderWithFetch(providerBody, "all")).toBe(false)
+      expect(hasProviderWithFetch(configBody, "providers")).toBe(false)
+    }),
   )
 })
