@@ -19,6 +19,7 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  timestamps: z.boolean().optional().describe("Show timestamps on messages (default: false)"),
 })
 
 export const TuiInfo = z

@@ -804,3 +804,36 @@ test("missing tui.json — silently treated as empty (ENOENT path)", async () =>
   // No theme set anywhere.
   expect(config.theme).toBeUndefined()
 })
+
+test("loads timestamps option from tui.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ timestamps: true }))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.timestamps).toBe(true)
+})
+
+test("timestamps defaults to undefined when not set", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ theme: "opencode" }))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.timestamps).toBeUndefined()
+})
+
+test("timestamps explicitly set to false is preserved", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ timestamps: false }))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  expect(config.timestamps).toBe(false)
+})
