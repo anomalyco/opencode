@@ -94,8 +94,29 @@ case "$RUST_TARGET" in
 esac
 
 SIDECAR_PATH="$REPO_ROOT/packages/desktop/src-tauri/sidecars/opencode-cli-${RUST_TARGET}"
-if [[ ! -f "$SIDECAR_PATH" ]]; then
-    echo "[deskfox] sidecar not found, building via 'bun run build --single' (no --baseline, RUST_TARGET=$RUST_TARGET)..."
+OPENCODE_SRC_DIR="$REPO_ROOT/packages/opencode/src"
+
+# FORK: 时间戳判断 — sidecar 不存在 OR 旧于 packages/opencode/src/**/*.ts 任一源文件 → rebuild
+# 跟 Win build-deskfox.ps1 commit b9581b76e ([feat: build-pipeline-sidecar-fix]) 同等修法
+# 不加这条 → packages/opencode/src 改动几周不进 sidecar binary(2026-05-09 fix/macos-docx-viewer 实战教训)
+need_rebuild_sidecar() {
+    [[ ! -f "$SIDECAR_PATH" ]] && return 0
+    # 找 src 内最新 .ts 文件 mtime
+    local latest_src_mtime
+    latest_src_mtime=$(find "$OPENCODE_SRC_DIR" -name "*.ts" -type f -exec stat -f%m {} + 2>/dev/null | sort -rn | head -1)
+    [[ -z "$latest_src_mtime" ]] && return 1
+    local sidecar_mtime
+    sidecar_mtime=$(stat -f%m "$SIDECAR_PATH" 2>/dev/null)
+    [[ -z "$sidecar_mtime" ]] && return 0
+    [[ "$latest_src_mtime" -gt "$sidecar_mtime" ]]
+}
+
+if need_rebuild_sidecar; then
+    if [[ ! -f "$SIDECAR_PATH" ]]; then
+        echo "[deskfox] sidecar not found, building via 'bun run build --single' (no --baseline, RUST_TARGET=$RUST_TARGET)..."
+    else
+        echo "[deskfox] sidecar stale(packages/opencode/src 内有新于 sidecar 的 .ts), rebuilding..."
+    fi
     (
         cd "$REPO_ROOT/packages/opencode"
         bun run build --single
@@ -112,7 +133,7 @@ if [[ ! -f "$SIDECAR_PATH" ]]; then
     chmod +x "$SIDECAR_PATH"
     echo "[deskfox] sidecar built: $(stat -f%z "$SIDECAR_PATH" 2>/dev/null || stat -c%s "$SIDECAR_PATH") bytes"
 else
-    echo "[deskfox] sidecar exists: $SIDECAR_PATH"
+    echo "[deskfox] sidecar up-to-date: $SIDECAR_PATH"
 fi
 
 # === 1. apply icons(按 env 选样式)===
