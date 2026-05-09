@@ -1,4 +1,5 @@
 import { withStatics } from "@opencode-ai/core/schema"
+import { ModelStatus } from "@/provider/model-status"
 import { Array, Context, Effect, HashMap, Layer, Option, Order, pipe, Schema } from "effect"
 import { DateTimeUtcFromMillis } from "effect/Schema"
 
@@ -114,7 +115,7 @@ export class Info extends Schema.Class<Info>("Model.Info")({
     released: DateTimeUtcFromMillis,
   }),
   cost: Cost.pipe(Schema.Array),
-  status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
+  status: ModelStatus,
   limit: Schema.Struct({
     context: Schema.Int,
     input: Schema.Int.pipe(Schema.optional),
