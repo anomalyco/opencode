@@ -16,7 +16,6 @@ const levelPriority: Record<Level, number> = {
   WARN: 2,
   ERROR: 3,
 }
-const keep = 10
 
 let level: Level = "INFO"
 
@@ -54,14 +53,110 @@ let logpath = ""
 export function file() {
   return logpath
 }
+export const MAX = 128 * 1024 * 1024
+const step = 1024 * 1024
+const wait = 5_000
+let size = 0
+let time = 0
+let task: Promise<void> | undefined
+
+type Entry = {
+  file: string
+  size: number
+  time: number
+}
+
+async function entries(dir: string) {
+  const list = await Glob.scan("*", {
+    cwd: dir,
+    absolute: true,
+    include: "file",
+  }).catch(() => [] as string[])
+  const rows = await Promise.all(
+    list
+      .filter((file) => file.endsWith(".log") || file.endsWith(".ndjson"))
+      .map(async (file) => {
+        const stat = await fs.stat(file).catch(() => undefined)
+        if (!stat) return
+        return {
+          file,
+          size: stat.size,
+          time: stat.mtimeMs,
+        } satisfies Entry
+      }),
+  )
+  return rows.filter((item): item is Entry => Boolean(item))
+}
+
+async function tail(file: string, keep: number) {
+  const stat = await fs.stat(file).catch(() => undefined)
+  if (!stat) return 0
+  if (keep <= 0) {
+    await fs.truncate(file, 0).catch(() => {})
+    return 0
+  }
+  if (stat.size <= keep) return stat.size
+
+  const fd = await fs.open(file, "r")
+  try {
+    const buf = Buffer.allocUnsafe(keep)
+    await fd.read(buf, 0, keep, stat.size - keep)
+    await fs.writeFile(file, buf)
+    return keep
+  } finally {
+    await fd.close().catch(() => {})
+  }
+}
+
+export async function trim(input?: {
+  dir?: string
+  max?: number
+  file?: string
+}) {
+  const dir = input?.dir ?? Global.Path.log
+  const keep = input?.max ?? MAX
+  const file = input?.file ?? logpath
+  const rows = (await entries(dir)).sort((a, b) => a.time - b.time)
+  let total = rows.reduce((sum, row) => sum + row.size, 0)
+  if (total <= keep) return
+
+  for (const row of rows) {
+    if (total <= keep) return
+    if (row.file === file) continue
+    await fs.unlink(row.file).catch(() => {})
+    total -= row.size
+  }
+
+  if (total <= keep) return
+  const row = rows.find((row) => row.file === file)
+  if (!row) return
+
+  const room = Math.max(0, keep - (total - row.size))
+  total = total - row.size + (await tail(row.file, room))
+  if (total <= keep) return
+}
+
+function sweep() {
+  const now = Date.now()
+  if (task) return
+  if (size < step && now - time < wait) return
+  size = 0
+  time = now
+  task = trim().finally(() => {
+    task = undefined
+  })
+}
+
 let write = (msg: any) => {
   process.stderr.write(msg)
+  size += msg.length
+  sweep()
   return msg.length
 }
 
 export async function init(options: Options) {
   if (options.level) level = options.level
-  void cleanup(Global.Path.log)
+  await trim()
   if (options.print) return
   logpath = path.join(
     Global.Path.log,
@@ -73,26 +168,14 @@ export async function init(options: Options) {
     return new Promise((resolve, reject) => {
       stream.write(msg, (err) => {
         if (err) reject(err)
-        else resolve(msg.length)
+        else {
+          size += msg.length
+          sweep()
+          resolve(msg.length)
+        }
       })
     })
   }
-}
-
-async function cleanup(dir: string) {
-  const files = (
-    await Glob.scan("????-??-??T??????.log", {
-      cwd: dir,
-      absolute: false,
-      include: "file",
-    }).catch(() => [])
-  )
-    .filter((file) => path.basename(file) === file)
-    .sort()
-  if (files.length <= keep) return
-
-  const doomed = files.slice(0, -keep)
-  await Promise.all(doomed.map((file) => fs.unlink(path.join(dir, file)).catch(() => {})))
 }
 
 function formatError(error: Error, depth = 0): string {

@@ -1,44 +1,30 @@
-import { afterEach, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
 import { tmpdir } from "../fixture/fixture"
 
-const log = Global.Path.log
+describe("util.log", () => {
+  test("defaults log cap to 128MB", () => {
+    expect(Log.MAX).toBe(128 * 1024 * 1024)
+  })
 
-afterEach(() => {
-  Global.Path.log = log
-})
+  test("deletes old logs and trims active log to stay within cap", async () => {
+    await using tmp = await tmpdir()
+    const old = path.join(tmp.path, "old.log")
+    const cur = path.join(tmp.path, "dev.log")
+    await fs.writeFile(old, "old!")
+    await fs.writeFile(cur, "0123456789")
+    await fs.utimes(old, new Date("2026-03-01T00:00:00Z"), new Date("2026-03-01T00:00:00Z"))
+    await fs.utimes(cur, new Date("2026-03-02T00:00:00Z"), new Date("2026-03-02T00:00:00Z"))
 
-async function files(dir: string) {
-  let last = ""
-  let same = 0
+    await Log.trim({
+      dir: tmp.path,
+      max: 8,
+      file: cur,
+    })
 
-  for (let i = 0; i < 50; i++) {
-    const list = (await fs.readdir(dir)).sort()
-    const next = JSON.stringify(list)
-    same = next === last ? same + 1 : 0
-    if (same >= 2 && list.length === 11) return list
-    last = next
-    await Bun.sleep(10)
-  }
-
-  return (await fs.readdir(dir)).sort()
-}
-
-test("init cleanup keeps the newest timestamped logs", async () => {
-  await using tmp = await tmpdir()
-  Global.Path.log = tmp.path
-
-  const list = Array.from({ length: 12 }, (_, i) => `2000-01-${String(i + 1).padStart(2, "0")}T000000.log`)
-
-  await Promise.all(list.map((file) => fs.writeFile(path.join(tmp.path, file), file)))
-
-  await Log.init({ print: false, dev: false })
-
-  const next = await files(tmp.path)
-
-  expect(next).not.toContain(list[0]!)
-  expect(next).toContain(list.at(-1)!)
+    expect(await fs.stat(old).catch(() => undefined)).toBeUndefined()
+    expect(await fs.readFile(cur, "utf-8")).toBe("23456789")
+  })
 })

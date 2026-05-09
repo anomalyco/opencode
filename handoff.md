@@ -7,12 +7,25 @@
   - `rebase-ui` — done
   - `rebase-tts` — done
   - `rebase-review` — done
-  - `rebase-autopilot` — in progress
+  - `rebase-autopilot` — done
   - `rebase-session` — done
-  - `rebase-infra` — pending
+  - `rebase-infra` — in progress
   - `rebase-verify` — in progress
 
 ## Latest Update
+- Infra memory-pressure port started and validated:
+  - added bounded log retention/trimming in `packages/core/src/util/log.ts` (128MB cap across `.log/.ndjson` with active-log tail trim).
+  - switched PTY scrollback from monolithic string buffer to bounded chunk retention in `packages/opencode/src/pty/index.ts`.
+  - added snapshot memory-artifact retention helper (`packages/opencode/src/diagnostic/memory.ts`) and tests.
+  - new/updated tests:
+    - `packages/opencode/test/memory/retention.test.ts`
+    - `packages/opencode/test/util/log.test.ts`
+- Validation passed for infra port scope:
+  - `packages/opencode`: `bun typecheck`
+  - `packages/opencode`: `bun test test/memory/retention.test.ts test/util/log.test.ts test/pty/pty-shell.test.ts`
+
+- Autopilot+heartbeat port committed:
+  - commit `343fde6a8`
 - Autopilot+heartbeat port is now integrated and green on targeted tests.
 - Fixed one regression introduced during autopilot test updates:
   - `test/agent/agent.test.ts` now matches actual default fallback behavior (`plan` when `build` is disabled).
