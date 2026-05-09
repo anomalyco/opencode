@@ -54,6 +54,9 @@ jobs:
           Write-Host "Version: $version"
           Write-Host "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
 
+      - name: Install all dependencies
+        run: bun install
+
       - name: Prepare desktop package
         working-directory: packages/desktop
         shell: pwsh
