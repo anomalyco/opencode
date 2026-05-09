@@ -172,3 +172,26 @@ export function deleteAccount(
   saveConfig(config, configPath)
   return true
 }
+
+/**
+ * 更新指定账号的 model 字段。
+ *
+ * @param model {providerID, modelID} 设 model;`null` 清除(走 user default)
+ * @returns 是否更新成功(account 不存在返 false)
+ */
+export function updateAccountModel(
+  accountId: string,
+  model: { providerID: string; modelID: string } | null,
+  configPath: string = defaultConfigPath(),
+): boolean {
+  const config = loadConfig(configPath)
+  const account = config.accounts[accountId]
+  if (!account) return false
+  if (model) {
+    account.model = { providerID: model.providerID, modelID: model.modelID }
+  } else {
+    delete account.model
+  }
+  saveConfig(config, configPath)
+  return true
+}

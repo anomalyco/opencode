@@ -62,6 +62,11 @@ export async function feishuOauthPoll(sessionId: string): Promise<OauthPollRespo
 // 账户 CRUD(C1.6)
 // ============================================================
 
+export interface ModelRef {
+  provider_id: string
+  model_id: string
+}
+
 export interface AccountSummary {
   account_id: string
   app_id: string
@@ -69,6 +74,17 @@ export interface AccountSummary {
   domain: FeishuDomain
   agent: string
   enabled?: boolean
+  model?: ModelRef | null
+}
+
+/** opencode `/config/providers` 响应形状(Rust JSON value 直传) */
+export interface ProvidersResponse {
+  providers: Array<{
+    id: string
+    name: string
+    models: Record<string, { id: string; name?: string }>
+  }>
+  default: Record<string, string>
 }
 
 export interface SaveAccountInput {
@@ -96,4 +112,21 @@ export async function feishuDeleteAccount(accountId: string): Promise<boolean> {
   return await invoke<boolean>("feishu_delete_account", {
     request: { account_id: accountId },
   })
+}
+
+/** 更新指定账号的 model(model=null 清除,走全局 default) */
+export async function feishuUpdateAccountModel(
+  accountId: string,
+  model: ModelRef | null,
+): Promise<boolean> {
+  return await invoke<boolean>("feishu_update_account_model", {
+    request: { account_id: accountId, model },
+  })
+}
+
+/** 拉 opencode 已配的 providers + models 列表(选 model 用) */
+export async function feishuListProviders(): Promise<ProvidersResponse> {
+  // Rust 端返 JSON 字符串(specta 不支持 generic JSON value),前端 parse
+  const raw = await invoke<string>("feishu_list_providers")
+  return JSON.parse(raw) as ProvidersResponse
 }

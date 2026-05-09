@@ -1064,5 +1064,16 @@ export const dict = {
   "settings.feishu.bind.switchToLark": "Need to bind a Lark (Global) account? Switch",
   "settings.feishu.bind.switchToFeishu": "Need to bind a 飞书 (China) account? Switch",
   "settings.feishu.bind.qrLoading": "Generating QR code...",
+  "settings.feishu.account.edit": "Edit",
+  "settings.feishu.account.modelLabel": "model",
+  "settings.feishu.account.modelDefault": "(use default)",
+  "settings.feishu.edit.title": "Edit account model",
+  "settings.feishu.edit.providerLabel": "Provider",
+  "settings.feishu.edit.modelLabel": "Model",
+  "settings.feishu.edit.useDefault": "Use DeskFox default (recommended)",
+  "settings.feishu.edit.noProviders": "No LLM providers configured. Set up providers in DeskFox first.",
+  "settings.feishu.edit.save": "Save",
+  "settings.feishu.edit.cancel": "Cancel",
+  "settings.feishu.edit.loadFailed": "Failed to load providers: {{msg}}",
   // FORK-END
 }

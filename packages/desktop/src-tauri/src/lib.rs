@@ -571,7 +571,10 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             // FORK: 飞书账户 CRUD(C1.6 写盘)[feat: feishu-bridge] 2026-05-08
             feishu_adapter::feishu_save_account,
             feishu_adapter::feishu_list_accounts,
-            feishu_adapter::feishu_delete_account
+            feishu_adapter::feishu_delete_account,
+            // FORK: per-account model 选择 [feat: feishu-bridge] 2026-05-09
+            feishu_adapter::feishu_update_account_model,
+            feishu_adapter::feishu_list_providers
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,

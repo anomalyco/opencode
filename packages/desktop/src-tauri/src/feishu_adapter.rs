@@ -92,24 +92,37 @@ where
 pub fn init(app: &AppHandle) {
     let state = AdapterState::default();
 
-    // v1 dev 兜底:从 env var 读 adapter 凭证
+    // plugin 模式(2026-05-09 起):plugin 启动时把 server 凭证写到
+    // ~/.opencode/feishu-plugin-server.json,Tauri command 调用时 lazy 读。
+    // init() 这里不预读 — 因为 plugin 启动晚于 DeskFox setup。
+    // (旧 env var 兼容路径保留作 dev 测试 fallback)
     if let (Ok(url), Ok(username), Ok(password)) = (
         std::env::var("FEISHU_ADAPTER_URL"),
         std::env::var("FEISHU_ADAPTER_USERNAME"),
         std::env::var("FEISHU_ADAPTER_PASSWORD"),
     ) {
         if let Ok(mut slot) = state.ready.lock() {
-            *slot = Some(AdapterReady { url, username, password });
-            tracing::info!("[feishu-adapter] loaded ready data from env vars");
+            *slot = Some(AdapterReady {
+                url,
+                username,
+                password,
+            });
+            tracing::info!("[feishu-adapter] loaded ready data from env vars (legacy)");
         }
-    } else {
-        tracing::debug!(
-            "[feishu-adapter] no env vars set; adapter not yet spawned. \
-             Phase 2+ will spawn child process automatically."
-        );
     }
 
     app.manage(state);
+}
+
+/// Lazy 读 ~/.opencode/feishu-plugin-server.json(plugin 启动后写入)。
+///
+/// 每次 Tauri command 调用前 try-load — plugin 启动是异步,DeskFox setup 时 file 还没,
+/// 等 user 触发 OAuth 时再读(那时 plugin 必然已 ready)。
+fn load_ready_from_file() -> Option<AdapterReady> {
+    let home = dirs::home_dir()?;
+    let path = home.join(".opencode").join("feishu-plugin-server.json");
+    let content = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&content).ok()
 }
 
 // ============================================================
@@ -194,16 +207,29 @@ struct OauthPollWire {
 }
 
 fn current_ready(state: &State<'_, AdapterState>) -> Result<AdapterReady, String> {
-    state
-        .ready
-        .lock()
-        .map_err(|_| "adapter state lock poisoned".to_string())?
-        .clone()
-        .ok_or_else(|| {
-            "adapter not ready: 飞书桥接 sidecar 还未启动(Phase 2+ 自动 spawn)。\
-             dev 测试请 export FEISHU_ADAPTER_URL/USERNAME/PASSWORD 后重启 DeskFox"
-                .to_string()
-        })
+    // 已有 ready → 直接返
+    {
+        let slot = state
+            .ready
+            .lock()
+            .map_err(|_| "adapter state lock poisoned".to_string())?;
+        if let Some(r) = slot.as_ref() {
+            return Ok(r.clone());
+        }
+    }
+
+    // Lazy load:plugin 启动后写 ~/.opencode/feishu-plugin-server.json,这里读
+    if let Some(r) = load_ready_from_file() {
+        if let Ok(mut slot) = state.ready.lock() {
+            *slot = Some(r.clone());
+        }
+        tracing::info!("[feishu-adapter] loaded ready data from feishu-plugin-server.json");
+        return Ok(r);
+    }
+
+    Err("adapter not ready: 飞书桥接 plugin 还未启动 — 检查 \
+         ~/.config/opencode/opencode.json 是否注册了 plugin,且 opencode-cli sidecar 已启动"
+        .to_string())
 }
 
 #[tauri::command]
@@ -279,6 +305,12 @@ pub struct SaveAccountRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize, specta::Type)]
+pub struct ModelRef {
+    pub provider_id: String,
+    pub model_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
 pub struct AccountSummary {
     pub account_id: String,
     pub app_id: String,
@@ -286,6 +318,7 @@ pub struct AccountSummary {
     pub domain: String,
     pub agent: String,
     pub enabled: Option<bool>,
+    pub model: Option<ModelRef>,
 }
 
 /// adapter wire request 转 camelCase
@@ -336,7 +369,74 @@ pub async fn feishu_save_account(
         domain: r.domain,
         agent: r.agent,
         enabled: None,
+        model: None,
     })
+}
+
+// ============================================================
+// per-account model 选择(Phase 1.x)— Tauri commands
+// ============================================================
+
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
+pub struct UpdateAccountModelRequest {
+    pub account_id: String,
+    /// `Some(model)` 设;`None` 清除(走 user 全局 default)
+    pub model: Option<ModelRef>,
+}
+
+#[derive(Serialize)]
+struct UpdateAccountModelWire<'a> {
+    #[serde(rename = "accountId")]
+    account_id: &'a str,
+    /// 飞书 plugin server 接受 `null` 表示清除
+    model: Option<ModelRefWire<'a>>,
+}
+
+#[derive(Serialize)]
+struct ModelRefWire<'a> {
+    #[serde(rename = "providerID")]
+    provider_id: &'a str,
+    #[serde(rename = "modelID")]
+    model_id: &'a str,
+}
+
+#[derive(Deserialize)]
+struct UpdateAccountModelWireResponse {
+    updated: bool,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feishu_update_account_model(
+    state: State<'_, AdapterState>,
+    request: UpdateAccountModelRequest,
+) -> Result<bool, String> {
+    let ready = current_ready(&state)?;
+    let wire = UpdateAccountModelWire {
+        account_id: &request.account_id,
+        model: request.model.as_ref().map(|m| ModelRefWire {
+            provider_id: &m.provider_id,
+            model_id: &m.model_id,
+        }),
+    };
+    let r: UpdateAccountModelWireResponse = post_json(&ready, "/accounts/update-model", &wire).await?;
+    Ok(r.updated)
+}
+
+/// 列 opencode 已配 providers + models(给 GUI 选 per-account model)
+///
+/// 返回 JSON 字符串(specta 不支持 serde_json::Value),前端 JSON.parse。
+/// 真实形状跟 opencode `/config/providers` 一致:`{ providers: [...], default: {} }`
+#[tauri::command]
+#[specta::specta]
+pub async fn feishu_list_providers(state: State<'_, AdapterState>) -> Result<String, String> {
+    let ready = current_ready(&state)?;
+    #[derive(Deserialize)]
+    struct Wrap {
+        data: serde_json::Value,
+    }
+    let r: Wrap = get_json(&ready, "/providers").await?;
+    serde_json::to_string(&r.data).map_err(|e| format!("serialize providers: {e}"))
 }
 
 #[derive(Deserialize)]
@@ -355,6 +455,15 @@ struct ListAccountWireItem {
     domain: String,
     agent: String,
     enabled: Option<bool>,
+    model: Option<ListAccountModelWire>,
+}
+
+#[derive(Deserialize)]
+struct ListAccountModelWire {
+    #[serde(rename = "providerID")]
+    provider_id: String,
+    #[serde(rename = "modelID")]
+    model_id: String,
 }
 
 /// HTTP GET 简版(reqwest GET + Basic auth)
@@ -396,6 +505,10 @@ pub async fn feishu_list_accounts(
             domain: w.domain,
             agent: w.agent,
             enabled: w.enabled,
+            model: w.model.map(|m| ModelRef {
+                provider_id: m.provider_id,
+                model_id: m.model_id,
+            }),
         })
         .collect())
 }

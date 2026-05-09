@@ -103,6 +103,17 @@ export const FeishuAccountSchema = z.object({
   // secondaryBindingCodes 不进 schema(运行时状态)
   /** opencode agent 名(默认 "build" — opencode 内置主 agent,执行 tools) */
   agent: z.string().default("build"),
+  /**
+   * per-account 模型选择(可选)。
+   * 不设 → plugin promptAsync 不传 model → opencode 用 user 全局 default。
+   * 设了 → plugin promptAsync 显式用此 model。
+   */
+  model: z
+    .object({
+      providerID: z.string().min(1),
+      modelID: z.string().min(1),
+    })
+    .optional(),
   /** 系统 prompt(账号级,默认 empty 用 opencode default) */
   systemPrompt: z.string().optional(),
   /** 工具白名单(账号级)*/

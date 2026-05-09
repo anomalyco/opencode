@@ -1043,5 +1043,16 @@ export const dict = {
   "settings.feishu.bind.switchToLark": "要綁定 Lark(國際)帳號?切換",
   "settings.feishu.bind.switchToFeishu": "要綁定飛書(國內)帳號?切換",
   "settings.feishu.bind.qrLoading": "產生 QR Code 中...",
+  "settings.feishu.account.edit": "編輯",
+  "settings.feishu.account.modelLabel": "model",
+  "settings.feishu.account.modelDefault": "(跟隨預設)",
+  "settings.feishu.edit.title": "編輯帳號模型",
+  "settings.feishu.edit.providerLabel": "提供商",
+  "settings.feishu.edit.modelLabel": "模型",
+  "settings.feishu.edit.useDefault": "跟隨 DeskFox 預設(推薦)",
+  "settings.feishu.edit.noProviders": "尚未配置任何 LLM 提供商,請先在 DeskFox 設定提供商。",
+  "settings.feishu.edit.save": "儲存",
+  "settings.feishu.edit.cancel": "取消",
+  "settings.feishu.edit.loadFailed": "拉取提供商列表失敗:{{msg}}",
   // FORK-END
 } satisfies Partial<Record<Keys, string>>

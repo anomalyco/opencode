@@ -56,6 +56,18 @@ export const SettingsFeishu: Component = () => {
     }
   }
 
+  const handleEdit = (acc: AccountSummary) => {
+    void import("./feishu-edit-account-dialog").then((x) => {
+      dialog.show(() => (
+        <x.FeishuEditAccountDialog
+          accountId={acc.account_id}
+          currentModel={acc.model ?? null}
+          onSaved={() => refetch()}
+        />
+      ))
+    })
+  }
+
   return (
     <div class="flex flex-col gap-6 p-4 max-w-2xl">
       {/* 标题 */}
@@ -117,15 +129,30 @@ export const SettingsFeishu: Component = () => {
                     <div class="flex items-center gap-3 text-11-regular text-text-weak">
                       <span class="truncate">openId: {acc.open_id}</span>
                       <span>agent: {acc.agent}</span>
+                      <span>
+                        {language.t("settings.feishu.account.modelLabel")}:{" "}
+                        {acc.model
+                          ? `${acc.model.provider_id}/${acc.model.model_id}`
+                          : language.t("settings.feishu.account.modelDefault")}
+                      </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    class="px-3 py-1 rounded-md text-12-medium text-text-warning hover:bg-surface-strong"
-                    onClick={() => void handleDelete(acc.account_id)}
-                  >
-                    {language.t("settings.feishu.account.delete")}
-                  </button>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      class="px-3 py-1 rounded-md text-12-medium hover:bg-surface-strong"
+                      onClick={() => handleEdit(acc)}
+                    >
+                      {language.t("settings.feishu.account.edit")}
+                    </button>
+                    <button
+                      type="button"
+                      class="px-3 py-1 rounded-md text-12-medium text-text-warning hover:bg-surface-strong"
+                      onClick={() => void handleDelete(acc.account_id)}
+                    >
+                      {language.t("settings.feishu.account.delete")}
+                    </button>
+                  </div>
                 </div>
               )}
             </For>
