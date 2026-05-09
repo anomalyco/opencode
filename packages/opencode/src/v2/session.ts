@@ -20,6 +20,19 @@ export type Delivery = Schema.Schema.Type<typeof Delivery>
 
 export const DefaultDelivery = "immediate" satisfies Delivery
 
+function windowsDirectoryVariants(directory: string) {
+  if (!/^[a-zA-Z]:[\\/]/.test(directory) && !directory.startsWith("\\\\") && !directory.startsWith("//")) {
+    return [directory]
+  }
+  return Array.from(new Set([directory, directory.replaceAll("/", "\\"), directory.replaceAll("\\", "/")]))
+}
+
+function directoryCondition(directory: string) {
+  const variants = windowsDirectoryVariants(directory)
+  if (variants.length === 1) return eq(SessionTable.directory, directory)
+  return or(...variants.map((item) => eq(SessionTable.directory, item)))!
+}
+
 export class Info extends Schema.Class<Info>("Session.Info")({
   id: SessionID,
   parentID: optionalOmitUndefined(SessionID),
@@ -158,7 +171,7 @@ export const layer = Layer.effect(
         if (direction === "previous" && order === "asc") order = "desc"
         if (direction === "previous" && order === "desc") order = "asc"
         const conditions: SQL[] = []
-        if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
+        if (input.directory) conditions.push(directoryCondition(input.directory))
         if (input.path)
           conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
