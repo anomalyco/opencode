@@ -88,8 +88,10 @@ export const FeishuBindDialog: Component<{ onBound?: () => void }> = (props) => 
         // QR 生成失败不阻断流程,仅 fallback 显文本链接
         console.warn("[feishu-bridge] QR generation failed:", qrErr)
       }
-      setPhase({ kind: "waiting", data, qrDataUrl })
+      // ⚠️ 先 setSecsLeft 再 setPhase — 防 createEffect 看到 phase=waiting + secsLeft=0
+      // 立即触发 "二维码已过期" expired 分支
       setSecsLeft(data.expires_in)
+      setPhase({ kind: "waiting", data, qrDataUrl })
       // 倒计时
       countdownTimer = setInterval(() => {
         setSecsLeft((s) => Math.max(0, s - 1))
