@@ -155,10 +155,23 @@ describe("tool.read external_directory permission", () => {
         yield* exec(dir, { filePath: alt }, next)
         const read = items.find((item) => item.permission === "read")
         expect(read).toBeDefined()
-        expect(read!.patterns).toEqual([full(target)])
+        expect(read!.patterns).toEqual([path.relative(dir, full(target))])
       }),
     )
   }
+
+  it.live("uses worktree-relative path for read permission so user rules match like edit/write", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "src", "secret.ts"), "shh")
+
+      const { items, next } = asks()
+      yield* exec(dir, { filePath: path.join(dir, "src", "secret.ts") }, next)
+      const read = items.find((item) => item.permission === "read")
+      expect(read).toBeDefined()
+      expect(read!.patterns).toEqual([path.join("src", "secret.ts")])
+    }),
+  )
 
   it.live("asks for directory-scoped external_directory permission when reading external directory", () =>
     Effect.gen(function* () {
