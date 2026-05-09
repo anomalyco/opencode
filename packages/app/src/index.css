@@ -199,11 +199,16 @@
 .cm-editor .cm-dropCursor {
   border-left-color: var(--text-base) !important;
 }
-/* 选区色对齐 */
+/* FORK: md-editing-iter-2 — 选区色用 primary 半透明,对比度高,深浅色模式都明显 2026-05-09
+   候选色给 user 验证:
+   - 当前: rgba(56, 139, 253, 0.35) GitHub 蓝(默认)
+   - 候选 B: color-mix(in oklab, var(--primary) 35%, transparent) — 跟随 brand 主题
+   - 候选 C: rgba(255, 213, 0, 0.35) — 暖黄,中文阅读偏好
+   实施期间出截屏给 user 选,选定后替换此处 */
 .cm-editor .cm-selectionBackground,
 .cm-editor.cm-focused .cm-selectionBackground,
 .cm-editor ::selection {
-  background: var(--surface-raised-stronger) !important;
+  background: rgba(56, 139, 253, 0.35) !important;
 }
 
 /* FORK: CM 行号 gutter — 跟 DeskFox 主题对齐(默认色在深色模式下太亮突兀)2026-05-05 */

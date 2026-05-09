@@ -1,8 +1,14 @@
 import { onCleanup, onMount, createEffect } from "solid-js"
 import { EditorState, type Extension } from "@codemirror/state"
-import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view"
+import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "@codemirror/view"
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { defaultHighlightStyle, syntaxHighlighting, type LanguageSupport } from "@codemirror/language"
+
+export type CursorInfo = {
+  line: number
+  col: number
+  selLength: number
+}
 
 type Props = {
   value: string
@@ -10,6 +16,8 @@ type Props = {
   onChange?: (value: string) => void
   // FORK: 上层注入语言/场景专用 extensions(如 markdown 列表续延 / 拖图 / 表格)2026-05-05
   extraExtensions?: Extension[]
+  // FORK: md-editing-iter-2 — 光标 / 选区变化回调,用于状态栏行/列号 2026-05-09
+  onCursorChange?: (info: CursorInfo) => void
 }
 
 export default function CodeMirrorView(props: Props) {
@@ -23,11 +31,25 @@ export default function CodeMirrorView(props: Props) {
       highlightActiveLine(),
       history(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      // FORK: md-editing-iter-2 — 长行软换行,避免水平滚动 2026-05-09
+      EditorView.lineWrapping,
+      // FORK: md-editing-iter-2 — drawSelection 让多行选区底色完整连贯(行尾空白也绘) 2026-05-09
+      drawSelection(),
       // FORK: extraExtensions 在 defaultKeymap 之前,自定义 keymap 优先 2026-05-05
       ...(props.extraExtensions ?? []),
       keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) props.onChange?.(u.state.doc.toString())
+        // FORK: md-editing-iter-2 — 上报光标 / 选区状态给上层状态栏 2026-05-09
+        if (props.onCursorChange && (u.docChanged || u.selectionSet)) {
+          const sel = u.state.selection.main
+          const lineObj = u.state.doc.lineAt(sel.head)
+          props.onCursorChange({
+            line: lineObj.number,
+            col: sel.head - lineObj.from + 1,
+            selLength: sel.to - sel.from,
+          })
+        }
       }),
       EditorView.theme({
         "&": { height: "100%", fontSize: "13px" },
@@ -40,6 +62,16 @@ export default function CodeMirrorView(props: Props) {
       state: EditorState.create({ doc: props.value, extensions }),
       parent,
     })
+    // FORK: md-editing-iter-2 — mount 后主动回调一次光标位置,初始化状态栏 2026-05-09
+    if (props.onCursorChange && view) {
+      const sel = view.state.selection.main
+      const lineObj = view.state.doc.lineAt(sel.head)
+      props.onCursorChange({
+        line: lineObj.number,
+        col: sel.head - lineObj.from + 1,
+        selLength: sel.to - sel.from,
+      })
+    }
   })
 
   onCleanup(() => {

@@ -1030,6 +1030,10 @@ export const dict = {
   "fileViewer.dialog.exportDocxTitle": "Save as Word document",
   "fileViewer.toast.exportDocxSuccess": "Exported to Word",
   "fileViewer.toast.exportDocxFail": "Export failed",
+  // FORK: md-editing-iter-2 — 编辑器状态栏行/列号 / 选中字符数 2026-05-09
+  "fileViewer.editor.statusBar.line": "Ln {{count}}",
+  "fileViewer.editor.statusBar.col": "Col {{count}}",
+  "fileViewer.editor.statusBar.sel": "Sel {{count}}",
   // FORK: md-context-menu-i18n — remaining viewer right-click menu items 2026-05-07
   "fileViewer.menu.addToChat": "Add to Chat",
   "fileViewer.menu.copy": "Copy",

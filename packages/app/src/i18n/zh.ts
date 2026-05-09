@@ -987,6 +987,10 @@ export const dict = {
   "fileViewer.dialog.exportDocxTitle": "保存为 Word 文档",
   "fileViewer.toast.exportDocxSuccess": "已导出为 Word",
   "fileViewer.toast.exportDocxFail": "导出失败",
+  // FORK: md-editing-iter-2 — 编辑器状态栏行/列号 / 选中字符数 2026-05-09
+  "fileViewer.editor.statusBar.line": "行 {{count}}",
+  "fileViewer.editor.statusBar.col": "列 {{count}}",
+  "fileViewer.editor.statusBar.sel": "已选 {{count}}",
   // FORK: md-context-menu-i18n — viewer 右键菜单剩余项接入 i18n 2026-05-07
   "fileViewer.menu.addToChat": "添加到聊天窗口",
   "fileViewer.menu.copy": "复制",

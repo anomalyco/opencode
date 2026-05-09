@@ -26,7 +26,9 @@ import { exportMdAsDocx } from "@/utils/md-export-docx"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
-import CodeMirrorView from "@/components/code-mirror-view"
+import CodeMirrorView, { type CursorInfo } from "@/components/code-mirror-view"
+// FORK: md-editing-iter-2 — 编辑态状态栏(行/列/选中字符数)2026-05-09
+import CmStatusBar from "@/components/cm-status-bar"
 import { langFromExt } from "@/utils/lang-from-ext"
 // FORK: .md 编辑增强(列表续延 / Ctrl+B/I/K / 拖图 / 智能粘贴 / Ctrl+F 等)2026-05-05
 import { markdownEditorExtensions } from "@/utils/markdown-editor-extensions"
@@ -381,6 +383,8 @@ export function FileTabContent(props: {
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal<string | null>(null)
   const [loadedMtime, setLoadedMtime] = createSignal<number | null>(null)
+  // FORK: md-editing-iter-2 — 编辑器光标 / 选区状态(行/列/选中字符数)2026-05-09
+  const [cursorInfo, setCursorInfo] = createSignal<CursorInfo | undefined>(undefined)
   const dirty = createMemo(() => {
     const d = draft()
     return d !== null && d !== contents()
@@ -1533,6 +1537,8 @@ export function FileTabContent(props: {
                 value={contents()}
                 language={langFromExt(path() ?? "")}
                 onChange={setDraft}
+                // FORK: md-editing-iter-2 — 光标 / 选区状态上报状态栏 2026-05-09
+                onCursorChange={setCursorInfo}
                 // FORK: .md 文件编辑态注入 markdown 增强扩展 — 列表续延 / 拖图 / Ctrl+F 等 2026-05-05
                 extraExtensions={
                   isMarkdownPath(path())
@@ -1544,6 +1550,8 @@ export function FileTabContent(props: {
                     : undefined
                 }
               />
+              {/* FORK: md-editing-iter-2 — 编辑态状态栏 2026-05-09 */}
+              <CmStatusBar info={cursorInfo()} />
             </div>
           </Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
