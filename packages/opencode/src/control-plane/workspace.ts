@@ -5,7 +5,6 @@ import { asc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { Project } from "@/project/project"
-import { Instance } from "@/project/instance"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
@@ -646,7 +645,7 @@ export const layer = Layer.effect(
 
             // "claim" this session so any future events coming from
             // the old workspace are ignored
-            SyncEvent.claim(input.sessionID, input.workspaceID ?? Instance.project.id)
+            SyncEvent.claim(input.sessionID, input.workspaceID ?? previous.projectID)
           }
         }
 

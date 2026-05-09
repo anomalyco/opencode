@@ -2,87 +2,62 @@
 import { useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useBindings, useKeymapSelector } from "@opentui/keymap/solid"
 import { RGBA, VignetteEffect, type KeyEvent, type Renderable } from "@opentui/core"
-import { resolveBindingSections, type BindingSectionsConfig, type BindingValue } from "@opentui/keymap/extras"
-import type { Binding } from "@opentui/keymap"
+import { createBindingLookup, type BindingConfig } from "@opentui/keymap/extras"
 import type { TuiPlugin, TuiPluginApi, TuiPluginMeta, TuiPluginModule, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
 
 const tabs = ["overview", "counter", "help"]
 const command = {
-  modal: "plugin.smoke.modal",
-  screen: "plugin.smoke.screen",
-  alert: "plugin.smoke.alert",
-  confirm: "plugin.smoke.confirm",
-  prompt: "plugin.smoke.prompt",
-  select: "plugin.smoke.select",
-  host: "plugin.smoke.host",
-  home: "plugin.smoke.home",
-  toast: "plugin.smoke.toast",
-  dialog_close: "plugin.smoke.dialog.close",
-  local_push: "plugin.smoke.local.push",
-  local_pop: "plugin.smoke.local.pop",
-  screen_home: "plugin.smoke.screen.home",
-  screen_left: "plugin.smoke.screen.left",
-  screen_right: "plugin.smoke.screen.right",
-  screen_up: "plugin.smoke.screen.up",
-  screen_down: "plugin.smoke.screen.down",
-  screen_modal: "plugin.smoke.screen.modal",
-  screen_local: "plugin.smoke.screen.local",
-  screen_host: "plugin.smoke.screen.host",
-  screen_alert: "plugin.smoke.screen.alert",
-  screen_confirm: "plugin.smoke.screen.confirm",
-  screen_prompt: "plugin.smoke.screen.prompt",
-  screen_select: "plugin.smoke.screen.select",
-  modal_accept: "plugin.smoke.modal.accept",
-  modal_close: "plugin.smoke.modal.close",
-} as const
-
-const sectionNames = ["global", "dialog", "local", "screen", "modal"] as const
-type SectionName = (typeof sectionNames)[number]
-type SectionConfig = Record<string, BindingValue<Renderable, KeyEvent>>
-type ResolvedSections = Record<SectionName, Binding<Renderable, KeyEvent>[]>
-type SmokeKeymap = {
-  sections?: Partial<Record<SectionName, SectionConfig>>
+  modal: "smoke_modal",
+  screen: "smoke_screen",
+  alert: "smoke_alert",
+  confirm: "smoke_confirm",
+  prompt: "smoke_prompt",
+  select: "smoke_select",
+  host: "smoke_host",
+  home: "smoke_home",
+  toast: "smoke_toast",
+  dialog_close: "smoke_dialog_close",
+  local_push: "smoke_local_push",
+  local_pop: "smoke_local_pop",
+  screen_home: "smoke_screen_home",
+  screen_left: "smoke_screen_left",
+  screen_right: "smoke_screen_right",
+  screen_up: "smoke_screen_up",
+  screen_down: "smoke_screen_down",
+  screen_modal: "smoke_screen_modal",
+  screen_local: "smoke_screen_local",
+  screen_host: "smoke_screen_host",
+  screen_alert: "smoke_screen_alert",
+  screen_confirm: "smoke_screen_confirm",
+  screen_prompt: "smoke_screen_prompt",
+  screen_select: "smoke_screen_select",
+  modal_accept: "smoke_modal_accept",
+  modal_close: "smoke_modal_close",
 }
 
-type SmokeOptions = {
-  enabled?: boolean
-  label?: unknown
-  route?: unknown
-  vignette?: unknown
-  keymap?: SmokeKeymap
-}
+type SmokeBindings = BindingConfig<Renderable, KeyEvent>
 
 const defaultKeymap = {
-  global: {
-    [command.modal]: "ctrl+shift+m",
-    [command.screen]: "ctrl+shift+o",
-  },
-  dialog: {
-    [command.dialog_close]: "escape",
-  },
-  local: {
-    [command.local_push]: "enter,return",
-    [command.local_pop]: "escape,q,backspace",
-  },
-  screen: {
-    [command.screen_home]: "escape,ctrl+h",
-    [command.screen_left]: "left,h",
-    [command.screen_right]: "right,l",
-    [command.screen_up]: "up,k",
-    [command.screen_down]: "down,j",
-    [command.screen_modal]: "ctrl+shift+m",
-    [command.screen_local]: "x",
-    [command.screen_host]: "z",
-    [command.screen_alert]: "a",
-    [command.screen_confirm]: "c",
-    [command.screen_prompt]: "p",
-    [command.screen_select]: "s",
-  },
-  modal: {
-    [command.modal_accept]: "enter,return",
-    [command.modal_close]: "escape",
-  },
-} satisfies Record<SectionName, SectionConfig>
+  [command.modal]: "ctrl+shift+m",
+  [command.screen]: "ctrl+shift+o",
+  [command.dialog_close]: "escape",
+  [command.local_push]: "enter,return",
+  [command.local_pop]: "escape,q,backspace",
+  [command.screen_home]: "escape,ctrl+h",
+  [command.screen_left]: "left,h",
+  [command.screen_right]: "right,l",
+  [command.screen_up]: "up,k",
+  [command.screen_down]: "down,j",
+  [command.screen_modal]: "ctrl+shift+m",
+  [command.screen_local]: "x",
+  [command.screen_host]: "z",
+  [command.screen_alert]: "a",
+  [command.screen_confirm]: "c",
+  [command.screen_prompt]: "p",
+  [command.screen_select]: "s",
+  [command.modal_accept]: "enter,return",
+  [command.modal_close]: "escape",
+}
 
 const pick = (value: unknown, fallback: string) => {
   if (typeof value !== "string") return fallback
@@ -95,11 +70,14 @@ const num = (value: unknown, fallback: number) => {
   return value
 }
 
+const record = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value)
+
 type Cfg = {
   label: string
   route: string
   vignette: number
-  keymap: SmokeKeymap | undefined
+  keybinds: SmokeBindings | undefined
 }
 
 type Route = {
@@ -116,12 +94,12 @@ type State = {
   local: number
 }
 
-const cfg = (options: SmokeOptions | undefined) => {
+const cfg = (options: Record<string, unknown> | undefined) => {
   return {
     label: pick(options?.label, "smoke"),
     route: pick(options?.route, "workspace-smoke"),
     vignette: Math.max(0, num(options?.vignette, 0.35)),
-    keymap: options?.keymap,
+    keybinds: record(options?.keybinds) ? (options.keybinds as SmokeBindings) : undefined,
   }
 }
 
@@ -132,21 +110,8 @@ const names = (input: Cfg) => {
   }
 }
 
-function createKeys(input: SmokeKeymap | undefined): { sections: ResolvedSections } {
-  const sections = resolveBindingSections(
-    {
-      global: { ...defaultKeymap.global, ...input?.sections?.global },
-      dialog: { ...defaultKeymap.dialog, ...input?.sections?.dialog },
-      local: { ...defaultKeymap.local, ...input?.sections?.local },
-      screen: { ...defaultKeymap.screen, ...input?.sections?.screen },
-      modal: { ...defaultKeymap.modal, ...input?.sections?.modal },
-    } satisfies BindingSectionsConfig<Renderable, KeyEvent>,
-    { sections: sectionNames },
-  ).sections
-
-  return {
-    sections,
-  }
+function createKeys(input: SmokeBindings | undefined) {
+  return createBindingLookup({ ...defaultKeymap, ...input })
 }
 
 type Keys = ReturnType<typeof createKeys>
@@ -376,7 +341,7 @@ const Screen = (props: {
         },
       },
     ],
-    bindings: props.keys.sections.dialog,
+    bindings: props.keys.gather("smoke.dialog", [command.dialog_close]),
   }))
 
   useBindings(() => ({
@@ -395,7 +360,7 @@ const Screen = (props: {
         },
       },
     ],
-    bindings: props.keys.sections.local,
+    bindings: props.keys.gather("smoke.local", [command.local_push, command.local_pop]),
   }))
 
   useBindings(() => ({
@@ -478,7 +443,20 @@ const Screen = (props: {
         },
       },
     ],
-    bindings: props.keys.sections.screen,
+    bindings: props.keys.gather("smoke.screen", [
+      command.screen_home,
+      command.screen_left,
+      command.screen_right,
+      command.screen_up,
+      command.screen_down,
+      command.screen_modal,
+      command.screen_local,
+      command.screen_host,
+      command.screen_alert,
+      command.screen_confirm,
+      command.screen_prompt,
+      command.screen_select,
+    ]),
   }))
   const shortcuts = useKeymapSelector((keymap) => {
     const bindings = keymap.getCommandBindings({
@@ -687,7 +665,7 @@ const Modal = (props: {
         },
       },
     ],
-    bindings: props.keys.sections.modal,
+    bindings: props.keys.gather("smoke.modal", [command.modal_accept, command.modal_close]),
   }))
   const shortcuts = useKeymapSelector((keymap) => {
     const bindings = keymap.getCommandBindings({
@@ -766,25 +744,8 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
     },
     home_prompt(ctx, value) {
       const skin = look(ctx.theme.current)
-      type Prompt = (props: {
-        workspaceID?: string
-        visible?: boolean
-        disabled?: boolean
-        onSubmit?: () => void
-        hint?: JSX.Element
-        right?: JSX.Element
-        showPlaceholder?: boolean
-        placeholders?: {
-          normal?: string[]
-          shell?: string[]
-        }
-      }) => JSX.Element
-      type Slot = (
-        props: { name: string; mode?: unknown; children?: JSX.Element } & Record<string, unknown>,
-      ) => JSX.Element | null
-      const ui = api.ui as TuiPluginApi["ui"] & { Prompt: Prompt; Slot: Slot }
-      const Prompt = ui.Prompt
-      const Slot = ui.Slot
+      const Prompt = api.ui.Prompt
+      const Slot = api.ui.Slot
       const normal = [
         `[SMOKE] route check for ${input.label}`,
         "[SMOKE] confirm home_prompt slot override",
@@ -1003,20 +964,29 @@ const reg = (api: TuiPluginApi, input: Cfg, keys: Keys) => {
         },
       },
     ],
-    bindings: keys.sections.global,
+    bindings: keys.gather("smoke.global", [
+      command.modal,
+      command.screen,
+      command.alert,
+      command.confirm,
+      command.prompt,
+      command.select,
+      command.host,
+      command.home,
+      command.toast,
+    ]),
   })
 }
 
 const tui: TuiPlugin = async (api, options, meta) => {
-  const input = options as SmokeOptions | undefined
-  if (input?.enabled === false) return
+  if (options?.enabled === false) return
 
   await api.theme.install("./smoke-theme.json")
   api.theme.set("smoke-theme")
 
-  const value = cfg(input)
+  const value = cfg(options)
   const route = names(value)
-  const keys = createKeys(value.keymap)
+  const keys = createKeys(value.keybinds)
   const fx = new VignetteEffect(value.vignette)
   const post = fx.apply.bind(fx)
   api.renderer.addPostProcessFn(post)

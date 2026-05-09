@@ -848,6 +848,41 @@ describe("workspace CRUD", () => {
     })
   })
 
+  test("sessionWarp detaches to the source project when invoked from a workspace instance", async () => {
+    await withInstance(async () => {
+      const projectID = Instance.project.id
+      await using workspaceTmp = await tmpdir({ git: true })
+      const previousType = unique("warp-detach-workspace-instance")
+      const previous = workspaceInfo(projectID, previousType)
+      insertWorkspace(previous)
+      registerAdapter(projectID, previousType, localAdapter(workspaceTmp.path, { createDir: false }).adapter)
+      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
+      attachSessionToWorkspace(session.id, previous.id)
+
+      const workspaceProjectID = await WithInstance.provide({
+        directory: workspaceTmp.path,
+        fn: async () => {
+          const id = Instance.project.id
+          expect(id).not.toBe(projectID)
+          await warpWorkspaceSession({ workspaceID: null, sessionID: session.id })
+          return id
+        },
+      })
+
+      expect(
+        Database.use((db) =>
+          db
+            .select({ workspaceID: SessionTable.workspace_id })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get(),
+        )?.workspaceID,
+      ).toBeNull()
+      expect(sessionSequenceOwner(session.id)).toBe(projectID)
+      expect(sessionSequenceOwner(session.id)).not.toBe(workspaceProjectID)
+    })
+  })
+
   it.live("sessionWarp syncs previous remote history, replays it, steals, and claims the sequence", () => {
     const calls: FetchCall[] = []
     let historySessionID: SessionID | undefined

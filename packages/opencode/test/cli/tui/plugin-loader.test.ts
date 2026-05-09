@@ -81,7 +81,7 @@ async function load(): Promise<Data> {
 
       await Bun.write(
         localPluginPath,
-        `import { resolveBindingSections } from "@opentui/keymap/extras"
+        `import { createBindingLookup } from "@opentui/keymap/extras"
 import { useBindings } from "@opentui/keymap/solid"
 
 export const ignored = async (_input, options) => {
@@ -97,20 +97,18 @@ export default {
     const cfg_diff = api.tuiConfig.diff_style
     const cfg_speed = api.tuiConfig.scroll_speed
     const cfg_accel = api.tuiConfig.scroll_acceleration?.enabled
-    const cfg_submit = api.tuiConfig.keybinds?.input_submit
     const has_keys = typeof api.keys.formatBindings === "function"
-    const keymap = resolveBindingSections(options.keymap?.sections ?? {
-      main: {
-        "plugin.loader.local": "ctrl+shift+m",
-        "plugin.loader.close": "escape",
-      },
-    }, { sections: ["main"] }).sections
-    const key_modal = keymap.main.find((item) => item.cmd === "plugin.loader.local")?.key
-    const key_close = keymap.main.find((item) => item.cmd === "plugin.loader.close")?.key
+    const keybinds = createBindingLookup(options.keybinds ?? {
+      "plugin.loader.local": "ctrl+shift+m",
+      "plugin.loader.close": "escape",
+    })
+    const bindings = keybinds.gather("plugin.loader", ["plugin.loader.local", "plugin.loader.close"])
+    const key_modal = bindings.find((item) => item.cmd === "plugin.loader.local")?.key
+    const key_close = bindings.find((item) => item.cmd === "plugin.loader.close")?.key
     const key_unknown = "ctrl+k"
     const off = api.keymap.registerLayer({
       commands: [{ name: "plugin.loader.local", run() {} }, { name: "plugin.loader.close", run() {} }],
-      bindings: keymap.main,
+      bindings,
     })
     off()
     const kv_before = api.kv.get(options.kv_key, "missing")
@@ -153,7 +151,7 @@ export default {
         key_unknown,
         has_keys,
         has_keymap: typeof api.keymap.registerLayer === "function",
-        has_resolve_binding_sections: typeof resolveBindingSections === "function",
+        has_create_binding_lookup: typeof createBindingLookup === "function",
         has_keymap_solid: typeof useBindings === "function",
         kv_before,
         kv_after,
@@ -176,7 +174,6 @@ export default {
         cfg_diff,
         cfg_speed,
         cfg_accel,
-        cfg_submit,
       }),
     )
   },
@@ -356,13 +353,9 @@ export default {
       theme_name: tmp.extra.localThemeName,
       kv_key: "plugin_state_key",
       session_id: "ses_test",
-      keymap: {
-        sections: {
-          main: {
-            "plugin.loader.local": "ctrl+alt+m",
-            "plugin.loader.close": "q",
-          },
-        },
+      keybinds: {
+        "plugin.loader.local": "ctrl+alt+m",
+        "plugin.loader.close": "q",
       },
     }
     const invalidOpts = {
@@ -408,9 +401,6 @@ export default {
           diff_style: "stacked",
           scroll_speed: 1.5,
           scroll_acceleration: { enabled: true },
-          keybinds: {
-            input_submit: "ctrl+enter",
-          },
         },
         state: {
           session: {
@@ -670,7 +660,7 @@ describe("tui.plugin.loader", () => {
     expect(data.local.key_unknown).toBe("ctrl+k")
     expect(data.local.has_keys).toBe(true)
     expect(data.local.has_keymap).toBe(true)
-    expect(data.local.has_resolve_binding_sections).toBe(true)
+    expect(data.local.has_create_binding_lookup).toBe(true)
     expect(data.local.has_keymap_solid).toBe(true)
     expect(data.local.kv_before).toBe("missing")
     expect(data.local.kv_after).toBe("stored")
@@ -693,7 +683,6 @@ describe("tui.plugin.loader", () => {
     expect(data.local.cfg_diff).toBe("stacked")
     expect(data.local.cfg_speed).toBe(1.5)
     expect(data.local.cfg_accel).toBe(true)
-    expect(data.local.cfg_submit).toBe("ctrl+enter")
   })
 
   test("installs themes in the correct scope and remains resilient", () => {
