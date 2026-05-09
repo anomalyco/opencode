@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { ConfigProvider } from "@/config/provider"
-import { ModelStatus } from "@/provider/model-status"
+import { CatalogModelStatus, ModelStatus } from "@/provider/model-status"
 import { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 
 describe("provider model status schemas", () => {
-  test("accept active status across config, models.dev, and public provider schemas", () => {
+  test("keeps catalog status separate from normalized provider status", () => {
+    expect(Schema.decodeUnknownSync(CatalogModelStatus)("deprecated")).toBe("deprecated")
+    expect(() => Schema.decodeUnknownSync(CatalogModelStatus)("active")).toThrow()
     expect(Schema.decodeUnknownSync(ModelStatus)("active")).toBe("active")
+  })
+
+  test("accepts active status across public provider schemas", () => {
     expect(Schema.decodeUnknownSync(ConfigProvider.Model)({ status: "active" }).status).toBe("active")
     expect(
       Schema.decodeUnknownSync(ModelsDev.Model)({
@@ -19,9 +24,8 @@ describe("provider model status schemas", () => {
         temperature: true,
         tool_call: true,
         limit: { context: 128000, output: 8192 },
-        status: "active",
       }).status,
-    ).toBe("active")
+    ).toBeUndefined()
     expect(
       Schema.decodeUnknownSync(Provider.Model)({
         id: "test-model",
