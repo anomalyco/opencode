@@ -25,10 +25,10 @@ jobs:
           bun ./scripts/prepare.ts
           bun install --ignore-scripts
           bun run build
-          npx electron-builder --win --arm64 --publish never --dir --config electron-builder.config.ts
+          npx electron-builder --win --arm64 --publish never --config electron-builder.config.ts
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-unpacked
-          path: packages/desktop/dist/win-unpacked/
+          name: opencode-portable
+          path: packages/desktop/dist/*portable*.exe
