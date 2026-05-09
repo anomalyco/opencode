@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { zod } from "@opencode-ai/core/effect-zod"
 import { PositiveInt, withStatics } from "@opencode-ai/core/schema"
+import { ModelStatus } from "@/provider/model-status"
 
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),
@@ -49,7 +50,7 @@ export const Model = Schema.Struct({
     }),
   ),
   experimental: Schema.optional(Schema.Boolean),
-  status: Schema.optional(Schema.Literals(["alpha", "beta", "deprecated", "active"])),
+  status: Schema.optional(ModelStatus),
   provider: Schema.optional(
     Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
   ),
