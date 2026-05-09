@@ -3,11 +3,6 @@ name: desktop-arm64-portable
 on:
   workflow_dispatch:
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
-
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: windows-2025
@@ -17,31 +12,20 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Install dependencies
+      - name: Install deps
         run: bun install
 
-      - name: Prepare desktop package
+      - name: Build portable
         working-directory: packages/desktop
         run: |
           $env:RUST_TARGET = "aarch64-pc-windows-msvc"
           bun ./scripts/prepare.ts
+          bun install
+          bun run build
+          npx electron-builder --win --arm64 --publish never --config electron-builder.config.ts
 
-      - name: Install desktop deps
-        working-directory: packages/desktop
-        run: bun install
-
-      - name: Build desktop
-        working-directory: packages/desktop
-        run: bun run build
-
-      - name: Package portable EXE
-        working-directory: packages/desktop
-        run: npx electron-builder --win --arm64 --publish never --config electron-builder.config.ts
-        timeout-minutes: 60
-
-      - name: Upload portable EXE
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-desktop-win-arm64-portable
+          name: opencode-portable
           path: packages/desktop/dist/*portable*.exe
-          retention-days: 7
