@@ -37,8 +37,8 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "session" })
 

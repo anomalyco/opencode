@@ -10,8 +10,8 @@ import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
-import { NonNegativeInt, withStatics } from "@/util/schema"
-import { zod } from "@/util/effect-zod"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,

@@ -6,8 +6,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
-import { zod, zodObject } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { zod, zodObject } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "vcs" })
 const PATCH_CONTEXT_LINES = 2_147_483_647

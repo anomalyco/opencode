@@ -1,5 +1,5 @@
 import { SessionID } from "@/session/schema"
-import { NonNegativeInt } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { EventV2 } from "./event"
 import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"

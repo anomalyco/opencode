@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 import { SessionID } from "./schema"
 import { ModelID, ProviderID } from "../provider/schema"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 
 export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
