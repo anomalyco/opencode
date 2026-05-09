@@ -24,6 +24,28 @@
   - `packages/opencode`: `bun typecheck`
   - `packages/opencode`: `bun test test/memory/retention.test.ts test/util/log.test.ts test/pty/pty-shell.test.ts`
 
+- Scheduler/cron heartbeat port is now integrated (uncommitted in working tree):
+  - added scheduler subsystem:
+    - `packages/opencode/src/scheduler/index.ts`
+    - `packages/opencode/src/scheduler/store.ts`
+    - `packages/opencode/src/scheduler/runner.ts`
+    - `packages/opencode/src/scheduler/heartbeat.ts`
+  - added CLI + tool surfaces:
+    - `packages/opencode/src/cli/cmd/cron.ts`
+    - `packages/opencode/src/tool/cron.ts`
+    - wired in `serve.ts`, `index.ts`, config schema, and tool registry.
+  - tests added:
+    - `packages/opencode/test/scheduler/index.test.ts`
+    - `packages/opencode/test/scheduler/store.test.ts`
+    - `packages/opencode/test/tool/cron.test.ts`
+  - regression caught and fixed during port:
+    - `ToolRegistry` init cycle (`Cannot access 'defaultLayer' before initialization`) resolved by lazy-loading `CronTool` in `tool/registry.ts`.
+  - validation:
+    - `packages/opencode`: `bun typecheck`
+    - `packages/opencode`: `bun test test/scheduler/index.test.ts test/scheduler/store.test.ts test/tool/cron.test.ts`
+    - `packages/opencode`: `bun test test/tool/registry.test.ts test/session/instruction.test.ts`
+    - `packages/app`: `bun run build`
+
 - Autopilot+heartbeat port committed:
   - commit `343fde6a8`
 - Autopilot+heartbeat port is now integrated and green on targeted tests.

@@ -140,6 +140,7 @@
     "chokidar": "4.0.3",
     "cli-sound": "1.1.3",
     "clipboardy": "4.0.0",
+    "croner": "9.1.0",
     "cross-spawn": "catalog:",
     "decimal.js": "10.5.0",
     "diff": "catalog:",

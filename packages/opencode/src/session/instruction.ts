@@ -12,6 +12,7 @@ import type { MessageID } from "./schema"
 
 const FILES = [
   "AGENTS.md",
+  "HEARTBEAT.md",
   ...(Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT ? [] : ["CLAUDE.md"]),
   "CONTEXT.md", // deprecated
 ]
