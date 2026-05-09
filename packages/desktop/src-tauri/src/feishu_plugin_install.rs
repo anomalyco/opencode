@@ -58,15 +58,13 @@ fn resolve_plugin_dir(app: &AppHandle) -> Option<PathBuf> {
 }
 
 fn resolve_user_config_path() -> Option<PathBuf> {
-    // 跨平台对齐 opencode 自己用的 xdg-basedir npm 包行为:
-    //   Linux:  $XDG_CONFIG_HOME 或 ~/.config           → ~/.config/opencode/
-    //   macOS:  ~/.config(xdg-basedir 在 darwin 用 ~/.config 不用 Library)→ ~/.config/opencode/
-    //   Win:    %APPDATA%(xdg-basedir 在 win32 用 APPDATA)→ %APPDATA%\opencode\
-    // dirs crate 在 Win 上 config_dir() 返 %APPDATA%\Roaming\,Mac 上返 ~/Library/Application Support
-    // — 所以 Mac/Linux 走 ~/.config 路径(对齐 xdg-basedir),Win 走 dirs::config_dir()(对齐 xdg-basedir)
-    #[cfg(target_os = "windows")]
-    let dir = dirs::config_dir()?.join("opencode");
-    #[cfg(not(target_os = "windows"))]
+    // 对齐 opencode 自己用的 xdg-basedir@5.1.0 npm 包行为(`packages/core/src/global.ts:12`)。
+    // xdg-basedir 5.1.0 实际无 Win 特殊分支,三平台一致:`$XDG_CONFIG_HOME` 或 `~/.config`。
+    //   - Linux:$XDG_CONFIG_HOME 或 ~/.config       → ~/.config/opencode/
+    //   - macOS:~/.config(不用 Library)            → ~/.config/opencode/
+    //   - Win:  ~/.config(不用 %APPDATA%)            → ~/.config/opencode/
+    // 注:旧版逻辑用 `dirs::config_dir()` 在 Win 返 %APPDATA%\Roaming\,跟 sidecar
+    // 实际查找路径不重叠,导致 plugin 注入永远命不中。三平台统一走 home/.config 修。
     let dir = dirs::home_dir()?.join(".config").join("opencode");
 
     let jsonc = dir.join("opencode.jsonc");
@@ -85,8 +83,28 @@ fn resolve_user_config_path() -> Option<PathBuf> {
     Some(json)
 }
 
+/// 把文件系统路径转成 opencode plugin loader 可接受的 `file://` URL。
+///
+/// Win 注意点:
+///   - `Path::canonicalize()` / Tauri `resource_dir()` 在 Win 经常加扩展长度前缀 `\\?\`,
+///     `import()` / Node URL parser 不接受 → 必须 strip
+///   - 反斜杠 `\` 必须转 `/`,标准 file URL 用正斜杠
+///   - 空格用 `%20` 编码(install 路径常见 `Program Files`)
+/// Linux/Mac 走 fall-through 自然处理(无 UNC,无 backslash)。
+fn to_file_url(path: &Path) -> String {
+    let raw = path.display().to_string();
+    let stripped = raw.strip_prefix(r"\\?\").unwrap_or(&raw);
+    let normalized = stripped.replace('\\', "/");
+    let encoded = normalized.replace(' ', "%20");
+    if encoded.starts_with('/') {
+        format!("file://{encoded}")
+    } else {
+        format!("file:///{encoded}")
+    }
+}
+
 fn inject_plugin(config_path: &Path, plugin_dir: &Path) -> Result<(), String> {
-    let plugin_url = format!("file://{}", plugin_dir.display());
+    let plugin_url = to_file_url(plugin_dir);
 
     let raw = if config_path.exists() {
         fs::read_to_string(config_path).map_err(|e| format!("read config: {e}"))?
@@ -190,4 +208,39 @@ fn strip_comments(input: &str) -> String {
         i += 1;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    // [bug-repro: Win 安装包 plugin URL 写出 `file://\\?\D:\...` 反斜杠 + UNC 前缀,
+    //  opencode plugin loader / Node import() 不接受]
+    #[test]
+    fn unc_prefix_stripped_and_backslashes_converted() {
+        let p = PathBuf::from(r"\\?\D:\project\plugin\feishu-bridge");
+        assert_eq!(to_file_url(&p), "file:///D:/project/plugin/feishu-bridge");
+    }
+
+    #[test]
+    fn plain_windows_path() {
+        let p = PathBuf::from(r"D:\foo\bar");
+        assert_eq!(to_file_url(&p), "file:///D:/foo/bar");
+    }
+
+    #[test]
+    fn unix_path_uses_double_slash() {
+        let p = PathBuf::from("/Users/u/foo");
+        assert_eq!(to_file_url(&p), "file:///Users/u/foo");
+    }
+
+    #[test]
+    fn space_encoded_as_pct20() {
+        let p = PathBuf::from(r"C:\Program Files\DeskFox\plugin\feishu-bridge");
+        assert_eq!(
+            to_file_url(&p),
+            "file:///C:/Program%20Files/DeskFox/plugin/feishu-bridge"
+        );
+    }
 }
