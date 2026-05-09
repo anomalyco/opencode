@@ -36,6 +36,8 @@ export const ListQuery = Schema.Struct({
 })
 export const DiffQuery = Schema.Struct(Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]))
 export const MessagesQuery = Schema.Struct({
+  directory: Schema.optional(Schema.String),
+  workspace: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
   before: Schema.optional(Schema.String),
 })
