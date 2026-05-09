@@ -165,14 +165,15 @@ export async function init(options: Options) {
   await fs.truncate(logpath).catch(() => {})
   const stream = createWriteStream(logpath, { flags: "a" })
   write = async (msg: any) => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       stream.write(msg, (err) => {
-        if (err) reject(err)
-        else {
-          size += msg.length
-          sweep()
-          resolve(msg.length)
+        if (err) {
+          resolve(0)
+          return
         }
+        size += msg.length
+        sweep()
+        resolve(msg.length)
       })
     })
   }

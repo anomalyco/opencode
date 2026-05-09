@@ -2,7 +2,7 @@
 
 ## Current State
 - Branch: `rebase/upstream-sync` (based on `upstream/dev`)
-- Latest commit: `bb95c60ee` (`fix: keep TTS on Effect HttpApi backend`)
+- Latest commit: `fbf48f48d` (`feat: scheduler cron heartbeat runtime`)
 - Active todos:
   - `rebase-ui` — done
   - `rebase-tts` — done
@@ -11,6 +11,28 @@
   - `rebase-session` — done
   - `rebase-infra` — done
   - `rebase-verify` — in progress
+
+## Latest Update (2026-05-09)
+- Rebased branch onto latest `upstream/dev` and resumed full verification.
+- Fixed major post-rebase test cascade caused by unhandled async logger write failures:
+  - `packages/core/src/util/log.ts`
+  - logger file writes now resolve safely on stream errors (no unhandled rejections during teardown).
+- Fixed shell output race causing intermittent `(no output)` regressions:
+  - `packages/opencode/src/tool/shell.ts`
+  - now joins output reader fiber before finalizing output.
+- Current verification snapshot:
+  - `packages/opencode`: `bun typecheck` ✅
+  - `packages/app`: `bun run build` ✅
+  - `packages/opencode`: `bun test` => `2617 pass / 11 skip / 2 todo / 6 fail`
+- Remaining 6 fails are environment/baseline in this machine context:
+  - `ModelsDev Service > get() returns {} when disk empty and fetch disabled` (local model snapshot state)
+  - `provider HttpApi > matches legacy OAuth authorize response shapes` (`"null"` body parity)
+  - `Worktree > list > uses parent folder name when worktree basename matches the primary worktree` (`/t` vs `/T` path-case mismatch)
+  - three `Project.fromDirectory with bare repos` tests (`safe.bareRepository=explicit`)
+- Pending user-requested publish/deploy actions:
+  - tag current `origin/dev`
+  - force-push rebased `rebase/upstream-sync` to `origin/dev`
+  - deploy/restart VM service and re-check original session page.
 
 ## Latest Update
 - Scheduler/cron heartbeat runtime committed:
