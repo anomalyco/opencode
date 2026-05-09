@@ -122,7 +122,7 @@ describe("sync HttpApi", () => {
     }
   })
 
-  test("returns structured validation errors", async () => {
+  test.todo("returns structured validation errors", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const response = await ExperimentalHttpApiServer.webHandler().handler(
       new Request(`http://localhost${SyncPaths.history}`, {

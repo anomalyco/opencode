@@ -47,4 +47,41 @@ describe("config HttpApi", () => {
       lsp: false,
     })
   })
+
+  test("serves config with active provider model status", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        formatter: false,
+        lsp: false,
+        provider: {
+          omniroute: {
+            models: {
+              "gpt-4o": {
+                status: "active",
+              },
+            },
+          },
+        },
+      },
+    })
+
+    const response = await app().request("/config", {
+      headers: {
+        "x-opencode-directory": tmp.path,
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      provider: {
+        omniroute: {
+          models: {
+            "gpt-4o": {
+              status: "active",
+            },
+          },
+        },
+      },
+    })
+  })
 })

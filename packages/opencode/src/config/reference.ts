@@ -1,8 +1,8 @@
 export * as ConfigReference from "./reference"
 
 import { Schema } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 const Git = Schema.Struct({
   repository: Schema.String.annotate({

@@ -9120,7 +9120,7 @@
             "enum": ["added", "deleted", "modified"]
           }
         },
-        "required": ["file", "patch", "additions", "deletions"],
+        "required": ["additions", "deletions"],
         "additionalProperties": false
       },
       "ProviderAuthError": {
@@ -11725,7 +11725,7 @@
                 },
                 "status": {
                   "type": "string",
-                  "enum": ["alpha", "beta", "deprecated"]
+                  "enum": ["alpha", "beta", "deprecated", "active"]
                 },
                 "provider": {
                   "type": "object",
@@ -13039,7 +13039,7 @@
             "enum": ["added", "deleted", "modified"]
           }
         },
-        "required": ["file", "patch", "additions", "deletions"],
+        "required": ["file", "additions", "deletions"],
         "additionalProperties": false
       },
       "VcsApplyError": {

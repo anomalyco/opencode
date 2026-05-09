@@ -6,8 +6,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
-import { zod, zodObject } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { zod, zodObject } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "vcs" })
 const PATCH_CONTEXT_LINES = 2_147_483_647
@@ -230,7 +230,10 @@ export type Info = Schema.Schema.Type<typeof Info>
 
 export const FileDiff = Schema.Struct({
   file: Schema.String,
-  patch: Schema.String,
+  // Mirrors Snapshot.FileDiff (see #26574). The current producer always
+  // populates patch, but loosening matches the sibling schema so a
+  // future code path that omits it can't crash /instance/vcs/diff.
+  patch: Schema.optional(Schema.String),
   additions: NonNegativeInt,
   deletions: NonNegativeInt,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
