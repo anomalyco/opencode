@@ -7,7 +7,9 @@
 // installer 不能动 user 配置,所以走 setup hook —— DeskFox 启动时检测 / 注入 plugin 路径,
 // 之后 sidecar spawn 即能加载。
 //
-// idempotent:已存在指向本 plugin 的项就跳过,不重复加。user 手动改过别的 plugin 项不动。
+// idempotent:已存在指向本 plugin 的有效项就跳过;失效项(路径已不存在)清理后重新注入。
+// 失效场景实例 — user 在 .dmg 挂载点双击 .app,inject 写入 /Volumes/... 路径,卸载挂载点后路径失效;
+// user 拖 .app 到 Applications 后下次启动需自愈,不能因子串匹配就跳过保留废 entry [feat: feishu-bridge-newuser-onboarding] 2026-05-10。
 
 use serde_json::Value;
 use std::fs;
@@ -136,28 +138,74 @@ fn inject_plugin(config_path: &Path, plugin_dir: &Path) -> Result<(), String> {
         .as_array_mut()
         .ok_or_else(|| "plugin field is not an array".to_string())?;
 
-    // idempotent 检测:任何项已包含本 plugin 路径的尾段(plugin/feishu-bridge)就跳过。
-    // 这样 user 手动配过开发版路径(不同前缀)我们也尊重不覆盖。
-    let already_has = arr.iter().any(|v| match v {
-        Value::String(s) => s.contains(PLUGIN_DIR_NAME),
-        Value::Object(o) => o
-            .get("path")
-            .and_then(|x| x.as_str())
-            .map(|p| p.contains(PLUGIN_DIR_NAME))
-            .unwrap_or(false),
-        _ => false,
+    // idempotent + 失效自愈:遍历 plugin 数组,把含 PLUGIN_DIR_NAME 子串的项分类
+    //   - 路径仍存在 → 保留(若就是当前 plugin_url 视为已注入,跳过 push)
+    //   - 路径已失效 → 移除 + log(挂载点卸载 / 旧版本 .app 删除等情况自愈)
+    let mut found_current = false;
+    let mut removed = 0_usize;
+    arr.retain(|v| {
+        let path_str = match v {
+            Value::String(s) => Some(s.as_str()),
+            Value::Object(o) => o.get("path").and_then(|x| x.as_str()),
+            _ => return true, // 非本 plugin 形状 → 不动
+        };
+        let Some(s) = path_str else { return true };
+        if !s.contains(PLUGIN_DIR_NAME) {
+            return true; // 不是本 plugin entry → 保持
+        }
+        // 是本 plugin entry → 检测路径是否仍存在
+        if path_still_valid(s) {
+            if s == plugin_url {
+                found_current = true;
+            }
+            true
+        } else {
+            tracing::info!("[feishu-plugin] removing stale entry: {s}");
+            removed += 1;
+            false
+        }
     });
 
-    if already_has {
-        tracing::info!("[feishu-plugin] already in user config, skipping inject");
+    if found_current {
+        if removed > 0 {
+            // 当前 entry 已存在,但顺手清掉了别的 stale entry(罕见:前后两次 inject 路径一致 + 旧版残留)
+            let pretty =
+                serde_json::to_string_pretty(&json).map_err(|e| format!("serialize: {e}"))?;
+            fs::write(config_path, pretty).map_err(|e| format!("write config: {e}"))?;
+            tracing::info!(
+                "[feishu-plugin] {plugin_url} already present; cleaned {removed} stale entry(ies)"
+            );
+        } else {
+            tracing::info!("[feishu-plugin] already in user config, skipping inject");
+        }
         return Ok(());
     }
 
     arr.push(Value::String(plugin_url.clone()));
     let pretty = serde_json::to_string_pretty(&json).map_err(|e| format!("serialize: {e}"))?;
     fs::write(config_path, pretty).map_err(|e| format!("write config: {e}"))?;
-    tracing::info!("[feishu-plugin] injected {plugin_url} into {}", config_path.display());
+    if removed > 0 {
+        tracing::info!(
+            "[feishu-plugin] injected {plugin_url} (replaced {removed} stale entry(ies)) into {}",
+            config_path.display()
+        );
+    } else {
+        tracing::info!(
+            "[feishu-plugin] injected {plugin_url} into {}",
+            config_path.display()
+        );
+    }
     Ok(())
+}
+
+/// 字符串路径(可能带 file:// 前缀,可能是裸路径)→ 判断对应文件系统路径是否存在
+fn path_still_valid(raw: &str) -> bool {
+    let trimmed = raw.strip_prefix("file://").unwrap_or(raw);
+    // file:// URL 在不同平台前导斜杠数量不同,Path::new 在 Mac/Linux 上 "/path" 直接可用;
+    // Win 上是 "/C:/path" 形式 — Path::new 也能识别(strip leading slash 兼容)
+    #[cfg(target_os = "windows")]
+    let trimmed = trimmed.strip_prefix('/').unwrap_or(trimmed);
+    Path::new(trimmed).exists()
 }
 
 /// 简单去 jsonc 注释(line `//` + block `/* */`)— 不严格(够 user 写的 .jsonc 用)。
@@ -213,10 +261,13 @@ fn strip_comments(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
+    // ---- to_file_url 转换覆盖(Win UNC 前缀 / 反斜杠 / 空格 / 跨平台)----
     // [bug-repro: Win 安装包 plugin URL 写出 `file://\\?\D:\...` 反斜杠 + UNC 前缀,
     //  opencode plugin loader / Node import() 不接受]
+
     #[test]
     fn unc_prefix_stripped_and_backslashes_converted() {
         let p = PathBuf::from(r"\\?\D:\project\plugin\feishu-bridge");
@@ -242,5 +293,141 @@ mod tests {
             to_file_url(&p),
             "file:///C:/Program%20Files/DeskFox/plugin/feishu-bridge"
         );
+    }
+
+    // ---- inject_plugin idempotent + 失效自愈覆盖 ----
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    /// 造一个独立 tmp 目录做测试根 — 不依赖 tempfile crate
+    struct Sandbox {
+        root: PathBuf,
+    }
+    impl Sandbox {
+        fn new(label: &str) -> Self {
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+            let root = std::env::temp_dir()
+                .join(format!("deskfox-feishu-plugin-install-test-{label}-{nanos}-{n}"));
+            fs::create_dir_all(&root).unwrap();
+            Self { root }
+        }
+        fn make_plugin_dir(&self, name: &str) -> PathBuf {
+            // plugin_dir 必须含 plugin/feishu-bridge 尾段(对齐真实 layout)
+            let dir = self.root.join(name).join(PLUGIN_DIR_NAME);
+            fs::create_dir_all(&dir).unwrap();
+            // 顺手放 package.json,inject_plugin 不读 plugin_dir 内容,但语义对齐
+            fs::write(dir.join("package.json"), "{}").unwrap();
+            dir
+        }
+    }
+    impl Drop for Sandbox {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn read_plugin_array(config: &Path) -> Vec<String> {
+        let raw = fs::read_to_string(config).unwrap();
+        let v: Value = serde_json::from_str(&raw).unwrap();
+        v.get("plugin")
+            .and_then(|p| p.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn first_inject_writes_entry_into_empty_config() {
+        let s = Sandbox::new("fresh");
+        let plugin_dir = s.make_plugin_dir("install-A");
+        let cfg = s.root.join("opencode.json");
+        fs::write(&cfg, r#"{ "$schema": "x" }"#).unwrap();
+        inject_plugin(&cfg, &plugin_dir).unwrap();
+        let arr = read_plugin_array(&cfg);
+        assert_eq!(arr.len(), 1);
+        assert!(arr[0].ends_with(PLUGIN_DIR_NAME));
+        assert!(arr[0].starts_with("file://"));
+    }
+
+    #[test]
+    fn idempotent_when_same_path_present_and_valid() {
+        let s = Sandbox::new("idem");
+        let plugin_dir = s.make_plugin_dir("install-A");
+        let cfg = s.root.join("opencode.json");
+        fs::write(&cfg, r#"{ "$schema": "x" }"#).unwrap();
+        inject_plugin(&cfg, &plugin_dir).unwrap();
+        let mtime_before = fs::metadata(&cfg).unwrap().modified().unwrap();
+        // 第二次 inject 同路径 — 不应改变 entry 数 / 不应触发文件 rewrite(found_current 路径)
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        inject_plugin(&cfg, &plugin_dir).unwrap();
+        let arr = read_plugin_array(&cfg);
+        assert_eq!(arr.len(), 1, "second inject must not duplicate");
+        let mtime_after = fs::metadata(&cfg).unwrap().modified().unwrap();
+        assert_eq!(
+            mtime_before, mtime_after,
+            "no-op inject should not rewrite file"
+        );
+    }
+
+    #[test]
+    fn stale_entry_is_replaced_when_path_changes() {
+        // 模拟 user 在 .dmg 挂载点双击 .app — inject 写 /Volumes/... 路径,卸载后 user 拖 Applications 再启动
+        let s = Sandbox::new("heal");
+        let mountpoint_dir = s.make_plugin_dir("Volumes-DMG");
+        let cfg = s.root.join("opencode.json");
+        fs::write(&cfg, r#"{ "$schema": "x" }"#).unwrap();
+        inject_plugin(&cfg, &mountpoint_dir).unwrap();
+        // 模拟挂载点卸载 — 删 dir
+        fs::remove_dir_all(&mountpoint_dir).unwrap();
+        assert!(!mountpoint_dir.exists());
+
+        // 拖 Applications 后再启动 — 新 plugin_dir 路径
+        let app_dir = s.make_plugin_dir("Applications-App");
+        inject_plugin(&cfg, &app_dir).unwrap();
+        let arr = read_plugin_array(&cfg);
+        assert_eq!(arr.len(), 1, "stale entry replaced, single entry remains");
+        assert!(
+            arr[0].contains("Applications-App"),
+            "new path injected: {arr:?}"
+        );
+        assert!(
+            !arr[0].contains("Volumes-DMG"),
+            "stale path removed: {arr:?}"
+        );
+    }
+
+    #[test]
+    fn unrelated_plugin_entries_preserved() {
+        let s = Sandbox::new("preserve");
+        let plugin_dir = s.make_plugin_dir("install-A");
+        let cfg = s.root.join("opencode.json");
+        // 已有一个 user 自己加的非本 plugin entry
+        fs::write(
+            &cfg,
+            r#"{ "$schema": "x", "plugin": ["file:///some/other/plugin"] }"#,
+        )
+        .unwrap();
+        inject_plugin(&cfg, &plugin_dir).unwrap();
+        let arr = read_plugin_array(&cfg);
+        assert_eq!(arr.len(), 2);
+        assert!(arr.iter().any(|s| s == "file:///some/other/plugin"));
+        assert!(arr.iter().any(|s| s.contains(PLUGIN_DIR_NAME)));
+    }
+
+    #[test]
+    fn path_still_valid_strips_file_url_prefix() {
+        let s = Sandbox::new("path");
+        let dir = s.make_plugin_dir("X");
+        let url = format!("file://{}", dir.display());
+        assert!(path_still_valid(&url));
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(!path_still_valid(&url));
     }
 }
