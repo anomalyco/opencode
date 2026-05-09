@@ -58,9 +58,17 @@ fn resolve_plugin_dir(app: &AppHandle) -> Option<PathBuf> {
 }
 
 fn resolve_user_config_path() -> Option<PathBuf> {
-    // user `~/.config/opencode/opencode.{jsonc,json}`,优先 jsonc
-    let home = dirs::home_dir()?;
-    let dir = home.join(".config").join("opencode");
+    // 跨平台对齐 opencode 自己用的 xdg-basedir npm 包行为:
+    //   Linux:  $XDG_CONFIG_HOME 或 ~/.config           → ~/.config/opencode/
+    //   macOS:  ~/.config(xdg-basedir 在 darwin 用 ~/.config 不用 Library)→ ~/.config/opencode/
+    //   Win:    %APPDATA%(xdg-basedir 在 win32 用 APPDATA)→ %APPDATA%\opencode\
+    // dirs crate 在 Win 上 config_dir() 返 %APPDATA%\Roaming\,Mac 上返 ~/Library/Application Support
+    // — 所以 Mac/Linux 走 ~/.config 路径(对齐 xdg-basedir),Win 走 dirs::config_dir()(对齐 xdg-basedir)
+    #[cfg(target_os = "windows")]
+    let dir = dirs::config_dir()?.join("opencode");
+    #[cfg(not(target_os = "windows"))]
+    let dir = dirs::home_dir()?.join(".config").join("opencode");
+
     let jsonc = dir.join("opencode.jsonc");
     if jsonc.exists() {
         return Some(jsonc);
