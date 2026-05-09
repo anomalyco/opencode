@@ -1401,6 +1401,18 @@ export type VcsInfo = {
   branch: string
 }
 
+export type OutputFormatText = {
+  type: "text"
+}
+
+export type OutputFormatJsonSchema = {
+  type: "json_schema"
+  schema: Record<string, unknown>
+  retryCount?: number
+}
+
+export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -2595,6 +2607,7 @@ export type SessionPromptData = {
     tools?: {
       [key: string]: boolean
     }
+    format?: OutputFormat
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
