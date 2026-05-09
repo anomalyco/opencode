@@ -171,9 +171,9 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           }
         }),
         method: Effect.fn("Installation.method")(function* () {
-          if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
-          if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
-          const exec = process.execPath.toLowerCase()
+          const invoked = (process.argv[1] || process.env._ || process.execPath).toLowerCase()
+          if (invoked.includes(path.join(".opencode", "bin"))) return "curl" as Method
+          if (invoked.includes(path.join(".local", "bin"))) return "curl" as Method
 
           const checks: Array<{ name: Method; command: () => Effect.Effect<string> }> = [
             { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]) },
@@ -186,8 +186,8 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           ]
 
           checks.sort((a, b) => {
-            const aMatches = exec.includes(a.name)
-            const bMatches = exec.includes(b.name)
+            const aMatches = invoked.includes(a.name)
+            const bMatches = invoked.includes(b.name)
             if (aMatches && !bMatches) return -1
             if (!aMatches && bMatches) return 1
             return 0
