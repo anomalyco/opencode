@@ -59,7 +59,7 @@ function isKnownSection(value: string): boolean {
   return extraAgents.some((agent) => agent.configSection === value)
 }
 
-type SkillGroup = "opencode" | "claude" | "project" | "external"
+type SkillGroup = "opencode" | "claude" | "project" | "external" | "plugin"
 
 type DocItem = {
   id: string
@@ -217,10 +217,34 @@ function file(path: string) {
 
 function origin(path: string) {
   const next = norm(path)
+  if (next.includes("/.agents/agent/") || next.includes("/.agents/agents/")) return ".agents"
+  if (next.includes("/.opencode/agent/") || next.includes("/.opencode/agents/")) return ".opencode"
   if (next.includes("/.claude/skills/")) return ".claude"
   if (next.includes("/.agents/skills/")) return ".agents"
   if (next.includes("/.opencode/skill/") || next.includes("/.opencode/skills/")) return ".opencode"
   return "skill"
+}
+
+function rel(root: string, path: string) {
+  const base = norm(root)
+  const next = norm(path)
+  if (next === base) return name(next)
+  if (!next.startsWith(base + "/")) return name(next)
+  return next.slice(base.length + 1)
+}
+
+function stem(path: string) {
+  return path.replace(/\.(?:md|mdx|d\.ts|ts|js|mjs|cjs)$/i, "")
+}
+
+function pkg(spec: string) {
+  if (spec.startsWith("file://")) return
+  if (spec.includes("\\") || spec.startsWith("/") || /^[A-Za-z]:\//.test(spec)) return
+  const last = spec.lastIndexOf("@")
+  if (last > 0) {
+    return { name: spec.slice(0, last), version: spec.slice(last + 1) || "latest" }
+  }
+  return { name: spec, version: "latest" }
 }
 
 function bucket(path: string, input: { skills?: string; claude?: string; project?: ReturnType<typeof owner> }) {
@@ -1963,6 +1987,13 @@ export default function ConfigPage() {
   const cfg = createMemo(() => globalSync.data.config)
   const t = language.t
 
+  function agentModeLabel(mode?: string) {
+    if (mode === "subagent") return t("config.agents.badge.subagent")
+    if (mode === "primary") return t("config.agents.badge.primary")
+    if (mode === "all") return t("config.agents.badge.all")
+    return t("config.agents.badge.agent")
+  }
+
   function back() {
     if (window.history.length > 1) {
       window.history.back()
@@ -2005,7 +2036,7 @@ export default function ConfigPage() {
     ]
   })
 
-  const agents = createMemo<DocItem[]>(() =>
+  const globalAgents = createMemo<DocItem[]>(() =>
     (space()?.agents ?? []).map((item) => ({
       id: `agent:${item.path}`,
       label: item.name,
@@ -2013,6 +2044,8 @@ export default function ConfigPage() {
       editable: true,
       source: "opencode",
       note: t("config.agents.note"),
+      group: "opencode" as const,
+      origin: ".opencode",
     })),
   )
 
@@ -2088,6 +2121,191 @@ export default function ConfigPage() {
 
     return walk(root)
   }
+
+  const scanAgents = async (
+    root: string,
+    extra: Pick<DocItem, "source" | "group" | "project" | "origin" | "root">,
+    opts?: { code?: boolean },
+  ) => {
+    if (!platform.listConfigDirectory) return [] as DocItem[]
+
+    const walk = async (dir: string): Promise<DocItem[]> => {
+      const list = await platform.listConfigDirectory?.(dir).catch(() => [] as ConfigTreeItem[])
+      if (!list?.length) return []
+
+      return Promise.all(
+        sortTree(list).map(async (item) => {
+          if (item.kind === "directory") return walk(item.path)
+          const match = opts?.code ? /\.(?:mdx?|d\.ts|[cm]?[jt]s)$/i : /\.mdx?$/i
+          if (!match.test(item.path)) return []
+
+          const label = stem(rel(root, item.path))
+
+          return [
+            {
+              id: `agent:${item.path}`,
+              label,
+              path: item.path,
+              editable: file(item.path),
+              note:
+                extra.group === "plugin" && opts?.code
+                  ? "Plugin agent prompt source file."
+                  : extra.group === "plugin"
+                    ? "Plugin agent prompt file."
+                    : t("config.agents.note"),
+              ...extra,
+            },
+          ]
+        }),
+      ).then((list) => list.flat())
+    }
+
+    const list = await walk(root)
+    return list
+  }
+
+  const [diskAgents] = createResource(
+    () => [state.agentRev, opened()] as const,
+    async ([, list]) => {
+      return Promise.all(
+        list.map(async (item) => {
+          const label = item.name ?? name(item.worktree)
+          const roots = Array.from(new Set([item.worktree, ...(item.sandboxes ?? [])]))
+
+          return Promise.all(
+            roots.map(async (dir) => {
+              const extra = dir === item.worktree ? undefined : name(dir)
+              const suffix = extra ? ` · ${extra}` : ""
+
+              return Promise.all([
+                scanAgents(join(dir, ".opencode", "agent"), {
+                  source: "project",
+                  group: "project",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.opencode${suffix}`,
+                }),
+                scanAgents(join(dir, ".opencode", "agents"), {
+                  source: "project",
+                  group: "project",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.opencode${suffix}`,
+                }),
+                scanAgents(join(dir, ".agents", "agent"), {
+                  source: "external",
+                  group: "plugin",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.agents${suffix}`,
+                }),
+                scanAgents(join(dir, ".agents", "agents"), {
+                  source: "external",
+                  group: "plugin",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.agents${suffix}`,
+                }),
+              ]).then((list) => list.flat())
+            }),
+          ).then((list) => list.flat())
+        }),
+      ).then((list) => list.flat())
+    },
+  )
+
+  const [pluginAgents] = createResource(
+    () => [state.agentRev, globalSync.data.path.home, cfg().plugin] as const,
+    async ([, home, plugins]) => {
+      const cache = home ? join(home, ".cache", "opencode") : undefined
+      if (!cache || !plugins?.length) return [] as DocItem[]
+
+      return Promise.all(
+        plugins
+          .map(pkg)
+          .filter((item): item is { name: string; version: string } => !!item)
+          .flatMap((item) => [
+            {
+              root: join(cache, "node_modules", item.name),
+              name: item.name,
+            },
+            {
+              root: join(cache, "packages", `${item.name}@${item.version}`, "node_modules", item.name),
+              name: item.name,
+            },
+          ])
+          .map(async (item) => {
+            return Promise.all([
+              scanAgents(join(item.root, "agent"), {
+                source: "external",
+                group: "plugin",
+                origin: item.name,
+                root: item.root,
+              }),
+              scanAgents(join(item.root, "agents"), {
+                source: "external",
+                group: "plugin",
+                origin: item.name,
+                root: item.root,
+              }),
+              scanAgents(join(item.root, "dist", "agents"), {
+                source: "external",
+                group: "plugin",
+                origin: item.name,
+                root: item.root,
+              }),
+            ]).then((list) => list.flat())
+          }),
+      ).then((list) => list.flat())
+    },
+  )
+
+  const runtimeAgents = createMemo<DocItem[]>(() => {
+    const names = new Set([...globalAgents(), ...(diskAgents() ?? []), ...(pluginAgents() ?? [])].map((item) => item.label))
+    return (loaded() ?? [])
+      .filter((item) => !item.native && !item.hidden && !names.has(item.name))
+      .map((item) => ({
+        id: `agent-runtime:${item.name}`,
+        label: item.name,
+        path: `runtime:${item.name}`,
+        editable: false,
+        source: "external",
+        group: "plugin" as const,
+        origin: "runtime",
+        note: item.description ?? "Loaded runtime agent from config or plugin.",
+        content: item.prompt ?? "No prompt content is available for this runtime agent.",
+      }))
+  })
+
+  const agents = createMemo<DocItem[]>(() => {
+    const seen = new Set<string>()
+    return [...globalAgents(), ...(diskAgents() ?? []), ...(pluginAgents() ?? []), ...runtimeAgents()]
+      .filter((item) => {
+        const key = norm(item.path)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .sort((a, b) => (a.group ?? "").localeCompare(b.group ?? "") || a.label.localeCompare(b.label))
+  })
+
+  const agentOpenCode = createMemo(() => agents().filter((item) => item.group === "opencode"))
+  const agentProject = createMemo(() => agents().filter((item) => item.group === "project"))
+  const agentPlugin = createMemo(() => agents().filter((item) => item.group === "plugin"))
+
+  const projectAgentGroups = createMemo(() => {
+    const items = agentProject()
+    const groups = new Map<string, DocItem[]>()
+    for (const item of items) {
+      const key = item.project ?? ""
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(item)
+    }
+    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  })
+
+  const agentProjectOpen = (key: string) => !!state.treeClosed[`agent-project:${key}`]
+  const toggleAgentProject = (key: string) => setState("treeClosed", `agent-project:${key}`, (v) => !v)
 
   const [diskClaude] = createResource(
     () => [state.skillRev, claudeRoot()] as const,
@@ -2421,7 +2639,12 @@ export default function ConfigPage() {
     if (!item) return undefined
     return dir(item.path)
   })
-  const agentWait = createMemo(() => state.section === "agents" && loaded.loading && agents().length === 0)
+  const agentWait = createMemo(
+    () =>
+      state.section === "agents" &&
+      (loaded.loading || diskAgents.loading || pluginAgents.loading) &&
+      agents().length === 0,
+  )
   const skillWait = createMemo(
     () =>
       state.section === "skills" &&
@@ -3400,7 +3623,7 @@ export default function ConfigPage() {
         </aside>
 
         <div class="flex min-h-0 min-w-0 flex-1 flex-col xl:flex-row">
-          <section class="shrink-0 border-b border-border-weak-base bg-surface-base/80 backdrop-blur xl:w-[320px] xl:border-r xl:border-b-0">
+          <section class="shrink-0 border-b border-border-weak-base bg-surface-base/80 backdrop-blur xl:w-[400px] xl:border-r xl:border-b-0">
             <div class="flex h-full min-h-0 flex-col">
               <div class="border-b border-border-weak-base px-4 py-4">
                 <Switch>
@@ -3593,23 +3816,119 @@ export default function ConfigPage() {
                         when={!agentWait()}
                         fallback={<Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />}
                       >
-                        <For each={agents()}>
-                          {(item) => {
-                            return (
-                              <ListButton
-                                active={state.pick === item.id}
-                                title={item.label}
-                                note={
-                                  loadedMap().get(item.label)?.description ||
-                                  loadedMap().get(item.label)?.mode ||
-                                  item.note
-                                }
-                                meta={short(item.path, space()?.agentsRoot)}
-                                onClick={() => void open(item)}
-                              />
-                            )
-                          }}
-                        </For>
+                        <div class="flex flex-col gap-3">
+                          <Show when={agentOpenCode().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.skills.group.opencode")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {agentOpenCode().length}
+                                </div>
+                              </div>
+                              <For each={agentOpenCode()}>
+                                {(item) => (
+                                  <ListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    note={
+                                      loadedMap().get(item.label)?.description ||
+                                      agentModeLabel(loadedMap().get(item.label)?.mode) ||
+                                      item.note
+                                    }
+                                    meta={short(item.path, space()?.agentsRoot)}
+                                    onClick={() => void open(item)}
+                                  />
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+
+                          <Show when={agentProject().length > 0}>
+                            <div class="flex flex-col gap-1">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.skills.group.project")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {agentProject().length}
+                                </div>
+                              </div>
+                              <For each={projectAgentGroups()}>
+                                {([name, items]) => (
+                                  <div class="flex flex-col rounded-xl border border-border-weak-base bg-background-base/70">
+                                    <button
+                                      type="button"
+                                      class="flex items-center justify-between gap-3 border-b border-border-weak-base px-3 py-2 text-left"
+                                      onClick={() => toggleAgentProject(name)}
+                                    >
+                                      <div class="flex min-w-0 items-center gap-2">
+                                        <div class="text-text-weak">
+                                          <Icon
+                                            name={agentProjectOpen(name) ? "chevron-down" : "chevron-right"}
+                                            size="small"
+                                          />
+                                        </div>
+                                        <div class="truncate text-12-medium text-text-strong">{name}</div>
+                                      </div>
+                                      <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                        {items.length}
+                                      </div>
+                                    </button>
+                                    <Show when={agentProjectOpen(name)}>
+                                      <div class="flex flex-col p-1">
+                                        <For each={items}>
+                                          {(item) => (
+                                            <ListButton
+                                              active={state.pick === item.id}
+                                              title={item.label}
+                                              note={
+                                                loadedMap().get(item.label)?.description ||
+                                                agentModeLabel(loadedMap().get(item.label)?.mode) ||
+                                                item.note
+                                              }
+                                              meta={[item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
+                                              onClick={() => void open(item)}
+                                            />
+                                          )}
+                                        </For>
+                                      </div>
+                                    </Show>
+                                  </div>
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+
+                          <Show when={agentPlugin().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.plugins.title")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {agentPlugin().length}
+                                </div>
+                              </div>
+                              <For each={agentPlugin()}>
+                                {(item) => (
+                                  <ListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    note={
+                                      loadedMap().get(item.label)?.description ||
+                                      agentModeLabel(loadedMap().get(item.label)?.mode) ||
+                                      item.note
+                                    }
+                                    meta={[item.project, item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
+                                    onClick={() => void open(item)}
+                                  />
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+                        </div>
                       </Show>
                     </Match>
 
@@ -4027,11 +4346,12 @@ export default function ConfigPage() {
                     onInput={(value) => setState("text", value)}
                     onSave={() => void save()}
                     onReload={() => void reload()}
-                    onOpenFolder={currentDoc() ? openFolder : undefined}
+                    onOpenFolder={file(currentDoc()?.path ?? "") ? openFolder : undefined}
+                    onCopyPath={file(currentDoc()?.path ?? "") ? copyPath : undefined}
                     extra={
                       <Show when={currentAgent()}>
                         <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                          {loadedMap().get(currentAgent()!.label)?.mode ?? t("config.agents.badge.agent")}
+                          {agentModeLabel(loadedMap().get(currentAgent()!.label)?.mode)}
                         </span>
                       </Show>
                     }
