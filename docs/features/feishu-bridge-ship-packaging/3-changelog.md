@@ -16,7 +16,8 @@ related: ./3-changelog.md
 
 | commit | 简述 |
 |---|---|
-| (本笔 commit) | `feat(branding): bundle 飞书桥接 plugin 进 installer + setup hook 注入 user opencode 配置 [feat: feishu-bridge-ship-packaging]` |
+| `e3feb3467` | `feat(branding): bundle 飞书桥接 plugin 进 installer + setup hook 注入 user opencode 配置 [feat: feishu-bridge-ship-packaging]`(主 commit) |
+| `7e5a3ef9b` | `fix(feishu-plugin-install): Win 用 %APPDATA% 路径对齐 xdg-basedir,Mac/Linux 仍 ~/.config`(Win 兼容 follow-up,见下方"Follow-up #1") |
 
 ## 改动文件
 
@@ -115,3 +116,24 @@ git revert <本笔 commit>
 
 - 把"installer ship plugin" 抽象成通用模式(以后 multi-IM:Slack/WeChat plugin 同套机制)
 - inject hook 加 unhealthy detection:resource 文件丢失时清掉无效 plugin entry,防 sidecar 启动失败循环
+
+## Follow-up #1(2026-05-09):Win 端 user config 路径对齐 xdg-basedir(commit `7e5a3ef9b`)
+
+**起源**:Mac 端实测通过 push 完之后,review `feishu_plugin_install::resolve_user_config_path` 发现 Win 兼容性 bug — 硬编码 `dirs::home_dir() + .config/opencode/` 在 Win 上算到 `C:\Users\<user>\.config\opencode\`,但 opencode 自己用 `xdg-basedir` npm 包,Win 行为是 **`%APPDATA%\opencode\`**(读 `process.env.APPDATA`)。如果不修,Win 端 inject 跑了但写到错位置,sidecar 读不到 plugin 字段,等于没注入。
+
+**修法**(`packages/desktop/src-tauri/src/feishu_plugin_install.rs`):
+
+```rust
+#[cfg(target_os = "windows")]
+let dir = dirs::config_dir()?.join("opencode");           // %APPDATA%\Roaming\opencode\
+#[cfg(not(target_os = "windows"))]
+let dir = dirs::home_dir()?.join(".config").join("opencode");  // ~/.config/opencode/
+```
+
+`dirs::config_dir()` 在 Win 返 `%APPDATA%\Roaming\` — xdg-basedir 在 Win 上读的是 `%APPDATA%`(默认就是 Roaming),所以对齐。
+
+**为什么不直接 `dirs::config_dir()` 一个跨平台**:macOS 上 `dirs::config_dir()` 返 `~/Library/Application Support/`,跟 xdg-basedir 在 darwin 上的 `~/.config/` 冲突。所以分平台。
+
+**验证**:Mac 端 cargo check 通过(Win cfg 分支 cfg-gated dead code,Mac 不参与编译);Win 端实测要等 Win user 拉新 dev build。
+
+**为什么这笔没跟主 commit 一起**:主 commit 已 push 完才发现的 Win 兼容性 review 漏掉,follow-up 单独 commit 走 fix 分支(同 feat-id 标记 `[feat: feishu-bridge-ship-packaging]`)。本笔 changelog 当时漏补,user 提醒后 docs 分支补落盘 — 教训:**bug-repro 类的 commit 不仅 commit message 标 tag,changelog follow-up 段同步落地**。
