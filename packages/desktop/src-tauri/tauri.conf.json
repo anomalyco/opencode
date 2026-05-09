@@ -35,6 +35,10 @@
     "category": "DeveloperTool",
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
     "externalBin": ["sidecars/opencode-cli"],
+    "resources": {
+      "../../branding/plugin/feishu-bridge/package.json": "plugin/feishu-bridge/package.json",
+      "../../branding/plugin/feishu-bridge/dist/plugin.js": "plugin/feishu-bridge/dist/plugin.js"
+    },
     "linux": {
       "rpm": {
         "compression": {

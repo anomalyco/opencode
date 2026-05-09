@@ -6,6 +6,8 @@ mod local_asset;
 mod system_tray;
 // FORK: 飞书 adapter 主进程接入(spawn + Tauri commands)[feat: feishu-bridge] 2026-05-08
 mod feishu_adapter;
+// FORK: 把 installer 资源里的飞书 plugin 路径注入 user opencode 配置 [feat: feishu-bridge-ship-packaging] 2026-05-09
+mod feishu_plugin_install;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 #[cfg(target_os = "linux")]
@@ -494,6 +496,10 @@ pub fn run() {
 
             // FORK: 飞书 adapter 状态初始化(C1.3,Phase 2+ 真 spawn)[feat: feishu-bridge]
             feishu_adapter::init(app.handle());
+
+            // FORK: installer 资源里的 feishu plugin 注入 user opencode 配置(idempotent)
+            // [feat: feishu-bridge-ship-packaging] 2026-05-09
+            feishu_plugin_install::ensure_feishu_plugin_in_config(app.handle());
 
             Ok(())
         });

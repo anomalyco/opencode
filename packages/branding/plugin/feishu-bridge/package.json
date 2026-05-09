@@ -1,0 +1,11 @@
+{
+  "name": "@deskfox/feishu-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DeskFox bundled feishu/Lark bridge plugin — 由 build script 通过 bun build 把 packages/adapter-feishu-lark/src/plugin.ts + 全部 deps 打成单 dist/plugin.js,装进 installer 跟 DeskFox 一起 ship。runtime 由 lib.rs setup 把 path 注入 user opencode 配置。",
+  "main": "./dist/plugin.js",
+  "exports": {
+    "./server": "./dist/plugin.js"
+  }
+}
