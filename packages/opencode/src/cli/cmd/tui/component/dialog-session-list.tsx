@@ -18,6 +18,20 @@ import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { WorkspaceLabel } from "./workspace-label"
 import { useCommandShortcut } from "../keymap"
 
+type SessionListFilter = {
+  scope?: "project"
+  path?: string
+}
+
+export function createDialogSessionListQuery(input: { query: string; filter: SessionListFilter }) {
+  return {
+    ...input.filter,
+    roots: true,
+    limit: input.query ? 30 : 100,
+    ...(input.query ? { search: input.query } : {}),
+  }
+}
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -30,17 +44,16 @@ export function DialogSessionList() {
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
 
-  const [searchResults, { refetch }] = createResource(
+  const [rootSessions, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
     async (input) => {
-      if (!input.query) return undefined
-      const result = await sdk.client.session.list({ search: input.query, limit: 30, ...input.filter })
+      const result = await sdk.client.session.list(createDialogSessionListQuery(input))
       return result.data ?? []
     },
   )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+  const sessions = createMemo(() => rootSessions() ?? sync.data.session.filter((x) => x.parentID === undefined))
 
   function recover(session: NonNullable<ReturnType<typeof sessions>[number]>) {
     const workspace = project.workspace.get(session.workspaceID!)
@@ -96,7 +109,7 @@ export function DialogSessionList() {
           }
           await project.workspace.sync()
           await sync.session.refresh()
-          if (search()) await refetch()
+          await refetch()
           if (info?.workspaceID === session.workspaceID) {
             route.navigate({ type: "home" })
           }
@@ -230,7 +243,7 @@ export function DialogSessionList() {
               if (status && status !== "connected") {
                 await sync.session.refresh()
               }
-              if (search()) await refetch()
+              await refetch()
               setToDelete(undefined)
               return
             }
