@@ -13039,7 +13039,7 @@
             "enum": ["added", "deleted", "modified"]
           }
         },
-        "required": ["file", "patch", "additions", "deletions"],
+        "required": ["file", "additions", "deletions"],
         "additionalProperties": false
       },
       "VcsApplyError": {

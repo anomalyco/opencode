@@ -1520,7 +1520,7 @@ export type VcsFileStatus = {
 
 export type VcsFileDiff = {
   file: string
-  patch: string
+  patch?: string
   additions: number
   deletions: number
   status?: "added" | "deleted" | "modified"

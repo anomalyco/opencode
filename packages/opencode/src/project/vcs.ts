@@ -230,7 +230,10 @@ export type Info = Schema.Schema.Type<typeof Info>
 
 export const FileDiff = Schema.Struct({
   file: Schema.String,
-  patch: Schema.String,
+  // Mirrors Snapshot.FileDiff (see #26574). The current producer always
+  // populates patch, but loosening matches the sibling schema so a
+  // future code path that omits it can't crash /instance/vcs/diff.
+  patch: Schema.optional(Schema.String),
   additions: NonNegativeInt,
   deletions: NonNegativeInt,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
