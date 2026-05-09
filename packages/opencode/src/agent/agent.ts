@@ -106,6 +106,7 @@ export const layer = Layer.effect(
           question: "deny",
           plan_enter: "deny",
           plan_exit: "deny",
+          autopilot_exit: "deny",
           repo_clone: "deny",
           repo_overview: "deny",
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
@@ -129,6 +130,22 @@ export const layer = Layer.effect(
               Permission.fromConfig({
                 question: "allow",
                 plan_enter: "allow",
+              }),
+              user,
+            ),
+            mode: "primary",
+            native: true,
+          },
+          autopilot: {
+            name: "autopilot",
+            description: "Build-mode agent for autonomous execution with explicit autopilot exit.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                plan_enter: "allow",
+                autopilot_exit: "allow",
               }),
               user,
             ),
@@ -413,9 +430,14 @@ export const layer = Layer.effect(
             if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)
             return agent.name
           }
-          const visible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
-          if (!visible) throw new Error("no primary visible agent found")
-          return visible.name
+          const visible = Object.values(agents).filter((a) => a.mode !== "subagent" && a.hidden !== true)
+          const build = visible.find((a) => a.name === "build")
+          if (build) return build.name
+          const plan = visible.find((a) => a.name === "plan")
+          if (plan) return plan.name
+          const fallback = visible[0]
+          if (fallback) return fallback.name
+          throw new Error("no primary visible agent found")
         })
 
         return {

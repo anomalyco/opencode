@@ -1,0 +1,5 @@
+<system-reminder>
+Autopilot mode remains active.
+Continue execution autonomously and keep moving the implementation forward.
+Only stop when the task is fully complete or you explicitly call autopilot_exit.
+</system-reminder>

@@ -41,6 +41,7 @@ test("returns default native agents when no config", async () => {
         const agents = await load(tmp.path, (svc) => svc.list())
         const names = agents.map((a) => a.name)
         expect(names).toContain("build")
+        expect(names).toContain("autopilot")
         expect(names).toContain("plan")
         expect(names).toContain("general")
         expect(names).toContain("explore")
@@ -66,6 +67,22 @@ test("build agent has correct default properties", async () => {
       expect(evalPerm(build, "bash")).toBe("allow")
       expect(evalPerm(build, "repo_clone")).toBe("deny")
       expect(evalPerm(build, "repo_overview")).toBe("deny")
+      expect(evalPerm(build, "autopilot_exit")).toBe("deny")
+    },
+  })
+})
+
+test("autopilot agent allows autopilot_exit", async () => {
+  await using tmp = await tmpdir()
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const autopilot = await load(tmp.path, (svc) => svc.get("autopilot"))
+      expect(autopilot).toBeDefined()
+      expect(autopilot?.mode).toBe("primary")
+      expect(autopilot?.native).toBe(true)
+      expect(evalPerm(autopilot, "edit")).toBe("allow")
+      expect(evalPerm(autopilot, "autopilot_exit")).toBe("allow")
     },
   })
 })
@@ -812,7 +829,7 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
     directory: tmp.path,
     fn: async () => {
       const agent = await load(tmp.path, (svc) => svc.defaultAgent())
-      // build is disabled, so it should return plan (next primary agent)
+      // build is disabled, so it should return plan (next preferred primary agent)
       expect(agent).toBe("plan")
     },
   })
@@ -823,6 +840,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     config: {
       agent: {
         build: { disable: true },
+        autopilot: { disable: true },
         plan: { disable: true },
       },
     },

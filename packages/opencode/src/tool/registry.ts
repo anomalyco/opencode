@@ -1,4 +1,5 @@
 import { PlanExitTool } from "./plan"
+import { AutopilotExitTool } from "./autopilot"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
 import { ShellTool } from "./shell"
@@ -116,6 +117,7 @@ export const layer: Layer.Layer<
     const todo = yield* TodoWriteTool
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
+    const autopilot = yield* AutopilotExitTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
     const codesearch = yield* CodeSearchTool
@@ -228,6 +230,7 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          autopilot: Tool.init(autopilot),
         })
 
         return {
@@ -250,6 +253,7 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
+            tool.autopilot,
           ],
           task: tool.task,
           read: tool.read,

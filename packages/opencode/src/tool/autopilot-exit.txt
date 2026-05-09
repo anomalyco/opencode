@@ -1,0 +1,9 @@
+Use this tool when autopilot work is complete and you are ready to hand control back to build mode.
+
+Call this tool:
+- After finishing the autonomous implementation task
+- When you are ready to provide a final concise summary
+
+Do NOT call this tool:
+- Before implementation work is complete
+- If you still need to run more tools to finish the task

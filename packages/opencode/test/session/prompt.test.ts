@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -48,6 +48,7 @@ import { Format } from "../../src/format"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
+import PROMPT_AUTOPILOT from "../../src/session/prompt/autopilot.txt"
 
 void Log.init({ print: false })
 
@@ -344,6 +345,46 @@ it.live("loop exits immediately when last assistant has stop finish", () =>
       expect(result.info.role).toBe("assistant")
       if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
       expect(yield* llm.calls).toBe(0)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop injects synthetic autopilot prompt instead of exiting immediately", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "autopilot",
+        noReply: true,
+        parts: [{ type: "text", text: "implement everything" }],
+      })
+      yield* llm.text("first pass complete")
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const scope = yield* Scope.Scope
+          const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkIn(scope, { startImmediately: true }))
+          yield* Effect.sleep("1 second")
+          expect(yield* llm.calls).toBeGreaterThanOrEqual(1)
+
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const injected = msgs
+            .flatMap((item) => item.parts)
+            .find(
+              (part): part is MessageV2.TextPart =>
+                part.type === "text" && part.synthetic === true && part.text === PROMPT_AUTOPILOT,
+            )
+          expect(injected).toBeDefined()
+          yield* prompt.cancel(chat.id)
+          yield* Fiber.await(loop)
+        }),
+      )
     }),
     { git: true, config: providerCfg },
   ),

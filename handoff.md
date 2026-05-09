@@ -7,10 +7,29 @@
   - `rebase-ui` — done
   - `rebase-tts` — done
   - `rebase-review` — done
-  - `rebase-autopilot` — pending
+  - `rebase-autopilot` — in progress
   - `rebase-session` — done
   - `rebase-infra` — pending
   - `rebase-verify` — in progress
+
+## Latest Update
+- Autopilot+heartbeat port is now integrated and green on targeted tests.
+- Fixed one regression introduced during autopilot test updates:
+  - `test/agent/agent.test.ts` now matches actual default fallback behavior (`plan` when `build` is disabled).
+- Targeted validation passed:
+  - `packages/opencode`: `bun typecheck`
+  - `packages/opencode`: `bun test test/agent/agent.test.ts test/tool/shell.test.ts test/session/prompt.test.ts`
+- Full suite snapshot after autopilot port:
+  - `packages/opencode`: `bun test` => `2583 pass / 11 skip / 2 todo / 4 fail`
+  - failing 4 tests remain the known baseline/environmental set (`ModelsDev` + 3 bare-repo tests), unchanged from prior triage.
+- Install gate note:
+  - repo currently has no `install:local` script (`bun run install:local` not available).
+- Current uncommitted scope for next commit:
+  - new autopilot tool + prompt assets
+  - autopilot native agent permissions
+  - autopilot loop reflection injection
+  - shell metadata heartbeat while quiet
+  - TUI switch back to `build` after `autopilot_exit`
 
 ## Completed Since Last Update
 - UI recent routing fix:
