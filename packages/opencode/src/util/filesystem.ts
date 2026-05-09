@@ -110,11 +110,22 @@ export async function mimeType(p: string): Promise<string> {
  * This is needed because Windows paths are case-insensitive but LSP servers
  * may return paths with different casing than what we send them.
  */
+
+function isDriveLetterPath(p: string): boolean {
+  return p.length >= 2 && /^[A-Za-z]:/.test(p)
+}
+
+function isUNCPath(p: string): boolean {
+  return p.startsWith("\\\\") || p.startsWith("//")
+}
+
 export function normalizePath(p: string): string {
   if (process.platform !== "win32") return p
   const resolved = win32.normalize(win32.resolve(windowsPath(p)))
   try {
-    return realpathSync.native(resolved)
+    const real = realpathSync.native(resolved)
+    if (isDriveLetterPath(resolved) && isUNCPath(real)) return resolved
+    return real
   } catch {
     return resolved
   }
@@ -135,9 +146,11 @@ export function normalizePathPattern(p: string): string {
 export function resolve(p: string): string {
   const resolved = pathResolve(windowsPath(p))
   try {
-    return normalizePath(realpathSync(resolved))
+    const real = realpathSync(resolved)
+    if (process.platform === "win32" && isDriveLetterPath(resolved) && isUNCPath(real)) return normalizePath(resolved)
+    return normalizePath(real)
   } catch (e) {
-    if (isEnoent(e)) return normalizePath(resolved)
+    if (process.platform === "win32" || isEnoent(e)) return normalizePath(resolved)
     throw e
   }
 }

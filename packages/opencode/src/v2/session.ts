@@ -3,6 +3,7 @@ import { SessionID } from "@/session/schema"
 import { WorkspaceID } from "@/control-plane/schema"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/storage/db"
 import * as Database from "@/storage/db"
+import { realpathSync } from "fs"
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { SessionMessage } from "./session-message"
 import type { Prompt } from "./session-prompt"
@@ -19,6 +20,17 @@ export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
 export type Delivery = Schema.Schema.Type<typeof Delivery>
 
 export const DefaultDelivery = "immediate" satisfies Delivery
+
+function directoryMatchCondition(directory: string): SQL {
+  if (process.platform !== "win32") return eq(SessionTable.directory, directory)
+  const alternatives = [directory]
+  try {
+    const real = realpathSync(directory)
+    if (real !== directory && !alternatives.includes(real)) alternatives.push(real)
+  } catch {}
+  if (alternatives.length === 1) return eq(SessionTable.directory, directory)
+  return or(...alternatives.map((d) => eq(SessionTable.directory, d)))!
+}
 
 export class Info extends Schema.Class<Info>("Session.Info")({
   id: SessionID,
@@ -158,7 +170,7 @@ export const layer = Layer.effect(
         if (direction === "previous" && order === "asc") order = "desc"
         if (direction === "previous" && order === "desc") order = "asc"
         const conditions: SQL[] = []
-        if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
+        if (input.directory) conditions.push(directoryMatchCondition(input.directory))
         if (input.path)
           conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))

@@ -140,8 +140,19 @@ function groupBySession<T extends { id: string; sessionID: string }>(input: T[])
   }, {})
 }
 
+function normalizePathForCompare(p: string): string {
+  let v = p.replace(/\\/g, "/").replace(/\/+$/, "")
+  if ((v.length >= 2 && v[1] === ":") || v.startsWith("//")) v = v.toLowerCase()
+  return v
+}
+
 function projectID(directory: string, projects: Project[]) {
-  return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))?.id
+  const key = normalizePathForCompare(directory)
+  return projects.find(
+    (project) =>
+      normalizePathForCompare(project.worktree) === key ||
+      project.sandboxes?.some((s) => normalizePathForCompare(s) === key),
+  )?.id
 }
 
 function mergeSession(setStore: SetStoreFunction<State>, session: Session) {
