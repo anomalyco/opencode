@@ -2127,10 +2127,9 @@ export default function ConfigPage() {
     opts?: { code?: boolean },
   ) => {
     if (!platform.listConfigDirectory) return [] as DocItem[]
-    console.debug("[config] scan agent prompts", { root, source: extra.source, origin: extra.origin })
 
     const walk = async (dir: string): Promise<DocItem[]> => {
-      const list = await platform.listConfigDirectory?.(dir).catch(() => [])
+      const list = await platform.listConfigDirectory?.(dir).catch(() => [] as ConfigTreeItem[])
       if (!list?.length) return []
 
       return Promise.all(
@@ -2161,7 +2160,6 @@ export default function ConfigPage() {
     }
 
     const list = await walk(root)
-    console.debug("[config] scan agent prompts done", { root, count: list.length })
     return list
   }
 
@@ -2236,7 +2234,6 @@ export default function ConfigPage() {
             },
           ])
           .map(async (item) => {
-            console.debug("[config] scan plugin agent roots", { plugin: item.name, root: item.root })
             return Promise.all([
               scanAgents(join(item.root, "agent"), {
                 source: "external",
@@ -2294,6 +2291,20 @@ export default function ConfigPage() {
   const agentOpenCode = createMemo(() => agents().filter((item) => item.group === "opencode"))
   const agentProject = createMemo(() => agents().filter((item) => item.group === "project"))
   const agentPlugin = createMemo(() => agents().filter((item) => item.group === "plugin"))
+
+  const projectAgentGroups = createMemo(() => {
+    const items = agentProject()
+    const groups = new Map<string, DocItem[]>()
+    for (const item of items) {
+      const key = item.project ?? ""
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(item)
+    }
+    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  })
+
+  const agentProjectOpen = (key: string) => !!state.treeClosed[`agent-project:${key}`]
+  const toggleAgentProject = (key: string) => setState("treeClosed", `agent-project:${key}`, (v) => !v)
 
   const [diskClaude] = createResource(
     () => [state.skillRev, claudeRoot()] as const,
@@ -2870,7 +2881,6 @@ export default function ConfigPage() {
 
   async function open(item: DocItem) {
     const run = ++openRun
-    console.debug("[config] open doc", { id: item.id, path: item.path, source: item.source, group: item.group })
     setState("pick", item.id)
     const cached = item.content ?? cache.get(item.path)
     if (cached !== undefined) {
@@ -2890,7 +2900,6 @@ export default function ConfigPage() {
   async function save() {
     const item = currentDoc()
     if (!item?.editable || !platform.writeConfigFile) return
-    console.debug("[config] save doc", { id: item.id, path: item.path, source: item.source, group: item.group })
     await platform
       .writeConfigFile(item.path, state.text)
       .then(() => {
@@ -2908,7 +2917,6 @@ export default function ConfigPage() {
 
   async function reload() {
     if (!platform.reloadBackend) return
-    console.debug("[config] reload backend")
     await platform
       .reloadBackend()
       .then(async () => {
@@ -3614,7 +3622,7 @@ export default function ConfigPage() {
         </aside>
 
         <div class="flex min-h-0 min-w-0 flex-1 flex-col xl:flex-row">
-          <section class="shrink-0 border-b border-border-weak-base bg-surface-base/80 backdrop-blur xl:w-[320px] xl:border-r xl:border-b-0">
+          <section class="shrink-0 border-b border-border-weak-base bg-surface-base/80 backdrop-blur xl:w-[400px] xl:border-r xl:border-b-0">
             <div class="flex h-full min-h-0 flex-col">
               <div class="border-b border-border-weak-base px-4 py-4">
                 <Switch>
@@ -3837,7 +3845,7 @@ export default function ConfigPage() {
                           </Show>
 
                           <Show when={agentProject().length > 0}>
-                            <div class="flex flex-col">
+                            <div class="flex flex-col gap-1">
                               <div class="flex items-center justify-between gap-3 px-1">
                                 <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
                                   {t("config.skills.group.project")}
@@ -3846,19 +3854,47 @@ export default function ConfigPage() {
                                   {agentProject().length}
                                 </div>
                               </div>
-                              <For each={agentProject()}>
-                                {(item) => (
-                                  <ListButton
-                                    active={state.pick === item.id}
-                                    title={item.label}
-                                    note={
-                                      loadedMap().get(item.label)?.description ||
-                                      agentModeLabel(loadedMap().get(item.label)?.mode) ||
-                                      item.note
-                                    }
-                                    meta={[item.project, item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
-                                    onClick={() => void open(item)}
-                                  />
+                              <For each={projectAgentGroups()}>
+                                {([name, items]) => (
+                                  <div class="flex flex-col rounded-xl border border-border-weak-base bg-background-base/70">
+                                    <button
+                                      type="button"
+                                      class="flex items-center justify-between gap-3 border-b border-border-weak-base px-3 py-2 text-left"
+                                      onClick={() => toggleAgentProject(name)}
+                                    >
+                                      <div class="flex min-w-0 items-center gap-2">
+                                        <div class="text-text-weak">
+                                          <Icon
+                                            name={agentProjectOpen(name) ? "chevron-down" : "chevron-right"}
+                                            size="small"
+                                          />
+                                        </div>
+                                        <div class="truncate text-12-medium text-text-strong">{name}</div>
+                                      </div>
+                                      <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                        {items.length}
+                                      </div>
+                                    </button>
+                                    <Show when={agentProjectOpen(name)}>
+                                      <div class="flex flex-col p-1">
+                                        <For each={items}>
+                                          {(item) => (
+                                            <ListButton
+                                              active={state.pick === item.id}
+                                              title={item.label}
+                                              note={
+                                                loadedMap().get(item.label)?.description ||
+                                                agentModeLabel(loadedMap().get(item.label)?.mode) ||
+                                                item.note
+                                              }
+                                              meta={[item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
+                                              onClick={() => void open(item)}
+                                            />
+                                          )}
+                                        </For>
+                                      </div>
+                                    </Show>
+                                  </div>
                                 )}
                               </For>
                             </div>
