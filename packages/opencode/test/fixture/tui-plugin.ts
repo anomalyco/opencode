@@ -186,17 +186,6 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return opts.app?.version ?? "0.0.0-test"
       },
     },
-    command: {
-      register() {
-        throw new Error("Deprecated api.command should not be used by test fixtures")
-      },
-      trigger() {
-        throw new Error("Deprecated api.command should not be used by test fixtures")
-      },
-      show() {
-        throw new Error("Deprecated api.command should not be used by test fixtures")
-      },
-    },
     keys: {
       formatSequence: () => "",
       formatBindings: () => undefined,

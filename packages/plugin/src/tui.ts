@@ -78,6 +78,8 @@ export type TuiKeys = {
 export type TuiKeymap = Keymap<Renderable, KeyEvent>
 
 /**
+ * Legacy `api.command` shape kept so v1 plugins can initialize. Remove in v2.
+ *
  * @deprecated Use `api.keymap.registerLayer({ commands, bindings })` instead.
  */
 export type TuiCommand = {
@@ -97,6 +99,8 @@ export type TuiCommand = {
 }
 
 /**
+ * Legacy `api.command` API kept so v1 plugins can initialize. Remove in v2.
+ *
  * @deprecated Use `api.keymap.registerLayer`, `api.keymap.dispatchCommand`, and
  * `api.keymap.dispatchCommand("command.palette.show")` instead.
  */
@@ -494,6 +498,8 @@ export type TuiWorkspace = {
 export type TuiPluginApi = {
   app: TuiApp
   /**
+   * Legacy `api.command` API kept so v1 plugins can initialize. Remove in v2.
+   *
    * @deprecated Use `api.keymap.registerLayer`, `api.keymap.dispatchCommand`, and
    * `api.keymap.dispatchCommand("command.palette.show")` instead.
    */

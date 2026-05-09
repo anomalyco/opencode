@@ -138,10 +138,6 @@ function warn(message: string, data: Record<string, unknown>) {
   console.warn(`[tui.plugin] ${message}`, data)
 }
 
-function warnCommandShim(api: string, replacement: string) {
-  warn("deprecated TUI plugin API", { api, replacement })
-}
-
 function createScopedKeymap(keymap: TuiPluginApi["keymap"], scope: PluginScope): TuiPluginApi["keymap"] {
   const cache = new Map<PropertyKey, unknown>()
   return new Proxy(keymap, {
@@ -581,7 +577,8 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
 
   return {
     app: api.app,
-    command: createCommandShim(keymap, warnCommandShim, api.ui.dialog, api.tuiConfig.keybinds),
+    // Keep deprecated `api.command` working for v1 plugins; remove in v2.
+    command: createCommandShim(keymap, api.ui.dialog, api.tuiConfig.keybinds),
     keys: api.keys,
     keymap,
     route,

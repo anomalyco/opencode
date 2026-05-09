@@ -1,3 +1,4 @@
+// Legacy `api.command` bridge for v1 plugins; remove in v2.
 import type { TuiCommand, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { TuiKeybind } from "../config/keybind"
 import type { DialogContext } from "../ui/dialog"
@@ -9,6 +10,11 @@ type Warn = (api: string, replacement: string) => void
 type LegacyDialog = TuiPluginApi["ui"]["dialog"]
 type CommandShimDialog = DialogContext | LegacyDialog
 type LegacyKeybinds = TuiPluginApi["tuiConfig"]["keybinds"]
+
+function warnCommandShim(api: string, replacement: string) {
+  // Warn v1 plugins about deprecated `api.command`; remove this shim path in v2.
+  console.warn("[tui.plugin] deprecated TUI plugin API", { api, replacement })
+}
 
 function createCommandShimDialog(dialog: CommandShimDialog): LegacyDialog {
   if (!("stack" in dialog)) return dialog
@@ -78,14 +84,13 @@ function toBindings(commands: TuiCommand[], keybinds: LegacyKeybinds) {
 
 export function createCommandShim(
   keymap: TuiPluginApi["keymap"],
-  warn: Warn,
   dialog: CommandShimDialog,
   keybinds: LegacyKeybinds,
 ): TuiPluginApi["command"] {
   const shimDialog = createCommandShimDialog(dialog)
   return {
     register(cb) {
-      warnOnce("api.command.register", "api.keymap.registerLayer({ commands, bindings })", warn)
+      warnOnce("api.command.register", "api.keymap.registerLayer({ commands, bindings })", warnCommandShim)
       const commands = cb()
       return keymap.registerLayer({
         commands: commands.map((item) => toCommand(item, shimDialog)),
@@ -93,11 +98,11 @@ export function createCommandShim(
       })
     },
     trigger(value) {
-      warnOnce("api.command.trigger", "api.keymap.dispatchCommand(name)", warn)
+      warnOnce("api.command.trigger", "api.keymap.dispatchCommand(name)", warnCommandShim)
       keymap.dispatchCommand(value)
     },
     show() {
-      warnOnce("api.command.show", `api.keymap.dispatchCommand("${COMMAND_PALETTE_SHOW}")`, warn)
+      warnOnce("api.command.show", `api.keymap.dispatchCommand("${COMMAND_PALETTE_SHOW}")`, warnCommandShim)
       keymap.dispatchCommand(COMMAND_PALETTE_SHOW)
     },
   }

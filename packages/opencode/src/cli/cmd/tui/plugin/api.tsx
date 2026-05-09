@@ -192,10 +192,6 @@ function appApi(): TuiPluginApi["app"] {
   }
 }
 
-function warnCommandShim(api: string, replacement: string) {
-  console.warn("[tui.plugin] deprecated TUI plugin API", { api, replacement })
-}
-
 export function createTuiApi(input: Input): TuiPluginApi {
   const lifecycle: TuiPluginApi["lifecycle"] = {
     signal: new AbortController().signal,
@@ -205,7 +201,8 @@ export function createTuiApi(input: Input): TuiPluginApi {
   }
   return {
     app: appApi(),
-    command: createCommandShim(input.keymap, warnCommandShim, input.dialog, input.tuiConfig.keybinds),
+    // Keep deprecated `api.command` working for v1 plugins; remove in v2.
+    command: createCommandShim(input.keymap, input.dialog, input.tuiConfig.keybinds),
     keys: {
       formatSequence(parts) {
         return Keymap.formatKeySequence(parts, input.tuiConfig)
