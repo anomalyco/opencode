@@ -9,6 +9,7 @@ import * as ConfigMarkdown from "./markdown"
 import { ConfigModelID } from "./model-id"
 import { ConfigParse } from "./parse"
 import { ConfigPermission } from "./permission"
+import { ConfigVariable } from "./variable"
 
 const log = Log.create({ service: "config" })
 
@@ -119,10 +120,19 @@ export async function load(dir: string) {
     const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
     const name = configEntryNameFromPath(item, patterns)
 
+    const body = md.content.trim()
+    if (body && md.data.prompt) {
+      log.warn("agent has both body and frontmatter prompt, body takes precedence", { agent: item })
+    }
+    let prompt: string = body || md.data.prompt || ""
+    if (prompt) {
+      prompt = await ConfigVariable.substitute({ type: "path", path: item, text: prompt, missing: "empty" })
+    }
+
     const config = {
       name,
       ...md.data,
-      prompt: md.content.trim(),
+      prompt,
     }
     result[config.name] = ConfigParse.schema(Info, config, item)
   }
@@ -143,10 +153,19 @@ export async function loadMode(dir: string) {
     })
     if (!md) continue
 
+    const body = md.content.trim()
+    if (body && md.data.prompt) {
+      log.warn("mode has both body and frontmatter prompt, body takes precedence", { mode: item })
+    }
+    let prompt: string = body || md.data.prompt || ""
+    if (prompt) {
+      prompt = await ConfigVariable.substitute({ type: "path", path: item, text: prompt, missing: "empty" })
+    }
+
     const config = {
       name: configEntryNameFromPath(item, []),
       ...md.data,
-      prompt: md.content.trim(),
+      prompt,
     }
     const parsed = Schema.decodeUnknownExit(Info)(config, { errors: "all", propertyOrder: "original" })
     if (Exit.isSuccess(parsed)) {

@@ -101,6 +101,9 @@ const live: Layer.Layer<
       const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
 
       const system: string[] = []
+      if (!input.agent.native && input.agent.prompt !== undefined && !input.agent.prompt) {
+        l.warn("agent prompt is empty, falling back to provider default", { agent: input.agent.name })
+      }
       system.push(
         [
           // use agent prompt otherwise provider prompt

@@ -912,6 +912,119 @@ Nested agent prompt`,
   })
 })
 
+test("agent .md with frontmatter prompt and empty body uses frontmatter prompt", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".opencode", "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(agentDir, "frontmatter-only.md"),
+        `---
+model: test/model
+prompt: "You are a custom assistant."
+---
+`,
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.agent?.["frontmatter-only"]).toEqual(
+        expect.objectContaining({
+          name: "frontmatter-only",
+          prompt: "You are a custom assistant.",
+        }),
+      )
+    },
+  })
+})
+
+test("agent .md with both body and frontmatter prompt uses body", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".opencode", "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(agentDir, "both.md"),
+        `---
+model: test/model
+prompt: "Frontmatter prompt"
+---
+Body prompt wins`,
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.agent?.["both"]).toEqual(
+        expect.objectContaining({
+          name: "both",
+          prompt: "Body prompt wins",
+        }),
+      )
+    },
+  })
+})
+
+test("agent .md prompt resolves {env:VAR} substitution", async () => {
+  process.env.__TEST_AGENT_VAR = "resolved-value"
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".opencode", "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(agentDir, "env-sub.md"),
+        `---
+model: test/model
+---
+Hello {env:__TEST_AGENT_VAR}`,
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.agent?.["env-sub"]?.prompt).toBe("Hello resolved-value")
+    },
+  })
+  delete process.env.__TEST_AGENT_VAR
+})
+
+test("agent .md frontmatter prompt resolves {file:path} substitution", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".opencode", "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Filesystem.write(path.join(dir, "system-prompt.txt"), "File content here")
+
+      await Filesystem.write(
+        path.join(agentDir, "file-sub.md"),
+        `---
+model: test/model
+prompt: "{file:../../system-prompt.txt}"
+---
+`,
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.agent?.["file-sub"]?.prompt).toBe("File content here")
+    },
+  })
+})
+
 test("loads commands from .opencode/command (singular)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
