@@ -983,6 +983,10 @@ export const dict = {
   "fileViewer.dialog.exportDocxTitle": "儲存為 Word 文件",
   "fileViewer.toast.exportDocxSuccess": "已匯出為 Word",
   "fileViewer.toast.exportDocxFail": "匯出失敗",
+  // FORK: md-editing-iter-2 — 編輯器狀態列行/欄號 / 選取字元數 2026-05-09
+  "fileViewer.editor.statusBar.line": "行 {{count}}",
+  "fileViewer.editor.statusBar.col": "欄 {{count}}",
+  "fileViewer.editor.statusBar.sel": "已選 {{count}}",
   // FORK: md-context-menu-i18n — viewer 右鍵選單剩餘項接入 i18n 2026-05-07
   "fileViewer.menu.addToChat": "新增至對話視窗",
   "fileViewer.menu.copy": "複製",
