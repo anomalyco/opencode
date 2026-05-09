@@ -1,4 +1,4 @@
-import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, Message, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
 import * as Locale from "@/util/locale"
 import {
   bootstrapSessionData,
@@ -20,6 +20,10 @@ const SUBAGENT_ECHO_LIMIT = 8
 
 type SessionMessage = {
   parts: Part[]
+}
+
+type BootstrapChildMessage = SessionMessage & {
+  info: Message
 }
 
 type Frame = {
@@ -513,6 +517,70 @@ function applyChildEvent(input: {
   return changed || queueChanged(input.detail.data, before)
 }
 
+function bootstrapChildEvent(input: {
+  detail: DetailState
+  event: Event
+  thinking: boolean
+  limits: Record<string, number>
+}) {
+  const out = reduceSessionData({
+    data: input.detail.data,
+    event: input.event,
+    sessionID: input.detail.sessionID,
+    thinking: input.thinking,
+    limits: input.limits,
+  })
+
+  return appendCommits(input.detail, out.commits)
+}
+
+function bootstrapChildMessages(input: {
+  detail: DetailState
+  messages: BootstrapChildMessage[]
+  thinking: boolean
+  limits: Record<string, number>
+}) {
+  let changed = false
+
+  for (const message of input.messages) {
+    changed =
+      bootstrapChildEvent({
+        detail: input.detail,
+        event: {
+          id: `bootstrap:message:${message.info.id}`,
+          type: "message.updated",
+          properties: {
+            sessionID: input.detail.sessionID,
+            info: message.info,
+          },
+        },
+        thinking: input.thinking,
+        limits: input.limits,
+      }) || changed
+
+    for (const part of message.parts) {
+      changed =
+        bootstrapChildEvent({
+          detail: input.detail,
+          event: {
+            id: `bootstrap:part:${part.id}`,
+            type: "message.part.updated",
+            properties: {
+              sessionID: input.detail.sessionID,
+              part,
+              time: 0,
+            },
+          },
+          thinking: input.thinking,
+          limits: input.limits,
+        }) || changed
+    }
+  }
+
+  compactDetail(input.detail)
+  return changed
+}
+
 function knownSession(data: SubagentData, sessionID: string) {
   return data.tabs.has(sessionID)
 }
@@ -634,7 +702,13 @@ export function bootstrapSubagentData(input: BootstrapSubagentInput) {
   return changed
 }
 
-export function bootstrapSubagentCalls(input: { data: SubagentData; sessionID: string; messages: SessionMessage[] }) {
+export function bootstrapSubagentCalls(input: {
+  data: SubagentData
+  sessionID: string
+  messages: BootstrapChildMessage[]
+  thinking: boolean
+  limits: Record<string, number>
+}) {
   if (!knownSession(input.data, input.sessionID) || input.messages.length === 0) {
     return false
   }
@@ -648,9 +722,14 @@ export function bootstrapSubagentCalls(input: { data: SubagentData; sessionID: s
     permissions: detail.data.permissions,
     questions: detail.data.questions,
   })
-  compactDetail(detail)
+  const changed = bootstrapChildMessages({
+    detail,
+    messages: input.messages,
+    thinking: input.thinking,
+    limits: input.limits,
+  })
 
-  return beforeCallCount !== detail.data.call.size || queueChanged(detail.data, before)
+  return changed || beforeCallCount !== detail.data.call.size || queueChanged(detail.data, before)
 }
 
 export function clearFinishedSubagents(data: SubagentData) {

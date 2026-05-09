@@ -1,45 +1,29 @@
 import { spyOn } from "bun:test"
 import path from "path"
-import type { KeyEvent, Renderable } from "@opentui/core"
-import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
+import { createBindingLookup } from "@opentui/keymap/extras"
 import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
-import { LegacyKeymapTransform } from "../../src/cli/cmd/tui/config/legacy-keymap-transform"
-import { ConfigKeybinds } from "../../src/config/keybinds"
-import {
-  KeymapConfig,
-  KeymapSectionNames,
-  keymapBindingDefaults,
-  type KeymapConfigInput,
-  type KeymapSection,
-} from "../../src/cli/cmd/tui/config/tui-schema"
+import { TuiKeybind } from "../../src/cli/cmd/tui/config/keybind"
 
 type PluginSpec = string | [string, Record<string, unknown>]
-type ResolvedInput = Omit<TuiConfig.Resolved, "keybinds" | "keymap"> & {
-  keybinds?: TuiConfig.Resolved["keybinds"]
-  keymap?: TuiConfig.Resolved["keymap"]
+type ResolvedInput = Omit<TuiConfig.Resolved, "keybinds" | "leader_timeout"> & {
+  keybinds?: Partial<TuiKeybind.Keybinds>
+  leader_timeout?: number
 }
 
-export function createTuiResolvedKeymap(input: KeymapConfigInput): TuiConfig.Resolved["keymap"] {
-  const config = KeymapConfig.parse(input)
-  return {
-    leader: !config.leader || config.leader === "none" ? "ctrl+x" : config.leader,
-    leader_timeout: config.leader_timeout,
-    ...resolveBindingSections<Renderable, KeyEvent, BindingSectionsConfig<Renderable, KeyEvent>, KeymapSection>(
-      config.sections,
-      {
-        sections: KeymapSectionNames,
-        bindingDefaults: keymapBindingDefaults,
-      },
-    ),
-  }
+export function createTuiResolvedKeybinds(input: Partial<TuiKeybind.Keybinds> = {}): TuiConfig.Resolved["keybinds"] {
+  const keybinds = TuiKeybind.Keybinds.parse(input)
+  return createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
+    commandMap: TuiKeybind.CommandMap,
+    bindingDefaults: TuiKeybind.bindingDefaults(),
+  })
 }
 
 export function createTuiResolvedConfig(input: ResolvedInput = {}): TuiConfig.Resolved {
-  const keybinds = input.keybinds ?? ConfigKeybinds.Keybinds.parse({})
+  const keybinds = TuiKeybind.Keybinds.parse(input.keybinds ?? {})
   return {
     ...input,
-    keybinds,
-    keymap: input.keymap ?? createTuiResolvedKeymap(LegacyKeymapTransform.create(input.keybinds ?? {})),
+    keybinds: createTuiResolvedKeybinds(keybinds),
+    leader_timeout: input.leader_timeout ?? 2000,
   }
 }
 

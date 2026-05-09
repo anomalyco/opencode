@@ -1619,6 +1619,8 @@ function toToolKind(toolName: string): ToolKind {
 
     case "grep":
     case "glob":
+    case "repo_clone":
+    case "repo_overview":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
       return "search"
@@ -1641,6 +1643,10 @@ function toLocations(toolName: string, input: Record<string, any>): { path: stri
       return input["filePath"] ? [{ path: input["filePath"] }] : []
     case "glob":
     case "grep":
+      return input["path"] ? [{ path: input["path"] }] : []
+    case "repo_clone":
+      return input["path"] ? [{ path: input["path"] }] : []
+    case "repo_overview":
       return input["path"] ? [{ path: input["path"] }] : []
     case ShellID.ToolID:
       return []

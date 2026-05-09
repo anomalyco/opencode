@@ -32,6 +32,7 @@
     "@cloudflare/workers-types": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "@types/bun": "catalog:",
     "@types/luxon": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
