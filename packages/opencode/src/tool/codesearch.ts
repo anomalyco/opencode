@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import * as Tool from "./tool"
-import * as McpExa from "./mcp-exa"
+import * as McpWebSearch from "./mcp-websearch"
 import DESCRIPTION from "./codesearch.txt"
 
 export const Parameters = Schema.Struct({
@@ -38,10 +38,11 @@ export const CodeSearchTool = Tool.define(
             },
           })
 
-          const result = yield* McpExa.call(
+          const result = yield* McpWebSearch.call(
             http,
+            McpWebSearch.EXA_URL,
             "get_code_context_exa",
-            McpExa.CodeArgs,
+            McpWebSearch.CodeArgs,
             {
               query: params.query,
               tokensNum: params.tokensNum,

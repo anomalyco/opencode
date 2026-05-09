@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -31,7 +32,7 @@ const svc = {
 }
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 async function withoutWatcher<T>(fn: () => Promise<T>) {
@@ -76,7 +77,7 @@ describe("session messages endpoint", () => {
   test("returns cursor headers for older pages", async () => {
     await using tmp = await tmpdir({ git: true })
     await withoutWatcher(() =>
-      Instance.provide({
+      WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const session = await svc.create({})
@@ -105,7 +106,7 @@ describe("session messages endpoint", () => {
   test("keeps full-history responses when limit is omitted", async () => {
     await using tmp = await tmpdir({ git: true })
     await withoutWatcher(() =>
-      Instance.provide({
+      WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const session = await svc.create({})
@@ -126,7 +127,7 @@ describe("session messages endpoint", () => {
   test("rejects invalid cursors and missing sessions", async () => {
     await using tmp = await tmpdir({ git: true })
     await withoutWatcher(() =>
-      Instance.provide({
+      WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const session = await svc.create({})
@@ -147,7 +148,7 @@ describe("session messages endpoint", () => {
   test("does not truncate large legacy limit requests", async () => {
     await using tmp = await tmpdir({ git: true })
     await withoutWatcher(() =>
-      Instance.provide({
+      WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const session = await svc.create({})

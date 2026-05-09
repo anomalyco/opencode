@@ -1,6 +1,9 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
 
-let getWorkspaceTerminalCacheKey: (dir: string) => string
+type ServerKey = Parameters<typeof import("./terminal").getTerminalServerScope>[1]
+
+let getWorkspaceTerminalCacheKey: (dir: string, scope?: string) => string
+let getTerminalServerScope: typeof import("./terminal").getTerminalServerScope
 let getLegacyTerminalStorageKeys: (dir: string, legacySessionID?: string) => string[]
 let migrateTerminalState: (value: unknown) => unknown
 
@@ -17,6 +20,7 @@ beforeAll(async () => {
   }))
   const mod = await import("./terminal")
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
+  getTerminalServerScope = mod.getTerminalServerScope
   getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
   migrateTerminalState = mod.migrateTerminalState
 })
@@ -24,6 +28,45 @@ beforeAll(async () => {
 describe("getWorkspaceTerminalCacheKey", () => {
   test("uses workspace-only directory cache key", () => {
     expect(getWorkspaceTerminalCacheKey("/repo")).toBe("/repo:__workspace__")
+  })
+
+  test("can include a server scope", () => {
+    expect(getWorkspaceTerminalCacheKey("/repo", "wsl:Debian")).toBe("wsl:Debian:/repo:__workspace__")
+  })
+})
+
+describe("getTerminalServerScope", () => {
+  test("preserves local server keys", () => {
+    expect(
+      getTerminalServerScope(
+        { type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } },
+        "sidecar" as ServerKey,
+      ),
+    ).toBeUndefined()
+    expect(
+      getTerminalServerScope(
+        { type: "http", http: { url: "http://localhost:4096" } },
+        "http://localhost:4096" as ServerKey,
+      ),
+    ).toBeUndefined()
+    expect(
+      getTerminalServerScope({ type: "http", http: { url: "http://[::1]:4096" } }, "http://[::1]:4096" as ServerKey),
+    ).toBeUndefined()
+  })
+
+  test("scopes non-local server keys", () => {
+    expect(
+      getTerminalServerScope(
+        { type: "sidecar", variant: "wsl", distro: "Debian", http: { url: "http://127.0.0.1:4096" } },
+        "wsl:Debian" as ServerKey,
+      ),
+    ).toBe("wsl:Debian" as ServerKey)
+    expect(
+      getTerminalServerScope(
+        { type: "http", http: { url: "https://example.com" } },
+        "https://example.com" as ServerKey,
+      ),
+    ).toBe("https://example.com" as ServerKey)
   })
 })
 

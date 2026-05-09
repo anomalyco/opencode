@@ -2,10 +2,12 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
 import { Context, Effect } from "effect"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import z from "zod"
 import { Format } from "@/format"
 import { TuiRoutes } from "./tui"
 import { Instance } from "@/project/instance"
+import { InstanceRuntime } from "@/project/instance-runtime"
 import { Vcs } from "@/project/vcs"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
@@ -14,18 +16,6 @@ import { LSP } from "@/lsp/lsp"
 import { Command } from "@/command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { ExperimentalHttpApiServer } from "./httpapi/server"
-import { PtyPaths } from "./httpapi/pty"
-import { EventPaths } from "./httpapi/event"
-import { ExperimentalPaths } from "./httpapi/experimental"
-import { FilePaths } from "./httpapi/file"
-import { InstancePaths } from "./httpapi/instance"
-import { McpPaths } from "./httpapi/mcp"
-import { SessionPaths } from "./httpapi/session"
-import { SyncPaths } from "./httpapi/sync"
-import { TuiPaths } from "./httpapi/tui"
-import { WorkspacePaths } from "./httpapi/workspace"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -37,14 +27,29 @@ import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
 import { InstanceMiddleware } from "./middleware"
-import { jsonRequest } from "./trace"
+import { jsonRequest, runRequest } from "./trace"
+import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { EventPaths } from "./httpapi/event"
+import { ExperimentalPaths } from "./httpapi/groups/experimental"
+import { FilePaths } from "./httpapi/groups/file"
+import { InstancePaths } from "./httpapi/groups/instance"
+import { McpPaths } from "./httpapi/groups/mcp"
+import { PtyPaths } from "./httpapi/groups/pty"
+import { SessionPaths } from "./httpapi/groups/session"
+import { SyncPaths } from "./httpapi/groups/sync"
+import { TuiPaths } from "./httpapi/groups/tui"
+import { WorkspacePaths } from "./httpapi/groups/workspace"
+import type { CorsOptions } from "@/server/cors"
+import { errors } from "@/server/error"
 
-export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
+export const InstanceRoutes = (upgrade: UpgradeWebSocket, opts?: CorsOptions): Hono => {
   const app = new Hono()
+  const handler = ExperimentalHttpApiServer.webHandler(opts).handler
+  const context = Context.empty() as Context.Context<unknown>
+
+  app.all("/api/*", (c) => handler(c.req.raw, context))
 
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
-    const handler = ExperimentalHttpApiServer.webHandler().handler
-    const context = Context.empty() as Context.Context<unknown>
     app.get(EventPaths.event, (c) => handler(c.req.raw, context))
     app.get("/question", (c) => handler(c.req.raw, context))
     app.post("/question/:requestID/reply", (c) => handler(c.req.raw, context))
@@ -82,7 +87,10 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(InstancePaths.path, (c) => handler(c.req.raw, context))
     app.post(InstancePaths.dispose, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcs, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.vcsStatus, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcsDiff, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.vcsDiffRaw, (c) => handler(c.req.raw, context))
+    app.post(InstancePaths.vcsApply, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.command, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.agent, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.skill, (c) => handler(c.req.raw, context))
@@ -99,12 +107,12 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
-    app.get(PtyPaths.shells, (c) => handler(c.req.raw, context))
     app.get(PtyPaths.list, (c) => handler(c.req.raw, context))
     app.post(PtyPaths.create, (c) => handler(c.req.raw, context))
     app.get(PtyPaths.get, (c) => handler(c.req.raw, context))
     app.put(PtyPaths.update, (c) => handler(c.req.raw, context))
     app.delete(PtyPaths.remove, (c) => handler(c.req.raw, context))
+    app.post(PtyPaths.connectToken, (c) => handler(c.req.raw, context))
     app.get(PtyPaths.connect, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
@@ -146,17 +154,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(TuiPaths.selectSession, (c) => handler(c.req.raw, context))
     app.get(TuiPaths.controlNext, (c) => handler(c.req.raw, context))
     app.post(TuiPaths.controlResponse, (c) => handler(c.req.raw, context))
-    app.get(WorkspacePaths.adaptors, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.adapters, (c) => handler(c.req.raw, context))
     app.post(WorkspacePaths.list, (c) => handler(c.req.raw, context))
     app.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
     app.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
     app.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
-    app.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.warp, (c) => handler(c.req.raw, context))
   }
 
   return app
     .route("/project", ProjectRoutes())
-    .route("/pty", PtyRoutes(upgrade))
+    .route("/pty", PtyRoutes(upgrade, opts))
     .route("/config", ConfigRoutes())
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
@@ -186,7 +194,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
         },
       }),
       async (c) => {
-        await Instance.dispose()
+        await InstanceRuntime.disposeInstance(Instance.current)
         return c.json(true)
       },
     )
@@ -283,6 +291,98 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           const vcs = yield* Vcs.Service
           return yield* vcs.diff(c.req.valid("query").mode)
         }),
+    )
+    .get(
+      "/vcs/status",
+      describeRoute({
+        summary: "Get VCS status",
+        description: "Retrieve changed files in the current working tree without patches.",
+        operationId: "vcs.status",
+        responses: {
+          200: {
+            description: "VCS status",
+            content: {
+              "application/json": {
+                schema: resolver(Vcs.FileStatus.zod.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) =>
+        jsonRequest("InstanceRoutes.vcs.status", c, function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.status()
+        }),
+    )
+    .get(
+      "/vcs/diff/raw",
+      describeRoute({
+        summary: "Get raw VCS diff",
+        description: "Retrieve a raw patch for current uncommitted changes.",
+        operationId: "vcs.diff.raw",
+        responses: {
+          200: {
+            description: "Raw VCS diff",
+            content: {
+              "text/x-diff": {
+                schema: resolver(z.string()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const patch = await runRequest(
+          "InstanceRoutes.vcs.diffRaw",
+          c,
+          Vcs.Service.use((vcs) => vcs.diffRaw()),
+        )
+        return c.text(patch, 200, { "content-type": "text/x-diff; charset=utf-8" })
+      },
+    )
+    .post(
+      "/vcs/apply",
+      describeRoute({
+        summary: "Apply VCS patch",
+        description: "Apply a raw patch to the current working tree.",
+        operationId: "vcs.apply",
+        responses: {
+          200: {
+            description: "VCS patch applied",
+            content: {
+              "application/json": {
+                schema: resolver(Vcs.ApplyResult.zod),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Vcs.ApplyInput.zodObject),
+      async (c) => {
+        const result = await runRequest(
+          "InstanceRoutes.vcs.apply",
+          c,
+          Vcs.Service.use((vcs) => vcs.apply(c.req.valid("json") as Vcs.ApplyInput)).pipe(
+            Effect.match({
+              onFailure: (error) => ({ ok: false as const, error }),
+              onSuccess: (value) => ({ ok: true as const, value }),
+            }),
+          ),
+        )
+        if (result.ok) return c.json(result.value)
+        return c.json(
+          {
+            name: "VcsApplyError",
+            data: {
+              message: result.error.message,
+              reason: result.error.reason,
+            },
+          },
+          400,
+        )
+      },
     )
     .get(
       "/command",

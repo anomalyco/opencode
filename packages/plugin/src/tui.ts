@@ -15,11 +15,39 @@ import type {
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
-import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
+import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
+import type { Binding, Keymap } from "@opentui/keymap"
+import {
+  createBindingLookup as createKeymapBindingLookup,
+  type BindingConfig,
+  type CreateBindingLookupOptions,
+  type KeySequenceFormatPart,
+  type SequenceBindingLike,
+} from "@opentui/keymap/extras"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"
 
-export type { CliRenderer, SlotMode } from "@opentui/core"
+export type { CliRenderer, KeyEvent, Renderable, SlotMode } from "@opentui/core"
+export { stringifyKeySequence, stringifyKeyStroke } from "@opentui/keymap"
+export type { Binding, KeyLike, KeySequencePart, KeyStringifyInput, StringifyOptions } from "@opentui/keymap"
+export { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras"
+export type {
+  BindingConfig,
+  BindingLookup,
+  BindingValue,
+  CreateBindingLookupOptions,
+  FormatCommandBindingsOptions,
+  FormatKeySequenceOptions,
+  KeySequenceFormatPart,
+  SequenceBindingLike,
+} from "@opentui/keymap/extras"
+
+export function createBindingLookup(
+  config: BindingConfig<Renderable, KeyEvent> | undefined,
+  options?: CreateBindingLookupOptions<Renderable, KeyEvent>,
+) {
+  return createKeymapBindingLookup<Renderable, KeyEvent>(config ?? {}, options)
+}
 
 export type TuiRouteCurrent =
   | {
@@ -42,39 +70,12 @@ export type TuiRouteDefinition = {
   render: (input: { params?: Record<string, unknown> }) => JSX.Element
 }
 
-export type TuiCommand = {
-  title: string
-  value: string
-  description?: string
-  category?: string
-  keybind?: string
-  suggested?: boolean
-  hidden?: boolean
-  enabled?: boolean
-  slash?: {
-    name: string
-    aliases?: string[]
-  }
-  onSelect?: () => void
+export type TuiKeys = {
+  formatSequence: (parts: readonly KeySequenceFormatPart[] | undefined) => string
+  formatBindings: (bindings: readonly SequenceBindingLike[] | undefined) => string | undefined
 }
 
-export type TuiKeybind = {
-  name: string
-  ctrl: boolean
-  meta: boolean
-  shift: boolean
-  super?: boolean
-  leader: boolean
-}
-
-export type TuiKeybindMap = Record<string, string>
-
-export type TuiKeybindSet = {
-  readonly all: TuiKeybindMap
-  get: (name: string) => string
-  match: (name: string, evt: ParsedKey) => boolean
-  print: (name: string) => string
-}
+export type TuiKeymap = Keymap<Renderable, KeyEvent>
 
 export type TuiDialogProps = {
   size?: "medium" | "large" | "xlarge"
@@ -285,9 +286,20 @@ export type TuiState = {
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }
 
-type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> &
+type TuiBindingLookupView = {
+  readonly bindings: ReadonlyArray<Binding<Renderable, KeyEvent>>
+  get: (command: string) => ReadonlyArray<Binding<Renderable, KeyEvent>>
+  has: (command: string) => boolean
+  gather: (name: string, commands: readonly string[]) => ReadonlyArray<Binding<Renderable, KeyEvent>>
+  pick: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
+  omit: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
+}
+
+type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
   NonNullable<PluginConfig["tui"]> & {
+    leader_timeout: number
     plugin_enabled?: Record<string, boolean>
+    keybinds: TuiBindingLookupView
   }
 
 export type TuiApp = {
@@ -320,6 +332,7 @@ export type TuiSidebarFileItem = {
 
 export type TuiHostSlotMap = {
   app: {}
+  app_bottom: {}
   home_logo: {}
   home_prompt: {
     workspace_id?: string
@@ -448,11 +461,8 @@ export type TuiWorkspace = {
 
 export type TuiPluginApi = {
   app: TuiApp
-  command: {
-    register: (cb: () => TuiCommand[]) => () => void
-    trigger: (value: string) => void
-    show: () => void
-  }
+  keys: TuiKeys
+  keymap: TuiKeymap
   route: {
     register: (routes: TuiRouteDefinition[]) => () => void
     navigate: (name: string, params?: Record<string, unknown>) => void
@@ -468,11 +478,6 @@ export type TuiPluginApi = {
     Prompt: (props: TuiPromptProps) => JSX.Element
     toast: (input: TuiToast) => void
     dialog: TuiDialogStack
-  }
-  keybind: {
-    match: (key: string, evt: ParsedKey) => boolean
-    print: (key: string) => string
-    create: (defaults: TuiKeybindMap, overrides?: Record<string, unknown>) => TuiKeybindSet
   }
   readonly tuiConfig: Frozen<TuiConfigView>
   kv: TuiKV

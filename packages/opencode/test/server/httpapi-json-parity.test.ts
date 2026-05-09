@@ -1,28 +1,32 @@
 import { afterEach, describe, expect } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
-import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/experimental"
-import { SessionPaths } from "../../src/server/routes/instance/httpapi/session"
+import { Server } from "../../src/server/server"
+import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
+import { FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
+import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/global"
+import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
+import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
+import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
+import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { MessageID, PartID } from "../../src/session/schema"
 import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
 
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
 function app(experimental: boolean) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return InstanceRoutes(websocket)
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
+type TestApp = ReturnType<typeof app>
 
 function pathFor(path: string, params: Record<string, string>) {
   return Object.entries(params).reduce((result, [key, value]) => result.replace(`:${key}`, value), path)
@@ -60,9 +64,9 @@ function withTmp<A, E, R>(
   ).pipe(Effect.flatMap((tmp) => fn(tmp).pipe(provideInstance(tmp.path))))
 }
 
-function readJson(label: string, app: ReturnType<typeof InstanceRoutes>, path: string, headers: HeadersInit) {
+function readJson(label: string, serverApp: TestApp, path: string, headers: HeadersInit) {
   return Effect.promise(async () => {
-    const response = await app.request(path, { headers })
+    const response = await serverApp.request(path, { headers })
     if (response.status !== 200) throw new Error(`${label} returned ${response.status}: ${await response.text()}`)
     return await response.json()
   })
@@ -70,8 +74,8 @@ function readJson(label: string, app: ReturnType<typeof InstanceRoutes>, path: s
 
 function expectJsonParity(input: {
   label: string
-  legacy: ReturnType<typeof InstanceRoutes>
-  httpapi: ReturnType<typeof InstanceRoutes>
+  legacy: TestApp
+  httpapi: TestApp
   path: string
   headers: HeadersInit
 }) {
@@ -85,11 +89,94 @@ function expectJsonParity(input: {
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
 describe("HttpApi JSON parity", () => {
+  it.live(
+    "matches legacy JSON shape for safe GET endpoints",
+    withTmp(
+      {
+        git: true,
+        config: {
+          formatter: false,
+          lsp: false,
+          mcp: {
+            demo: {
+              type: "local",
+              command: ["echo", "demo"],
+              enabled: false,
+            },
+          },
+        },
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => Bun.write(`${tmp.path}/hello.txt`, "hello\n"))
+
+          const headers = { "x-opencode-directory": tmp.path }
+          const legacy = app(false)
+          const httpapi = app(true)
+
+          yield* Effect.forEach(
+            [
+              { label: "global.health", path: GlobalPaths.health, headers: {} },
+              { label: "global.config", path: GlobalPaths.config, headers: {} },
+              { label: "instance.path", path: InstancePaths.path, headers },
+              { label: "instance.vcs", path: InstancePaths.vcs, headers },
+              { label: "instance.vcsDiff", path: `${InstancePaths.vcsDiff}?mode=git`, headers },
+              { label: "instance.command", path: InstancePaths.command, headers },
+              { label: "instance.agent", path: InstancePaths.agent, headers },
+              { label: "instance.skill", path: InstancePaths.skill, headers },
+              { label: "instance.lsp", path: InstancePaths.lsp, headers },
+              { label: "instance.formatter", path: InstancePaths.formatter, headers },
+              { label: "config.get", path: "/config", headers },
+              { label: "config.providers", path: "/config/providers", headers },
+              { label: "project.list", path: "/project", headers },
+              { label: "project.current", path: "/project/current", headers },
+              { label: "provider.list", path: "/provider", headers },
+              { label: "provider.auth", path: "/provider/auth", headers },
+              { label: "permission.list", path: "/permission", headers },
+              { label: "question.list", path: "/question", headers },
+              { label: "mcp.status", path: McpPaths.status, headers },
+              { label: "pty.shells", path: PtyPaths.shells, headers },
+              { label: "pty.list", path: PtyPaths.list, headers },
+              { label: "file.list", path: `${FilePaths.list}?${new URLSearchParams({ path: "." })}`, headers },
+              {
+                label: "file.content",
+                path: `${FilePaths.content}?${new URLSearchParams({ path: "hello.txt" })}`,
+                headers,
+              },
+              { label: "file.status", path: FilePaths.status, headers },
+              {
+                label: "find.file",
+                path: `${FilePaths.findFile}?${new URLSearchParams({ query: "hello", dirs: "false" })}`,
+                headers,
+              },
+              {
+                label: "find.text",
+                path: `${FilePaths.findText}?${new URLSearchParams({ pattern: "hello" })}`,
+                headers,
+              },
+              {
+                label: "find.symbol",
+                path: `${FilePaths.findSymbol}?${new URLSearchParams({ query: "hello" })}`,
+                headers,
+              },
+              { label: "experimental.console", path: ExperimentalPaths.console, headers },
+              { label: "experimental.consoleOrgs", path: ExperimentalPaths.consoleOrgs, headers },
+              { label: "experimental.toolIDs", path: ExperimentalPaths.toolIDs, headers },
+              { label: "experimental.worktree", path: ExperimentalPaths.worktree, headers },
+              { label: "experimental.resource", path: ExperimentalPaths.resource, headers },
+            ],
+            (input) => expectJsonParity({ ...input, legacy, httpapi }),
+            { concurrency: 1 },
+          )
+        }),
+    ),
+  )
+
   it.live(
     "matches legacy JSON shape for session read endpoints",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>

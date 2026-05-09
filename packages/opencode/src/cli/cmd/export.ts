@@ -1,13 +1,11 @@
-import type { Argv } from "yargs"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
-import { cmd } from "./cmd"
-import { bootstrap } from "../bootstrap"
+import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
-import { AppRuntime } from "@/effect/app-runtime"
+import { Effect } from "effect"
 
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value
@@ -220,11 +218,11 @@ function sanitize(data: { info: Session.Info; messages: MessageV2.WithParts[] })
   }
 }
 
-export const ExportCommand = cmd({
+export const ExportCommand = effectCmd({
   command: "export [sessionID]",
   describe: "export session data as JSON",
-  builder: (yargs: Argv) => {
-    return yargs
+  builder: (yargs) =>
+    yargs
       .positional("sessionID", {
         describe: "session id to export",
         type: "string",
@@ -232,75 +230,62 @@ export const ExportCommand = cmd({
       .option("sanitize", {
         describe: "redact sensitive transcript and file data",
         type: "boolean",
-      })
-  },
-  handler: async (args) => {
-    await bootstrap(process.cwd(), async () => {
-      let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
-      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
+      }),
+  handler: Effect.fn("Cli.export")(function* (args) {
+    return yield* run(args)
+  }),
+})
 
-      if (!sessionID) {
-        UI.empty()
-        prompts.intro("Export session", {
-          output: process.stderr,
-        })
+const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; sanitize?: boolean }) {
+  const svc = yield* Session.Service
+  let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
+  process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
 
-        const sessions = []
-        for await (const session of Session.list()) {
-          sessions.push(session)
-        }
+  if (!sessionID) {
+    UI.empty()
+    prompts.intro("Export session", { output: process.stderr })
 
-        if (sessions.length === 0) {
-          prompts.log.error("No sessions found", {
-            output: process.stderr,
-          })
-          prompts.outro("Done", {
-            output: process.stderr,
-          })
-          return
-        }
+    const sessions = yield* svc.list()
 
-        sessions.sort((a, b) => b.time.updated - a.time.updated)
+    if (sessions.length === 0) {
+      prompts.log.error("No sessions found", { output: process.stderr })
+      prompts.outro("Done", { output: process.stderr })
+      return
+    }
 
-        const selectedSession = await prompts.autocomplete({
-          message: "Select session to export",
-          maxItems: 10,
-          options: sessions.map((session) => ({
-            label: session.title,
-            value: session.id,
-            hint: `${new Date(session.time.updated).toLocaleString()} • ${session.id.slice(-8)}`,
-          })),
-          output: process.stderr,
-        })
+    sessions.sort((a, b) => b.time.updated - a.time.updated)
 
-        if (prompts.isCancel(selectedSession)) {
-          throw new UI.CancelledError()
-        }
+    const selectedSession = yield* Effect.promise(() =>
+      prompts.autocomplete({
+        message: "Select session to export",
+        maxItems: 10,
+        options: sessions.map((session) => ({
+          label: session.title,
+          value: session.id,
+          hint: `${new Date(session.time.updated).toLocaleString()} • ${session.id.slice(-8)}`,
+        })),
+        output: process.stderr,
+      }),
+    )
 
-        sessionID = selectedSession
+    if (prompts.isCancel(selectedSession)) {
+      return yield* Effect.die(new UI.CancelledError())
+    }
 
-        prompts.outro("Exporting session...", {
-          output: process.stderr,
-        })
-      }
+    sessionID = selectedSession
 
-      try {
-        const sessionInfo = await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(sessionID!)))
-        const messages = await AppRuntime.runPromise(
-          Session.Service.use((svc) => svc.messages({ sessionID: sessionInfo.id })),
-        )
+    prompts.outro("Exporting session...", { output: process.stderr })
+  }
 
-        const exportData = {
-          info: sessionInfo,
-          messages,
-        }
+  // Match legacy try/catch — catches both typed failures and defects
+  // (Session.Service.get throws NotFoundError as a defect, not a typed E).
+  return yield* Effect.gen(function* () {
+    const sessionInfo = yield* svc.get(sessionID!)
+    const messages = yield* svc.messages({ sessionID: sessionInfo.id })
 
-        process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
-        process.stdout.write(EOL)
-      } catch {
-        UI.error(`Session not found: ${sessionID!}`)
-        process.exit(1)
-      }
-    })
-  },
+    const exportData = { info: sessionInfo, messages }
+
+    process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
+    process.stdout.write(EOL)
+  }).pipe(Effect.catchCause(() => fail(`Session not found: ${sessionID!}`)))
 })

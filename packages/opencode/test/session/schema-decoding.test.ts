@@ -59,6 +59,7 @@ describe("Session.Info", () => {
       projectID,
       workspaceID,
       directory: "/tmp/proj",
+      path: "packages/opencode",
       parentID: sessionIDChild,
       summary: {
         additions: 10,
@@ -229,8 +230,21 @@ describe("SessionStatus.Info", () => {
     expect(SessionStatus.Info.zod.parse({ type: "idle" })).toEqual({ type: "idle" })
   })
 
-  test("retry carries attempt/message/next", () => {
-    const input = { type: "retry" as const, attempt: 1, message: "transient", next: 500 }
+  test("retry carries attempt/message/action/next", () => {
+    const input = {
+      type: "retry" as const,
+      attempt: 1,
+      message: "transient",
+      action: {
+        reason: "free_tier_limit",
+        provider: "opencode",
+        title: "Free limit reached",
+        message: "Subscribe to OpenCode Go.",
+        label: "subscribe",
+        link: "https://opencode.ai/go",
+      },
+      next: 500,
+    }
     expect(decode(input)).toEqual(input)
     expect(SessionStatus.Info.zod.parse(input)).toEqual(input)
   })
