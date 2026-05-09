@@ -317,7 +317,7 @@ describe("HttpApi workspace routing middleware", () => {
                   id: workspaceID,
                   type,
                   branch: null,
-                  name: null,
+                  name: "remote-http-fence-target",
                   directory: null,
                   extra: null,
                   projectID: project.project.id,
