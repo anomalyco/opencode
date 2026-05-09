@@ -5,7 +5,7 @@ import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createResource, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
-import { SDKProvider } from "@/context/sdk"
+import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
 
@@ -14,6 +14,7 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const navigate = useNavigate()
   const params = useParams()
   const sync = useSync()
+  const sdk = useSDK()
   const slug = createMemo(() => base64Encode(props.directory))
 
   createEffect(() => {
@@ -34,6 +35,15 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
       directory={props.directory}
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
+      onFetchAppResource={async (server, uri) => {
+        const res = await fetch(
+          `${sdk.url}/mcp/app/resource?uri=${encodeURIComponent(uri)}&server=${encodeURIComponent(server)}`,
+        ).catch(() => undefined)
+        if (!res?.ok) return undefined
+        const data = (await res.json()) as { html: string } | undefined
+        if (typeof data?.html === "string" && data.html.includes("export{")) return undefined
+        return data
+      }}
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>

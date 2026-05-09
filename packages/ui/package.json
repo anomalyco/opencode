@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
+    "@modelcontextprotocol/ext-apps": "^1.1.2",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/core": "workspace:*",
     "@pierre/diffs": "catalog:",

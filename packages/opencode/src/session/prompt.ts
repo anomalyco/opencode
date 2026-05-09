@@ -515,10 +515,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
 
               const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
+              const appMeta = MCP.toolMeta(key)
               const metadata = {
                 ...result.metadata,
                 truncated: truncated.truncated,
                 ...(truncated.truncated && { outputPath: truncated.outputPath }),
+                ...(result.structuredContent ? { structuredContent: result.structuredContent } : {}),
+                ...(appMeta
+                  ? {
+                      resourceUri: appMeta.resourceUri,
+                      server: appMeta.server,
+                      ...(appMeta.maxHeight ? { maxHeight: appMeta.maxHeight } : {}),
+                    }
+                  : {}),
               }
 
               const output = {

@@ -7,6 +7,7 @@ import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { Effect } from "effect"
 import { jsonRequest, runRequest } from "./trace"
+import { McpAppRoutes } from "../mcp-app"
 
 const UnsupportedOAuthError = z
   .object({
@@ -273,5 +274,6 @@ export const McpRoutes = lazy(() =>
           yield* mcp.disconnect(name)
           return true
         }),
-    ),
+    )
+    .route("/app", McpAppRoutes()),
 )

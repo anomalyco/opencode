@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MCP App Demo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0d0d0f;
+        --bg2: #141416;
+        --bg3: #1c1c20;
+        --border: rgba(255, 255, 255, 0.07);
+        --text: #e4e4e7;
+        --muted: rgba(255, 255, 255, 0.35);
+        --accent: #7c3aed;
+        --accent2: #6366f1;
+        --green: #10b981;
+        --red: #ef4444;
+        --yellow: #f59e0b;
+        --blue: #3b82f6;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13px;
+        background: var(--bg);
+        color: var(--text);
+        padding: 16px;
+        line-height: 1.5;
+      }
+
+      /* ── header ── */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .badge {
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(124, 58, 237, 0.2);
+        color: #a78bfa;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .title {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .ts {
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ── tabs ── */
+      .tabs {
+        display: flex;
+        gap: 2px;
+        margin-bottom: 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .tab {
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        background: none;
+        color: var(--muted);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        transition: color 0.15s;
+      }
+      .tab:hover {
+        color: var(--text);
+      }
+      .tab.active {
+        color: var(--text);
+        border-bottom-color: var(--accent2);
+      }
+
+      /* ── metric cards ── */
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      .card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+      .card-label {
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .card-value {
+        font-size: 26px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+      }
+      .card-unit {
+        font-size: 13px;
+        font-weight: 500;
+        opacity: 0.5;
+        margin-left: 1px;
+      }
+      .card-pill {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 99px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .pill-up {
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+      }
+      .pill-down {
+        background: rgba(239, 68, 68, 0.15);
+        color: #f87171;
+      }
+      .pill-flat {
+        background: rgba(255, 255, 255, 0.07);
+        color: var(--muted);
+      }
+      .sparkline {
+        height: 32px;
+        width: 100%;
+      }
+
+      /* ── section head ── */
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .section-title {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+
+      /* ── bar chart ── */
+      .bars {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        margin-bottom: 16px;
+      }
+      .bar-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .bar-name {
+        width: 78px;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bar-track {
+        flex: 1;
+        height: 7px;
+        background: var(--bg3);
+        border-radius: 99px;
+        overflow: hidden;
+      }
+      .bar-fill {
+        height: 100%;
+        border-radius: 99px;
+        transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .bar-val {
+        width: 44px;
+        text-align: right;
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ── line chart ── */
+      .chart-wrap {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+        margin-bottom: 16px;
+      }
+      .chart-svg {
+        width: 100%;
+        display: block;
+        overflow: visible;
+      }
+
+      /* ── log ── */
+      .log-wrap {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        margin-bottom: 16px;
+      }
+      .log-header {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+      .dot-green {
+        background: var(--green);
+      }
+      .dot-yellow {
+        background: var(--yellow);
+      }
+      .dot-red {
+        background: var(--red);
+      }
+      .log-body {
+        padding: 10px 14px;
+        font-family: "SF Mono", "Fira Code", monospace;
+        font-size: 11px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .log-line {
+        display: flex;
+        gap: 10px;
+      }
+      .log-time {
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .log-lvl {
+        width: 40px;
+        font-weight: 600;
+      }
+      .lvl-info {
+        color: var(--blue);
+      }
+      .lvl-warn {
+        color: var(--yellow);
+      }
+      .lvl-error {
+        color: var(--red);
+      }
+      .log-msg {
+        color: var(--text);
+      }
+
+      /* ── actions ── */
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      button {
+        padding: 7px 14px;
+        border-radius: 7px;
+        border: 1px solid var(--border);
+        background: var(--bg3);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          border-color 0.12s;
+      }
+      button:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button.primary:hover {
+        background: #6d28d9;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .panel {
+        display: none;
+      }
+      .panel.active {
+        display: block;
+      }
+
+      /* ── status ── */
+      .status {
+        font-size: 11px;
+        color: var(--muted);
+        font-style: italic;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .spinner {
+        width: 10px;
+        height: 10px;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-top-color: var(--accent2);
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        flex-shrink: 0;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="header-left">
+        <span class="badge">MCP App</span>
+        <span class="title" id="title">Dashboard</span>
+      </div>
+      <span class="ts" id="timestamp"></span>
+    </div>
+
+    <div class="tabs" id="tab-bar"></div>
+
+    <div id="panel-overview" class="panel active">
+      <div class="metrics" id="metrics"></div>
+      <div class="chart-wrap" id="chart-wrap" style="display: none">
+        <div class="section-head">
+          <span class="section-title" id="chart-label">Throughput</span>
+          <span class="ts" id="chart-period"></span>
+        </div>
+        <svg class="chart-svg" id="chart-svg" height="80"></svg>
+      </div>
+      <div id="bar-section" style="display: none">
+        <div class="section-head">
+          <span class="section-title" id="bar-label">Breakdown</span>
+        </div>
+        <div class="bars" id="bars"></div>
+      </div>
+    </div>
+
+    <div id="panel-logs" class="panel">
+      <div class="log-wrap">
+        <div class="log-header">
+          <span class="dot dot-green"></span>
+          <span class="section-title">Recent Events</span>
+        </div>
+        <div class="log-body" id="log-body"></div>
+      </div>
+    </div>
+
+    <div id="panel-raw" class="panel">
+      <div class="log-wrap">
+        <div class="log-header"><span class="section-title">Raw Payload</span></div>
+        <div
+          class="log-body"
+          id="raw-body"
+          style="white-space: pre-wrap; word-break: break-all; font-size: 10.5px; color: var(--muted)"
+        ></div>
+      </div>
+    </div>
+
+    <div class="actions" id="actions"></div>
+    <div class="status" id="status"><span class="spinner"></span> Connecting…</div>
+
+    <script>
+      ;(async () => {
+        const { App } = window
+        const $ = (id) => document.getElementById(id)
+        const COLORS = ["#7c3aed", "#10b981", "#f59e0b", "#3b82f6", "#ec4899", "#06b6d4"]
+
+        // ── tab system ──
+        const TABS = [
+          { id: "overview", label: "Overview" },
+          { id: "logs", label: "Events" },
+          { id: "raw", label: "Raw" },
+        ]
+        let activeTab = "overview"
+        const tabBar = $("tab-bar")
+        TABS.forEach((t) => {
+          const btn = document.createElement("button")
+          btn.className = "tab" + (t.id === activeTab ? " active" : "")
+          btn.textContent = t.label
+          btn.onclick = () => {
+            activeTab = t.id
+            document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"))
+            btn.classList.add("active")
+            document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"))
+            $("panel-" + t.id).classList.add("active")
+          }
+          tabBar.appendChild(btn)
+        })
+
+        // ── sparkline helper ──
+        function sparkline(el, vals, color) {
+          if (!vals?.length) return
+          const w = el.clientWidth || 120,
+            h = 32
+          el.setAttribute("viewBox", `0 0 ${w} ${h}`)
+          const mx = Math.max(...vals),
+            mn = Math.min(...vals)
+          const range = mx - mn || 1
+          const pts = vals.map((v, i) => {
+            const x = (i / (vals.length - 1)) * w
+            const y = h - ((v - mn) / range) * (h - 4) - 2
+            return `${x},${y}`
+          })
+          el.innerHTML = `
+            <defs>
+              <linearGradient id="sg${color.replace("#", "")}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="${color}" stop-opacity=".25"/>
+                <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <polygon points="${pts.join(" ")} ${w},${h} 0,${h}" fill="url(#sg${color.replace("#", "")})"/>
+            <polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          `
+        }
+
+        // ── multi-series line chart ──
+        function lineChart(svgEl, series, label) {
+          const w = svgEl.clientWidth || 400,
+            h = 80
+          svgEl.setAttribute("viewBox", `0 0 ${w} ${h}`)
+          const allVals = series.flatMap((s) => s.values)
+          const mx = Math.max(...allVals),
+            mn = Math.min(...allVals)
+          const range = mx - mn || 1
+          const len = Math.max(...series.map((s) => s.values.length))
+          let html = `<defs>`
+          series.forEach((s, si) => {
+            const c = s.color || COLORS[si % COLORS.length]
+            html += `<linearGradient id="lg${si}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${c}" stop-opacity=".15"/>
+              <stop offset="100%" stop-color="${c}" stop-opacity="0"/>
+            </linearGradient>`
+          })
+          html += `</defs>`
+          // grid lines
+          ;[0, 0.33, 0.67, 1].forEach((f) => {
+            const y = h - f * (h - 4) - 2
+            html += `<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="rgba(255,255,255,.05)" stroke-width="1"/>`
+          })
+          series.forEach((s, si) => {
+            const c = s.color || COLORS[si % COLORS.length]
+            const pts = s.values.map((v, i) => {
+              const x = (i / (len - 1)) * w
+              const y = h - ((v - mn) / range) * (h - 4) - 2
+              return `${x},${y}`
+            })
+            html += `<polygon points="${pts.join(" ")} ${w},${h} 0,${h}" fill="url(#lg${si})"/>`
+            html += `<polyline points="${pts.join(" ")}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`
+            // dot at end
+            const last = pts.at(-1).split(",")
+            html += `<circle cx="${last[0]}" cy="${last[1]}" r="3" fill="${c}"/>`
+          })
+          // legend
+          series.forEach((s, si) => {
+            const c = s.color || COLORS[si % COLORS.length]
+            const x = 6 + si * 90
+            html += `<rect x="${x}" y="3" width="8" height="3" rx="1.5" fill="${c}"/>`
+            html += `<text x="${x + 11}" y="9" font-size="9" fill="rgba(255,255,255,.45)" font-family="-apple-system,sans-serif">${s.name}</text>`
+          })
+          svgEl.innerHTML = html
+        }
+
+        // ── render ──
+        function render(data) {
+          $("status").textContent = ""
+          if (data.title) $("title").textContent = data.title
+          if (data.timestamp) $("timestamp").textContent = data.timestamp
+
+          // metrics cards
+          if (data.metrics?.length) {
+            $("metrics").innerHTML = ""
+            data.metrics.forEach((m, i) => {
+              const dir = m.change > 0 ? "up" : m.change < 0 ? "down" : "flat"
+              const arrow = m.change > 0 ? "↑" : m.change < 0 ? "↓" : "—"
+              const card = document.createElement("div")
+              card.className = "card"
+              card.innerHTML = `
+                <div class="card-top">
+                  <span class="card-label">${m.label}</span>
+                  ${m.change != null ? `<span class="card-pill pill-${dir}">${arrow} ${Math.abs(m.change)}%</span>` : ""}
+                </div>
+                <div class="card-value">${m.value}<span class="card-unit">${m.unit ?? ""}</span></div>
+                ${m.sparkline ? `<svg class="sparkline" id="spark-${i}"></svg>` : ""}
+              `
+              $("metrics").appendChild(card)
+              if (m.sparkline) {
+                setTimeout(() => sparkline($(`spark-${i}`), m.sparkline, m.change >= 0 ? "#10b981" : "#ef4444"), 50)
+              }
+            })
+          }
+
+          // multi-series line chart
+          if (data.chart?.series?.length) {
+            $("chart-wrap").style.display = ""
+            if (data.chart.label) $("chart-label").textContent = data.chart.label
+            if (data.chart.period) $("chart-period").textContent = data.chart.period
+            setTimeout(() => lineChart($("chart-svg"), data.chart.series, data.chart.label), 50)
+          }
+
+          // bar chart
+          if (data.bars?.length) {
+            $("bar-section").style.display = ""
+            if (data.barsLabel) $("bar-label").textContent = data.barsLabel
+            const max = Math.max(...data.bars.map((b) => b.value))
+            $("bars").innerHTML = data.bars
+              .map(
+                (b, i) => `
+              <div class="bar-row">
+                <div class="bar-name" title="${b.name}">${b.name}</div>
+                <div class="bar-track">
+                  <div class="bar-fill" style="width:0%;background:${COLORS[i % COLORS.length]}" data-pct="${((b.value / max) * 100).toFixed(1)}"></div>
+                </div>
+                <div class="bar-val">${b.value}${b.unit ?? ""}</div>
+              </div>
+            `,
+              )
+              .join("")
+            setTimeout(() => {
+              document.querySelectorAll(".bar-fill").forEach((el) => {
+                el.style.width = el.dataset.pct + "%"
+              })
+            }, 60)
+          }
+
+          // event log
+          if (data.events?.length) {
+            $("log-body").innerHTML = data.events
+              .map(
+                (e) => `
+              <div class="log-line">
+                <span class="log-time">${e.time}</span>
+                <span class="log-lvl lvl-${(e.level || "info").toLowerCase()}">${(e.level || "INFO").toUpperCase()}</span>
+                <span class="log-msg">${e.msg}</span>
+              </div>
+            `,
+              )
+              .join("")
+          }
+
+          // raw
+          $("raw-body").textContent = JSON.stringify(data, null, 2)
+
+          // actions
+          if (data.actions?.length) {
+            $("actions").innerHTML = ""
+            data.actions.forEach((a) => {
+              const btn = document.createElement("button")
+              btn.className = a.primary ? "primary" : ""
+              btn.textContent = a.label
+              btn.onclick = async () => {
+                btn.disabled = true
+                $("status").innerHTML =
+                  `<span class="spinner" style="display:inline-block;width:10px;height:10px;border:2px solid rgba(255,255,255,.1);border-top-color:#6366f1;border-radius:50%;animation:spin .6s linear infinite"></span> Sending…`
+                await app.callServerTool({ name: "_demo_action", arguments: { action_id: a.id } })
+                $("status").textContent = `✓ ${a.label} sent`
+                btn.disabled = false
+              }
+              $("actions").appendChild(btn)
+            })
+          }
+        }
+
+        // ── bridge ──
+        const app = new App({ name: "demo-dashboard", version: "1.0.0" }, {})
+        app.ontoolinput = (params) => {
+          $("status").textContent = "Running…"
+        }
+        app.ontoolresult = (params) => {
+          const sc = params.structuredContent
+          if (sc) render(sc)
+          else $("status").textContent = "No structured content."
+        }
+        app
+          .connect()
+          .then(() => {})
+          .catch((e) => {
+            $("status").textContent = "Connect error: " + e.message
+          })
+      })()
+    </script>
+  </body>
+</html>
