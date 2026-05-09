@@ -2,6 +2,10 @@ mod cli;
 mod constants;
 // FORK: 本地资源自定义 protocol(.md 图 / 音视频 / HTML 预览 iframe 共用)2026-05-05
 mod local_asset;
+// FORK: DeskFox system tray + 主进程常驻骨架 [feat: feishu-bridge] 2026-05-08
+mod system_tray;
+// FORK: 飞书 adapter 主进程接入(spawn + Tauri commands)[feat: feishu-bridge] 2026-05-08
+mod feishu_adapter;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 #[cfg(target_os = "linux")]
@@ -483,6 +487,14 @@ pub fn run() {
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
 
+            // FORK: 注册 system tray(C0.5.1 scaffold,菜单 / 命令 C0.5.3 加)[feat: feishu-bridge]
+            if let Err(err) = system_tray::build_tray(app.handle()) {
+                tracing::warn!("failed to build system tray: {err}");
+            }
+
+            // FORK: 飞书 adapter 状态初始化(C1.3,Phase 2+ 真 spawn)[feat: feishu-bridge]
+            feishu_adapter::init(app.handle());
+
             Ok(())
         });
 
@@ -494,10 +506,26 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app, event| {
-            if let RunEvent::Exit = event {
-                tracing::info!("Received Exit");
-
-                kill_sidecar(app.clone());
+            match &event {
+                RunEvent::Exit => {
+                    tracing::info!("Received Exit");
+                    kill_sidecar(app.clone());
+                }
+                // FORK: 关 GUI ≠ 退主进程(C0.5.2)— 飞书 adapter 长驻 [feat: feishu-bridge]
+                RunEvent::WindowEvent { label, event: window_event, .. }
+                    if label == MainWindow::LABEL =>
+                {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = window_event {
+                        if !system_tray::is_quitting() {
+                            api.prevent_close();
+                            if let Some(w) = app.get_webview_window(MainWindow::LABEL) {
+                                let _ = w.hide();
+                            }
+                            tracing::debug!("close requested → hidden(主进程仍跑)");
+                        }
+                    }
+                }
+                _ => {}
             }
         });
 }
@@ -532,7 +560,22 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             text_file::get_file_mtime,
             text_file::read_binary_file_base64,
             text_file::write_binary_file_absolute_base64, // FORK: 文件树外部 OS 文件拖入 2026-04-28
-            text_file::fetch_url_base64 // FORK: MD 导出 Word — 远端图片 fetch 绕 WebView2 CORS 2026-05-08
+            text_file::fetch_url_base64, // FORK: MD 导出 Word — 远端图片 fetch 绕 WebView2 CORS 2026-05-08
+            // FORK: tray 状态切换 + 主窗口控制 + 退出 [feat: feishu-bridge] 2026-05-08
+            system_tray::set_tray_status_cmd,
+            system_tray::show_main_window_cmd,
+            system_tray::quit_app_cmd,
+            // FORK: 飞书 adapter OAuth 接入 [feat: feishu-bridge] 2026-05-08
+            feishu_adapter::feishu_oauth_start,
+            feishu_adapter::feishu_oauth_poll,
+            feishu_adapter::feishu_adapter_status,
+            // FORK: 飞书账户 CRUD(C1.6 写盘)[feat: feishu-bridge] 2026-05-08
+            feishu_adapter::feishu_save_account,
+            feishu_adapter::feishu_list_accounts,
+            feishu_adapter::feishu_delete_account,
+            // FORK: per-account model 选择 [feat: feishu-bridge] 2026-05-09
+            feishu_adapter::feishu_update_account_model,
+            feishu_adapter::feishu_list_providers
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
