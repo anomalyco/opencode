@@ -17,6 +17,7 @@ export const SidebarContent = (props: {
   opened: Accessor<boolean>
   aimMove: (event: MouseEvent) => void
   projects: Accessor<LocalProject[]>
+  renderRecentTile?: () => JSX.Element
   renderProject: (project: LocalProject) => JSX.Element
   handleDragStart: (event: unknown) => void
   handleDragEnd: () => void
@@ -66,6 +67,7 @@ export const SidebarContent = (props: {
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
+              <Show when={props.renderRecentTile}>{(render) => render()}</Show>
               <Tooltip
                 placement={placement()}
                 value={
