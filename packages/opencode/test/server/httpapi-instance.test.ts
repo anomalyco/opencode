@@ -5,6 +5,7 @@ import { Config, Effect, FileSystem, Layer, Path } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { WorkspaceID } from "../../src/control-plane/schema"
+import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
@@ -92,6 +93,31 @@ describe("instance HttpApi", () => {
 
       expect(response.status).toBe(200)
       expect(JSON.parse(response.headers[FenceHeader] ?? "{}")).not.toEqual({})
+    }),
+  )
+
+  it.live("does not emit sync fence headers for fixed-workspace reads or no-op mutations", () =>
+    Effect.gen(function* () {
+      const originalWorkspaceID = Flag.OPENCODE_WORKSPACE_ID
+      Flag.OPENCODE_WORKSPACE_ID = WorkspaceID.ascending()
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Flag.OPENCODE_WORKSPACE_ID = originalWorkspaceID
+        }),
+      )
+
+      const dir = yield* tmpdirScoped({ git: true })
+      const read = yield* HttpClientRequest.get(InstancePaths.path).pipe(directoryHeader(dir), HttpClient.execute)
+      const log = yield* HttpClientRequest.post(ControlPaths.log).pipe(
+        directoryHeader(dir),
+        HttpClientRequest.bodyJson({ service: "fence-test", level: "info", message: "noop" }),
+        Effect.flatMap(HttpClient.execute),
+      )
+
+      expect(read.status).toBe(200)
+      expect(read.headers[FenceHeader]).toBeUndefined()
+      expect(log.status).toBe(200)
+      expect(log.headers[FenceHeader]).toBeUndefined()
     }),
   )
 
