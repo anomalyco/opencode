@@ -9057,7 +9057,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^per"
           },
           "sessionID": {
             "type": "string"
@@ -9355,7 +9356,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que"
           },
           "sessionID": {
             "type": "string"
@@ -9387,7 +9389,8 @@
             "type": "string"
           },
           "requestID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que"
           },
           "answers": {
             "type": "array",
@@ -9406,7 +9409,8 @@
             "type": "string"
           },
           "requestID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^que"
           }
         },
         "required": ["sessionID", "requestID"],
@@ -15815,7 +15819,8 @@
                 "type": "string"
               },
               "requestID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^per"
               },
               "reply": {
                 "type": "string",
