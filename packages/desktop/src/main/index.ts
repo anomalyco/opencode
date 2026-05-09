@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs"
 import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow } from "electron"
@@ -164,7 +164,13 @@ const main = Effect.gen(function* () {
     return
   }
 
-  preferAppEnv(app.getPath("userData"))
+  const dataPath = app.isPackaged
+    ? join(dirname(app.getPath("exe")), "data")
+    : app.getPath("userData")
+  if (app.isPackaged && !existsSync(dataPath)) {
+    mkdirSync(dataPath, { recursive: true })
+  }
+  preferAppEnv(dataPath)
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
@@ -303,7 +309,7 @@ const main = Effect.gen(function* () {
         },
         {
           needsMigration,
-          userDataPath: app.getPath("userData"),
+          userDataPath: dataPath,
           onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
           onStdout: (message) => logger.log("sidecar stdout", { message }),
           onStderr: (message) => logger.warn("sidecar stderr", { message }),

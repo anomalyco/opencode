@@ -1,6 +1,7 @@
 import { MainLogger } from "electron-log"
 import log from "electron-log/main.js"
-import { readFileSync, readdirSync, statSync, unlinkSync } from "node:fs"
+import { app } from "electron"
+import { mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, existsSync } from "node:fs"
 import { dirname, join } from "node:path"
 
 const MAX_LOG_AGE_DAYS = 7
@@ -9,7 +10,22 @@ const TAIL_LINES = 1000
 let logger: MainLogger
 export const getLogger = () => logger
 
+function getPortableLogPath(): string {
+  if (app.isPackaged) {
+    const exePath = app.getPath("exe")
+    const exeDir = dirname(exePath)
+    const logDir = join(exeDir, "data", "logs")
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true })
+    }
+    return logDir
+  }
+  return log.transports.file.getFile().path.replace(/[^\\\/]+$/, "")
+}
+
 export function initLogging() {
+  const logDir = getPortableLogPath()
+  log.transports.file.resolvePathFn = () => join(logDir, "opencode.log")
   log.transports.file.maxSize = 5 * 1024 * 1024
   initConsoleTransport()
   cleanup()
