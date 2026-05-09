@@ -89,7 +89,7 @@ describe("recent session helpers", () => {
     ])
   })
 
-  test("orphan children with missing parent are excluded from sections", () => {
+  test("orphan children with missing parent become roots", () => {
     const now = DateTime.local(2026, 3, 28, 10, 0, 0)
     const orphan = session({
       id: "orphan",
@@ -109,11 +109,11 @@ describe("recent session helpers", () => {
 
     const data = organizeRecentSessions([orphan, root], now)
 
-    expect(data.roots.map((s) => s.id)).toEqual(["root"])
-    expect(data.sections.map((s) => s.label)).toEqual(["Yesterday"])
+    expect(data.roots.map((s) => s.id)).toEqual(["orphan", "root"])
+    expect(data.sections.map((s) => s.label)).toEqual(["Today", "Yesterday"])
   })
 
-  test("orphan-only list produces empty sections", () => {
+  test("orphan-only list still renders in sections", () => {
     const now = DateTime.local(2026, 3, 28, 10, 0, 0)
     const orphan = session({
       id: "orphan",
@@ -126,7 +126,7 @@ describe("recent session helpers", () => {
 
     const data = organizeRecentSessions([orphan], now)
 
-    expect(data.roots).toEqual([])
-    expect(data.sections.length).toBe(0)
+    expect(data.roots.map((s) => s.id)).toEqual(["orphan"])
+    expect(data.sections.map((s) => s.label)).toEqual(["Today"])
   })
 })

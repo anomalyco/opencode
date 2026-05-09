@@ -81,7 +81,7 @@ export function organizeRecentSessions(list: GlobalSession[], now: Clock = DateT
   }
 
   const roots = list
-    .filter((session) => !session.parentID)
+    .filter((session) => !session.parentID || !lookup.has(session.parentID))
     .sort((a, b) => {
       const diff = visit(b) - visit(a)
       if (diff) return diff
