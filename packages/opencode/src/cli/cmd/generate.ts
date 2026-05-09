@@ -1,13 +1,28 @@
 import { Server } from "../../server/server"
 import type { CommandModule } from "yargs"
 
-type Args = {}
+type Args = {
+  httpapi: boolean
+  hono: boolean
+}
 
 export const GenerateCommand = {
   command: "generate",
-  builder: (yargs) => yargs,
-  handler: async () => {
-    const specs = (await Server.openapi()) as { paths: Record<string, Record<string, any>> }
+  builder: (yargs) =>
+    yargs
+      .option("httpapi", {
+        type: "boolean",
+        default: false,
+        description:
+          "Generate OpenAPI from the Effect HttpApi contract (default; flag retained for backwards compatibility)",
+      })
+      .option("hono", {
+        type: "boolean",
+        default: false,
+        description: "Generate OpenAPI from the legacy Hono backend (parity-diff only; will be removed)",
+      }),
+  handler: async (args) => {
+    const specs = args.hono ? await Server.openapiHono() : await Server.openapi()
     for (const item of Object.values(specs.paths)) {
       for (const method of ["get", "post", "put", "delete", "patch"] as const) {
         const operation = item[method]

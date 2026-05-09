@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
 import { Instance } from "../../src/project/instance"
@@ -14,11 +15,13 @@ import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
+const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const context = Context.empty() as Context.Context<unknown>
 const it = testEffect(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))
 
-function app() {
-  return Server.Default().app
+function app(experimental: boolean) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 type TestApp = ReturnType<typeof app>
 
@@ -76,6 +79,7 @@ const readResponse = Effect.fnUntraced(function* (input: { app: TestApp; path: s
 })
 
 afterEach(async () => {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
   await resetDatabase()
 })
@@ -161,19 +165,23 @@ describe("mcp HttpApi", () => {
   })
 
   it.live(
-    "returns unsupported OAuth error responses",
+    "matches legacy unsupported OAuth error responses",
     withMcpProject((dir) =>
       Effect.gen(function* () {
         const headers = { "x-opencode-directory": dir }
+        const legacy = app(false)
+        const httpapi = app(true)
 
         yield* Effect.forEach(["/mcp/demo/auth", "/mcp/demo/auth/authenticate"], (path) =>
           Effect.gen(function* () {
-            const response = yield* readResponse({ app: app(), path, headers })
+            const legacyResponse = yield* readResponse({ app: legacy, path, headers })
+            const httpapiResponse = yield* readResponse({ app: httpapi, path, headers })
 
-            expect(response).toEqual({
+            expect(legacyResponse).toEqual({
               status: 400,
               body: JSON.stringify({ error: "MCP server demo does not support OAuth" }),
             })
+            expect(httpapiResponse).toEqual(legacyResponse)
           }),
         )
       }),

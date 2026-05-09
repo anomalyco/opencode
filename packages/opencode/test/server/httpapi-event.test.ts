@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
@@ -8,8 +9,11 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
-function app() {
-  return Server.Default().app
+const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
+
+function app(experimental = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 
 async function readFirstChunk(response: Response) {
@@ -32,12 +36,13 @@ async function readFirstEvent(response: Response) {
 }
 
 afterEach(async () => {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
   await resetDatabase()
 })
 
-describe("event HttpApi", () => {
-  test("serves event stream", async () => {
+describe("event HttpApi bridge", () => {
+  test("serves event stream through experimental Effect route", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const response = await app().request(EventPaths.event, { headers: { "x-opencode-directory": tmp.path } })
 
@@ -49,11 +54,15 @@ describe("event HttpApi", () => {
     expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
   })
 
-  test("serves the initial server connected event", async () => {
+  test("matches legacy first event frame", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const headers = { "x-opencode-directory": tmp.path }
-    const response = await app().request(EventPaths.event, { headers })
+    const legacy = await app(false).request(EventPaths.event, { headers })
+    const effect = await app(true).request(EventPaths.event, { headers })
 
-    expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
+    const legacyEvent = await readFirstEvent(legacy)
+    const effectEvent = await readFirstEvent(effect)
+    expect(effectEvent.type).toBe(legacyEvent.type)
+    expect(effectEvent.properties).toEqual(legacyEvent.properties)
   })
 })

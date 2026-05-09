@@ -1,5 +1,4 @@
 import { TuiEvent } from "@/cli/cmd/tui/event"
-import { TuiRequest as TuiRequestPayload } from "@/server/shared/tui-control"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -10,6 +9,10 @@ import { described } from "./metadata"
 
 const root = "/tui"
 export const CommandPayload = Schema.Struct({ command: Schema.String })
+export const TuiRequestPayload = Schema.Struct({
+  path: Schema.String,
+  body: Schema.Unknown,
+})
 const EventTuiPromptAppend = Schema.Struct({
   type: Schema.Literal(TuiEvent.PromptAppend.type),
   properties: TuiEvent.PromptAppend.properties,

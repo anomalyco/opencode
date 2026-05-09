@@ -1,12 +1,12 @@
+import z from "zod"
 import { AsyncQueue } from "@/util/queue"
-import { Schema } from "effect"
 
-export const TuiRequest = Schema.Struct({
-  path: Schema.String,
-  body: Schema.Unknown,
+export const TuiRequest = z.object({
+  path: z.string(),
+  body: z.any(),
 })
 
-export type TuiRequest = Schema.Schema.Type<typeof TuiRequest>
+export type TuiRequest = z.infer<typeof TuiRequest>
 
 const request = new AsyncQueue<TuiRequest>()
 const response = new AsyncQueue<unknown>()

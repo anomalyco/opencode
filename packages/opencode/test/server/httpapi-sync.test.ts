@@ -13,11 +13,13 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
+const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const context = Context.empty() as Context.Context<unknown>
 
-function app() {
-  return Server.Default().app
+function app(httpapi = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpapi
+  return httpapi ? Server.Default().app : Server.Legacy().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
@@ -26,13 +28,14 @@ function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
 
 afterEach(async () => {
   mock.restore()
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await disposeAllInstances()
   await resetDatabase()
 })
 
 describe("sync HttpApi", () => {
-  test("serves sync routes", async () => {
+  test("serves sync routes through Hono bridge", async () => {
     Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
@@ -84,7 +87,7 @@ describe("sync HttpApi", () => {
     expect(info.mock.calls.some(([message]) => message === "sync replay complete")).toBe(true)
   })
 
-  test("validates seq values", async () => {
+  test("matches legacy seq validation", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
     const cases = [
@@ -113,12 +116,18 @@ describe("sync HttpApi", () => {
     ]
 
     for (const item of cases) {
-      const response = await app().request(item.path, {
+      const legacy = await app(false).request(item.path, {
         method: "POST",
         headers,
         body: JSON.stringify(item.body),
       })
-      expect(response.status).toBe(400)
+      const httpapi = await app(true).request(item.path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(item.body),
+      })
+      expect(httpapi.status).toBe(legacy.status)
+      expect(httpapi.status).toBe(400)
     }
   })
 
