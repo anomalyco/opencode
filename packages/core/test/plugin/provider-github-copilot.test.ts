@@ -2,8 +2,8 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { GithubCopilotPlugin } from "../../../src/v2/plugin/provider/github-copilot"
-import { fakeSelectorSdk, it, model } from "../../../../core/test/v2/plugin/provider-helper"
+import { GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
+import { fakeSelectorSdk, it, model } from "../v2/plugin/provider-helper"
 
 describe("GithubCopilotPlugin", () => {
   it.effect("creates the bundled Copilot SDK for the GitHub Copilot package", () =>

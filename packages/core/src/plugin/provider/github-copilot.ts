@@ -1,7 +1,7 @@
 import { Effect } from "effect"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "../../model"
+import { PluginV2 } from "../../plugin"
+import { ProviderV2 } from "../../provider"
 
 function shouldUseResponses(modelID: string) {
   // Copilot supports Responses for GPT-5 class models, except mini variants
@@ -20,7 +20,7 @@ export const GithubCopilotPlugin = PluginV2.define({
       }),
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/github-copilot") return
-        const mod = yield* Effect.promise(() => import("../../../provider/sdk/copilot/copilot-provider"))
+        const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider"))
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
       "aisdk.language": Effect.fn(function* (evt) {

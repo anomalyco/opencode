@@ -9,6 +9,7 @@ import { CoherePlugin } from "./cohere"
 import { DeepInfraPlugin } from "./deepinfra"
 import { DynamicProviderPlugin } from "./dynamic"
 import { GatewayPlugin } from "./gateway"
+import { GithubCopilotPlugin } from "./github-copilot"
 import { GitLabPlugin } from "./gitlab"
 import { GooglePlugin } from "./google"
 import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "./google-vertex"
@@ -41,6 +42,7 @@ export const ProviderPlugins = [
   CoherePlugin,
   DeepInfraPlugin,
   GatewayPlugin,
+  GithubCopilotPlugin,
   GitLabPlugin,
   GooglePlugin,
   GoogleVertexAnthropicPlugin,
