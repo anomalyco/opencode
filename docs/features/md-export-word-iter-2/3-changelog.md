@@ -12,11 +12,23 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ## Commit 列表
 
-> 待补 — commit 后回填
+本 feat 共 6 笔实施 commit + 1 merge commit + 1 release bump commit:
 
 ```
-TBD
+185ad127c  feat(desktop): 加 fetch_url_base64 命令 — 远端图片走后端 reqwest 绕 WebView2 CORS
+194172129  chore(deps): 加 katex@0.16.45 + mathml2omml@0.5.0 — 数学公式 LaTeX→MathML→OMML  [override-blacklist]
+f5b22a840  feat(ui): viewer marked 扩展 — <mark>/GFM emoji/heading anchor/嵌套 link 图片  [override-blacklist]
+a8030f1f3  feat(md-export-word): iter-2 全面保真度提升 — HTML 标签/Alerts/blockquote/图片/表格/数学/目录跳转  [large-diff]
+bfb6ca503  test(md-export-word): iter-2 helper 全覆盖 — 单测 72 → 147  [large-diff]
+b2740f19a  docs(features): md-export-word-iter-2 三文档 + 索引(规范 v2 Large 改动)
+ae96d138b  Merge feat/md-export-word-iter-2 into dev
+a9072d384  chore(release): bump Windows installer 2026.5.9.1
 ```
+
+**Release**:[ship-prod-2026.5.9.1](https://github.com/zoulukuang/deskfox/releases/tag/ship-prod-2026.5.9.1) (GitHub) / [Gitee 镜像](https://gitee.com/zoulukuang/deskfox/releases/tag/ship-prod-2026.5.9.1)
+- Installer:`DeskFox-2026.5.9.1-setup.exe`(58.15 MB / 60,978,467 bytes)
+- SHA256:`3C79209005D28EBFD621CC806313ECE614054CEF1745C3D1819C467EE6B7D2D9`
+- Build 路径:GitHub Actions 两次 60min timeout(根因待查),最终走**本地 build + `gh release create` 上传** + Gitee mirror 闭环
 
 ## 改动文件
 
