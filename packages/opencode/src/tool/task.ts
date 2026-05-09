@@ -6,6 +6,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { ModelID, ProviderID } from "../provider/schema"
 import { Effect, Exit, Schema } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 
@@ -21,6 +22,10 @@ export const Parameters = Schema.Struct({
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
   prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  model: Schema.optional(Schema.String).annotate({
+    description:
+      "Override the model for this subagent. Format: provider/model (e.g. anthropic/claude-sonnet-4, openai/gpt-4o). Takes precedence over the agent's configured model.",
+  }),
   task_id: Schema.optional(Schema.String).annotate({
     description:
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
@@ -104,9 +109,35 @@ export const TaskTool = Tool.define(
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
 
-      const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
+      let model: { modelID: ModelID; providerID: ProviderID }
+      if (params.model) {
+        const slash = params.model.indexOf("/")
+        if (slash <= 0 || slash === params.model.length - 1) {
+          return yield* Effect.fail(
+            new Error(
+              `Invalid model format: "${params.model}". Expected provider/model (e.g. anthropic/claude-sonnet-4)`,
+            ),
+          )
+        }
+        yield* ctx.ask({
+          permission: "model_override",
+          patterns: [params.model],
+          always: [params.model.slice(0, slash + 1) + "*"],
+          metadata: {
+            description: params.description,
+            subagent_type: params.subagent_type,
+            model: params.model,
+          },
+        })
+        model = {
+          providerID: ProviderID.make(params.model.slice(0, slash)),
+          modelID: ModelID.make(params.model.slice(slash + 1)),
+        }
+      } else {
+        model = next.model ?? {
+          modelID: msg.info.modelID,
+          providerID: msg.info.providerID,
+        }
       }
 
       yield* ctx.metadata({

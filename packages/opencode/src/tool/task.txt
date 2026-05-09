@@ -11,6 +11,11 @@ When NOT to use the Task tool:
 - If you are searching for code within a specific file or set of 2-3 files, use the Read tool instead of the Task tool, to find the match more quickly
 - Other tasks that are not related to the agent descriptions above
 
+Model selection:
+- Each agent has a default model (usually inherited from the parent session).
+- You can override the model by passing the `model` parameter in `provider/model` format (e.g. `anthropic/claude-sonnet-4`, `openai/gpt-4o`, `google/gemini-2.5-pro`).
+- Model overrides require the `model_override` permission. By default this permission is denied and the user will be asked to approve. The user can allow specific models or providers in their config (e.g. `"model_override": { "anthropic/*": "allow" }`).
+- Use the `model` parameter to run a subagent on a different model than the parent session. This is useful for leveraging different model strengths (e.g., sending research tasks to a faster/cheaper model, or routing code generation to a more capable model).
 
 Usage notes:
 1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses

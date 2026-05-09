@@ -432,4 +432,38 @@ describe("tool.task", () => {
       },
     },
   )
+
+  it.instance("execute uses model parameter to override subagent model", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          model: "anthropic/claude-sonnet-4",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.metadata.model.providerID as string).toBe("anthropic")
+      expect(result.metadata.model.modelID as string).toBe("claude-sonnet-4")
+      expect((seen?.model?.providerID ?? "") as string).toBe("anthropic")
+      expect((seen?.model?.modelID ?? "") as string).toBe("claude-sonnet-4")
+    }),
+  )
 })
