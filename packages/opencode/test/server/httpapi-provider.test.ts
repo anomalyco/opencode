@@ -116,32 +116,11 @@ describe("provider HttpApi", () => {
           method: 0,
           headers,
         })
-<<<<<<< HEAD
-        const apiHttpApi = yield* requestAuthorize({
-          app: httpapi,
-          providerID,
-          method: 0,
-          headers,
-        })
-        expect(apiLegacy).toEqual({ status: 200, body: "" })
-        // #26474 changed the HTTP API authorize handler to serialize an
-        // undefined service result as JSON `null` instead of an empty body
-        // so clients can `.json()` parse the response uniformly. The legacy
-        // Hono path still emits an empty body (`c.json(undefined)`); the new
-        // backend's body diverges intentionally.
-        expect(apiHttpApi).toEqual({ status: 200, body: "null" })
-||||||| parent of 5baf0106a (research(server): simplify Hono deletion cleanup)
-        const apiHttpApi = yield* requestAuthorize({
-          app: httpapi,
-          providerID,
-          method: 0,
-          headers,
-        })
-        expect(apiLegacy).toEqual({ status: 200, body: "" })
-        expect(apiHttpApi).toEqual(apiLegacy)
-=======
-        expect(api).toEqual({ status: 200, body: "" })
->>>>>>> 5baf0106a (research(server): simplify Hono deletion cleanup)
+        // method 0 (api-key style) — authorize() resolves with no further
+        // redirect; #26474 changed the wire format to JSON `null` so clients
+        // can `.json()` parse uniformly instead of getting an empty body
+        // that throws.
+        expect(api).toEqual({ status: 200, body: "null" })
 
         const oauth = yield* requestAuthorize({
           app: server,

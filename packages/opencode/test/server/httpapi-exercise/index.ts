@@ -1,10 +1,10 @@
 /**
- * End-to-end exerciser for the legacy Hono instance routes and the Effect HttpApi routes.
+ * End-to-end exerciser for the Effect HttpApi routes.
  *
- * The goal is not to be a normal unit test file. This is a route-coverage and parity
- * harness we can run while deleting Hono: every public route should eventually have a
- * small scenario that proves the Effect route decodes requests, uses the right instance
- * context, mutates storage when expected, and returns a compatible response shape.
+ * The goal is not to be a normal unit test file. This is a route-coverage harness:
+ * every public route should have a small scenario that proves the route decodes
+ * requests, uses the right instance context, mutates storage when expected, and
+ * returns the expected response shape.
  *
  * The script intentionally isolates `OPENCODE_DB` before importing modules that touch
  * storage. Scenarios may create/delete sessions and reset the database after each run,
@@ -15,8 +15,7 @@
  * - `.seeded(...)` creates typed per-scenario state using Effect helpers on `ctx`.
  * - `.at(...)` builds the request from that typed state.
  * - `.json(...)` / `.jsonEffect(...)` assert response shape and optional side effects.
- * - `.mutating()` tells parity mode to run Effect and Hono in separate isolated contexts
- *   so destructive routes compare equivalent fresh setups instead of sharing one DB.
+ * - `.mutating()` tells the runner to reset isolated state after destructive routes.
  */
 import { Effect } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
@@ -1263,7 +1262,6 @@ const main = Effect.gen(function* () {
   const options = parseOptions(Bun.argv.slice(2))
   const modules = yield* Effect.promise(() => runtime())
   const effectRoutes = routeKeys(OpenApi.fromApi(modules.PublicApi))
-  const honoRoutes = routeKeys(yield* Effect.promise(() => modules.Server.openapiHono()))
   const selected = selectedScenarios(options, scenarios)
   const missing = effectRoutes.filter((route) => !scenarios.some((scenario) => route === routeKey(scenario)))
   const extra = scenarios.filter((scenario) => !effectRoutes.includes(routeKey(scenario)))
@@ -1274,7 +1272,7 @@ const main = Effect.gen(function* () {
     }
   }
 
-  printHeader(options, effectRoutes, honoRoutes, selected, missing, extra, {
+  printHeader(options, effectRoutes, selected, missing, extra, {
     database: exerciseDatabasePath,
     global: exerciseGlobalRoot,
   })
