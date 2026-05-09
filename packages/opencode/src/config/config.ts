@@ -121,12 +121,12 @@ const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate
 })
 
 // The Effect Schema is the canonical source of truth. The `.zod` compatibility
-// surface is derived so existing Hono validators keep working without a parallel
-// Zod definition.
+// surface is derived from it so plugin/SDK Zod consumers keep working without
+// a parallel hand-maintained Zod definition.
 //
 // The walker emits `z.object({...})` which is non-strict by default. Config
 // historically uses `.strict()` (additionalProperties: false in openapi.json),
-// so layer that on after derivation.  Re-apply the Config ref afterward
+// so layer that on after derivation. Re-apply the Config ref afterward
 // since `.strict()` strips the walker's meta annotation.
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String).annotate({
