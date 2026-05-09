@@ -531,7 +531,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             text_file::write_text_file,
             text_file::get_file_mtime,
             text_file::read_binary_file_base64,
-            text_file::write_binary_file_absolute_base64 // FORK: 文件树外部 OS 文件拖入 2026-04-28
+            text_file::write_binary_file_absolute_base64, // FORK: 文件树外部 OS 文件拖入 2026-04-28
+            text_file::fetch_url_base64 // FORK: MD 导出 Word — 远端图片 fetch 绕 WebView2 CORS 2026-05-08
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
