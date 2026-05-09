@@ -16,14 +16,14 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Install deps
-        run: bun install
+        run: bun install --ignore-scripts
 
       - name: Build portable
         working-directory: packages/desktop
         run: |
           $env:RUST_TARGET = "aarch64-pc-windows-msvc"
           bun ./scripts/prepare.ts
-          bun install
+          bun install --ignore-scripts
           bun run build
           npx electron-builder --win --arm64 --publish never --config electron-builder.config.ts
 
