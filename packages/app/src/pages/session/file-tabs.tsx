@@ -1610,7 +1610,9 @@ export function FileTabContent(props: {
                 </button>
                 <div class="my-1 border-t border-border-base" />
                 <button
-                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover"
+                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!isMarkdownPath(path())}
+                  title={isMarkdownPath(path()) ? undefined : language.t("fileViewer.menu.exportDocxOnlyMd")}
                   onClick={() => void onExportDocx()}
                 >
                   {language.t("fileViewer.menu.exportDocx")}
