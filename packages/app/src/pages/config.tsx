@@ -1987,7 +1987,7 @@ export default function ConfigPage() {
     }
   })
   const opened = createMemo(() =>
-    [...globalSync.data.project].sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
+    Object.values(globalSync.data.projectByDomain).flat().filter(Boolean).sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
   )
 
   const agentsMd = createMemo<DocItem[]>(() => {

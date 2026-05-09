@@ -401,7 +401,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       // project's sandboxes onto this tile and create a false "selected" state.
       const metadata =
         globalSync.data.project.find((x) => x.worktree === project.worktree) ??
-        (projectID ? globalSync.data.project.find((x) => x.id === projectID) : undefined)
+        (projectID ? globalSync.data.project.find((x) => x.id === projectID) : undefined) ??
+        Object.values(globalSync.data.projectByDomain)
+          .flat()
+          .filter(Boolean)
+          .find((x) => x.worktree === project.worktree) ??
+        (projectID ? Object.values(globalSync.data.projectByDomain).flat().filter(Boolean).find((x) => x.id === projectID) : undefined)
 
       // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
       // Without this, different subdirectories of the same git repo would share the same
@@ -415,8 +420,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const roots = createMemo(() => {
       const map = new Map<string, string>()
-      const worktrees = new Set(globalSync.data.project.map((project) => workspaceKey(project.worktree)))
-      for (const project of globalSync.data.project) {
+      const allProjects = Object.values(globalSync.data.projectByDomain).flat().filter(Boolean)
+      const worktrees = new Set(allProjects.map((project) => workspaceKey(project.worktree)))
+      for (const project of allProjects) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
           const key = workspaceKey(sandbox)
