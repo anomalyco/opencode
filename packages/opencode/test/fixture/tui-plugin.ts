@@ -187,34 +187,14 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
     },
     command: {
-      register(cb) {
-        const commands = cb()
-        return keymap.registerLayer({
-          commands: commands.map((item) => ({
-            namespace: "palette",
-            name: item.value,
-            title: item.title,
-            desc: item.description,
-            category: item.category,
-            suggested: item.suggested,
-            hidden: item.hidden,
-            enabled: item.enabled,
-            slashName: item.slash?.name,
-            slashAliases: item.slash?.aliases,
-            run() {
-              item.onSelect?.()
-            },
-          })),
-          bindings: commands.flatMap((item) =>
-            item.keybind ? [{ key: item.keybind, cmd: item.value, desc: item.title }] : [],
-          ),
-        })
+      register() {
+        throw new Error("Deprecated api.command should not be used by test fixtures")
       },
-      trigger(value) {
-        keymap.dispatchCommand(value)
+      trigger() {
+        throw new Error("Deprecated api.command should not be used by test fixtures")
       },
       show() {
-        keymap.dispatchCommand("command.palette.show")
+        throw new Error("Deprecated api.command should not be used by test fixtures")
       },
     },
     keys: {
