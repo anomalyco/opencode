@@ -1,5 +1,5 @@
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Cause, Effect } from "effect"
+import { Cause, Duration, Effect } from "effect"
 import { TestLLMServer } from "../../lib/llm-server"
 import type { Config } from "../../../src/config/config"
 import { ModelID, ProviderID } from "../../../src/provider/schema"
@@ -26,7 +26,7 @@ export function runScenario(options: Options) {
     return runActive(options, scenario).pipe(
       Effect.timeoutOrElse({
         duration: options.scenarioTimeout,
-        orElse: () => Effect.die(new Error(`scenario timed out after ${options.scenarioTimeout}`)),
+        orElse: () => Effect.die(new Error(`scenario timed out after ${Duration.format(options.scenarioTimeout)}`)),
       }),
       Effect.as({ status: "pass", scenario } as Result),
       Effect.catchCause((cause) => Effect.succeed({ status: "fail" as const, scenario, message: Cause.pretty(cause) })),

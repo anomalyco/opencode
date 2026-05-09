@@ -1,4 +1,4 @@
-import type { Effect } from "effect"
+import type { Duration, Effect } from "effect"
 import type { Config } from "../../../src/config/config"
 import type { Project } from "../../../src/project/project"
 import type { Worktree } from "../../../src/worktree"
@@ -26,7 +26,7 @@ export type Options = {
   stopAt: string | undefined
   failOnMissing: boolean
   failOnSkip: boolean
-  scenarioTimeout: string
+  scenarioTimeout: Duration.Duration
   progress: boolean
   trace: boolean
 }
