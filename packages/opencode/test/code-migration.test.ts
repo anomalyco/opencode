@@ -38,26 +38,28 @@ describe("CodeMigration", () => {
         yield* Effect.promise(() => done)
       }).pipe(
         Effect.provide(
-          CodeMigration.make(() => [
-            {
-              name: first,
-              run: Effect.sync(() => {
-                runs++
-              }),
-            },
-            {
-              name: first,
-              run: Effect.sync(() => {
-                runs++
-              }),
-            },
-            {
-              name: sentinel,
-              run: Effect.sync(() => {
-                complete()
-              }),
-            },
-          ]),
+          CodeMigration.make(
+            Effect.succeed([
+              {
+                name: first,
+                run: Effect.sync(() => {
+                  runs++
+                }),
+              },
+              {
+                name: first,
+                run: Effect.sync(() => {
+                  runs++
+                }),
+              },
+              {
+                name: sentinel,
+                run: Effect.sync(() => {
+                  complete()
+                }),
+              },
+            ]),
+          ),
         ),
       )
 

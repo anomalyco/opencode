@@ -4,9 +4,9 @@ import { CodeMigrationTable } from "./code-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 
-export type Migration = {
+export type Migration<R = never> = {
   name: string
-  run: Effect.Effect<void, unknown>
+  run: Effect.Effect<void, unknown, R>
 }
 
 const log = Log.create({ service: "code-migration" })
@@ -15,10 +15,10 @@ export interface Interface {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/CodeMigration") {}
 
-export const make = (build: () => Migration[]) => Layer.effect(
+export const make = <R>(build: Effect.Effect<Migration<R>[], never, R>) => Layer.effect(
   Service,
   Effect.gen(function* () {
-    const migrations = build()
+    const migrations = yield* build
 
     yield* Effect.gen(function* () {
       if (migrations.length === 0) return
@@ -54,7 +54,7 @@ export const make = (build: () => Migration[]) => Layer.effect(
   }),
 )
 
-export const layer = make(() => [])
+export const layer = make(Effect.succeed([]))
 
 export const defaultLayer = layer
 
