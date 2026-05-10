@@ -18,7 +18,7 @@ function part(mime: string, data: string) {
   return {
     id: PartID.ascending(),
     messageID: MessageID.ascending(),
-    sessionID: SessionID.make("test"),
+    sessionID: SessionID.make("ses_test"),
     type: "file" as const,
     mime,
     url: `data:${mime};base64,${data}`,

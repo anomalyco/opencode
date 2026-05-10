@@ -62,6 +62,7 @@ export const layer = Layer.effect(
       Effect.promise(async () => {
         const photonWasm = (await import("@silvia-odwyer/photon-node/photon_rs_bg.wasm", { with: { type: "file" } }))
           .default
+        // Patched photon-node reads this during module init so Bun compiled binaries use the embedded wasm path.
         ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
           photonWasm
         try {
