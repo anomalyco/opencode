@@ -22,7 +22,7 @@ The highest-risk rewrite is `InstanceQueryParameters`, which injected `directory
 
 ## PR Checklist
 
-Status legend: `[x]` done locally, `[~]` in progress locally, `[!]` blocked, `[ ]` not started.
+Status legend: `[x]` done locally, `[~]` in progress locally, `[ ]` not started.
 
 Current combined PR scope:
 
@@ -98,18 +98,20 @@ Verification:
 
 ### PR 4: Move Path Parameter Patterns Into ID Schemas
 
-- `[!]` Blocked: Effect currently emits path parameter `pattern` from runtime checks such as `Schema.isStartsWith(...)`, and schema-level OpenAPI metadata does not support a metadata-only `pattern` override.
-- Do not add runtime ID prefix validation solely to remove `PathParameterSchemas`; existing tests and persisted/test fixtures rely on branded string IDs that do not always use production prefixes.
-- Keep `PathParameterSchemas` / `pathParameterSchema()` until Effect supports schema-level OpenAPI-only JSON Schema overrides, or until opencode intentionally tightens runtime ID validation with a migration plan.
+- Audit `PathParameterSchemas` and `pathParameterSchema()` in `public.ts`.
+- Check source schemas in files like `packages/opencode/src/session/schema.ts`, `packages/opencode/src/permission/schema.ts`, and pty schema definitions.
+- Add or fix `ZodOverride` / OpenAPI-compatible annotations on branded ID schemas so generated path params include the same patterns without `public.ts` overrides.
+- Delete one path override only after generated OpenAPI is unchanged for that param.
 
 Concrete first targets:
 
-- `[!]` `sessionID`
-- `[!]` `messageID`
-- `[!]` `partID`
-- `[!]` `permissionID`
-- `[!]` `ptyID`
-- `[!]` workspace `id`
+- `[x]` `sessionID`
+- `[x]` `messageID`
+- `[x]` `partID`
+- `[x]` `permissionID`
+- `[x]` `ptyID`
+
+Leave ambiguous route-local `id` overrides for workspace routes until they are renamed or explicitly typed in endpoint params.
 
 Verification:
 
