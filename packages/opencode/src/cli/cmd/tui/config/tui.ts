@@ -7,7 +7,7 @@ import { Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { KeymapLeaderTimeoutDefault, TuiInfo, TuiJsonSchemaInfo } from "./tui-schema"
+import { KeymapLeaderTimeoutDefault, TuiInfo, TuiInfoPermissive, TuiJsonSchemaInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@opencode-ai/core/global"
@@ -53,20 +53,30 @@ function pluginScope(file: string, ctx: { directory: string }): ConfigPlugin.Sco
   return "global"
 }
 
+function aliasKeymap(obj: Record<string, unknown>) {
+  // Accept `keymap` as an alias for `keybinds` — the published JSON schema
+  // at opencode.ai/tui.json marks `keybinds` deprecated in favour of `keymap`.
+  if ("keymap" in obj && !("keybinds" in obj)) {
+    obj.keybinds = obj.keymap
+    delete obj.keymap
+  }
+  return obj
+}
+
 function normalize(raw: Record<string, unknown>) {
   const data = { ...raw }
-  if (!("tui" in data)) return data
+  if (!("tui" in data)) return aliasKeymap(data)
   if (!isRecord(data.tui)) {
     delete data.tui
-    return data
+    return aliasKeymap(data)
   }
 
   const tui = data.tui
   delete data.tui
-  return {
+  return aliasKeymap({
     ...tui,
     ...data,
-  }
+  })
 }
 
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
@@ -91,8 +101,18 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       if (!isRecord(data)) return {} as Info
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      const validated = ConfigParse.schema(Info, normalize(data), configFilepath)
-      return yield* resolvePlugins(validated, configFilepath)
+      const normalized = normalize(data)
+      try {
+        const validated = ConfigParse.schema(Info, normalized, configFilepath)
+        return yield* resolvePlugins(validated, configFilepath)
+      } catch {
+        // Strict parse failed (likely unrecognised keys). Fall back to a
+        // permissive parse that strips unknown keys so valid settings are
+        // still applied instead of silently dropping the entire config.
+        log.warn("tui config has unrecognised keys, ignoring them", { path: configFilepath })
+        const permissive = ConfigParse.schema(TuiInfoPermissive, normalized, configFilepath)
+        return yield* resolvePlugins(permissive as Info, configFilepath)
+      }
     }).pipe(
       // catchCause (not tapErrorCause + orElseSucceed) because ConfigParse.jsonc/.schema
       // can sync-throw — those become defects, which orElseSucceed wouldn't catch.
@@ -187,6 +207,12 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     ]).join(",")
   }
   const parsedKeybinds = TuiKeybind.Keybinds.parse(keybinds)
+  // Guard against leader set to "none" or false — the keymap engine
+  // requires exactly one real trigger binding for the leader key.
+  if (parsedKeybinds.leader === "none" || parsedKeybinds.leader === false) {
+    log.warn('leader key cannot be disabled, falling back to default', { got: parsedKeybinds.leader, fallback: TuiKeybind.LeaderDefault })
+    parsedKeybinds.leader = TuiKeybind.LeaderDefault
+  }
   const result: Resolved = {
     ...acc.result,
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(parsedKeybinds), {

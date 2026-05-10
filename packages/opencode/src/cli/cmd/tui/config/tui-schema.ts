@@ -21,7 +21,7 @@ export const TuiOptions = z.object({
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
 })
 
-export const TuiInfo = z
+const TuiInfoShape = z
   .object({
     $schema: z.string().optional(),
     theme: z.string().optional(),
@@ -30,6 +30,14 @@ export const TuiInfo = z
     plugin_enabled: z.record(z.string(), z.boolean()).optional(),
   })
   .extend(TuiOptions.shape)
-  .strict()
+
+export const TuiInfo = TuiInfoShape.strict()
+
+/**
+ * Permissive variant that strips unrecognised keys instead of failing.
+ * Used as a fallback when `TuiInfo` (strict) rejects the file so that
+ * valid settings are still applied.
+ */
+export const TuiInfoPermissive = TuiInfoShape.strip()
 
 export const TuiJsonSchemaInfo = TuiInfo
