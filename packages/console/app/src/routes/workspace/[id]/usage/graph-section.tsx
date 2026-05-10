@@ -362,7 +362,7 @@ export function GraphSection() {
               },
               callback: (value) => {
                 const num = Number(value)
-                return num >= 1000 ? `$${(num / 1000).toFixed(1)}k` : `$${num.toFixed(0)}`
+                return num >= 1000 ? `$${(num / 1000).toFixed(1)}k` : `$${num.toFixed(2)}`
               },
             },
           },
