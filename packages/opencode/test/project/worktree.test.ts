@@ -200,6 +200,35 @@ describe("Worktree", () => {
     )
   })
 
+  describe("list", () => {
+    it.live("uses parent folder name when worktree basename matches the primary worktree", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const svc = yield* Worktree.Service
+            const parent = path.join(path.dirname(dir), `${path.basename(dir)}-parent`)
+            const target = path.join(parent, path.basename(dir))
+            const branch = `same-basename-list-${Date.now()}`
+
+            yield* Effect.promise(() => fs.mkdir(parent, { recursive: true }))
+            yield* Effect.promise(() => $`git worktree add -b ${branch} ${target}`.cwd(dir).quiet())
+
+            const list = yield* svc.list()
+            const directory = yield* Effect.promise(() => fs.realpath(target).catch(() => target))
+
+            expect(list).toContainEqual({
+              name: path.basename(parent),
+              branch,
+              directory: directory.toLowerCase(),
+            })
+
+            yield* svc.remove({ directory: target })
+          }),
+        { git: true },
+      ),
+    )
+  })
+
   describe("remove edge cases", () => {
     it.live("remove non-existent directory succeeds silently", () =>
       provideTmpdirInstance(

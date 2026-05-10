@@ -8,6 +8,7 @@ import type {
   Comparison,
   Method,
   ProjectOptions,
+  RequestSpec,
   ScenarioContext,
   SeededContext,
   TodoScenario,
@@ -16,7 +17,7 @@ import type {
 class ScenarioBuilder<S = undefined> {
   private readonly state: BuilderState<S>
 
-  constructor(method: Method, path: string, name: string) {
+  constructor(method: Method, path: string, name: string, auth: AuthPolicy) {
     this.state = {
       method,
       path,
@@ -25,10 +26,11 @@ class ScenarioBuilder<S = undefined> {
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- The unseeded builder state is intentionally undefined until `.seeded(...)` narrows it.
       seed: () => Effect.succeed(undefined as S),
       request: (ctx) => ({ path, headers: ctx.headers() }),
+      authProbe: undefined,
       capture: "full",
       mutates: false,
       reset: true,
-      auth: "protected",
+      auth,
     }
   }
 
@@ -46,6 +48,10 @@ class ScenarioBuilder<S = undefined> {
 
   at(request: BuilderState<S>["request"]) {
     return this.clone({ request })
+  }
+
+  probe(authProbe: RequestSpec) {
+    return this.clone({ authProbe })
   }
 
   mutating() {
@@ -124,7 +130,7 @@ class ScenarioBuilder<S = undefined> {
   }
 
   private clone(next: Partial<BuilderState<S>>) {
-    const builder = new ScenarioBuilder<S>(this.state.method, this.state.path, this.state.name)
+    const builder = new ScenarioBuilder<S>(this.state.method, this.state.path, this.state.name, this.state.auth)
     Object.assign(builder.state, this.state, next)
     return builder
   }
@@ -134,7 +140,7 @@ class ScenarioBuilder<S = undefined> {
    * for `.at(...)` and assertions, giving stateful route tests type-safe setup.
    */
   seeded<Next>(seed: (ctx: ScenarioContext) => Effect.Effect<Next>) {
-    const builder = new ScenarioBuilder<Next>(this.state.method, this.state.path, this.state.name)
+    const builder = new ScenarioBuilder<Next>(this.state.method, this.state.path, this.state.name, this.state.auth)
     Object.assign(builder.state, this.state, { seed })
     return builder
   }
@@ -151,6 +157,7 @@ class ScenarioBuilder<S = undefined> {
       name: state.name,
       project: state.project,
       seed: state.seed,
+      authProbe: state.authProbe,
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- `.seeded(...)` preserves the paired request/state type inside the builder.
       request: (ctx, seeded) => state.request({ ...ctx, state: seeded as S }),
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- `.seeded(...)` preserves the paired assertion/state type inside the builder.
@@ -164,12 +171,19 @@ class ScenarioBuilder<S = undefined> {
   }
 }
 
+const routes = (auth: AuthPolicy) => ({
+  get: (path: string, name: string) => new ScenarioBuilder("GET", path, name, auth),
+  post: (path: string, name: string) => new ScenarioBuilder("POST", path, name, auth),
+  put: (path: string, name: string) => new ScenarioBuilder("PUT", path, name, auth),
+  patch: (path: string, name: string) => new ScenarioBuilder("PATCH", path, name, auth),
+  delete: (path: string, name: string) => new ScenarioBuilder("DELETE", path, name, auth),
+})
+
 export const http = {
-  get: (path: string, name: string) => new ScenarioBuilder("GET", path, name),
-  post: (path: string, name: string) => new ScenarioBuilder("POST", path, name),
-  put: (path: string, name: string) => new ScenarioBuilder("PUT", path, name),
-  patch: (path: string, name: string) => new ScenarioBuilder("PATCH", path, name),
-  delete: (path: string, name: string) => new ScenarioBuilder("DELETE", path, name),
+  protected: routes("protected"),
+  public: routes("public"),
+  publicBypass: routes("public-bypass"),
+  ticketBypass: routes("ticket-bypass"),
 }
 
 export const pending = (method: Method, path: string, name: string, reason: string): TodoScenario => ({

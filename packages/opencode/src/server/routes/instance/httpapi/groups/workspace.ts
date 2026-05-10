@@ -5,7 +5,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, Op
 import { ApiVcsApplyError } from "./instance"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/experimental/workspace"
@@ -40,6 +40,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
     HttpApiGroup.make("workspace")
       .add(
         HttpApiEndpoint.get("adapters", WorkspacePaths.adapters, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(WorkspaceAdapterEntry), "Workspace adapters"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -49,6 +50,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.get("list", WorkspacePaths.list, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Workspace.Info), "Workspaces"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -58,6 +60,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.post("create", WorkspacePaths.list, {
+          query: WorkspaceRoutingQuery,
           payload: CreatePayload,
           success: described(Workspace.Info, "Workspace created"),
           error: HttpApiError.BadRequest,
@@ -69,6 +72,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.post("syncList", WorkspacePaths.syncList, {
+          query: WorkspaceRoutingQuery,
           success: described(HttpApiSchema.NoContent, "Workspace list synced"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -78,6 +82,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.get("status", WorkspacePaths.status, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Workspace.ConnectionStatus), "Workspace status"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -88,6 +93,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
         ),
         HttpApiEndpoint.delete("remove", WorkspacePaths.remove, {
           params: { id: Workspace.Info.fields.id },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.UndefinedOr(Workspace.Info), "Workspace removed"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
@@ -98,6 +104,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.post("warp", WorkspacePaths.warp, {
+          query: WorkspaceRoutingQuery,
           payload: WarpPayload,
           success: described(HttpApiSchema.NoContent, "Session warped"),
           error: [ApiWorkspaceWarpError, ApiVcsApplyError],

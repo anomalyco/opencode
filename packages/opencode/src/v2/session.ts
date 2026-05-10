@@ -10,7 +10,7 @@ import { EventV2 } from "./event"
 import { ProjectID } from "@/project/schema"
 import { SessionEvent } from "./session-event"
 import { V2Schema } from "./schema"
-import { optionalOmitUndefined } from "@/util/schema"
+import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { Modelv2 } from "./model"
 
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({

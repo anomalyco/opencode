@@ -1,4 +1,3 @@
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { ConfigProvider, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { parse } from "./assertions"
@@ -23,13 +22,31 @@ export function call(
   )
 }
 
-export function callAuthProbe(backend: Backend, scenario: ActiveScenario) {
-  return Effect.promise(async () =>
-    capture(
-      await app(await runtime(), backend, { auth: { password: "secret" } }).request(toAuthProbeRequest(scenario)),
-      scenario.capture,
-    ),
-  )
+export function callAuthProbe(
+  backend: Backend,
+  scenario: ActiveScenario,
+  credentials: "missing" | "valid" = "missing",
+) {
+  return Effect.promise(async () => {
+    const controller = new AbortController()
+    return Promise.race([
+      Promise.resolve(
+        app(await runtime(), backend, { auth: { password: "secret" } }).request(
+          toAuthProbeRequest(scenario, credentials, controller.signal),
+        ),
+      ).then((response) => capture(response, scenario.capture)),
+      Bun.sleep(1_000).then(() => {
+        controller.abort("auth probe timed out")
+        return {
+          status: 0,
+          contentType: "",
+          text: "auth probe timed out",
+          body: undefined,
+          timedOut: true,
+        }
+      }),
+    ])
+  })
 }
 
 const appCache: Partial<Record<string, BackendApp>> = {}
@@ -38,16 +55,7 @@ function app(modules: Runtime, backend: Backend, options: CallOptions) {
   const username = options.auth?.username
   const password = options.auth?.password
   const cacheKey = `${backend}:${username ?? ""}:${password ?? ""}`
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = backend === "effect"
-  Flag.OPENCODE_SERVER_PASSWORD = password
-  Flag.OPENCODE_SERVER_USERNAME = username
   if (appCache[cacheKey]) return appCache[cacheKey]
-  if (backend === "legacy") {
-    const legacy = modules.Server.Legacy().app
-    return (appCache[cacheKey] = {
-      request: (input, init) => legacy.request(input, init),
-    })
-  }
 
   const handler = HttpRouter.toWebHandler(
     modules.ExperimentalHttpApiServer.routes.pipe(
@@ -78,12 +86,26 @@ function toRequest(scenario: ActiveScenario, ctx: SeededContext<unknown>) {
   })
 }
 
-function toAuthProbeRequest(scenario: ActiveScenario) {
-  return new Request(new URL(authProbePath(scenario.path), "http://localhost"), {
+function toAuthProbeRequest(scenario: ActiveScenario, credentials: "missing" | "valid", signal: AbortSignal) {
+  const spec = scenario.authProbe ?? {
+    path: authProbePath(scenario.path),
+    body: scenario.method === "GET" ? undefined : {},
+  }
+  const headers = {
+    ...(spec.body === undefined ? {} : { "content-type": "application/json" }),
+    ...spec.headers,
+    ...(credentials === "valid" ? { authorization: basic("opencode", "secret") } : {}),
+  }
+  return new Request(new URL(spec.path, "http://localhost"), {
     method: scenario.method,
-    headers: scenario.method === "GET" ? undefined : { "content-type": "application/json" },
-    body: scenario.method === "GET" ? undefined : JSON.stringify({}),
+    headers,
+    body: spec.body === undefined ? undefined : JSON.stringify(spec.body),
+    signal,
   })
+}
+
+function basic(username: string, password: string) {
+  return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
 }
 
 function authProbePath(path: string) {
@@ -99,6 +121,7 @@ async function capture(response: Response, mode: CaptureMode): Promise<CallResul
     contentType: response.headers.get("content-type") ?? "",
     text,
     body: parse(text),
+    timedOut: false,
   }
 }
 
