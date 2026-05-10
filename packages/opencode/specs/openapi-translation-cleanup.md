@@ -105,13 +105,13 @@ Verification:
 
 Concrete first targets:
 
-- `sessionID`
-- `messageID`
-- `partID`
-- `permissionID`
-- `ptyID`
+- `[x]` `sessionID`
+- `[x]` `messageID`
+- `[x]` `partID`
+- `[x]` `permissionID`
+- `[x]` `ptyID`
 
-Leave ambiguous route-local `id` overrides for workspace routes until they are renamed or explicitly typed in endpoint params.
+- `[x]` Remove ambiguous workspace `id` path overrides once the endpoint source schema emits the `wrk` pattern.
 
 Verification:
 

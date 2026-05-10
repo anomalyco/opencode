@@ -69,14 +69,6 @@ const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /api/session/{sessionID}/message limit": { type: "number" },
 }
 
-const PathParameterSchemas: Record<string, OpenApiSchema> = {
-  sessionID: { type: "string", pattern: "^ses.*" },
-  messageID: { type: "string", pattern: "^msg.*" },
-  partID: { type: "string", pattern: "^prt.*" },
-  permissionID: { type: "string", pattern: "^per.*" },
-  ptyID: { type: "string", pattern: "^pty.*" },
-}
-
 const LegacyComponentDescriptions: Record<string, string> = {
   LogLevel: "Log level",
   ServerConfig: "Server configuration for opencode serve and web commands",
@@ -486,7 +478,7 @@ function flattenOptions(options: OpenApiSchema[] | undefined): OpenApiSchema[] |
 function normalizeParameter(param: OpenApiParameter, route: string) {
   if (!param.schema || typeof param.schema !== "object") return
   if (param.in === "path") {
-    param.schema = pathParameterSchema(route, param.name) ?? stripOptionalNull(param.schema)
+    param.schema = stripOptionalNull(param.schema)
     return
   }
   if (param.in === "query") {
@@ -503,15 +495,6 @@ function normalizeParameter(param: OpenApiParameter, route: string) {
     }
   }
   param.schema = stripOptionalNull(param.schema)
-}
-
-function pathParameterSchema(route: string, name: string) {
-  if (name in PathParameterSchemas) return PathParameterSchemas[name]
-  if (name === "id" && route.startsWith("DELETE /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
-  if (name === "id" && route.startsWith("POST /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
-  if (name === "requestID" && route.startsWith("POST /permission/")) return { type: "string", pattern: "^per.*" }
-  if (name === "requestID" && route.startsWith("POST /question/")) return { type: "string", pattern: "^que.*" }
-  return undefined
 }
 
 export const PublicApi = OpenCodeHttpApi.annotateMerge(
