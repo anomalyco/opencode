@@ -3,10 +3,10 @@ import { Route, type RouteModelInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Protocol } from "../route/protocol"
 import {
+  LLMEvent,
   Usage,
   type CacheHint,
   type FinishReason,
-  type LLMEvent,
   type LLMRequest,
   type ToolCallPart,
   type ToolDefinition,
@@ -400,13 +400,26 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.contentBlockDelta?.delta?.text) {
-      return [state, [{ type: "text-delta" as const, text: event.contentBlockDelta.delta.text }]] as const
+      return [
+        state,
+        [
+          LLMEvent.textDelta({
+            id: `text-${event.contentBlockDelta.contentBlockIndex}`,
+            text: event.contentBlockDelta.delta.text,
+          }),
+        ],
+      ] as const
     }
 
     if (event.contentBlockDelta?.delta?.reasoningContent?.text) {
       return [
         state,
-        [{ type: "reasoning-delta" as const, text: event.contentBlockDelta.delta.reasoningContent.text }],
+        [
+          LLMEvent.reasoningDelta({
+            id: `reasoning-${event.contentBlockDelta.contentBlockIndex}`,
+            text: event.contentBlockDelta.delta.reasoningContent.text,
+          }),
+        ],
       ] as const
     }
 
@@ -449,7 +462,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
         event.modelStreamErrorException?.message ??
         event.serviceUnavailableException?.message ??
         "Bedrock Converse stream error"
-      return [state, [{ type: "provider-error" as const, message, retryable: true }]] as const
+      return [state, [LLMEvent.providerError({ message, retryable: true })]] as const
     }
 
     if (event.validationException || event.throttlingException) {
@@ -457,7 +470,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
         event.validationException?.message ?? event.throttlingException?.message ?? "Bedrock Converse error"
       return [
         state,
-        [{ type: "provider-error" as const, message, retryable: event.throttlingException !== undefined }],
+        [LLMEvent.providerError({ message, retryable: event.throttlingException !== undefined })],
       ] as const
     }
 
@@ -468,7 +481,7 @@ const framing = BedrockEventStream.framing(ADAPTER)
 
 const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
   state.pendingFinish
-    ? [{ type: "request-finish", reason: state.pendingFinish.reason, usage: state.pendingFinish.usage }]
+    ? [LLMEvent.requestFinish({ reason: state.pendingFinish.reason, usage: state.pendingFinish.usage })]
     : []
 
 // =============================================================================

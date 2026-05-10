@@ -6,9 +6,9 @@ import { Framing } from "../route/framing"
 import { HttpTransport, WebSocketTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
+  LLMEvent,
   Usage,
   type FinishReason,
-  type LLMEvent,
   type LLMRequest,
   type ProviderMetadata,
   type TextPart,
@@ -348,22 +348,20 @@ const hostedToolEvents = (
   const tool = HOSTED_TOOLS[item.type]
   const providerMetadata = openaiMetadata({ itemId: item.id })
   return [
-    {
-      type: "tool-call",
+    LLMEvent.toolCall({
       id: item.id,
       name: tool.name,
       input: tool.input(item),
       providerExecuted: true,
       providerMetadata,
-    },
-    {
-      type: "tool-result",
+    }),
+    LLMEvent.toolResult({
       id: item.id,
       name: tool.name,
       result: hostedToolResult(item),
       providerExecuted: true,
       providerMetadata,
-    },
+    }),
   ]
 }
 
@@ -382,12 +380,7 @@ const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): Ste
   return [
     state,
     [
-      {
-        type: "text-delta",
-        id: event.item_id,
-        text: event.delta,
-        ...(event.item_id ? { providerMetadata: openaiMetadata({ itemId: event.item_id }) } : {}),
-      },
+      LLMEvent.textDelta({ id: event.item_id ?? "text-0", text: event.delta }),
     ],
   ]
 }
@@ -458,30 +451,28 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
 const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
   [
-    {
-      type: "request-finish",
+    LLMEvent.requestFinish({
       reason: mapFinishReason(event, state.hasFunctionCall),
       usage: mapUsage(event.response?.usage),
-      ...(event.response?.id || event.response?.service_tier
-        ? {
-            providerMetadata: openaiMetadata({
+      providerMetadata:
+        event.response?.id || event.response?.service_tier
+          ? openaiMetadata({
               responseId: event.response.id,
               serviceTier: event.response.service_tier,
-            }),
-          }
-        : {}),
-    },
+            })
+          : undefined,
+    }),
   ],
 ]
 
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [{ type: "provider-error", message: event.message ?? event.code ?? "OpenAI Responses response failed" }],
+  [LLMEvent.providerError({ message: event.message ?? event.code ?? "OpenAI Responses response failed" })],
 ]
 
 const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [{ type: "provider-error", message: event.message ?? event.code ?? "OpenAI Responses stream error" }],
+  [LLMEvent.providerError({ message: event.message ?? event.code ?? "OpenAI Responses stream error" })],
 ]
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {

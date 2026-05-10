@@ -6,9 +6,9 @@ import { Framing } from "../route/framing"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
+  LLMEvent,
   Usage,
   type FinishReason,
-  type LLMEvent,
   type LLMRequest,
   type TextPart,
   type ToolCallPart,
@@ -312,7 +312,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
 
-    if (delta?.content) events.push({ type: "text-delta", text: delta.content })
+    if (delta?.content) events.push(LLMEvent.textDelta({ id: "text-0", text: delta.content }))
 
     for (const tool of toolDeltas) {
       const result = ToolStream.appendOrStart(
@@ -350,7 +350,7 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
   return [
     ...state.toolCallEvents,
-    ...(reason ? ([{ type: "request-finish", reason, usage: state.usage }] satisfies ReadonlyArray<LLMEvent>) : []),
+    ...(reason ? [LLMEvent.requestFinish({ reason, usage: state.usage })] : []),
   ]
 }
 
