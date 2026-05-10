@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Layer, Context, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -9,6 +9,7 @@ import { Snapshot } from "@/snapshot"
 import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
+import { Image } from "@/image/image"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
@@ -92,6 +93,7 @@ export const layer: Layer.Layer<
   | LLM.Service
   | Permission.Service
   | Plugin.Service
+  | Image.Service
   | SessionSummary.Service
   | SessionStatus.Service
 > = Layer.effect(
@@ -108,6 +110,7 @@ export const layer: Layer.Layer<
     const summary = yield* SessionSummary.Service
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
+    const image = yield* Image.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -377,17 +380,41 @@ export const layer: Layer.Layer<
 
           case "tool-result": {
             const toolCall = yield* readToolCall(value.toolCallId)
+            const toolAttachments: MessageV2.FilePart[] = (
+              Array.isArray(value.output.attachments) ? value.output.attachments : []
+            ).filter(
+              (attachment: unknown): attachment is MessageV2.FilePart =>
+                isRecord(attachment) &&
+                attachment.type === "file" &&
+                typeof attachment.mime === "string" &&
+                typeof attachment.url === "string",
+            )
+            const normalized = yield* Effect.forEach(toolAttachments, (attachment) =>
+              attachment.mime.startsWith("image/")
+                ? image.normalize(attachment).pipe(Effect.exit)
+                : Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
+            )
+            const omitted = normalized.filter(Exit.isFailure).length
+            const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
+            const output = {
+              ...value.output,
+              output:
+                omitted === 0
+                  ? value.output.output
+                  : `${value.output.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the inline image size limit.]`,
+              attachments: attachments?.length ? attachments : undefined,
+            }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             EventV2.run(SessionEvent.Tool.Success.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
-              structured: value.output.metadata,
+              structured: output.metadata,
               content: [
                 {
                   type: "text",
-                  text: value.output.output,
+                  text: output.output,
                 },
-                ...(value.output.attachments?.map((item: MessageV2.FilePart) => ({
+                ...(output.attachments?.map((item: MessageV2.FilePart) => ({
                   type: "file",
                   uri: item.url,
                   mime: item.mime,
@@ -399,7 +426,7 @@ export const layer: Layer.Layer<
               },
               timestamp: DateTime.makeUnsafe(Date.now()),
             })
-            yield* completeToolCall(value.toolCallId, value.output)
+            yield* completeToolCall(value.toolCallId, output)
             return
           }
 
@@ -758,6 +785,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(SessionStatus.defaultLayer),
+    Layer.provide(Image.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
   ),

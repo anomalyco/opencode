@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { LLMError, type ProviderMetadata, type ToolCall, type ToolInputDelta } from "../../schema"
+import { LLMError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputDelta } from "../../schema"
 import { eventError, parseToolInput, type ToolAccumulator } from "../shared"
 
 type StreamKey = string | number
@@ -49,34 +49,24 @@ const withoutTool = <K extends StreamKey>(tools: State<K>, key: K): State<K> => 
   return next
 }
 
-const inputDelta = (tool: PendingTool, text: string): ToolInputDelta => ({
-  type: "tool-input-delta",
-  id: tool.id,
-  name: tool.name,
-  text,
-  ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
-})
+const inputDelta = (tool: PendingTool, text: string): ToolInputDelta =>
+  LLMEvent.toolInputDelta({
+    id: tool.id,
+    name: tool.name,
+    text,
+  })
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) =>
   parseToolInput(route, tool.name, inputOverride ?? tool.input).pipe(
     Effect.map(
       (input): ToolCall =>
-        tool.providerExecuted
-          ? {
-              type: "tool-call",
-              id: tool.id,
-              name: tool.name,
-              input,
-              providerExecuted: true,
-              ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
-            }
-          : {
-              type: "tool-call",
-              id: tool.id,
-              name: tool.name,
-              input,
-              ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
-            },
+        LLMEvent.toolCall({
+          id: tool.id,
+          name: tool.name,
+          input,
+          providerExecuted: tool.providerExecuted ? true : undefined,
+          providerMetadata: tool.providerMetadata,
+        }),
     ),
   )
 

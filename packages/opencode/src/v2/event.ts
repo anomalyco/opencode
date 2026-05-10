@@ -1,6 +1,6 @@
 import { Identifier } from "@/id/id"
 import { SyncEvent } from "@/sync"
-import { withStatics } from "@/util/schema"
+import { withStatics } from "@opencode-ai/core/schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Schema from "effect/Schema"
 

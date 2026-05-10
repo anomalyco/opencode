@@ -298,6 +298,36 @@ describe("session HttpApi", () => {
   )
 
   it.live(
+    "serves sessions with migrated summary diffs missing file details",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const session = yield* createSession(tmp.path, { title: "legacy diff" })
+        yield* Effect.sync(() =>
+          Database.use((db) =>
+            db
+              .update(SessionTable)
+              .set({
+                summary_additions: 1,
+                summary_deletions: 0,
+                summary_files: 1,
+                summary_diffs: [{ additions: 1, deletions: 0 }],
+              })
+              .where(eq(SessionTable.id, session.id))
+              .run(),
+          ),
+        )
+
+        const response = yield* request(pathFor(SessionPaths.get, { sessionID: session.id }), {
+          headers: { "x-opencode-directory": tmp.path },
+        })
+
+        expect(response.status).toBe(200)
+        expect((yield* json<Session.Info>(response)).summary?.diffs).toEqual([{ additions: 1, deletions: 0 }])
+      }),
+    ),
+  )
+
+  it.live(
     "serves lifecycle mutation routes",
     withTmp({ git: true, config: { formatter: false, lsp: false, share: "disabled" } }, (tmp) =>
       Effect.gen(function* () {
@@ -364,8 +394,15 @@ describe("session HttpApi", () => {
           headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
           body: JSON.stringify({ title: "workspace session" }),
         })
+        const messages = yield* request(
+          `${pathFor(SessionPaths.messages, { sessionID: created.id })}?workspace=${workspace.id}`,
+          {
+            headers: { "x-opencode-directory": tmp.path },
+          },
+        )
 
         expect(created).toMatchObject({ id: created.id, workspaceID: workspace.id })
+        expect(messages.status).toBe(200)
         expect(
           yield* Effect.sync(() =>
             Database.use((db) =>
