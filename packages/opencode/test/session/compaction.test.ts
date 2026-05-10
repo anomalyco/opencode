@@ -226,12 +226,6 @@ async function summaryAssistant(sessionID: SessionID, parentID: MessageID, root:
   return msg
 }
 
-async function lastCompactionPart(sessionID: SessionID) {
-  return (await svc.messages({ sessionID }))
-    .at(-2)
-    ?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction")
-}
-
 function createCompactionMarker(sessionID: SessionID) {
   return SessionNs.Service.use((ssn) =>
     Effect.gen(function* () {
@@ -256,14 +250,6 @@ function createCompactionMarker(sessionID: SessionID) {
 
 async function createCompactionMarkerAsync(sessionID: SessionID) {
   return run(createCompactionMarker(sessionID))
-}
-
-function readLastCompactionPart(sessionID: SessionID) {
-  return SessionNs.Service.use((ssn) => ssn.messages({ sessionID })).pipe(
-    Effect.map((messages) =>
-      messages.at(-2)?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction"),
-    ),
-  )
 }
 
 function fake(
@@ -377,6 +363,10 @@ function readCompactionPart(sessionID: SessionID) {
       messages.at(-2)?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction"),
     ),
   )
+}
+
+async function lastCompactionPart(sessionID: SessionID) {
+  return run(readCompactionPart(sessionID))
 }
 
 function llm() {
@@ -1057,7 +1047,7 @@ describe("session.compaction.process", () => {
       yield* createUserMessage(session.id, "first")
       const keep = yield* createUserMessage(session.id, "second")
       yield* createUserMessage(session.id, "third")
-      yield* SessionCompaction.use.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+      yield* createSummaryCompaction(session.id)
 
       const msgs = yield* ssn.messages({ sessionID: session.id })
       const parent = msgs.at(-1)?.info.id
@@ -1069,7 +1059,7 @@ describe("session.compaction.process", () => {
         auto: false,
       })
 
-      const part = yield* readLastCompactionPart(session.id)
+      const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
       expect(part?.tail_start_id).toBe(keep.id)
     }).pipe(Effect.provide(compactionProcessLayer({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) }))),
@@ -1083,7 +1073,7 @@ describe("session.compaction.process", () => {
       yield* createUserMessage(session.id, "first")
       yield* createUserMessage(session.id, "x".repeat(2_000))
       const keep = yield* createUserMessage(session.id, "tiny")
-      yield* SessionCompaction.use.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+      yield* createSummaryCompaction(session.id)
 
       const msgs = yield* ssn.messages({ sessionID: session.id })
       const parent = msgs.at(-1)?.info.id
@@ -1095,7 +1085,7 @@ describe("session.compaction.process", () => {
         auto: false,
       })
 
-      const part = yield* readLastCompactionPart(session.id)
+      const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
       expect(part?.tail_start_id).toBe(keep.id)
     }).pipe(Effect.provide(compactionProcessLayer({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 100 }) }))),
