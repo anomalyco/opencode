@@ -1,10 +1,8 @@
 import { Context, Effect, Layer } from "effect"
 import { makeRuntime } from "./effect/run-service"
 import { Database, type TxOrDb } from "./storage/db"
-import { Global } from "@opencode-ai/core/global"
+import { CodeMigrationTable } from "./code-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
-import path from "path"
-import { mkdir } from "fs/promises"
 
 export type Migration = {
   name: string
@@ -18,20 +16,8 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/CodeMigration") {}
 
 const log = Log.create({ service: "code-migration" })
-const marker = path.join(Global.Path.data, "code-migration.json")
 
 export const All: Migration[] = []
-
-async function readCompleted() {
-  const file = Bun.file(marker)
-  if (!(await file.exists())) return new Set<string>()
-  return new Set((await file.json()) as string[])
-}
-
-async function writeCompleted(completed: Set<string>) {
-  await mkdir(path.dirname(marker), { recursive: true })
-  await Bun.write(marker, JSON.stringify([...completed].sort(), null, 2))
-}
 
 export const layer = Layer.effect(
   Service,
@@ -58,13 +44,29 @@ async function runPending() {
   if (All.length === 0) return
 
   const db = Database.Client()
+  db.run("BEGIN IMMEDIATE")
 
-  const completed = await readCompleted()
-  for (const migration of All.filter((item) => !completed.has(item.name))) {
-    log.info("running code migration", { name: migration.name })
-    await migration.run(db)
-    completed.add(migration.name)
-    await writeCompleted(completed)
+  try {
+    const completed = new Set(
+      db
+        .select({ name: CodeMigrationTable.name })
+        .from(CodeMigrationTable)
+        .all()
+        .map((row) => row.name),
+    )
+    for (const migration of All.filter((item) => !completed.has(item.name))) {
+      log.info("running code migration", { name: migration.name })
+      await migration.run(db)
+      db.insert(CodeMigrationTable)
+        .values({ name: migration.name, time_completed: Date.now() })
+        .onConflictDoNothing()
+        .run()
+      completed.add(migration.name)
+    }
+    db.run("COMMIT")
+  } catch (error) {
+    db.run("ROLLBACK")
+    throw error
   }
 }
 
