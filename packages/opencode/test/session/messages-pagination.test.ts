@@ -291,6 +291,51 @@ describe("MessageV2.page", () => {
     }),
   )
 
+  test("pages forward with after cursor", async () => {
+    await WithInstance.provide({
+      directory: root,
+      fn: async () => {
+        const session = await svc.create({})
+        const ids = await fill(session.id, 6)
+
+        // Anchor at "before everything": all messages are newer than time 0
+        const anchor = MessageV2.cursor.encode({ id: MessageID.ascending(), time: 0 })
+
+        const a = MessageV2.page({ sessionID: session.id, limit: 2, after: anchor })
+        expect(a.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
+        expect(a.more).toBe(true)
+        expect(a.cursor).toBeTruthy()
+
+        const b = MessageV2.page({ sessionID: session.id, limit: 2, after: a.cursor! })
+        expect(b.items.map((item) => item.info.id)).toEqual(ids.slice(2, 4))
+        expect(b.more).toBe(true)
+        expect(b.cursor).toBeTruthy()
+
+        const c = MessageV2.page({ sessionID: session.id, limit: 2, after: b.cursor! })
+        expect(c.items.map((item) => item.info.id)).toEqual(ids.slice(4, 6))
+        expect(c.more).toBe(false)
+        expect(c.cursor).toBeUndefined()
+
+        await svc.remove(session.id)
+      },
+    })
+  })
+
+  test("rejects requests with both before and after", async () => {
+    await WithInstance.provide({
+      directory: root,
+      fn: async () => {
+        const session = await svc.create({})
+        await fill(session.id, 2)
+        const dummyCursor = MessageV2.cursor.encode({ id: MessageID.ascending(), time: 0 })
+        expect(() =>
+          MessageV2.page({ sessionID: session.id, limit: 2, before: dummyCursor, after: dummyCursor }),
+        ).toThrow()
+        await svc.remove(session.id)
+      },
+    })
+  })
+
   it.instance("large limit returns all messages without cursor", () =>
     withSession(({ sessionID }) =>
       Effect.gen(function* () {
