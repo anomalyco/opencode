@@ -23,29 +23,29 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       return {
         tokens: 0,
         percent: null,
-        cacheInput: 0,
-        cacheNew: 0,
+        totalInputTokens: 0,
+        newInputTokens: 0,
         cacheRead: 0,
         cacheWrite: 0,
         cacheHitPercent: null,
-        cacheOutput: 0,
+        outputTokens: 0,
       }
     }
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const cacheInput = last.tokens.input + last.tokens.cache.read + last.tokens.cache.write
-    const cacheHitPercent = cacheInput > 0 ? ((last.tokens.cache.read / cacheInput) * 100).toFixed(1) : null
+    const totalInputTokens = last.tokens.input + last.tokens.cache.read + last.tokens.cache.write
+    const cacheHitPercent = totalInputTokens > 0 ? ((last.tokens.cache.read / totalInputTokens) * 100).toFixed(1) : null
     return {
       tokens,
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
-      cacheInput,
-      cacheNew: last.tokens.input,
+      totalInputTokens,
+      newInputTokens: last.tokens.input,
       cacheRead: last.tokens.cache.read,
       cacheWrite: last.tokens.cache.write,
       cacheHitPercent,
-      cacheOutput: last.tokens.output,
+      outputTokens: last.tokens.output,
     }
   })
 
@@ -62,12 +62,12 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <Show when={Flag.OPENCODE_EXPERIMENTAL_CACHE_AUDIT && state().cacheHitPercent != null}>
         <box>
           <text fg={theme().text}><b>Cache Audit</b></text>
-          <text fg={theme().textMuted}>{state().cacheInput.toLocaleString()} input tokens</text>
-          <text fg={theme().textMuted}>  {state().cacheNew.toLocaleString()} new</text>
+          <text fg={theme().textMuted}>{state().totalInputTokens.toLocaleString()} input tokens</text>
+          <text fg={theme().textMuted}>  {state().newInputTokens.toLocaleString()} new</text>
           <text fg={theme().textMuted}>  {state().cacheRead.toLocaleString()} cache read</text>
           <text fg={theme().textMuted}>  {state().cacheWrite.toLocaleString()} cache write</text>
           <text fg={theme().textMuted}>{state().cacheHitPercent}% hit rate</text>
-          <text fg={theme().textMuted}>{state().cacheOutput.toLocaleString()} output tokens</text>
+          <text fg={theme().textMuted}>{state().outputTokens.toLocaleString()} output tokens</text>
         </box>
       </Show>
     </>

@@ -499,9 +499,9 @@ export const layer = Layer.effect(
               metadata: value.providerMetadata,
             })
             if (Flag.OPENCODE_EXPERIMENTAL_CACHE_AUDIT) {
-              const totalInputTokens = usage.tokens.input + usage.tokens.cache.read + usage.tokens.cache.write
+              const totalInputTokens = usage.rawInputTokens
               const cacheHitPercent = totalInputTokens > 0 ? ((usage.tokens.cache.read / totalInputTokens) * 100).toFixed(1) : "0.0"
-              log.info(
+              slog.info(
                 `[CACHE] ${ctx.model.id}  input=${totalInputTokens} (cache_read=${usage.tokens.cache.read} cache_write=${usage.tokens.cache.write} new=${usage.tokens.input})  hit=${cacheHitPercent}%  output=${usage.tokens.output}  total=${usage.tokens.total ?? 0}`,
               )
             }
