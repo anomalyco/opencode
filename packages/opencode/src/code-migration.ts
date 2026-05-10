@@ -24,29 +24,27 @@ export const layer = Layer.effect(
       if (migrations.length === 0) return
 
       for (const migration of migrations) {
-        yield* Effect.sync(() =>
-          Database.transaction(
-            (db) => {
-              const completed = db
-                .select({ name: CodeMigrationTable.name })
-                .from(CodeMigrationTable)
-                .where(eq(CodeMigrationTable.name, migration.name))
-                .get()
-              if (completed) return
+        Database.transaction(
+          (db) => {
+            const completed = db
+              .select({ name: CodeMigrationTable.name })
+              .from(CodeMigrationTable)
+              .where(eq(CodeMigrationTable.name, migration.name))
+              .get()
+            if (completed) return
 
-              log.info("running code migration", { name: migration.name })
-              Effect.runSync(migration.run(db))
-              db.insert(CodeMigrationTable)
-                .values({ name: migration.name, time_completed: Date.now() })
-                .onConflictDoNothing()
-                .run()
-            },
-            { behavior: "immediate" },
-          ),
+            log.info("running code migration", { name: migration.name })
+            Effect.runSync(migration.run(db))
+            db.insert(CodeMigrationTable)
+              .values({ name: migration.name, time_completed: Date.now() })
+              .onConflictDoNothing()
+              .run()
+          },
+          { behavior: "immediate" },
         )
       }
     }).pipe(
-      Effect.tapCause((cause) => Effect.sync(() => log.error("failed to run code migrations", { cause }))),
+      Effect.tapCause((cause) => Effect.logError("failed to run code migrations", { cause })),
       Effect.ignore,
       Effect.forkScoped,
     )
