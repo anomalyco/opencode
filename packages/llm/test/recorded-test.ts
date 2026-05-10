@@ -53,7 +53,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         ...metadata,
       }
       const mode = recorderOptions?.mode ?? (recording ? "record" : "replay")
-      const cassetteService = HttpRecorder.Cassette.layer({ directory: FIXTURES_DIR }).pipe(
+      const cassetteService = HttpRecorder.Cassette.fileSystem({ directory: FIXTURES_DIR }).pipe(
         Layer.provide(NodeFileSystem.layer),
       )
       const requestExecutor = RequestExecutor.layer.pipe(

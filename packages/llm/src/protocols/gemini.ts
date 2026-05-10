@@ -5,9 +5,9 @@ import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { Protocol } from "../route/protocol"
 import {
+  LLMEvent,
   Usage,
   type FinishReason,
-  type LLMEvent,
   type LLMRequest,
   type MediaPart,
   type TextPart,
@@ -311,7 +311,7 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
 
 const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
   state.finishReason || state.usage
-    ? [{ type: "request-finish", reason: mapFinishReason(state.finishReason, state.hasToolCalls), usage: state.usage }]
+    ? [LLMEvent.requestFinish({ reason: mapFinishReason(state.finishReason, state.hasToolCalls), usage: state.usage })]
     : []
 
 const step = (state: ParserState, event: GeminiEvent) => {
@@ -332,14 +332,18 @@ const step = (state: ParserState, event: GeminiEvent) => {
 
   for (const part of candidate.content.parts) {
     if ("text" in part && part.text.length > 0) {
-      events.push({ type: part.thought ? "reasoning-delta" : "text-delta", text: part.text })
+      events.push(
+        part.thought
+          ? LLMEvent.reasoningDelta({ id: "reasoning-0", text: part.text })
+          : LLMEvent.textDelta({ id: "text-0", text: part.text }),
+      )
       continue
     }
 
     if ("functionCall" in part) {
       const input = part.functionCall.args
       const id = `tool_${nextToolCallId++}`
-      events.push({ type: "tool-call", id, name: part.functionCall.name, input })
+      events.push(LLMEvent.toolCall({ id, name: part.functionCall.name, input }))
       hasToolCalls = true
     }
   }

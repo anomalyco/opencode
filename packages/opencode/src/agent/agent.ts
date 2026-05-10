@@ -26,9 +26,7 @@ import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { zod } from "@opencode-ai/core/effect-zod"
 import { withStatics, type DeepMutable } from "@opencode-ai/core/schema"
-
-type ReferenceEntry = NonNullable<Config.Info["reference"]>[string]
-type ResolvedReference = { kind: "git"; repository: string; branch?: string } | { kind: "local"; path: string }
+import { Reference } from "@/reference/reference"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -303,69 +301,70 @@ export const layer = Layer.effect(
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }
 
-        function referencePath(value: string) {
-          if (value.startsWith("~/")) return path.join(Global.Path.home, value.slice(2))
-          return path.isAbsolute(value)
-            ? value
-            : path.resolve(ctx.worktree === "/" ? ctx.directory : ctx.worktree, value)
-        }
-
-        function resolveReference(reference: ReferenceEntry): ResolvedReference {
-          if (typeof reference === "string") {
-            if (reference.startsWith(".") || reference.startsWith("/") || reference.startsWith("~")) {
-              return { kind: "local", path: referencePath(reference) }
-            }
-            return { kind: "git", repository: reference }
-          }
-          if ("path" in reference) return { kind: "local", path: referencePath(reference.path) }
-          return { kind: "git", repository: reference.repository, branch: reference.branch }
-        }
-
-        function referencePrompt(name: string, reference: ResolvedReference) {
+        function referencePrompt(reference: Reference.Resolved) {
           if (reference.kind === "local") {
             return [
-              PROMPT_SCOUT,
-              `You are Scout reference @${name}. This reference points to a local directory outside or alongside the current workspace.`,
+              `You are configured reference @${reference.name}, a read-only research agent for external reference material.`,
               `Local directory: ${reference.path}`,
-              `When invoked, inspect this directory as the primary reference source. Prefer repo_overview with path ${JSON.stringify(reference.path)} before broader searches. Do not edit files.`,
+              `Inspect this directory as the primary reference source. Prefer repo_overview with path ${JSON.stringify(reference.path)} before broader searches. Do not edit files.`,
+              `Return exact absolute file paths for findings whenever possible.`,
+            ].join("\n\n")
+          }
+
+          if (reference.kind === "invalid") {
+            return [
+              `You are configured reference @${reference.name}, but this reference is not usable yet.`,
+              `Configured repository: ${reference.repository}`,
+              `Problem: ${reference.message}`,
+              `Explain this configuration problem if invoked. Do not edit files or attempt fallback clones.`,
             ].join("\n\n")
           }
 
           return [
-            PROMPT_SCOUT,
-            `You are Scout reference @${name}. This reference points to a git repository.`,
+            `You are configured reference @${reference.name}, a read-only research agent for external reference material.`,
             `Repository: ${reference.repository}`,
             ...(reference.branch ? [`Branch/ref: ${reference.branch}`] : []),
-            `When invoked, clone or refresh this repository with repo_clone, then inspect the cached repository as the primary reference source. Do not edit files.`,
+            `Cached directory: ${reference.path}`,
+            `OpenCode materializes this configured repository before use. Do not call repo_clone for this reference.`,
+            `Inspect the cached directory as the primary reference source. Prefer repo_overview with path ${JSON.stringify(reference.path)} before broader searches, then use Glob, Grep, and Read inside that directory. Do not edit files.`,
+            `Return exact absolute file paths for findings whenever possible.`,
           ].join("\n\n")
         }
 
+        function referenceDescription(reference: Reference.Resolved) {
+          if (reference.kind === "local") return `Scout reference for local directory ${reference.path}`
+          if (reference.kind === "git") return `Scout reference for repository ${reference.repository}`
+          return `Invalid Scout reference for repository ${reference.repository}`
+        }
+
         if (Flag.OPENCODE_EXPERIMENTAL_SCOUT) {
-          for (const [name, reference] of Object.entries(cfg.reference ?? {})) {
-            if (agents[name]) continue
-            const resolved = resolveReference(reference)
-            const localPath = resolved.kind === "local" ? resolved.path : undefined
-            agents[name] = {
-              name,
-              description:
-                resolved.kind === "local"
-                  ? `Scout reference for local directory ${resolved.path}`
-                  : `Scout reference for repository ${resolved.repository}`,
+          const resolvedReferences = Reference.resolveAll({
+            references: cfg.reference ?? {},
+            directory: ctx.directory,
+            worktree: ctx.worktree,
+          })
+          for (const resolved of resolvedReferences) {
+            if (agents[resolved.name]) continue
+            const localPath = resolved.kind === "invalid" ? undefined : resolved.path
+            agents[resolved.name] = {
+              name: resolved.name,
+              description: referenceDescription(resolved),
               permission: Permission.merge(
                 agents.scout.permission,
-                Permission.fromConfig(
-                  localPath
+                Permission.fromConfig({
+                  repo_clone: "deny",
+                  ...(localPath
                     ? {
                         external_directory: {
                           [localPath]: "allow",
                           [path.join(localPath, "*")]: "allow",
                         },
                       }
-                    : {},
-                ),
+                    : {}),
+                }),
               ),
-              prompt: referencePrompt(name, resolved),
-              options: { reference },
+              prompt: referencePrompt(resolved),
+              options: { reference: cfg.reference?.[resolved.name], resolved },
               mode: "subagent",
               native: false,
             }
