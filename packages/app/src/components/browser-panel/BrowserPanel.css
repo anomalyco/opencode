@@ -1,0 +1,386 @@
+.browser-panel-shell {
+  border-bottom: 1px solid var(--border-weaker-base);
+  background: var(--background-base);
+}
+
+.browser-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 36px;
+  margin: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-weaker-base);
+  background: var(--surface-base);
+  list-style: none;
+  overflow-x: auto;
+}
+
+.browser-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 180px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-weak);
+  font-size: 12px;
+}
+
+.browser-tab-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.browser-tab--active {
+  border-color: var(--border-base);
+  background: var(--surface-raised-base);
+  color: var(--text-strong);
+}
+
+.browser-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-tab-close,
+.browser-tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-weak);
+}
+
+.browser-tab-close {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
+
+.browser-tab-close:hover,
+.browser-tab-add:hover {
+  border-color: var(--border-base);
+  color: var(--text-strong);
+}
+
+.browser-tab-add {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.browser-tab-new {
+  display: flex;
+}
+
+.browser-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-weaker-base);
+}
+
+.browser-panel-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.browser-panel-toolbar-group-end {
+  margin-left: auto;
+}
+
+.browser-panel-toolbar-address {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.browser-panel-input {
+  width: 100%;
+  min-width: 12rem;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  background: var(--surface-base);
+  color: var(--text-strong);
+}
+
+.browser-panel-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-base);
+  border-radius: 6px;
+  background: var(--surface-base);
+  color: var(--text-strong);
+}
+
+.browser-panel-button:hover:not(:disabled) {
+  background: var(--surface-raised-base);
+}
+
+.browser-panel-button-active,
+.browser-panel-button[aria-pressed="true"] {
+  border-color: var(--border-info-selected);
+  background: var(--surface-info-base);
+  color: var(--text-on-info-strong);
+  box-shadow: inset 0 0 0 1px var(--border-info-hover);
+}
+
+.browser-panel-button-active:hover:not(:disabled),
+.browser-panel-button[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--surface-info-strong);
+}
+
+.browser-panel-button-captured {
+  border-color: var(--border-success-selected, var(--border-info-selected));
+  background: var(--surface-success-base, var(--surface-info-base));
+  color: var(--text-on-success-strong, var(--text-on-info-strong));
+  animation: browser-panel-capture-flash 0.7s ease-out;
+}
+
+@keyframes browser-panel-capture-flash {
+  0% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--border-info-selected) 45%, transparent);
+  }
+  45% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--border-info-selected) 20%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.browser-panel-button:disabled {
+  opacity: 0.45;
+}
+
+.browser-panel-button-primary {
+  background: var(--surface-raised-base);
+}
+
+.browser-panel-count {
+  color: var(--text-weak);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.browser-panel-status {
+  color: var(--text-weak);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.browser-panel-body {
+  position: relative;
+  height: 320px;
+  background: var(--background-base);
+}
+
+.browser-panel-switch {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-weaker-base);
+  background: var(--surface-base);
+}
+
+.browser-panel-switch-button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-weak);
+  font: inherit;
+}
+
+.browser-panel-switch-button[aria-pressed="true"] {
+  border-color: var(--border-base);
+  background: var(--surface-raised-base);
+  color: var(--text-strong);
+}
+
+.browser-panel-switch-button:focus-visible,
+.browser-console-clear:focus-visible {
+  outline: 2px solid var(--border-strong-base);
+  outline-offset: 2px;
+}
+
+.browser-page-view {
+  position: relative;
+  height: calc(100% - 41px);
+}
+
+.browser-panel-view {
+  width: 100%;
+  height: 100%;
+  background: var(--surface-base);
+}
+
+.browser-annotation-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.browser-annotation-marker {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-base);
+  border-radius: 999px;
+  background: var(--surface-raised-base);
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--background-base) 35%, transparent);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.browser-panel-hint {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  background: var(--surface-raised-base);
+  color: var(--text-weak);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.browser-annotation-editor {
+  position: absolute;
+  z-index: 1;
+  width: 220px;
+  padding: 8px;
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  background: var(--surface-raised-base);
+  color: var(--text-strong);
+  pointer-events: auto;
+}
+
+.browser-annotation-input {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  padding: 8px;
+  border: 1px solid var(--border-base);
+  border-radius: 6px;
+  background: var(--surface-base);
+  color: var(--text-strong);
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.browser-annotation-input:focus-visible {
+  outline: 2px solid var(--border-strong-base);
+  outline-offset: 2px;
+}
+
+.browser-console-view {
+  height: calc(100% - 41px);
+  background: var(--surface-base);
+  color: var(--text-strong);
+  overflow: hidden;
+}
+
+.browser-console-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-weaker-base);
+}
+
+.browser-console-count,
+.browser-console-empty {
+  color: var(--text-weak);
+  font-size: 12px;
+}
+
+.browser-console-clear {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-base);
+  border-radius: 6px;
+  background: var(--surface-base);
+  color: var(--text-strong);
+}
+
+.browser-console-content,
+.browser-console-list {
+  height: calc(100% - 37px);
+  overflow: auto;
+}
+
+.browser-console-empty {
+  padding: 12px;
+}
+
+.browser-console-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-weaker-base);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.browser-console-message,
+.browser-console-source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-console-level,
+.browser-console-source,
+.browser-console-time,
+.browser-console-truncated {
+  color: var(--text-weak);
+}

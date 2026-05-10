@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { BrowserAnnotation } from "@/context/browser-types"
 import type { Prompt } from "@/context/prompt"
 import { buildRequestParts } from "./build-request-parts"
 
@@ -332,5 +333,352 @@ describe("buildRequestParts", () => {
       // Should preserve .. segments (backend normalizes)
       expect(filePart.url).toContain("/..")
     }
+  })
+
+  test("serializes browser annotations into a compact bounded synthetic text part", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "review this", start: 0, end: 11 }],
+      context: [],
+      images: [],
+      annotations: [
+        {
+          id: "annotation-1",
+          createdAt: 1,
+          pageUrl: "https://opencode.ai/pricing",
+          pageTitle: "Pricing",
+          userComment: "CTA copy is vague",
+          element: {
+            tagName: "button",
+            selector: "button[data-testid='cta']",
+            role: "button",
+            accessibleName: "Start free trial now",
+            visibleText: "A".repeat(140),
+            attributes: { "data-testid": "cta" },
+            boundingBox: { x: 10, y: 20, width: 200, height: 44 },
+          },
+          preview: {
+            screenshotCrop: "data:image/png;base64,AAA",
+          },
+          context: {
+            nearbyDomSanitized: "B".repeat(260),
+          },
+        } satisfies BrowserAnnotation,
+      ],
+      text: "review this",
+      messageID: "msg_annotation",
+      sessionID: "ses_annotation",
+      sessionDirectory: "/repo",
+    })
+
+    const annotationPart = result.requestParts.find(
+      (part) =>
+        part.type === "text" &&
+        part.synthetic &&
+        !!part.metadata?.opencodeAnnotations,
+    )
+
+    expect(annotationPart).toBeDefined()
+    expect(annotationPart?.type).toBe("text")
+    if (annotationPart?.type !== "text") return
+
+    expect(annotationPart.text).toContain("browser annotation")
+    expect(annotationPart.text).toContain("browser.annotation.get_detail")
+
+    const metadata = annotationPart.metadata?.opencodeAnnotations as {
+      count: number
+      compact: Array<{
+        id: string
+        pageUrl: string
+        pageTitle: string
+        userComment: string
+        selector: string
+        role?: string
+        accessibleName?: string
+        visibleText?: string
+        boundingBox: { x: number; y: number; width: number; height: number }
+        screenshotCrop?: string
+        nearbyDomSanitized?: string
+      }>
+    }
+
+    expect(metadata.count).toBe(1)
+    expect(metadata.compact).toHaveLength(1)
+    expect(metadata.compact[0]).toEqual({
+      id: "annotation-1",
+      pageUrl: "https://opencode.ai/pricing",
+      pageTitle: "Pricing",
+      userComment: "CTA copy is vague",
+      selector: "button[data-testid='cta']",
+      role: "button",
+      accessibleName: "Start free trial now",
+      visibleText: "A".repeat(100),
+      boundingBox: { x: 10, y: 20, width: 200, height: 44 },
+      screenshotCrop: "data:image/png;base64,AAA",
+      nearbyDomSanitized: "B".repeat(200),
+    })
+  })
+
+  test("injects one compact browser tools hint for @browser without fake agent parts", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "use @browser to inspect console", start: 0, end: 31 }],
+      context: [],
+      images: [],
+      text: "use @browser to inspect console",
+      messageID: "msg_browser_hint",
+      sessionID: "ses_browser_hint",
+      sessionDirectory: "/repo",
+      browserIntegratedToolsAvailable: true,
+    })
+
+    const browserHints = result.requestParts.filter(
+      (part) => part.type === "text" && part.synthetic && !!part.metadata?.opencodeBrowserTools,
+    )
+
+    expect(browserHints).toHaveLength(1)
+    expect(browserHints[0]?.type).toBe("text")
+    if (browserHints[0]?.type !== "text") return
+    expect(browserHints[0].text).toContain("Integrated browser tools are available")
+    expect(browserHints[0].text).toContain("should be preferred over Playwright/external browsers")
+    expect(browserHints[0].text).toContain("integrated browser")
+    expect(browserHints[0].text).not.toContain("browser.open")
+    expect(browserHints[0].text).toContain("browser_navigate")
+    expect(browserHints[0].text).toContain("browser_click")
+    expect(browserHints[0].text).toContain("browser_type")
+    expect(browserHints[0].text).toContain("browser_back")
+    expect(browserHints[0].text).toContain("browser_forward")
+    expect(browserHints[0].text).toContain("browser_reload")
+    expect(browserHints[0].text).toContain("browser_screenshot")
+    expect(browserHints[0].text).toContain("browser_inspect")
+    expect(browserHints[0].text).toContain("browser_console_messages")
+    expect(browserHints[0].text).toContain("browser_console_clear")
+    expect(browserHints[0].text).not.toContain("browser.navigate")
+    expect(browserHints[0].text).not.toContain("browser.console_messages")
+    expect(browserHints[0].text).toContain("navigation, inspection, screenshots, console, and page interaction")
+    expect(browserHints[0].text.length).toBeLessThan(700)
+    expect(result.requestParts.some((part) => part.type === "agent" && part.name === "browser")).toBe(false)
+  })
+
+  test("does not claim browser tools are available when enabled but not explicitly available", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "use @browser to inspect console", start: 0, end: 31 }],
+      context: [],
+      images: [],
+      text: "use @browser to inspect console",
+      messageID: "msg_browser_unavailable_hint",
+      sessionID: "ses_browser_unavailable_hint",
+      sessionDirectory: "/repo",
+      browserIntegratedToolsEnabled: true,
+      browserIntegratedToolsAvailable: false,
+    })
+
+    const browserHints = result.requestParts.filter(
+      (part) => part.type === "text" && part.synthetic && !!part.metadata?.opencodeBrowserTools,
+    )
+
+    expect(browserHints).toHaveLength(1)
+    expect(browserHints[0]?.type).toBe("text")
+    if (browserHints[0]?.type !== "text") return
+    expect(browserHints[0].text).toContain("Integrated browser tools are unavailable")
+    expect(browserHints[0].text).not.toContain("Integrated browser tools are available")
+    expect(browserHints[0].text).not.toContain("should be preferred over Playwright/external browsers")
+    expect(browserHints[0].metadata?.opencodeBrowserTools).toEqual({ enabled: true, available: false })
+  })
+
+  test("injects disabled browser copy instead of available tools copy when integrated tools are disabled", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "use @browser to inspect console", start: 0, end: 31 }],
+      context: [],
+      images: [],
+      text: "use @browser to inspect console",
+      messageID: "msg_browser_disabled_hint",
+      sessionID: "ses_browser_disabled_hint",
+      sessionDirectory: "/repo",
+      browserIntegratedToolsEnabled: false,
+      browserIntegratedToolsAvailable: true,
+    })
+
+    const browserHints = result.requestParts.filter(
+      (part) => part.type === "text" && part.synthetic && !!part.metadata?.opencodeBrowserTools,
+    )
+
+    expect(browserHints).toHaveLength(1)
+    expect(browserHints[0]?.type).toBe("text")
+    if (browserHints[0]?.type !== "text") return
+    expect(browserHints[0].text).toContain("Integrated browser tools are disabled")
+    expect(browserHints[0].text).not.toContain("Integrated browser tools are available")
+    expect(browserHints[0].text).not.toContain("should be preferred over Playwright/external browsers")
+    expect(browserHints[0].text).not.toContain("browser_navigate")
+    expect(browserHints[0].metadata?.opencodeBrowserTools).toEqual({ enabled: false, available: false })
+    expect(browserHints[0].text.length).toBeLessThan(300)
+  })
+
+  test("does not inject a browser tools hint for domain-like @browser text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "contact @browser.com for support", start: 0, end: 32 }],
+      context: [],
+      images: [],
+      text: "contact @browser.com for support",
+      messageID: "msg_browser_domain",
+      sessionID: "ses_browser_domain",
+      sessionDirectory: "/repo",
+    })
+
+    expect(
+      result.requestParts.filter(
+        (part) => part.type === "text" && part.synthetic && !!part.metadata?.opencodeBrowserTools,
+      ),
+    ).toHaveLength(0)
+  })
+
+  test("injects exactly one browser tools hint for an exact @browser token", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "open @browser, then inspect console", start: 0, end: 35 }],
+      context: [],
+      images: [],
+      text: "open @browser, then inspect console",
+      messageID: "msg_browser_exact_token",
+      sessionID: "ses_browser_exact_token",
+      sessionDirectory: "/repo",
+    })
+
+    expect(
+      result.requestParts.filter(
+        (part) => part.type === "text" && part.synthetic && !!part.metadata?.opencodeBrowserTools,
+      ),
+    ).toHaveLength(1)
+  })
+
+  test("injects the same browser tools hint for /browser used inside a prompt", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "use /browser then inspect console", start: 0, end: 33 }],
+      context: [],
+      images: [],
+      text: "use /browser then inspect console",
+      messageID: "msg_browser_slash_hint",
+      sessionID: "ses_browser_slash_hint",
+      sessionDirectory: "/repo",
+      browserIntegratedToolsAvailable: true,
+    })
+
+    const browserHints = result.requestParts.filter(
+      (part) => part.type === "text" && part.synthetic && !!part.metadata?.opencodeBrowserTools,
+    )
+
+    expect(browserHints).toHaveLength(1)
+    expect(browserHints[0]?.type).toBe("text")
+    if (browserHints[0]?.type !== "text") return
+    expect(browserHints[0].text).toContain("Integrated browser tools are available")
+    expect(browserHints[0].text).toContain("should be preferred over Playwright/external browsers")
+    expect(browserHints[0].text).toContain("browser_console_messages")
+    expect(result.requestParts.some((part) => part.type === "agent" && part.name === "browser")).toBe(false)
+  })
+
+  test("injects the enabled browser priority hint when integrated tools are explicitly enabled", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "/browser inspect console", start: 0, end: 24 }],
+      context: [],
+      images: [],
+      text: "/browser inspect console",
+      messageID: "msg_browser_enabled_hint",
+      sessionID: "ses_browser_enabled_hint",
+      sessionDirectory: "/repo",
+      browserIntegratedToolsEnabled: true,
+      browserIntegratedToolsAvailable: true,
+    })
+
+    const browserHints = result.requestParts.filter(
+      (part) => part.type === "text" && part.synthetic && !!part.metadata?.opencodeBrowserTools,
+    )
+
+    expect(browserHints).toHaveLength(1)
+    expect(browserHints[0]?.type).toBe("text")
+    if (browserHints[0]?.type !== "text") return
+    expect(browserHints[0].text).toContain("Integrated browser tools are available")
+    expect(browserHints[0].text).toContain("should be preferred over Playwright/external browsers")
+    expect(browserHints[0].metadata?.opencodeBrowserTools).toEqual({ enabled: true, available: true })
+  })
+
+  test("injects the @browser synthetic hint once when the mention appears multiple times", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "@browser compare with @browser console", start: 0, end: 38 }],
+      context: [],
+      images: [],
+      text: "@browser compare with @browser console",
+      messageID: "msg_browser_hint_once",
+      sessionID: "ses_browser_hint_once",
+      sessionDirectory: "/repo",
+    })
+
+    expect(
+      result.requestParts.filter(
+        (part) => part.type === "text" && part.synthetic && !!part.metadata?.opencodeBrowserTools,
+      ),
+    ).toHaveLength(1)
+  })
+
+  test("omits oversized annotation screenshot crops from compact context", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "review this", start: 0, end: 11 }],
+      context: [],
+      images: [],
+      annotations: [
+        {
+          id: "annotation-1",
+          createdAt: 1,
+          pageUrl: "https://opencode.ai/pricing",
+          pageTitle: "Pricing",
+          userComment: "CTA copy is vague",
+          element: {
+            tagName: "button",
+            selector: "button[data-testid='cta']",
+            role: "button",
+            accessibleName: "Start free trial now",
+            visibleText: "Start free trial now",
+            attributes: { "data-testid": "cta" },
+            boundingBox: { x: 10, y: 20, width: 200, height: 44 },
+          },
+          preview: {
+            screenshotCrop: `data:image/png;base64,${"A".repeat(10_000)}`,
+          },
+          context: {
+            nearbyDomSanitized: "Compare plans",
+          },
+        } satisfies BrowserAnnotation,
+      ],
+      text: "review this",
+      messageID: "msg_annotation_large_crop",
+      sessionID: "ses_annotation_large_crop",
+      sessionDirectory: "/repo",
+    })
+
+    const annotationPart = result.requestParts.find(
+      (part) =>
+        part.type === "text" &&
+        part.synthetic &&
+        !!part.metadata?.opencodeAnnotations,
+    )
+
+    expect(annotationPart).toBeDefined()
+    expect(annotationPart?.type).toBe("text")
+    if (annotationPart?.type !== "text") return
+
+    expect(annotationPart.text).not.toContain("data:image/png;base64")
+    expect(annotationPart.metadata?.opencodeAnnotations).toEqual({
+      count: 1,
+      compact: [
+        {
+          id: "annotation-1",
+          pageUrl: "https://opencode.ai/pricing",
+          pageTitle: "Pricing",
+          userComment: "CTA copy is vague",
+          selector: "button[data-testid='cta']",
+          role: "button",
+          accessibleName: "Start free trial now",
+          visibleText: "Start free trial now",
+          boundingBox: { x: 10, y: 20, width: 200, height: 44 },
+          nearbyDomSanitized: "Compare plans",
+        },
+      ],
+    })
   })
 })

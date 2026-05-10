@@ -17,7 +17,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-edit-session"),
-  messageID: MessageID.make("msg_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),

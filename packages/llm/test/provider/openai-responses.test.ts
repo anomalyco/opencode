@@ -336,8 +336,8 @@ describe("OpenAI Responses route", () => {
 
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
-        { type: "text-delta", id: "msg_1", text: "Hello" },
-        { type: "text-delta", id: "msg_1", text: "!" },
+        { type: "text-delta", id: "msg_1", text: "Hello", providerMetadata: { openai: { itemId: "msg_1" } } },
+        { type: "text-delta", id: "msg_1", text: "!", providerMetadata: { openai: { itemId: "msg_1" } } },
         {
           type: "request-finish",
           reason: "stop",
@@ -394,12 +394,14 @@ describe("OpenAI Responses route", () => {
           id: "call_1",
           name: "lookup",
           text: '{"query"',
+          providerMetadata: { openai: { itemId: "item_1" } },
         },
         {
           type: "tool-input-delta",
           id: "call_1",
           name: "lookup",
           text: ':"weather"}',
+          providerMetadata: { openai: { itemId: "item_1" } },
         },
         {
           type: "tool-call",

@@ -24,8 +24,6 @@ export const WorkspaceRoutingQueryFields = {
   workspace: Schema.optional(Schema.String),
 }
 
-export const WorkspaceRoutingQuery = Schema.Struct(WorkspaceRoutingQueryFields)
-
 type RemoteTarget = Extract<Target, { type: "remote" }>
 
 type RequestPlan = Data.TaggedEnum<{

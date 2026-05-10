@@ -4,7 +4,7 @@ import {
   type ContentPart,
   type FinishReason,
   type LLMError,
-  LLMEvent,
+  type LLMEvent,
   LLMRequest,
   Message,
   type ProviderMetadata,
@@ -115,19 +115,11 @@ interface StepState {
 
 const accumulate = (state: StepState, event: LLMEvent) => {
   if (event.type === "text-delta") {
-    appendStreamingText(state, "text", event.text, undefined)
+    appendStreamingText(state, "text", event.text, event.providerMetadata)
     return
   }
   if (event.type === "reasoning-delta") {
-    appendStreamingText(state, "reasoning", event.text, undefined)
-    return
-  }
-  if (event.type === "reasoning-end") {
-    appendStreamingText(state, "reasoning", "", event.providerMetadata)
-    return
-  }
-  if (event.type === "text-end") {
-    appendStreamingText(state, "text", "", event.providerMetadata)
+    appendStreamingText(state, "reasoning", event.text, event.providerMetadata)
     return
   }
   if (event.type === "tool-call") {
@@ -227,10 +219,10 @@ const decodeAndExecute = (tool: AnyTool, input: unknown): Effect.Effect<ToolResu
 const emitEvents = (call: ToolCallPart, result: ToolResultValue): ReadonlyArray<LLMEvent> =>
   result.type === "error"
     ? [
-        LLMEvent.toolError({ id: call.id, name: call.name, message: String(result.value) }),
-        LLMEvent.toolResult({ id: call.id, name: call.name, result }),
+        { type: "tool-error", id: call.id, name: call.name, message: String(result.value) },
+        { type: "tool-result", id: call.id, name: call.name, result },
       ]
-    : [LLMEvent.toolResult({ id: call.id, name: call.name, result })]
+    : [{ type: "tool-result", id: call.id, name: call.name, result }]
 
 const followUpRequest = (
   request: LLMRequest,

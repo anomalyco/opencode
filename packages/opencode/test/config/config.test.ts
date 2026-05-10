@@ -141,6 +141,30 @@ test("loads config with defaults when no files exist", async () => {
   })
 })
 
+test("defaults integrated browser agent tools on when unset", async () => {
+  await using tmp = await tmpdir()
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.browser?.integratedTools?.enabled).toBe(true)
+    },
+  })
+})
+
+test("preserves disabled integrated browser agent tools config", async () => {
+  await using tmp = await tmpdir({
+    config: { browser: { integratedTools: { enabled: false } } },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.browser?.integratedTools?.enabled).toBe(false)
+    },
+  })
+})
+
 test("loads JSON config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout"
+import { createLayoutPanelController, createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout"
 
 describe("layout session-key helpers", () => {
   test("couples touch and scroll seed in order", () => {
@@ -30,6 +30,40 @@ describe("layout session-key helpers", () => {
     })
 
     expect(seen).toEqual(["dir/one", "dir/two"])
+  })
+})
+
+describe("createLayoutPanelController", () => {
+  test("exposes opened, open, close, and toggle around one boolean state", () => {
+    createRoot((dispose) => {
+      const [opened, setOpened] = createSignal(false)
+      const panel = createLayoutPanelController(opened, setOpened)
+
+      expect(panel.opened()).toBe(false)
+      panel.open()
+      expect(panel.opened()).toBe(true)
+      panel.toggle()
+      expect(panel.opened()).toBe(false)
+      panel.close()
+      expect(panel.opened()).toBe(false)
+
+      dispose()
+    })
+  })
+
+  test("supports the browserPanel header toggle contract", () => {
+    createRoot((dispose) => {
+      const [browserPanelOpened, setBrowserPanelOpened] = createSignal(false)
+      const browserPanel = createLayoutPanelController(browserPanelOpened, setBrowserPanelOpened)
+
+      expect(browserPanel.opened()).toBe(false)
+      browserPanel.toggle()
+      expect(browserPanel.opened()).toBe(true)
+      browserPanel.toggle()
+      expect(browserPanel.opened()).toBe(false)
+
+      dispose()
+    })
   })
 })
 

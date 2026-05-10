@@ -115,18 +115,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -446,18 +446,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -490,18 +490,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -532,18 +532,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -595,18 +595,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -656,18 +656,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -710,18 +710,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -797,18 +797,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -861,18 +861,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "provider",
@@ -931,18 +931,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -985,18 +985,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1031,18 +1031,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1092,18 +1092,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1156,18 +1156,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1220,18 +1220,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "roots",
@@ -1332,18 +1332,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1380,18 +1380,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "pattern",
@@ -1496,18 +1496,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "query",
@@ -1580,18 +1580,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "query",
@@ -1636,18 +1636,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "path",
@@ -1692,18 +1692,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "path",
@@ -1744,18 +1744,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1792,18 +1792,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1837,18 +1837,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1881,18 +1881,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1925,18 +1925,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -1973,18 +1973,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "mode",
@@ -2030,18 +2030,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2074,18 +2074,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2152,18 +2152,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2200,18 +2200,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2248,18 +2248,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2312,18 +2312,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2360,18 +2360,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2408,18 +2408,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2454,18 +2454,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -2536,28 +2536,28 @@
         "operationId": "mcp.auth.start",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "name",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -2617,28 +2617,28 @@
         "operationId": "mcp.auth.remove",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "name",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -2688,28 +2688,28 @@
         "operationId": "mcp.auth.callback",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "name",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -2776,28 +2776,28 @@
         "operationId": "mcp.auth.authenticate",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "name",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -2848,28 +2848,28 @@
         "operationId": "mcp.connect",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "name",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -2900,28 +2900,28 @@
         "operationId": "mcp.disconnect",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "name",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -2954,18 +2954,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -3002,18 +3002,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -3046,18 +3046,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -3088,28 +3088,28 @@
         "operationId": "project.update",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "projectID",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -3202,18 +3202,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -3263,18 +3263,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -3309,18 +3309,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -3394,29 +3394,29 @@
         "operationId": "pty.get",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^pty"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -3455,29 +3455,29 @@
         "operationId": "pty.update",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^pty"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -3546,29 +3546,29 @@
         "operationId": "pty.remove",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^pty"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -3610,29 +3610,29 @@
         "operationId": "pty.connectToken",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^pty"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -3697,18 +3697,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -3743,29 +3743,29 @@
         "operationId": "question.reply",
         "parameters": [
           {
-            "name": "requestID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^que"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^que.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -3837,29 +3837,29 @@
         "operationId": "question.reject",
         "parameters": [
           {
-            "name": "requestID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^que"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^que.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -3913,18 +3913,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -3959,29 +3959,29 @@
         "operationId": "permission.reply",
         "parameters": [
           {
-            "name": "requestID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^per"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^per.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -4055,18 +4055,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -4122,18 +4122,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -4171,28 +4171,28 @@
         "operationId": "provider.oauth.authorize",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "providerID",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -4256,28 +4256,28 @@
         "operationId": "provider.oauth.callback",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "providerID",
             "in": "path",
             "schema": {
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -4341,18 +4341,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "scope",
@@ -4444,18 +4444,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -4489,8 +4489,7 @@
                 "type": "object",
                 "properties": {
                   "parentID": {
-                    "type": "string",
-                    "pattern": "^ses"
+                    "type": "string"
                   },
                   "title": {
                     "type": "string"
@@ -4518,8 +4517,7 @@
                     "$ref": "#/components/schemas/PermissionRuleset"
                   },
                   "workspaceID": {
-                    "type": "string",
-                    "pattern": "^wrk"
+                    "type": "string"
                   }
                 },
                 "additionalProperties": false
@@ -4543,18 +4541,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -4599,29 +4597,29 @@
         "operationId": "session.get",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -4670,29 +4668,29 @@
         "operationId": "session.delete",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -4742,29 +4740,29 @@
         "operationId": "session.update",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -4842,29 +4840,29 @@
         "operationId": "session.children",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -4919,29 +4917,29 @@
         "operationId": "session.todo",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -4996,36 +4994,36 @@
         "operationId": "session.diff",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           },
           {
             "name": "messageID",
             "in": "query",
             "schema": {
               "type": "string",
-              "pattern": "^msg"
+              "pattern": "^msg.*"
             },
             "required": false
           }
@@ -5062,29 +5060,29 @@
         "operationId": "session.messages",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           },
           {
             "name": "limit",
@@ -5168,29 +5166,29 @@
         "operationId": "session.prompt",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -5246,8 +5244,7 @@
                 "type": "object",
                 "properties": {
                   "messageID": {
-                    "type": "string",
-                    "pattern": "^msg"
+                    "type": "string"
                   },
                   "model": {
                     "type": "object",
@@ -5323,11 +5320,27 @@
         "operationId": "session.message",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sessionID",
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^ses"
+              "pattern": "^ses.*"
             },
             "required": true
           },
@@ -5336,25 +5349,9 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^msg"
+              "pattern": "^msg.*"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -5417,11 +5414,27 @@
         "operationId": "session.deleteMessage",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sessionID",
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^ses"
+              "pattern": "^ses.*"
             },
             "required": true
           },
@@ -5430,25 +5443,9 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^msg"
+              "pattern": "^msg.*"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -5500,29 +5497,29 @@
         "operationId": "session.fork",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -5556,8 +5553,7 @@
                 "type": "object",
                 "properties": {
                   "messageID": {
-                    "type": "string",
-                    "pattern": "^msg"
+                    "type": "string"
                   }
                 },
                 "additionalProperties": false
@@ -5579,29 +5575,29 @@
         "operationId": "session.abort",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -5653,29 +5649,29 @@
         "operationId": "session.init",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -5726,8 +5722,7 @@
                     "type": "string"
                   },
                   "messageID": {
-                    "type": "string",
-                    "pattern": "^msg"
+                    "type": "string"
                   }
                 },
                 "required": ["modelID", "providerID", "messageID"],
@@ -5750,29 +5745,29 @@
         "operationId": "session.share",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -5821,29 +5816,29 @@
         "operationId": "session.unshare",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -5894,29 +5889,29 @@
         "operationId": "session.summarize",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -5990,29 +5985,29 @@
         "operationId": "session.prompt_async",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -6049,8 +6044,7 @@
                 "type": "object",
                 "properties": {
                   "messageID": {
-                    "type": "string",
-                    "pattern": "^msg"
+                    "type": "string"
                   },
                   "model": {
                     "type": "object",
@@ -6126,29 +6120,29 @@
         "operationId": "session.command",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -6204,8 +6198,7 @@
                 "type": "object",
                 "properties": {
                   "messageID": {
-                    "type": "string",
-                    "pattern": "^msg"
+                    "type": "string"
                   },
                   "agent": {
                     "type": "string"
@@ -6228,8 +6221,7 @@
                       "type": "object",
                       "properties": {
                         "id": {
-                          "type": "string",
-                          "pattern": "^prt"
+                          "type": "string"
                         },
                         "type": {
                           "type": "string",
@@ -6273,29 +6265,29 @@
         "operationId": "session.shell",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -6353,8 +6345,7 @@
                 "type": "object",
                 "properties": {
                   "messageID": {
-                    "type": "string",
-                    "pattern": "^msg"
+                    "type": "string"
                   },
                   "agent": {
                     "type": "string"
@@ -6396,29 +6387,29 @@
         "operationId": "session.revert",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -6462,12 +6453,10 @@
                 "type": "object",
                 "properties": {
                   "messageID": {
-                    "type": "string",
-                    "pattern": "^msg"
+                    "type": "string"
                   },
                   "partID": {
-                    "type": "string",
-                    "pattern": "^prt"
+                    "type": "string"
                   }
                 },
                 "required": ["messageID"],
@@ -6490,29 +6479,29 @@
         "operationId": "session.unrevert",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -6563,11 +6552,27 @@
         "operationId": "permission.respond",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sessionID",
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^ses"
+              "pattern": "^ses.*"
             },
             "required": true
           },
@@ -6576,25 +6581,9 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^per"
+              "pattern": "^per.*"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -6664,11 +6653,27 @@
         "operationId": "part.delete",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sessionID",
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^ses"
+              "pattern": "^ses.*"
             },
             "required": true
           },
@@ -6677,7 +6682,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^msg"
+              "pattern": "^msg.*"
             },
             "required": true
           },
@@ -6686,25 +6691,9 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^prt"
+              "pattern": "^prt.*"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -6753,11 +6742,27 @@
         "operationId": "part.update",
         "parameters": [
           {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sessionID",
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^ses"
+              "pattern": "^ses.*"
             },
             "required": true
           },
@@ -6766,7 +6771,7 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^msg"
+              "pattern": "^msg.*"
             },
             "required": true
           },
@@ -6775,25 +6780,9 @@
             "in": "path",
             "schema": {
               "type": "string",
-              "pattern": "^prt"
+              "pattern": "^prt.*"
             },
             "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "responses": {
@@ -6854,18 +6843,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -6899,18 +6888,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7004,18 +6993,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7027,8 +7016,7 @@
                   "type": "object",
                   "properties": {
                     "sessionID": {
-                      "type": "string",
-                      "pattern": "^ses"
+                      "type": "string"
                     }
                   },
                   "required": ["sessionID"],
@@ -7058,8 +7046,7 @@
                 "type": "object",
                 "properties": {
                   "sessionID": {
-                    "type": "string",
-                    "pattern": "^ses"
+                    "type": "string"
                   }
                 },
                 "required": ["sessionID"],
@@ -7084,18 +7071,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7175,84 +7162,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "number"
-            },
-            "required": false
-          },
-          {
-            "name": "order",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": ["asc", "desc"]
-            },
-            "required": false
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "roots",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "string",
-                  "enum": ["true", "false"]
-                }
-              ]
-            },
-            "required": false
-          },
-          {
-            "name": "start",
-            "in": "query",
-            "schema": {
-              "type": "number"
-            },
-            "required": false
-          },
-          {
-            "name": "search",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order or filters."
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7293,29 +7214,29 @@
         "operationId": "v2.session.prompt",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -7365,29 +7286,29 @@
         "operationId": "v2.session.compact",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -7411,29 +7332,29 @@
         "operationId": "v2.session.wait",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -7457,29 +7378,29 @@
         "operationId": "v2.session.context",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -7513,55 +7434,29 @@
         "operationId": "v2.session.messages",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "number"
-            },
-            "required": false
-          },
-          {
-            "name": "order",
-            "in": "query",
+            "name": "sessionID",
+            "in": "path",
             "schema": {
               "type": "string",
-              "enum": ["asc", "desc"]
+              "pattern": "^ses.*"
             },
-            "required": false
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order."
-            },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -7604,18 +7499,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7675,18 +7570,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7720,18 +7615,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7765,18 +7660,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7810,18 +7705,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7855,18 +7750,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7900,18 +7795,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -7945,18 +7840,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8016,18 +7911,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8088,18 +7983,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8165,18 +8060,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8222,7 +8117,6 @@
                 "properties": {
                   "sessionID": {
                     "type": "string",
-                    "pattern": "^ses",
                     "description": "Session ID to navigate to"
                   }
                 },
@@ -8248,18 +8142,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8301,18 +8195,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8353,18 +8247,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8414,18 +8308,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8460,18 +8354,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8505,8 +8399,7 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string",
-                    "pattern": "^wrk"
+                    "type": "string"
                   },
                   "type": {
                     "type": "string"
@@ -8552,18 +8445,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8589,18 +8482,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8614,8 +8507,7 @@
                     "type": "object",
                     "properties": {
                       "workspaceID": {
-                        "type": "string",
-                        "pattern": "^wrk"
+                        "type": "string"
                       },
                       "status": {
                         "type": "string",
@@ -8647,29 +8539,29 @@
         "operationId": "experimental.workspace.remove",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^wrk"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^wrk.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -8712,18 +8604,18 @@
           {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           }
         ],
         "responses": {
@@ -8759,8 +8651,7 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^wrk"
+                        "type": "string"
                       },
                       {
                         "type": "null"
@@ -8768,8 +8659,7 @@
                     ]
                   },
                   "sessionID": {
-                    "type": "string",
-                    "pattern": "^ses"
+                    "type": "string"
                   },
                   "copyChanges": {
                     "type": "boolean"
@@ -8795,29 +8685,29 @@
         "operationId": "pty.connect",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^pty"
-            },
-            "required": true
-          },
-          {
             "name": "directory",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
             "name": "workspace",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "ptyID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pty.*"
             },
-            "required": false
+            "required": true
           }
         ],
         "responses": {
@@ -9171,8 +9061,7 @@
             "pattern": "^per"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "permission": {
             "type": "string"
@@ -9196,8 +9085,7 @@
             "type": "object",
             "properties": {
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -9220,10 +9108,12 @@
             "type": "string"
           },
           "additions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           },
           "deletions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           },
           "status": {
             "type": "string",
@@ -9453,8 +9343,7 @@
         "type": "object",
         "properties": {
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "callID": {
             "type": "string"
@@ -9471,8 +9360,7 @@
             "pattern": "^que"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "questions": {
             "type": "array",
@@ -9498,8 +9386,7 @@
         "type": "object",
         "properties": {
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "requestID": {
             "type": "string",
@@ -9519,8 +9406,7 @@
         "type": "object",
         "properties": {
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "requestID": {
             "type": "string",
@@ -9745,7 +9631,6 @@
             "properties": {
               "sessionID": {
                 "type": "string",
-                "pattern": "^ses",
                 "description": "Session ID to navigate to"
               }
             },
@@ -9830,8 +9715,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^pty"
+            "type": "string"
           },
           "title": {
             "type": "string"
@@ -9906,12 +9790,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "role": {
             "type": "string",
@@ -9986,12 +9868,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "role": {
             "type": "string",
@@ -10038,8 +9918,7 @@
             ]
           },
           "parentID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "modelID": {
             "type": "string"
@@ -10076,25 +9955,31 @@
             "type": "object",
             "properties": {
               "total": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "input": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "output": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "reasoning": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "cache": {
                 "type": "object",
                 "properties": {
                   "read": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "write": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   }
                 },
                 "required": ["read", "write"],
@@ -10142,16 +10027,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10192,16 +10074,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10240,16 +10119,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10287,10 +10163,12 @@
             "type": "string"
           },
           "start": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           },
           "end": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["value", "start", "end"],
@@ -10414,16 +10292,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10596,16 +10471,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10631,16 +10503,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10657,16 +10526,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10685,25 +10551,31 @@
             "type": "object",
             "properties": {
               "total": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "input": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "output": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "reasoning": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "cache": {
                 "type": "object",
                 "properties": {
                   "read": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "write": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   }
                 },
                 "required": ["read", "write"],
@@ -10721,16 +10593,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10747,16 +10616,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10779,16 +10645,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10823,16 +10686,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10864,16 +10724,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "messageID": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -10886,8 +10743,7 @@
             "type": "boolean"
           },
           "tail_start_id": {
-            "type": "string",
-            "pattern": "^msg"
+            "type": "string"
           }
         },
         "required": ["id", "sessionID", "messageID", "type", "auto"],
@@ -10963,8 +10819,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "slug": {
             "type": "string"
@@ -10973,8 +10828,7 @@
             "type": "string"
           },
           "workspaceID": {
-            "type": "string",
-            "pattern": "^wrk"
+            "type": "string"
           },
           "directory": {
             "type": "string"
@@ -10983,20 +10837,22 @@
             "type": "string"
           },
           "parentID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "summary": {
             "type": "object",
             "properties": {
               "additions": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "deletions": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "files": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "diffs": {
                 "type": "array",
@@ -11072,12 +10928,10 @@
             "type": "object",
             "properties": {
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               },
               "partID": {
-                "type": "string",
-                "pattern": "^prt"
+                "type": "string"
               },
               "snapshot": {
                 "type": "string"
@@ -12010,36 +11864,6 @@
         "enum": ["auto", "stretch"],
         "description": "@deprecated Always uses stretch layout."
       },
-      "ImageAttachmentConfig": {
-        "type": "object",
-        "properties": {
-          "auto_resize": {
-            "type": "boolean"
-          },
-          "max_width": {
-            "type": "integer",
-            "exclusiveMinimum": 0
-          },
-          "max_height": {
-            "type": "integer",
-            "exclusiveMinimum": 0
-          },
-          "max_base64_bytes": {
-            "type": "integer",
-            "exclusiveMinimum": 0
-          }
-        },
-        "additionalProperties": false
-      },
-      "AttachmentConfig": {
-        "type": "object",
-        "properties": {
-          "image": {
-            "$ref": "#/components/schemas/ImageAttachmentConfig"
-          }
-        },
-        "additionalProperties": false
-      },
       "Config": {
         "type": "object",
         "properties": {
@@ -12369,9 +12193,6 @@
             "additionalProperties": {
               "type": "boolean"
             }
-          },
-          "attachment": {
-            "$ref": "#/components/schemas/AttachmentConfig"
           },
           "enterprise": {
             "type": "object",
@@ -12830,8 +12651,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "slug": {
             "type": "string"
@@ -12840,8 +12660,7 @@
             "type": "string"
           },
           "workspaceID": {
-            "type": "string",
-            "pattern": "^wrk"
+            "type": "string"
           },
           "directory": {
             "type": "string"
@@ -12850,20 +12669,22 @@
             "type": "string"
           },
           "parentID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "summary": {
             "type": "object",
             "properties": {
               "additions": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "deletions": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "files": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "diffs": {
                 "type": "array",
@@ -12939,12 +12760,10 @@
             "type": "object",
             "properties": {
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               },
               "partID": {
-                "type": "string",
-                "pattern": "^prt"
+                "type": "string"
               },
               "snapshot": {
                 "type": "string"
@@ -13183,10 +13002,12 @@
             "type": "string"
           },
           "additions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           },
           "deletions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           },
           "status": {
             "type": "string",
@@ -13206,10 +13027,12 @@
             "type": "string"
           },
           "additions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           },
           "deletions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           },
           "status": {
             "type": "string",
@@ -13630,8 +13453,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -13672,8 +13494,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -13699,8 +13520,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -13735,8 +13555,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^prt"
+            "type": "string"
           },
           "type": {
             "type": "string",
@@ -13932,7 +13751,6 @@
             "properties": {
               "sessionID": {
                 "type": "string",
-                "pattern": "^ses",
                 "description": "Session ID to navigate to"
               }
             },
@@ -13947,8 +13765,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^wrk"
+            "type": "string"
           },
           "type": {
             "type": "string"
@@ -14060,8 +13877,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "info": {
                 "$ref": "#/components/schemas/Message"
@@ -14099,12 +13915,10 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               }
             },
             "required": ["sessionID", "messageID"],
@@ -14139,8 +13953,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "part": {
                 "$ref": "#/components/schemas/Part"
@@ -14182,16 +13995,13 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               },
               "partID": {
-                "type": "string",
-                "pattern": "^prt"
+                "type": "string"
               }
             },
             "required": ["sessionID", "messageID", "partID"],
@@ -14226,8 +14036,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "info": {
                 "$ref": "#/components/schemas/Session"
@@ -14265,8 +14074,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "info": {
                 "type": "object",
@@ -14274,8 +14082,7 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^ses"
+                        "type": "string"
                       },
                       {
                         "type": "null"
@@ -14305,8 +14112,7 @@
                   "workspaceID": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^wrk"
+                        "type": "string"
                       },
                       {
                         "type": "null"
@@ -14336,8 +14142,7 @@
                   "parentID": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^ses"
+                        "type": "string"
                       },
                       {
                         "type": "null"
@@ -14350,13 +14155,16 @@
                         "type": "object",
                         "properties": {
                           "additions": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0
                           },
                           "deletions": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0
                           },
                           "files": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0
                           },
                           "diffs": {
                             "type": "array",
@@ -14507,12 +14315,10 @@
                         "type": "object",
                         "properties": {
                           "messageID": {
-                            "type": "string",
-                            "pattern": "^msg"
+                            "type": "string"
                           },
                           "partID": {
-                            "type": "string",
-                            "pattern": "^prt"
+                            "type": "string"
                           },
                           "snapshot": {
                             "type": "string"
@@ -14565,8 +14371,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "info": {
                 "$ref": "#/components/schemas/Session"
@@ -14607,8 +14412,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "agent": {
                 "type": "string"
@@ -14649,8 +14453,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "model": {
                 "type": "object",
@@ -14704,8 +14507,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "prompt": {
                 "$ref": "#/components/schemas/Prompt"
@@ -14746,8 +14548,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "text": {
                 "type": "string"
@@ -14788,8 +14589,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -14833,8 +14633,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -14878,8 +14677,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "agent": {
                 "type": "string"
@@ -14939,8 +14737,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "finish": {
                 "type": "string"
@@ -14952,22 +14749,27 @@
                 "type": "object",
                 "properties": {
                   "input": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "output": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "reasoning": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "cache": {
                     "type": "object",
                     "properties": {
                       "read": {
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": 0
                       },
                       "write": {
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": ["read", "write"],
@@ -15016,8 +14818,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "error": {
                 "$ref": "#/components/schemas/SessionErrorUnknown"
@@ -15058,8 +14859,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               }
             },
             "required": ["timestamp", "sessionID"],
@@ -15097,8 +14897,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "delta": {
                 "type": "string"
@@ -15139,8 +14938,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "text": {
                 "type": "string"
@@ -15181,8 +14979,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "reasoningID": {
                 "type": "string"
@@ -15223,8 +15020,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "reasoningID": {
                 "type": "string"
@@ -15268,8 +15064,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "reasoningID": {
                 "type": "string"
@@ -15313,8 +15108,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -15358,8 +15152,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -15403,8 +15196,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -15448,8 +15240,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -15509,8 +15300,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -15567,8 +15357,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -15638,8 +15427,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -15696,11 +15484,11 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "attempt": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "error": {
                 "$ref": "#/components/schemas/SessionNextRetry_error"
@@ -15741,8 +15529,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "reason": {
                 "type": "string",
@@ -15784,8 +15571,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "text": {
                 "type": "string"
@@ -15826,8 +15612,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "text": {
                 "type": "string"
@@ -15978,16 +15763,13 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               },
               "partID": {
-                "type": "string",
-                "pattern": "^prt"
+                "type": "string"
               },
               "field": {
                 "type": "string"
@@ -16034,8 +15816,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "requestID": {
                 "type": "string",
@@ -16067,8 +15848,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "diff": {
                 "type": "array",
@@ -16098,8 +15878,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "error": {
                 "anyOf": [
@@ -16246,8 +16025,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "todos": {
                 "type": "array",
@@ -16277,8 +16055,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "status": {
                 "$ref": "#/components/schemas/SessionStatus"
@@ -16305,8 +16082,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               }
             },
             "required": ["sessionID"],
@@ -16330,8 +16106,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               }
             },
             "required": ["sessionID"],
@@ -16409,15 +16184,13 @@
                 "type": "string"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "arguments": {
                 "type": "string"
               },
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               }
             },
             "required": ["name", "sessionID", "arguments", "messageID"],
@@ -16529,8 +16302,7 @@
             "type": "object",
             "properties": {
               "workspaceID": {
-                "type": "string",
-                "pattern": "^wrk"
+                "type": "string"
               },
               "status": {
                 "type": "string",
@@ -16657,8 +16429,7 @@
             "type": "object",
             "properties": {
               "id": {
-                "type": "string",
-                "pattern": "^pty"
+                "type": "string"
               },
               "exitCode": {
                 "type": "integer",
@@ -16686,8 +16457,7 @@
             "type": "object",
             "properties": {
               "id": {
-                "type": "string",
-                "pattern": "^pty"
+                "type": "string"
               }
             },
             "required": ["id"],
@@ -16711,8 +16481,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "info": {
                 "$ref": "#/components/schemas/Message"
@@ -16739,12 +16508,10 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               }
             },
             "required": ["sessionID", "messageID"],
@@ -16768,8 +16535,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "part": {
                 "$ref": "#/components/schemas/Part"
@@ -16800,16 +16566,13 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "messageID": {
-                "type": "string",
-                "pattern": "^msg"
+                "type": "string"
               },
               "partID": {
-                "type": "string",
-                "pattern": "^prt"
+                "type": "string"
               }
             },
             "required": ["sessionID", "messageID", "partID"],
@@ -16833,8 +16596,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "info": {
                 "$ref": "#/components/schemas/Session"
@@ -16861,8 +16623,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "info": {
                 "$ref": "#/components/schemas/Session"
@@ -16889,8 +16650,7 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "info": {
                 "$ref": "#/components/schemas/Session"
@@ -16920,8 +16680,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "agent": {
                 "type": "string"
@@ -16951,8 +16710,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "model": {
                 "type": "object",
@@ -17046,8 +16804,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "prompt": {
                 "$ref": "#/components/schemas/Prompt"
@@ -17077,8 +16834,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "text": {
                 "type": "string"
@@ -17108,8 +16864,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17142,8 +16897,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17176,8 +16930,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "agent": {
                 "type": "string"
@@ -17226,8 +16979,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "finish": {
                 "type": "string"
@@ -17239,22 +16991,27 @@
                 "type": "object",
                 "properties": {
                   "input": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "output": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "reasoning": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "cache": {
                     "type": "object",
                     "properties": {
                       "read": {
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": 0
                       },
                       "write": {
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": ["read", "write"],
@@ -17306,8 +17063,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "error": {
                 "$ref": "#/components/schemas/SessionErrorUnknown"
@@ -17337,8 +17093,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               }
             },
             "required": ["timestamp", "sessionID"],
@@ -17365,8 +17120,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "delta": {
                 "type": "string"
@@ -17396,8 +17150,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "text": {
                 "type": "string"
@@ -17427,8 +17180,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "reasoningID": {
                 "type": "string"
@@ -17458,8 +17210,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "reasoningID": {
                 "type": "string"
@@ -17492,8 +17243,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "reasoningID": {
                 "type": "string"
@@ -17526,8 +17276,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17560,8 +17309,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17594,8 +17342,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17628,8 +17375,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17712,8 +17458,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17759,8 +17504,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17819,8 +17563,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "callID": {
                 "type": "string"
@@ -17856,7 +17599,8 @@
             "type": "string"
           },
           "statusCode": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0
           },
           "isRetryable": {
             "type": "boolean"
@@ -17897,11 +17641,11 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "attempt": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0
               },
               "error": {
                 "$ref": "#/components/schemas/SessionNextRetry_error"
@@ -17931,8 +17675,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "reason": {
                 "type": "string",
@@ -17963,8 +17706,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "text": {
                 "type": "string"
@@ -17994,8 +17736,7 @@
                 "type": "number"
               },
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "type": "string"
               },
               "text": {
                 "type": "string"
@@ -18051,19 +17792,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "parentID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "projectID": {
             "type": "string"
           },
           "workspaceID": {
-            "type": "string",
-            "pattern": "^wrk"
+            "type": "string"
           },
           "path": {
             "type": "string"
@@ -18249,8 +17987,7 @@
             "additionalProperties": false
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "type": "string"
           },
           "text": {
             "type": "string"
@@ -18725,24 +18462,19 @@
       },
       "BadRequestError": {
         "type": "object",
-        "required": ["name", "data"],
+        "required": ["data", "errors", "success"],
         "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["BadRequest"]
-          },
-          "data": {
-            "type": "object",
-            "required": ["message"],
-            "properties": {
-              "message": {
-                "type": "string"
-              },
-              "kind": {
-                "type": "string",
-                "enum": ["Params", "Headers", "Query", "Body", "Payload"]
-              }
+          "data": {},
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
             }
+          },
+          "success": {
+            "type": "boolean",
+            "enum": [false]
           }
         }
       }

@@ -3,6 +3,7 @@ import { app, BrowserWindow, net, nativeImage, nativeTheme, protocol } from "ele
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
+import { attachBrowserView } from "./browser"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -126,6 +127,7 @@ export function createMainWindow() {
   state.manage(win)
   loadWindow(win, "index.html")
   wireZoom(win)
+  attachBrowserView(win)
 
   win.once("ready-to-show", () => {
     win.show()

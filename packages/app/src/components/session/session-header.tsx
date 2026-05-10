@@ -25,6 +25,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
+import { SessionHeaderBrowserToggle } from "./session-header-browser-toggle"
 
 const OPEN_APPS = [
   "vscode",
@@ -450,6 +451,8 @@ export function SessionHeader() {
                 </Show>
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
+                  <SessionHeaderBrowserToggle browserPanel={view().browserPanel} />
+
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}

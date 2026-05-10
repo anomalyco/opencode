@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron"
+import { createBrowserApi } from "./browser"
 import type { ElectronAPI, InitStep, SqliteMigrationProgress } from "./types"
 
 const api: ElectronAPI = {
@@ -66,6 +67,7 @@ const api: ElectronAPI = {
   checkUpdate: () => ipcRenderer.invoke("check-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
+  browser: createBrowserApi(ipcRenderer),
 }
 
 contextBridge.exposeInMainWorld("api", api)

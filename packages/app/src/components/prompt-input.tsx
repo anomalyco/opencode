@@ -19,6 +19,9 @@ import { useSDK } from "@/context/sdk"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
+import { useAnnotationStore } from "@/context/annotation-store"
+import { clearBrowserAnnotations } from "@/context/annotation-actions"
+import { useBrowserStore } from "@/context/browser-store"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -48,12 +51,14 @@ import {
   type PromptHistoryStoredEntry,
   promptLength,
 } from "./prompt-input/history"
-import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
+import { createPromptSubmit, hasSubmittableInput, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
-import { PromptImageAttachments } from "./prompt-input/image-attachments"
+import { PromptAttachmentArea } from "./prompt-input/attachment-area"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
+import { activateBrowserMention, buildAtOptions, getAtOptionKey } from "./prompt-input/browser-mention"
+import { applySlashCommandSelection } from "./prompt-input/browser-command"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
 import { loadAgentsQuery, loadProvidersQuery } from "@/context/global-sync/bootstrap"
@@ -111,6 +116,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const prompt = usePrompt()
   const layout = useLayout()
   const comments = useComments()
+  const annotations = useAnnotationStore()
+  const browsers = useBrowserStore()
   const dialog = useDialog()
   const providers = useProviders()
   const command = useCommand()
@@ -284,12 +291,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.mode === "shell") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
   })
+  const annotationCount = createMemo(() => annotations.store.annotations.length)
   const blank = createMemo(() => {
     const text = prompt
       .current()
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
-    return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
+    return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0 && annotationCount() === 0
   })
   const stopping = createMemo(() => working() && blank())
   const tip = () => {
@@ -570,15 +578,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!option) return
     if (option.type === "agent") {
       addPart({ type: "agent", name: option.name, content: "@" + option.name, start: 0, end: 0 })
-    } else {
-      addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
+      return
     }
+    if (option.type === "browser") {
+      void activateBrowserMention({
+        api: window.api?.browser,
+        browserStore: browsers,
+        openPanel: () => view().browserPanel.open(),
+        setPanelOpen: (open) => annotations.setPanelOpen(open),
+      }).then(addPart)
+      return
+    }
+    addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
   }
 
-  const atKey = (x: AtOption | undefined) => {
-    if (!x) return ""
-    return x.type === "agent" ? `agent:${x.name}` : `file:${x.path}`
-  }
+  const atKey = getAtOptionKey
 
   const {
     flat: atFlat,
@@ -592,25 +606,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const open = recent()
       const seen = new Set(open)
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
-      if (!query.trim()) return [...agents, ...pinned]
+      if (!query.trim()) return buildAtOptions({ agents, pinned, files: [] })
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
         .map((path) => ({ type: "file", path, display: path }))
-      return [...agents, ...pinned, ...fileOptions]
+      return buildAtOptions({ agents, pinned, files: fileOptions })
     },
     key: atKey,
     filterKeys: ["display"],
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
+      if (item.type === "browser") return "browser"
       if (item.recent) return "recent"
       return "file"
     },
     sortGroupsBy: (a, b) => {
       const rank = (category: string) => {
         if (category === "agent") return 0
-        if (category === "recent") return 1
-        return 2
+        if (category === "browser") return 1
+        if (category === "recent") return 2
+        return 3
       }
       return rank(a.category) - rank(b.category)
     },
@@ -642,21 +658,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
-    if (!cmd) return
     closePopover()
-    const images = imageAttachments()
-
-    if (cmd.type === "custom") {
-      const text = `/${cmd.trigger} `
-      setEditorText(text)
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
-      focusEditorEnd()
-      return
-    }
-
-    clearEditor()
-    prompt.set([...DEFAULT_PROMPT, ...images], 0)
-    command.trigger(cmd.id, "slash")
+    applySlashCommandSelection({
+      cmd,
+      images: imageAttachments(),
+      setEditorText,
+      setPrompt: prompt.set,
+      focusEditorEnd,
+      clearEditor,
+      triggerCommand: command.trigger,
+    })
   }
 
   const {
@@ -1071,6 +1082,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
+    annotations: () => annotations.store.annotations.slice(),
     commentCount,
     autoAccept: () => accepting(),
     mode: () => store.mode,
@@ -1090,6 +1102,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
+    clearAnnotations: () => clearBrowserAnnotations(annotations),
+    browser: {
+      api: window.api?.browser,
+      store: browsers,
+      openPanel: () => view().browserPanel.open(),
+      setPanelOpen: (open) => annotations.setPanelOpen(open),
+    },
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1240,13 +1259,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (event.repeat) return
       if (
         working() &&
-        prompt
-          .current()
-          .map((part) => ("content" in part ? part.content : ""))
-          .join("")
-          .trim().length === 0 &&
-        imageAttachments().length === 0 &&
-        commentCount() === 0
+        !hasSubmittableInput({
+          text: prompt
+            .current()
+            .map((part) => ("content" in part ? part.content : ""))
+            .join(""),
+          images: imageAttachments(),
+          annotations: annotations.store.annotations,
+          commentCount: commentCount(),
+        })
       ) {
         return
       }
@@ -1316,8 +1337,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }}
           t={(key) => language.t(key as Parameters<typeof language.t>[0])}
         />
-        <PromptImageAttachments
-          attachments={imageAttachments()}
+        <PromptAttachmentArea
+          imageAttachments={imageAttachments()}
           onOpen={(attachment) =>
             dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
           }

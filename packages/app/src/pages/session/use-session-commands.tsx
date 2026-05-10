@@ -19,6 +19,10 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useBrowserStore } from "@/context/browser-store"
+import { useAnnotationStore } from "@/context/annotation-store"
+import { openBrowserPanel } from "@/context/browser-actions"
+import { BROWSER_SLASH_DESCRIPTION } from "@/components/prompt-input/browser-command"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -47,6 +51,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
+  const browsers = useBrowserStore()
+  const annotations = useAnnotationStore()
   const layout = useLayout()
   const navigate = useNavigate()
   const { params, tabs, view } = useSessionLayout()
@@ -254,6 +260,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const openTerminal = () => {
     if (terminal.all().length > 0) terminal.new()
     view().terminal.open()
+  }
+
+  const openBrowser = () => {
+    void openBrowserPanel({
+      api: window.api?.browser,
+      browserStore: browsers,
+      openPanel: () => view().browserPanel.open(),
+      setPanelOpen: (open) => annotations.setPanelOpen(open),
+    })
   }
 
   const chooseModel = () => {
@@ -475,6 +490,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           }),
         ]
       : []),
+    viewCommand({
+      id: "browser.open",
+      title: "Browser",
+      description: BROWSER_SLASH_DESCRIPTION,
+      slash: "browser",
+      onSelect: openBrowser,
+    }),
     viewCommand({
       id: "input.focus",
       title: language.t("command.input.focus"),

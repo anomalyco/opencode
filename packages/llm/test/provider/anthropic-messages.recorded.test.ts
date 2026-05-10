@@ -1,4 +1,3 @@
-import { Redactor } from "@opencode-ai/http-recorder"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError } from "../../src"
@@ -31,7 +30,7 @@ const recorded = recordedTests({
   provider: "anthropic",
   protocol: "anthropic-messages",
   requires: ["ANTHROPIC_API_KEY"],
-  options: { redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }) },
+  options: { requestHeaders: ["content-type", "anthropic-version"] },
 })
 
 describe("Anthropic Messages sad-path recorded", () => {

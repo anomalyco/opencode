@@ -1,7 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import type { BrowserAnnotation } from "@/context/browser-types"
 import type { Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+let hasSubmittableInput: typeof import("./submit").hasSubmittableInput
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -20,12 +22,19 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const promptAsyncCalls: Array<{ directory: string; parts: unknown[] }> = []
+const toasts: Array<{ title?: string; description?: string; variant?: string }> = []
+const browserPanel: boolean[] = []
+const browserNavigations: string[] = []
+const browserCreated: Array<string | undefined> = []
+const openBrowserPanelCalls: Array<string | undefined> = []
+let config: { browser?: { integratedTools?: { enabled?: boolean } } } = {}
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
 
-const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+let promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
 const clientFor = (directory: string) => {
   createdClients.push(directory)
@@ -45,7 +54,10 @@ const clientFor = (directory: string) => {
         return { data: undefined }
       },
       prompt: async () => ({ data: undefined }),
-      promptAsync: async () => ({ data: undefined }),
+      promptAsync: async (input: { parts: unknown[] }) => {
+        promptAsyncCalls.push({ directory, parts: input.parts })
+        return { data: undefined }
+      },
       command: async () => ({ data: undefined }),
       abort: async () => ({ data: undefined }),
     },
@@ -71,7 +83,32 @@ beforeAll(async () => {
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
-    showToast: () => 0,
+    showToast: (input: { title?: string; description?: string; variant?: string }) => {
+      toasts.push(input)
+      return 0
+    },
+  }))
+
+  mock.module("@/context/browser-actions", () => ({
+    openBrowserPanel: async (input: {
+      api?: {
+        createBrowser?: (value?: { url?: string }) => Promise<{ browser: { id: string; title: string; url: string }; state: { activeBrowserId: string } }>
+        navigate?: (url: string) => Promise<unknown>
+      }
+      browserStore: { store: { activeId: string | null; instances?: Record<string, { id: string; title: string; url: string; visible: boolean }> } }
+      openPanel: () => void
+      setPanelOpen: (open: boolean) => void
+      url?: string
+    }) => {
+      openBrowserPanelCalls.push(input.url)
+      input.openPanel()
+      input.setPanelOpen(true)
+      if (!input.api) return undefined
+      const existingId = input.browserStore.store.activeId ?? Object.keys(input.browserStore.store.instances ?? {})[0]
+      const created = existingId ? undefined : await input.api.createBrowser?.(input.url ? { url: input.url } : undefined)
+      if (input.url && (!created || created.browser.url !== input.url)) await input.api.navigate?.(input.url)
+      return existingId ?? created?.state.activeBrowserId ?? created?.browser.id
+    },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -130,7 +167,7 @@ beforeAll(async () => {
         directory: "/repo/main",
         client: rootClient,
         url: "http://localhost:4096",
-        createClient(opts: any) {
+        createClient(opts: { directory: string; throwOnError?: boolean }) {
           return clientFor(opts.directory)
         },
       }
@@ -164,6 +201,7 @@ beforeAll(async () => {
 
   mock.module("@/context/global-sync", () => ({
     useGlobalSync: () => ({
+      data: { config },
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
@@ -199,6 +237,7 @@ beforeAll(async () => {
 
   const mod = await import("./submit")
   createPromptSubmit = mod.createPromptSubmit
+  hasSubmittableInput = mod.hasSubmittableInput
 })
 
 beforeEach(() => {
@@ -211,9 +250,290 @@ beforeEach(() => {
   params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
+  promptAsyncCalls.length = 0
+  toasts.length = 0
+  browserPanel.length = 0
+  browserNavigations.length = 0
+  browserCreated.length = 0
+  openBrowserPanelCalls.length = 0
+  config = {}
   selected = "/repo/worktree-a"
   variant = undefined
+  promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
+})
+
+describe("local browser slash command", () => {
+  const browserCommand = () => ({
+    browser: {
+      api: {
+        createBrowser: async (input?: { url?: string }) => {
+          browserCreated.push(input?.url)
+          return {
+            browser: { id: "browser-1", title: "Browser", url: input?.url ?? "about:blank" },
+            state: { activeBrowserId: "browser-1", browsers: [] },
+          }
+        },
+        navigate: async (url: string) => {
+          browserNavigations.push(url)
+          return { url, title: "" }
+        },
+      },
+      store: {
+        store: { activeId: null, instances: {} },
+        addBrowser: () => undefined,
+        setActiveBrowser: () => undefined,
+        updateBrowser: () => undefined,
+      },
+      openPanel: () => browserPanel.push(true),
+      setPanelOpen: (open: boolean) => browserPanel.push(open),
+    },
+  })
+
+  test("opens and provisions the browser panel for raw /browser without sending a prompt", async () => {
+    params = { id: "session-browser" }
+    promptValue = [{ type: "text", content: "/browser", start: 0, end: 8 }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-browser" }),
+      imageAttachments: () => [],
+      annotations: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+      ...browserCommand(),
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(browserPanel).toEqual([true, true])
+    expect(browserCreated).toEqual([undefined])
+    expect(browserNavigations).toEqual([])
+    expect(promptAsyncCalls).toEqual([])
+    expect(createdSessions).toEqual([])
+  })
+
+  test("submits /browser task through the normal prompt path exactly once with task text preserved", async () => {
+    params = { id: "session-browser" }
+    promptValue = [{ type: "text", content: "/browser facebook.com", start: 0, end: 21 }]
+    const submitted: boolean[] = []
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-browser" }),
+      imageAttachments: () => [],
+      annotations: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => submitted.push(true),
+      ...browserCommand(),
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(submitted).toEqual([true])
+    expect(browserPanel).toEqual([])
+    expect(openBrowserPanelCalls).toEqual([])
+    expect(browserCreated).toEqual([])
+    expect(browserNavigations).toEqual([])
+    expect(promptAsyncCalls).toHaveLength(1)
+    expect(promptAsyncCalls[0]?.parts[0]).toMatchObject({ type: "text", text: "/browser facebook.com" })
+    expect(
+      promptAsyncCalls[0]?.parts.some(
+        (part) =>
+          typeof part === "object" &&
+          part !== null &&
+          "type" in part &&
+          part.type === "text" &&
+          "metadata" in part &&
+          typeof part.metadata === "object" &&
+          part.metadata !== null &&
+          "opencodeBrowserTools" in part.metadata,
+      ),
+    ).toBe(true)
+    expect(createdSessions).toEqual([])
+  })
+
+  test("submits /browser prose task without silently clearing it after local panel navigation", async () => {
+    params = { id: "session-browser" }
+    promptValue = [{ type: "text", content: "/browser abrir facebook.com y revisar login", start: 0, end: 42 }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-browser" }),
+      imageAttachments: () => [],
+      annotations: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+      ...browserCommand(),
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(browserPanel).toEqual([])
+    expect(openBrowserPanelCalls).toEqual([])
+    expect(browserCreated).toEqual([])
+    expect(browserNavigations).toEqual([])
+    expect(promptAsyncCalls).toHaveLength(1)
+    expect(promptAsyncCalls[0]?.parts[0]).toMatchObject({
+      type: "text",
+      text: "/browser abrir facebook.com y revisar login",
+    })
+    expect(createdSessions).toEqual([])
+  })
+
+  test("submits arbitrary /browser task text instead of rejecting it as an invalid URL", async () => {
+    params = { id: "session-browser" }
+    promptValue = [{ type: "text", content: "/browser investigá facebook", start: 0, end: 27 }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-browser" }),
+      imageAttachments: () => [],
+      annotations: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+      ...browserCommand(),
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(toasts).toEqual([])
+    expect(browserPanel).toEqual([])
+    expect(promptAsyncCalls).toHaveLength(1)
+    expect(promptAsyncCalls[0]?.parts[0]).toMatchObject({ type: "text", text: "/browser investigá facebook" })
+    expect(createdSessions).toEqual([])
+  })
+
+  test("submits /browser task with disabled-state browser hint when integrated tools are disabled", async () => {
+    params = { id: "session-browser" }
+    config = { browser: { integratedTools: { enabled: false } } }
+    promptValue = [{ type: "text", content: "/browser inspect login", start: 0, end: 22 }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-browser" }),
+      imageAttachments: () => [],
+      annotations: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+      ...browserCommand(),
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const browserHint = promptAsyncCalls[0]?.parts.find(
+      (part) =>
+        typeof part === "object" &&
+        part !== null &&
+        "type" in part &&
+        part.type === "text" &&
+        "metadata" in part &&
+        typeof part.metadata === "object" &&
+        part.metadata !== null &&
+        "opencodeBrowserTools" in part.metadata,
+    ) as { text?: string; metadata?: { opencodeBrowserTools?: unknown } } | undefined
+
+    expect(promptAsyncCalls).toHaveLength(1)
+    expect(browserHint?.text).toContain("Integrated browser tools are disabled")
+    expect(browserHint?.text).not.toContain("Integrated browser tools are available")
+    expect(browserHint?.metadata?.opencodeBrowserTools).toEqual({ enabled: false, available: false })
+  })
+
+  test("submits /browser task with unavailable browser hint when the bridge API is missing", async () => {
+    params = { id: "session-browser" }
+    promptValue = [{ type: "text", content: "/browser inspect login", start: 0, end: 22 }]
+    const target = browserCommand()
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-browser" }),
+      imageAttachments: () => [],
+      annotations: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+      browser: { ...target.browser, api: undefined },
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const browserHint = promptAsyncCalls[0]?.parts.find(
+      (part) =>
+        typeof part === "object" &&
+        part !== null &&
+        "type" in part &&
+        part.type === "text" &&
+        "metadata" in part &&
+        typeof part.metadata === "object" &&
+        part.metadata !== null &&
+        "opencodeBrowserTools" in part.metadata,
+    ) as { text?: string; metadata?: { opencodeBrowserTools?: unknown } } | undefined
+
+    expect(promptAsyncCalls).toHaveLength(1)
+    expect(browserHint?.text).toContain("Integrated browser tools are unavailable")
+    expect(browserHint?.text).not.toContain("Integrated browser tools are available")
+    expect(browserHint?.text).not.toContain("should be preferred over Playwright/external browsers")
+    expect(browserHint?.metadata?.opencodeBrowserTools).toEqual({ enabled: true, available: false })
+  })
 })
 
 describe("prompt submit worktree selection", () => {
@@ -221,6 +541,7 @@ describe("prompt submit worktree selection", () => {
     const submit = createPromptSubmit({
       info: () => undefined,
       imageAttachments: () => [],
+      annotations: () => [],
       commentCount: () => 0,
       autoAccept: () => false,
       mode: () => "shell",
@@ -258,6 +579,7 @@ describe("prompt submit worktree selection", () => {
     const submit = createPromptSubmit({
       info: () => undefined,
       imageAttachments: () => [],
+      annotations: () => [],
       commentCount: () => 0,
       autoAccept: () => true,
       mode: () => "shell",
@@ -288,6 +610,7 @@ describe("prompt submit worktree selection", () => {
     const submit = createPromptSubmit({
       info: () => ({ id: "session-1" }),
       imageAttachments: () => [],
+      annotations: () => [],
       commentCount: () => 0,
       autoAccept: () => false,
       mode: () => "normal",
@@ -319,6 +642,7 @@ describe("prompt submit worktree selection", () => {
     const submit = createPromptSubmit({
       info: () => undefined,
       imageAttachments: () => [],
+      annotations: () => [],
       commentCount: () => 0,
       autoAccept: () => false,
       mode: () => "normal",
@@ -341,5 +665,216 @@ describe("prompt submit worktree selection", () => {
 
     expect(storedSessions["/repo/worktree-a"]).toEqual([{ id: "session-1", title: "New session 1" }])
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("submits annotations through the prompt request path even without text", async () => {
+    params = { id: "session-annotations" }
+    promptValue = [{ type: "text", content: "", start: 0, end: 0 }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-annotations" }),
+      imageAttachments: () => [],
+      annotations: () => [
+        {
+          id: "annotation-1",
+          createdAt: 1,
+          pageTitle: "Pricing",
+          pageUrl: "https://opencode.ai/pricing",
+          userComment: "Clarify the CTA",
+          element: {
+            selector: "button[data-testid='cta']",
+            tagName: "button",
+            role: "button",
+            accessibleName: "Start free trial",
+            visibleText: "Start free trial",
+            attributes: {},
+            boundingBox: { x: 10, y: 20, width: 200, height: 44 },
+          },
+          preview: {},
+          context: {
+            nearbyDomSanitized: "Start free trial Compare plans",
+          },
+        } satisfies BrowserAnnotation,
+      ],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(promptAsyncCalls).toHaveLength(1)
+    expect(promptAsyncCalls[0]?.directory).toBe("/repo/main")
+    expect(
+      promptAsyncCalls[0]?.parts.some(
+        (part) =>
+          typeof part === "object" &&
+          part !== null &&
+          "type" in part &&
+          part.type === "text" &&
+          "metadata" in part &&
+          typeof part.metadata === "object" &&
+          part.metadata !== null &&
+          "opencodeAnnotations" in part.metadata,
+      ),
+    ).toBe(true)
+  })
+
+  test("clears annotations after a successful send", async () => {
+    params = { id: "session-annotations" }
+    promptValue = [{ type: "text", content: "review this", start: 0, end: 11 }]
+    const cleared: string[] = []
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-annotations" }),
+      imageAttachments: () => [],
+      annotations: () => [
+        {
+          id: "annotation-1",
+          createdAt: 1,
+          pageTitle: "Pricing",
+          pageUrl: "https://opencode.ai/pricing",
+          userComment: "Clarify the CTA",
+          element: {
+            selector: "button[data-testid='cta']",
+            tagName: "button",
+            role: "button",
+            accessibleName: "Start free trial",
+            visibleText: "Start free trial",
+            attributes: {},
+            boundingBox: { x: 10, y: 20, width: 200, height: 44 },
+          },
+          preview: {},
+          context: {
+            nearbyDomSanitized: "Start free trial Compare plans",
+          },
+        } satisfies BrowserAnnotation,
+      ],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      clearAnnotations: () => {
+        cleared.push("send")
+      },
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(cleared).toEqual(["send"])
+  })
+
+  test("clears annotations after queueing a draft", async () => {
+    params = { id: "session-queue" }
+    promptValue = [{ type: "text", content: "review this", start: 0, end: 11 }]
+    const cleared: string[] = []
+    const queued: Array<{ annotations: BrowserAnnotation[] }> = []
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-queue" }),
+      imageAttachments: () => [],
+      annotations: () => [
+        {
+          id: "annotation-1",
+          createdAt: 1,
+          pageTitle: "Pricing",
+          pageUrl: "https://opencode.ai/pricing",
+          userComment: "Clarify the CTA",
+          element: {
+            selector: "button[data-testid='cta']",
+            tagName: "button",
+            role: "button",
+            accessibleName: "Start free trial",
+            visibleText: "Start free trial",
+            attributes: {},
+            boundingBox: { x: 10, y: 20, width: 200, height: 44 },
+          },
+          preview: {},
+          context: {
+            nearbyDomSanitized: "Start free trial Compare plans",
+          },
+        } satisfies BrowserAnnotation,
+      ],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      shouldQueue: () => true,
+      onQueue: (draft) => {
+        queued.push({ annotations: draft.annotations })
+      },
+      clearAnnotations: () => {
+        cleared.push("queue")
+      },
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(queued).toHaveLength(1)
+    expect(queued[0]?.annotations).toHaveLength(1)
+    expect(cleared).toEqual(["queue"])
+  })
+
+  test("treats annotation-only input as submittable while working", () => {
+    expect(
+      hasSubmittableInput({
+        text: "   ",
+        images: [],
+        annotations: [
+          {
+            id: "annotation-1",
+            createdAt: 1,
+            pageTitle: "Pricing",
+            pageUrl: "https://opencode.ai/pricing",
+            userComment: "Clarify the CTA",
+            element: {
+              selector: "button[data-testid='cta']",
+              tagName: "button",
+              role: "button",
+              accessibleName: "Start free trial",
+              visibleText: "Start free trial",
+              attributes: {},
+              boundingBox: { x: 10, y: 20, width: 200, height: 44 },
+            },
+            preview: {},
+            context: {},
+          } satisfies BrowserAnnotation,
+        ],
+        commentCount: 0,
+      }),
+    ).toBe(true)
   })
 })

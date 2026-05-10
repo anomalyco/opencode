@@ -7,8 +7,8 @@ import { SessionID, MessageID, PartID } from "../../src/session/schema"
 function createTextPart(text: string): MessageV2.Part {
   return {
     id: PartID.ascending(),
-    sessionID: SessionID.make("ses_test"),
-    messageID: MessageID.make("msg_test"),
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "text" as const,
     text,
   }
@@ -17,8 +17,8 @@ function createTextPart(text: string): MessageV2.Part {
 function createReasoningPart(text: string): MessageV2.Part {
   return {
     id: PartID.ascending(),
-    sessionID: SessionID.make("ses_test"),
-    messageID: MessageID.make("msg_test"),
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "reasoning" as const,
     text,
     time: { start: 0 },
@@ -29,8 +29,8 @@ function createToolPart(tool: string, title: string, status: "completed" | "runn
   if (status === "completed") {
     return {
       id: PartID.ascending(),
-      sessionID: SessionID.make("ses_test"),
-      messageID: MessageID.make("msg_test"),
+      sessionID: SessionID.make("s"),
+      messageID: MessageID.make("m"),
       type: "tool" as const,
       callID: "c1",
       tool,
@@ -46,8 +46,8 @@ function createToolPart(tool: string, title: string, status: "completed" | "runn
   }
   return {
     id: PartID.ascending(),
-    sessionID: SessionID.make("ses_test"),
-    messageID: MessageID.make("msg_test"),
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "tool" as const,
     callID: "c1",
     tool,
@@ -62,8 +62,8 @@ function createToolPart(tool: string, title: string, status: "completed" | "runn
 function createStepStartPart(): MessageV2.Part {
   return {
     id: PartID.ascending(),
-    sessionID: SessionID.make("ses_test"),
-    messageID: MessageID.make("msg_test"),
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "step-start" as const,
   }
 }
@@ -71,8 +71,8 @@ function createStepStartPart(): MessageV2.Part {
 function createStepFinishPart(): MessageV2.Part {
   return {
     id: PartID.ascending(),
-    sessionID: SessionID.make("ses_test"),
-    messageID: MessageID.make("msg_test"),
+    sessionID: SessionID.make("s"),
+    messageID: MessageID.make("m"),
     type: "step-finish" as const,
     reason: "done",
     cost: 0,

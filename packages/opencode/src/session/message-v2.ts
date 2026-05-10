@@ -143,8 +143,8 @@ export type ReasoningPart = Types.DeepMutable<Schema.Schema.Type<typeof Reasonin
 const filePartSourceBase = {
   text: Schema.Struct({
     value: Schema.String,
-    start: Schema.Finite,
-    end: Schema.Finite,
+    start: NonNegativeInt,
+    end: NonNegativeInt,
   }).annotate({ identifier: "FilePartSourceText" }),
 }
 
@@ -270,13 +270,13 @@ export const StepFinishPart = Schema.Struct({
   snapshot: Schema.optional(Schema.String),
   cost: Schema.Finite,
   tokens: Schema.Struct({
-    total: Schema.optional(Schema.Finite),
-    input: Schema.Finite,
-    output: Schema.Finite,
-    reasoning: Schema.Finite,
+    total: Schema.optional(NonNegativeInt),
+    input: NonNegativeInt,
+    output: NonNegativeInt,
+    reasoning: NonNegativeInt,
     cache: Schema.Struct({
-      read: Schema.Finite,
-      write: Schema.Finite,
+      read: NonNegativeInt,
+      write: NonNegativeInt,
     }),
   }),
 })
@@ -554,13 +554,13 @@ export const Assistant = Schema.Struct({
   summary: Schema.optional(Schema.Boolean),
   cost: Schema.Finite,
   tokens: Schema.Struct({
-    total: Schema.optional(Schema.Finite),
-    input: Schema.Finite,
-    output: Schema.Finite,
-    reasoning: Schema.Finite,
+    total: Schema.optional(NonNegativeInt),
+    input: NonNegativeInt,
+    output: NonNegativeInt,
+    reasoning: NonNegativeInt,
     cache: Schema.Struct({
-      read: Schema.Finite,
-      write: Schema.Finite,
+      read: NonNegativeInt,
+      write: NonNegativeInt,
     }),
   }),
   structured: Schema.optional(Schema.Any),

@@ -632,6 +632,10 @@ export const dict = {
   "settings.general.section.sounds": "Efectos de sonido",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Pantalla",
+  "settings.browser.section": "Navegador",
+  "settings.browser.integratedTools.title": "Herramientas del navegador integrado para el agente",
+  "settings.browser.integratedTools.description":
+    "Cuando está desactivado, el agente no recibirá automáticamente las herramientas del navegador integrado.",
 
   "settings.general.row.language.title": "Idioma",
   "settings.general.row.language.description": "Cambiar el idioma de visualización para OpenCode",

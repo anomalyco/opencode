@@ -10,6 +10,7 @@ import type {
   WindowConfig,
   WslConfig,
 } from "../preload/types"
+import { registerBrowserIpcHandlers } from "./browser/ipc-handlers"
 import { getStore } from "./store"
 import { setTitlebar, updateTitlebar } from "./windows"
 
@@ -41,6 +42,7 @@ type Deps = {
 }
 
 export function registerIpcHandlers(deps: Deps) {
+  registerBrowserIpcHandlers()
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", (event: IpcMainInvokeEvent) => {
     const send = (step: InitStep) => event.sender.send("init-step", step)

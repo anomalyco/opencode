@@ -37,6 +37,7 @@ import {
 import { migrate } from "./migrate"
 import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
 import { Deferred, Effect, Fiber } from "effect"
+import { startIntegratedBrowserAgentToolServer, type IntegratedBrowserAgentToolServer } from "./browser/agent-tool-server"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -53,6 +54,7 @@ const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 let logger: ReturnType<typeof initLogging>
 let mainWindow: BrowserWindow | null = null
 let server: SidecarListener | null = null
+let browserToolServer: IntegratedBrowserAgentToolServer | null = null
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
@@ -81,6 +83,9 @@ function setInitStep(step: InitStep) {
 }
 
 async function killSidecar() {
+  const currentBrowserToolServer = browserToolServer
+  browserToolServer = null
+  if (currentBrowserToolServer) await currentBrowserToolServer.stop()
   if (!server) return
   const current = server
   server = null
@@ -281,6 +286,7 @@ const main = Effect.gen(function* () {
   const hostname = "127.0.0.1"
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
+  browserToolServer = yield* Effect.promise(() => startIntegratedBrowserAgentToolServer())
 
   const loadingTask = yield* Effect.gen(function* () {
     logger.log("sidecar connection started", { url })

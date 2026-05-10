@@ -727,6 +727,10 @@ export const dict = {
   "settings.general.section.sounds": "Sound effects",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Display",
+  "settings.browser.section": "Browser",
+  "settings.browser.integratedTools.title": "Integrated browser agent tools",
+  "settings.browser.integratedTools.description":
+    "When off, the agent will not receive integrated browser tools automatically.",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",

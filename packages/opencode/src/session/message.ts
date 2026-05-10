@@ -172,12 +172,12 @@ export const Info = Schema.Struct({
         cost: Schema.Finite,
         summary: Schema.optional(Schema.Boolean),
         tokens: Schema.Struct({
-          input: Schema.Finite,
-          output: Schema.Finite,
-          reasoning: Schema.Finite,
+          input: NonNegativeInt,
+          output: NonNegativeInt,
+          reasoning: NonNegativeInt,
           cache: Schema.Struct({
-            read: Schema.Finite,
-            write: Schema.Finite,
+            read: NonNegativeInt,
+            write: NonNegativeInt,
           }),
         }),
       }),

@@ -118,12 +118,12 @@ export namespace Step {
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
-        input: Schema.Finite,
-        output: Schema.Finite,
-        reasoning: Schema.Finite,
+        input: NonNegativeInt,
+        output: NonNegativeInt,
+        reasoning: NonNegativeInt,
         cache: Schema.Struct({
-          read: Schema.Finite,
-          write: Schema.Finite,
+          read: NonNegativeInt,
+          write: NonNegativeInt,
         }),
       }),
       snapshot: Schema.String.pipe(Schema.optional),
@@ -305,7 +305,7 @@ export namespace Tool {
 
 export const RetryError = Schema.Struct({
   message: Schema.String,
-  statusCode: Schema.Finite.pipe(Schema.optional),
+  statusCode: NonNegativeInt.pipe(Schema.optional),
   isRetryable: Schema.Boolean,
   responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   responseBody: Schema.String.pipe(Schema.optional),
@@ -320,7 +320,7 @@ export const Retried = EventV2.define({
   aggregate: "sessionID",
   schema: {
     ...Base,
-    attempt: Schema.Finite,
+    attempt: NonNegativeInt,
     error: RetryError,
   },
 })

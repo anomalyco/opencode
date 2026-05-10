@@ -151,6 +151,18 @@ export const getTabReorderIndex = (tabs: readonly string[], from: string, to: st
   return toIndex
 }
 
+export const getSessionPanelWidth = (input: {
+  browserOpen: boolean
+  fileTreeOpen: boolean
+  fileTreeWidth: number
+  reviewOpen: boolean
+  sessionWidth: number
+}) => {
+  if (!input.reviewOpen && !input.browserOpen && !input.fileTreeOpen) return "100%"
+  if (input.reviewOpen || input.browserOpen) return `${input.sessionWidth}px`
+  return `calc(100% - ${input.fileTreeWidth}px)`
+}
+
 export const createSizing = () => {
   const [state, setState] = createStore({ active: false })
   let t: number | undefined

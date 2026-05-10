@@ -21,7 +21,6 @@ import { TuiApi } from "./groups/tui"
 import { WorkspaceApi } from "./groups/workspace"
 import { V2Api } from "./groups/v2"
 import { Authorization } from "./middleware/authorization"
-import { SchemaErrorMiddleware } from "./middleware/schema-error"
 
 // SSE event schemas built from the BusEvent/SyncEvent registries.
 const EventSchema = Schema.Union(BusEvent.effectPayloads()).annotate({ identifier: "Event" })
@@ -30,7 +29,6 @@ const SyncEventSchemas = SyncEvent.effectPayloads()
 export const RootHttpApi = HttpApi.make("opencode-root")
   .addHttpApi(ControlApi)
   .addHttpApi(GlobalApi)
-  .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
 
 export const InstanceHttpApi = HttpApi.make("opencode-instance")
@@ -49,7 +47,6 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(V2Api)
   .addHttpApi(TuiApi)
   .addHttpApi(WorkspaceApi)
-  .middleware(SchemaErrorMiddleware)
 
 export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(RootHttpApi)

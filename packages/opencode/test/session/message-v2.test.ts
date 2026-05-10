@@ -102,9 +102,9 @@ function assistantInfo(
 
 function basePart(messageID: string, id: string) {
   return {
-    id: PartID.make(id.startsWith("prt") ? id : `prt_${id}`),
+    id: PartID.make(id),
     sessionID,
-    messageID: MessageID.make(messageID.startsWith("msg") ? messageID : `msg_${messageID}`),
+    messageID: MessageID.make(messageID),
   }
 }
 

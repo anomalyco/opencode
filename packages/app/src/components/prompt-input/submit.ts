@@ -4,6 +4,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import { batch, type Accessor } from "solid-js"
+import type { BrowserAnnotation } from "@/context/browser-types"
 import type { FileSelection } from "@/context/file"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -16,12 +17,21 @@ import { useSync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
+import { parseBrowserSlashCommand, type BrowserCommandTarget } from "./browser-command"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { openBrowserPanel } from "@/context/browser-actions"
 
 type PendingPrompt = {
   abort: AbortController
   cleanup: VoidFunction
+}
+
+type SubmittableInput = {
+  text: string
+  images: ImageAttachmentPart[]
+  annotations: BrowserAnnotation[]
+  commentCount: number
 }
 
 const pending = new Map<string, PendingPrompt>()
@@ -31,9 +41,11 @@ export type FollowupDraft = {
   sessionDirectory: string
   prompt: Prompt
   context: (ContextItem & { key: string })[]
+  annotations: BrowserAnnotation[]
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  browserIntegratedToolsAvailable?: boolean
 }
 
 type FollowupSendInput = {
@@ -49,6 +61,15 @@ type FollowupSendInput = {
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
+
+export const hasSubmittableInput = (input: SubmittableInput) => {
+  return (
+    input.text.trim().length > 0 ||
+    input.images.length > 0 ||
+    input.annotations.length > 0 ||
+    input.commentCount > 0
+  )
+}
 
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
@@ -108,10 +129,13 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     prompt: input.draft.prompt,
     context: input.draft.context,
     images,
+    annotations: input.draft.annotations,
     text,
     sessionID: input.draft.sessionID,
     messageID,
     sessionDirectory: input.draft.sessionDirectory,
+    browserIntegratedToolsEnabled: input.globalSync.data.config.browser?.integratedTools?.enabled ?? true,
+    browserIntegratedToolsAvailable: input.draft.browserIntegratedToolsAvailable === true,
   })
 
   const message: Message = {
@@ -173,6 +197,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 type PromptSubmitInput = {
   info: Accessor<{ id: string } | undefined>
   imageAttachments: Accessor<ImageAttachmentPart[]>
+  annotations: Accessor<BrowserAnnotation[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
   mode: Accessor<"normal" | "shell">
@@ -190,6 +215,8 @@ type PromptSubmitInput = {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  clearAnnotations?: () => void
+  browser?: BrowserCommandTarget
 }
 
 type CommentItem = {
@@ -292,10 +319,29 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
+    const annotations = input.annotations().slice()
     const mode = input.mode()
 
-    if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
+    if (!hasSubmittableInput({ text, images, annotations, commentCount: input.commentCount() })) {
       if (input.working()) void abort()
+      return
+    }
+
+    const browserCommand = mode === "normal" ? parseBrowserSlashCommand(text) : undefined
+    if (browserCommand && !("task" in browserCommand)) {
+      if (!input.browser) return
+
+      input.addToHistory(currentPrompt, mode)
+      input.resetHistoryNavigation()
+      await openBrowserPanel({
+        api: input.browser.api,
+        browserStore: input.browser.store,
+        openPanel: input.browser.openPanel,
+        setPanelOpen: input.browser.setPanelOpen,
+      })
+      prompt.reset()
+      input.setMode("normal")
+      input.setPopover(null)
       return
     }
 
@@ -395,14 +441,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
     const agent = currentAgent.name
     const context = prompt.context.items().slice()
+    const browserIntegratedToolsEnabled = globalSync.data.config.browser?.integratedTools?.enabled ?? true
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
       prompt: currentPrompt,
       context,
+      annotations,
       agent,
       model,
       variant,
+      browserIntegratedToolsAvailable: browserIntegratedToolsEnabled && !!input.browser?.api,
     }
 
     const clearInput = () => {
@@ -427,6 +476,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
       input.onQueue?.(draft)
       clearContext()
+      input.clearAnnotations?.()
       clearInput()
       return
     }
@@ -562,7 +612,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
-    }).catch((err) => {
+    })
+      .then((sent) => {
+        if (!sent) return
+        input.clearAnnotations?.()
+      })
+      .catch((err) => {
       pending.delete(session.id)
       if (sessionDirectory === projectDirectory) {
         sync.set("session_status", session.id, { type: "idle" })
@@ -574,7 +629,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       removeOptimisticMessage()
       restoreCommentItems(commentItems)
       restoreInput()
-    })
+      })
   }
 
   return {

@@ -67,7 +67,6 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        flex-shrink: 0;
         padding: 0;
         background: transparent;
         border: none;
@@ -80,7 +79,6 @@
         }
 
         svg {
-          flex-shrink: 0;
           width: 16px;
           height: 16px;
         }

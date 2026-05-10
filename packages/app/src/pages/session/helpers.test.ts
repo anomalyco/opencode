@@ -6,6 +6,7 @@ import {
   createOpenSessionFileTab,
   createSessionTabs,
   focusTerminalById,
+  getSessionPanelWidth,
   getTabReorderIndex,
   shouldFocusTerminalOnKeyDown,
 } from "./helpers"
@@ -114,6 +115,42 @@ describe("getTabReorderIndex", () => {
 
   test("returns undefined for unknown droppable id", () => {
     expect(getTabReorderIndex(["a", "b", "c"], "a", "missing")).toBeUndefined()
+  })
+})
+
+describe("getSessionPanelWidth", () => {
+  test("uses the session panel width when review or browser content panels are open", () => {
+    expect(
+      getSessionPanelWidth({
+        browserOpen: false,
+        fileTreeOpen: false,
+        fileTreeWidth: 320,
+        reviewOpen: true,
+        sessionWidth: 720,
+      }),
+    ).toBe("720px")
+
+    expect(
+      getSessionPanelWidth({
+        browserOpen: true,
+        fileTreeOpen: false,
+        fileTreeWidth: 320,
+        reviewOpen: false,
+        sessionWidth: 720,
+      }),
+    ).toBe("720px")
+  })
+
+  test("uses file tree width only when no content panel is open", () => {
+    expect(
+      getSessionPanelWidth({
+        browserOpen: false,
+        fileTreeOpen: true,
+        fileTreeWidth: 320,
+        reviewOpen: false,
+        sessionWidth: 720,
+      }),
+    ).toBe("calc(100% - 320px)")
   })
 })
 

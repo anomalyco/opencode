@@ -28,7 +28,6 @@ import { optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
-import { ModelStatus } from "./model-status"
 
 const log = Log.create({ service: "provider" })
 
@@ -898,7 +897,7 @@ export const Model = Schema.Struct({
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
-  status: ModelStatus,
+  status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,

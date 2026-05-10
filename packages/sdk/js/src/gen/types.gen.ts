@@ -752,11 +752,11 @@ export type Project = {
 }
 
 export type BadRequestError = {
-  name: "BadRequest"
-  data: {
-    message: string
-    kind?: "Params" | "Headers" | "Query" | "Body" | "Payload"
-  }
+  data: unknown
+  errors: Array<{
+    [key: string]: unknown
+  }>
+  success: false
 }
 
 export type NotFoundError = {

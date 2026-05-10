@@ -1,5 +1,4 @@
 import { Config } from "effect"
-import { InstallationChannel } from "../installation/version"
 
 function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
@@ -9,13 +8,6 @@ function truthy(key: string) {
 function falsy(key: string) {
   const value = process.env[key]?.toLowerCase()
   return value === "false" || value === "0"
-}
-
-// Channels where new experiments default to ON (unstable / internal users).
-// Stable channels (`prod`, `latest`) stay opt-in.
-const UNSTABLE_CHANNELS = new Set(["dev", "beta", "local"])
-function unstableDefault(key: string) {
-  return truthy(key) || (!falsy(key) && UNSTABLE_CHANNELS.has(InstallationChannel))
 }
 
 function number(key: string) {
@@ -56,9 +48,6 @@ export const Flag = {
   OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),
   OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
   OPENCODE_DISABLE_EXTERNAL_SKILLS: truthy("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
-  // Default-on for dev/beta/local; opt-in for stable. Set
-  // OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL=false to force off, =true to force on.
-  OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL: unstableDefault("OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL"),
   OPENCODE_FAKE_VCS: process.env["OPENCODE_FAKE_VCS"],
   OPENCODE_SERVER_PASSWORD: process.env["OPENCODE_SERVER_PASSWORD"],
   OPENCODE_SERVER_USERNAME: process.env["OPENCODE_SERVER_USERNAME"],

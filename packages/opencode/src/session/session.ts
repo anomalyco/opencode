@@ -142,9 +142,9 @@ function sessionPath(worktree: string, cwd: string) {
 }
 
 const Summary = Schema.Struct({
-  additions: Schema.Finite,
-  deletions: Schema.Finite,
-  files: Schema.Finite,
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
+  files: NonNegativeInt,
   diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
 })
 
@@ -353,7 +353,7 @@ export function plan(input: { slug: string; time: { created: number } }, instanc
 export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
     if (!Number.isFinite(value)) return 0
-    return Math.max(0, value)
+    return value
   }
   const inputTokens = safe(input.usage.inputTokens ?? 0)
   const outputTokens = safe(input.usage.outputTokens ?? 0)

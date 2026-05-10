@@ -55,6 +55,21 @@ export type LocalProject = Partial<Project> & { worktree: string; expanded: bool
 
 export type ReviewDiffStyle = "unified" | "split"
 
+export function createLayoutPanelController(opened: Accessor<boolean>, setOpened: (next: boolean) => void) {
+  return {
+    opened,
+    open() {
+      setOpened(true)
+    },
+    close() {
+      setOpened(false)
+    },
+    toggle() {
+      setOpened(!opened())
+    },
+  }
+}
+
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
   touch(key)
   seed(key)
@@ -243,6 +258,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         review: {
           diffStyle: "split" as ReviewDiffStyle,
           panelOpened: true,
+        },
+        browserPanel: {
+          opened: false,
         },
         fileTree: {
           opened: false,
@@ -727,6 +745,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const browserPanelOpened = createMemo(() => store.browserPanel?.opened ?? false)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -752,6 +771,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("review", "panelOpened", next)
         }
 
+        function setBrowserPanelOpened(next: boolean) {
+          const current = store.browserPanel
+          if (!current) {
+            setStore("browserPanel", { opened: next })
+            return
+          }
+
+          if (current.opened === next) return
+          setStore("browserPanel", "opened", next)
+        }
+
         return {
           scroll(tab: string) {
             return scroll.scroll(key(), tab)
@@ -759,30 +789,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(key(), tab, pos)
           },
-          terminal: {
-            opened: terminalOpened,
-            open() {
-              setTerminalOpened(true)
-            },
-            close() {
-              setTerminalOpened(false)
-            },
-            toggle() {
-              setTerminalOpened(!terminalOpened())
-            },
-          },
-          reviewPanel: {
-            opened: reviewPanelOpened,
-            open() {
-              setReviewPanelOpened(true)
-            },
-            close() {
-              setReviewPanelOpened(false)
-            },
-            toggle() {
-              setReviewPanelOpened(!reviewPanelOpened())
-            },
-          },
+          terminal: createLayoutPanelController(terminalOpened, setTerminalOpened),
+          reviewPanel: createLayoutPanelController(reviewPanelOpened, setReviewPanelOpened),
+          browserPanel: createLayoutPanelController(browserPanelOpened, setBrowserPanelOpened),
           review: {
             open: createMemo(() => s().reviewOpen ?? []),
             setOpen(open: string[]) {

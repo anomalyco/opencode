@@ -5,10 +5,10 @@ import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { Protocol } from "../route/protocol"
 import {
-  LLMEvent,
   Usage,
   type CacheHint,
   type FinishReason,
+  type LLMEvent,
   type LLMRequest,
   type ProviderMetadata,
   type ToolCallPart,
@@ -415,13 +415,14 @@ const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"
       ? String((block.content as Record<string, unknown>).type)
       : ""
   const isError = errorPayload.endsWith("_tool_result_error")
-  return LLMEvent.toolResult({
+  return {
+    type: "tool-result",
     id: block.tool_use_id ?? "",
     name: SERVER_TOOL_RESULT_NAMES[block.type],
     result: isError ? { type: "error", value: block.content } : { type: "json", value: block.content },
     providerExecuted: true,
     providerMetadata: anthropicMetadata({ blockType: block.type }),
-  })
+  }
 }
 
 type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
@@ -452,17 +453,18 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
   }
 
   if (block.type === "text" && block.text) {
-    return [state, [LLMEvent.textDelta({ id: `text-${event.index ?? 0}`, text: block.text })]]
+    return [state, [{ type: "text-delta", text: block.text }]]
   }
 
   if (block.type === "thinking" && block.thinking) {
     return [
       state,
       [
-        LLMEvent.reasoningDelta({
-          id: `reasoning-${event.index ?? 0}`,
+        {
+          type: "reasoning-delta",
           text: block.thinking,
-        }),
+          ...(block.signature ? { providerMetadata: anthropicMetadata({ signature: block.signature }) } : {}),
+        },
       ],
     ]
   }
@@ -478,25 +480,17 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
   const delta = event.delta
 
   if (delta?.type === "text_delta" && delta.text) {
-    return [state, [LLMEvent.textDelta({ id: `text-${event.index ?? 0}`, text: delta.text })]] satisfies StepResult
+    return [state, [{ type: "text-delta", text: delta.text }]] satisfies StepResult
   }
 
   if (delta?.type === "thinking_delta" && delta.thinking) {
-    return [
-      state,
-      [LLMEvent.reasoningDelta({ id: `reasoning-${event.index ?? 0}`, text: delta.thinking })],
-    ] satisfies StepResult
+    return [state, [{ type: "reasoning-delta", text: delta.thinking }]] satisfies StepResult
   }
 
   if (delta?.type === "signature_delta" && delta.signature) {
     return [
       state,
-      [
-        LLMEvent.reasoningEnd({
-          id: `reasoning-${event.index ?? 0}`,
-          providerMetadata: anthropicMetadata({ signature: delta.signature }),
-        }),
-      ],
+      [{ type: "reasoning-delta", text: "", providerMetadata: anthropicMetadata({ signature: delta.signature }) }],
     ] satisfies StepResult
   }
 
@@ -530,20 +524,21 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
   return [
     { ...state, usage },
     [
-      LLMEvent.requestFinish({
+      {
+        type: "request-finish",
         reason: mapFinishReason(event.delta?.stop_reason),
         usage,
-        providerMetadata: event.delta?.stop_sequence
-          ? anthropicMetadata({ stopSequence: event.delta.stop_sequence })
-          : undefined,
-      }),
+        ...(event.delta?.stop_sequence
+          ? { providerMetadata: anthropicMetadata({ stopSequence: event.delta.stop_sequence }) }
+          : {}),
+      },
     ],
   ]
 }
 
 const onError = (state: ParserState, event: AnthropicEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: event.error?.message ?? "Anthropic Messages stream error" })],
+  [{ type: "provider-error", message: event.error?.message ?? "Anthropic Messages stream error" }],
 ]
 
 const step = (state: ParserState, event: AnthropicEvent) => {

@@ -22,9 +22,8 @@ function run<A>(fn: (svc: Project.Interface) => Effect.Effect<A>) {
   )
 }
 
-function legacySessionID() {
-  // Global-session migration covers persisted IDs from before prefixed session IDs.
-  return crypto.randomUUID() as SessionID
+function uid() {
+  return SessionID.make(crypto.randomUUID())
 }
 
 function seed(opts: { id: SessionID; dir: string; project: ProjectID }) {
@@ -74,7 +73,7 @@ describe("migrateFromGlobal", () => {
     expect(pre.id).toBe(ProjectID.global)
 
     // 2. Seed a session under "global" with matching directory
-    const id = legacySessionID()
+    const id = uid()
     seed({ id, dir: tmp.path, project: ProjectID.global })
 
     // 3. Make a commit so the project gets a real ID
@@ -101,7 +100,7 @@ describe("migrateFromGlobal", () => {
     // 3. Seed a session under "global" with matching directory.
     //    This simulates a session created before git init that wasn't
     //    present when the real project row was first created.
-    const id = legacySessionID()
+    const id = uid()
     seed({ id, dir: tmp.path, project: ProjectID.global })
 
     // 4. Call fromDirectory again — project row already exists,
@@ -122,7 +121,7 @@ describe("migrateFromGlobal", () => {
 
     // Legacy sessions may lack a directory value.
     // Without a matching origin directory, they should remain global.
-    const id = legacySessionID()
+    const id = uid()
     seed({ id, dir: "", project: ProjectID.global })
 
     await run((svc) => svc.fromDirectory(tmp.path))
@@ -140,7 +139,7 @@ describe("migrateFromGlobal", () => {
     ensureGlobal()
 
     // Seed a session under "global" but for a DIFFERENT directory
-    const id = legacySessionID()
+    const id = uid()
     seed({ id, dir: "/some/other/dir", project: ProjectID.global })
 
     await run((svc) => svc.fromDirectory(tmp.path))
