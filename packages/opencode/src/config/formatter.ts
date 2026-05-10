@@ -1,8 +1,8 @@
 export * as ConfigFormatter from "./formatter"
 
 import { Schema } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 export const Entry = Schema.Struct({
   disabled: Schema.optional(Schema.Boolean),

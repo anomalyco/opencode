@@ -19,7 +19,7 @@ afterEach(async () => {
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "scout",
   abort: AbortSignal.any([]),

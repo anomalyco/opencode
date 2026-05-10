@@ -30,7 +30,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
         connected,
       )
       return {
-        all: Object.values(providers),
+        all: Object.values(providers).map(Provider.toPublicInfo),
         default: Provider.defaultModelIDs(providers),
         connected: Object.keys(connected),
       }
