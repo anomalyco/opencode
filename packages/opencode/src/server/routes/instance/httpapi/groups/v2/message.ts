@@ -3,46 +3,31 @@ import { SessionMessage } from "@/v2/session-message"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../../middleware/authorization"
+import { WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
+
+export const MessagesQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  limit: Schema.optional(
+    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
+  ).annotate({
+    description: "Maximum number of messages to return. When omitted, the endpoint returns its default page size.",
+  }),
+  order: Schema.optional(Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")])).annotate({
+    description: "Message order for the first page. Use desc for newest first or asc for oldest first.",
+  }),
+  cursor: Schema.optional(
+    Schema.String.annotate({
+      description:
+        "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.",
+    }),
+  ),
+}).annotate({ identifier: "V2SessionMessagesQuery" })
 
 export const MessageGroup = HttpApiGroup.make("v2.message")
   .add(
     HttpApiEndpoint.get("messages", "/api/session/:sessionID/message", {
       params: { sessionID: SessionID },
-      query: Schema.Union([
-        Schema.Struct({
-          limit: Schema.optional(
-            Schema.NumberFromString.check(
-              Schema.isInt(),
-              Schema.isGreaterThanOrEqualTo(1),
-              Schema.isLessThanOrEqualTo(200),
-            ),
-          ).annotate({
-            description:
-              "Maximum number of messages to return. When omitted, the endpoint returns its default page size.",
-          }),
-          order: Schema.optional(Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")])).annotate({
-            description: "Message order for the first page. Use desc for newest first or asc for oldest first.",
-          }),
-          cursor: Schema.optional(Schema.Never),
-        }),
-        Schema.Struct({
-          limit: Schema.optional(
-            Schema.NumberFromString.check(
-              Schema.isInt(),
-              Schema.isGreaterThanOrEqualTo(1),
-              Schema.isLessThanOrEqualTo(200),
-            ),
-          ).annotate({
-            description:
-              "Maximum number of messages to return. When omitted, the endpoint returns its default page size.",
-          }),
-          cursor: Schema.String.annotate({
-            description:
-              "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.",
-          }),
-          order: Schema.optional(Schema.Never),
-        }),
-      ]).annotate({ identifier: "V2SessionMessagesQuery" }),
+      query: MessagesQuery,
       success: Schema.Struct({
         items: Schema.Array(SessionMessage.Message),
         cursor: Schema.Struct({

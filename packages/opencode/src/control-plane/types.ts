@@ -1,8 +1,7 @@
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { ProjectID } from "@/project/schema"
 import { WorkspaceID } from "./schema"
-import { zod } from "@/util/effect-zod"
-import { type DeepMutable, withStatics } from "@/util/schema"
+import type { DeepMutable } from "@opencode-ai/core/schema"
 
 export const WorkspaceInfo = Schema.Struct({
   id: WorkspaceID,
@@ -12,16 +11,19 @@ export const WorkspaceInfo = Schema.Struct({
   directory: Schema.NullOr(Schema.String),
   extra: Schema.NullOr(Schema.Unknown),
   projectID: ProjectID,
-})
-  .annotate({ identifier: "Workspace" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Workspace" })
 export type WorkspaceInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceInfo>>
+
+export const WorkspaceListedInfo = Schema.Struct(Struct.omit(WorkspaceInfo.fields, ["id"])).annotate({
+  identifier: "WorkspaceListedInfo",
+})
+export type WorkspaceListedInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceListedInfo>>
 
 export const WorkspaceAdapterEntry = Schema.Struct({
   type: Schema.String,
   name: Schema.String,
   description: Schema.String,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type WorkspaceAdapterEntry = Schema.Schema.Type<typeof WorkspaceAdapterEntry>
 
 export type Target =
@@ -40,6 +42,7 @@ export type WorkspaceAdapter = {
   description: string
   configure(info: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
   create(info: WorkspaceInfo, env: Record<string, string | undefined>, from?: WorkspaceInfo): Promise<void>
+  list?(): WorkspaceListedInfo[] | Promise<WorkspaceListedInfo[]>
   remove(info: WorkspaceInfo): Promise<void>
   target(info: WorkspaceInfo): Target | Promise<Target>
 }
