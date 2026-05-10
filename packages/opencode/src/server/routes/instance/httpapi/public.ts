@@ -478,7 +478,7 @@ function flattenOptions(options: OpenApiSchema[] | undefined): OpenApiSchema[] |
 function normalizeParameter(param: OpenApiParameter, route: string) {
   if (!param.schema || typeof param.schema !== "object") return
   if (param.in === "path") {
-    param.schema = pathParameterSchema(route, param.name) ?? stripOptionalNull(param.schema)
+    param.schema = stripOptionalNull(param.schema)
     return
   }
   if (param.in === "query") {
@@ -495,12 +495,6 @@ function normalizeParameter(param: OpenApiParameter, route: string) {
     }
   }
   param.schema = stripOptionalNull(param.schema)
-}
-
-function pathParameterSchema(route: string, name: string) {
-  if (name === "id" && route.startsWith("DELETE /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
-  if (name === "id" && route.startsWith("POST /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
-  return undefined
 }
 
 export const PublicApi = OpenCodeHttpApi.annotateMerge(
