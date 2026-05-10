@@ -9,7 +9,7 @@
 ;   AppId 三档独立 GUID → 控制面板"应用与功能"识别成 3 个独立 app,可同机共存
 
 #ifndef AppVersion
-  #define AppVersion "2026.5.9.1"
+  #define AppVersion "2026.5.10.1"
 #endif
 
 #ifndef AppEnv
@@ -71,6 +71,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#ReleaseDir}\{#AppExeName}";       DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}\opencode-cli.exe";    DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseDir}\opencode_lib.dll";    DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+; 飞书桥接 plugin bundle(2026-05-10 加,feishu-bridge-ship-packaging Win Inno Setup follow-up)
+;   Mac 端经 tauri.conf.json bundle.resources 走 NSIS 打入 .app/.exe;Win 端走 Inno Setup
+;   独立配置,需在 [Files] 显式列。runtime 由 feishu_plugin_install.rs 注入 user opencode 配置。
+Source: "{#ReleaseDir}\plugin\feishu-bridge\package.json";    DestDir: "{app}\plugin\feishu-bridge";      Flags: ignoreversion
+Source: "{#ReleaseDir}\plugin\feishu-bridge\dist\plugin.js";  DestDir: "{app}\plugin\feishu-bridge\dist"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}";        Filename: "{app}\{#AppExeName}"

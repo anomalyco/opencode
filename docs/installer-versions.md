@@ -14,6 +14,12 @@
 
 
 
+## [Windows] 2026.5.10.1 - 2026-05-10 11:54
+
+(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
+
+---
+
 ## [Windows] 2026.5.9.1 - 2026-05-09 10:19
 
 **主题**:MD → Word 导出第二轮迭代 — 全面保真度提升([feat: md-export-word-iter-2](features/md-export-word-iter-2/3-changelog.md),merge `ae96d138b`)
