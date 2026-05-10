@@ -154,6 +154,16 @@ describe("MultiBrowserManager", () => {
     expect(manager.getBrowser(id)).toBeUndefined()
   })
 
+  test("cleans up browser when webContents is already absent during destroyed cleanup", () => {
+    const win = createWindow()
+    const id = manager.createBrowser(win as never)
+
+    Object.defineProperty(viewInstances[0]!, "webContents", { value: undefined })
+
+    expect(() => viewInstances[0]!.emit("destroyed")).not.toThrow()
+    expect(manager.getBrowser(id)).toBeUndefined()
+  })
+
   test("keeps browser tracked when webContents close is prevented", () => {
     const firstId = manager.createBrowser()
     const id = manager.createBrowser()

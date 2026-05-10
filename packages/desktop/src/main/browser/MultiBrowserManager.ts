@@ -78,7 +78,8 @@ function syncBrowserState(id: BrowserId) {
 function detachBrowserView(id: BrowserId) {
   const win = browserWindows.get(id)
   const instance = browsers.get(id)
-  if (instance?.view.webContents.isDestroyed()) return
+  const webContents = instance?.view.webContents
+  if (!webContents || webContents.isDestroyed()) return
   if (!win || !instance || !win.contentView.children.includes(instance.view)) return
   win.contentView.removeChildView(instance.view)
 }
@@ -177,12 +178,13 @@ export function closeBrowser(id: BrowserId) {
   instance.state.visible = false
   instance.view.setVisible(false)
 
-  if (instance.view.webContents.isDestroyed()) {
+  const webContents = instance.view.webContents
+  if (!webContents || webContents.isDestroyed()) {
     cleanupBrowser(id)
     return true
   }
 
-  instance.view.webContents.close()
+  webContents.close()
   return true
 }
 
