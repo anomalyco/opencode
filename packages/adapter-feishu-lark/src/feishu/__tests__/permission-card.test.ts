@@ -168,9 +168,9 @@ describe("parseCardAction", () => {
 // ============================================================
 
 interface FakeReplyCall {
-  path: { requestID: string }
+  path: { id: string; permissionID: string }
   query: { directory: string }
-  body: { reply: string }
+  body: { response: string }
 }
 
 function makeFakes() {
@@ -178,11 +178,9 @@ function makeFakes() {
   const sentCards: Array<{ chatId: string; content: string }> = []
 
   const opencodeClient = {
-    permission: {
-      reply: async (args: any) => {
-        replyCalls.push(args)
-        return { data: true }
-      },
+    postSessionIdPermissionsPermissionId: async (args: any) => {
+      replyCalls.push(args)
+      return { data: true }
     },
   } as any
 
@@ -232,14 +230,14 @@ describe("PermissionCardController", () => {
     expect(controller.size).toBe(1)
   })
 
-  test("handleReply once → 调 opencode permission.reply", async () => {
+  test("handleReply once → 调 opencode postSessionIdPermissionsPermissionId", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "once" })
     expect(fakes.replyCalls.length).toBe(1)
     expect(fakes.replyCalls[0]).toEqual({
-      path: { requestID: baseRequest.id },
+      path: { id: baseRequest.sessionID, permissionID: baseRequest.id },
       query: { directory: "/test/workspace" },
-      body: { reply: "once" },
+      body: { response: "once" },
     })
     expect(controller.size).toBe(0) // cleaned up after reply
   })
@@ -247,13 +245,13 @@ describe("PermissionCardController", () => {
   test("handleReply always → 同款 reply", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "always" })
-    expect(fakes.replyCalls[0]?.body.reply).toBe("always")
+    expect(fakes.replyCalls[0]?.body.response).toBe("always")
   })
 
   test("handleReply reject → 同款 reply", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "reject" })
-    expect(fakes.replyCalls[0]?.body.reply).toBe("reject")
+    expect(fakes.replyCalls[0]?.body.response).toBe("reject")
   })
 
   test("handleReply 未知 requestID(已 expired / 重复点击)→ noop", async () => {
@@ -267,7 +265,7 @@ describe("PermissionCardController", () => {
     await new Promise((r) => setTimeout(r, 150)) // > timeoutMs
     expect(controller.size).toBe(0)
     expect(fakes.replyCalls.length).toBe(1)
-    expect(fakes.replyCalls[0]?.body.reply).toBe("reject")
+    expect(fakes.replyCalls[0]?.body.response).toBe("reject")
   })
 
   test("user 点击早于 timeout → 取消 timer,后续 timer 不再 fire", async () => {
@@ -293,7 +291,7 @@ describe("PermissionCardController", () => {
     }
     await controller.start(baseRequest, "oc_TEST")
     expect(fakes.replyCalls.length).toBe(1)
-    expect(fakes.replyCalls[0]?.body.reply).toBe("reject")
+    expect(fakes.replyCalls[0]?.body.response).toBe("reject")
     expect(controller.size).toBe(0)
   })
 

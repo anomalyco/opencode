@@ -323,28 +323,39 @@ export class PermissionCardController {
   }
 
   /**
-   * 调 opencode SDK permission.reply。失败仅 log,不重试 — opencode 内部会因
-   * pending.delete 后等不到 reply 卡死,user 飞书侧再触发新消息会创建新 session 解锁。
+   * 调 opencode SDK 回放权限响应。
+   *
+   * v1 SDK(我们 adapter 用的 `@opencode-ai/sdk`)接口:
+   *   client.postSessionIdPermissionsPermissionId({
+   *     path: { id: <sessionID>, permissionID: <requestID> },
+   *     query: { directory },
+   *     body: { response: "once" | "always" | "reject" }   ← 字段名 response 不是 reply
+   *   })
+   * 走 POST /session/{id}/permissions/{permissionID}
+   *
+   * 失败仅 log,不重试 — opencode 内部会因 pending 等不到 reply 卡死,user 飞书侧再触发
+   * 新消息会创建新 session 解锁。
    */
   private async replyToOpencode(
     requestID: string,
-    _sessionID: string,
+    sessionID: string,
     reply: PermissionReply,
   ): Promise<void> {
     try {
-      const permClient = (this.opts.opencodeClient as unknown as { permission?: { reply?: Function } })
-        .permission
-      if (!permClient || typeof permClient.reply !== "function") {
-        console.error(`[permission-card] SDK client.permission.reply not available`)
+      const client = this.opts.opencodeClient as unknown as {
+        postSessionIdPermissionsPermissionId?: (args: unknown) => Promise<unknown>
+      }
+      if (typeof client.postSessionIdPermissionsPermissionId !== "function") {
+        console.error(`[permission-card] SDK postSessionIdPermissionsPermissionId not available`)
         return
       }
-      await permClient.reply({
-        path: { requestID },
+      await client.postSessionIdPermissionsPermissionId({
+        path: { id: sessionID, permissionID: requestID },
         query: { directory: this.opts.workspaceDir },
-        body: { reply },
+        body: { response: reply },
       })
     } catch (err) {
-      console.error(`[permission-card] permission.reply API failed for ${requestID}:`, err)
+      console.error(`[permission-card] permission reply API failed for ${requestID}:`, err)
     }
   }
 
