@@ -82,6 +82,10 @@ function normalizedTarget(target?: string) {
   return process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
 }
 
+function containsReferencePath(referencePath: string, target: string) {
+  return AppFileSystem.contains(normalizedTarget(referencePath) ?? referencePath, target)
+}
+
 export function resolve(input: { name: string; reference: ReferenceEntry; directory: string; worktree: string }): Resolved {
   if (typeof input.reference === "string") {
     if (input.reference.startsWith(".") || input.reference.startsWith("/") || input.reference.startsWith("~")) {
@@ -189,7 +193,7 @@ export const layer = Layer.effect(
         if (!full) return yield* InstanceState.useEffect(state, (s) => s.materializeAll)
         return yield* InstanceState.useEffect(
           state,
-          (s) => s.materializeByPath.find((item) => AppFileSystem.contains(item.path, full))?.run ?? Effect.void,
+          (s) => s.materializeByPath.find((item) => containsReferencePath(item.path, full))?.run ?? Effect.void,
         )
       }),
       contains: Effect.fn("Reference.contains")(function* (target?: string) {
@@ -197,7 +201,7 @@ export const layer = Layer.effect(
         const full = normalizedTarget(target)
         if (!full) return false
         return yield* InstanceState.use(state, (s) =>
-          s.references.some((reference) => reference.kind === "git" && AppFileSystem.contains(reference.path, full)),
+          s.references.some((reference) => reference.kind === "git" && containsReferencePath(reference.path, full)),
         )
       }),
     })
