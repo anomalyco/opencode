@@ -1,4 +1,5 @@
-import { test, expect, mock, beforeEach } from "bun:test"
+import { test, expect, mock, beforeEach, spyOn } from "bun:test"
+import fs from "fs/promises"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Effect } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
@@ -324,6 +325,95 @@ test(
 )
 
 test(
+  "disconnect terminates the local stdio root process",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "disconnect-root-server"
+      const serverState = getOrCreateClientState("disconnect-root-server")
+      const killed: Array<{ pid: number; signal: NodeJS.Signals | number | undefined }> = []
+      const kill = spyOn(process, "kill").mockImplementation((pid: number, signal?: NodeJS.Signals | number) => {
+        killed.push({ pid, signal })
+        return true
+      })
+
+      try {
+        yield* mcp.add("disconnect-root-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        yield* mcp.disconnect("disconnect-root-server")
+
+        expect(killed).toContainEqual({ pid: 12345, signal: "SIGTERM" })
+        expect(serverState.closed).toBe(true)
+      } finally {
+        kill.mockRestore()
+      }
+    }),
+  ),
+)
+
+test("disconnect terminates local stdio descendant processes discovered by pgrep", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/opencode.json`,
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {},
+        }),
+      )
+      await Bun.write(
+        `${dir}/pgrep`,
+        `#!/bin/sh
+if [ "$2" = "12345" ]; then
+  printf '54321\n'
+fi
+`,
+      )
+      await fs.chmod(`${dir}/pgrep`, 0o755)
+    },
+  })
+
+  const originalPath = process.env.PATH ?? ""
+  process.env.PATH = `${tmp.path}:${originalPath}`
+  const killed: Array<{ pid: number; signal: NodeJS.Signals | number | undefined }> = []
+  const kill = spyOn(process, "kill").mockImplementation((pid: number, signal?: NodeJS.Signals | number) => {
+    killed.push({ pid, signal })
+    return true
+  })
+
+  try {
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        lastCreatedClientName = "disconnect-descendant-server"
+        await Effect.runPromise(
+          MCP.Service.use((mcp) =>
+            Effect.gen(function* () {
+              yield* mcp.add("disconnect-descendant-server", {
+                type: "local",
+                command: ["echo", "test"],
+              })
+
+              yield* mcp.disconnect("disconnect-descendant-server")
+
+              expect(killed).toContainEqual({ pid: 54321, signal: "SIGTERM" })
+              expect(killed).toContainEqual({ pid: 12345, signal: "SIGTERM" })
+            }),
+          ).pipe(Effect.provide(MCP.defaultLayer)),
+        )
+
+        await InstanceRuntime.disposeInstance(Instance.current)
+      },
+    })
+  } finally {
+    process.env.PATH = originalPath
+    kill.mockRestore()
+  }
+})
+
+test(
   "connect() after disconnect() re-establishes the server",
   withInstance(
     {
@@ -394,6 +484,40 @@ test(
   ),
 )
 
+test(
+  "add() replacing a server terminates the old local stdio root process",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "replace-root-server"
+      getOrCreateClientState("replace-root-server")
+      const killed: Array<{ pid: number; signal: NodeJS.Signals | number | undefined }> = []
+      const kill = spyOn(process, "kill").mockImplementation((pid: number, signal?: NodeJS.Signals | number) => {
+        killed.push({ pid, signal })
+        return true
+      })
+
+      try {
+        yield* mcp.add("replace-root-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        clientStates.delete("replace-root-server")
+        getOrCreateClientState("replace-root-server")
+
+        yield* mcp.add("replace-root-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(killed).toContainEqual({ pid: 12345, signal: "SIGTERM" })
+      } finally {
+        kill.mockRestore()
+      }
+    }),
+  ),
+)
+
 // ========================================================================
 // Test: state init with mixed success/failure
 // ========================================================================
@@ -445,6 +569,85 @@ test(
       }),
   ),
 )
+
+test(
+  "create rollback after defs failure terminates the local stdio root process",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "rollback-root-server"
+      const serverState = getOrCreateClientState("rollback-root-server")
+      serverState.listToolsShouldFail = true
+      const killed: Array<{ pid: number; signal: NodeJS.Signals | number | undefined }> = []
+      const kill = spyOn(process, "kill").mockImplementation((pid: number, signal?: NodeJS.Signals | number) => {
+        killed.push({ pid, signal })
+        return true
+      })
+
+      try {
+        const addResult = yield* mcp.add("rollback-root-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const serverStatus = (addResult.status as any)["rollback-root-server"] ?? addResult.status
+        expect(serverStatus.status).toBe("failed")
+        expect(killed).toContainEqual({ pid: 12345, signal: "SIGTERM" })
+        expect(serverState.closed).toBe(true)
+      } finally {
+        kill.mockRestore()
+      }
+    }),
+  ),
+)
+
+test("instance finalizer terminates the local stdio root process", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/opencode.json`,
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {},
+        }),
+      )
+    },
+  })
+
+  const killed: Array<{ pid: number; signal: NodeJS.Signals | number | undefined }> = []
+  const kill = spyOn(process, "kill").mockImplementation((pid: number, signal?: NodeJS.Signals | number) => {
+    killed.push({ pid, signal })
+    return true
+  })
+
+  try {
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        lastCreatedClientName = "finalizer-root-server"
+        const serverState = getOrCreateClientState("finalizer-root-server")
+
+        await Effect.runPromise(
+          MCP.Service.use((mcp) =>
+            Effect.gen(function* () {
+              yield* mcp.add("finalizer-root-server", {
+                type: "local",
+                command: ["echo", "test"],
+              })
+              expect(serverState.closed).toBe(false)
+            }),
+          ).pipe(Effect.provide(MCP.defaultLayer)),
+        )
+
+        await InstanceRuntime.disposeInstance(Instance.current)
+
+        expect(killed).toContainEqual({ pid: 12345, signal: "SIGTERM" })
+        expect(serverState.closed).toBe(true)
+      },
+    })
+  } finally {
+    kill.mockRestore()
+  }
+})
 
 test(
   "falls back when MCP output schema refs fail SDK tool discovery",

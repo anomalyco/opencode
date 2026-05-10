@@ -474,7 +474,7 @@ export const layer = Layer.effect(
 
       const listed = yield* defs(key, mcpClient, mcp.timeout)
       if (!listed) {
-        yield* Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore)
+        yield* stopClient(mcpClient)
         return { status: { status: "failed", error: "Failed to get tools" } } satisfies CreateResult
       }
 
@@ -506,6 +506,20 @@ export const layer = Layer.effect(
       Effect.scoped,
       Effect.catch(() => Effect.succeed([] as number[])),
     )
+
+    const stopClient = Effect.fnUntraced(function* (client: MCPClient) {
+      const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : undefined
+
+      if (typeof pid === "number") {
+        for (const target of [...(yield* descendants(pid)), pid]) {
+          try {
+            process.kill(target, "SIGTERM")
+          } catch {}
+        }
+      }
+
+      yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+    })
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
@@ -563,19 +577,7 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             yield* Effect.forEach(
               Object.values(s.clients),
-              (client) =>
-                Effect.gen(function* () {
-                  const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
-                  if (typeof pid === "number") {
-                    const pids = yield* descendants(pid)
-                    for (const dpid of pids) {
-                      try {
-                        process.kill(dpid, "SIGTERM")
-                      } catch {}
-                    }
-                  }
-                  yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
-                }),
+              (client) => stopClient(client),
               { concurrency: "unbounded" },
             )
             pendingOAuthTransports.clear()
@@ -590,7 +592,7 @@ export const layer = Layer.effect(
       const client = s.clients[name]
       delete s.defs[name]
       if (!client) return Effect.void
-      return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      return stopClient(client)
     }
 
     const storeClient = Effect.fnUntraced(function* (
