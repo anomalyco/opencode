@@ -13,7 +13,7 @@ import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
-import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { MessageID, PartID } from "../../src/session/schema"
 import * as Database from "@/storage/db"
 import { PartTable } from "@/session/session.sql"
 import { resetDatabase } from "../fixture/db"
@@ -25,68 +25,55 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-function app() {
-  return Server.Default().app
-}
-
-function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
-  return Effect.runPromise(fx.pipe(Effect.provide(Session.defaultLayer)))
-}
-
-function pathFor(path: string, params: Record<string, string>) {
-  return Object.entries(params).reduce((result, [key, value]) => result.replace(`:${key}`, value), path)
-}
-
 function seedNegativeTokenSession(directory: string) {
-  return Effect.promise(
-    async () =>
-      await WithInstance.provide({
-        directory,
-        fn: () =>
-          runSession(
-            Effect.gen(function* () {
-              const session = yield* Session.Service
-              const info = yield* session.create({})
-              const message = yield* session.updateMessage({
-                id: MessageID.ascending(),
-                role: "user",
-                sessionID: info.id,
-                agent: "build",
-                model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
-                time: { created: Date.now() },
-              })
-              const partID = PartID.ascending()
-              yield* session.updatePart({
-                id: partID,
-                sessionID: info.id,
-                messageID: message.id,
-                type: "step-finish" as const,
-                reason: "stop",
-                cost: 0,
-                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              })
+  return Effect.promise(async () =>
+    WithInstance.provide({
+      directory,
+      fn: () =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const info = yield* session.create({})
+            const message = yield* session.updateMessage({
+              id: MessageID.ascending(),
+              role: "user",
+              sessionID: info.id,
+              agent: "build",
+              model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+              time: { created: Date.now() },
+            })
+            const partID = PartID.ascending()
+            yield* session.updatePart({
+              id: partID,
+              sessionID: info.id,
+              messageID: message.id,
+              type: "step-finish",
+              reason: "stop",
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            })
 
-              // Bypass the schema with a direct SQL update to install the
-              // negative `output` value we want to test loading.
-              Database.use((db) =>
-                db
-                  .update(PartTable)
-                  .set({
-                    data: {
-                      type: "step-finish",
-                      reason: "stop",
-                      cost: 0,
-                      tokens: { input: 0, output: -42, reasoning: 0, cache: { read: 0, write: 0 } },
-                    } as never,
-                  })
-                  .where(eq(PartTable.id, partID))
-                  .run(),
-              )
+            // Bypass the schema with a direct SQL update to install the
+            // negative `output` value we want to test loading.
+            Database.use((db) =>
+              db
+                .update(PartTable)
+                .set({
+                  data: {
+                    type: "step-finish",
+                    reason: "stop",
+                    cost: 0,
+                    tokens: { input: 0, output: -42, reasoning: 0, cache: { read: 0, write: 0 } },
+                  } as never,
+                })
+                .where(eq(PartTable.id, partID))
+                .run(),
+            )
 
-              return info.id as SessionID
-            }),
-          ),
-      }),
+            return info.id
+          }).pipe(Effect.provide(Session.defaultLayer)),
+        ),
+    }),
   )
 }
 
@@ -100,9 +87,9 @@ describe("messages endpoint tolerates legacy negative token counts", () => {
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const sessionID = yield* seedNegativeTokenSession(tmp.path)
-          const url = `${pathFor(SessionPaths.messages, { sessionID })}?limit=80&directory=${encodeURIComponent(tmp.path)}`
-          const res = yield* Effect.promise(async () => await app().request(url))
-          expect(res.status, `messages endpoint 400'd on legacy negative tokens`).not.toBe(400)
+          const url = `${SessionPaths.messages.replace(":sessionID", sessionID)}?limit=80&directory=${encodeURIComponent(tmp.path)}`
+          const res = yield* Effect.promise(async () => Server.Default().app.request(url))
+          expect(res.status, "messages endpoint 400'd on legacy negative tokens").not.toBe(400)
         }),
       ),
     ),
