@@ -1800,9 +1800,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            const system: string[] | { stable: string[]; dynamic: string[] } = Flag.OPENCODE_EXPERIMENTAL_SYSTEM_PROMPT_SPLIT
+              ? {
+                  stable: [...instructions.global],
+                  dynamic: [...env, ...instructions.project, ...(skills ? [skills] : [])],
+                }
+              : [...env, ...instructions.global, ...instructions.project, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            if (format.type === "json_schema") {
+              if (Array.isArray(system)) system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+              else system.dynamic.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            }
             const result = yield* handle.process({
               user: lastUser,
               agent,

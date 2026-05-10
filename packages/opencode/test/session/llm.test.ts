@@ -1289,4 +1289,219 @@ describe("session.llm.stream", () => {
       },
     })
   })
+
+  test("sends split system as two messages for Anthropic-compatible models", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("anthropic", "claude-opus-4-6")
+    const model = source.model
+    const chunks = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg-split",
+          model: model.id,
+          usage: { input_tokens: 3, cache_creation_input_tokens: null, cache_read_input_tokens: null },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Hello" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+        usage: { input_tokens: 3, output_tokens: 2, cache_creation_input_tokens: null, cache_read_input_tokens: null },
+      },
+      { type: "message_stop" },
+    ]
+    const request = waitRequest("/messages", createEventResponse(chunks))
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["anthropic"],
+            provider: {
+              anthropic: {
+                name: "Anthropic",
+                env: ["ANTHROPIC_API_KEY"],
+                npm: "@ai-sdk/anthropic",
+                api: "https://api.anthropic.com/v1",
+                models: { [model.id]: model },
+                options: {
+                  apiKey: "test-anthropic-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-split-system")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-split"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: { stable: ["Global instructions"], dynamic: ["Project instructions"] },
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = await request
+        const body = capture.body
+        const system = body.system as Array<{ text: string }> | undefined
+
+        expect(capture.url.pathname.endsWith("/messages")).toBe(true)
+        expect(Array.isArray(system)).toBe(true)
+        expect(system?.length).toBe(2)
+        expect(system?.[0]?.text).toContain("Global instructions")
+        expect(system?.[1]?.text).toContain("Project instructions")
+      },
+    })
+  })
+
+  test("sends flat system as single message for Anthropic-compatible models", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("anthropic", "claude-opus-4-6")
+    const model = source.model
+    const chunks = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg-flat",
+          model: model.id,
+          usage: { input_tokens: 3, cache_creation_input_tokens: null, cache_read_input_tokens: null },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Hello" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+        usage: { input_tokens: 3, output_tokens: 2, cache_creation_input_tokens: null, cache_read_input_tokens: null },
+      },
+      { type: "message_stop" },
+    ]
+    const request = waitRequest("/messages", createEventResponse(chunks))
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["anthropic"],
+            provider: {
+              anthropic: {
+                name: "Anthropic",
+                env: ["ANTHROPIC_API_KEY"],
+                npm: "@ai-sdk/anthropic",
+                api: "https://api.anthropic.com/v1",
+                models: { [model.id]: model },
+                options: {
+                  apiKey: "test-anthropic-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-flat-system")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-flat"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["Combined instructions"],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = await request
+        const body = capture.body
+        const system = body.system as Array<{ text: string }> | string | undefined
+
+        expect(capture.url.pathname.endsWith("/messages")).toBe(true)
+        // Flat system should produce a single system message (string or single-element array)
+        if (Array.isArray(system)) {
+          expect(system.length).toBe(1)
+          expect(system[0]?.text).toContain("Combined instructions")
+        } else {
+          expect(system).toContain("Combined instructions")
+        }
+      },
+    })
+  })
 })
