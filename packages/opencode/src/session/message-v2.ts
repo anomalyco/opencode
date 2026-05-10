@@ -143,8 +143,8 @@ export type ReasoningPart = Types.DeepMutable<Schema.Schema.Type<typeof Reasonin
 const filePartSourceBase = {
   text: Schema.Struct({
     value: Schema.String,
-    start: NonNegativeInt,
-    end: NonNegativeInt,
+    start: Schema.Finite,
+    end: Schema.Finite,
   }).annotate({ identifier: "FilePartSourceText" }),
 }
 

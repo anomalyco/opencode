@@ -305,7 +305,7 @@ export namespace Tool {
 
 export const RetryError = Schema.Struct({
   message: Schema.String,
-  statusCode: NonNegativeInt.pipe(Schema.optional),
+  statusCode: Schema.Finite.pipe(Schema.optional),
   isRetryable: Schema.Boolean,
   responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   responseBody: Schema.String.pipe(Schema.optional),
@@ -320,7 +320,7 @@ export const Retried = EventV2.define({
   aggregate: "sessionID",
   schema: {
     ...Base,
-    attempt: NonNegativeInt,
+    attempt: Schema.Finite,
     error: RetryError,
   },
 })
