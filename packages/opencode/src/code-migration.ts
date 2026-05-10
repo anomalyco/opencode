@@ -1,12 +1,12 @@
 import { Context, Effect, Layer } from "effect"
-import { Database, type TxOrDb } from "./storage/db"
+import { Database } from "./storage/db"
 import { CodeMigrationTable } from "./code-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 
 export type Migration = {
   name: string
-  run: (db: TxOrDb) => Effect.Effect<void, unknown>
+  run: Effect.Effect<void, unknown>
 }
 
 const log = Log.create({ service: "code-migration" })
@@ -34,7 +34,7 @@ export const layer = Layer.effect(
             if (completed) return
 
             log.info("running code migration", { name: migration.name })
-            Effect.runSync(migration.run(db))
+            Effect.runSync(migration.run)
             db.insert(CodeMigrationTable)
               .values({ name: migration.name, time_completed: Date.now() })
               .onConflictDoNothing()
