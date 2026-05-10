@@ -1,6 +1,5 @@
 import { AppRuntime } from "@/effect/app-runtime"
 import * as InstanceState from "@/effect/instance-state"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { Project } from "@/project/project"
 import { ProjectID } from "@/project/schema"
 import { Effect } from "effect"
@@ -29,7 +28,6 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
         directory: ctx.directory,
         worktree: ctx.directory,
         project: next,
-        init: () => AppRuntime.runPromise(InstanceBootstrap),
       })
       return next
     })

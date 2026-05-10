@@ -12,9 +12,9 @@ import { Process } from "@/util/process"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { NonNegativeInt, withStatics } from "@/util/schema"
-import { zod, ZodOverride } from "@/util/effect-zod"
+import { containsPath } from "@/project/instance-context"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
+import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
 
 const log = Log.create({ service: "lsp" })
 
@@ -221,12 +221,7 @@ export const layer = Layer.effect(
 
     const getClients = Effect.fnUntraced(function* (file: string) {
       const ctx = yield* InstanceState.context
-      if (
-        !AppFileSystem.contains(ctx.directory, file) &&
-        (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, file))
-      ) {
-        return [] as LSPClient.Info[]
-      }
+      if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file

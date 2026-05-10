@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import * as Tool from "./tool"
-import * as McpExa from "./mcp-exa"
+import * as McpWebSearch from "./mcp-websearch"
 import DESCRIPTION from "./codesearch.txt"
 
 export const Parameters = Schema.Struct({
@@ -9,7 +9,7 @@ export const Parameters = Schema.Struct({
     description:
       "Search query to find relevant context for APIs, Libraries, and SDKs. For example, 'React useState hook examples', 'Python pandas dataframe filtering', 'Express.js middleware', 'Next js partial prerendering configuration'",
   }),
-  tokensNum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1000))
+  tokensNum: Schema.Number.check(Schema.isGreaterThanOrEqualTo(1000))
     .check(Schema.isLessThanOrEqualTo(50000))
     .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(5000)))
     .annotate({
@@ -38,10 +38,11 @@ export const CodeSearchTool = Tool.define(
             },
           })
 
-          const result = yield* McpExa.call(
+          const result = yield* McpWebSearch.call(
             http,
+            McpWebSearch.EXA_URL,
             "get_code_context_exa",
-            McpExa.CodeArgs,
+            McpWebSearch.CodeArgs,
             {
               query: params.query,
               tokensNum: params.tokensNum,

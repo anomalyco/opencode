@@ -4,6 +4,7 @@ import { Session as SessionNs } from "@/session/session"
 import { Bus } from "../../src/bus"
 import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
@@ -34,7 +35,7 @@ function updatePart<T extends MessageV2.Part>(part: T) {
 
 describe("session.created event", () => {
   test("should emit session.created event when session is created", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         let eventReceived = false
@@ -63,7 +64,7 @@ describe("session.created event", () => {
   })
 
   test("session.created event should be emitted before session.updated", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const events: string[] = []
@@ -95,7 +96,7 @@ describe("step-finish token propagation via Bus event", () => {
   test(
     "non-zero tokens propagate through PartUpdated event",
     async () => {
-      await Instance.provide({
+      await WithInstance.provide({
         directory: projectRoot,
         fn: async () => {
           const info = await create({})
@@ -166,7 +167,7 @@ describe("Session", () => {
   test("remove works without an instance", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    const info = await Instance.provide({
+    const info = await WithInstance.provide({
       directory: tmp.path,
       fn: () => create({ title: "remove-without-instance" }),
     })

@@ -1,5 +1,4 @@
 import { cmd } from "@/cli/cmd/cmd"
-import { tui } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"
@@ -71,6 +70,12 @@ async function input(value?: string) {
   return piped + "\n" + value
 }
 
+export function resolveThreadDirectory(project?: string, envPWD = process.env.PWD, cwd = process.cwd()) {
+  const root = Filesystem.resolve(envPWD ?? cwd)
+  if (project) return Filesystem.resolve(path.isAbsolute(project) ? project : path.join(root, project))
+  return Filesystem.resolve(cwd)
+}
+
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
   describe: "start opencode tui",
@@ -124,10 +129,7 @@ export const TuiThreadCommand = cmd({
 
       // Resolve relative --project paths from PWD, then use the real cwd after
       // chdir so the thread and worker share the same directory key.
-      const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
-      const next = args.project
-        ? Filesystem.resolve(path.isAbsolute(args.project) ? args.project : path.join(root, args.project))
-        : Filesystem.resolve(process.cwd())
+      const next = resolveThreadDirectory(args.project)
       const file = await target()
       try {
         process.chdir(next)
@@ -226,6 +228,7 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
+        const { tui } = await import("./app")
         await tui({
           url: transport.url,
           async onSnapshot() {

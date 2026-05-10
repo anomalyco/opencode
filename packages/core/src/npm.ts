@@ -120,13 +120,17 @@ export const layer = Layer.effect(
         }
       })()
 
-      if (yield* afs.existsSafe(dir)) {
+      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
-      if (!first) return yield* new InstallFailedError({ add: [pkg], dir })
+      if (!first) {
+        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        if (Option.isSome(result.entrypoint)) return result
+        return yield* new InstallFailedError({ add: [pkg], dir })
+      }
       return resolveEntryPoint(first.name, first.path)
     }, Effect.scoped)
 

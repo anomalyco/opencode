@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import z from "zod"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Project } from "@/project/project"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
@@ -28,11 +29,11 @@ describe("session.listGlobal", () => {
     await using first = await tmpdir({ git: true })
     await using second = await tmpdir({ git: true })
 
-    const firstSession = await Instance.provide({
+    const firstSession = await WithInstance.provide({
       directory: first.path,
       fn: async () => svc.create({ title: "first-session" }),
     })
-    const secondSession = await Instance.provide({
+    const secondSession = await WithInstance.provide({
       directory: second.path,
       fn: async () => svc.create({ title: "second-session" }),
     })
@@ -58,12 +59,12 @@ describe("session.listGlobal", () => {
   test("excludes archived sessions by default", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    const archived = await Instance.provide({
+    const archived = await WithInstance.provide({
       directory: tmp.path,
       fn: async () => svc.create({ title: "archived-session" }),
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => svc.setArchived({ sessionID: archived.id, time: Date.now() }),
     })
@@ -82,12 +83,12 @@ describe("session.listGlobal", () => {
   test("supports cursor pagination", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    const first = await Instance.provide({
+    const first = await WithInstance.provide({
       directory: tmp.path,
       fn: async () => svc.create({ title: "page-one" }),
     })
     await new Promise((resolve) => setTimeout(resolve, 5))
-    const second = await Instance.provide({
+    const second = await WithInstance.provide({
       directory: tmp.path,
       fn: async () => svc.create({ title: "page-two" }),
     })
