@@ -11,6 +11,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch as Toggle } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -192,6 +193,50 @@ function statusClass(status: AutomationRun["status"]) {
   if (status === "completed_no_findings") return "text-icon-success-base"
   if (activeStatuses.includes(status)) return "text-icon-info-active"
   return "text-text-base"
+}
+
+function formatFindingsCount(count: number) {
+  return count === 1 ? "1 finding" : `${count} findings`
+}
+
+function jsonText(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return
+  if ("summary" in value && typeof value.summary === "string") return value.summary
+  if ("message" in value && typeof value.message === "string") return value.message
+  if ("error" in value && typeof value.error === "string") return value.error
+  if (!("data" in value) || typeof value.data !== "object" || value.data === null) return
+  if ("message" in value.data && typeof value.data.message === "string") return value.data.message
+  if ("summary" in value.data && typeof value.data.summary === "string") return value.data.summary
+}
+
+function parseJsonText(text: string) {
+  try {
+    return jsonText(JSON.parse(text))
+  } catch {
+    return undefined
+  }
+}
+
+function cleanAutomationText(value?: string) {
+  const text = value?.trim()
+  if (!text) return ""
+  const fenced = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim()
+  const candidate = fenced.startsWith("json\n") ? fenced.slice(5).trim() : fenced
+  return parseJsonText(candidate) ?? text
+}
+
+function normalizedAutomationText(value?: string) {
+  return cleanAutomationText(value).replace(/\s+/g, " ").trim().toLowerCase()
+}
+
+function shouldShowRunSummary(summary: string, findings: AutomationFinding[]) {
+  const normalized = normalizedAutomationText(summary)
+  if (!normalized) return false
+  if (findings.length !== 1) return true
+  const details = normalizedAutomationText(findings[0]?.details)
+  if (!details) return true
+  if (details === normalized) return false
+  return findings[0]?.title !== "Automation report" || !details.startsWith(normalized)
 }
 
 export default function AutomationsPage() {
@@ -972,7 +1017,7 @@ export default function AutomationsPage() {
                           <div class="mt-2 flex items-center justify-between gap-2 text-12-regular">
                             <span class={statusClass(run.status)}>{label(run.status)}</span>
                             <span class="text-text-weak">
-                              {run.time.archived ? "Archived" : `${run.findingsCount} findings`}
+                              {run.time.archived ? "Archived" : formatFindingsCount(run.findingsCount)}
                             </span>
                           </div>
                         </button>
@@ -991,6 +1036,8 @@ export default function AutomationsPage() {
                 {(run) => {
                   const automation = () => automationList().find((item) => item.id === run().automationID)
                   const files = () => (diff()?.runID === run().id ? diff()!.files : undefined)
+                  const runFindings = () => (findings() ?? []) as AutomationFinding[]
+                  const runSummary = () => cleanAutomationText(run().summary ?? run().error)
                   return (
                     <div class="max-w-5xl px-6 py-5 flex flex-col gap-6">
                       <div class="flex items-start justify-between gap-4">
@@ -1041,12 +1088,10 @@ export default function AutomationsPage() {
                         </div>
                       </div>
 
-                      <Show when={run().summary || run().error}>
+                      <Show when={shouldShowRunSummary(runSummary(), runFindings())}>
                         <div class="border-t border-border-weak-base pt-4">
                           <div class="text-12-medium text-text-weak mb-2">Summary</div>
-                          <p class="text-14-regular text-text-base whitespace-pre-wrap">
-                            {run().summary ?? run().error}
-                          </p>
+                          <Markdown text={runSummary()} class="text-14-regular text-text-base" />
                         </div>
                       </Show>
 
@@ -1075,20 +1120,32 @@ export default function AutomationsPage() {
                           </div>
                         </div>
                         <Show
-                          when={(findings() ?? []).length > 0}
+                          when={runFindings().length > 0}
                           fallback={<div class="text-14-regular text-text-base">No findings recorded.</div>}
                         >
                           <div class="flex flex-col border border-border-weak-base rounded-md overflow-hidden">
-                            <For each={(findings() ?? []) as AutomationFinding[]}>
+                            <For each={runFindings()}>
                               {(finding) => (
                                 <div class="border-t first:border-t-0 border-border-weaker-base p-3">
                                   <div class="flex items-start justify-between gap-3">
                                     <div class="text-14-medium text-text-strong">{finding.title}</div>
                                     <div class="text-12-medium text-text-weak">{label(finding.severity)}</div>
                                   </div>
-                                  <p class="mt-1 text-13-regular text-text-base whitespace-pre-wrap">
-                                    {finding.details}
-                                  </p>
+                                  <Markdown
+                                    text={cleanAutomationText(finding.details)}
+                                    class="mt-1 text-13-regular text-text-base"
+                                  />
+                                  <Show when={finding.recommendedNextAction}>
+                                    {(action) => (
+                                      <div class="mt-3">
+                                        <div class="text-12-medium text-text-weak mb-1">Recommended Next Action</div>
+                                        <Markdown
+                                          text={cleanAutomationText(action())}
+                                          class="text-13-regular text-text-base"
+                                        />
+                                      </div>
+                                    )}
+                                  </Show>
                                   <Show when={finding.filesChanged.length > 0}>
                                     <div class="mt-2 text-12-regular text-text-weak truncate">
                                       {finding.filesChanged.join(", ")}

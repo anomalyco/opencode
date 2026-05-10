@@ -405,22 +405,27 @@ export function computeNextRun(input: { schedule: ScheduleConfig; after: number;
 }
 
 const AutomationOutput = z.object({
-  result: z.enum(["findings", "no_findings", "needs_approval", "failed"]),
-  summary: z.string(),
+  result: z
+    .enum(["findings", "no_findings", "needs_approval", "failed"])
+    .describe("Overall run result. Use findings for reviewable changes or observations."),
+  summary: z
+    .string()
+    .describe("A concise Markdown summary of the run. Do not repeat finding details or include raw JSON."),
   findings: z
     .array(
       z.object({
-        title: z.string(),
+        title: z.string().describe("Short finding title without Markdown heading syntax."),
         severity: z.enum(["low", "medium", "high"]),
-        details: z.string(),
-        filesChanged: z.array(z.string()).default([]),
-        recommendedNextAction: z.string().optional(),
+        details: z.string().describe("Markdown details with evidence, impact, and context. Do not include raw JSON."),
+        filesChanged: z.array(z.string()).default([]).describe("Repo-relative files related to this finding."),
+        recommendedNextAction: z.string().optional().describe("Optional concise next action in Markdown."),
       }),
     )
+    .describe("Specific findings. Leave empty only when there are truly no findings.")
     .default([]),
-  diffSummary: z.string().optional(),
-  commandsRun: z.array(z.string()).optional(),
-  needsApprovalFor: z.string().nullable().optional(),
+  diffSummary: z.string().optional().describe("Optional Markdown summary of file changes."),
+  commandsRun: z.array(z.string()).optional().describe("Commands run during the automation."),
+  needsApprovalFor: z.string().nullable().optional().describe("What requires approval, if anything."),
 })
 
 type AutomationOutput = z.infer<typeof AutomationOutput>
@@ -489,37 +494,87 @@ function buildPrompt(automation: Info, project: { directory: string; worktree: s
     "- If result is findings, include at least one finding entry.",
     "- Use result no_findings only when you made no file changes and there is nothing worth reporting.",
     "- If human approval is needed, stop and say exactly what is needed.",
-    "- End with a concise final report. If possible, include a JSON object with result, summary, findings, diffSummary, commandsRun, and needsApprovalFor.",
+    "- End with a concise Markdown report for the user.",
+    "- Optionally append a fenced block labelled automation_result containing JSON with result, summary, findings, diffSummary, commandsRun, and needsApprovalFor. This is helpful but not required.",
+    "- Do not put raw JSON in the human-readable summary or finding details.",
+    "- Keep summary distinct from findings: summary says what happened; findings explain specific reviewable items.",
   ].join("\n")
+}
+
+function messageText(message: MessageV2.WithParts) {
+  return message.parts
+    .filter((part): part is MessageV2.TextPart => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+}
+
+function parseAutomationOutputJson(raw: string) {
+  try {
+    const parsed = AutomationOutput.safeParse(JSON.parse(raw))
+    if (parsed.success) return parsed.data
+  } catch {}
+}
+
+function stripStructuredJson(text: string) {
+  const withoutFences = text.replace(/```(?:json|automation_result)?\s*([\s\S]*?)```/gi, (match, raw: string) =>
+    parseAutomationOutputJson(raw.trim()) ? "" : match,
+  )
+  return [...withoutFences.matchAll(/(\{[\s\S]*"result"[\s\S]*\})/gi)].reduce(
+    (result, match) => (parseAutomationOutputJson(match[1]?.trim() ?? "") ? result.replace(match[0], "") : result),
+    withoutFences,
+  )
+}
+
+function cleanReportText(text: string) {
+  return stripStructuredJson(text)
+    .replace(/\bNO_FINDINGS\b/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+function normalizeOutput(output: AutomationOutput): AutomationOutput {
+  const summary = cleanReportText(output.summary) || "Automation completed."
+  return {
+    ...output,
+    summary,
+    findings: output.findings.map((finding) => ({
+      ...finding,
+      title: cleanReportText(finding.title) || "Automation report",
+      details: cleanReportText(finding.details) || summary,
+      filesChanged: [...new Set(finding.filesChanged.map((file) => file.trim()).filter(Boolean))],
+      recommendedNextAction: finding.recommendedNextAction
+        ? cleanReportText(finding.recommendedNextAction) || undefined
+        : undefined,
+    })),
+    diffSummary: output.diffSummary ? cleanReportText(output.diffSummary) || undefined : undefined,
+    commandsRun: output.commandsRun?.map((command) => command.trim()).filter(Boolean),
+    needsApprovalFor: output.needsApprovalFor ? cleanReportText(output.needsApprovalFor) || undefined : undefined,
+  }
 }
 
 function parseTextOutput(text: string): AutomationOutput | undefined {
   const candidates = [
-    ...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi),
+    ...text.matchAll(/```(?:json|automation_result)?\s*([\s\S]*?)```/gi),
     ...text.matchAll(/(\{[\s\S]*"result"[\s\S]*\})/gi),
   ]
   for (const candidate of candidates) {
     const raw = candidate[1]?.trim()
     if (!raw) continue
-    try {
-      const parsed = AutomationOutput.safeParse(JSON.parse(raw))
-      if (parsed.success) return parsed.data
-    } catch {}
+    const parsed = parseAutomationOutputJson(raw)
+    if (parsed) return normalizeOutput(parsed)
   }
 }
 
 function fallbackOutput(message: MessageV2.WithParts): AutomationOutput {
-  const text = message.parts
-    .filter((part): part is MessageV2.TextPart => part.type === "text")
-    .map((part) => part.text)
-    .join("\n")
-    .trim()
-  const parsed = parseTextOutput(text)
+  const raw = messageText(message)
+  const parsed = parseTextOutput(raw)
   if (parsed) return parsed
-  return {
-    result: text.includes("NO_FINDINGS") ? "no_findings" : "findings",
+  const text = cleanReportText(raw)
+  return normalizeOutput({
+    result: /\bNO_FINDINGS\b/i.test(raw) ? "no_findings" : "findings",
     summary: text || "Automation completed.",
-    findings: text.includes("NO_FINDINGS")
+    findings: /\bNO_FINDINGS\b/i.test(raw)
       ? []
       : [
           {
@@ -529,7 +584,13 @@ function fallbackOutput(message: MessageV2.WithParts): AutomationOutput {
             filesChanged: [],
           },
         ],
-  }
+  })
+}
+
+function assistantErrorSummary(error: NonNullable<MessageV2.Assistant["error"]>) {
+  const data = typeof error.data === "object" && error.data !== null ? error.data : undefined
+  if (data && "message" in data && typeof data.message === "string") return data.message
+  return error.name
 }
 
 function defined<T extends object>(input: T) {
@@ -953,23 +1014,27 @@ export const layer = Layer.effect(
       diffs: FileDiff[],
     ) {
       const now = Date.now()
-      const hasReviewableOutput = output.result === "findings" || output.findings.length > 0 || diffs.length > 0
+      const finalOutput = normalizeOutput(output)
+      const hasReviewableOutput =
+        finalOutput.result === "findings" || finalOutput.findings.length > 0 || diffs.length > 0
       const status: RunStatus =
-        output.result === "needs_approval"
+        finalOutput.result === "needs_approval"
           ? "needs_approval"
-          : output.result === "failed"
+          : finalOutput.result === "failed"
             ? "failed"
-            : output.result === "no_findings" && !hasReviewableOutput
+            : finalOutput.result === "no_findings" && !hasReviewableOutput
               ? "completed_no_findings"
               : "completed_with_findings"
       const findings =
-        output.findings.length > 0 || status !== "completed_with_findings"
-          ? output.findings
+        finalOutput.findings.length > 0 || status !== "completed_with_findings"
+          ? finalOutput.findings
           : [
               {
                 title: "Automation report",
                 severity: "medium" as const,
-                details: [output.summary, output.diffSummary].filter(Boolean).join("\n\n") || "Automation completed.",
+                details:
+                  [finalOutput.summary, finalOutput.diffSummary].filter(Boolean).join("\n\n") ||
+                  "Automation completed.",
                 filesChanged: diffs.map((diff) => diff.file),
               },
             ]
@@ -984,13 +1049,13 @@ export const layer = Layer.effect(
       yield* insertFindings(runID, findings)
       yield* patchRun(runID, {
         status,
-        result: output.result,
-        summary: output.summary,
+        result: finalOutput.result,
+        summary: finalOutput.summary,
         findings_count: findings.length,
         diff_additions: diffs.reduce((sum, item) => sum + item.additions, 0),
         diff_deletions: diffs.reduce((sum, item) => sum + item.deletions, 0),
         diff_files: diffs.length,
-        error: output.result === "failed" ? output.summary : undefined,
+        error: finalOutput.result === "failed" ? finalOutput.summary : undefined,
         time_completed: now,
         time_read: archiveNoFindings ? now : undefined,
         time_archived: archiveNoFindings ? now : undefined,
@@ -1164,14 +1229,15 @@ export const layer = Layer.effect(
           result.assistant.info.role === "assistant" && result.assistant.info.structured
             ? AutomationOutput.safeParse(result.assistant.info.structured)
             : undefined
-        const output = structured?.success ? structured.data : fallbackOutput(result.assistant)
-        if (result.assistant.info.role === "assistant" && result.assistant.info.error) {
-          output.result = "failed"
-          output.summary = JSON.stringify(result.assistant.info.error)
-        }
+        const output = normalizeOutput(structured?.success ? structured.data : fallbackOutput(result.assistant))
+        const error = result.assistant.info.role === "assistant" ? result.assistant.info.error : undefined
+        const finalOutput =
+          error && (error.name !== "StructuredOutputError" || !messageText(result.assistant))
+            ? normalizeOutput({ ...output, result: "failed", summary: assistantErrorSummary(error), findings: [] })
+            : output
         const latest = yield* getRun(runID)
         if (latest.status === "cancelled") return
-        yield* finishRun(automation, runID, output, result.diffs)
+        yield* finishRun(automation, runID, finalOutput, result.diffs)
       }).pipe(
         Effect.exit,
         Effect.ensuring(
@@ -1470,5 +1536,13 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Worktree.defaultLayer),
   ),
 )
+
+export const AutomationTesting = {
+  buildPrompt,
+  cleanReportText,
+  fallbackOutput,
+  normalizeOutput,
+  parseTextOutput,
+}
 
 export * as Automation from "./automation"
