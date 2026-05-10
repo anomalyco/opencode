@@ -116,6 +116,7 @@ describe("tui markdown link wrap", () => {
         .filter(Boolean)
 
       expect(lines.length).toBeGreaterThan(1)
+      expect(lines.join("")).toBe(url)
 
       const attrs = renderer.currentRenderBuffer.buffers.attributes
       const all = lines.map((line, row) => ids(attrs, renderer.currentRenderBuffer.width, row, line.length))
