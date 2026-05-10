@@ -33,8 +33,9 @@ export const SettingsFeishu: Component = () => {
   // ⚠️ 用 createSignal + 手动 fetch(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
   // 同 file-tabs.tsx:1179 注释的处理方式
   const [accounts, setAccounts] = createSignal<AccountSummary[]>([])
-  // null=loading,true=user 配过 build agent 的默认 model,false=完全没配 → 飞书消息进来会失败
-  // 检测 logic 跟 feishu-edit-account-dialog.tsx:69 的 buildDefault 判断对齐
+  // null=loading,true=user 至少有一个 provider 配过 default model,false=完全没配 → 飞书消息进来会失败
+  // opencode /providers 响应 default 字段是 Record<provider_id, model_id>(实测 2026-05-10:
+  // key 是 provider id 如 "minimax-cn-coding-plan" / "opencode" / "claude-code",不是 agent name)
   const [hasDefaultModel, setHasDefaultModel] = createSignal<boolean | null>(null)
 
   const refetch = async () => {
@@ -48,7 +49,9 @@ export const SettingsFeishu: Component = () => {
   const checkDefaultModel = async () => {
     try {
       const data = await feishuListProviders()
-      setHasDefaultModel(Boolean(data.default?.build))
+      const defaults = data.default ?? {}
+      // 非空字典 = user 至少配过一个 provider 的 default model → 飞书桥接收消息时 opencode 能 routing
+      setHasDefaultModel(Object.keys(defaults).length > 0)
     } catch {
       // 拿不到 providers 多半是 plugin server 本身就异常,adapter notReady 已会显示
       // 这里不二次报警,留 null(不渲染 warning)

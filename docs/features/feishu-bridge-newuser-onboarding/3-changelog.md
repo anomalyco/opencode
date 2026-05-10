@@ -17,6 +17,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | `3590f9cb4` | A1 — `fix(feishu-plugin-install): 路径失效自愈 — user 拖 .app 到 Applications 后插件不再卡死` |
 | `42bac78df` | A4 — `feat(feishu-bridge): default model 缺失检测 + 友好降级回复` |
 | `08ff26115` | A3 — `feat(branding): .dmg 拖拽引导背景图 + 显式 dmg layout` |
+| (本笔)| A4.A follow-up — `fix(feishu-bridge): A4.A 检测逻辑修 — data.default key 是 provider id 不是 agent name` |
 
 ## A1 — plugin 路径失效自愈(`3590f9cb4`)
 
@@ -203,3 +204,45 @@ git revert 08ff26115 42bac78df 3590f9cb4
 - A5:macOS notification 权限请求 + tray badge 显示未读
 - 美术升级:dmg-background.png drop-in 替换为带 logo / 品牌色的精装版本
 - A4 friendlyErrorReply 文案 i18n 化(目前是中文 hardcode)— 若 DeskFox 用户群扩大到非中文 locale 再做
+- `feishu-edit-account-dialog.tsx:69` 的 `data.default?.build` 同样 latent bug,但只影响"当前默认 model"文案(永远显示 `defaultUnset`),不阻塞功能 — 后续顺手修
+
+## Follow-up #1(2026-05-10):A4.A 检测逻辑修 — `data.default` key 是 provider id 不是 agent name
+
+### 起源
+
+dev 实测 A4.A 警告卡片:user 已配 3 个 default(`minimax-cn-coding-plan` / `opencode` / `claude-code`)+ 已绑定飞书账号,**仍显示** "尚未配置默认 LLM model" 警告 — false positive。curl plugin server `/providers` 看实际响应:
+
+```json
+{
+  "default": {
+    "minimax-cn-coding-plan": "MiniMax-M2.7-highspeed",
+    "opencode": "big-pickle",
+    "claude-code": "sonnet"
+  }
+}
+```
+
+`data.default` 的 key 是**provider id**(`minimax-cn-coding-plan` 之类),**不是 agent name**(我以为的 `build` / `plan`)。所以 `data.default?.build` 永远是 undefined。
+
+### 修法
+
+`packages/app/src/components/settings-feishu.tsx`:
+
+```ts
+// 旧(false positive):
+setHasDefaultModel(Boolean(data.default?.build))
+
+// 新(实测 schema 对齐):
+const defaults = data.default ?? {}
+setHasDefaultModel(Object.keys(defaults).length > 0)
+```
+
+非空字典 = user 至少配过一个 provider 的 default model → 飞书消息进来时 opencode 能 routing → 不报警。
+
+### 同样 bug 的 latent 副本
+
+`feishu-edit-account-dialog.tsx:69` 同样的 `data.default?.build` 判断,导致"当前默认 model"文案永远显示 `defaultUnset` — latent bug,但只影响显示文案不阻塞功能(user 在 edit dialog 也没注意)。**本笔不修**(不在范围内,留 FUTURE)。
+
+### 教训
+
+抄现有代码做 follow-up feature 时,**抄的代码本身可能有 latent bug**。本来该看 opencode SDK schema 或 curl server response 自己确认,而不是机械对齐 sibling 代码。memory 加警示。
