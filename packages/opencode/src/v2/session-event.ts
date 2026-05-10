@@ -118,12 +118,12 @@ export namespace Step {
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
-        input: NonNegativeInt,
-        output: NonNegativeInt,
-        reasoning: NonNegativeInt,
+        input: Schema.Finite,
+        output: Schema.Finite,
+        reasoning: Schema.Finite,
         cache: Schema.Struct({
-          read: NonNegativeInt,
-          write: NonNegativeInt,
+          read: Schema.Finite,
+          write: Schema.Finite,
         }),
       }),
       snapshot: Schema.String.pipe(Schema.optional),
