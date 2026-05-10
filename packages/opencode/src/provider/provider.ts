@@ -119,7 +119,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
 type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
-type CustomDiscoverModels = () => Promise<Record<string, Model>>
+type CustomDiscoverModels = (provider: Info) => Promise<Record<string, Model>>
 type CustomLoader = (provider: Info) => Effect.Effect<{
   autoload: boolean
   getModel?: CustomModelLoader
@@ -607,10 +607,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             featureFlags,
           })
         },
-        async discoverModels(): Promise<Record<string, Model>> {
+        async discoverModels(provider): Promise<Record<string, Model>> {
           if (!apiKey) {
             log.info("gitlab model discovery skipped: no apiKey")
-            return {}
+            return provider.models
           }
 
           try {
@@ -630,12 +630,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                     }
                   : null,
               })
-              return {}
+              return provider.models
             }
 
-            const models: Record<string, Model> = {}
+            const models: Record<string, Model> = { ...provider.models }
             for (const m of result.models) {
-              if (!input.models[m.id]) {
+              if (!models[m.id]) {
                 models[m.id] = {
                   id: ModelID.make(m.id),
                   providerID: ProviderID.make("gitlab"),
@@ -685,7 +685,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             return models
           } catch (e) {
             log.warn("gitlab model discovery failed", { error: e })
-            return {}
+            return provider.models
           }
         },
       }
@@ -1080,6 +1080,150 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+type ConfigProviderInfo = NonNullable<Config.Info["provider"]>[string]
+
+function isLmStudioID(id: string) {
+  const lower = id.toLowerCase()
+  return lower.includes("lmstudio") || lower.includes("lm-studio")
+}
+
+function isLmStudioURL(value: unknown) {
+  if (typeof value !== "string") return false
+  const lower = value.toLowerCase()
+  return lower.includes("127.0.0.1:1234") || lower.includes("localhost:1234")
+}
+
+function lmStudioBaseURL(provider: Info) {
+  if (typeof provider.options.baseURL === "string" && provider.options.baseURL.trim() !== "")
+    return provider.options.baseURL.trim()
+
+  const modelURL = Object.values(provider.models)
+    .map((model) => model.api.url)
+    .find((url) => url.trim() !== "")
+  if (modelURL) return modelURL
+  if (isLmStudioID(provider.id)) return "http://localhost:1234/v1"
+  return undefined
+}
+
+function lmStudioModelsEndpoint(baseURL: string) {
+  const normalized = baseURL.replace(/\/+$/, "")
+  return `${normalized.endsWith("/v1") ? normalized : `${normalized}/v1`}/models`
+}
+
+function shouldDiscoverLmStudio(provider: Info) {
+  if (provider.options.discoverModels === false) return false
+  if (provider.options.discoverModels === true) return true
+  if (isLmStudioID(provider.id)) return true
+  if (isLmStudioURL(provider.options.baseURL)) return true
+  return Object.values(provider.models).some((model) => isLmStudioURL(model.api.url))
+}
+
+function isLmStudioEmbeddingModel(id: string) {
+  const lower = id.toLowerCase()
+  return lower.includes("embedding") || lower.includes("embed") || lower.includes("rerank")
+}
+
+function lmStudioModel(provider: Info, id: string, baseURL: string): Model {
+  const configured =
+    provider.models[id] ?? Object.values(provider.models).find((model) => model.api.id === id || model.id === id)
+  return {
+    id: ModelID.make(id),
+    providerID: provider.id,
+    name: configured?.name ?? id,
+    family: configured?.family ?? "",
+    api: {
+      id: configured?.api.id ?? id,
+      url: baseURL,
+      npm: configured?.api.npm ?? "@ai-sdk/openai-compatible",
+    },
+    status: configured?.status ?? "active",
+    headers: configured?.headers ?? {},
+    options: configured?.options ?? {},
+    cost: configured?.cost ?? { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: configured?.limit ?? { context: 0, output: 0 },
+    capabilities: configured?.capabilities ?? {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    release_date: configured?.release_date ?? "",
+    variants: configured?.variants ?? {},
+  }
+}
+
+function configuredLmStudioModels(provider: Info, configProvider: ConfigProviderInfo | undefined, baseURL: string) {
+  return Object.fromEntries(
+    Object.keys(configProvider?.models ?? {}).flatMap((id) => {
+      const model = provider.models[id]
+      if (!model) return []
+      return [
+        [
+          id,
+          {
+            ...model,
+            api: {
+              ...model.api,
+              url: model.api.url || baseURL,
+            },
+          },
+        ],
+      ]
+    }),
+  )
+}
+
+async function discoverLmStudioModels(provider: Info, configProvider: ConfigProviderInfo | undefined) {
+  const baseURL = lmStudioBaseURL(provider)
+  if (!baseURL) return configuredLmStudioModels(provider, configProvider, "")
+  const configured = configuredLmStudioModels(provider, configProvider, baseURL)
+
+  try {
+    const headers = new Headers({ Accept: "application/json" })
+    if (isRecord(provider.options.headers)) {
+      for (const [key, value] of Object.entries(provider.options.headers)) {
+        if (typeof value === "string") headers.set(key, value)
+      }
+    }
+    const apiKey = typeof provider.options.apiKey === "string" ? provider.options.apiKey : provider.key
+    if (apiKey && !headers.has("authorization")) headers.set("Authorization", `Bearer ${apiKey}`)
+
+    const response = await fetch(lmStudioModelsEndpoint(baseURL), {
+      headers,
+      signal: AbortSignal.timeout(2_000),
+    })
+    if (!response.ok) {
+      log.warn("lmstudio model discovery failed", { providerID: provider.id, status: response.status })
+      return configured
+    }
+
+    const body = await response.json()
+    if (!isRecord(body) || !Array.isArray(body.data)) {
+      log.warn("lmstudio model discovery failed: invalid response", { providerID: provider.id })
+      return configured
+    }
+
+    const includeEmbeddingModels = provider.options.includeEmbeddingModels === true
+    const models = Object.fromEntries(
+      body.data.flatMap((item) => {
+        if (!isRecord(item) || typeof item.id !== "string" || item.id.trim() === "") return []
+        const id = item.id.trim()
+        if (!includeEmbeddingModels && isLmStudioEmbeddingModel(id)) return []
+        return [[id, lmStudioModel(provider, id, baseURL)]]
+      }),
+    )
+
+    log.info("lmstudio model discovery complete", { providerID: provider.id, count: Object.keys(models).length })
+    return models
+  } catch (e) {
+    log.warn("lmstudio model discovery failed", { providerID: provider.id, error: e })
+    return configured
+  }
+}
+
 const layer: Layer.Layer<
   Service,
   never,
@@ -1347,18 +1491,20 @@ const layer: Layer.Layer<
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+        for (const [id, provider] of Object.entries(providers)) {
+          if (discoveryLoaders[id]) continue
+          if (!shouldDiscoverLmStudio(provider)) continue
+          discoveryLoaders[id] = (current) => discoverLmStudioModels(current, cfg.provider?.[id])
+        }
+
+        for (const [id, discoverModels] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderID.make(id)
+          if (!providers[providerID] || !isProviderAllowed(providerID)) continue
           yield* Effect.promise(async () => {
             try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
-                }
-              }
+              providers[providerID].models = await discoverModels(providers[providerID])
             } catch (e) {
-              log.warn("state discovery error", { id: "gitlab", error: e })
+              log.warn("state discovery error", { id, error: e })
             }
           })
         }
@@ -1428,6 +1574,8 @@ const layer: Layer.Layer<
         })
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
+        delete options["discoverModels"]
+        delete options["includeEmbeddingModels"]
 
         if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
           delete options.fetch

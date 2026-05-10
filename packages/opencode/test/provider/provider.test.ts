@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
+import net from "net"
 import path from "path"
 
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
@@ -62,6 +63,42 @@ async function markPluginDependenciesReady(dir: string) {
     path.join(dir, "package-lock.json"),
     JSON.stringify({ packages: { "": { dependencies: { "@opencode-ai/plugin": "0.0.0" } } } }),
   )
+}
+
+async function freePort() {
+  return await new Promise<number>((resolve, reject) => {
+    const server = net.createServer()
+    server.unref()
+    server.on("error", reject)
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address()
+      server.close(() => {
+        if (typeof address === "object" && address) return resolve(address.port)
+        reject(new Error("Unable to allocate a test port"))
+      })
+    })
+  })
+}
+
+async function createModelsServer(models: string[], status = 200) {
+  const paths: string[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: await freePort(),
+    fetch(req) {
+      paths.push(new URL(req.url).pathname)
+      if (status !== 200) return new Response("discovery failed", { status })
+      return Response.json({
+        object: "list",
+        data: models.map((id) => ({
+          id,
+          object: "model",
+          owned_by: "organization_owner",
+        })),
+      })
+    },
+  })
+  return { server, paths }
 }
 
 function paid(providers: Awaited<ReturnType<typeof list>>) {
@@ -809,6 +846,163 @@ test("explicit baseURL overrides api field", async () => {
       expect(providers[ProviderID.make("custom-api")].options.baseURL).toBe("https://custom.override.com/v1")
     },
   })
+})
+
+test("lmstudio discovers live models and prunes stale configured models", async () => {
+  const { server, paths } = await createModelsServer(["live-model", "text-embedding-nomic-embed-text-v1.5"])
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              lmstudio: {
+                options: {
+                  baseURL: `${server.url}v1`,
+                },
+                models: {
+                  stale: {},
+                  "live-model": {
+                    name: "Live Override",
+                    limit: { context: 12345, output: 678 },
+                    options: { customOption: "custom-value" },
+                    headers: { "X-Model": "live" },
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        const models = providers[ProviderID.make("lmstudio")].models
+        expect(Object.keys(models)).toEqual(["live-model"])
+        expect(models["live-model"].name).toBe("Live Override")
+        expect(models["live-model"].limit.context).toBe(12345)
+        expect(models["live-model"].options.customOption).toBe("custom-value")
+        expect(models["live-model"].headers["X-Model"]).toBe("live")
+        expect(models["live-model"].api.url).toBe(`${server.url}v1`)
+      },
+    })
+    expect(paths).toEqual(["/v1/models"])
+  } finally {
+    server.stop(true)
+  }
+})
+
+test("lmstudio discovery normalizes baseURL without v1", async () => {
+  const { server, paths } = await createModelsServer(["live-model"])
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-openai": {
+                name: "Local OpenAI",
+                npm: "@ai-sdk/openai-compatible",
+                options: {
+                  baseURL: server.url.toString().replace(/\/$/, ""),
+                  discoverModels: true,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        expect(providers[ProviderID.make("local-openai")].models["live-model"]).toBeDefined()
+      },
+    })
+    expect(paths).toEqual(["/v1/models"])
+  } finally {
+    server.stop(true)
+  }
+})
+
+test("lmstudio discovery can be disabled", async () => {
+  const { server, paths } = await createModelsServer(["live-model"])
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              lmstudio: {
+                options: {
+                  baseURL: `${server.url}v1`,
+                  discoverModels: false,
+                },
+                models: {
+                  configured: {},
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        expect(providers[ProviderID.make("lmstudio")].models.configured).toBeDefined()
+        expect(providers[ProviderID.make("lmstudio")].models["live-model"]).toBeUndefined()
+      },
+    })
+    expect(paths).toEqual([])
+  } finally {
+    server.stop(true)
+  }
+})
+
+test("lmstudio discovery failure falls back to configured models only", async () => {
+  const { server } = await createModelsServer(["live-model"], 500)
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              lmstudio: {
+                options: {
+                  baseURL: `${server.url}v1`,
+                },
+                models: {
+                  manual: {},
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        expect(Object.keys(providers[ProviderID.make("lmstudio")].models)).toEqual(["manual"])
+      },
+    })
+  } finally {
+    server.stop(true)
+  }
 })
 
 test("model inherits properties from existing database model", async () => {

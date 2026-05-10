@@ -82,6 +82,12 @@ export const Info = Schema.Struct({
       Schema.Struct({
         apiKey: Schema.optional(Schema.String),
         baseURL: Schema.optional(Schema.String),
+        discoverModels: Schema.optional(Schema.Boolean).annotate({
+          description: "Discover provider models from the live API when supported, such as LM Studio /v1/models",
+        }),
+        includeEmbeddingModels: Schema.optional(Schema.Boolean).annotate({
+          description: "Include obvious embedding or rerank models during live model discovery",
+        }),
         enterpriseUrl: Schema.optional(Schema.String).annotate({
           description: "GitHub Enterprise URL for copilot authentication",
         }),
