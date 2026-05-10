@@ -1,4 +1,4 @@
-import { Context, Data, Effect, FileSystem, Layer } from "effect"
+import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { secretFindings, type SecretFinding } from "./redaction"
@@ -6,9 +6,10 @@ import { decodeCassette, encodeCassette, type Cassette, type CassetteMetadata, t
 
 const DEFAULT_RECORDINGS_DIR = path.resolve(process.cwd(), "test", "fixtures", "recordings")
 
-export class CassetteNotFoundError extends Data.TaggedError("CassetteNotFoundError")<{
-  readonly cassetteName: string
-}> {
+export class CassetteNotFoundError extends Schema.TaggedErrorClass<CassetteNotFoundError>()(
+  "CassetteNotFoundError",
+  { cassetteName: Schema.String },
+) {
   override get message() {
     return `Cassette "${this.cassetteName}" not found`
   }

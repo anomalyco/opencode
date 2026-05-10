@@ -95,10 +95,13 @@ export const redactHeaders = (
   )
 }
 
-export type SecretFinding = {
-  readonly path: string
-  readonly reason: string
-}
+import { Schema } from "effect"
+
+export const SecretFindingSchema = Schema.Struct({
+  path: Schema.String,
+  reason: Schema.String,
+})
+export type SecretFinding = Schema.Schema.Type<typeof SecretFindingSchema>
 
 export const secretFindings = (value: unknown): ReadonlyArray<SecretFinding> =>
   stringEntries(value).flatMap((entry) => [

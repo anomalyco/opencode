@@ -1,13 +1,13 @@
-import { Data, Effect, Ref, Scope } from "effect"
+import { Effect, Ref, Schema, Scope } from "effect"
 import type * as CassetteService from "./cassette"
 import type { CassetteNotFoundError } from "./cassette"
-import type { SecretFinding } from "./redaction"
+import { SecretFindingSchema } from "./redaction"
 import type { CassetteMetadata, Interaction } from "./schema"
 
-export class UnsafeCassetteError extends Data.TaggedError("UnsafeCassetteError")<{
-  readonly cassetteName: string
-  readonly findings: ReadonlyArray<SecretFinding>
-}> {
+export class UnsafeCassetteError extends Schema.TaggedErrorClass<UnsafeCassetteError>()("UnsafeCassetteError", {
+  cassetteName: Schema.String,
+  findings: Schema.Array(SecretFindingSchema),
+}) {
   override get message() {
     return `Refusing to write cassette "${this.cassetteName}" because it contains possible secrets: ${this.findings
       .map((finding) => `${finding.path} (${finding.reason})`)
