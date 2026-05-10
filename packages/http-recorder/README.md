@@ -97,34 +97,53 @@ custom equivalence (e.g. ignoring a timestamp field in the body).
 ## Redaction & secret safety
 
 Cassettes get checked in, so the recorder is aggressive about not letting
-secrets escape:
-
-- **Headers** are stripped to a small allow-list (`content-type`, `accept`,
-  `openai-beta`). Sensitive headers within the allow-list (`authorization`,
-  `cookie`, API-key headers, AWS/GCP tokens, …) are replaced with
-  `[REDACTED]`. Extend with `requestHeaders` / `redact.headers`.
-- **URL query parameters** matching common secret names (`api_key`, `token`,
-  `signature`, AWS signing params, …) are replaced with `[REDACTED]`. URL
-  user/password are replaced. Extend with `redact.query` and `redact.url`.
-- **Bodies** are passed verbatim by default. Supply `redactBody: (parsed) =>
-  parsed` to strip fields from JSON bodies before they're written.
-- **Final scan** — after assembling the cassette, the recorder scans every
-  string for known secret patterns (Bearer tokens, `sk-…`, `sk-ant-…`,
-  Google `AIza…` keys, AWS access keys, GitHub tokens, PEM blocks) and for
-  values matching any environment variable named like a credential. If
-  anything is found, the cassette is **not written** and the request fails
-  with a description of what was detected.
+secrets escape. Redaction is configured by composing a `Redactor`:
 
 ```ts
+import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
+
 HttpRecorder.cassetteLayer("anthropic/messages", {
   mode: process.env.RECORD === "true" ? "record" : "replay",
-  redact: {
-    headers: ["x-internal-tracing-id"],
-    url: (url) => url.replace(/\/accounts\/[^/]+/, "/accounts/{account}"),
-  },
-  redactBody: (body) => ({ ...body, user_id: "{user}" }),
+  redactor: Redactor.defaults({
+    requestHeaders: { allow: ["content-type", "anthropic-version"] },
+    url: { transform: (url) => url.replace(/\/accounts\/[^/]+/, "/accounts/{account}") },
+    body: (parsed) => ({ ...(parsed as object), user_id: "{user}" }),
+  }),
 })
 ```
+
+`Redactor.defaults({ … })` composes the four built-in redactors with your
+overrides. For full control, build the stack yourself:
+
+```ts
+const redactor = Redactor.compose(
+  Redactor.requestHeaders({ allow: ["content-type", "x-custom"] }),
+  Redactor.responseHeaders(),
+  Redactor.url({ query: ["session-id"] }),
+  Redactor.body((parsed) => /* … */),
+)
+```
+
+What each layer does:
+
+- **`requestHeaders` / `responseHeaders`** — strip headers to a small
+  allow-list (request default: `content-type`, `accept`, `openai-beta`;
+  response default: `content-type`). Sensitive headers within the
+  allow-list (`authorization`, `cookie`, API-key headers, AWS/GCP tokens,
+  …) are replaced with `[REDACTED]`.
+- **`url`** — query parameters matching common secret names (`api_key`,
+  `token`, `signature`, AWS signing params, …) are replaced with
+  `[REDACTED]`. URL user/password are replaced. `transform` runs after
+  built-in redaction for path-level scrubbing.
+- **`body`** — receives the parsed JSON request body and returns a redacted
+  version. No-op for non-JSON bodies.
+
+After assembling the cassette, the recorder scans every string for known
+secret patterns (Bearer tokens, `sk-…`, `sk-ant-…`, Google `AIza…` keys,
+AWS access keys, GitHub tokens, PEM blocks) and for values matching any
+environment variable named like a credential. If anything is found, the
+cassette is **not written** and the request fails with `UnsafeCassetteError`
+listing what was detected.
 
 ## WebSocket recording
 
@@ -167,14 +186,7 @@ type RecordReplayOptions = {
   mode?: "record" | "replay" | "passthrough"   // default: "replay"
   directory?: string                            // default: <cwd>/test/fixtures/recordings
   metadata?: Record<string, unknown>            // merged into cassette.metadata
-  requestHeaders?: ReadonlyArray<string>        // allow-list (default: content-type, accept, openai-beta)
-  responseHeaders?: ReadonlyArray<string>       // allow-list (default: content-type)
-  redact?: {
-    headers?: ReadonlyArray<string>             // additional header names to redact
-    query?: ReadonlyArray<string>               // additional query params to redact
-    url?: (url: string) => string               // post-redaction URL transform
-  }
-  redactBody?: (body: unknown) => unknown       // JSON body redaction
+  redactor?: Redactor                           // default: Redactor.defaults()
   dispatch?: "match" | "sequential"             // default: "match"
   match?: (incoming, recorded) => boolean       // custom matcher
 }
@@ -182,13 +194,15 @@ type RecordReplayOptions = {
 
 ## Layout
 
-| File             | Purpose                                                              |
-| ---------------- | -------------------------------------------------------------------- |
-| `effect.ts`      | `cassetteLayer` / `recordingLayer` — the `HttpClient` adapter.       |
-| `websocket.ts`   | `makeWebSocketExecutor` — WebSocket record/replay.                   |
-| `cassette.ts`    | `Cassette.Service` — reads/writes cassette files, accumulates state. |
-| `schema.ts`      | Effect Schema definitions for the cassette JSON format.              |
-| `storage.ts`     | Path resolution, JSON encode/decode, sync existence check.           |
-| `matching.ts`    | Canonicalization and the default request matcher.                    |
-| `redaction.ts`   | Header / URL / body redaction and secret pattern detection.          |
-| `diff.ts`        | Human-readable mismatch diagnostics.                                 |
+| File           | Purpose                                                              |
+| -------------- | -------------------------------------------------------------------- |
+| `effect.ts`    | `cassetteLayer` / `recordingLayer` — the `HttpClient` adapter.       |
+| `websocket.ts` | `makeWebSocketExecutor` — WebSocket record/replay.                   |
+| `cassette.ts`  | `Cassette.Service` — reads/writes cassette files, accumulates state. |
+| `recorder.ts`  | `UnsafeCassetteError`, shared findings-aware append helper.          |
+| `redactor.ts`  | Composable `Redactor` — headers, url, body redaction.                |
+| `redaction.ts` | Lower-level header/URL primitives + secret pattern detection.        |
+| `schema.ts`    | Effect Schema definitions for the cassette JSON format.              |
+| `storage.ts`   | Path resolution, JSON encode/decode, sync existence check.           |
+| `matching.ts`  | Canonicalization and the default request matcher.                    |
+| `diff.ts`      | Human-readable mismatch diagnostics.                                 |

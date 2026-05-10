@@ -1,6 +1,6 @@
-import { Context, Effect, FileSystem, Layer, PlatformError, Ref } from "effect"
+import { Context, Effect, FileSystem, Layer, PlatformError } from "effect"
 import * as path from "node:path"
-import { cassetteSecretFindings, type SecretFinding } from "./redaction"
+import { cassetteSecretFindings, secretFindings, type SecretFinding } from "./redaction"
 import type { Cassette, CassetteMetadata, Interaction } from "./schema"
 import { cassetteFor, cassettePath, DEFAULT_RECORDINGS_DIR, formatCassette, parseCassette } from "./storage"
 
@@ -37,9 +37,17 @@ export const layer = (options: { readonly directory?: string } = {}) =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem
       const directory = options.directory ?? DEFAULT_RECORDINGS_DIR
-      const recorded = yield* Ref.make(new Map<string, ReadonlyArray<Interaction>>())
+      const recorded = new Map<string, { interactions: Interaction[]; findings: SecretFinding[] }>()
+      const directoriesEnsured = new Set<string>()
 
       const pathFor = (name: string) => cassettePath(name, directory)
+
+      const ensureDirectory = Effect.fn("Cassette.ensureDirectory")(function* (name: string) {
+        const dir = path.dirname(pathFor(name))
+        if (directoriesEnsured.has(dir)) return
+        yield* fileSystem.makeDirectory(dir, { recursive: true })
+        directoriesEnsured.add(dir)
+      })
 
       const walk = (directory: string): Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError> =>
         Effect.gen(function* () {
@@ -61,7 +69,7 @@ export const layer = (options: { readonly directory?: string } = {}) =>
       })
 
       const write = Effect.fn("Cassette.write")(function* (name: string, cassette: Cassette) {
-        yield* fileSystem.makeDirectory(path.dirname(pathFor(name)), { recursive: true })
+        yield* ensureDirectory(name)
         yield* fileSystem.writeFileString(pathFor(name), formatCassette(cassette))
       })
 
@@ -70,11 +78,12 @@ export const layer = (options: { readonly directory?: string } = {}) =>
         interaction: Interaction,
         metadata: CassetteMetadata | undefined,
       ) {
-        const interactions = yield* Ref.updateAndGet(recorded, (previous) =>
-          new Map(previous).set(name, [...(previous.get(name) ?? []), interaction]),
-        )
-        const cassette = cassetteFor(name, interactions.get(name) ?? [], metadata)
-        const findings = cassetteSecretFindings(cassette)
+        const entry = recorded.get(name) ?? { interactions: [], findings: [] }
+        entry.interactions.push(interaction)
+        entry.findings.push(...secretFindings(interaction))
+        recorded.set(name, entry)
+        const cassette = cassetteFor(name, entry.interactions, metadata)
+        const findings = [...entry.findings, ...secretFindings(cassette.metadata ?? {})]
         if (findings.length === 0) yield* write(name, cassette)
         return { cassette, findings }
       })
@@ -103,6 +112,3 @@ export const layer = (options: { readonly directory?: string } = {}) =>
     }),
   )
 
-export const defaultLayer = layer()
-
-export * as Cassette from "./cassette"
