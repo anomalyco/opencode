@@ -48,6 +48,8 @@ When commenting on specific lines, opencode receives:
 
 This allows for more targeted requests without needing to specify file paths or line numbers manually.
 
+By default, opencode replies with a top-level PR comment. Set `reply_to_review_thread: true` to reply directly in the triggering review comment thread instead.
+
 ## Installation
 
 Run the following command in the terminal from your GitHub repo:
@@ -80,6 +82,8 @@ This will walk you through installing the GitHub app, creating the workflow, and
        runs-on: ubuntu-latest
        permissions:
          id-token: write
+         pull-requests: write
+         issues: write
        steps:
           - name: Checkout repository
             uses: actions/checkout@v6
@@ -95,6 +99,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
            with:
              model: anthropic/claude-sonnet-4-20250514
              use_github_token: true
+             reply_to_review_thread: true
    ```
 
 3. Store the API keys in secrets. In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. Add the required API keys.

@@ -118,6 +118,7 @@ let accessToken: string
 let octoRest: Octokit
 let octoGraph: typeof graphql
 let commentId: number
+let commentType: "issue" | "review" = "issue"
 let gitConfig: string
 let session: { id: string; title: string; version: string }
 let shareId: string | undefined
@@ -331,6 +332,14 @@ function useEnvShare() {
   throw new Error(`Invalid share value: ${value}. Share must be a boolean.`)
 }
 
+function useEnvReplyToReviewThread() {
+  const value = process.env["REPLY_TO_REVIEW_THREAD"]
+  if (!value) return false
+  if (value === "true") return true
+  if (value === "false") return false
+  throw new Error(`Invalid reply_to_review_thread value: ${value}. reply_to_review_thread must be a boolean.`)
+}
+
 function useEnvMock() {
   return {
     mockEvent: process.env["MOCK_EVENT"],
@@ -349,6 +358,8 @@ function isMock() {
 
 function isPullRequest() {
   const context = useContext()
+  if (context.eventName === "pull_request_review_comment") return true
+
   const payload = context.payload as IssueCommentEvent
   return Boolean(payload.issue.pull_request)
 }
@@ -358,7 +369,13 @@ function useContext() {
 }
 
 function useIssueId() {
-  const payload = useContext().payload as IssueCommentEvent
+  const context = useContext()
+  if (context.eventName === "pull_request_review_comment") {
+    const payload = context.payload as PullRequestReviewCommentEvent
+    return payload.pull_request.number
+  }
+
+  const payload = context.payload as IssueCommentEvent
   return payload.issue.number
 }
 
@@ -402,7 +419,24 @@ async function getAccessToken() {
 
 async function createComment() {
   const { repo } = useContext()
+  const reviewContext = getReviewCommentContext()
+
+  if (reviewContext && useEnvReplyToReviewThread()) {
+    const payload = useContext().payload as PullRequestReviewCommentEvent
+    const reviewCommentId = payload.comment.in_reply_to_id ?? payload.comment.id
+    console.log("Creating review thread reply...")
+    commentType = "review"
+    return await octoRest.rest.pulls.createReplyForReviewComment({
+      owner: repo.owner,
+      repo: repo.repo,
+      pull_number: useIssueId(),
+      comment_id: reviewCommentId,
+      body: `[Working...](${useEnvRunUrl()})`,
+    })
+  }
+
   console.log("Creating comment...")
+  commentType = "issue"
   return await octoRest.rest.issues.createComment({
     owner: repo.owner,
     repo: repo.repo,
@@ -788,6 +822,15 @@ async function updateComment(body: string) {
   console.log("Updating comment...")
 
   const { repo } = useContext()
+  if (commentType === "review") {
+    return await octoRest.rest.pulls.updateReviewComment({
+      owner: repo.owner,
+      repo: repo.repo,
+      comment_id: commentId,
+      body,
+    })
+  }
+
   return await octoRest.rest.issues.updateComment({
     owner: repo.owner,
     repo: repo.repo,

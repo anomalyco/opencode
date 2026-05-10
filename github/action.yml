@@ -38,6 +38,11 @@ inputs:
     description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
 
+  reply_to_review_thread:
+    description: "Reply in the triggering pull request review thread when handling pull_request_review_comment events"
+    required: false
+    default: "false"
+
 runs:
   using: "composite"
   steps:
@@ -77,3 +82,4 @@ runs:
         MENTIONS: ${{ inputs.mentions }}
         VARIANT: ${{ inputs.variant }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}
+        REPLY_TO_REVIEW_THREAD: ${{ inputs.reply_to_review_thread }}
