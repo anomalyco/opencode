@@ -44,9 +44,10 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
 export function run<Def extends SyncEvent.Definition>(
   def: Def,
   data: SyncEvent.Event<Def>["data"],
-  options?: { publish?: boolean },
+  // Temporary escape hatch while the full v2 event system remains experimental.
+  options?: { publish?: boolean; bypassExperimentalEventSystem?: boolean },
 ) {
-  if (!Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) return
+  if (!options?.bypassExperimentalEventSystem && !Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) return
   SyncEvent.run(def, data, options)
 }
 

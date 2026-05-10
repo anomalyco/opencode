@@ -976,15 +976,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         current.model.id !== info.model.modelID ||
         current.model.variant !== info.model.variant
       ) {
-        EventV2.run(SessionEvent.ModelSwitched.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          model: {
-            id: Modelv2.ID.make(info.model.modelID),
-            providerID: Modelv2.ProviderID.make(info.model.providerID),
-            variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
+        EventV2.run(
+          SessionEvent.ModelSwitched.Sync,
+          {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            model: {
+              id: Modelv2.ID.make(info.model.modelID),
+              providerID: Modelv2.ProviderID.make(info.model.providerID),
+              variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
+            },
           },
-        })
+          { bypassExperimentalEventSystem: true },
+        )
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))

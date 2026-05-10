@@ -276,11 +276,15 @@ export const layer = Layer.effect(
         })
       }),
       switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
-        EventV2.run(SessionEvent.ModelSwitched.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(Date.now()),
-          model: input.model,
-        })
+        EventV2.run(
+          SessionEvent.ModelSwitched.Sync,
+          {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+            model: input.model,
+          },
+          { bypassExperimentalEventSystem: true },
+        )
       }),
       subagent: Effect.fn("V2Session.subagent")(function* (input) {
         const parent = yield* result.get(input.parentID)
