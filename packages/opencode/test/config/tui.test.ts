@@ -446,6 +446,16 @@ test("resolves keybind lookup from canonical keybinds", async () => {
   ])
 })
 
+test("defaults paste to ctrl+v and cmd+v", async () => {
+  await using tmp = await tmpdir()
+  const config = await getTuiConfig(tmp.path)
+
+  expect(config.keybinds.get("prompt.paste")).toEqual([
+    { key: "ctrl+v", cmd: "prompt.paste", preventDefault: false, desc: "Paste from clipboard" },
+    { key: "super+v", cmd: "prompt.paste", preventDefault: false, desc: "Paste from clipboard" },
+  ])
+})
+
 test("keybinds accept OpenTUI binding specs", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
