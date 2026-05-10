@@ -184,6 +184,77 @@ function makeActionValue(requestID: string, reply: PermissionReply): PermissionC
   return { kind: "permission_reply", requestID, reply }
 }
 
+/** "已确认"状态显示文案 + header 颜色 */
+const SETTLED_DISPLAY: Record<PermissionReply | "timeout", { text: string; color: string }> = {
+  once: { text: "✅ 已允许一次", color: "green" },
+  always: { text: "🟢 已始终允许", color: "green" },
+  reject: { text: "🛑 已拒绝", color: "red" },
+  timeout: { text: "⏰ 已超时(自动拒绝)", color: "grey" },
+}
+
+/**
+ * 渲染"已确认"卡片 — user 点过按钮(或超时)后,patch 替换原卡片显示新状态。
+ *
+ * 关键变化跟原卡片对比:
+ *   - header.template:orange → green/red/grey(根据 reply)
+ *   - header.title:加 settled 后缀
+ *   - 移除 action 段(actions 里 3 个 button 不再显示,user 无法再点)
+ *   - 加 note 段显示选择 + 时间(本期简版,只显示选择,不带时间戳)
+ *   - patterns + metadata block 保留(让 user 看到 history 上下文)
+ */
+export function buildSettledCard(
+  request: PermissionRequest,
+  reply: PermissionReply | "timeout",
+): InteractiveCard {
+  const { emoji: permEmoji, label: permLabel } = displayFor(request.permission)
+  const { text: settledText, color: headerColor } = SETTLED_DISPLAY[reply]
+
+  // 复用原卡片的 patterns + metadata 渲染逻辑,但 elements 不再含 action
+  const shownPatterns = request.patterns.slice(0, 5)
+  const restCount = request.patterns.length - shownPatterns.length
+  const patternsLines = shownPatterns.map((p) => `\`${truncate(p, 150)}\``).join("\n")
+  const patternsBlock =
+    patternsLines + (restCount > 0 ? `\n…还有 ${restCount} 项` : "")
+
+  const metaLines: string[] = []
+  for (const [k, v] of Object.entries(request.metadata)) {
+    if (typeof v === "string") {
+      metaLines.push(`**${k}**:\`${truncate(v, 200)}\``)
+    } else if (typeof v === "number" || typeof v === "boolean") {
+      metaLines.push(`**${k}**:${v}`)
+    }
+  }
+
+  const elements: Array<unknown> = [
+    {
+      tag: "div",
+      text: { tag: "lark_md", content: patternsBlock || "_(无路径)_" },
+    },
+  ]
+  if (metaLines.length > 0) {
+    elements.push({
+      tag: "div",
+      text: { tag: "lark_md", content: metaLines.join("\n") },
+    })
+  }
+  elements.push({
+    tag: "note",
+    elements: [{ tag: "plain_text", content: settledText }],
+  })
+
+  return {
+    config: { update_multi: true, wide_screen_mode: true },
+    header: {
+      title: {
+        tag: "plain_text",
+        content: `${permEmoji} ${permLabel} — ${settledText}`,
+      },
+      template: headerColor,
+    },
+    elements,
+  }
+}
+
 /**
  * 解析飞书 card.action.trigger 事件,提取 PermissionReply 信息。
  *
@@ -216,6 +287,8 @@ export function parseCardAction(event: unknown): ParsedCardAction | null {
 interface PendingCard {
   chatId: string
   sessionID: string
+  /** PermissionRequest 缓存 — 用 user reply 后渲染 settled 卡片需要原 request 内容 */
+  request: PermissionRequest
   cardMessageId?: string
   timeoutHandle: ReturnType<typeof setTimeout>
 }
@@ -266,6 +339,7 @@ export class PermissionCardController {
     this.pending.set(request.id, {
       chatId,
       sessionID: request.sessionID,
+      request,
       cardMessageId: undefined,
       timeoutHandle,
     })
@@ -298,7 +372,7 @@ export class PermissionCardController {
   /**
    * 收到 card.action.trigger → user 点了一个按钮。
    *
-   * 路由:取 requestID 对应 pending → 调 opencode reply → 清理。
+   * 路由:取 requestID 对应 pending → 调 opencode reply → patch 卡片成已确认状态 → 清理。
    */
   async handleReply(parsed: ParsedCardAction): Promise<void> {
     const entry = this.pending.get(parsed.requestID)
@@ -306,6 +380,8 @@ export class PermissionCardController {
       console.warn(`[permission-card] no pending for ${parsed.requestID} (already replied or expired)`)
       return
     }
+    // patch 卡片到已确认状态(在 cleanup 前抢先用 entry 的 cardMessageId / request)
+    await this.patchSettledCard(entry, parsed.reply)
     this.cleanup(parsed.requestID)
     console.log(
       `[permission-card] user replied ${parsed.reply} for ${parsed.requestID} (chat=${entry.chatId})`,
@@ -313,13 +389,36 @@ export class PermissionCardController {
     await this.replyToOpencode(parsed.requestID, entry.sessionID, parsed.reply)
   }
 
-  /** 5min 超时兜底:自动 reject。 */
+  /** 5min 超时兜底:自动 reject + 卡片 patch 成"已超时"。 */
   private async handleTimeout(requestID: string): Promise<void> {
     const entry = this.pending.get(requestID)
     if (!entry) return
+    await this.patchSettledCard(entry, "timeout")
     this.cleanup(requestID)
     console.warn(`[permission-card] timeout for ${requestID},自动 reject 解锁`)
     await this.replyToOpencode(requestID, entry.sessionID, "reject")
+  }
+
+  /**
+   * patch 飞书卡片到"已确认"状态(header 变色 + 移除 actions + 显示 user 选择)。
+   *
+   * 失败 silent log — 主要响应路径(replyToOpencode)更重要,卡片视觉更新是 nice-to-have。
+   * cardMessageId 缺失(原 sendCard 失败那种)直接跳过。
+   */
+  private async patchSettledCard(
+    entry: PendingCard,
+    reply: PermissionReply | "timeout",
+  ): Promise<void> {
+    if (!entry.cardMessageId) return
+    try {
+      const settledCard = buildSettledCard(entry.request, reply)
+      await this.opts.larkClient.im.v1.message.patch({
+        path: { message_id: entry.cardMessageId },
+        data: { content: JSON.stringify(settledCard) },
+      })
+    } catch (err) {
+      console.warn(`[permission-card] patch settled card failed for ${entry.request.id}:`, err)
+    }
   }
 
   /**
