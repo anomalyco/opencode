@@ -90,7 +90,12 @@ function containsReferencePath(referencePath: string, target: string) {
   return AppFileSystem.contains(normalizedTarget(referencePath) ?? referencePath, target)
 }
 
-export function resolve(input: { name: string; reference: ReferenceEntry; directory: string; worktree: string }): Resolved {
+export function resolve(input: {
+  name: string
+  reference: ReferenceEntry
+  directory: string
+  worktree: string
+}): Resolved {
   if (typeof input.reference === "string") {
     if (input.reference.startsWith(".") || input.reference.startsWith("/") || input.reference.startsWith("~")) {
       return { name: input.name, kind: "local", path: referencePath({ ...input, value: input.reference }) }
@@ -142,7 +147,11 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Reference.state")(function* (ctx) {
         const cfg = yield* config.get()
-        const references = resolveAll({ references: cfg.reference ?? {}, directory: ctx.directory, worktree: ctx.worktree })
+        const references = resolveAll({
+          references: cfg.reference ?? {},
+          directory: ctx.directory,
+          worktree: ctx.worktree,
+        })
         const seenPath = new Set<string>()
         const gitReferences = references.filter((reference): reference is Extract<Resolved, { kind: "git" }> => {
           if (reference.kind !== "git") return false

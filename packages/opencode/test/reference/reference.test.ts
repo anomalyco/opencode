@@ -15,12 +15,7 @@ afterEach(async () => {
 })
 
 const it = testEffect(
-  Layer.mergeAll(
-    AppFileSystem.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-    Git.defaultLayer,
-    Reference.defaultLayer,
-  ),
+  Layer.mergeAll(AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer, Reference.defaultLayer),
 )
 
 const experimentalScout = <A, E, R>(self: Effect.Effect<A, E, R>) =>

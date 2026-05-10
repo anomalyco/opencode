@@ -87,15 +87,7 @@ export const ensure = Effect.fn("RepositoryCache.ensure")(function* (
 
         if (status === "cloned") {
           const clone = yield* services.git.run(
-            [
-              "clone",
-              "--depth",
-              "100",
-              ...(input.branch ? ["--branch", input.branch] : []),
-              "--",
-              remote,
-              localPath,
-            ],
+            ["clone", "--depth", "100", ...(input.branch ? ["--branch", input.branch] : []), "--", remote, localPath],
             { cwd: path.dirname(localPath) },
           )
           if (clone.exitCode !== 0) {
