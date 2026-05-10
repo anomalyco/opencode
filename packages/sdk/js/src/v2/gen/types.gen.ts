@@ -771,6 +771,7 @@ export type Prompt = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  references?: Array<PromptReferenceAttachment>
 }
 
 export type GlobalEvent = {
@@ -2718,6 +2719,18 @@ export type PromptAgentAttachment = {
   source?: PromptSource
 }
 
+export type PromptReferenceAttachment = {
+  name: string
+  kind: "local" | "git" | "invalid"
+  uri?: string
+  repository?: string
+  branch?: string
+  target?: string
+  targetUri?: string
+  problem?: string
+  source?: PromptSource
+}
+
 export type EventSessionNextPrompted = {
   id: string
   type: "session.next.prompted"
@@ -3121,6 +3134,7 @@ export type SessionMessageUser = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  references?: Array<PromptReferenceAttachment>
   type: "user"
 }
 
