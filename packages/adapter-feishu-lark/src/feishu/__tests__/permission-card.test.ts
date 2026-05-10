@@ -168,9 +168,9 @@ describe("parseCardAction", () => {
 // ============================================================
 
 interface FakeReplyCall {
-  path: { requestID: string }
+  path: { id: string; permissionID: string }
   query: { directory: string }
-  body: { reply: string }
+  body: { response: string }
 }
 
 function makeFakes() {
@@ -178,31 +178,37 @@ function makeFakes() {
   const sentCards: Array<{ chatId: string; content: string }> = []
 
   const opencodeClient = {
-    permission: {
-      reply: async (args: any) => {
-        replyCalls.push(args)
-        return { data: true }
-      },
+    postSessionIdPermissionsPermissionId: async (args: any) => {
+      replyCalls.push(args)
+      return { data: true }
     },
   } as any
+
+  const deletedCards: Array<{ messageId: string }> = []
+  let createCounter = 0
 
   const larkClient = {
     im: {
       v1: {
         message: {
           create: async (args: any) => {
+            createCounter++
             sentCards.push({
               chatId: args.data.receive_id,
               content: args.data.content,
             })
-            return { data: { message_id: "om_fake" } }
+            return { data: { message_id: `om_fake_${createCounter}` } }
+          },
+          delete: async (args: any) => {
+            deletedCards.push({ messageId: args.path.message_id })
+            return { data: {} }
           },
         },
       },
     },
   } as any
 
-  return { opencodeClient, larkClient, replyCalls, sentCards }
+  return { opencodeClient, larkClient, replyCalls, sentCards, deletedCards }
 }
 
 describe("PermissionCardController", () => {
@@ -232,14 +238,14 @@ describe("PermissionCardController", () => {
     expect(controller.size).toBe(1)
   })
 
-  test("handleReply once → 调 opencode permission.reply", async () => {
+  test("handleReply once → 调 opencode postSessionIdPermissionsPermissionId", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "once" })
     expect(fakes.replyCalls.length).toBe(1)
     expect(fakes.replyCalls[0]).toEqual({
-      path: { requestID: baseRequest.id },
+      path: { id: baseRequest.sessionID, permissionID: baseRequest.id },
       query: { directory: "/test/workspace" },
-      body: { reply: "once" },
+      body: { response: "once" },
     })
     expect(controller.size).toBe(0) // cleaned up after reply
   })
@@ -247,13 +253,13 @@ describe("PermissionCardController", () => {
   test("handleReply always → 同款 reply", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "always" })
-    expect(fakes.replyCalls[0]?.body.reply).toBe("always")
+    expect(fakes.replyCalls[0]?.body.response).toBe("always")
   })
 
   test("handleReply reject → 同款 reply", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "reject" })
-    expect(fakes.replyCalls[0]?.body.reply).toBe("reject")
+    expect(fakes.replyCalls[0]?.body.response).toBe("reject")
   })
 
   test("handleReply 未知 requestID(已 expired / 重复点击)→ noop", async () => {
@@ -267,7 +273,7 @@ describe("PermissionCardController", () => {
     await new Promise((r) => setTimeout(r, 150)) // > timeoutMs
     expect(controller.size).toBe(0)
     expect(fakes.replyCalls.length).toBe(1)
-    expect(fakes.replyCalls[0]?.body.reply).toBe("reject")
+    expect(fakes.replyCalls[0]?.body.response).toBe("reject")
   })
 
   test("user 点击早于 timeout → 取消 timer,后续 timer 不再 fire", async () => {
@@ -293,7 +299,7 @@ describe("PermissionCardController", () => {
     }
     await controller.start(baseRequest, "oc_TEST")
     expect(fakes.replyCalls.length).toBe(1)
-    expect(fakes.replyCalls[0]?.body.reply).toBe("reject")
+    expect(fakes.replyCalls[0]?.body.response).toBe("reject")
     expect(controller.size).toBe(0)
   })
 
@@ -303,5 +309,69 @@ describe("PermissionCardController", () => {
     expect(controller.size).toBe(2)
     controller.abortAll()
     expect(controller.size).toBe(0)
+  })
+
+  test("user 点 once → 撤回原卡片 + 发已确认 settled 卡片(header 变 green + 移除 action 段)", async () => {
+    await controller.start(baseRequest, "oc_TEST")
+    await controller.handleReply({ requestID: baseRequest.id, reply: "once" })
+    // 1. 撤回了原卡片
+    expect(fakes.deletedCards.length).toBe(1)
+    expect(fakes.deletedCards[0]?.messageId).toBe("om_fake_1")
+    // 2. 发了第二张 settled 卡片
+    expect(fakes.sentCards.length).toBe(2)
+    const settled = JSON.parse(fakes.sentCards[1]!.content)
+    expect(settled.header.template).toBe("green")
+    expect(settled.header.title.content).toContain("已允许一次")
+    expect(
+      (settled.elements as Array<{ tag: string }>).find((e) => e.tag === "action"),
+    ).toBeUndefined()
+  })
+
+  test("user 点 reject → settled card header 变 red", async () => {
+    await controller.start(baseRequest, "oc_TEST")
+    await controller.handleReply({ requestID: baseRequest.id, reply: "reject" })
+    const settled = JSON.parse(fakes.sentCards[1]!.content)
+    expect(settled.header.template).toBe("red")
+    expect(settled.header.title.content).toContain("已拒绝")
+  })
+
+  test("超时 → settled card header 变 grey + 显示已超时", async () => {
+    await controller.start(baseRequest, "oc_TEST")
+    await new Promise((r) => setTimeout(r, 150)) // > timeoutMs
+    expect(fakes.deletedCards.length).toBe(1)
+    expect(fakes.sentCards.length).toBe(2)
+    const settled = JSON.parse(fakes.sentCards[1]!.content)
+    expect(settled.header.template).toBe("grey")
+    expect(settled.header.title.content).toContain("已超时")
+  })
+
+  test("delete API 失败 → silent warn,继续发新卡片", async () => {
+    fakes.larkClient.im.v1.message.delete = async () => {
+      throw new Error("delete api 502")
+    }
+    await controller.start(baseRequest, "oc_TEST")
+    await controller.handleReply({ requestID: baseRequest.id, reply: "once" })
+    // delete 失败,但 settled 卡仍发出
+    expect(fakes.sentCards.length).toBe(2)
+    // reply 主路径不受影响
+    expect(fakes.replyCalls.length).toBe(1)
+    expect(fakes.replyCalls[0]?.body.response).toBe("once")
+  })
+
+  test("send settled card 失败 → silent warn,不阻塞 reply 主路径", async () => {
+    let callCount = 0
+    fakes.larkClient.im.v1.message.create = async (args: any) => {
+      callCount++
+      if (callCount === 1) {
+        // 第一张原卡片正常发
+        return { data: { message_id: "om_fake_orig" } }
+      }
+      throw new Error("create api 502")
+    }
+    await controller.start(baseRequest, "oc_TEST")
+    await controller.handleReply({ requestID: baseRequest.id, reply: "once" })
+    // 第 2 张 create 失败,但主 reply 路径不受影响
+    expect(fakes.replyCalls.length).toBe(1)
+    expect(fakes.replyCalls[0]?.body.response).toBe("once")
   })
 })

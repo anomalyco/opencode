@@ -322,7 +322,9 @@ export class MessagePipeline {
     const wrap = msgsRes as {
       data?: Array<{
         info: {
+          id?: string
           role?: string
+          parentID?: string
           error?: { message?: string; data?: { message?: string } }
         }
         parts: Array<{ type?: string; text?: string; synthetic?: boolean; ignored?: boolean }>
@@ -339,8 +341,22 @@ export class MessagePipeline {
     const data = wrap.data
     if (data.length === 0) return ""
 
-    const assistantEntry = findLastUsefulAssistant(data)
-    if (!assistantEntry) return ""
+    // 本轮 user msg id — 用来限定只取本轮 assistant(防 reject 时回退取前一轮答案)
+    let userMsgId: string | undefined = undefined
+    for (let i = data.length - 1; i >= 0; i--) {
+      if (data[i]!.info.role === "user") {
+        userMsgId = data[i]!.info.id
+        break
+      }
+    }
+
+    const assistantEntry = findLastUsefulAssistant(data, userMsgId)
+    if (!assistantEntry) {
+      console.warn(
+        `[pipeline ${this.opts.accountId}] 本轮无 useful assistant(user msg=${userMsgId ?? "?"})— 可能 reject + LLM 无后续输出`,
+      )
+      return ""
+    }
 
     // 检查 LLM 错误(opencode 把 LLM API error 存进 assistant message.error)
     const err = assistantEntry.info.error
@@ -452,26 +468,37 @@ export class MessagePipeline {
 /** SDK session.messages 返回 entry 的子集类型(仅本 helper 需要的字段)*/
 export type AssistantMessageEntry = {
   info: {
+    id?: string
     role?: string
+    parentID?: string
     error?: { message?: string; data?: { message?: string } }
   }
   parts: Array<{ type?: string; text?: string; synthetic?: boolean; ignored?: boolean }>
 }
 
 /**
- * 倒序找最近一条"有用"的 assistant message。
+ * 倒序找当前 turn 里最近一条"有用"的 assistant message。
  *
  * 有用 = 有 error(error 也是有效信号,caller 会抛出去)或 有非空 text part。
  * 跳过条件 = 0-token / 空文本 placeholder ghost(text 全空 + 无 error)。
  *
- * 返回 undefined → 整个 data 里没有任何 assistant role 的 entry,或全是 placeholder。
+ * **本轮约束**:只考虑 `parentID === userMsgId` 的 assistant message。前一轮的 assistant
+ * 不会被误取(2026-05-11 修;之前没此约束,reject 时本轮 assistant 无 text + 没 info.error
+ * 被识别为 ghost 跳过 → 倒序回退到上一轮 assistant text → 把上一轮答案重发到飞书 →
+ * user 看到"已拒绝"卡片但仍收到旧答案,严重安全感问题)。
+ *
+ * 返回 undefined → 本轮没有任何 useful assistant message,caller 应返空字符串。
  */
 export function findLastUsefulAssistant(
   data: ReadonlyArray<AssistantMessageEntry>,
+  userMsgId?: string,
 ): AssistantMessageEntry | undefined {
   for (let i = data.length - 1; i >= 0; i--) {
     const m = data[i]
     if (!m || m.info.role !== "assistant") continue
+    // 本轮约束:assistant.parentID 必须等于 userMsgId(本轮触发的 user msg)
+    // 没传 userMsgId 时退化成"任何轮"行为,兼容旧 caller(测试 / 回归保留)
+    if (userMsgId !== undefined && m.info.parentID !== userMsgId) continue
 
     if (m.info.error) return m
 
@@ -484,7 +511,7 @@ export function findLastUsefulAssistant(
         !p.ignored,
     )
     if (hasRealText) return m
-    // 否则:placeholder ghost,继续往前扫
+    // 否则:placeholder ghost,继续往前扫(仍受 parentID 约束)
   }
   return undefined
 }
