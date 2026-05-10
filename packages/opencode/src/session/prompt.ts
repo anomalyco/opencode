@@ -758,7 +758,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
               throw error
             }
-            const model = input.model ?? agent.model ?? (yield* lastModel(input.sessionID))
+            const model = input.model ?? agent.model ?? (yield* currentModel(input.sessionID))
             const userMsg: MessageV2.User = {
               id: input.messageID ?? MessageID.ascending(),
               sessionID: input.sessionID,
@@ -916,7 +916,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return yield* Effect.failCause(exit.cause)
     })
 
-    const lastModel = Effect.fnUntraced(function* (sessionID: SessionID) {
+    const currentModel = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const current = Database.use((db) =>
+        db.select({ model: SessionTable.model }).from(SessionTable).where(eq(SessionTable.id, sessionID)).get(),
+      )
+      if (current?.model) {
+        return {
+          providerID: ProviderID.make(current.model.providerID),
+          modelID: ModelID.make(current.model.id),
+          ...(current.model.variant && current.model.variant !== "default" ? { variant: current.model.variant } : {}),
+        }
+      }
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
       return yield* provider.defaultModel()
@@ -933,7 +943,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw error
       }
 
-      const model = input.model ?? ag.model ?? (yield* lastModel(input.sessionID))
+      const current = Database.use((db) =>
+        db
+          .select({ agent: SessionTable.agent, model: SessionTable.model })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get(),
+      )
+      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
@@ -957,13 +974,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         format: input.format,
       }
 
-      const current = Database.use((db) =>
-        db
-          .select({ agent: SessionTable.agent, model: SessionTable.model })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, input.sessionID))
-          .get(),
-      )
       if (current?.agent !== info.agent) {
         EventV2.run(
           SessionEvent.AgentSwitched.Sync,
@@ -978,7 +988,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (
         current?.model?.providerID !== info.model.providerID ||
         current.model.id !== info.model.modelID ||
-        current.model.variant !== info.model.variant
+        (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant
       ) {
         EventV2.run(
           SessionEvent.ModelSwitched.Sync,
@@ -1712,7 +1722,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           if (cmdAgent?.model) return cmdAgent.model
         }
         if (input.model) return Provider.parseModel(input.model)
-        return yield* lastModel(input.sessionID)
+        return yield* currentModel(input.sessionID)
       })
 
       yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
@@ -1745,7 +1755,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const userModel = isSubtask
         ? input.model
           ? Provider.parseModel(input.model)
-          : yield* lastModel(input.sessionID)
+          : yield* currentModel(input.sessionID)
         : taskModel
 
       yield* plugin.trigger(
