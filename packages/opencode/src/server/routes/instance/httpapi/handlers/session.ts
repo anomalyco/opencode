@@ -107,11 +107,20 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       query: typeof MessagesQuery.Type
     }) {
-      if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
+      if ((ctx.query.before || ctx.query.after) && ctx.query.limit === undefined)
+        return yield* new HttpApiError.BadRequest({})
+      if (ctx.query.before && ctx.query.after) return yield* new HttpApiError.BadRequest({})
       if (ctx.query.before) {
         const before = ctx.query.before
         yield* Effect.try({
           try: () => MessageV2.cursor.decode(before),
+          catch: () => new HttpApiError.BadRequest({}),
+        })
+      }
+      if (ctx.query.after) {
+        const after = ctx.query.after
+        yield* Effect.try({
+          try: () => MessageV2.cursor.decode(after),
           catch: () => new HttpApiError.BadRequest({}),
         })
       }
@@ -125,6 +134,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           sessionID: ctx.params.sessionID,
           limit: ctx.query.limit,
           before: ctx.query.before,
+          after: ctx.query.after,
         }),
       )
       if (!page.cursor) return page.items
@@ -134,7 +144,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       // header echoes the real origin instead of a hard-coded localhost.
       const url = Option.getOrElse(HttpServerRequest.toURL(request), () => new URL(request.url, "http://localhost"))
       url.searchParams.set("limit", ctx.query.limit.toString())
-      url.searchParams.set("before", page.cursor)
+      const direction = ctx.query.after ? "after" : "before"
+      url.searchParams.set(direction, page.cursor)
       return HttpServerResponse.jsonUnsafe(page.items, {
         headers: {
           "Access-Control-Expose-Headers": "Link, X-Next-Cursor",
