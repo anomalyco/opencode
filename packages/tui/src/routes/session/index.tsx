@@ -427,6 +427,61 @@ export function Session() {
     }, 50)
   }
 
+  // Pagination + asymmetric windowing
+  const WINDOW_CAP = 200
+  const NEAR_TOP_THRESHOLD = 5
+  const NEAR_BOTTOM_THRESHOLD = 5
+
+  async function maybeLoadOlderMessages() {
+    if (!scroll || scroll.isDestroyed) return
+    if (!sync.data.messageOlderCursor[route.sessionID]) return
+    if (sync.data.messageOlderLoading[route.sessionID]) return
+    if (scroll.y > NEAR_TOP_THRESHOLD) return
+    const prevScrollHeight = scroll.scrollHeight
+    const prevY = scroll.y
+    await sync.session.loadOlderMessages(route.sessionID)
+    // Trim from the bottom if the user is well above it - only safe when
+    // there's room above the live tail and no message there is still
+    // streaming. trimNewerMessages itself enforces the streaming guard.
+    const messages = sync.data.message[route.sessionID] ?? []
+    if (messages.length > WINDOW_CAP && scroll.scrollHeight - prevY > scroll.height * 4) {
+      sync.session.trimNewerMessages(route.sessionID, WINDOW_CAP)
+    }
+    setTimeout(() => {
+      if (!scroll || scroll.isDestroyed) return
+      scroll.scrollTo(prevY + (scroll.scrollHeight - prevScrollHeight))
+    }, 0)
+  }
+
+  async function maybeLoadNewerMessages() {
+    if (!scroll || scroll.isDestroyed) return
+    if (!sync.data.messageNewerCursor[route.sessionID]) return
+    if (sync.data.messageNewerLoading[route.sessionID]) return
+    const distanceFromBottom = scroll.scrollHeight - scroll.height - scroll.y
+    if (distanceFromBottom > NEAR_BOTTOM_THRESHOLD) return
+    const prevScrollHeight = scroll.scrollHeight
+    const prevY = scroll.y
+    await sync.session.loadNewerMessages(route.sessionID)
+    // Trim from the top - older messages can always be re-fetched via the
+    // older cursor, no streaming concern.
+    const messages = sync.data.message[route.sessionID] ?? []
+    if (messages.length > WINDOW_CAP && prevY > scroll.height * 4) {
+      sync.session.trimOlderMessages(route.sessionID, WINDOW_CAP)
+    }
+    setTimeout(() => {
+      if (!scroll || scroll.isDestroyed) return
+      // After append, scroll position relative to top is unchanged. After
+      // top-trim, content above shrinks - keep the same logical position.
+      const heightDelta = scroll.scrollHeight - prevScrollHeight
+      if (heightDelta < 0) scroll.scrollTo(Math.max(0, prevY + heightDelta))
+    }, 0)
+  }
+
+  function maybeLoadAdjacent() {
+    void maybeLoadOlderMessages()
+    void maybeLoadNewerMessages()
+  }
+
   const local = useLocal()
 
   function enterChild(sessionID: string) {
@@ -755,6 +810,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-scroll.height / 2)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -765,6 +821,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(scroll.height / 2)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -775,6 +832,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-1)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -785,6 +843,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(1)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -795,6 +854,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-scroll.height / 4)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -805,6 +865,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(scroll.height / 4)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -815,6 +876,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollTo(0)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -825,6 +887,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollTo(scroll.scrollHeight)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -1194,7 +1257,17 @@ export function Session() {
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
+                onMouseScroll={() => {
+                  // Defer until after the scrollbox has applied the scroll
+                  // delta so scroll.y reflects the post-event position.
+                  setTimeout(() => maybeLoadAdjacent(), 0)
+                }}
               >
+                <Show when={sync.data.messageOlderLoading[route.sessionID]}>
+                  <box paddingLeft={3} flexShrink={0}>
+                    <Spinner color={theme.textMuted}>Loading older messages…</Spinner>
+                  </box>
+                </Show>
                 <box height={1} />
                 <For each={messages()}>
                   {(message, index) => (
@@ -1292,6 +1365,11 @@ export function Session() {
                     </Switch>
                   )}
                 </For>
+                <Show when={sync.data.messageNewerLoading[route.sessionID]}>
+                  <box paddingLeft={3} flexShrink={0}>
+                    <Spinner color={theme.textMuted}>Loading newer messages…</Spinner>
+                  </box>
+                </Show>
               </scrollbox>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
