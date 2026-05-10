@@ -15,7 +15,7 @@ import { WithInstance } from "../../src/project/with-instance"
 import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
-import { provideTmpdirInstance, tmpdir } from "../fixture/fixture"
+import { provideTmpdirInstance, TestInstance, tmpdir } from "../fixture/fixture"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -145,6 +145,53 @@ async function assistant(sessionID: SessionID, parentID: MessageID, root: string
   }
   await svc.updateMessage(msg)
   return msg
+}
+
+function createUserMessage(sessionID: SessionID, text: string) {
+  return Effect.gen(function* () {
+    const ssn = yield* SessionNs.Service
+    const msg = yield* ssn.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID,
+      agent: "build",
+      model: ref,
+      time: { created: Date.now() },
+    })
+    yield* ssn.updatePart({
+      id: PartID.ascending(),
+      messageID: msg.id,
+      sessionID,
+      type: "text",
+      text,
+    })
+    return msg
+  })
+}
+
+function createAssistantMessage(sessionID: SessionID, parentID: MessageID, root: string) {
+  return SessionNs.Service.use((ssn) =>
+    ssn.updateMessage({
+      id: MessageID.ascending(),
+      role: "assistant",
+      sessionID,
+      mode: "build",
+      agent: "build",
+      path: { cwd: root, root },
+      cost: 0,
+      tokens: {
+        output: 0,
+        input: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: ref.modelID,
+      providerID: ref.providerID,
+      parentID,
+      time: { created: Date.now() },
+      finish: "end_turn",
+    }),
+  )
 }
 
 async function summaryAssistant(sessionID: SessionID, parentID: MessageID, root: string, text: string) {
@@ -805,35 +852,35 @@ describe("session.compaction.prune", () => {
 })
 
 describe("session.compaction.process", () => {
-  test("throws when parent is not a user message", async () => {
-    await using tmp = await tmpdir()
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const reply = await assistant(session.id, msg.id, tmp.path)
-        const rt = runtime("continue")
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          await expect(
-            rt.runPromise(
-              SessionCompaction.Service.use((svc) =>
-                svc.process({
-                  parentID: reply.id,
-                  messages: msgs,
-                  sessionID: session.id,
-                  auto: false,
-                }),
-              ),
-            ),
-          ).rejects.toThrow(`Compaction parent must be a user message: ${reply.id}`)
-        } finally {
-          await rt.dispose()
+  it.instance(
+    "throws when parent is not a user message",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const reply = yield* createAssistantMessage(session.id, msg.id, test.directory)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const exit = yield* Effect.exit(
+        SessionCompaction.use.process({
+          parentID: reply.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        }),
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(Error)
+        if (error instanceof Error) {
+          expect(error.message).toContain(`Compaction parent must be a user message: ${reply.id}`)
         }
-      },
-    })
-  })
+      }
+    }),
+  )
 
   test("publishes compacted event on continue", async () => {
     await using tmp = await tmpdir()
