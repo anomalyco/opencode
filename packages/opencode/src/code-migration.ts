@@ -1,5 +1,4 @@
-import { Context, Effect, Layer } from "effect"
-import { makeRuntime } from "./effect/run-service"
+import { Effect, Layer } from "effect"
 import { Database, type TxOrDb } from "./storage/db"
 import { CodeMigrationTable } from "./code-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
@@ -9,32 +8,15 @@ export type Migration = {
   run: (db: TxOrDb) => void | Promise<void>
 }
 
-export interface Interface {
-  readonly start: () => Effect.Effect<void>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/CodeMigration") {}
-
 const log = Log.create({ service: "code-migration" })
 
 export const All: Migration[] = []
 
-export const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    let started = false
-
-    const start = Effect.fn("CodeMigration.start")(function* () {
-      if (started) return
-      started = true
-      yield* Effect.sync(() => {
-        void runPending().catch((error) => {
-          log.error("failed to run code migrations", { error })
-        })
-      })
+export const layer = Layer.effectDiscard(
+  Effect.sync(() => {
+    void runPending().catch((error) => {
+      log.error("failed to run code migrations", { error })
     })
-
-    return Service.of({ start })
   }),
 )
 
@@ -68,12 +50,6 @@ async function runPending() {
     db.run("ROLLBACK")
     throw error
   }
-}
-
-const { runFork } = makeRuntime(Service, defaultLayer)
-
-export function start() {
-  runFork((svc) => svc.start())
 }
 
 export * as CodeMigration from "./code-migration"
