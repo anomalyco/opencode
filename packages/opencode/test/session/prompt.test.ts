@@ -495,6 +495,50 @@ it.live("static loop consumes queued replies across turns", () =>
   ),
 )
 
+it.live("plan mode reminders remain stable when the message becomes history", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Plan prompt cache",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "plan",
+        noReply: true,
+        parts: [{ type: "text", text: "first plan question" }],
+      })
+
+      yield* llm.text("first plan answer")
+      yield* prompt.loop({ sessionID: session.id })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "plan",
+        noReply: true,
+        parts: [{ type: "text", text: "second plan question" }],
+      })
+
+      yield* llm.text("second plan answer")
+      yield* prompt.loop({ sessionID: session.id })
+
+      const hits = yield* llm.hits
+      const messages = hits[1].body.messages as { role: string; content: unknown }[]
+      expect(messages[1].role).toBe("user")
+      expect(messages[1].content).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "text", text: expect.stringContaining("first plan question") }),
+          expect.objectContaining({ type: "text", text: expect.stringContaining("Plan Mode - System Reminder") }),
+        ]),
+      )
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
 it.live("loop continues when finish is tool-calls", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ llm }) {

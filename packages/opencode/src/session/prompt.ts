@@ -237,28 +237,26 @@ export const layer = Layer.effect(
     }) {
       const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
       if (!userMessage) return input.messages
+      const ensureSyntheticPart = Effect.fn("SessionPrompt.ensureSyntheticPart")(function* (text: string) {
+        if (userMessage.parts.some((part) => part.type === "text" && part.synthetic && part.text === text)) return
+        const part = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text,
+          synthetic: true,
+        })
+        userMessage.parts.push(part)
+      })
 
       if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
         if (input.agent.name === "plan") {
-          userMessage.parts.push({
-            id: PartID.ascending(),
-            messageID: userMessage.info.id,
-            sessionID: userMessage.info.sessionID,
-            type: "text",
-            text: PROMPT_PLAN,
-            synthetic: true,
-          })
+          yield* ensureSyntheticPart(PROMPT_PLAN)
         }
         const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
         if (wasPlan && input.agent.name === "build") {
-          userMessage.parts.push({
-            id: PartID.ascending(),
-            messageID: userMessage.info.id,
-            sessionID: userMessage.info.sessionID,
-            type: "text",
-            text: BUILD_SWITCH,
-            synthetic: true,
-          })
+          yield* ensureSyntheticPart(BUILD_SWITCH)
         }
         return input.messages
       }
