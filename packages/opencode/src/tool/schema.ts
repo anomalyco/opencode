@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
-import { zod, ZodOverride } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 const toolIdSchema = Schema.String.annotate({ [ZodOverride]: Identifier.schema("tool") }).pipe(Schema.brand("ToolID"))
 

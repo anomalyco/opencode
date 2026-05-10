@@ -1065,7 +1065,7 @@ export type ProviderConfig = {
         output: Array<"text" | "audio" | "image" | "video" | "pdf">
       }
       experimental?: boolean
-      status?: "alpha" | "beta" | "deprecated"
+      status?: "alpha" | "beta" | "deprecated" | "active"
       options?: {
         [key: string]: unknown
       }
@@ -3012,7 +3012,7 @@ export type ProviderListResponses = {
             output: Array<"text" | "audio" | "image" | "video" | "pdf">
           }
           experimental?: boolean
-          status?: "alpha" | "beta" | "deprecated"
+          status?: "alpha" | "beta" | "deprecated" | "active"
           options: {
             [key: string]: unknown
           }

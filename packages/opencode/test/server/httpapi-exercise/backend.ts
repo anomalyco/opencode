@@ -1,4 +1,3 @@
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { ConfigProvider, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { parse } from "./assertions"
@@ -56,16 +55,7 @@ function app(modules: Runtime, backend: Backend, options: CallOptions) {
   const username = options.auth?.username
   const password = options.auth?.password
   const cacheKey = `${backend}:${username ?? ""}:${password ?? ""}`
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = backend === "effect"
-  Flag.OPENCODE_SERVER_PASSWORD = password
-  Flag.OPENCODE_SERVER_USERNAME = username
   if (appCache[cacheKey]) return appCache[cacheKey]
-  if (backend === "legacy") {
-    const legacy = modules.Server.Legacy().app
-    return (appCache[cacheKey] = {
-      request: (input, init) => legacy.request(input, init),
-    })
-  }
 
   const handler = HttpRouter.toWebHandler(
     modules.ExperimentalHttpApiServer.routes.pipe(
