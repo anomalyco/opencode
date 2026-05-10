@@ -76,7 +76,7 @@ describe("opencode TUI keymap", () => {
   })
 
   test("supports esc alias in configured textarea bindings", async () => {
-    const setup = await createTextarea({ input_delete: "esc" })
+    const setup = await createTextarea({ input_delete: "esc,delete" })
     try {
       setup.textarea.setText("a")
       setup.textarea.cursorOffset = 0
@@ -102,7 +102,7 @@ describe("opencode TUI keymap", () => {
           },
         },
       ],
-      bindings: [{ key: "esc", cmd: "session.interrupt" }],
+      bindings: [{ key: "esc,ctrl+x", cmd: "session.interrupt" }],
     })
 
     try {
