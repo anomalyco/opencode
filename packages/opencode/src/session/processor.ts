@@ -749,6 +749,7 @@ export const layer: Layer.Layer<
                     next: info.next,
                   })
                 },
+                maxAttempts: (yield* config.get()).session?.retry?.maxAttempts,
               }),
             ),
             Effect.catch(halt),

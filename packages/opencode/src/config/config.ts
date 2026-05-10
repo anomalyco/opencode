@@ -283,6 +283,18 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  session: Schema.optional(
+    Schema.Struct({
+      retry: Schema.optional(
+        Schema.Struct({
+          maxAttempts: Schema.optional(NonNegativeInt).annotate({
+            description:
+              "Maximum number of retry attempts for transient errors (5xx, rate limits). Set to 0 to disable retries. Default: 5",
+          }),
+        }),
+      ),
+    }),
+  ),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
