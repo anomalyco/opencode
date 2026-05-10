@@ -99,6 +99,7 @@ function completedToolEvent(
     tool: string
     input: Record<string, unknown>
     output: string
+    title?: string
     attachments?: ToolStateCompleted["attachments"]
   },
 ): GlobalEventEnvelope {
@@ -106,7 +107,7 @@ function completedToolEvent(
     status: "completed",
     input: opts.input,
     output: opts.output,
-    title: opts.tool,
+    title: opts.title ?? opts.tool,
     metadata: {},
     time: { start: Date.now() - 1, end: Date.now() },
     ...(opts.attachments && { attachments: opts.attachments }),
@@ -897,6 +898,35 @@ describe("acp.agent event subscription", () => {
           .map((u) => inProgressText(u.update))
 
         expect(snapshots).toEqual(["a", "a"])
+        stop()
+      },
+    })
+  })
+
+  test("completed tool_call_update uses tool name as title, not state.title", async () => {
+    await using tmp = await tmpdir()
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push(
+          completedToolEvent(sessionId, cwd, {
+            callID: "call_write_title",
+            tool: "write",
+            input: { filePath: "/home/user/project/src/index.ts" },
+            output: "Wrote file successfully.",
+            title: "src/index.ts",
+          }),
+        )
+        await new Promise((r) => setTimeout(r, 20))
+
+        const update = completedToolUpdate(sessionUpdates, sessionId, "call_write_title")
+        expect(update).toBeDefined()
+        expect(update!.title).toBe("write")
+
         stop()
       },
     })
