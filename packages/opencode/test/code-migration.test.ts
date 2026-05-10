@@ -41,21 +41,21 @@ describe("CodeMigration", () => {
           CodeMigration.make(() => [
             {
               name: first,
-              run: () => {
+              run: Effect.sync(() => {
                 runs++
-              },
+              }),
             },
             {
               name: first,
-              run: () => {
+              run: Effect.sync(() => {
                 runs++
-              },
+              }),
             },
             {
               name: sentinel,
-              run: () => {
+              run: Effect.sync(() => {
                 complete()
-              },
+              }),
             },
           ]),
         ),

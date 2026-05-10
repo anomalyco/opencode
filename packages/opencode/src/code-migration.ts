@@ -1,12 +1,12 @@
 import { Context, Effect, Layer } from "effect"
-import { Database, type TxOrDb } from "./storage/db"
+import { Database } from "./storage/db"
 import { CodeMigrationTable } from "./code-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 
 export type Migration = {
   name: string
-  run: (db: TxOrDb) => void | Promise<void>
+  run: Effect.Effect<void, unknown>
 }
 
 const log = Log.create({ service: "code-migration" })
@@ -23,30 +23,27 @@ export const make = (build: () => Migration[]) => Layer.effect(
     yield* Effect.gen(function* () {
       if (migrations.length === 0) return
 
+      // Migrations run in a background fiber, so they must be resumable until
+      // their completion row is written.
       for (const migration of migrations) {
-        yield* Effect.promise(async () => {
-          const db = Database.Client()
-          db.run("BEGIN IMMEDIATE")
-          try {
-            const completed = db
-              .select({ name: CodeMigrationTable.name })
-              .from(CodeMigrationTable)
-              .where(eq(CodeMigrationTable.name, migration.name))
-              .get()
-            if (!completed) {
-              log.info("running code migration", { name: migration.name })
-              await migration.run(db)
-              db.insert(CodeMigrationTable)
-                .values({ name: migration.name, time_completed: Date.now() })
-                .onConflictDoNothing()
-                .run()
-            }
-            db.run("COMMIT")
-          } catch (error) {
-            db.run("ROLLBACK")
-            throw error
-          }
-        })
+        const completed = Database.use((db) =>
+          db
+            .select({ name: CodeMigrationTable.name })
+            .from(CodeMigrationTable)
+            .where(eq(CodeMigrationTable.name, migration.name))
+            .get(),
+        )
+        if (completed) continue
+
+        log.info("running code migration", { name: migration.name })
+        yield* migration.run
+        Database.use((db) =>
+          db
+            .insert(CodeMigrationTable)
+            .values({ name: migration.name, time_completed: Date.now() })
+            .onConflictDoNothing()
+            .run(),
+        )
       }
     }).pipe(
       Effect.tapCause((cause) => Effect.logError("failed to run code migrations", { cause })),
