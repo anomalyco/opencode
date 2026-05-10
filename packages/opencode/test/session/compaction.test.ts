@@ -10,7 +10,6 @@ import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Token } from "@/util/token"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "../../src/permission"
@@ -1293,91 +1292,70 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("replays the prior user turn on overflow when earlier context exists", async () => {
-    await using tmp = await tmpdir()
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        await user(session.id, "root")
-        const replay = await user(session.id, "image")
-        await svc.updatePart({
-          id: PartID.ascending(),
-          messageID: replay.id,
-          sessionID: session.id,
-          type: "file",
-          mime: "image/png",
-          filename: "cat.png",
-          url: "https://example.com/cat.png",
-        })
-        const msg = await user(session.id, "current")
-        const rt = runtime("continue", Plugin.defaultLayer, wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: true,
-                overflow: true,
-              }),
-            ),
-          )
+  it.instance(
+    "replays the prior user turn on overflow when earlier context exists",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "root")
+      const replay = yield* createUserMessage(session.id, "image")
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: replay.id,
+        sessionID: session.id,
+        type: "file",
+        mime: "image/png",
+        filename: "cat.png",
+        url: "https://example.com/cat.png",
+      })
+      const msg = yield* createUserMessage(session.id, "current")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
 
-          const last = (await svc.messages({ sessionID: session.id })).at(-1)
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+        overflow: true,
+      })
 
-          expect(result).toBe("continue")
-          expect(last?.info.role).toBe("user")
-          expect(last?.parts.some((part) => part.type === "file")).toBe(false)
-          expect(
-            last?.parts.some((part) => part.type === "text" && part.text.includes("Attached image/png: cat.png")),
-          ).toBe(true)
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+      const last = (yield* ssn.messages({ sessionID: session.id })).at(-1)
 
-  test("falls back to overflow guidance when no replayable turn exists", async () => {
-    await using tmp = await tmpdir()
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        await user(session.id, "earlier")
-        const msg = await user(session.id, "current")
+      expect(result).toBe("continue")
+      expect(last?.info.role).toBe("user")
+      expect(last?.parts.some((part) => part.type === "file")).toBe(false)
+      expect(
+        last?.parts.some((part) => part.type === "text" && part.text.includes("Attached image/png: cat.png")),
+      ).toBe(true)
+    }),
+  )
 
-        const rt = runtime("continue", Plugin.defaultLayer, wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: true,
-                overflow: true,
-              }),
-            ),
-          )
+  it.instance(
+    "falls back to overflow guidance when no replayable turn exists",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "earlier")
+      const msg = yield* createUserMessage(session.id, "current")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
 
-          const last = (await svc.messages({ sessionID: session.id })).at(-1)
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+        overflow: true,
+      })
 
-          expect(result).toBe("continue")
-          expect(last?.info.role).toBe("user")
-          if (last?.parts[0]?.type === "text") {
-            expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
-          }
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+      const last = (yield* ssn.messages({ sessionID: session.id })).at(-1)
+
+      expect(result).toBe("continue")
+      expect(last?.info.role).toBe("user")
+      if (last?.parts[0]?.type === "text") {
+        expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
+      }
+    }),
+  )
 
   test("stops quickly when aborted during retry backoff", async () => {
     const stub = llm()
