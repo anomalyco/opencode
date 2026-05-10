@@ -525,26 +525,20 @@ You can also define commands using markdown files in `~/.config/opencode/command
 
 ---
 
-### Keymap
+### Keybinds
 
-Customize TUI keyboard shortcuts in `tui.json` with `keymap`.
+Customize TUI keyboard shortcuts in `tui.json` with `keybinds`.
 
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
-  "keymap": {
-    "sections": {
-      "global": {
-        "command.palette.show": "ctrl+p"
-      }
-    }
+  "keybinds": {
+    "command_list": "ctrl+p"
   }
 }
 ```
 
-`keymap` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
-
-The older `keybinds` field is deprecated and only applies when `keymap` is not present.
+`keybinds` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
 
 [Learn more here](/docs/keybinds).
 

@@ -415,8 +415,11 @@ export async function handler(
             message: error.message,
           },
           metadata:
-            error instanceof GoUsageLimitError || error instanceof BlackUsageLimitError
-              ? { workspace: error.workspace }
+            error instanceof GoUsageLimitError
+              ? {
+                  workspace: error.workspace,
+                  limitName: error.limitName,
+                }
               : {},
         }),
         { status: 429, headers },
@@ -710,7 +713,6 @@ export async function handler(
               t("zen.api.error.subscriptionQuotaExceeded", {
                 retryIn: formatRetryTime(result.resetInSec),
               }),
-              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -729,7 +731,6 @@ export async function handler(
               t("zen.api.error.subscriptionQuotaExceeded", {
                 retryIn: formatRetryTime(result.resetInSec),
               }),
-              authInfo.workspaceID,
               result.resetInSec,
             )
         }
@@ -743,6 +744,7 @@ export async function handler(
     // Validate lite subscription billing
     if (opts.modelList === "lite" && authInfo.billing.lite && authInfo.lite) {
       try {
+        const consoleGoUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/go`
         const sub = authInfo.lite
         const liteData = LiteData.getLimits()
 
@@ -755,8 +757,12 @@ export async function handler(
           })
           if (result.status === "rate-limited")
             throw new GoUsageLimitError(
-              t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+              t("zen.api.error.goSubscriptionWeeklyLimitExceeded", {
+                retryIn: formatRetryTime(result.resetInSec),
+                consoleGoUrl,
+              }),
               authInfo.workspaceID,
+              "weekly",
               result.resetInSec,
             )
         }
@@ -771,8 +777,12 @@ export async function handler(
           })
           if (result.status === "rate-limited")
             throw new GoUsageLimitError(
-              t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+              t("zen.api.error.goSubscriptionMonthlyLimitExceeded", {
+                retryIn: formatRetryTime(result.resetInSec),
+                consoleGoUrl,
+              }),
               authInfo.workspaceID,
+              "monthly",
               result.resetInSec,
             )
         }
@@ -787,8 +797,12 @@ export async function handler(
           })
           if (result.status === "rate-limited")
             throw new GoUsageLimitError(
-              t("zen.api.error.subscriptionQuotaExceededUseFreeModels"),
+              t("zen.api.error.goSubscriptionRollingLimitExceeded", {
+                retryIn: formatRetryTime(result.resetInSec),
+                consoleGoUrl,
+              }),
               authInfo.workspaceID,
+              "5 hour",
               result.resetInSec,
             )
         }

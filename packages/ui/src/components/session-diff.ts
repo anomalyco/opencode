@@ -12,7 +12,8 @@ type LegacyDiff = {
   status?: "added" | "deleted" | "modified"
 }
 
-type ReviewDiff = SnapshotFileDiff | VcsFileDiff | LegacyDiff
+type SnapshotDiff = SnapshotFileDiff & { file: string }
+type ReviewDiff = SnapshotDiff | VcsFileDiff | LegacyDiff
 
 export type ViewDiff = {
   file: string
