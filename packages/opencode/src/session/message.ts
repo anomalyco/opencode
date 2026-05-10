@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 import { SessionID } from "./schema"
 import { ModelID, ProviderID } from "../provider/schema"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 
 export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
@@ -172,12 +172,12 @@ export const Info = Schema.Struct({
         cost: Schema.Finite,
         summary: Schema.optional(Schema.Boolean),
         tokens: Schema.Struct({
-          input: NonNegativeInt,
-          output: NonNegativeInt,
-          reasoning: NonNegativeInt,
+          input: Schema.Finite,
+          output: Schema.Finite,
+          reasoning: Schema.Finite,
           cache: Schema.Struct({
-            read: NonNegativeInt,
-            write: NonNegativeInt,
+            read: Schema.Finite,
+            write: Schema.Finite,
           }),
         }),
       }),

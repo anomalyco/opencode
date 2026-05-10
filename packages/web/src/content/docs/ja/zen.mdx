@@ -93,8 +93,7 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | Kimi K2.5             | kimi-k2.5             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2.6             | kimi-k2.6             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle            | big-pickle            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Ling 2.6 Flash        | ling-2.6-flash        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Hy3 Preview Free      | hy3-preview-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Ring 2.6 1T           | ring-2.6-1t-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 OpenCode 設定で使う [model id](/docs/config/#models) は `opencode/<model-id>` 形式です。たとえば、GPT 5.5 では設定に `opencode/gpt-5.5` を使用します。
@@ -119,8 +118,7 @@ https://opencode.ai/zen/v1/models
 | --------------------------------- | ------ | ------- | ----------- | ------------ |
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | MiniMax M2.5 Free                 | Free   | Free    | Free        | -            |
-| Ling 2.6 Flash Free               | Free   | Free    | Free        | -            |
-| Hy3 Preview Free                  | Free   | Free    | Free        | -            |
+| Ring 2.6 1T Free                  | Free   | Free    | Free        | -            |
 | Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
@@ -161,7 +159,7 @@ https://opencode.ai/zen/v1/models
 | GPT 5.1 Codex Mini                | $0.25  | $2.00   | $0.025      | -            |
 | GPT 5                             | $1.07  | $8.50   | $0.107      | -            |
 | GPT 5 Codex                       | $1.07  | $8.50   | $0.107      | -            |
-| GPT 5 Nano                        | Free   | Free    | Free        | -            |
+| GPT 5 Nano                        | $0.05  | $0.40   | $0.005      | -            |
 
 使用履歴に _Claude Haiku 3.5_ が表示されることがあります。これはセッションのタイトル生成に使われる [low cost model](/docs/config/#models) です。
 
@@ -172,8 +170,7 @@ https://opencode.ai/zen/v1/models
 無料モデル:
 
 - MiniMax M2.5 Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
-- Ling 2.6 Flash Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
-- Hy3 Preview Flash Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
+- Ring 2.6 1T Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Nemotron 3 Super Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Big Pickle はステルスモデルで、期間限定で OpenCode で無料提供されています。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 
@@ -225,8 +222,7 @@ https://opencode.ai/zen/v1/models
 
 - Big Pickle: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - MiniMax M2.5 Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
-- Ling 2.6 Flash Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
-- Hy3 Preview Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
+- Ring 2.6 1T Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - Nemotron 3 Super Free（NVIDIA の無料エンドポイント）: [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) に基づいて提供されます。試用専用であり、本番環境や機密性の高いデータには使用しないでください。プロンプトと出力は、NVIDIA が自社のモデルとサービスを改善するために記録します。個人情報や機密データは送信しないでください。
 - OpenAI APIs: リクエストは [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) に従って 30 日間保持されます。
 - Anthropic APIs: リクエストは [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) に従って 30 日間保持されます。
