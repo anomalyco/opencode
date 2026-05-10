@@ -130,6 +130,21 @@ describe("file/index Filesystem patterns", () => {
         },
       })
     })
+
+    test("returns binary for extensionless binary files", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "extensionless-binary")
+      await fs.writeFile(filepath, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01, 0x02, 0x03]), "binary")
+
+      await WithInstance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await read("extensionless-binary")
+          expect(result.type).toBe("binary")
+          expect(result.content).toBe("")
+        },
+      })
+    })
   })
 
   describe("read() - Filesystem.mimeType()", () => {

@@ -288,6 +288,18 @@ const isBinaryByExtension = (file: string) => binary.has(ext(file))
 const isImage = (mimeType: string) => mimeType.startsWith("image/")
 const getImageMimeType = (file: string) => mime[ext(file)] || "image/" + ext(file)
 
+function isBinaryContent(bytes: Uint8Array) {
+  if (bytes.length === 0) return false
+
+  let nonPrintable = 0
+  for (const byte of bytes) {
+    if (byte === 0) return true
+    if (byte < 9 || (byte > 13 && byte < 32)) nonPrintable++
+  }
+
+  return nonPrintable / bytes.length > 0.3
+}
+
 function shouldEncode(mimeType: string) {
   const type = mimeType.toLowerCase()
   log.debug("shouldEncode", { type })
@@ -536,6 +548,15 @@ export const layer = Layer.effect(
       const encode = knownText ? false : shouldEncode(mimeType)
 
       if (encode && !isImage(mimeType)) return { type: "binary" as const, content: "", mimeType }
+      if (!knownText) {
+        const sample = yield* Effect.tryPromise({
+          try: () => Bun.file(full).slice(0, 4096).arrayBuffer(),
+          catch: (error) => error,
+        }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (sample && isBinaryContent(new Uint8Array(sample))) {
+          return { type: "binary" as const, content: "", mimeType }
+        }
+      }
 
       if (encode) {
         const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
