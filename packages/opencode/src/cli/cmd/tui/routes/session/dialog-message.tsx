@@ -53,13 +53,13 @@ export function DialogMessage(props: {
         {
           title: "Revert",
           value: "session.revert",
-          description: "undo messages and file changes",
+          description: "Undo messages and file changes",
           onSelect: (dialog) => handleRevert(dialog, false),
         },
         {
           title: "Revert conversation only",
           value: "session.revert-conversation-only",
-          description: "undo messages but preserve file changes",
+          description: "Undo only messages",
           onSelect: (dialog) => handleRevert(dialog, true),
         },
         {
