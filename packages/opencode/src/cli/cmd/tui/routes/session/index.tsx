@@ -75,7 +75,6 @@ import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
-import { Global } from "@opencode-ai/core/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -90,6 +89,7 @@ import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { useCommandPalette } from "../../context/command-palette"
 import { useBindings, useCommandShortcut } from "../../keymap"
+import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1078,23 +1078,24 @@ export function Session() {
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
-    <context.Provider
-      value={{
-        get width() {
-          return contentWidth()
-        },
-        sessionID: route.sessionID,
-        conceal,
-        showThinking,
-        showTimestamps,
-        showDetails,
-        showGenericToolOutput,
-        diffWrapMode,
-        providers,
-        sync,
-        tui: tuiConfig,
-      }}
-    >
+    <PathFormatterProvider path={session()?.directory}>
+      <context.Provider
+        value={{
+          get width() {
+            return contentWidth()
+          },
+          sessionID: route.sessionID,
+          conceal,
+          showThinking,
+          showTimestamps,
+          showDetails,
+          showGenericToolOutput,
+          diffWrapMode,
+          providers,
+          sync,
+          tui: tuiConfig,
+        }}
+      >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
         <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
@@ -1270,7 +1271,8 @@ export function Session() {
           </Switch>
         </Show>
       </box>
-    </context.Provider>
+      </context.Provider>
+    </PathFormatterProvider>
   )
 }
 
@@ -1827,7 +1829,7 @@ function BlockTool(props: {
 
 function Shell(props: ToolProps<typeof ShellTool>) {
   const { theme } = useTheme()
-  const sync = useSync()
+  const pathFormatter = usePathFormatter()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
@@ -1841,18 +1843,7 @@ function Shell(props: ToolProps<typeof ShellTool>) {
   const workdirDisplay = createMemo(() => {
     const workdir = props.input.workdir
     if (!workdir || workdir === ".") return undefined
-
-    const base = sync.path.directory
-    if (!base) return undefined
-
-    const absolute = path.resolve(base, workdir)
-    if (absolute === base) return undefined
-
-    const home = Global.Path.home
-    if (!home) return absolute
-
-    const match = absolute === home || absolute.startsWith(home + path.sep)
-    return match ? absolute.replace(home, "~") : absolute
+    return pathFormatter.format(workdir)
   })
 
   const title = createMemo(() => {
@@ -1894,6 +1885,7 @@ function Shell(props: ToolProps<typeof ShellTool>) {
 
 function Write(props: ToolProps<typeof WriteTool>) {
   const { theme, syntax } = useTheme()
+  const pathFormatter = usePathFormatter()
   const code = createMemo(() => {
     if (!props.input.content) return ""
     return props.input.content
@@ -1902,7 +1894,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool title={"# Wrote " + pathFormatter.format(props.input.filePath)} part={props.part}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
@@ -1917,7 +1909,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part}>
-          Write {normalizePath(props.input.filePath!)}
+          Write {pathFormatter.format(props.input.filePath)}
         </InlineTool>
       </Match>
     </Switch>
@@ -1925,9 +1917,10 @@ function Write(props: ToolProps<typeof WriteTool>) {
 }
 
 function Glob(props: ToolProps<typeof GlobTool>) {
+  const pathFormatter = usePathFormatter()
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
-      Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      Glob "{props.input.pattern}" <Show when={props.input.path}>in {pathFormatter.format(props.input.path)} </Show>
       <Show when={props.metadata.count}>
         ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
       </Show>
@@ -1937,6 +1930,7 @@ function Glob(props: ToolProps<typeof GlobTool>) {
 
 function Read(props: ToolProps<typeof ReadTool>) {
   const { theme } = useTheme()
+  const pathFormatter = usePathFormatter()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
@@ -1954,13 +1948,13 @@ function Read(props: ToolProps<typeof ReadTool>) {
         spinner={isRunning()}
         part={props.part}
       >
-        Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+        Read {pathFormatter.format(props.input.filePath)} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
             <text paddingLeft={3} fg={theme.textMuted}>
-              ↳ Loaded {normalizePath(filepath)}
+              ↳ Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
         )}
@@ -1970,9 +1964,10 @@ function Read(props: ToolProps<typeof ReadTool>) {
 }
 
 function Grep(props: ToolProps<typeof GrepTool>) {
+  const pathFormatter = usePathFormatter()
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
-      Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      Grep "{props.input.pattern}" <Show when={props.input.path}>in {pathFormatter.format(props.input.path)} </Show>
       <Show when={props.metadata.matches}>
         ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
       </Show>
@@ -2071,6 +2066,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 function Edit(props: ToolProps<typeof EditTool>) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const pathFormatter = usePathFormatter()
 
   const view = createMemo(() => {
     const diffStyle = ctx.tui.diff_style
@@ -2086,7 +2082,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool title={"← Edit " + pathFormatter.format(props.input.filePath)} part={props.part}>
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -2113,7 +2109,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
-          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+          Edit {pathFormatter.format(props.input.filePath)} {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
     </Switch>
@@ -2123,6 +2119,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
 function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const pathFormatter = usePathFormatter()
 
   const files = createMemo(() => props.metadata.files ?? [])
 
@@ -2161,7 +2158,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
     if (file.type === "delete") return "# Deleted " + file.relativePath
     if (file.type === "add") return "# Created " + file.relativePath
-    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " → " + file.relativePath
+    if (file.type === "move") return "# Moved " + pathFormatter.format(file.filePath) + " → " + file.relativePath
     return "← Patched " + file.relativePath
   }
 
@@ -2279,20 +2276,6 @@ function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]
       </box>
     </Show>
   )
-}
-
-function normalizePath(input?: string) {
-  if (!input) return ""
-
-  const cwd = process.cwd()
-  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
-  const relative = path.relative(cwd, absolute)
-
-  if (!relative) return "."
-  if (!relative.startsWith("..")) return relative
-
-  // outside cwd - use absolute
-  return absolute
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {
