@@ -139,3 +139,13 @@ let dir = dirs::home_dir()?.join(".config").join("opencode");  // ~/.config/open
 **为什么这笔没跟主 commit 一起**:主 commit 已 push 完才发现的 Win 兼容性 review 漏掉,follow-up 单独 commit 走 fix 分支(同 feat-id 标记 `[feat: feishu-bridge-ship-packaging]`)。本笔 changelog 当时漏补,user 提醒后 docs 分支补落盘 — 教训:**bug-repro 类的 commit 不仅 commit message 标 tag,changelog follow-up 段同步落地**。
 
 > **2026-05-10 续笔修正**:本 follow-up 基于错误假设(以为 xdg-basedir 在 Win 用 `%APPDATA%`)。实际 `xdg-basedir@5.1.0` 三平台一致 `$XDG_CONFIG_HOME` 或 `~/.config`,**没有 Win 特殊分支**。Win 端实测后此笔注入仍命不中 sidecar 路径(`%APPDATA%\Roaming\opencode\` 跟 `~/.config/opencode/` 不重叠),且 `file://` URL 还有反斜杠 + `\\?\` UNC 前缀第二个 bug。两 bug 真正修复见独立 follow-up feat [`feishu-plugin-install-win-path`](../feishu-plugin-install-win-path/3-changelog.md)(commit `7f65c691e`,Win 端 user 实测扫码绑定通)。教训:**修跨平台 bug 不靠目标平台实测就 commit + push 是漏洞,Win 端 fork-only 改动应让 Win 端 review 闸把守**。
+
+## Follow-up #2(2026-05-10):Win Inno Setup `.iss` 没 bundle plugin
+
+**起源**:user 在 Win 端 build 第一笔 prod installer `DeskFox-2026.5.10.1-setup.exe` 装到 user 机器后,飞书桥接 tab 仍显示"未启动"警告 — 跟修 ship-packaging 之前一模一样。复盘发现 ISCC log 编译 installer 时 `[Files]` 只 3 行(`DeskFox.exe` + `opencode-cli.exe` + `opencode_lib.dll`),plugin/ 整个目录**不进** setup.exe。
+
+**根因**:本笔(主 commit `e3feb3467`)只动了 `tauri.conf.json` 的 `bundle.resources`,让 **Tauri 自带的 NSIS bundler** 把 plugin 打入 .app/.exe(Mac 路径走通)。但本仓 Win 端用 **Inno Setup**(`packages/branding/installer/DeskFox.iss`),`.iss` 是独立配置,主笔没补 [Files] 段 → installer 不带 plugin → install 后路径不存在 → resolve_plugin_dir 返 None → 整个注入流程跳过。
+
+**修法 + 实测**:见独立 follow-up feat [`feishu-installer-bundle-plugin`](../feishu-installer-bundle-plugin/3-changelog.md)(commit `39e487f75`,Win user 装新 installer 后飞书桥接直接到 "添加账号" 空态)。
+
+**教训**:跨平台 ship 路径不能假设"一种打包格式做完了别的也跟着做完"。Tauri NSIS bundler(默认)和 Inno Setup(本仓 Win 自定义)是两套独立配置,后续任何往 install dir 加资源的改动都要同步动两处:`tauri.conf.json` `bundle.resources` 和 `DeskFox.iss` `[Files]` 段。
