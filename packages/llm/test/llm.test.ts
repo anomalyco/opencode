@@ -126,7 +126,7 @@ describe("llm constructors", () => {
     expect(
       LLMResponse.text({
         events: [
-          { type: "text-delta", text: "hi" },
+          { type: "text-delta", id: "text-0", text: "hi" },
           { type: "request-finish", reason: "stop" },
         ],
       }),

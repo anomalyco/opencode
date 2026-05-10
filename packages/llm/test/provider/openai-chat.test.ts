@@ -225,8 +225,8 @@ describe("OpenAI Chat route", () => {
 
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
-        { type: "text-delta", text: "Hello" },
-        { type: "text-delta", text: "!" },
+        { type: "text-delta", id: "text-0", text: "Hello" },
+        { type: "text-delta", id: "text-0", text: "!" },
         {
           type: "request-finish",
           reason: "stop",

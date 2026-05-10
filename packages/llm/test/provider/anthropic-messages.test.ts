@@ -115,7 +115,7 @@ describe("Anthropic Messages route", () => {
         cacheReadInputTokens: 1,
         totalTokens: 7,
       })
-      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toMatchObject({
+      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
       expect(response.events.at(-1)).toMatchObject({
