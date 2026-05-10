@@ -183,17 +183,20 @@ function addLegacyErrorSchemas(spec: OpenApiSpec) {
   if (!spec.components?.schemas) return
   spec.components.schemas.BadRequestError = {
     type: "object",
-    required: ["data", "errors", "success"],
+    required: ["name", "data"],
     properties: {
-      data: {},
-      errors: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: {},
+      name: { type: "string", enum: ["BadRequest"] },
+      data: {
+        type: "object",
+        required: ["message"],
+        properties: {
+          message: { type: "string" },
+          kind: {
+            type: "string",
+            enum: ["Params", "Headers", "Query", "Body", "Payload"],
+          },
         },
       },
-      success: { type: "boolean", enum: [false] },
     },
   }
   spec.components.schemas.NotFoundError = {
