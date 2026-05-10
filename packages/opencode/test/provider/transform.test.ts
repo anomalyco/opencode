@@ -1123,6 +1123,130 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   })
 })
 
+describe("ProviderTransform.message - Cerebras reasoning replay", () => {
+  test("Cerebras GLM rewrites reasoning blocks into <think> text", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me think about this..." },
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "bash",
+            input: { command: "echo hello" },
+          },
+          { type: "text", text: "Done" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: ModelID.make("cerebras/zai-glm-4.7"),
+        providerID: ProviderID.make("cerebras"),
+        api: {
+          id: "zai-glm-4.7",
+          url: "https://api.cerebras.ai/v1",
+          npm: "@ai-sdk/cerebras",
+        },
+        name: "Z.AI GLM-4.7",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: {
+          input: 0.001,
+          output: 0.002,
+          cache: { read: 0.0001, write: 0.0002 },
+        },
+        limit: {
+          context: 128000,
+          output: 4096,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-01-10",
+      },
+      {},
+    )
+
+    expect(result[0].content).toEqual([
+      { type: "text", text: "<think>Let me think about this...</think>" },
+      {
+        type: "tool-call",
+        toolCallId: "test",
+        toolName: "bash",
+        input: { command: "echo hello" },
+      },
+      { type: "text", text: "Done" },
+    ])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+
+  test("Cerebras gpt-oss replays reasoning as plain assistant text", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "First, I should think it through." },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: ModelID.make("cerebras/gpt-oss-120b"),
+        providerID: ProviderID.make("cerebras"),
+        api: {
+          id: "gpt-oss-120b",
+          url: "https://api.cerebras.ai/v1",
+          npm: "@ai-sdk/cerebras",
+        },
+        name: "GPT OSS 120B",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: {
+          input: 0.001,
+          output: 0.002,
+          cache: { read: 0.0001, write: 0.0002 },
+        },
+        limit: {
+          context: 128000,
+          output: 4096,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2025-08-05",
+      },
+      {},
+    )
+
+    expect(result[0].content).toEqual([
+      { type: "text", text: "First, I should think it through." },
+      { type: "text", text: "Answer" },
+    ])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.message - surrogate sanitization", () => {
   const model = {
     id: "test/test-model",

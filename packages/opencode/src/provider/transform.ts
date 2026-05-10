@@ -284,6 +284,27 @@ function normalizeMessages(
     return result
   }
 
+  if (model.api.npm === "@ai-sdk/cerebras") {
+    // @ai-sdk/openai-compatible replays reasoning parts as assistant.reasoning_content,
+    // but Cerebras expects prior reasoning to be folded back into assistant.content.
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+      return {
+        ...msg,
+        content: msg.content.flatMap((part) => {
+          if (part.type !== "reasoning") return [part]
+          if (part.text.length === 0) return []
+          return [
+            {
+              type: "text" as const,
+              text: model.api.id.toLowerCase().includes("gpt-oss") ? part.text : `<think>${part.text}</think>`,
+            },
+          ]
+        }),
+      }
+    })
+  }
+
   // Deepseek requires all assistant messages to have reasoning on them
   if (model.api.id.toLowerCase().includes("deepseek")) {
     msgs = msgs.map((msg) => {
