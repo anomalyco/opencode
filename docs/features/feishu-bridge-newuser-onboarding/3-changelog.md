@@ -14,12 +14,12 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 | commit | 简述 |
 |---|---|
-| `3590f9cb4` | A1 — `fix(feishu-plugin-install): 路径失效自愈 — user 拖 .app 到 Applications 后插件不再卡死` |
-| `42bac78df` | A4 — `feat(feishu-bridge): default model 缺失检测 + 友好降级回复` |
-| `08ff26115` | A3 — `feat(branding): .dmg 拖拽引导背景图 + 显式 dmg layout` |
-| `a9f24c636` | A4.A follow-up — `fix(feishu-bridge): A4.A 检测逻辑修 — data.default key 是 provider id 不是 agent name` |
+| `839e0d4c8` | A1 — `fix(feishu-plugin-install): 路径失效自愈 — user 拖 .app 到 Applications 后插件不再卡死` |
+| `3281c9396` | A4 — `feat(feishu-bridge): default model 缺失检测 + 友好降级回复` |
+| `827bfd2f0` | A3 — `feat(branding): .dmg 拖拽引导背景图 + 显式 dmg layout` |
+| `49616d7f8` | A4.A follow-up — `fix(feishu-bridge): A4.A 检测逻辑修 — data.default key 是 provider id 不是 agent name` |
 
-## A1 — plugin 路径失效自愈(`3590f9cb4`)
+## A1 — plugin 路径失效自愈(`839e0d4c8`)
 
 ### 改动文件
 
@@ -65,7 +65,7 @@ else { arr.push(plugin_url); }
 
 5/5 ✅
 
-## A4 — default model 缺失检测 + 友好降级回复(`42bac78df`)
+## A4 — default model 缺失检测 + 友好降级回复(`3281c9396`)
 
 ### 改动文件
 
@@ -137,7 +137,7 @@ export function friendlyErrorReply(err: Error): string {
 
 7/7 ✅;i18n completeness 8/8 ✅;monorepo typecheck 16/16 ✅。
 
-## A3 — .dmg 拖拽引导(`08ff26115`)
+## A3 — .dmg 拖拽引导(`827bfd2f0`)
 
 ### 改动文件
 
@@ -187,7 +187,7 @@ windowSize / appPosition / applicationFolderPosition 跟 Tauri 默认值一致(`
 ## 回退
 
 ```sh
-git revert 08ff26115 42bac78df 3590f9cb4
+git revert 827bfd2f0 3281c9396 839e0d4c8
 ```
 
 按从后往前 revert(避免 conflict)。三笔互不依赖,可分别独立 revert。
