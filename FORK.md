@@ -53,6 +53,59 @@ After rebasing on `upstream/dev`, verify each feature still works:
 - `packages/app/src/pages/layout/helpers.ts` — `workspaceKey()` normalizes workspace directory paths (handles Windows paths, trailing slashes, drive letters)
 - Used in `sidebar-workspace.tsx` and `helpers.ts` instead of `pathKey` from `@/utils/path-key`
 
+### 6. `/recent` Route and Navigation
+
+**Files:**
+- `packages/app/src/app.tsx` — lazy `RecentRoute` import and `/recent` route (MUST be before `/:dir` catch-all)
+- `packages/app/src/pages/layout.tsx` — `RecentTile` onClick calls `navigate("/recent")`
+- `packages/app/src/pages/layout/sidebar-recent.tsx` — slug uses `base64Encode(session.directory)` (NOT hardcoded `"recent"`)
+- `packages/app/src/pages/layout/sidebar-items.tsx` — message hover navigate uses absolute path with leading `/`
+
+**How to verify:**
+1. Click "Recent sessions" tile on home page → URL changes to `/recent`, main content shows "Recently Active" page
+2. Click any session in the recent sidebar → URL is `/<base64dir>/session/<sessionId>`, session content loads
+3. Hover a session → hover preview shows messages; clicking a message navigates to the correct session
+
+### 7. TTS (Text-to-Speech) Support
+
+**Files:**
+- `packages/opencode/src/server/routes/tts.ts` — TTS HTTP endpoint
+
+**How to verify:** Check that the TTS route exists and responds (GET/POST to `/tts/...`).
+
+### 8. Auto-Resume on Serve
+
+**Files:**
+- `packages/opencode/src/cli/cmd/serve.ts` — `autoresume()` function dedupes sessions and resumes by recency
+
+**How to verify:** Start `opencode serve`, sessions with pending questions should auto-resume.
+
+### 9. Multi-Instance Serve
+
+**Files:**
+- `packages/opencode/src/cli/cmd/serve.ts` — `OPENCODE_INSTANCE_MAX` env var support
+
+**How to verify:** Env var `OPENCODE_INSTANCE_MAX=16` is respected in systemd service config.
+
+---
+
+## 🧪 Post-Rebase Browser Smoke Test
+
+After every rebase + deploy, run through this checklist in the browser:
+
+| # | Test | Expected |
+|---|------|----------|
+| 1 | Navigate to `/` | Home page loads with "Recent projects" tiles |
+| 2 | Click "Recent sessions" tile | URL → `/recent`, main content shows "Recently Active" with session list |
+| 3 | Click "Recent sessions" sidebar button | Sidebar switches to recent sessions panel |
+| 4 | Click a session in recent sidebar | URL → `/<base64dir>/session/<id>`, session messages load |
+| 5 | Click a project tile on home page | Project's session list loads, sidebar shows project sessions |
+| 6 | Open model picker (model button) | "Recently Used" group appears at top |
+| 7 | Hover a session in sidebar | Preview card shows user messages |
+| 8 | Check parent/child sessions | Subagent sessions nested under parent with collapse chevron |
+| 9 | Check session labels in recent sidebar | Project/workspace labels shown under session titles |
+| 10 | Verify back/forward navigation | Browser back/forward buttons work between sessions |
+
 ---
 
 ## Common Rebase Conflict Zones
@@ -92,7 +145,28 @@ git rebase upstream/dev
 # 3. After resolving conflicts, diff against backup to check for lost features
 git diff HEAD..backup/dev-YYYYMMDDHHMMSS -- packages/app/src/pages/layout/
 
-# 4. Walk through this checklist and verify each feature
+# 4. Walk through features 1–9 above and verify each one in the code
 # 5. Run typecheck
-cd packages/app && bun typecheck
+cd packages/opencode && bun typecheck
+
+# 6. Build and deploy
+cd packages/opencode && bun run build
+# Copy binary to ~/.local/bin/opencode on the remote
+# Restart service: systemctl --user restart opencode-serve
+
+# 7. Run the Browser Smoke Test (10-item checklist above) on the deployed instance
+```
+
+## Deployment Quick Reference
+
+```bash
+# On remote VM (azureuser@100.108.64.76):
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+cd /home/azureuser/workspace/opencode-deploy-159-OhZXeN
+git pull origin dev
+cd packages/opencode && bun run build
+# Stop service, copy binary, restart:
+systemctl --user stop opencode-serve
+cp dist/opencode-linux-x64/bin/opencode ~/.local/bin/opencode
+systemctl --user start opencode-serve
 ```
