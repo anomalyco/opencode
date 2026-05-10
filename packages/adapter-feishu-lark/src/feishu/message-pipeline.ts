@@ -41,6 +41,28 @@ const FEISHU_OPEN_API_DOMAIN: Record<"feishu" | "lark", string> = {
 }
 
 /**
+ * 飞书 session 专属 system prompt — 跟 build agent 自带的 system 拼接(opencode 行为)。
+ *
+ * 用途:禁用 LLM 的"反问 user"工具(`question` / `ask-user-question` 等),避免 agent
+ * loop 调这类工具后**永远卡死等不到回答**(飞书无 GUI 接收 question 的 form 输入)。
+ *
+ * 真互动(form 卡片 + synthetic message)是 OpenClaw 对齐 roadmap 的 #5,Large 后续做。
+ * 本 system prompt 是临时止血,2026-05-10 立。
+ */
+const FEISHU_SESSION_SYSTEM_PROMPT = [
+  "本会话通过飞书 / Lark 桥接,你跟用户之间没有 GUI 交互层。",
+  "**禁止**调用任何反问用户类工具(question / ask-user-question / askUser / clarify 等),",
+  "因为用户在飞书 IM 看不到这些问题,会导致 agent loop 永远卡住。",
+  "",
+  "遇到信息不足或语义模糊时,请**直接做以下任一**:",
+  "1. 基于现有信息和你的最佳判断给出答案;",
+  "2. 在回复里明确写「需要补充以下信息:...」请用户重发新消息;",
+  "3. 短答 + 列出可选方向让用户挑(纯文本即可,不要用工具)。",
+  "",
+  "其他工具(file 操作 / shell / bash / read 等)不受此限制,正常使用。",
+].join("\n")
+
+/**
  * 给飞书 user 的友好错误回复 — 把技术性 opencode error message 翻译成 user 可操作的指引。
  * 只识别 happy-path 阻塞性错误(没配 default model / provider key 无效),其他原样返回。
  *
@@ -229,6 +251,7 @@ export class MessagePipeline {
         query: { directory: FEISHU_WORKSPACE },
         body: {
           agent,
+          system: FEISHU_SESSION_SYSTEM_PROMPT,
           ...(accountModel
             ? { model: { providerID: accountModel.providerID, modelID: accountModel.modelID } }
             : {}),

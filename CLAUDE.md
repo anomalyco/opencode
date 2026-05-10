@@ -53,6 +53,16 @@
 完整规范:[`docs/governance/自动化测试规范.md`](docs/governance/自动化测试规范.md)
 长期规划(5 期分级 + KPI):[需求池](file:../OPENCODE-PLAN/需求池/自动化测试-长期规划.md)
 
+### R6. 网络监听安全(2026-05-10 立,feishu-server-loopback-bind 教训)
+
+- **任何新增 `Bun.serve` / `*.listen()` 必须显式指定 loopback hostname**(`127.0.0.1` / `localhost`)
+- 默认 `0.0.0.0` 监听 = 暴露端口到所有网卡(LAN/公网)= Win Firewall 弹窗 + 安全风险(同 WiFi 任何人可探测端口,即使有 basic auth 攻击面也不该开)
+- 例外:仅当确实需要公网监听(罕见),走 `[network-bind-public: <理由>]` commit message tag override
+- pre-commit hook §4.5 自动拦截违规(scan staged 新增 `Bun.serve(` / `.listen(<num>)` 模式 + 同文件搜安全标记 → 失败则 block)
+- 测试文件(`__tests__/` / `.test.` / `.spec.`)豁免
+
+起源:2026-05-10 user 反馈装完 DeskFox 弹"Bun 是否允许公共网络访问"对话框,审计发现 plugin server `Bun.serve()` 缺 hostname 默认绑 0.0.0.0,LAN 任何人能扫到端口。修法 1 行(加 `hostname: "127.0.0.1"`),并立此规则 + commit 闸防止再犯。
+
 ## 五条设计原则(背后逻辑)
 
 - **P1 隔离**:新功能尽量放新文件,改上游是例外
