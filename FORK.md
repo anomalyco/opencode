@@ -66,21 +66,34 @@ After rebasing on `upstream/dev`, verify each feature still works:
 2. Click any session in the recent sidebar → URL is `/<base64dir>/session/<sessionId>`, session content loads
 3. Hover a session → hover preview shows messages; clicking a message navigates to the correct session
 
-### 7. TTS (Text-to-Speech) Support
+### 7. Session Auto-Title and Rename
+
+**Files:**
+- `packages/opencode/src/session/prompt.ts` — `ensureTitle()` at line ~170, called on step 1 (first assistant response)
+- `packages/opencode/src/agent/agent.ts` — built-in "title" agent definition (line ~261)
+- `packages/opencode/src/agent/prompt/title.txt` — title generation system prompt
+- `packages/app/src/pages/session/message-timeline.tsx` — `titleMutation`, `openTitleEditor()`, "Rename" dropdown item
+
+**How to verify:**
+1. Send a message in a new session → after first assistant response, session title should auto-update from "New session - ..." to a generated title
+2. Open "More options" dropdown on a session → "Rename" item appears → clicking opens inline title editor
+3. If auto-title fails, check that the configured provider has a working "small" model available
+
+### 8. TTS (Text-to-Speech) Support
 
 **Files:**
 - `packages/opencode/src/server/routes/tts.ts` — TTS HTTP endpoint
 
 **How to verify:** Check that the TTS route exists and responds (GET/POST to `/tts/...`).
 
-### 8. Auto-Resume on Serve
+### 9. Auto-Resume on Serve
 
 **Files:**
 - `packages/opencode/src/cli/cmd/serve.ts` — `autoresume()` function dedupes sessions and resumes by recency
 
 **How to verify:** Start `opencode serve`, sessions with pending questions should auto-resume.
 
-### 9. Multi-Instance Serve
+### 10. Multi-Instance Serve
 
 **Files:**
 - `packages/opencode/src/cli/cmd/serve.ts` — `OPENCODE_INSTANCE_MAX` env var support
@@ -104,7 +117,9 @@ After every rebase + deploy, run through this checklist in the browser:
 | 7 | Hover a session in sidebar | Preview card shows user messages |
 | 8 | Check parent/child sessions | Subagent sessions nested under parent with collapse chevron |
 | 9 | Check session labels in recent sidebar | Project/workspace labels shown under session titles |
-| 10 | Verify back/forward navigation | Browser back/forward buttons work between sessions |
+| 10 | Open "More options" on a session | "Rename" option present; clicking opens inline editor |
+| 11 | Send a message in new session | After first response, title auto-updates from "New session - ..." |
+| 12 | Verify back/forward navigation | Browser back/forward buttons work between sessions |
 
 ---
 
