@@ -184,24 +184,23 @@ function makeFakes() {
     },
   } as any
 
-  const patchedCards: Array<{ messageId: string; content: string }> = []
+  const deletedCards: Array<{ messageId: string }> = []
+  let createCounter = 0
 
   const larkClient = {
     im: {
       v1: {
         message: {
           create: async (args: any) => {
+            createCounter++
             sentCards.push({
               chatId: args.data.receive_id,
               content: args.data.content,
             })
-            return { data: { message_id: "om_fake" } }
+            return { data: { message_id: `om_fake_${createCounter}` } }
           },
-          patch: async (args: any) => {
-            patchedCards.push({
-              messageId: args.path.message_id,
-              content: args.data.content,
-            })
+          delete: async (args: any) => {
+            deletedCards.push({ messageId: args.path.message_id })
             return { data: {} }
           },
         },
@@ -209,7 +208,7 @@ function makeFakes() {
     },
   } as any
 
-  return { opencodeClient, larkClient, replyCalls, sentCards, patchedCards }
+  return { opencodeClient, larkClient, replyCalls, sentCards, deletedCards }
 }
 
 describe("PermissionCardController", () => {
@@ -312,44 +311,66 @@ describe("PermissionCardController", () => {
     expect(controller.size).toBe(0)
   })
 
-  test("user 点 once → patch 卡片到已确认状态(header 变 green + 移除 action 段)", async () => {
+  test("user 点 once → 撤回原卡片 + 发已确认 settled 卡片(header 变 green + 移除 action 段)", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "once" })
-    expect(fakes.patchedCards.length).toBe(1)
-    expect(fakes.patchedCards[0]?.messageId).toBe("om_fake")
-    const patched = JSON.parse(fakes.patchedCards[0]!.content)
-    expect(patched.header.template).toBe("green")
-    expect(patched.header.title.content).toContain("已允许一次")
-    // 不再有 action 段
+    // 1. 撤回了原卡片
+    expect(fakes.deletedCards.length).toBe(1)
+    expect(fakes.deletedCards[0]?.messageId).toBe("om_fake_1")
+    // 2. 发了第二张 settled 卡片
+    expect(fakes.sentCards.length).toBe(2)
+    const settled = JSON.parse(fakes.sentCards[1]!.content)
+    expect(settled.header.template).toBe("green")
+    expect(settled.header.title.content).toContain("已允许一次")
     expect(
-      (patched.elements as Array<{ tag: string }>).find((e) => e.tag === "action"),
+      (settled.elements as Array<{ tag: string }>).find((e) => e.tag === "action"),
     ).toBeUndefined()
   })
 
-  test("user 点 reject → patch header 变 red", async () => {
+  test("user 点 reject → settled card header 变 red", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "reject" })
-    const patched = JSON.parse(fakes.patchedCards[0]!.content)
-    expect(patched.header.template).toBe("red")
-    expect(patched.header.title.content).toContain("已拒绝")
+    const settled = JSON.parse(fakes.sentCards[1]!.content)
+    expect(settled.header.template).toBe("red")
+    expect(settled.header.title.content).toContain("已拒绝")
   })
 
-  test("超时 → patch header 变 grey + 显示已超时", async () => {
+  test("超时 → settled card header 变 grey + 显示已超时", async () => {
     await controller.start(baseRequest, "oc_TEST")
     await new Promise((r) => setTimeout(r, 150)) // > timeoutMs
-    expect(fakes.patchedCards.length).toBe(1)
-    const patched = JSON.parse(fakes.patchedCards[0]!.content)
-    expect(patched.header.template).toBe("grey")
-    expect(patched.header.title.content).toContain("已超时")
+    expect(fakes.deletedCards.length).toBe(1)
+    expect(fakes.sentCards.length).toBe(2)
+    const settled = JSON.parse(fakes.sentCards[1]!.content)
+    expect(settled.header.template).toBe("grey")
+    expect(settled.header.title.content).toContain("已超时")
   })
 
-  test("patch API 失败 → silent warn,不阻塞 reply 主路径", async () => {
-    fakes.larkClient.im.v1.message.patch = async () => {
-      throw new Error("patch api 502")
+  test("delete API 失败 → silent warn,继续发新卡片", async () => {
+    fakes.larkClient.im.v1.message.delete = async () => {
+      throw new Error("delete api 502")
     }
     await controller.start(baseRequest, "oc_TEST")
     await controller.handleReply({ requestID: baseRequest.id, reply: "once" })
-    // patch 失败但 reply 仍调到 opencode
+    // delete 失败,但 settled 卡仍发出
+    expect(fakes.sentCards.length).toBe(2)
+    // reply 主路径不受影响
+    expect(fakes.replyCalls.length).toBe(1)
+    expect(fakes.replyCalls[0]?.body.response).toBe("once")
+  })
+
+  test("send settled card 失败 → silent warn,不阻塞 reply 主路径", async () => {
+    let callCount = 0
+    fakes.larkClient.im.v1.message.create = async (args: any) => {
+      callCount++
+      if (callCount === 1) {
+        // 第一张原卡片正常发
+        return { data: { message_id: "om_fake_orig" } }
+      }
+      throw new Error("create api 502")
+    }
+    await controller.start(baseRequest, "oc_TEST")
+    await controller.handleReply({ requestID: baseRequest.id, reply: "once" })
+    // 第 2 张 create 失败,但主 reply 路径不受影响
     expect(fakes.replyCalls.length).toBe(1)
     expect(fakes.replyCalls[0]?.body.response).toBe("once")
   })

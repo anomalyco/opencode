@@ -359,7 +359,7 @@ export class PermissionCardController {
         if (entry) entry.cardMessageId = cardMessageId
       }
       console.log(
-        `[permission-card] sent card for request ${request.id} (${request.permission}) to chat ${chatId}`,
+        `[permission-card] sent card for request ${request.id} (${request.permission}) to chat ${chatId} cardMessageId=${cardMessageId ?? "MISSING"}`,
       )
     } catch (err) {
       console.error(`[permission-card] sendCard failed for ${request.id}:`, err)
@@ -380,8 +380,8 @@ export class PermissionCardController {
       console.warn(`[permission-card] no pending for ${parsed.requestID} (already replied or expired)`)
       return
     }
-    // patch 卡片到已确认状态(在 cleanup 前抢先用 entry 的 cardMessageId / request)
-    await this.patchSettledCard(entry, parsed.reply)
+    // 撤回原卡片 + 发已确认状态卡(B1 路径,飞书 patch 不主动刷 client,改 delete + send 新卡)
+    await this.replaceWithSettledCard(entry, parsed.reply)
     this.cleanup(parsed.requestID)
     console.log(
       `[permission-card] user replied ${parsed.reply} for ${parsed.requestID} (chat=${entry.chatId})`,
@@ -389,35 +389,56 @@ export class PermissionCardController {
     await this.replyToOpencode(parsed.requestID, entry.sessionID, parsed.reply)
   }
 
-  /** 5min 超时兜底:自动 reject + 卡片 patch 成"已超时"。 */
+  /** 5min 超时兜底:自动 reject + 撤回原卡片 + 发"已超时"卡片。 */
   private async handleTimeout(requestID: string): Promise<void> {
     const entry = this.pending.get(requestID)
     if (!entry) return
-    await this.patchSettledCard(entry, "timeout")
+    await this.replaceWithSettledCard(entry, "timeout")
     this.cleanup(requestID)
     console.warn(`[permission-card] timeout for ${requestID},自动 reject 解锁`)
     await this.replyToOpencode(requestID, entry.sessionID, "reject")
   }
 
   /**
-   * patch 飞书卡片到"已确认"状态(header 变色 + 移除 actions + 显示 user 选择)。
+   * 撤回原卡片 + 发"已确认"状态新卡片(B1 视觉反馈路径)。
    *
-   * 失败 silent log — 主要响应路径(replyToOpencode)更重要,卡片视觉更新是 nice-to-have。
-   * cardMessageId 缺失(原 sendCard 失败那种)直接跳过。
+   * 为何 delete + send 不用 patch:飞书 patch API 接受新内容(server 返 code=0),但
+   * client 不主动 re-fetch 已渲染卡片,user 看到的还是原 3 button 卡。delete + send 强制
+   * client 重新接收消息,视觉刷新可靠 — 代价是 chat 历史多一条"消息已撤回"小灰字提示,可接受。
+   *
+   * 失败 silent log — replyToOpencode 是主路径,卡片视觉是 nice-to-have。
+   * cardMessageId 缺失(原 sendCard 失败那种)直接跳 delete 这步,只发新卡(原卡片不存在故不需撤)。
    */
-  private async patchSettledCard(
+  private async replaceWithSettledCard(
     entry: PendingCard,
     reply: PermissionReply | "timeout",
   ): Promise<void> {
-    if (!entry.cardMessageId) return
+    // 1. 尝试撤回原卡片(没 cardMessageId 跳过)
+    if (entry.cardMessageId) {
+      try {
+        await this.opts.larkClient.im.v1.message.delete({
+          path: { message_id: entry.cardMessageId },
+        })
+        console.log(`[permission-card] deleted original card ${entry.cardMessageId}`)
+      } catch (err) {
+        console.warn(`[permission-card] delete original card failed for ${entry.request.id}:`, err)
+        // 撤回失败不阻断,继续发新卡片(user 会看到旧卡片+新卡片并存)
+      }
+    }
+    // 2. 发已确认状态卡片到同一 chat
     try {
       const settledCard = buildSettledCard(entry.request, reply)
-      await this.opts.larkClient.im.v1.message.patch({
-        path: { message_id: entry.cardMessageId },
-        data: { content: JSON.stringify(settledCard) },
+      await this.opts.larkClient.im.v1.message.create({
+        params: { receive_id_type: "chat_id" },
+        data: {
+          receive_id: entry.chatId,
+          msg_type: "interactive",
+          content: JSON.stringify(settledCard),
+        },
       })
+      console.log(`[permission-card] sent settled card to chat ${entry.chatId} → ${reply}`)
     } catch (err) {
-      console.warn(`[permission-card] patch settled card failed for ${entry.request.id}:`, err)
+      console.warn(`[permission-card] send settled card failed for ${entry.request.id}:`, err)
     }
   }
 
