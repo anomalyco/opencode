@@ -191,9 +191,11 @@ export function getProgress(): InstallProgress {
   return progress
 }
 
-// Race all mirrors with HEAD; return the first one that responds OK with a
-// reasonable response time. Falls back to the first mirror if all probes fail.
-async function pickFastestMirror(): Promise<{ mirror: Mirror; url: string }> {
+// FORK: HEAD 探活返排序好的镜像列表 — 活的按延迟升序在前,死的按原顺序在后。
+// 历史:原 pickFastestMirror 只返 winner 一个,download GET 失败就死(典型场景:HEAD
+// OK 但 GET 因 hotlinking/限速/Referer 检查返 403)。现在改返完整列表配合 startInstall
+// 内 cascade 循环,任何一个 mirror 下载挂了自动切下一个。2026-05-10
+async function rankMirrors(): Promise<{ mirror: Mirror; url: string }[]> {
   const candidates: { mirror: Mirror; url: string }[] = []
   for (const m of MIRRORS) {
     const url = urlForMirror(m)
@@ -214,27 +216,24 @@ async function pickFastestMirror(): Promise<{ mirror: Mirror; url: string }> {
         signal: ctrl.signal,
         headers: { "User-Agent": "OpenCode-Installer/1.0" },
       })
-      if (!res.ok) throw new Error(`HEAD ${res.status}`)
+      if (!res.ok) return { mirror, url, elapsed: Number.MAX_SAFE_INTEGER, ok: false as const }
       const elapsed = Date.now() - start
-      return { mirror, url, elapsed }
+      return { mirror, url, elapsed, ok: true as const }
+    } catch {
+      return { mirror, url, elapsed: Number.MAX_SAFE_INTEGER, ok: false as const }
     } finally {
       clearTimeout(timer)
     }
   }
 
-  // Use Promise.any to race; first OK wins. If all reject, fall back to first
-  // candidate (TDF official) and let the actual download attempt surface a
-  // useful error.
-  try {
-    const winner = await Promise.any(candidates.map((c) => probe(c)))
-    log.info("mirror selected", { mirror: winner.mirror.name, elapsed: winner.elapsed })
-    return { mirror: winner.mirror, url: winner.url }
-  } catch {
-    log.warn("all mirror probes failed, falling back to first candidate", {
-      first: candidates[0].mirror.name,
-    })
-    return candidates[0]
-  }
+  const results = await Promise.all(candidates.map((c) => probe(c)))
+  const alive = results.filter((r) => r.ok).sort((a, b) => a.elapsed - b.elapsed)
+  const dead = results.filter((r) => !r.ok)
+  log.info("mirrors ranked", {
+    alive: alive.map((r) => `${r.mirror.name}@${r.elapsed}ms`),
+    dead: dead.map((r) => r.mirror.name),
+  })
+  return [...alive, ...dead].map(({ mirror, url }) => ({ mirror, url }))
 }
 
 export async function startInstall(): Promise<InstallProgress> {
@@ -260,17 +259,10 @@ export async function startInstall(): Promise<InstallProgress> {
 
   void (async () => {
     try {
-      const { mirror, url } = await pickFastestMirror()
-
-      progress = {
-        phase: "downloading",
-        bytesDownloaded: 0,
-        percent: 0,
-        mirrorName: mirror.name,
-      }
+      const ranked = await rankMirrors()
 
       await fs.mkdir(DOWNLOAD_DIR, { recursive: true })
-      const msiPath = path.join(DOWNLOAD_DIR, path.basename(new URL(url).pathname))
+      const msiPath = path.join(DOWNLOAD_DIR, path.basename(new URL(ranked[0].url).pathname))
 
       const existingSize = await fs
         .stat(msiPath)
@@ -287,14 +279,54 @@ export async function startInstall(): Promise<InstallProgress> {
           bytesDownloaded: existingSize,
           bytesTotal: existingSize,
           percent: 100,
-          mirrorName: mirror.name,
+          mirrorName: ranked[0].mirror.name,
           message: "已使用本地缓存的安装包",
         }
       } else {
-        log.info("downloading LibreOffice", { url, msiPath, mirror: mirror.name })
-        await downloadWithProgress(url, msiPath, mirror.name, (p) => {
-          progress = p
-        })
+        // FORK-BEGIN: cascade 切换 — winner 失败自动试下一个,全部失败才 throw 2026-05-10
+        const failures: { mirror: string; err: string }[] = []
+        let succeeded = false
+        for (let i = 0; i < ranked.length; i++) {
+          const { mirror, url } = ranked[i]
+          progress = {
+            phase: "downloading",
+            bytesDownloaded: 0,
+            percent: 0,
+            mirrorName: mirror.name,
+            message:
+              failures.length > 0
+                ? `镜像 ${failures[failures.length - 1].mirror} 失败,改用 ${mirror.name}…`
+                : undefined,
+          }
+          try {
+            log.info("downloading LibreOffice", {
+              url,
+              msiPath,
+              mirror: mirror.name,
+              attempt: i + 1,
+              totalAttempts: ranked.length,
+            })
+            await downloadWithProgress(url, msiPath, mirror.name, (p) => {
+              progress = p
+            })
+            succeeded = true
+            break
+          } catch (e: any) {
+            const errMsg = String(e?.message ?? e)
+            log.warn("mirror download failed, trying next", {
+              mirror: mirror.name,
+              err: errMsg,
+              remaining: ranked.length - i - 1,
+            })
+            failures.push({ mirror: mirror.name, err: errMsg })
+            await fs.unlink(msiPath + ".part").catch(() => undefined)
+          }
+        }
+        if (!succeeded) {
+          const summary = failures.map((f) => `${f.mirror} ${f.err}`).join(" | ")
+          throw new Error(`所有 ${failures.length} 个下载源均失败 — ${summary}`)
+        }
+        // FORK-END
       }
 
       // FORK-BEGIN: platform-specific install (Windows msiexec / macOS DMG) 2026-04-29
