@@ -364,7 +364,17 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
       "Content-Type": "application/json",
       Accept: "application/json",
     }
-    const cfgHeaders = this.cfg.headers?.()
+    // opencode's bundled-provider loader can pass `headers` as either a
+    // function (matching upstream openai-compatible's schema) OR a plain
+    // object (when opencode injects defaults from its provider merge layer).
+    // Handle both — `?.()` would throw on a non-callable object.
+    let cfgHeaders: Record<string, string | undefined> | undefined
+    const rawHeaders = this.cfg.headers as unknown
+    if (typeof rawHeaders === "function") {
+      cfgHeaders = (rawHeaders as () => Record<string, string | undefined>)()
+    } else if (rawHeaders && typeof rawHeaders === "object") {
+      cfgHeaders = rawHeaders as Record<string, string | undefined>
+    }
     if (cfgHeaders) {
       for (const [k, v] of Object.entries(cfgHeaders)) if (v != null) headers[k] = v
     }
