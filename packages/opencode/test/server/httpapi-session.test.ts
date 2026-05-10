@@ -1,36 +1,43 @@
 import { afterEach, describe, expect } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { registerAdaptor } from "../../src/control-plane/adaptors"
-import type { WorkspaceAdaptor } from "../../src/control-plane/types"
+import { registerAdapter } from "../../src/control-plane/adapters"
+import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
-import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@/storage/db"
-import { SessionTable } from "@/session/session.sql"
+import { SessionMessageTable, SessionTable } from "@/session/session.sql"
+import { SessionMessage } from "../../src/v2/session-message"
+import { Modelv2 } from "../../src/v2/model"
+import * as DateTime from "effect/DateTime"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const workspaceLayer = Workspace.defaultLayer.pipe(
+  Layer.provide(InstanceStore.defaultLayer),
+  Layer.provide(InstanceBootstrap.defaultLayer),
+)
 
-function app(experimental = true) {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return experimental ? Server.Default().app : Server.Legacy().app
+function app() {
+  return Server.Default().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
@@ -44,17 +51,17 @@ function pathFor(path: string, params: Record<string, string>) {
 function createSession(directory: string, input?: Session.CreateInput) {
   return Effect.promise(
     async () =>
-      await Instance.provide({
+      await WithInstance.provide({
         directory,
         fn: () => runSession(Session.Service.use((svc) => svc.create(input))),
       }),
   )
 }
 
-function createTextMessage(directory: string, sessionID: SessionID, text: string) {
+function createTextMessage(directory: string, sessionID: SessionIDType, text: string) {
   return Effect.promise(
     async () =>
-      await Instance.provide({
+      await WithInstance.provide({
         directory,
         fn: () =>
           runSession(
@@ -82,7 +89,7 @@ function createTextMessage(directory: string, sessionID: SessionID, text: string
   )
 }
 
-const localAdaptor = (directory: string): WorkspaceAdaptor => ({
+const localAdapter = (directory: string): WorkspaceAdapter => ({
   name: "Local Test",
   description: "Create a local test workspace",
   configure: (info) => ({ ...info, name: "local-test", directory }),
@@ -95,7 +102,7 @@ const localAdaptor = (directory: string): WorkspaceAdaptor => ({
 
 const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
   Effect.gen(function* () {
-    registerAdaptor(input.projectID, input.type, localAdaptor(input.directory))
+    registerAdapter(input.projectID, input.type, localAdapter(input.directory))
     return yield* Workspace.Service.use((svc) =>
       svc.create({
         type: input.type,
@@ -103,15 +110,11 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
         extra: null,
         projectID: input.projectID,
       }),
-    ).pipe(Effect.provide(Workspace.defaultLayer))
+    ).pipe(Effect.provide(workspaceLayer))
   })
 
 function request(path: string, init?: RequestInit) {
   return Effect.promise(async () => app().request(path, init))
-}
-
-function requestWithBackend(experimental: boolean, path: string, init?: RequestInit) {
-  return Effect.promise(async () => app(experimental).request(path, init))
 }
 
 function json<T>(response: Response) {
@@ -119,6 +122,10 @@ function json<T>(response: Response) {
     if (response.status !== 200) throw new Error(await response.text())
     return (await response.json()) as T
   })
+}
+
+function responseJson(response: Response) {
+  return Effect.promise(() => response.json())
 }
 
 function requestJson<T>(path: string, init?: RequestInit) {
@@ -136,15 +143,55 @@ function withTmp<A, E, R>(
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
 describe("session HttpApi", () => {
   it.live(
-    "serves read routes through Hono bridge",
+    "returns declared not found errors for read routes",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const headers = { "x-opencode-directory": tmp.path }
+        const missingSession = SessionID.descending()
+        const missingSessionBody = {
+          name: "NotFoundError",
+          data: { message: `Session not found: ${missingSession}` },
+        }
+
+        const get = yield* request(pathFor(SessionPaths.get, { sessionID: missingSession }), { headers })
+        expect(get.status).toBe(404)
+        expect(yield* responseJson(get)).toEqual(missingSessionBody)
+
+        const messages = yield* request(pathFor(SessionPaths.messages, { sessionID: missingSession }), { headers })
+        expect(messages.status).toBe(404)
+        expect(yield* responseJson(messages)).toEqual(missingSessionBody)
+
+        const remove = yield* request(pathFor(SessionPaths.remove, { sessionID: missingSession }), {
+          headers,
+          method: "DELETE",
+        })
+        expect(remove.status).toBe(404)
+        expect(yield* responseJson(remove)).toEqual(missingSessionBody)
+
+        const session = yield* createSession(tmp.path, { title: "missing message" })
+        const missingMessage = MessageID.ascending()
+        const message = yield* request(
+          pathFor(SessionPaths.message, { sessionID: session.id, messageID: missingMessage }),
+          { headers },
+        )
+        expect(message.status).toBe(404)
+        expect(yield* responseJson(message)).toEqual({
+          name: "NotFoundError",
+          data: { message: `Message not found: ${missingMessage}` },
+        })
+      }),
+    ),
+  )
+
+  it.live(
+    "serves read routes",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const headers = { "x-opencode-directory": tmp.path }
@@ -202,12 +249,86 @@ describe("session HttpApi", () => {
             { headers },
           ),
         ).toMatchObject({ info: { id: message.info.id } })
+
+        yield* Effect.promise(() =>
+          WithInstance.provide({
+            directory: tmp.path,
+            fn: async () => {
+              const message = new SessionMessage.Assistant({
+                id: SessionMessage.ID.create(),
+                type: "assistant",
+                agent: "build",
+                model: {
+                  id: Modelv2.ID.make("model"),
+                  providerID: Modelv2.ProviderID.make("provider"),
+                  variant: Modelv2.VariantID.make("default"),
+                },
+                time: { created: DateTime.makeUnsafe(1) },
+                content: [],
+              })
+              Database.use((db) =>
+                db
+                  .insert(SessionMessageTable)
+                  .values([
+                    {
+                      id: message.id,
+                      session_id: parent.id,
+                      type: message.type,
+                      time_created: 1,
+                      data: {
+                        time: { created: 1 },
+                        agent: message.agent,
+                        model: message.model,
+                        content: message.content,
+                      } as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+                    },
+                  ])
+                  .run(),
+              )
+            },
+          }),
+        )
+
+        expect(
+          (yield* requestJson<{ items: SessionMessage.Message[] }>(`/api/session/${parent.id}/message`, { headers }))
+            .items,
+        ).toMatchObject([{ type: "assistant" }])
       }),
     ),
   )
 
   it.live(
-    "serves lifecycle mutation routes through Hono bridge",
+    "serves sessions with migrated summary diffs missing file details",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const session = yield* createSession(tmp.path, { title: "legacy diff" })
+        yield* Effect.sync(() =>
+          Database.use((db) =>
+            db
+              .update(SessionTable)
+              .set({
+                summary_additions: 1,
+                summary_deletions: 0,
+                summary_files: 1,
+                summary_diffs: [{ additions: 1, deletions: 0 }],
+              })
+              .where(eq(SessionTable.id, session.id))
+              .run(),
+          ),
+        )
+
+        const response = yield* request(pathFor(SessionPaths.get, { sessionID: session.id }), {
+          headers: { "x-opencode-directory": tmp.path },
+        })
+
+        expect(response.status).toBe(200)
+        expect((yield* json<Session.Info>(response)).summary?.diffs).toEqual([{ additions: 1, deletions: 0 }])
+      }),
+    ),
+  )
+
+  it.live(
+    "serves lifecycle mutation routes",
     withTmp({ git: true, config: { formatter: false, lsp: false, share: "disabled" } }, (tmp) =>
       Effect.gen(function* () {
         const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
@@ -273,8 +394,15 @@ describe("session HttpApi", () => {
           headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
           body: JSON.stringify({ title: "workspace session" }),
         })
+        const messages = yield* request(
+          `${pathFor(SessionPaths.messages, { sessionID: created.id })}?workspace=${workspace.id}`,
+          {
+            headers: { "x-opencode-directory": tmp.path },
+          },
+        )
 
         expect(created).toMatchObject({ id: created.id, workspaceID: workspace.id })
+        expect(messages.status).toBe(200)
         expect(
           yield* Effect.sync(() =>
             Database.use((db) =>
@@ -291,39 +419,26 @@ describe("session HttpApi", () => {
   )
 
   it.live(
-    "matches legacy archived timestamp validation",
+    "validates archived timestamp values",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
-        const legacy = yield* createSession(tmp.path, { title: "legacy" })
-        const effect = yield* createSession(tmp.path, { title: "effect" })
+        const session = yield* createSession(tmp.path, { title: "archived" })
         const body = JSON.stringify({ time: { archived: -1 } })
 
-        const legacyResponse = yield* requestWithBackend(
-          false,
-          pathFor(SessionPaths.update, { sessionID: legacy.id }),
-          {
-            method: "PATCH",
-            headers,
-            body,
-          },
-        )
-        expect(legacyResponse.status).toBe(200)
-        expect((yield* json<Session.Info>(legacyResponse)).time.archived).toBe(-1)
-
-        const effectResponse = yield* requestWithBackend(true, pathFor(SessionPaths.update, { sessionID: effect.id }), {
+        const response = yield* request(pathFor(SessionPaths.update, { sessionID: session.id }), {
           method: "PATCH",
           headers,
           body,
         })
-        expect(effectResponse.status).toBe(legacyResponse.status)
-        expect((yield* json<Session.Info>(effectResponse)).time.archived).toBe(-1)
+        expect(response.status).toBe(200)
+        expect((yield* json<Session.Info>(response)).time.archived).toBe(-1)
       }),
     ),
   )
 
   it.live(
-    "matches legacy project-scoped path and directory precedence",
+    "uses project-scoped path and directory precedence",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const currentDir = path.join(tmp.path, "packages", "opencode", "src")
@@ -343,22 +458,18 @@ describe("session HttpApi", () => {
           directory: currentDir,
         })
         const headers = { "x-opencode-directory": tmp.path }
-        const legacy = (yield* json<Session.Info[]>(
-          yield* requestWithBackend(false, `${SessionPaths.list}?${query}`, { headers }),
-        )).map((item) => item.id)
-        const effect = (yield* json<Session.Info[]>(
-          yield* requestWithBackend(true, `${SessionPaths.list}?${query}`, { headers }),
+        const sessions = (yield* json<Session.Info[]>(
+          yield* request(`${SessionPaths.list}?${query}`, { headers }),
         )).map((item) => item.id)
 
-        expect(legacy).toContain(pathSession.id)
-        expect(legacy).not.toContain(pathlessSession.id)
-        expect(effect).toEqual(legacy)
+        expect(sessions).toContain(pathSession.id)
+        expect(sessions).not.toContain(pathlessSession.id)
       }),
     ),
   )
 
   it.live(
-    "matches legacy paginated message link headers",
+    "serves paginated message link headers",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const headers = { "x-opencode-directory": tmp.path }
@@ -367,20 +478,17 @@ describe("session HttpApi", () => {
         yield* createTextMessage(tmp.path, session.id, "second")
         const route = `${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=1`
 
-        const legacy = yield* requestWithBackend(false, route, { headers })
-        const effect = yield* requestWithBackend(true, route, { headers })
+        const response = yield* request(route, { headers })
 
-        expect(effect.headers.get("x-next-cursor")).toBe(legacy.headers.get("x-next-cursor"))
-        expect(effect.headers.get("link")).toBe(legacy.headers.get("link"))
-        expect(effect.headers.get("access-control-expose-headers")).toBe(
-          legacy.headers.get("access-control-expose-headers"),
-        )
+        expect(response.headers.get("x-next-cursor")).toBeTruthy()
+        expect(response.headers.get("link")).toContain("limit=1")
+        expect(response.headers.get("access-control-expose-headers")?.toLowerCase()).toContain("x-next-cursor")
       }),
     ),
   )
 
   it.live(
-    "serves message mutation routes through Hono bridge",
+    "serves message mutation routes",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
@@ -424,7 +532,7 @@ describe("session HttpApi", () => {
   )
 
   it.live(
-    "serves remaining non-LLM session mutation routes through Hono bridge",
+    "serves remaining non-LLM session mutation routes",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }

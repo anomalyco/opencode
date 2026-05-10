@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 const providerIdSchema = Schema.String.pipe(Schema.brand("ProviderID"))
 

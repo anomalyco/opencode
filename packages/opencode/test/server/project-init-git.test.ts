@@ -1,20 +1,22 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import path from "path"
 import { GlobalBus } from "../../src/bus/global"
 import { Snapshot } from "../../src/snapshot"
-import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Filesystem } from "@/util/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
 afterEach(async () => {
   await resetDatabase()
 })
+
+const disposedEvents = (seen: { directory?: string; payload: { type: string } }[], dir: string) =>
+  seen.filter((evt) => evt.directory === dir && evt.payload.type === "server.instance.disposed").length
 
 describe("project.initGit endpoint", () => {
   test("initializes git and reloads immediately", async () => {
@@ -24,8 +26,6 @@ describe("project.initGit endpoint", () => {
     const fn = (evt: { directory?: string; payload: { type: string } }) => {
       seen.push(evt)
     }
-    const reload = Instance.reload
-    const reloadSpy = spyOn(Instance, "reload").mockImplementation((input) => reload(input))
     GlobalBus.on("event", fn)
 
     try {
@@ -42,10 +42,8 @@ describe("project.initGit endpoint", () => {
         vcs: "git",
         worktree: tmp.path,
       })
-      expect(reloadSpy).toHaveBeenCalledTimes(1)
-      expect(seen.some((evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed")).toBe(
-        true,
-      )
+      // Reload behavior: bus emits exactly one server.instance.disposed for the directory.
+      expect(disposedEvents(seen, tmp.path)).toBe(1)
       expect(await Filesystem.exists(path.join(tmp.path, ".git", "opencode"))).toBe(false)
 
       const current = await app.request("/project/current", {
@@ -69,8 +67,7 @@ describe("project.initGit endpoint", () => {
         ),
       ).toBeTruthy()
     } finally {
-      await Instance.disposeAll()
-      reloadSpy.mockRestore()
+      await disposeAllInstances()
       GlobalBus.off("event", fn)
     }
   })
@@ -82,8 +79,6 @@ describe("project.initGit endpoint", () => {
     const fn = (evt: { directory?: string; payload: { type: string } }) => {
       seen.push(evt)
     }
-    const reload = Instance.reload
-    const reloadSpy = spyOn(Instance, "reload").mockImplementation((input) => reload(input))
     GlobalBus.on("event", fn)
 
     try {
@@ -98,10 +93,7 @@ describe("project.initGit endpoint", () => {
         vcs: "git",
         worktree: tmp.path,
       })
-      expect(
-        seen.filter((evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed").length,
-      ).toBe(0)
-      expect(reloadSpy).toHaveBeenCalledTimes(0)
+      expect(disposedEvents(seen, tmp.path)).toBe(0)
 
       const current = await app.request("/project/current", {
         headers: {
@@ -114,8 +106,7 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.path,
       })
     } finally {
-      await Instance.disposeAll()
-      reloadSpy.mockRestore()
+      await disposeAllInstances()
       GlobalBus.off("event", fn)
     }
   })

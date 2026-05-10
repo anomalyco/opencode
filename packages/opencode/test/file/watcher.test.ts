@@ -3,12 +3,13 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from "effect"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
 import { FileWatcher } from "../../src/file/watcher"
 import { Git } from "../../src/git"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 
 // Native @parcel/watcher bindings aren't reliably available in CI (missing on Linux, flaky on Windows)
 const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
@@ -28,7 +29,7 @@ type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
 /** Run `body` with a live FileWatcher service. */
 function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
-  return Instance.provide({
+  return WithInstance.provide({
     directory,
     fn: async () => {
       const layer: Layer.Layer<FileWatcher.Service, never, never> = FileWatcher.layer.pipe(
@@ -147,7 +148,7 @@ function ready(directory: string) {
 
 describeWatcher("FileWatcher", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("publishes root create, update, and delete events", async () => {
@@ -193,7 +194,7 @@ describeWatcher("FileWatcher", () => {
     await withWatcher(tmp.path, Effect.void)
 
     // Now write a file — no watcher should be listening
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: () =>
         Effect.runPromise(

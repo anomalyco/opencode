@@ -40,7 +40,6 @@ export namespace ZenData {
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
         payloadModifier: z.record(z.string(), z.any()).optional(),
-        safetyIdentifier: z.boolean().optional(),
       }),
     ),
   })

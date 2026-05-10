@@ -34,6 +34,12 @@ process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
+process.env["OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"] = "true"
+// Tests assert exact skill counts from disk discovery; the built-in
+// customize-opencode skill is opt-in for stable channels and on by default
+// for unstable channels (including "local" where CI runs). Disable it here
+// so disk-discovery tests aren't off-by-one.
+process.env["OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL"] = "false"
 
 // Set test home directory to isolate tests from user's actual home directory
 // This prevents tests from picking up real user configs/skills from ~/.claude/skills
@@ -79,7 +85,7 @@ delete process.env["OPENCODE_SERVER_USERNAME"]
 process.env["OPENCODE_DB"] = ":memory:"
 
 // Now safe to import from src/
-const Log = await import("@opencode-ai/core/util/log")
+const { Log } = await import("@opencode-ai/core/util/log")
 const { initProjectors } = await import("../src/server/projectors")
 
 void Log.init({

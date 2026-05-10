@@ -26,7 +26,12 @@ export function getProjectAvatarSource(id?: string, icon?: { color?: string; url
   return icon?.url
 }
 
-export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
+export const ProjectIcon = (props: {
+  project: LocalProject
+  class?: string
+  notify?: boolean
+  working?: boolean
+}): JSX.Element => {
   const globalSync = useGlobalSync()
   const notification = useNotification()
   const permission = usePermission()
@@ -64,6 +69,11 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
             "bg-text-interactive-base": !hasPermissions() && !hasError(),
           }}
         />
+      </Show>
+      <Show when={props.working}>
+        <div class="absolute bottom-px right-px size-3 rounded-full bg-background-base z-10 flex items-center justify-center">
+          <Spinner class="size-[9px]" />
+        </div>
       </Show>
     </div>
   )

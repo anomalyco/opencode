@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
 import z from "zod"
 
-import { zod, ZodOverride } from "../../src/util/effect-zod"
+import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
 
 function json(schema: z.ZodTypeAny) {
   const { $schema: _, ...rest } = z.toJSONSchema(schema)
