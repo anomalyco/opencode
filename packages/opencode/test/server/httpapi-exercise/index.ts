@@ -38,6 +38,10 @@ import { type Scenario } from "./types"
 
 void (await import("@opencode-ai/core/util/log")).init({ print: false })
 
+function cursor(input: Record<string, unknown>) {
+  return Buffer.from(JSON.stringify(input)).toString("base64url")
+}
+
 const scenarios: Scenario[] = [
   http.protected
     .get("/global/health", "global.health")
@@ -599,6 +603,64 @@ const scenarios: Scenario[] = [
       "none",
     ),
   http.protected
+    .get("/api/session", "v2.session.list.filters")
+    .at((ctx) => ({
+      path: `/api/session?${new URLSearchParams({
+        limit: "2",
+        order: "asc",
+        path: ".",
+        roots: "false",
+        start: "0",
+        search: "missing",
+        directory: ctx.directory ?? "",
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.items)
+        object(body.cursor)
+      },
+      "none",
+    ),
+  http.protected
+    .get("/api/session", "v2.session.list.cursor")
+    .at((ctx) => ({
+      path: `/api/session?${new URLSearchParams({
+        limit: "2",
+        directory: ctx.directory ?? "",
+        cursor: cursor({
+          id: "ses_httpapi_missing",
+          time: 0,
+          order: "desc",
+          direction: "next",
+          directory: ctx.directory,
+        }),
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.items)
+        object(body.cursor)
+      },
+      "none",
+    ),
+  http.protected
+    .get("/api/session", "v2.session.list.cursor.invalid")
+    .at((ctx) => ({
+      path: `/api/session?${new URLSearchParams({
+        cursor: cursor({ id: "ses_httpapi_missing", time: 0, order: "desc", direction: "next" }),
+        search: "not-allowed-with-cursor",
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .status(400, undefined, "none"),
+  http.protected
     .get("/api/session/{sessionID}/context", "v2.session.context")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/context", { sessionID: "ses_httpapi_missing" }),
@@ -620,6 +682,53 @@ const scenarios: Scenario[] = [
       },
       "none",
     ),
+  http.protected
+    .get("/api/session/{sessionID}/message", "v2.session.messages.params")
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
+        limit: "2",
+        order: "asc",
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.items)
+        object(body.cursor)
+      },
+      "none",
+    ),
+  http.protected
+    .get("/api/session/{sessionID}/message", "v2.session.messages.cursor")
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
+        limit: "2",
+        directory: ctx.directory ?? "",
+        cursor: cursor({ id: "msg_httpapi_missing", time: 0, order: "desc", direction: "next" }),
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.items)
+        object(body.cursor)
+      },
+      "none",
+    ),
+  http.protected
+    .get("/api/session/{sessionID}/message", "v2.session.messages.cursor.invalid")
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
+        cursor: cursor({ id: "msg_httpapi_missing", time: 0, order: "desc", direction: "next" }),
+        order: "asc",
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .status(400, undefined, "none"),
   http.protected
     .post("/api/session/{sessionID}/prompt", "v2.session.prompt.invalid")
     .at((ctx) => ({

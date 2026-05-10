@@ -24,22 +24,27 @@ const decodeCursor = Schema.decodeUnknownSync(SessionCursor)
 
 function hasCursorFilter(query: {
   readonly order?: unknown
-  readonly directory?: unknown
   readonly path?: unknown
-  readonly workspace?: unknown
   readonly roots?: unknown
   readonly start?: unknown
   readonly search?: unknown
 }) {
   return (
     query.order !== undefined ||
-    query.directory !== undefined ||
     query.path !== undefined ||
-    query.workspace !== undefined ||
     query.roots !== undefined ||
     query.start !== undefined ||
     query.search !== undefined
   )
+}
+
+function hasCursorRoutingMismatch(
+  query: { readonly directory?: string; readonly workspace?: string },
+  decoded: SessionCursor | undefined,
+) {
+  if (!decoded) return false
+  if (query.directory !== undefined && query.directory !== decoded.directory) return true
+  return query.workspace !== undefined && query.workspace !== decoded.workspaceID
 }
 
 const sessionCursor = {
@@ -71,6 +76,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
             try: () => (ctx.query.cursor ? sessionCursor.decode(ctx.query.cursor) : undefined),
             catch: () => new HttpApiError.BadRequest({}),
           })
+          if (hasCursorRoutingMismatch(ctx.query, decoded)) return yield* new HttpApiError.BadRequest({})
           const order = decoded?.order ?? ctx.query.order ?? "desc"
           const filters = decoded ?? {
             directory: ctx.query.directory,

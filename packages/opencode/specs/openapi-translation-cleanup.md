@@ -58,7 +58,7 @@ Verification:
 Notes:
 
 - Added `WorkspaceRoutingQuery` in `middleware/workspace-routing.ts` as the canonical runtime schema for middleware-consumed query params.
-- Replaced v2 union-query schemas with plain struct query schemas so `OpenApi.fromApi` emits their query params directly; cursor mutual-exclusion rules now live in the handlers.
+- Replaced v2 union-query schemas with plain struct query schemas so `OpenApi.fromApi` emits their query params directly. This intentionally exposes the beta `/api/session` pagination/filter params in the SDK; cursor mutual-exclusion rules now live in the handlers, while `directory` / `workspace` remain allowed with cursors for routing.
 
 Expected code shape:
 
@@ -71,7 +71,7 @@ Verification:
 - `[x]` `bun test --timeout 5000 test/server/httpapi-query-schema-drift.test.ts` from `packages/opencode`.
 - `[x]` `bun dev generate > /tmp/opencode-openapi.json` from `packages/opencode`.
 - `[x]` `./packages/sdk/js/script/build.ts` from repo root.
-- `[x]` Inspect SDK diff for removed `directory` / `workspace` params. Result: none after explicit runtime schemas; v2 list/message now also expose their existing pagination query params in the SDK.
+- `[x]` Inspect SDK diff for removed `directory` / `workspace` params. Result: none after explicit runtime schemas; v2 list/message now also expose their existing beta pagination/filter query params in the SDK.
 - `[x]` `bun typecheck` from `packages/opencode`.
 
 ### PR 3: Replace Broad Query Type Override Sets With Route-Level Helpers
