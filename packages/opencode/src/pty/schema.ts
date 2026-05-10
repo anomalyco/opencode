@@ -4,7 +4,9 @@ import { Identifier } from "@/id/id"
 import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
 import { withStatics } from "@opencode-ai/core/schema"
 
-const ptyIdSchema = Schema.String.annotate({ [ZodOverride]: Identifier.schema("pty") }).pipe(Schema.brand("PtyID"))
+const ptyIdSchema = Schema.String.check(Schema.isStartsWith("pty"))
+  .annotate({ [ZodOverride]: Identifier.schema("pty") })
+  .pipe(Schema.brand("PtyID"))
 
 export type PtyID = typeof ptyIdSchema.Type
 
