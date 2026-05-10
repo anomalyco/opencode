@@ -1202,48 +1202,37 @@ describe("session.compaction.process", () => {
     { git: true },
   )
 
-  test("allows plugins to disable synthetic continue prompt", async () => {
-    await using tmp = await tmpdir()
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const rt = runtime("continue", autocontinue(false), wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: true,
-              }),
-            ),
-          )
+  itProcess.instance(
+    "allows plugins to disable synthetic continue prompt",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
 
-          const all = await svc.messages({ sessionID: session.id })
-          const last = all.at(-1)
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
 
-          expect(result).toBe("continue")
-          expect(last?.info.role).toBe("assistant")
-          expect(
-            all.some(
-              (msg) =>
-                msg.info.role === "user" &&
-                msg.parts.some(
-                  (part) =>
-                    part.type === "text" && part.synthetic && part.text.includes("Continue if you have next steps"),
-                ),
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const last = all.at(-1)
+
+      expect(result).toBe("continue")
+      expect(last?.info.role).toBe("assistant")
+      expect(
+        all.some(
+          (msg) =>
+            msg.info.role === "user" &&
+            msg.parts.some(
+              (part) => part.type === "text" && part.synthetic && part.text.includes("Continue if you have next steps"),
             ),
-          ).toBe(false)
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+        ),
+      ).toBe(false)
+    }).pipe(Effect.provide(compactionProcessLayer({ plugin: autocontinue(false) }))),
+  )
 
   it.instance(
     "replays the prior user turn on overflow when earlier context exists",
