@@ -21,8 +21,6 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
-import { zod as effectZod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "worktree" })
 
@@ -46,9 +44,7 @@ export const Info = Schema.Struct({
   name: Schema.String,
   branch: Schema.String,
   directory: Schema.String,
-})
-  .annotate({ identifier: "Worktree" })
-  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+}).annotate({ identifier: "Worktree" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const CreateInput = Schema.Struct({
@@ -56,23 +52,17 @@ export const CreateInput = Schema.Struct({
   startCommand: Schema.optional(
     Schema.String.annotate({ description: "Additional startup script to run after the project's start command" }),
   ),
-})
-  .annotate({ identifier: "WorktreeCreateInput" })
-  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+}).annotate({ identifier: "WorktreeCreateInput" })
 export type CreateInput = Schema.Schema.Type<typeof CreateInput>
 
 export const RemoveInput = Schema.Struct({
   directory: Schema.String,
-})
-  .annotate({ identifier: "WorktreeRemoveInput" })
-  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+}).annotate({ identifier: "WorktreeRemoveInput" })
 export type RemoveInput = Schema.Schema.Type<typeof RemoveInput>
 
 export const ResetInput = Schema.Struct({
   directory: Schema.String,
-})
-  .annotate({ identifier: "WorktreeResetInput" })
-  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+}).annotate({ identifier: "WorktreeResetInput" })
 export type ResetInput = Schema.Schema.Type<typeof ResetInput>
 
 export const NotGitError = NamedError.create(
@@ -361,13 +351,15 @@ export const layer: Layer.Layer<
       }
 
       const primary = yield* canonical(ctx.worktree)
+      const primaryName = pathSvc.basename(primary).toLowerCase()
       return yield* Effect.forEach(parseWorktreeList(result.text), (entry) =>
         Effect.gen(function* () {
           if (!entry.path) return undefined
           const directory = yield* canonical(entry.path)
           if (directory === primary) return undefined
+          const name = pathSvc.basename(directory).toLowerCase()
           return {
-            name: pathSvc.basename(directory),
+            name: name === primaryName ? pathSvc.basename(pathSvc.dirname(directory)) : name,
             directory,
             ...(entry.branch ? { branch: entry.branch.replace(/^refs\/heads\//, "") } : {}),
           }

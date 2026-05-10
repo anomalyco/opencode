@@ -20,7 +20,7 @@ function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connec
         },
       },
     ],
-    bindings: props.api.tuiConfig.keymap.sections.home_tips,
+    bindings: props.api.tuiConfig.keybinds.get("tips.toggle"),
   }))
 
   return (
