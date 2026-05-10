@@ -1,6 +1,6 @@
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { lazy } from "@/util/lazy"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { which } from "@/util/which"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"

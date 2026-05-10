@@ -4,14 +4,14 @@ import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import z from "zod"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Hash } from "@opencode-ai/core/util/hash"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
-import { Log } from "../util"
-import { withStatics } from "@/util/schema"
-import { zod } from "@/util/effect-zod"
+import * as Log from "@opencode-ai/core/util/log"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
@@ -20,10 +20,13 @@ export const Patch = Schema.Struct({
 export type Patch = typeof Patch.Type
 
 export const FileDiff = Schema.Struct({
-  file: Schema.String,
-  patch: Schema.String,
-  additions: Schema.Number,
-  deletions: Schema.Number,
+  // Optional because legacy/imported `summary_diffs` on disk may omit
+  // file details and patch text. Required Schema rejected the whole
+  // session response and broke session loading on Desktop.
+  file: Schema.optional(Schema.String),
+  patch: Schema.optional(Schema.String),
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
 })
   .annotate({ identifier: "SnapshotFileDiff" })

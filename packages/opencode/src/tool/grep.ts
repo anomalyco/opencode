@@ -1,7 +1,7 @@
 import path from "path"
 import { Schema } from "effect"
 import { Effect, Option } from "effect"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"

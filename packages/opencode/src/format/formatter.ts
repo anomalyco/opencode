@@ -1,7 +1,7 @@
 import { Npm } from "@opencode-ai/core/npm"
 import type { InstanceContext } from "../project/instance"
-import { Filesystem } from "../util"
-import { Process } from "../util"
+import { Filesystem } from "@/util/filesystem"
+import { Process } from "@/util/process"
 import { which } from "../util/which"
 import { Flag } from "@opencode-ai/core/flag/flag"
 

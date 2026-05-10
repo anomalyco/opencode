@@ -1,4 +1,5 @@
 import { test, expect, mock, beforeEach } from "bun:test"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Effect } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 
@@ -171,6 +172,7 @@ beforeEach(() => {
 // Import after mocks
 const { MCP } = await import("../../src/mcp/index")
 const { Instance } = await import("../../src/project/instance")
+const { WithInstance } = await import("../../src/project/with-instance")
 const { tmpdir } = await import("../fixture/fixture")
 
 // --- Helper ---
@@ -192,12 +194,12 @@ function withInstance(
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         await Effect.runPromise(MCP.Service.use(fn).pipe(Effect.provide(MCP.defaultLayer)))
         // dispose instance to clean up state between tests
-        await Instance.dispose()
+        await InstanceRuntime.disposeInstance(Instance.current)
       },
     })
   }

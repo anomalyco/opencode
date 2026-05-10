@@ -16,13 +16,13 @@ import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import fs from "fs/promises"
 import path from "path"
-import { Session } from "../../src/session"
+import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionSummary } from "../../src/session/summary"
 import { MessageV2 } from "../../src/session/message-v2"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
@@ -30,14 +30,15 @@ import { TestLLMServer } from "../lib/llm-server"
 // Same layer setup as prompt-effect.test.ts
 import { NodeFileSystem } from "@effect/platform-node"
 import { Agent as AgentSvc } from "../../src/agent/agent"
+import { Git } from "../../src/git"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
-import { Config } from "../../src/config"
-import { LSP } from "../../src/lsp"
+import { Config } from "@/config/config"
+import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
-import { Provider as ProviderSvc } from "../../src/provider"
+import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { Question } from "../../src/question"
 import { Skill } from "../../src/skill"
@@ -49,8 +50,8 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionRunState } from "../../src/session/run-state"
 import { SessionStatus } from "../../src/session/status"
 import { Snapshot } from "../../src/snapshot"
-import { ToolRegistry } from "../../src/tool"
-import { Truncate } from "../../src/tool"
+import { ToolRegistry } from "@/tool/registry"
+import { Truncate } from "@/tool/truncate"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../../src/file/ripgrep"
@@ -128,6 +129,7 @@ function makeHttp() {
     Layer.provide(Skill.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Git.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provideMerge(todo),
@@ -236,7 +238,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       expect(tool?.state.status).toBe("completed")
 
       // Poll for diff — summarize() is fire-and-forget
-      let diff: Array<{ file: string }> = []
+      let diff: Array<{ file?: string }> = []
       for (let i = 0; i < 50; i++) {
         diff = yield* summary.diff({ sessionID: session.id })
         if (diff.length > 0) break

@@ -37,7 +37,6 @@ export type ProviderHelper = (input: {
   reqModel: string
   providerModel: string
   adjustCacheUsage?: boolean
-  safetyIdentifier?: string
   workspaceID?: string
 }) => {
   format: ZenData.Format

@@ -1,4 +1,4 @@
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Bonjour } from "bonjour-service"
 
 const log = Log.create({ service: "mdns" })

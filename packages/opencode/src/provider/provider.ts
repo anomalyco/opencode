@@ -1,9 +1,9 @@
 import os from "os"
 import fuzzysort from "fuzzysort"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
@@ -13,21 +13,22 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { zod } from "@/util/effect-zod"
+import { zod } from "@opencode-ai/core/effect-zod"
 import { namedSchemaError } from "@/util/named-schema-error"
 import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
-import { EffectBridge } from "@/effect"
-import { InstanceState } from "@/effect"
+import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
-import { withStatics } from "@/util/schema"
+import { optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
+import { ModelStatus } from "./model-status"
 
 const log = Log.create({ service: "provider" })
 
@@ -112,7 +113,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/vercel": () => import("@ai-sdk/vercel").then((m) => m.createVercel),
   "@ai-sdk/alibaba": () => import("@ai-sdk/alibaba").then((m) => m.createAlibaba),
   "gitlab-ai-provider": () => import("gitlab-ai-provider").then((m) => m.createGitLab),
-  "@ai-sdk/github-copilot": () => import("./sdk/copilot").then((m) => m.createOpenaiCompatible),
+  "@ai-sdk/github-copilot": () => import("./sdk/copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
 }
 
@@ -136,6 +137,14 @@ type CustomDep = {
 
 function useLanguageModel(sdk: any) {
   return sdk.responses === undefined && sdk.chat === undefined
+}
+
+function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
+  if (useChat && sdk.chat) return sdk.chat(modelID)
+  if (sdk.responses) return sdk.responses(modelID)
+  if (sdk.messages) return sdk.messages(modelID)
+  if (sdk.chat) return sdk.chat(modelID)
+  return sdk.languageModel(modelID)
 }
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
@@ -199,27 +208,41 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     azure: Effect.fnUntraced(function* (provider: Info) {
       const env = yield* dep.env()
+      const auth = yield* dep.auth(provider.id)
       const resource = iife(() => {
-        const name = provider.options?.resourceName
-        if (typeof name === "string" && name.trim() !== "") return name
-        return env["AZURE_RESOURCE_NAME"]
+        return [
+          provider.options?.resourceName,
+          auth?.type === "api" ? auth.metadata?.resourceName : undefined,
+          env["AZURE_RESOURCE_NAME"],
+        ].find((name) => typeof name === "string" && name.trim() !== "")
       })
+
+      if (!resource && !provider.options?.baseURL) {
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(
+              "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
+            )
+          },
+        }
+      }
 
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
+          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
-        options: {},
-        vars(_options) {
-          return {
-            ...(resource && { AZURE_RESOURCE_NAME: resource }),
+        options: {
+          resourceName: resource,
+        },
+        vars(_options): Record<string, string> {
+          if (resource) {
+            return {
+              AZURE_RESOURCE_NAME: resource,
+            }
           }
+          return {}
         },
       }
     }),
@@ -228,12 +251,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
+          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
           baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
@@ -848,27 +866,27 @@ const ProviderCapabilities = Schema.Struct({
 })
 
 const ProviderCacheCost = Schema.Struct({
-  read: Schema.Number,
-  write: Schema.Number,
+  read: Schema.Finite,
+  write: Schema.Finite,
 })
 
 const ProviderCost = Schema.Struct({
-  input: Schema.Number,
-  output: Schema.Number,
+  input: Schema.Finite,
+  output: Schema.Finite,
   cache: ProviderCacheCost,
-  experimentalOver200K: Schema.optional(
+  experimentalOver200K: optionalOmitUndefined(
     Schema.Struct({
-      input: Schema.Number,
-      output: Schema.Number,
+      input: Schema.Finite,
+      output: Schema.Finite,
       cache: ProviderCacheCost,
     }),
   ),
 })
 
 const ProviderLimit = Schema.Struct({
-  context: Schema.Number,
-  input: Schema.optional(Schema.Number),
-  output: Schema.Number,
+  context: Schema.Finite,
+  input: optionalOmitUndefined(Schema.Finite),
+  output: Schema.Finite,
 })
 
 export const Model = Schema.Struct({
@@ -876,15 +894,15 @@ export const Model = Schema.Struct({
   providerID: ProviderID,
   api: ProviderApiInfo,
   name: Schema.String,
-  family: Schema.optional(Schema.String),
+  family: optionalOmitUndefined(Schema.String),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
-  status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
+  status: ModelStatus,
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
-  variants: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
+  variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
 })
   .annotate({ identifier: "Model" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -895,7 +913,7 @@ export const Info = Schema.Struct({
   name: Schema.String,
   source: Schema.Literals(["env", "config", "custom", "api"]),
   env: Schema.Array(Schema.String),
-  key: Schema.optional(Schema.String),
+  key: optionalOmitUndefined(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
   models: Schema.Record(Schema.String, Model),
 })
@@ -917,6 +935,16 @@ export const ConfigProvidersResult = Schema.Struct({
   default: DefaultModelIDs,
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
+
+export function toPublicInfo(provider: Info): Info {
+  return JSON.parse(
+    JSON.stringify(provider, (_, value) => {
+      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
+      if (typeof value === "bigint") return value.toString()
+      return value
+    }),
+  )
+}
 
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
   return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
@@ -1055,7 +1083,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
 const layer: Layer.Layer<
   Service,
   never,
-  Config.Service | Auth.Service | Plugin.Service | AppFileSystem.Service | Env.Service
+  Config.Service | Auth.Service | Plugin.Service | AppFileSystem.Service | Env.Service | ModelsDev.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -1064,13 +1092,14 @@ const layer: Layer.Layer<
     const auth = yield* Auth.Service
     const env = yield* Env.Service
     const plugin = yield* Plugin.Service
+    const modelsDevSvc = yield* ModelsDev.Service
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
         using _ = log.time("state")
         const bridge = yield* EffectBridge.make()
         const cfg = yield* config.get()
-        const modelsDev = yield* Effect.promise(() => ModelsDev.get())
+        const modelsDev = yield* modelsDevSvc.get()
         const database = mapValues(modelsDev, fromModelsDevProvider)
 
         const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
@@ -1119,6 +1148,33 @@ const layer: Layer.Layer<
           if (enabled && !enabled.has(providerID)) return false
           if (disabled.has(providerID)) return false
           return true
+        }
+
+        for (const hook of plugins) {
+          const p = hook.provider
+          const models = p?.models
+          if (!p || !models) continue
+
+          const providerID = ProviderID.make(p.id)
+          if (disabled.has(providerID)) continue
+
+          const provider = database[providerID]
+          if (!provider) continue
+          const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+
+          provider.models = yield* Effect.promise(async () => {
+            const next = await models(toPublicInfo(provider), { auth: pluginAuth })
+            return Object.fromEntries(
+              Object.entries(next).map(([id, model]) => [
+                id,
+                {
+                  ...model,
+                  id: ModelID.make(id),
+                  providerID,
+                },
+              ]),
+            )
+          })
         }
 
         // extend database from config
@@ -1254,7 +1310,7 @@ const layer: Layer.Layer<
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
               () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
-              database[plugin.auth!.provider],
+              toPublicInfo(database[plugin.auth!.provider]),
             ),
           )
           const opts = options ?? {}
@@ -1307,33 +1363,6 @@ const layer: Layer.Layer<
           })
         }
 
-        for (const hook of plugins) {
-          const p = hook.provider
-          const models = p?.models
-          if (!p || !models) continue
-
-          const providerID = ProviderID.make(p.id)
-          if (disabled.has(providerID)) continue
-
-          const provider = providers[providerID]
-          if (!provider) continue
-          const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
-
-          provider.models = yield* Effect.promise(async () => {
-            const next = await models(provider, { auth: pluginAuth })
-            return Object.fromEntries(
-              Object.entries(next).map(([id, model]) => [
-                id,
-                {
-                  ...model,
-                  id: ModelID.make(id),
-                  providerID,
-                },
-              ]),
-            )
-          })
-        }
-
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderID.make(id)
           if (!isProviderAllowed(providerID)) {
@@ -1358,7 +1387,9 @@ const layer: Layer.Layer<
             )
               delete provider.models[modelID]
 
-            model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            if (!model.variants || Object.keys(model.variants).length === 0) {
+              model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            }
 
             const configVariants = configProvider?.models?.[modelID]?.variants
             if (configVariants && model.variants) {
@@ -1464,10 +1495,13 @@ const layer: Layer.Layer<
           if (combined) opts.signal = combined
 
           // Strip openai itemId metadata following what codex does
-          if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+          if (
+            (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
+            opts.body &&
+            opts.method === "POST"
+          ) {
             const body = JSON.parse(opts.body as string)
-            const isAzure = model.providerID.includes("azure")
-            const keepIds = isAzure && body.store === true
+            const keepIds = body.store === true
             if (!keepIds && Array.isArray(body.input)) {
               for (const item of body.input) {
                 if ("id" in item) {
@@ -1698,6 +1732,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
+    Layer.provide(ModelsDev.defaultLayer),
   ),
 )
 
@@ -1728,3 +1763,5 @@ export const ModelNotFoundError = namedSchemaError("ProviderModelNotFoundError",
 export const InitError = namedSchemaError("ProviderInitError", {
   providerID: ProviderID,
 })
+
+export * as Provider from "./provider"

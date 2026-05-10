@@ -1,9 +1,13 @@
-import { NotFoundError, eq, and } from "../storage"
+import { NotFoundError } from "@/storage/storage"
+import { eq } from "drizzle-orm"
+import { and } from "drizzle-orm"
 import { SyncEvent } from "@/sync"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { Log } from "../util"
+import { WorkspaceTable } from "@/control-plane/workspace.sql"
+import { Log } from "@opencode-ai/core/util/log"
+import nextProjectors from "./projectors-next"
 
 const log = Log.create({ service: "session.projector" })
 
@@ -42,6 +46,7 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     parent_id: grab(info, "parentID"),
     slug: grab(info, "slug"),
     directory: grab(info, "directory"),
+    path: grab(info, "path"),
     title: grab(info, "title"),
     version: grab(info, "version"),
     share_url: grab(info, "share", (v) => grab(v, "url")),
@@ -65,6 +70,10 @@ export default [
     db.insert(SessionTable)
       .values(Session.toRow(data.info as Session.Info))
       .run()
+
+    if (data.info.workspaceID) {
+      db.update(WorkspaceTable).set({ time_used: Date.now() }).where(eq(WorkspaceTable.id, data.info.workspaceID)).run()
+    }
   }),
 
   SyncEvent.project(Session.Event.Updated, (db, data) => {
@@ -133,4 +142,6 @@ export default [
       log.warn("ignored late part update", { partID: id, messageID, sessionID })
     }
   }),
+
+  ...nextProjectors,
 ]

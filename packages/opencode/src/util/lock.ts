@@ -94,3 +94,5 @@ export async function write(key: string): Promise<Disposable> {
     }
   })
 }
+
+export * as Lock from "./lock"

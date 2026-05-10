@@ -63,6 +63,11 @@ export function truncate(str: string, len: number): string {
   return str.slice(0, len - 1) + "…"
 }
 
+export function truncateLeft(str: string, len: number): string {
+  if (str.length <= len) return str
+  return "…" + str.slice(-(len - 1))
+}
+
 export function truncateMiddle(str: string, maxLength: number = 35): string {
   if (str.length <= maxLength) return str
 
@@ -77,3 +82,5 @@ export function pluralize(count: number, singular: string, plural: string): stri
   const template = count === 1 ? singular : plural
   return template.replace("{}", count.toString())
 }
+
+export * as Locale from "./locale"

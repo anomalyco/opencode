@@ -3,7 +3,7 @@ export * as ConfigParse from "./parse"
 import { type ParseError as JsoncParseError, parse as parseJsoncImpl, printParseErrorCode } from "jsonc-parser"
 import { Cause, Exit, Schema as EffectSchema, SchemaIssue } from "effect"
 import z from "zod"
-import type { DeepMutable } from "@/util/schema"
+import type { DeepMutable } from "@opencode-ai/core/schema"
 import { InvalidError, JsonError } from "./error"
 
 type ZodSchema<T> = z.ZodType<T>

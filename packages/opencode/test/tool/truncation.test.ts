@@ -1,14 +1,15 @@
 import { describe, test, expect } from "bun:test"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, FileSystem, Layer } from "effect"
-import { Truncate } from "../../src/tool"
-import { Config } from "../../src/config"
+import { Truncate } from "@/tool/truncate"
+import { Config } from "@/config/config"
 import { Identifier } from "../../src/id/id"
-import { Process } from "../../src/util"
-import { Filesystem } from "../../src/util"
+import { Process } from "@/util/process"
+import { Filesystem } from "@/util/filesystem"
 import path from "path"
 import { testEffect } from "../lib/effect"
 import { writeFileStringScoped } from "../lib/filesystem"
+import { TestConfig } from "../fixture/config"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 const ROOT = path.resolve(import.meta.dir, "..", "..")
@@ -16,11 +17,7 @@ const ROOT = path.resolve(import.meta.dir, "..", "..")
 const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, NodeFileSystem.layer))
 
 const configuredLayer = (cfg: Config.Info) =>
-  Layer.mergeAll(
-    Truncate.defaultLayer,
-    NodeFileSystem.layer,
-    Layer.mock(Config.Service)({ get: () => Effect.succeed(cfg) }),
-  )
+  Layer.mergeAll(Truncate.defaultLayer, NodeFileSystem.layer, TestConfig.layer({ get: () => Effect.succeed(cfg) }))
 const configuredIt = (cfg: Config.Info) => testEffect(configuredLayer(cfg))
 
 describe("Truncate", () => {
