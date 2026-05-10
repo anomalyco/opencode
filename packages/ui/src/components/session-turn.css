@@ -151,6 +151,7 @@
   }
 
   [data-component="session-turn-diffs-content"] {
+    user-select: text;
     padding-top: 0px;
     display: flex;
     flex-direction: column;
