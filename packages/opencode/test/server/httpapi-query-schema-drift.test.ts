@@ -26,7 +26,7 @@ import {
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { MessagesQuery as V2MessagesQuery } from "../../src/server/routes/instance/httpapi/groups/v2/message"
 import { SessionsQuery as V2SessionsQuery } from "../../src/server/routes/instance/httpapi/groups/v2/session"
-import { QueryBoolean } from "../../src/server/routes/instance/httpapi/groups/query"
+import { QueryBoolean, QueryBooleanOpenApi } from "../../src/server/routes/instance/httpapi/groups/query"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
@@ -36,6 +36,8 @@ const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 type Method = "get" | "post" | "put" | "delete" | "patch"
 type QuerySchema = { readonly fields: Record<string, unknown> }
 type OpenApiSchema = {
+  readonly anyOf?: readonly OpenApiSchema[]
+  readonly enum?: readonly string[]
   readonly maximum?: number
   readonly minimum?: number
   readonly pattern?: string
@@ -74,6 +76,13 @@ const numericSdkQueryParams = [
   { method: "get", path: "/api/session", name: "start", schema: { type: "number" } },
   { method: "get", path: "/api/session/:sessionID/message", name: "limit", schema: { type: "number" } },
 ] satisfies Array<{ method: Method; path: string; name: string; schema: OpenApiSchema }>
+
+const booleanSdkQueryParams = [
+  { method: "get", path: ExperimentalPaths.session, name: "roots" },
+  { method: "get", path: ExperimentalPaths.session, name: "archived" },
+  { method: "get", path: SessionPaths.list, name: "roots" },
+  { method: "get", path: "/api/session", name: "roots" },
+] satisfies Array<{ method: Method; path: string; name: string }>
 
 const queryParamPatterns = [
   { method: "get", path: SessionPaths.diff, name: "messageID", pattern: "^msg" },
@@ -174,20 +183,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.effect(
-    "OpenAPI query parameter patterns come from runtime schemas",
-    Effect.sync(() => {
-      const spec = OpenApi.fromApi(PublicApi)
-      for (const expected of queryParamPatterns) {
-        expect(
-          queryParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
-          `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
-        ).toEqual({ type: "string", pattern: expected.pattern })
-      }
-    }),
-  )
-
-  it.effect(
-    "OpenAPI workspace query params are declared by runtime query schemas",
+    "OpenAPI query params are declared by runtime query schemas",
     Effect.sync(() => {
       const spec = OpenApi.fromApi(PublicApi)
       for (const route of openApiDriftRoutes) {
@@ -200,7 +196,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.effect(
-    "OpenAPI numeric query params preserve generated SDK call shapes",
+    "OpenAPI query and path schemas preserve compatibility metadata",
     Effect.sync(() => {
       const spec = OpenApi.fromApi(PublicApi)
       for (const expected of numericSdkQueryParams) {
@@ -209,13 +205,18 @@ describe("httpapi query schema drift", () => {
           `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
         ).toEqual(expected.schema)
       }
-    }),
-  )
-
-  it.effect(
-    "OpenAPI path parameter patterns come from runtime schemas",
-    Effect.sync(() => {
-      const spec = OpenApi.fromApi(PublicApi)
+      for (const expected of booleanSdkQueryParams) {
+        expect(
+          queryParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
+          `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
+        ).toEqual(QueryBooleanOpenApi)
+      }
+      for (const expected of queryParamPatterns) {
+        expect(
+          queryParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
+          `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
+        ).toEqual({ type: "string", pattern: expected.pattern })
+      }
       for (const expected of pathParamPatterns) {
         expect(
           pathParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
