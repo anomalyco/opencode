@@ -343,13 +343,22 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
     }
 
     const requestParams: Record<string, unknown> = {
-      model: this.modelId,
       messages,
       max_tokens: options.maxOutputTokens,
       temperature: options.temperature,
       top_p: options.topP,
       stop: options.stopSequences,
       seed: options.seed,
+    }
+    // Only include `model` when the caller-supplied modelId is a real value.
+    // opencode's session resolver falls back to its sentinel `"default"`
+    // (and to empty string with some misconfigured agents) when no model is
+    // pinned. We DO NOT want either of those leaking through to OpenAI as a
+    // literal `model: "default"` — the gym openai_model server's
+    // `body_dict.setdefault("model", self.config.openai_model)` will fill in
+    // the policy-configured model name when we omit it instead.
+    if (this.modelId && this.modelId !== "default") {
+      requestParams.model = this.modelId
     }
     if (tools && (tools as unknown[]).length) requestParams.tools = tools
     if (toolChoice) requestParams.tool_choice = toolChoice
