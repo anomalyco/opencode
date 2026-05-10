@@ -1,33 +1,32 @@
 import { Schema } from "effect"
 import { Identifier } from "@/id/id"
-import { zod, ZodOverride } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { withStatics } from "@opencode-ai/core/schema"
 
-export const AutomationID = Schema.String.annotate({ [ZodOverride]: Identifier.schema("automation") }).pipe(
-  Schema.brand("AutomationID"),
-  withStatics((s) => ({
-    ascending: (id?: string) => s.make(Identifier.ascending("automation", id)),
-    zod: zod(s),
+const automationIdSchema = Schema.String.check(Schema.isStartsWith("aut")).pipe(Schema.brand("AutomationID"))
+export type AutomationID = typeof automationIdSchema.Type
+
+export const AutomationID = automationIdSchema.pipe(
+  withStatics((schema: typeof automationIdSchema) => ({
+    ascending: (id?: string) => schema.make(Identifier.ascending("automation", id)),
   })),
 )
-export type AutomationID = Schema.Schema.Type<typeof AutomationID>
 
-export const AutomationRunID = Schema.String.annotate({ [ZodOverride]: Identifier.schema("automationRun") }).pipe(
-  Schema.brand("AutomationRunID"),
-  withStatics((s) => ({
-    ascending: (id?: string) => s.make(Identifier.ascending("automationRun", id)),
-    zod: zod(s),
+const automationRunIdSchema = Schema.String.check(Schema.isStartsWith("arn")).pipe(Schema.brand("AutomationRunID"))
+export type AutomationRunID = typeof automationRunIdSchema.Type
+
+export const AutomationRunID = automationRunIdSchema.pipe(
+  withStatics((schema: typeof automationRunIdSchema) => ({
+    ascending: (id?: string) => schema.make(Identifier.ascending("automationRun", id)),
   })),
 )
-export type AutomationRunID = Schema.Schema.Type<typeof AutomationRunID>
 
-export const AutomationFindingID = Schema.String.annotate({
-  [ZodOverride]: Identifier.schema("automationFinding"),
-}).pipe(
+const automationFindingIdSchema = Schema.String.check(Schema.isStartsWith("afn")).pipe(
   Schema.brand("AutomationFindingID"),
-  withStatics((s) => ({
-    ascending: (id?: string) => s.make(Identifier.ascending("automationFinding", id)),
-    zod: zod(s),
+)
+export type AutomationFindingID = typeof automationFindingIdSchema.Type
+
+export const AutomationFindingID = automationFindingIdSchema.pipe(
+  withStatics((schema: typeof automationFindingIdSchema) => ({
+    ascending: (id?: string) => schema.make(Identifier.ascending("automationFinding", id)),
   })),
 )
-export type AutomationFindingID = Schema.Schema.Type<typeof AutomationFindingID>

@@ -4,7 +4,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import { and, desc, eq, inArray, lte, sql } from "drizzle-orm"
 import { Database } from "@/storage/db"
-import { Instance } from "@/project/instance"
+import { InstanceRef } from "@/effect/instance-ref"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ProjectID } from "@/project/schema"
@@ -18,23 +18,19 @@ import { SessionSummary } from "@/session/summary"
 import { SessionStatus } from "@/session/status"
 import type { FileDiff } from "@/snapshot"
 import { Worktree } from "@/worktree"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
 import { Cause, Context, Effect, Exit, Layer, Option, Schema, Types } from "effect"
 import { AutomationFindingTable, AutomationRunTable, AutomationTable } from "./automation.sql"
 import { AutomationFindingID, AutomationID, AutomationRunID } from "./schema"
 
 const log = Log.create({ service: "automation" })
 
-export const Weekday = Schema.Literals(["sun", "mon", "tue", "wed", "thu", "fri", "sat"]).pipe(
-  withStatics((s) => ({ zod: zod(s) })),
-)
+export const Weekday = Schema.Literals(["sun", "mon", "tue", "wed", "thu", "fri", "sat"])
 export type Weekday = Schema.Schema.Type<typeof Weekday>
 
 export const ScheduleConfig = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("interval"),
-    everyMinutes: Schema.Number,
+    everyMinutes: Schema.Finite,
   }),
   Schema.Struct({
     type: Schema.Literal("daily"),
@@ -47,13 +43,13 @@ export const ScheduleConfig = Schema.Union([
     time: Schema.String,
     timezone: Schema.String,
   }),
-]).pipe(withStatics((s) => ({ zod: zod(s) })))
+])
 export type ScheduleConfig = Types.DeepMutable<Schema.Schema.Type<typeof ScheduleConfig>>
 
-export const ExecutionMode = Schema.Literals(["local", "worktree"]).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const ExecutionMode = Schema.Literals(["local", "worktree"])
 export type ExecutionMode = Schema.Schema.Type<typeof ExecutionMode>
 
-export const AutomationKind = Schema.Literals(["standalone", "thread"]).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const AutomationKind = Schema.Literals(["standalone", "thread"])
 export type AutomationKind = Schema.Schema.Type<typeof AutomationKind>
 
 export const PermissionProfile = Schema.Literals([
@@ -61,7 +57,7 @@ export const PermissionProfile = Schema.Literals([
   "repo_write_no_network",
   "repo_write_with_tests",
   "repo_write_network_requires_approval",
-]).pipe(withStatics((s) => ({ zod: zod(s) })))
+])
 export type PermissionProfile = Schema.Schema.Type<typeof PermissionProfile>
 
 export const RunStatus = Schema.Literals([
@@ -73,22 +69,22 @@ export const RunStatus = Schema.Literals([
   "completed_no_findings",
   "failed",
   "cancelled",
-]).pipe(withStatics((s) => ({ zod: zod(s) })))
+])
 export type RunStatus = Schema.Schema.Type<typeof RunStatus>
 
 const DiffStats = Schema.Struct({
-  additions: Schema.Number,
-  deletions: Schema.Number,
-  files: Schema.Number,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  files: Schema.Finite,
 })
 
 const Time = Schema.Struct({
-  created: Schema.Number,
-  updated: Schema.Number,
-  lastRun: Schema.optional(Schema.Number),
-  nextRun: Schema.optional(Schema.Number),
-  starts: Schema.optional(Schema.Number),
-  ends: Schema.optional(Schema.Number),
+  created: Schema.Finite,
+  updated: Schema.Finite,
+  lastRun: Schema.optional(Schema.Finite),
+  nextRun: Schema.optional(Schema.Finite),
+  starts: Schema.optional(Schema.Finite),
+  ends: Schema.optional(Schema.Finite),
 })
 
 export const Finding = Schema.Struct({
@@ -100,12 +96,11 @@ export const Finding = Schema.Struct({
   filesChanged: Schema.mutable(Schema.Array(Schema.String)),
   recommendedNextAction: Schema.optional(Schema.String),
   time: Schema.Struct({
-    created: Schema.Number,
-    updated: Schema.Number,
+    created: Schema.Finite,
+    updated: Schema.Finite,
   }),
 })
   .annotate({ identifier: "AutomationFinding" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Finding = Types.DeepMutable<Schema.Schema.Type<typeof Finding>>
 
 export const Info = Schema.Struct({
@@ -123,11 +118,10 @@ export const Info = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.Literals(["none", "low", "medium", "high"])),
   permissionProfile: PermissionProfile,
   notificationBehavior: Schema.Literals(["inbox", "auto_archive_no_findings"]),
-  maxRuntimeMinutes: Schema.optional(Schema.Number),
+  maxRuntimeMinutes: Schema.optional(Schema.Finite),
   time: Time,
 })
   .annotate({ identifier: "Automation" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const RunInfo = Schema.Struct({
@@ -145,21 +139,20 @@ export const RunInfo = Schema.Struct({
   branchName: Schema.optional(Schema.String),
   summary: Schema.optional(Schema.String),
   result: Schema.optional(Schema.Literals(["findings", "no_findings", "needs_approval", "failed"])),
-  findingsCount: Schema.Number,
+  findingsCount: Schema.Finite,
   diffStats: Schema.optional(DiffStats),
   error: Schema.optional(Schema.String),
   time: Schema.Struct({
-    created: Schema.Number,
-    updated: Schema.Number,
-    queued: Schema.Number,
-    started: Schema.optional(Schema.Number),
-    completed: Schema.optional(Schema.Number),
-    read: Schema.optional(Schema.Number),
-    archived: Schema.optional(Schema.Number),
+    created: Schema.Finite,
+    updated: Schema.Finite,
+    queued: Schema.Finite,
+    started: Schema.optional(Schema.Finite),
+    completed: Schema.optional(Schema.Finite),
+    read: Schema.optional(Schema.Finite),
+    archived: Schema.optional(Schema.Finite),
   }),
 })
   .annotate({ identifier: "AutomationRun" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type RunInfo = Types.DeepMutable<Schema.Schema.Type<typeof RunInfo>>
 
 export const CreateInput = Schema.Struct({
@@ -174,12 +167,11 @@ export const CreateInput = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.Literals(["none", "low", "medium", "high"])),
   permissionProfile: Schema.optional(PermissionProfile),
   notificationBehavior: Schema.optional(Schema.Literals(["inbox", "auto_archive_no_findings"])),
-  maxRuntimeMinutes: Schema.optional(Schema.Number),
-  startsAt: Schema.optional(Schema.Number),
-  endsAt: Schema.optional(Schema.Number),
+  maxRuntimeMinutes: Schema.optional(Schema.Finite),
+  startsAt: Schema.optional(Schema.Finite),
+  endsAt: Schema.optional(Schema.Finite),
 })
   .annotate({ identifier: "AutomationCreateInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
 
 export const UpdateInput = Schema.Struct({
@@ -194,30 +186,25 @@ export const UpdateInput = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.Literals(["none", "low", "medium", "high"])),
   permissionProfile: Schema.optional(PermissionProfile),
   notificationBehavior: Schema.optional(Schema.Literals(["inbox", "auto_archive_no_findings"])),
-  maxRuntimeMinutes: Schema.optional(Schema.Number),
-  startsAt: Schema.optional(Schema.Number),
-  endsAt: Schema.optional(Schema.Number),
+  maxRuntimeMinutes: Schema.optional(Schema.Finite),
+  startsAt: Schema.optional(Schema.Finite),
+  endsAt: Schema.optional(Schema.Finite),
 })
   .annotate({ identifier: "AutomationUpdateInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 
 export const ListRunsInput = Schema.Struct({
   automationID: Schema.optional(AutomationID),
   inbox: Schema.optional(Schema.Boolean),
   archived: Schema.optional(Schema.Boolean),
-  limit: Schema.optional(Schema.Number),
+  limit: Schema.optional(Schema.Finite),
 })
   .annotate({ identifier: "AutomationListRunsInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type ListRunsInput = Types.DeepMutable<Schema.Schema.Type<typeof ListRunsInput>>
 
-export const NotFoundError = NamedError.create(
-  "AutomationNotFoundError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const NotFoundError = NamedError.create("AutomationNotFoundError", {
+  message: Schema.String,
+})
 
 type AutomationRow = typeof AutomationTable.$inferSelect
 type RunRow = typeof AutomationRunTable.$inferSelect
@@ -1035,7 +1022,7 @@ export const layer = Layer.effect(
                 details:
                   [finalOutput.summary, finalOutput.diffSummary].filter(Boolean).join("\n\n") ||
                   "Automation completed.",
-                filesChanged: diffs.map((diff) => diff.file),
+                filesChanged: diffs.map((diff) => diff.file).filter((file): file is string => file !== undefined),
               },
             ]
       const nextRunAt = computeNextRun({
@@ -1217,12 +1204,10 @@ export const layer = Layer.effect(
             )
           : runPromptEffect(automation, runID)
         const result = worktreeInfo
-          ? yield* Effect.promise(async () => {
-              const nested = await Instance.provide({
-                directory: worktreeInfo!.directory,
-                fn: () => Effect.runPromise(task.pipe(Effect.provide(WorktreeRunLayer))),
-              })
-              return await nested
+          ? yield* Effect.gen(function* () {
+              const current = yield* InstanceState.context
+              const ctx = { ...current, directory: worktreeInfo!.directory }
+              return yield* task.pipe(Effect.provideService(InstanceRef, ctx), Effect.provide(WorktreeRunLayer))
             })
           : yield* task
         const structured =

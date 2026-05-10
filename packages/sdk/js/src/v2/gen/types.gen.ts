@@ -5,15 +5,7 @@ export type ClientOptions = {
 }
 
 export type Event =
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow1
-  | EventTuiSessionSelect
-  | EventServerConnected
-  | EventGlobalDisposed
   | EventServerInstanceDisposed
-  | EventFileEdited
-  | EventFileWatcherUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
@@ -21,23 +13,29 @@ export type Event =
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
+  | EventSessionStatus
+  | EventSessionIdle
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventTodoUpdated
-  | EventSessionStatus
-  | EventSessionIdle
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow1
+  | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
   | EventProjectUpdated
   | EventSessionCompacted
+  | EventFileEdited
+  | EventFileWatcherUpdated
+  | EventTodoUpdated
+  | EventWorktreeReady
+  | EventWorktreeFailed
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventWorkspaceStatus
-  | EventWorktreeReady
-  | EventWorktreeFailed
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -77,11 +75,13 @@ export type Event =
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
-  | EventCatalogModelUpdated
+  | EventServerConnected
+  | EventGlobalDisposed
   | EventModelsDevRefreshed
   | EventAccountAdded
   | EventAccountRemoved
   | EventAccountSwitched
+  | EventCatalogModelUpdated
 
 export type OAuth = {
   type: "oauth"
@@ -119,59 +119,13 @@ export type InvalidRequestError = {
   field?: string
 }
 
-export type EventTuiPromptAppend = {
+export type LiveAutomationRun = {
   id: string
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  id: string
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  id: string
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  id: string
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
+  automationID: string
+  projectID: string
+  directory: string
+  title: string
+  status: "queued" | "preparing" | "running"
 }
 
 export type PermissionRequest = {
@@ -259,6 +213,28 @@ export type ApiError = {
   }
 }
 
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      action?: {
+        reason: string
+        provider: string
+        title: string
+        message: string
+        label: string
+        link?: string
+      }
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -315,42 +291,60 @@ export type QuestionRejected = {
   requestID: string
 }
 
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
+export type EventTuiPromptAppend = {
+  id: string
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
 }
 
-export type SessionStatus =
-  | {
-      type: "idle"
-    }
-  | {
-      type: "retry"
-      attempt: number
-      message: string
-      action?: {
-        reason: string
-        provider: string
-        title: string
-        message: string
-        label: string
-        link?: string
-      }
-      next: number
-    }
-  | {
-      type: "busy"
-    }
+export type EventTuiCommandExecute = {
+  id: string
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  id: string
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  id: string
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
 
 export type Project = {
   id: string
@@ -374,6 +368,21 @@ export type Project = {
     initialized?: number
   }
   sandboxes: Array<string>
+}
+
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
 }
 
 export type Pty = {
@@ -806,15 +815,7 @@ export type GlobalEvent = {
   project?: string
   workspace?: string
   payload:
-    | EventTuiPromptAppend
-    | EventTuiCommandExecute
-    | EventTuiToastShow
-    | EventTuiSessionSelect
-    | EventServerConnected
-    | EventGlobalDisposed
     | EventServerInstanceDisposed
-    | EventFileEdited
-    | EventFileWatcherUpdated
     | EventLspClientDiagnostics
     | EventLspUpdated
     | EventMessagePartDelta
@@ -822,23 +823,29 @@ export type GlobalEvent = {
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
+    | EventSessionStatus
+    | EventSessionIdle
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
-    | EventTodoUpdated
-    | EventSessionStatus
-    | EventSessionIdle
+    | EventTuiPromptAppend
+    | EventTuiCommandExecute
+    | EventTuiToastShow
+    | EventTuiSessionSelect
     | EventMcpToolsChanged
     | EventMcpBrowserOpenFailed
     | EventCommandExecuted
     | EventProjectUpdated
     | EventSessionCompacted
+    | EventFileEdited
+    | EventFileWatcherUpdated
+    | EventTodoUpdated
+    | EventWorktreeReady
+    | EventWorktreeFailed
     | EventVcsBranchUpdated
     | EventWorkspaceReady
     | EventWorkspaceFailed
     | EventWorkspaceStatus
-    | EventWorktreeReady
-    | EventWorktreeFailed
     | EventPtyCreated
     | EventPtyUpdated
     | EventPtyExited
@@ -878,11 +885,13 @@ export type GlobalEvent = {
     | EventSessionNextCompactionStarted
     | EventSessionNextCompactionDelta
     | EventSessionNextCompactionEnded
-    | EventCatalogModelUpdated
+    | EventServerConnected
+    | EventGlobalDisposed
     | EventModelsDevRefreshed
     | EventAccountAdded
     | EventAccountRemoved
     | EventAccountSwitched
+    | EventCatalogModelUpdated
     | SyncEventMessageUpdated
     | SyncEventMessageRemoved
     | SyncEventMessagePartUpdated
@@ -1313,6 +1322,200 @@ export type Config = {
     continue_loop_on_deny?: boolean
     mcp_timeout?: number
   }
+}
+
+export type Automation = {
+  id: string
+  projectID: string
+  directory: string
+  title: string
+  enabled: boolean
+  kind: "standalone" | "thread"
+  threadID?: string
+  prompt: string
+  schedule:
+    | {
+        type: "interval"
+        everyMinutes: number
+      }
+    | {
+        type: "daily"
+        time: string
+        timezone: string
+      }
+    | {
+        type: "weekly"
+        days: Array<"sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat">
+        time: string
+        timezone: string
+      }
+  executionMode: "local" | "worktree"
+  model: string
+  reasoningEffort?: "none" | "low" | "medium" | "high"
+  permissionProfile:
+    | "read_only"
+    | "repo_write_no_network"
+    | "repo_write_with_tests"
+    | "repo_write_network_requires_approval"
+  notificationBehavior: "inbox" | "auto_archive_no_findings"
+  maxRuntimeMinutes?: number
+  time: {
+    created: number
+    updated: number
+    lastRun?: number
+    nextRun?: number
+    starts?: number
+    ends?: number
+  }
+}
+
+export type AutomationCreateInput = {
+  title: string
+  enabled?: boolean
+  kind?: "standalone" | "thread"
+  threadID?: string
+  prompt: string
+  schedule:
+    | {
+        type: "interval"
+        everyMinutes: number
+      }
+    | {
+        type: "daily"
+        time: string
+        timezone: string
+      }
+    | {
+        type: "weekly"
+        days: Array<"sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat">
+        time: string
+        timezone: string
+      }
+  executionMode?: "local" | "worktree"
+  model?: string
+  reasoningEffort?: "none" | "low" | "medium" | "high"
+  permissionProfile?:
+    | "read_only"
+    | "repo_write_no_network"
+    | "repo_write_with_tests"
+    | "repo_write_network_requires_approval"
+  notificationBehavior?: "inbox" | "auto_archive_no_findings"
+  maxRuntimeMinutes?: number
+  startsAt?: number
+  endsAt?: number
+}
+
+export type AutomationRun = {
+  id: string
+  automationID: string
+  projectID: string
+  directory: string
+  sessionID?: string
+  status:
+    | "queued"
+    | "preparing"
+    | "running"
+    | "needs_approval"
+    | "completed_with_findings"
+    | "completed_no_findings"
+    | "failed"
+    | "cancelled"
+  promptSnapshot: string
+  modelSnapshot: string
+  executionModeSnapshot: "local" | "worktree"
+  scheduleSnapshot:
+    | {
+        type: "interval"
+        everyMinutes: number
+      }
+    | {
+        type: "daily"
+        time: string
+        timezone: string
+      }
+    | {
+        type: "weekly"
+        days: Array<"sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat">
+        time: string
+        timezone: string
+      }
+  worktreePath?: string
+  branchName?: string
+  summary?: string
+  result?: "findings" | "no_findings" | "needs_approval" | "failed"
+  findingsCount: number
+  diffStats?: {
+    additions: number
+    deletions: number
+    files: number
+  }
+  error?: string
+  time: {
+    created: number
+    updated: number
+    queued: number
+    started?: number
+    completed?: number
+    read?: number
+    archived?: number
+  }
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
+  }
+}
+
+export type AutomationFinding = {
+  id: string
+  runID: string
+  title: string
+  severity: "low" | "medium" | "high"
+  details: string
+  filesChanged: Array<string>
+  recommendedNextAction?: string
+  time: {
+    created: number
+    updated: number
+  }
+}
+
+export type AutomationUpdateInput = {
+  title?: string
+  enabled?: boolean
+  kind?: "standalone" | "thread"
+  threadID?: string
+  prompt?: string
+  schedule?:
+    | {
+        type: "interval"
+        everyMinutes: number
+      }
+    | {
+        type: "daily"
+        time: string
+        timezone: string
+      }
+    | {
+        type: "weekly"
+        days: Array<"sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat">
+        time: string
+        timezone: string
+      }
+  executionMode?: "local" | "worktree"
+  model?: string
+  reasoningEffort?: "none" | "low" | "medium" | "high"
+  permissionProfile?:
+    | "read_only"
+    | "repo_write_no_network"
+    | "repo_write_with_tests"
+    | "repo_write_network_requires_approval"
+  notificationBehavior?: "inbox" | "auto_archive_no_findings"
+  maxRuntimeMinutes?: number
+  startsAt?: number
+  endsAt?: number
 }
 
 export type Model = {
@@ -1780,13 +1983,6 @@ export type ProviderAuthError1 = {
     field?: string
     message?: string
     kind?: string
-  }
-}
-
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
   }
 }
 
@@ -2499,44 +2695,11 @@ export type SyncEventSessionNextCompactionEnded = {
   }
 }
 
-export type EventServerConnected = {
-  id: string
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  id: string
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventServerInstanceDisposed = {
   id: string
   type: "server.instance.disposed"
   properties: {
     directory: string
-  }
-}
-
-export type EventFileEdited = {
-  id: string
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type EventFileWatcherUpdated = {
-  id: string
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
   }
 }
 
@@ -2610,6 +2773,23 @@ export type EventSessionError = {
   }
 }
 
+export type EventSessionStatus = {
+  id: string
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
+export type EventSessionIdle = {
+  id: string
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
 export type EventQuestionAsked = {
   id: string
   type: "question.asked"
@@ -2626,32 +2806,6 @@ export type EventQuestionRejected = {
   id: string
   type: "question.rejected"
   properties: QuestionRejected
-}
-
-export type EventTodoUpdated = {
-  id: string
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
-  }
-}
-
-export type EventSessionStatus = {
-  id: string
-  type: "session.status"
-  properties: {
-    sessionID: string
-    status: SessionStatus
-  }
-}
-
-export type EventSessionIdle = {
-  id: string
-  type: "session.idle"
-  properties: {
-    sessionID: string
-  }
 }
 
 export type EventMcpToolsChanged = {
@@ -2696,6 +2850,49 @@ export type EventSessionCompacted = {
   }
 }
 
+export type EventFileEdited = {
+  id: string
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  id: string
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventTodoUpdated = {
+  id: string
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
+export type EventWorktreeReady = {
+  id: string
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch?: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  id: string
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
 export type EventVcsBranchUpdated = {
   id: string
   type: "vcs.branch.updated"
@@ -2726,23 +2923,6 @@ export type EventWorkspaceStatus = {
   properties: {
     workspaceID: string
     status: "connected" | "connecting" | "disconnected" | "error"
-  }
-}
-
-export type EventWorktreeReady = {
-  id: string
-  type: "worktree.ready"
-  properties: {
-    name: string
-    branch?: string
-  }
-}
-
-export type EventWorktreeFailed = {
-  id: string
-  type: "worktree.failed"
-  properties: {
-    message: string
   }
 }
 
@@ -3241,6 +3421,80 @@ export type EventSessionNextCompactionEnded = {
   }
 }
 
+export type EventServerConnected = {
+  id: string
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  id: string
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventModelsDevRefreshed = {
+  id: string
+  type: "models-dev.refreshed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type AccountV2oAuthCredential = {
+  type: "oauth"
+  refresh: string
+  access: string
+  expires: number
+}
+
+export type AccountV2ApiKeyCredential = {
+  type: "api"
+  key: string
+  metadata?: {
+    [key: string]: string
+  }
+}
+
+export type AccountV2Credential = AccountV2oAuthCredential | AccountV2ApiKeyCredential
+
+export type AccountV2Info = {
+  id: string
+  serviceID: string
+  description: string
+  credential: AccountV2Credential
+}
+
+export type EventAccountAdded = {
+  id: string
+  type: "account.added"
+  properties: {
+    account: AccountV2Info
+  }
+}
+
+export type EventAccountRemoved = {
+  id: string
+  type: "account.removed"
+  properties: {
+    account: AccountV2Info
+  }
+}
+
+export type EventAccountSwitched = {
+  id: string
+  type: "account.switched"
+  properties: {
+    serviceID: string
+    from?: string
+    to?: string
+  }
+}
+
 export type ModelV2Info = {
   id: string
   apiID: string
@@ -3344,64 +3598,6 @@ export type EventCatalogModelUpdated = {
   type: "catalog.model.updated"
   properties: {
     model: ModelV2Info
-  }
-}
-
-export type EventModelsDevRefreshed = {
-  id: string
-  type: "models-dev.refreshed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type AccountV2oAuthCredential = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-}
-
-export type AccountV2ApiKeyCredential = {
-  type: "api"
-  key: string
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type AccountV2Credential = AccountV2oAuthCredential | AccountV2ApiKeyCredential
-
-export type AccountV2Info = {
-  id: string
-  serviceID: string
-  description: string
-  credential: AccountV2Credential
-}
-
-export type EventAccountAdded = {
-  id: string
-  type: "account.added"
-  properties: {
-    account: AccountV2Info
-  }
-}
-
-export type EventAccountRemoved = {
-  id: string
-  type: "account.removed"
-  properties: {
-    account: AccountV2Info
-  }
-}
-
-export type EventAccountSwitched = {
-  id: string
-  type: "account.switched"
-  properties: {
-    serviceID: string
-    from?: string
-    to?: string
   }
 }
 
@@ -3950,6 +4146,34 @@ export type GlobalHealthResponses = {
 
 export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthResponses]
 
+export type GlobalAutomationRunningData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/automation/running"
+}
+
+export type GlobalAutomationRunningErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalAutomationRunningError = GlobalAutomationRunningErrors[keyof GlobalAutomationRunningErrors]
+
+export type GlobalAutomationRunningResponses = {
+  /**
+   * Running automation runs
+   */
+  200: {
+    count: number
+    runs: Array<LiveAutomationRun>
+  }
+}
+
+export type GlobalAutomationRunningResponse = GlobalAutomationRunningResponses[keyof GlobalAutomationRunningResponses]
+
 export type GlobalEventData = {
   body?: never
   path?: never
@@ -4103,6 +4327,472 @@ export type EventSubscribeResponses = {
 }
 
 export type EventSubscribeResponse = EventSubscribeResponses[keyof EventSubscribeResponses]
+
+export type AutomationListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation"
+}
+
+export type AutomationListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AutomationListError = AutomationListErrors[keyof AutomationListErrors]
+
+export type AutomationListResponses = {
+  /**
+   * List of automations
+   */
+  200: Array<Automation>
+}
+
+export type AutomationListResponse = AutomationListResponses[keyof AutomationListResponses]
+
+export type AutomationCreateData = {
+  body?: AutomationCreateInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation"
+}
+
+export type AutomationCreateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type AutomationCreateError = AutomationCreateErrors[keyof AutomationCreateErrors]
+
+export type AutomationCreateResponses = {
+  /**
+   * Created automation
+   */
+  200: Automation
+}
+
+export type AutomationCreateResponse = AutomationCreateResponses[keyof AutomationCreateResponses]
+
+export type AutomationRunsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    automationID?: string
+    inbox?: "true" | "false"
+    archived?: "true" | "false"
+    limit?: string
+  }
+  url: "/automation/runs"
+}
+
+export type AutomationRunsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AutomationRunsError = AutomationRunsErrors[keyof AutomationRunsErrors]
+
+export type AutomationRunsResponses = {
+  /**
+   * List of automation runs
+   */
+  200: Array<AutomationRun>
+}
+
+export type AutomationRunsResponse = AutomationRunsResponses[keyof AutomationRunsResponses]
+
+export type AutomationRunGetData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/runs/{runID}"
+}
+
+export type AutomationRunGetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationRunGetError = AutomationRunGetErrors[keyof AutomationRunGetErrors]
+
+export type AutomationRunGetResponses = {
+  /**
+   * Automation run
+   */
+  200: AutomationRun
+}
+
+export type AutomationRunGetResponse = AutomationRunGetResponses[keyof AutomationRunGetResponses]
+
+export type AutomationRunFindingsData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/runs/{runID}/findings"
+}
+
+export type AutomationRunFindingsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationRunFindingsError = AutomationRunFindingsErrors[keyof AutomationRunFindingsErrors]
+
+export type AutomationRunFindingsResponses = {
+  /**
+   * Automation findings
+   */
+  200: Array<AutomationFinding>
+}
+
+export type AutomationRunFindingsResponse = AutomationRunFindingsResponses[keyof AutomationRunFindingsResponses]
+
+export type AutomationRunDiffData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/runs/{runID}/diff"
+}
+
+export type AutomationRunDiffErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationRunDiffError = AutomationRunDiffErrors[keyof AutomationRunDiffErrors]
+
+export type AutomationRunDiffResponses = {
+  /**
+   * Automation run diff
+   */
+  200: Array<SnapshotFileDiff>
+}
+
+export type AutomationRunDiffResponse = AutomationRunDiffResponses[keyof AutomationRunDiffResponses]
+
+export type AutomationRunReadData = {
+  body?: {
+    read?: boolean
+  }
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/runs/{runID}/read"
+}
+
+export type AutomationRunReadErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationRunReadError = AutomationRunReadErrors[keyof AutomationRunReadErrors]
+
+export type AutomationRunReadResponses = {
+  /**
+   * Automation run
+   */
+  200: AutomationRun
+}
+
+export type AutomationRunReadResponse = AutomationRunReadResponses[keyof AutomationRunReadResponses]
+
+export type AutomationRunArchiveData = {
+  body?: {
+    archived?: boolean
+  }
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/runs/{runID}/archive"
+}
+
+export type AutomationRunArchiveErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationRunArchiveError = AutomationRunArchiveErrors[keyof AutomationRunArchiveErrors]
+
+export type AutomationRunArchiveResponses = {
+  /**
+   * Automation run
+   */
+  200: AutomationRun
+}
+
+export type AutomationRunArchiveResponse = AutomationRunArchiveResponses[keyof AutomationRunArchiveResponses]
+
+export type AutomationRunCancelData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/runs/{runID}/cancel"
+}
+
+export type AutomationRunCancelErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationRunCancelError = AutomationRunCancelErrors[keyof AutomationRunCancelErrors]
+
+export type AutomationRunCancelResponses = {
+  /**
+   * Automation run
+   */
+  200: AutomationRun
+}
+
+export type AutomationRunCancelResponse = AutomationRunCancelResponses[keyof AutomationRunCancelResponses]
+
+export type AutomationDeleteData = {
+  body?: never
+  path: {
+    automationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/{automationID}"
+}
+
+export type AutomationDeleteErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationDeleteError = AutomationDeleteErrors[keyof AutomationDeleteErrors]
+
+export type AutomationDeleteResponses = {
+  /**
+   * Deleted
+   */
+  200: boolean
+}
+
+export type AutomationDeleteResponse = AutomationDeleteResponses[keyof AutomationDeleteResponses]
+
+export type AutomationGetData = {
+  body?: never
+  path: {
+    automationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/{automationID}"
+}
+
+export type AutomationGetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationGetError = AutomationGetErrors[keyof AutomationGetErrors]
+
+export type AutomationGetResponses = {
+  /**
+   * Automation
+   */
+  200: Automation
+}
+
+export type AutomationGetResponse = AutomationGetResponses[keyof AutomationGetResponses]
+
+export type AutomationUpdateData = {
+  body?: AutomationUpdateInput
+  path: {
+    automationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/{automationID}"
+}
+
+export type AutomationUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationUpdateError = AutomationUpdateErrors[keyof AutomationUpdateErrors]
+
+export type AutomationUpdateResponses = {
+  /**
+   * Updated automation
+   */
+  200: Automation
+}
+
+export type AutomationUpdateResponse = AutomationUpdateResponses[keyof AutomationUpdateResponses]
+
+export type AutomationDuplicateData = {
+  body?: never
+  path: {
+    automationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/{automationID}/duplicate"
+}
+
+export type AutomationDuplicateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationDuplicateError = AutomationDuplicateErrors[keyof AutomationDuplicateErrors]
+
+export type AutomationDuplicateResponses = {
+  /**
+   * Duplicated automation
+   */
+  200: Automation
+}
+
+export type AutomationDuplicateResponse = AutomationDuplicateResponses[keyof AutomationDuplicateResponses]
+
+export type AutomationRunNowData = {
+  body?: never
+  path: {
+    automationID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/automation/{automationID}/run"
+}
+
+export type AutomationRunNowErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type AutomationRunNowError = AutomationRunNowErrors[keyof AutomationRunNowErrors]
+
+export type AutomationRunNowResponses = {
+  /**
+   * Queued automation run
+   */
+  200: AutomationRun
+}
+
+export type AutomationRunNowResponse = AutomationRunNowResponses[keyof AutomationRunNowResponses]
 
 export type ConfigGetData = {
   body?: never

@@ -45,7 +45,7 @@ const LiveAutomationRun = Schema.Struct({
 }).annotate({ identifier: "LiveAutomationRun" })
 
 const GlobalAutomationRunning = Schema.Struct({
-  count: Schema.Number,
+  count: Schema.Finite,
   runs: Schema.Array(LiveAutomationRun),
 })
 

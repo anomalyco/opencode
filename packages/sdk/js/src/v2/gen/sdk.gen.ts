@@ -15,6 +15,36 @@ import type {
   AuthRemoveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  AutomationCreateErrors,
+  AutomationCreateInput,
+  AutomationCreateResponses,
+  AutomationDeleteErrors,
+  AutomationDeleteResponses,
+  AutomationDuplicateErrors,
+  AutomationDuplicateResponses,
+  AutomationGetErrors,
+  AutomationGetResponses,
+  AutomationListErrors,
+  AutomationListResponses,
+  AutomationRunArchiveErrors,
+  AutomationRunArchiveResponses,
+  AutomationRunCancelErrors,
+  AutomationRunCancelResponses,
+  AutomationRunDiffErrors,
+  AutomationRunDiffResponses,
+  AutomationRunFindingsErrors,
+  AutomationRunFindingsResponses,
+  AutomationRunGetErrors,
+  AutomationRunGetResponses,
+  AutomationRunNowErrors,
+  AutomationRunNowResponses,
+  AutomationRunReadErrors,
+  AutomationRunReadResponses,
+  AutomationRunsErrors,
+  AutomationRunsResponses,
+  AutomationUpdateErrors,
+  AutomationUpdateInput,
+  AutomationUpdateResponses,
   CommandListErrors,
   CommandListResponses,
   Config as Config3,
@@ -68,6 +98,8 @@ import type {
   FindTextResponses,
   FormatterStatusErrors,
   FormatterStatusResponses,
+  GlobalAutomationRunningErrors,
+  GlobalAutomationRunningResponses,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
@@ -493,6 +525,21 @@ export class App extends HeyApiClient {
   }
 }
 
+export class Automation extends HeyApiClient {
+  /**
+   * List running automation runs
+   *
+   * List automation runs that are currently executing in this OpenCode process.
+   */
+  public running<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      GlobalAutomationRunningResponses,
+      GlobalAutomationRunningErrors,
+      ThrowOnError
+    >({ url: "/global/automation/running", ...options })
+  }
+}
+
 export class Config extends HeyApiClient {
   /**
    * Get global configuration
@@ -592,6 +639,11 @@ export class Global extends HeyApiClient {
     })
   }
 
+  private _automation?: Automation
+  get automation(): Automation {
+    return (this._automation ??= new Automation({ client: this.client }))
+  }
+
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
@@ -627,6 +679,505 @@ export class Event extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+}
+
+export class Run extends HeyApiClient {
+  /**
+   * Get automation run
+   *
+   * Get a single automation run.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AutomationRunGetResponses, AutomationRunGetErrors, ThrowOnError>({
+      url: "/automation/runs/{runID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List automation run findings
+   *
+   * List findings for an automation run.
+   */
+  public findings<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      AutomationRunFindingsResponses,
+      AutomationRunFindingsErrors,
+      ThrowOnError
+    >({
+      url: "/automation/runs/{runID}/findings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get automation run diff
+   *
+   * Get file diffs captured for an automation run session.
+   */
+  public diff<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AutomationRunDiffResponses, AutomationRunDiffErrors, ThrowOnError>({
+      url: "/automation/runs/{runID}/diff",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Mark automation run read
+   *
+   * Mark an automation run read or unread.
+   */
+  public read<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      workspace?: string
+      read?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "read" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AutomationRunReadResponses, AutomationRunReadErrors, ThrowOnError>({
+      url: "/automation/runs/{runID}/read",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Archive automation run
+   *
+   * Archive or unarchive an automation run.
+   */
+  public archive<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      workspace?: string
+      archived?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "archived" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      AutomationRunArchiveResponses,
+      AutomationRunArchiveErrors,
+      ThrowOnError
+    >({
+      url: "/automation/runs/{runID}/archive",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Cancel automation run
+   *
+   * Cancel a queued or running automation run.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AutomationRunCancelResponses, AutomationRunCancelErrors, ThrowOnError>(
+      {
+        url: "/automation/runs/{runID}/cancel",
+        ...options,
+        ...params,
+      },
+    )
+  }
+}
+
+export class Automation2 extends HeyApiClient {
+  /**
+   * List automations
+   *
+   * List scheduled automations for the current project.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AutomationListResponses, AutomationListErrors, ThrowOnError>({
+      url: "/automation",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create automation
+   *
+   * Create a scheduled automation for the current project.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      automationCreateInput?: AutomationCreateInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "automationCreateInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AutomationCreateResponses, AutomationCreateErrors, ThrowOnError>({
+      url: "/automation",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List automation runs
+   *
+   * List automation runs for the current project.
+   */
+  public runs<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      automationID?: string
+      inbox?: "true" | "false"
+      archived?: "true" | "false"
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "automationID" },
+            { in: "query", key: "inbox" },
+            { in: "query", key: "archived" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AutomationRunsResponses, AutomationRunsErrors, ThrowOnError>({
+      url: "/automation/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete automation
+   *
+   * Delete a scheduled automation.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      automationID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "automationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<AutomationDeleteResponses, AutomationDeleteErrors, ThrowOnError>({
+      url: "/automation/{automationID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get automation
+   *
+   * Get a single automation.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      automationID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "automationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AutomationGetResponses, AutomationGetErrors, ThrowOnError>({
+      url: "/automation/{automationID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update automation
+   *
+   * Update a scheduled automation.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      automationID: string
+      directory?: string
+      workspace?: string
+      automationUpdateInput?: AutomationUpdateInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "automationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "automationUpdateInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<AutomationUpdateResponses, AutomationUpdateErrors, ThrowOnError>({
+      url: "/automation/{automationID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Duplicate automation
+   *
+   * Create a disabled copy of an existing scheduled automation.
+   */
+  public duplicate<ThrowOnError extends boolean = false>(
+    parameters: {
+      automationID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "automationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AutomationDuplicateResponses, AutomationDuplicateErrors, ThrowOnError>(
+      {
+        url: "/automation/{automationID}/duplicate",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * Run automation now
+   *
+   * Queue an automation run immediately.
+   */
+  public runNow<ThrowOnError extends boolean = false>(
+    parameters: {
+      automationID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "automationID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AutomationRunNowResponses, AutomationRunNowErrors, ThrowOnError>({
+      url: "/automation/{automationID}/run",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _run?: Run
+  get run(): Run {
+    return (this._run ??= new Run({ client: this.client }))
   }
 }
 
@@ -5035,6 +5586,11 @@ export class OpencodeClient extends HeyApiClient {
   private _event?: Event
   get event(): Event {
     return (this._event ??= new Event({ client: this.client }))
+  }
+
+  private _automation?: Automation2
+  get automation(): Automation2 {
+    return (this._automation ??= new Automation2({ client: this.client }))
   }
 
   private _config?: Config2

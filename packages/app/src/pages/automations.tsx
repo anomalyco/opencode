@@ -292,7 +292,7 @@ export default function AutomationsPage() {
   }
 
   const loadRuns = async () => {
-    const result = await sdk.client.automation.runs({ limit: 100 })
+    const result = await sdk.client.automation.runs({ limit: "100" })
     return result.data ?? []
   }
 

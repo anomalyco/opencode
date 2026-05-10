@@ -44,14 +44,14 @@ export const automationHandlers = HttpApiBuilder.group(InstanceHttpApi, "automat
 
     const read = Effect.fn("AutomationHttpApi.read")(function* (ctx: {
       params: { runID: AutomationRunID }
-      payload?: typeof RunReadPayload.Type
+      payload: typeof RunReadPayload.Type | void
     }) {
       return yield* mapNotFound(automation.markRunRead(ctx.params.runID, ctx.payload?.read))
     })
 
     const archive = Effect.fn("AutomationHttpApi.archive")(function* (ctx: {
       params: { runID: AutomationRunID }
-      payload?: typeof RunArchivePayload.Type
+      payload: typeof RunArchivePayload.Type | void
     }) {
       return yield* mapNotFound(automation.archiveRun(ctx.params.runID, ctx.payload?.archived))
     })
