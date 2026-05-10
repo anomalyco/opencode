@@ -1,0 +1,1068 @@
+.TH OPENCODE 1 "2026-05-10" "opencode" "User Commands"
+.SH NAME
+opencode \- open source AI coding agent for the terminal
+.SH SYNOPSIS
+.B opencode
+[option...] [\fIproject\fR]
+.P
+.B opencode run
+[\fImessage\fR...] [option...]
+.P
+.B opencode serve
+[option...]
+.P
+.B opencode web
+[option...]
+.P
+.B opencode attach
+\fIurl\fR [option...]
+.P
+.B opencode agent
+\fIcreate\fR|\fIlist\fR [option...]
+.P
+.B opencode mcp
+\fIadd\fR|\fIlist\fR|\fIauth\fR|\fIlogout\fR|\fIdebug\fR [\fIname\fR]
+.P
+.B opencode session
+\fIlist\fR|\fIdelete\fR [option...]
+.P
+.B opencode auth
+\fIlogin\fR|\fIlist\fR|\fIlogout\fR [option...]
+.P
+.B opencode github
+\fIinstall\fR|\fIrun\fR [option...]
+.P
+.B opencode models
+[\fIprovider\fR] [option...]
+.P
+.B opencode stats
+[option...]
+.P
+.B opencode export
+[\fIsessionID\fR] [option...]
+.P
+.B opencode import
+\fIfile\fR|\fIurl\fR
+.P
+.B opencode pr
+\fInumber\fR
+.P
+.B opencode plugin
+\fImodule\fR [option...]
+.P
+.B opencode upgrade
+[\fItarget\fR] [option...]
+.P
+.B opencode uninstall
+[option...]
+.P
+.B opencode completion
+.P
+.B opencode debug
+[command]
+.P
+.B opencode db
+[\fIquery\fR|path]
+.SH DESCRIPTION
+.B opencode
+is an open source AI coding agent that helps you write code in your terminal,
+desktop, or IDE. It supports 75+ LLM providers, LSP integration, multi-session
+workflows, custom agents, MCP tools, and GitHub Actions automation.
+.P
+Run without arguments to start the interactive Terminal User Interface (TUI)
+in the current directory. Pass a project path to start in a specific directory.
+.SH TUI (TERMINAL USER INTERFACE)
+When launched without a command,
+.B opencode
+opens a full-screen TUI where you can converse with AI models, reference files
+via \(lq@\(rq, run shell commands via \(lq!\(rq, and use slash commands.
+.SS File References
+Use
+.B @
+followed by a filename to fuzzy-search and attach file contents to your prompt.
+.SS Shell Commands
+Start a message with
+.B !
+to execute a shell command. The output is added to the conversation.
+.SS Slash Commands
+The TUI supports the following built-in slash commands:
+.TP
+.B /connect
+Add or configure an AI provider.
+.TP
+.B /init
+Scans the project and creates or updates
+.BR AGENTS.md .
+.TP
+.B /undo
+Undo the last message and revert all file changes (requires Git).
+.TP
+.B /redo
+Redo a previously undone message (requires Git).
+.TP
+.B /new
+Start a new session. Alias:
+.BR /clear .
+.TP
+.B /compact
+Summarize and compact the current session to reduce context. Alias:
+.BR /summarize .
+.TP
+.B /sessions
+List and switch between sessions. Aliases:
+.BR /resume ", " /continue .
+.TP
+.B /share
+Create a shareable link to the current conversation.
+.TP
+.B /unshare
+Remove sharing from the current session.
+.TP
+.B /export
+Export the conversation as Markdown and open in your editor.
+.TP
+.B /editor
+Open an external editor to compose your message.
+.TP
+.B /models
+List available models from configured providers.
+.TP
+.B /themes
+List and switch between UI themes.
+.TP
+.B /thinking
+Toggle visibility of model reasoning/thinking blocks.
+.TP
+.B /details
+Toggle tool execution details in the output.
+.TP
+.B /help
+Display the help dialog.
+.TP
+.B /exit
+Exit OpenCode. Aliases:
+.BR /quit ", " /q .
+.SS Keybinds
+Default keyboard shortcuts (configurable via
+.BR tui.json ):
+.TP
+.B Tab
+Switch between primary agents (Build \(hA Plan).
+.TP
+.B Ctrl+P
+Open command palette.
+.TP
+.B Ctrl+T
+Cycle through model variants.
+.TP
+.B Ctrl+X
+Leader key prefix (followed by a command key).
+.TP
+.B Ctrl+X u
+Undo.
+.TP
+.B Ctrl+X r
+Redo.
+.TP
+.B Ctrl+X c
+Compact session.
+.TP
+.B Ctrl+X n
+New session.
+.TP
+.B Ctrl+X l
+Sessions list.
+.TP
+.B Ctrl+X e
+External editor.
+.TP
+.B Ctrl+X x
+Export conversation.
+.TP
+.B Ctrl+X m
+List models.
+.TP
+.B Ctrl+X t
+Themes.
+.TP
+.B Ctrl+X q
+Exit.
+.SH COMMANDS
+.TP
+.B opencode [\fIproject\fR]
+Start the TUI. Optionally specify a project directory.
+.RS
+.TP
+.B \-c, \-\-continue
+Continue the last session.
+.TP
+.B \-s, \-\-session \fIid\fR
+Continue a specific session by ID.
+.TP
+.B \-\-fork
+Fork the session when continuing (use with \-\-continue or \-\-session).
+.TP
+.B \-m, \-\-model \fImodel\fR
+Model to use in the form
+.IR provider/model .
+.TP
+.B \-\-agent \fIname\fR
+Agent to use.
+.TP
+.B \-\-prompt \fIstring\fR
+Pre-populate the prompt.
+.TP
+.B \-\-port \fInumber\fR
+Port to listen on (default: 0 = random).
+.TP
+.B \-\-hostname \fIaddr\fR
+Hostname to listen on (default: 127.0.0.1).
+.TP
+.B \-\-mdns
+Enable mDNS service discovery.
+.TP
+.B \-\-mdns\-domain \fIdomain\fR
+Custom mDNS domain (default: opencode.local).
+.TP
+.B \-\-cors \fIorigin\fR
+Additional CORS origins.
+.RE
+.TP
+.B opencode run [\fImessage\fR...]
+Non-interactive mode. Runs the given prompt and exits.
+.RS
+.TP
+.B \-c, \-\-continue
+Continue the last session.
+.TP
+.B \-s, \-\-session \fIid\fR
+Continue a specific session.
+.TP
+.B \-\-fork
+Fork the session.
+.TP
+.B \-\-share
+Share the session.
+.TP
+.B \-m, \-\-model \fImodel\fR
+Model override.
+.TP
+.B \-\-agent \fIname\fR
+Agent override.
+.TP
+.B \-f, \-\-file \fIpath\fR
+Attach file(s) to the message.
+.TP
+.B \-\-format \fIformat\fR
+Output format:
+.B default
+(formatted text) or
+.BR json .
+.TP
+.B \-\-title \fIstring\fR
+Session title.
+.TP
+.B \-\-attach \fIurl\fR
+Attach to a running opencode server (e.g. http://localhost:4096).
+.TP
+.B \-\-password, \-p \fIpass\fR
+Basic auth password.
+.TP
+.B \-\-username, \-u \fIuser\fR
+Basic auth username (default: opencode).
+.TP
+.B \-\-dir \fIpath\fR
+Working directory.
+.TP
+.B \-\-port \fInumber\fR
+Port for local server.
+.TP
+.B \-\-variant \fIvariant\fR
+Provider-specific reasoning effort.
+.TP
+.B \-\-thinking
+Show thinking blocks.
+.TP
+.B \-\-dangerously\-skip\-permissions
+Auto-approve all permissions.
+.RE
+.TP
+.B opencode serve
+Start a headless HTTP API server.
+.RS
+.TP
+.B \-\-port, \-\-hostname, \-\-mdns, \-\-cors
+Same as TUI flags above.
+.RE
+.TP
+.B opencode web
+Start a headless server and open a web browser UI.
+.TP
+.B opencode attach \fIurl\fR
+Attach a TUI to an already running backend server.
+.RS
+.TP
+.B \-\-dir
+Working directory.
+.TP
+.B \-c, \-\-continue
+Continue last session.
+.TP
+.B \-s, \-\-session \fIid\fR
+Specific session.
+.TP
+.B \-\-fork
+Fork the session.
+.TP
+.B \-p, \-\-password
+Basic auth password.
+.TP
+.B \-u, \-\-username
+Basic auth username.
+.RE
+.TP
+.B opencode agent create
+Create a new agent interactively.
+.RS
+.TP
+.B \-\-path \fIdir\fR
+Directory to write the agent file.
+.TP
+.B \-\-description \fIstring\fR
+What the agent should do.
+.TP
+.B \-\-mode \fImode\fR
+Agent mode:
+.BR all ", " primary ", or " subagent .
+.TP
+.B \-\-permissions \fIlist\fR
+Comma-separated allowed permissions (default: all).
+.TP
+.B \-m, \-\-model \fImodel\fR
+Model to use.
+.RE
+.TP
+.B opencode agent list
+List all available agents.
+.TP
+.B opencode auth login
+Log in to an AI provider.
+.RS
+.TP
+.B \-\-provider, \-p \fIid\fR
+Provider ID or name.
+.TP
+.B \-\-method, \-m \fIlabel\fR
+Login method label.
+.RE
+.TP
+.B opencode auth list
+List authenticated providers. Alias:
+.BR ls .
+.TP
+.B opencode auth logout
+Log out of a provider.
+.TP
+.B opencode github install
+Install the GitHub agent in the current repository.
+.TP
+.B opencode github run
+Run the GitHub agent (used in GitHub Actions).
+.RS
+.TP
+.B \-\-event
+GitHub event type.
+.TP
+.B \-\-token
+GitHub personal access token.
+.RE
+.TP
+.B opencode mcp add
+Add an MCP server interactively.
+.TP
+.B opencode mcp list
+List configured MCP servers. Alias:
+.BR ls .
+.TP
+.B opencode mcp auth [\fIname\fR]
+Authenticate with an OAuth-enabled MCP server.
+.TP
+.B opencode mcp logout [\fIname\fR]
+Remove OAuth credentials for an MCP server.
+.TP
+.B opencode mcp debug \fIname\fR
+Debug OAuth connection issues for an MCP server.
+.TP
+.B opencode models [\fIprovider\fR]
+List available models. Optionally filter by provider.
+.RS
+.TP
+.B \-\-refresh
+Refresh the models cache.
+.TP
+.B \-\-verbose
+Show metadata including costs.
+.RE
+.TP
+.B opencode session list
+List sessions.
+.RS
+.TP
+.B \-n, \-\-max\-count \fIN\fR
+Limit to N most recent sessions.
+.TP
+.B \-\-format \fIformat\fR
+Output format:
+.B table
+or
+.BR json .
+.RE
+.TP
+.B opencode session delete \fIsessionID\fR
+Delete a session.
+.TP
+.B opencode stats
+Show token usage and cost statistics.
+.RS
+.TP
+.B \-\-days \fIN\fR
+Show stats for last N days.
+.TP
+.B \-\-tools \fIN\fR
+Show top N tools.
+.TP
+.B \-\-models [N]
+Show model usage breakdown.
+.TP
+.B \-\-project \fIname\fR
+Filter by project.
+.RE
+.TP
+.B opencode export [\fIsessionID\fR]
+Export session data as JSON.
+.RS
+.TP
+.B \-\-sanitize
+Redact sensitive data.
+.RE
+.TP
+.B opencode import \fIfile\fR|\fIurl\fR
+Import session from a JSON file or OpenCode share URL.
+.TP
+.B opencode pr \fInumber\fR
+Fetch and checkout a GitHub PR branch, then run OpenCode.
+.TP
+.B opencode plugin \fImodule\fR
+Install a plugin and update config. Alias:
+.BR plug .
+.RS
+.TP
+.B \-g, \-\-global
+Install in global config.
+.TP
+.B \-f, \-\-force
+Replace existing version.
+.RE
+.TP
+.B opencode upgrade [\fItarget\fR]
+Upgrade to the latest or a specific version.
+.RS
+.TP
+.B \-m, \-\-method \fImethod\fR
+Installation method: curl, npm, pnpm, bun, brew.
+.RE
+.TP
+.B opencode uninstall
+Uninstall OpenCode and remove all related files.
+.RS
+.TP
+.B \-c, \-\-keep\-config
+Keep configuration files.
+.TP
+.B \-d, \-\-keep\-data
+Keep session data and snapshots.
+.TP
+.B \-\-dry\-run
+Show what would be removed.
+.TP
+.B \-f, \-\-force
+Skip confirmation prompts.
+.RE
+.TP
+.B opencode db [\fIquery\fR]
+Database tools.
+.RS
+.TP
+.B \-\-format \fIformat\fR
+Output format:
+.B json
+or
+.BR tsv .
+.TP
+.B path
+Print the database path.
+.RE
+.TP
+.B opencode completion
+Generate shell completion script.
+.TP
+.B opencode debug
+Debugging and troubleshooting tools.
+.SH GLOBAL FLAGS
+.TP
+.B \-h, \-\-help
+Show help.
+.TP
+.B \-v, \-\-version
+Show version number.
+.TP
+.B \-\-print\-logs
+Print logs to stderr.
+.TP
+.B \-\-log\-level \fIlevel\fR
+Log level: DEBUG, INFO, WARN, ERROR.
+.TP
+.B \-\-pure
+Run without external plugins.
+.SH CONFIGURATION
+Configuration files use JSON or JSONC format and are
+.B merged
+together (not replaced). Later sources override earlier ones for conflicting
+keys; non-conflicting keys are preserved.
+.SS Config Precedence (later wins)
+.IP 1. 3
+Remote config from
+.B .well\-known/opencode
+(organizational defaults)
+.IP 2. 3
+Global:
+.IR ~/.config/opencode/opencode.json
+.IP 3. 3
+Custom (
+.B OPENCODE_CONFIG
+env var)
+.IP 4. 3
+Project:
+.I ./opencode.json
+.IP 5. 3
+.B .opencode/
+directories (agents, commands, plugins, skills, tools, themes)
+.IP 6. 3
+Inline (
+.B OPENCODE_CONFIG_CONTENT
+env var)
+.IP 7. 3
+Managed configs (admin-enforced)
+.SS Configuration Schema
+.B opencode.json
+supports the following top-level keys:
+.TP
+.B model
+Default model in
+.I provider/model
+format.
+.TP
+.B small_model
+Cheaper model for lightweight tasks (title, summary).
+.TP
+.B provider
+Provider-specific options (timeout, chunkTimeout, setCacheKey, etc.).
+.TP
+.B server
+Server settings: port, hostname, mdns, cors.
+.TP
+.B permission
+Global permission rules (see PERMISSIONS section).
+.TP
+.B agent
+Custom agent definitions (see AGENTS section).
+.TP
+.B command
+Custom slash command definitions.
+.TP
+.B mcp
+MCP server definitions (see MCP SERVERS section).
+.TP
+.B lsp
+LSP server settings (true to enable, object for fine-grained config).
+.TP
+.B formatter
+Formatter settings (true to enable, object for custom formatters).
+.TP
+.B instructions
+Array of paths/glob patterns to additional rule files.
+.TP
+.B shell
+Shell to use (e.g. bash, zsh, pwsh).
+.TP
+.B compaction
+Context compaction settings: auto, prune, reserved.
+.TP
+.B share
+Sharing mode: manual, auto, disabled.
+.TP
+.B snapshot
+Enable/disable file change tracking for undo/redo.
+.TP
+.B autoupdate
+Enable/disable automatic updates.
+.TP
+.B default_agent
+Default primary agent (default: build).
+.TP
+.B enabled_providers
+Allowlist of providers.
+.TP
+.B disabled_providers
+Denylist of providers.
+.TP
+.B plugin
+Array of plugin module names.
+.TP
+.B watcher
+File watcher ignore patterns.
+.SS Variable Substitution
+.TP
+.B {env:VARIABLE_NAME}
+Substitute an environment variable value.
+.TP
+.B {file:path/to/file}
+Substitute the contents of a file.
+.SS TUI Configuration
+TUI-specific settings go in
+.B tui.json
+(or
+.BR tui.jsonc ):
+.IP
+.RS
+.nf
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "leader_timeout": 2000,
+  "scroll_speed": 3,
+  "scroll_acceleration": { "enabled": false },
+  "diff_style": "auto",
+  "mouse": true,
+  "keybinds": { ... }
+}
+.fi
+.RE
+.SH AGENTS
+Agents are specialized AI assistants with custom prompts, models, and tool
+permissions. Two types exist:
+.TP
+.B primary
+Main assistants you interact with directly. Switch via Tab.
+Built-in: Build (all tools), Plan (read-only).
+.TP
+.B subagent
+Specialized assistants invoked by primary agents or manually via
+.BR @name .
+Built-in: General, Explore (read-only codebase), Scout (external docs).
+.SS Defining Agents
+Agents can be defined in
+.B opencode.json
+under the
+.B agent
+key, or as standalone Markdown files in
+.IR ~/.config/opencode/agents/
+or
+.IR .opencode/agents/ .
+.P
+Example Markdown agent:
+.RS
+.nf
+\-\-\-
+description: Reviews code for quality and best practices
+mode: subagent
+model: anthropic/claude\-sonnet\-4\-5
+temperature: 0.1
+permission:
+  edit: deny
+  bash: deny
+\-\-\-
+You are a code reviewer. Focus on security, performance,
+and maintainability.
+.fi
+.RE
+.SS Agent Options
+.TP
+.B description
+(required) Brief description of the agent's purpose.
+.TP
+.B mode
+\fBprimary\fR, \fBsubagent\fR, or \fBall\fR.
+.TP
+.B model
+Model override in
+.I provider/model
+format.
+.TP
+.B temperature
+Response randomness (0.0\-1.0).
+.TP
+.B top_p
+Nucleus sampling (0.0\-1.0).
+.TP
+.B steps
+Maximum agentic iterations before forced text response.
+.TP
+.B prompt
+System prompt string or
+.B {file:./path}
+reference.
+.TP
+.B permission
+Per-agent permission overrides (see PERMISSIONS).
+.TP
+.B color
+Hex color or theme token for UI.
+.TP
+.B hidden
+Hide subagent from @ autocomplete.
+.TP
+.B disable
+Disable the agent.
+.SH PERMISSIONS
+Permissions control which actions require approval. Each key resolves to:
+.BR allow ", " ask ", or " deny .
+.P
+Default behavior:
+.B allow
+for most tools;
+.B ask
+for
+.B doom_loop
+and
+.BR external_directory ;
+.B deny
+for .env file reads.
+.SS Permission Keys
+.TP
+.B read
+Reading files (matches file path).
+.TP
+.B edit
+All file modifications (write, edit, patch).
+.TP
+.B glob
+File globbing (matches glob pattern).
+.TP
+.B grep
+Content search (matches regex pattern).
+.TP
+.B bash
+Shell commands (matches parsed command prefixes).
+.TP
+.B task
+Launching subagents (matches subagent name).
+.TP
+.B skill
+Loading skills.
+.TP
+.B lsp
+LSP queries.
+.TP
+.B question
+Asking the user questions.
+.TP
+.B webfetch
+Fetching URLs.
+.TP
+.B websearch
+Web search queries.
+.TP
+.B external_directory
+Accessing paths outside the project directory.
+.TP
+.B doom_loop
+Repeated identical tool calls (3+ times).
+.SS Granular Rules
+.B bash
+supports object syntax for command-level granularity:
+.P
+.RS
+.nf
+"bash": {
+  "*": "ask",
+  "git *": "allow",
+  "npm *": "allow",
+  "rm *": "deny"
+}
+.fi
+.RE
+.P
+The
+.B last matching rule
+wins. A common pattern places the catch-all
+.B *
+rule first and specific rules after.
+.SS External Directory Access
+Allow access to paths outside the project working directory:
+.P
+.RS
+.nf
+"external_directory": {
+  "~/projects/personal/**": "allow"
+}
+.fi
+.RE
+.SH MCP SERVERS
+Model Context Protocol servers add external tools. OpenCode supports local
+and remote MCP servers.
+.SS Local MCP
+.RS
+.nf
+"mcp": {
+  "my\-tool": {
+    "type": "local",
+    "command": ["npx", "\-y", "my\-mcp\-command"],
+    "enabled": true,
+    "environment": {
+      "MY_KEY": "{env:MY_KEY}"
+    }
+  }
+}
+.fi
+.RE
+.SS Remote MCP
+.RS
+.nf
+"mcp": {
+  "sentry": {
+    "type": "remote",
+    "url": "https://mcp.sentry.dev/mcp",
+    "oauth": {}
+  }
+}
+.fi
+.RE
+.P
+OAuth-enabled remote MCP servers can be authenticated via:
+.IP
+.B opencode mcp auth \fIserver\-name\fR
+.P
+OAuth tokens are stored in
+.IR ~/.local/share/opencode/mcp-auth.json .
+.P
+MCP tools are registered with the server name as a prefix, so tools can be
+enabled/disabled per-agent using glob patterns (e.g.
+.BR "mymcp_*" ).
+.SH ENVIRONMENT
+.TP
+.B OPENCODE_SERVER_PASSWORD
+Enable basic auth for serve/web.
+.TP
+.B OPENCODE_SERVER_USERNAME
+Basic auth username (default: opencode).
+.TP
+.B OPENCODE_CONFIG
+Path to config file.
+.TP
+.B OPENCODE_CONFIG_DIR
+Path to config directory.
+.TP
+.B OPENCODE_CONFIG_CONTENT
+Inline JSON config content.
+.TP
+.B OPENCODE_TUI_CONFIG
+Path to TUI config file.
+.TP
+.B OPENCODE_PERMISSION
+Inline JSON permissions.
+.TP
+.B OPENCODE_AUTO_SHARE
+Automatically share sessions.
+.TP
+.B OPENCODE_DISABLE_AUTOUPDATE
+Disable automatic updates.
+.TP
+.B OPENCODE_DISABLE_PRUNE
+Disable old data pruning.
+.TP
+.B OPENCODE_DISABLE_MOUSE
+Disable TUI mouse capture.
+.TP
+.B OPENCODE_DISABLE_AUTOCOMPACT
+Disable automatic context compaction.
+.TP
+.B OPENCODE_DISABLE_CLAUDE_CODE
+Disable reading from .claude directory.
+.TP
+.B OPENCODE_DISABLE_MODELS_FETCH
+Disable fetching models from remote sources.
+.TP
+.B OPENCODE_DISABLE_LSP_DOWNLOAD
+Disable automatic LSP downloads.
+.TP
+.B OPENCODE_DISABLE_TERMINAL_TITLE
+Disable terminal title updates.
+.TP
+.B OPENCODE_GIT_BASH_PATH
+Path to Git Bash on Windows.
+.TP
+.B OPENCODE_MODELS_URL
+Custom URL for models configuration.
+.TP
+.B OPENCODE_CLIENT
+Client identifier (default: cli).
+.TP
+.B OPENCODE_FAKE_VCS
+Fake VCS provider for testing.
+.TP
+.B OPENCODE_ENABLE_EXA
+Enable Exa web search tools.
+.SH FILES
+.TP
+.I ~/.config/opencode/opencode.json
+Global server/runtime configuration.
+.TP
+.I ~/.config/opencode/tui.json
+Global TUI configuration.
+.TP
+.I ~/.config/opencode/AGENTS.md
+Global user rules (injected into LLM context).
+.TP
+.I ~/.config/opencode/agents/
+Global custom agent definitions (Markdown).
+.TP
+.I ~/.config/opencode/commands/
+Global custom command definitions (Markdown).
+.TP
+.I ~/.config/opencode/themes/
+Custom theme files.
+.TP
+.I ~/.config/opencode/plugins/
+Plugin files.
+.TP
+.I ~/.local/share/opencode/auth.json
+Stored provider credentials.
+.TP
+.I ~/.local/share/opencode/mcp-auth.json
+Stored MCP OAuth tokens.
+.TP
+.I ./AGENTS.md
+Project-specific rules.
+.TP
+.I ./opencode.json
+Project-specific config.
+.TP
+.I ./.opencode/agents/
+Project-specific agents.
+.TP
+.I ./.opencode/commands/
+Project-specific commands.
+.SH EXAMPLES
+.TP
+Start the TUI in the current directory
+.B opencode
+.TP
+Start the TUI in a specific project
+.B opencode /path/to/project
+.TP
+Continue the last session
+.B opencode -c
+.TP
+Non-interactive prompt
+.B opencode run "How does authentication work here?"
+.TP
+Non-interactive with file attachment
+.B opencode run -f src/auth.ts "Find and fix bugs"
+.TP
+Continue a specific session
+.B opencode -s abc123
+.TP
+Fork and continue
+.B opencode -c --fork
+.TP
+Use a specific model
+.B opencode -m anthropic/claude-sonnet-4-5
+.TP
+Use a custom agent
+.B opencode --agent code-reviewer
+.TP
+Start a headless server
+.B opencode serve --port 4096 --hostname 0.0.0.0
+.TP
+Attach TUI to a remote server
+.B opencode attach http://10.0.0.5:4096
+.TP
+Run commands against a running server
+.B opencode run --attach http://localhost:4096 "add tests"
+.TP
+Export a session
+.B opencode export abc123 --sanitize
+.TP
+Import a session
+.B opencode import https://opencode.ai/s/abc123
+.TP
+View token usage stats
+.B opencode stats --days 30 --models
+.TP
+List all available models
+.B opencode models --refresh
+.TP
+Create a custom agent interactively
+.B opencode agent create
+.TP
+Add an MCP server
+.B opencode mcp add
+.TP
+Install GitHub integration
+.B opencode github install
+.TP
+Upgrade to the latest version
+.B opencode upgrade
+.TP
+Uninstall OpenCode
+.B opencode uninstall
+.SH TIPS
+.TP
+Use
+.B Tab
+to switch between Plan mode (no changes) and Build mode in the TUI.
+.TP
+Reference files with
+.B @filename
+to include them in your prompt.
+.TP
+Start a message with
+.B !
+to run a shell command inline.
+.TP
+Use
+.B /undo
+to revert changes (requires Git).
+.TP
+Commit
+.B AGENTS.md
+to Git for team-wide project context.
+.TP
+Use
+.B \-\-dangerously\-skip\-permissions
+only in trusted CI environments.
+.TP
+MCP servers add context tokens; keep enabled servers minimal.
+.TP
+Use
+.B opencode models \-\-refresh
+to update the model list after adding a new provider.
+.SH BUGS
+Report bugs and feature requests on GitHub:
+.br
+https://github.com/anomalyco/opencode/issues
+.SH SEE ALSO
+.BR git (1),
+.BR npm (1),
+.BR gh (1)
+.P
+OpenCode documentation: https://dev.opencode.ai/docs
+.br
+OpenCode GitHub repository: https://github.com/anomalyco/opencode
+.br
+OpenCode Discord: https://opencode.ai/discord
+.SH AUTHOR
+OpenCode is developed by Anomaly and contributors.
+.br
+https://github.com/anomalyco/opencode
