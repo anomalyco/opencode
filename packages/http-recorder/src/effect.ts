@@ -12,7 +12,7 @@ import {
 } from "effect/unstable/http"
 import * as CassetteService from "./cassette"
 import { defaultMatcher, selectMatch, selectSequential, type RequestMatcher } from "./matching"
-import { appendOrFail, makeReplayState } from "./recorder"
+import { appendOrFail, makeReplayState, resolveAutoMode } from "./recorder"
 import { defaults, type Redactor } from "./redactor"
 import { redactUrl } from "./redaction"
 import { httpInteractions, type CassetteMetadata, type HttpInteraction, type ResponseSnapshot } from "./schema"
@@ -70,12 +70,7 @@ export const recordingLayer = (
       const redactor = options.redactor ?? defaults()
       const match = options.match ?? defaultMatcher
       const requested = options.mode ?? "auto"
-      const mode =
-        requested === "auto"
-          ? process.env.CI === "true" || (yield* cassetteService.exists(name))
-            ? "replay"
-            : "record"
-          : requested
+      const mode = requested === "auto" ? yield* resolveAutoMode(cassetteService, name) : requested
       const sequential = options.dispatch === "sequential"
       const replay = yield* makeReplayState(cassetteService, name, httpInteractions)
 

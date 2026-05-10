@@ -17,6 +17,22 @@ export class UnsafeCassetteError extends Error {
   }
 }
 
+export type ResolvedMode = "record" | "replay" | "passthrough"
+
+const isCI = () => {
+  const value = process.env.CI
+  return value !== undefined && value !== "" && value !== "false" && value !== "0"
+}
+
+export const resolveAutoMode = (
+  cassette: CassetteService.Interface,
+  name: string,
+): Effect.Effect<ResolvedMode> =>
+  Effect.gen(function* () {
+    if (isCI()) return "replay"
+    return (yield* cassette.exists(name)) ? "replay" : "record"
+  })
+
 export const appendOrFail = (
   cassette: CassetteService.Interface,
   name: string,
