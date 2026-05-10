@@ -1,7 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { Database } from "./storage/db"
 import { CodeMigrationTable } from "./code-migration.sql"
-import { Session } from "./session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 
@@ -16,10 +15,10 @@ export interface Interface {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/CodeMigration") {}
 
-export const make = <R>(build: Effect.Effect<Migration<R>[], never, R>) => Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const migrations = yield* build
+    const migrations: Migration[] = []
 
     yield* Effect.gen(function* () {
       if (migrations.length === 0) return
@@ -52,21 +51,6 @@ export const make = <R>(build: Effect.Effect<Migration<R>[], never, R>) => Layer
       Effect.forkScoped,
     )
     return Service.of({})
-  }),
-)
-
-export const layer = make(
-  Effect.gen(function* () {
-    const session = yield* Session.Service
-    return [
-      {
-        name: "list-sessions-with-session-service",
-        run: Effect.gen(function* () {
-          const sessions = yield* session.list()
-          log.info("listed sessions with session service", { count: sessions.length })
-        }),
-      },
-    ]
   }),
 )
 
