@@ -1046,8 +1046,13 @@ export function options(input: {
     result["enable_thinking"] = true
   }
 
+  if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
+    result["reasoningSummary"] = "auto"
+    return result;
+  }
+
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
-    if (!input.model.api.id.includes("gpt-5-pro") && !input.model.api.id.includes("gpt-5.5")) {
+    if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
       // Only inject reasoningSummary for providers that support it natively.
       // @ai-sdk/openai-compatible proxies (e.g. LiteLLM) do not understand this
