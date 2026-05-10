@@ -1047,6 +1047,8 @@ export const dict = {
   "settings.feishu.description": "Talk to your AI agent via Lark / Feishu.",
   "settings.feishu.adapter.notReady": "Lark adapter is not running.",
   "settings.feishu.adapter.notReady.hint": "Phase 2+ will spawn the sidecar automatically. For now, set FEISHU_ADAPTER_URL / USERNAME / PASSWORD env vars and restart DeskFox.",
+  "settings.feishu.noDefaultModel.title": "No default LLM model configured",
+  "settings.feishu.noDefaultModel.hint": "You can still bind a Lark account, but DeskFox can't reply to incoming messages until a default model is set. Open Settings → Providers, add an API key for any provider — the build agent default will pick a model automatically.",
   "settings.feishu.account.empty.title": "No Lark account bound",
   "settings.feishu.account.empty.description": "Bind your first Lark / Feishu account to start receiving messages.",
   "settings.feishu.account.add": "Add Lark account",

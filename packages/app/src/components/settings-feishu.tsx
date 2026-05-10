@@ -16,6 +16,7 @@ import {
   feishuAdapterStatus,
   feishuDeleteAccount,
   feishuListAccounts,
+  feishuListProviders,
   type AccountSummary,
 } from "@/utils/feishu-config"
 
@@ -32,6 +33,10 @@ export const SettingsFeishu: Component = () => {
   // ⚠️ 用 createSignal + 手动 fetch(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
   // 同 file-tabs.tsx:1179 注释的处理方式
   const [accounts, setAccounts] = createSignal<AccountSummary[]>([])
+  // null=loading,true=user 至少有一个 provider 配过 default model,false=完全没配 → 飞书消息进来会失败
+  // opencode /providers 响应 default 字段是 Record<provider_id, model_id>(实测 2026-05-10:
+  // key 是 provider id 如 "minimax-cn-coding-plan" / "opencode" / "claude-code",不是 agent name)
+  const [hasDefaultModel, setHasDefaultModel] = createSignal<boolean | null>(null)
 
   const refetch = async () => {
     try {
@@ -41,11 +46,27 @@ export const SettingsFeishu: Component = () => {
     }
   }
 
+  const checkDefaultModel = async () => {
+    try {
+      const data = await feishuListProviders()
+      const defaults = data.default ?? {}
+      // 非空字典 = user 至少配过一个 provider 的 default model → 飞书桥接收消息时 opencode 能 routing
+      setHasDefaultModel(Object.keys(defaults).length > 0)
+    } catch {
+      // 拿不到 providers 多半是 plugin server 本身就异常,adapter notReady 已会显示
+      // 这里不二次报警,留 null(不渲染 warning)
+      setHasDefaultModel(null)
+    }
+  }
+
   onMount(async () => {
     try {
       const ready = await feishuAdapterStatus()
       setAdapterReady(ready)
-      if (ready) await refetch()
+      if (ready) {
+        await refetch()
+        await checkDefaultModel()
+      }
     } catch {
       setAdapterReady(false)
     }
@@ -107,6 +128,18 @@ export const SettingsFeishu: Component = () => {
           </p>
           <p class="text-12-regular text-text-weak">
             {language.t("settings.feishu.adapter.notReady.hint")}
+          </p>
+        </div>
+      </Show>
+
+      {/* 默认 LLM model 未配置警告 — 飞书消息进来会失败,即使绑了账号也是死循环 */}
+      <Show when={adapterReady() === true && hasDefaultModel() === false}>
+        <div class="bg-surface-warning rounded-md p-4 flex flex-col gap-1.5">
+          <p class="text-13-medium">
+            {language.t("settings.feishu.noDefaultModel.title")}
+          </p>
+          <p class="text-12-regular text-text-weak">
+            {language.t("settings.feishu.noDefaultModel.hint")}
           </p>
         </div>
       </Show>

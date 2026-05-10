@@ -40,6 +40,43 @@ const FEISHU_OPEN_API_DOMAIN: Record<"feishu" | "lark", string> = {
   lark: "https://open.larksuite.com",
 }
 
+/**
+ * 给飞书 user 的友好错误回复 — 把技术性 opencode error message 翻译成 user 可操作的指引。
+ * 只识别 happy-path 阻塞性错误(没配 default model / provider key 无效),其他原样返回。
+ *
+ * 触发关键字来源(opencode source verified 2026-05-10):
+ *   - "no providers found"  → packages/opencode/src/provider/provider.ts:1706
+ *   - "no models found"     → packages/opencode/src/provider/provider.ts:1708
+ *   - "Invalid model"       → CLI/github.ts;形态 `Invalid model ${x}. Model must be ...`
+ *   - "API key"             → upstream provider SDK 抛 401 时常含 "API key" / "api key"
+ *
+ * exported for unit testing.
+ */
+export function friendlyErrorReply(err: Error): string {
+  const msg = err.message ?? String(err)
+  const lower = msg.toLowerCase()
+  if (
+    lower.includes("no providers found") ||
+    lower.includes("no models found") ||
+    lower.includes("no model configured") ||
+    lower.includes("invalid model")
+  ) {
+    return (
+      "❌ DeskFox 未配置默认 LLM model。\n" +
+      "请打开 DeskFox 主程序 → Settings → Providers,给任一 provider 添加 API key,build agent 默认 model 会自动设置好。\n" +
+      `(原始错误:${msg})`
+    )
+  }
+  if (lower.includes("api key") || lower.includes("api_key") || lower.includes("401")) {
+    return (
+      "❌ DeskFox 调用 LLM 失败 — API key 可能无效或额度不足。\n" +
+      "请到 DeskFox 主程序 → Settings → Providers 检查对应 provider 的 key。\n" +
+      `(原始错误:${msg})`
+    )
+  }
+  return `❌ DeskFox 处理出错:${msg}`
+}
+
 export interface PipelineOptions {
   account: FeishuAccount
   accountId: string
@@ -133,10 +170,7 @@ export class MessagePipeline {
         )
       } catch (err) {
         console.error(`[pipeline ${this.opts.accountId}] createSession failed:`, err)
-        await this.sendFeishuText(
-          event.chatId,
-          `❌ DeskFox 创建会话失败:${(err as Error).message}`,
-        )
+        await this.sendFeishuText(event.chatId, friendlyErrorReply(err as Error))
         return
       }
     }
@@ -146,10 +180,7 @@ export class MessagePipeline {
       reply = await this.runOpencode(sessionID, text, this.opts.account.agent)
     } catch (err) {
       console.error(`[pipeline ${this.opts.accountId}] opencode error:`, err)
-      await this.sendFeishuText(
-        event.chatId,
-        `❌ DeskFox 处理出错:${(err as Error).message}`,
-      )
+      await this.sendFeishuText(event.chatId, friendlyErrorReply(err as Error))
       return
     }
 
