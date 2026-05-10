@@ -204,9 +204,9 @@ describe("Gemini route", () => {
         totalTokens: 7,
       })
       expect(response.events).toEqual([
-        { type: "reasoning-delta", text: "thinking" },
-        { type: "text-delta", text: "Hello" },
-        { type: "text-delta", text: "!" },
+        { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
+        { type: "text-delta", id: "text-0", text: "Hello" },
+        { type: "text-delta", id: "text-0", text: "!" },
         {
           type: "request-finish",
           reason: "stop",

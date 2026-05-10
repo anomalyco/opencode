@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { FinishReason, ProtocolID, ProviderMetadata, RouteID } from "./ids"
+import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, ResponseID, RouteID, ToolCallID } from "./ids"
 import { ModelRef } from "./options"
 import { ToolResultValue } from "./messages"
 
@@ -14,60 +14,87 @@ export class Usage extends Schema.Class<Usage>("LLM.Usage")({
 }) {}
 
 export const RequestStart = Schema.Struct({
-  type: Schema.Literal("request-start"),
-  id: Schema.String,
+  type: Schema.tag("request-start"),
+  id: ResponseID,
   model: ModelRef,
 }).annotate({ identifier: "LLM.Event.RequestStart" })
 export type RequestStart = Schema.Schema.Type<typeof RequestStart>
 
 export const StepStart = Schema.Struct({
-  type: Schema.Literal("step-start"),
+  type: Schema.tag("step-start"),
   index: Schema.Number,
 }).annotate({ identifier: "LLM.Event.StepStart" })
 export type StepStart = Schema.Schema.Type<typeof StepStart>
 
 export const TextStart = Schema.Struct({
-  type: Schema.Literal("text-start"),
-  id: Schema.String,
+  type: Schema.tag("text-start"),
+  id: ContentBlockID,
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextStart" })
 export type TextStart = Schema.Schema.Type<typeof TextStart>
 
 export const TextDelta = Schema.Struct({
-  type: Schema.Literal("text-delta"),
-  id: Schema.optional(Schema.String),
+  type: Schema.tag("text-delta"),
+  id: ContentBlockID,
   text: Schema.String,
-  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextDelta" })
 export type TextDelta = Schema.Schema.Type<typeof TextDelta>
 
 export const TextEnd = Schema.Struct({
-  type: Schema.Literal("text-end"),
-  id: Schema.String,
+  type: Schema.tag("text-end"),
+  id: ContentBlockID,
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextEnd" })
 export type TextEnd = Schema.Schema.Type<typeof TextEnd>
 
-export const ReasoningDelta = Schema.Struct({
-  type: Schema.Literal("reasoning-delta"),
-  id: Schema.optional(Schema.String),
-  text: Schema.String,
+export const ReasoningStart = Schema.Struct({
+  type: Schema.tag("reasoning-start"),
+  id: ContentBlockID,
   providerMetadata: Schema.optional(ProviderMetadata),
+}).annotate({ identifier: "LLM.Event.ReasoningStart" })
+export type ReasoningStart = Schema.Schema.Type<typeof ReasoningStart>
+
+export const ReasoningDelta = Schema.Struct({
+  type: Schema.tag("reasoning-delta"),
+  id: ContentBlockID,
+  text: Schema.String,
 }).annotate({ identifier: "LLM.Event.ReasoningDelta" })
 export type ReasoningDelta = Schema.Schema.Type<typeof ReasoningDelta>
 
+export const ReasoningEnd = Schema.Struct({
+  type: Schema.tag("reasoning-end"),
+  id: ContentBlockID,
+  providerMetadata: Schema.optional(ProviderMetadata),
+}).annotate({ identifier: "LLM.Event.ReasoningEnd" })
+export type ReasoningEnd = Schema.Schema.Type<typeof ReasoningEnd>
+
+export const ToolInputStart = Schema.Struct({
+  type: Schema.tag("tool-input-start"),
+  id: ToolCallID,
+  name: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
+}).annotate({ identifier: "LLM.Event.ToolInputStart" })
+export type ToolInputStart = Schema.Schema.Type<typeof ToolInputStart>
+
 export const ToolInputDelta = Schema.Struct({
-  type: Schema.Literal("tool-input-delta"),
-  id: Schema.String,
+  type: Schema.tag("tool-input-delta"),
+  id: ToolCallID,
   name: Schema.String,
   text: Schema.String,
-  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolInputDelta" })
 export type ToolInputDelta = Schema.Schema.Type<typeof ToolInputDelta>
 
+export const ToolInputEnd = Schema.Struct({
+  type: Schema.tag("tool-input-end"),
+  id: ToolCallID,
+  name: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
+}).annotate({ identifier: "LLM.Event.ToolInputEnd" })
+export type ToolInputEnd = Schema.Schema.Type<typeof ToolInputEnd>
+
 export const ToolCall = Schema.Struct({
-  type: Schema.Literal("tool-call"),
-  id: Schema.String,
+  type: Schema.tag("tool-call"),
+  id: ToolCallID,
   name: Schema.String,
   input: Schema.Unknown,
   providerExecuted: Schema.optional(Schema.Boolean),
@@ -76,8 +103,8 @@ export const ToolCall = Schema.Struct({
 export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 
 export const ToolResult = Schema.Struct({
-  type: Schema.Literal("tool-result"),
-  id: Schema.String,
+  type: Schema.tag("tool-result"),
+  id: ToolCallID,
   name: Schema.String,
   result: ToolResultValue,
   providerExecuted: Schema.optional(Schema.Boolean),
@@ -86,8 +113,8 @@ export const ToolResult = Schema.Struct({
 export type ToolResult = Schema.Schema.Type<typeof ToolResult>
 
 export const ToolError = Schema.Struct({
-  type: Schema.Literal("tool-error"),
-  id: Schema.String,
+  type: Schema.tag("tool-error"),
+  id: ToolCallID,
   name: Schema.String,
   message: Schema.String,
   providerMetadata: Schema.optional(ProviderMetadata),
@@ -95,7 +122,7 @@ export const ToolError = Schema.Struct({
 export type ToolError = Schema.Schema.Type<typeof ToolError>
 
 export const StepFinish = Schema.Struct({
-  type: Schema.Literal("step-finish"),
+  type: Schema.tag("step-finish"),
   index: Schema.Number,
   reason: FinishReason,
   usage: Schema.optional(Usage),
@@ -104,7 +131,7 @@ export const StepFinish = Schema.Struct({
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
 export const RequestFinish = Schema.Struct({
-  type: Schema.Literal("request-finish"),
+  type: Schema.tag("request-finish"),
   reason: FinishReason,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
@@ -112,7 +139,7 @@ export const RequestFinish = Schema.Struct({
 export type RequestFinish = Schema.Schema.Type<typeof RequestFinish>
 
 export const ProviderErrorEvent = Schema.Struct({
-  type: Schema.Literal("provider-error"),
+  type: Schema.tag("provider-error"),
   message: Schema.String,
   retryable: Schema.optional(Schema.Boolean),
   providerMetadata: Schema.optional(ProviderMetadata),
@@ -125,8 +152,12 @@ const llmEventTagged = Schema.Union([
   TextStart,
   TextDelta,
   TextEnd,
+  ReasoningStart,
   ReasoningDelta,
+  ReasoningEnd,
+  ToolInputStart,
   ToolInputDelta,
+  ToolInputEnd,
   ToolCall,
   ToolResult,
   ToolError,
@@ -135,20 +166,52 @@ const llmEventTagged = Schema.Union([
   ProviderErrorEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
 
+type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
+
+const responseID = (value: ResponseID | string) => ResponseID.make(value)
+const contentBlockID = (value: ContentBlockID | string) => ContentBlockID.make(value)
+const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
+
 /**
  * camelCase aliases for `LLMEvent.guards` (provided by `Schema.toTaggedUnion`).
  * Lets consumers write `events.filter(LLMEvent.is.toolCall)` instead of
  * `events.filter(LLMEvent.guards["tool-call"])`.
  */
 export const LLMEvent = Object.assign(llmEventTagged, {
+  requestStart: (input: WithID<RequestStart, ResponseID>) => RequestStart.make({ ...input, id: responseID(input.id) }),
+  stepStart: StepStart.make,
+  textStart: (input: WithID<TextStart, ContentBlockID>) => TextStart.make({ ...input, id: contentBlockID(input.id) }),
+  textDelta: (input: WithID<TextDelta, ContentBlockID>) => TextDelta.make({ ...input, id: contentBlockID(input.id) }),
+  textEnd: (input: WithID<TextEnd, ContentBlockID>) => TextEnd.make({ ...input, id: contentBlockID(input.id) }),
+  reasoningStart: (input: WithID<ReasoningStart, ContentBlockID>) =>
+    ReasoningStart.make({ ...input, id: contentBlockID(input.id) }),
+  reasoningDelta: (input: WithID<ReasoningDelta, ContentBlockID>) =>
+    ReasoningDelta.make({ ...input, id: contentBlockID(input.id) }),
+  reasoningEnd: (input: WithID<ReasoningEnd, ContentBlockID>) =>
+    ReasoningEnd.make({ ...input, id: contentBlockID(input.id) }),
+  toolInputStart: (input: WithID<ToolInputStart, ToolCallID>) =>
+    ToolInputStart.make({ ...input, id: toolCallID(input.id) }),
+  toolInputDelta: (input: WithID<ToolInputDelta, ToolCallID>) =>
+    ToolInputDelta.make({ ...input, id: toolCallID(input.id) }),
+  toolInputEnd: (input: WithID<ToolInputEnd, ToolCallID>) => ToolInputEnd.make({ ...input, id: toolCallID(input.id) }),
+  toolCall: (input: WithID<ToolCall, ToolCallID>) => ToolCall.make({ ...input, id: toolCallID(input.id) }),
+  toolResult: (input: WithID<ToolResult, ToolCallID>) => ToolResult.make({ ...input, id: toolCallID(input.id) }),
+  toolError: (input: WithID<ToolError, ToolCallID>) => ToolError.make({ ...input, id: toolCallID(input.id) }),
+  stepFinish: StepFinish.make,
+  requestFinish: RequestFinish.make,
+  providerError: ProviderErrorEvent.make,
   is: {
     requestStart: llmEventTagged.guards["request-start"],
     stepStart: llmEventTagged.guards["step-start"],
     textStart: llmEventTagged.guards["text-start"],
     textDelta: llmEventTagged.guards["text-delta"],
     textEnd: llmEventTagged.guards["text-end"],
+    reasoningStart: llmEventTagged.guards["reasoning-start"],
     reasoningDelta: llmEventTagged.guards["reasoning-delta"],
+    reasoningEnd: llmEventTagged.guards["reasoning-end"],
+    toolInputStart: llmEventTagged.guards["tool-input-start"],
     toolInputDelta: llmEventTagged.guards["tool-input-delta"],
+    toolInputEnd: llmEventTagged.guards["tool-input-end"],
     toolCall: llmEventTagged.guards["tool-call"],
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],

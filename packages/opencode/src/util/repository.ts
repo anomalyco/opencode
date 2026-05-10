@@ -125,6 +125,21 @@ export function parseRepositoryReference(input: string) {
   }
 }
 
+export function parseRemoteRepositoryReference(input: string) {
+  const reference = parseRepositoryReference(input)
+  if (!reference) throw new Error("Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand")
+  if (reference.protocol === "file:") throw new Error("Local file repositories are not supported")
+  return reference
+}
+
+export function validateRepositoryBranch(branch: string) {
+  if (!/^[A-Za-z0-9/_.-]+$/.test(branch) || branch.startsWith("-") || branch.includes("..")) {
+    throw new Error(
+      "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
+    )
+  }
+}
+
 export function parseGitHubRemote(input: string) {
   const cleaned = normalize(input)
   if (!cleaned.includes("://") && !cleaned.match(/^(?:[^@/\s]+@)?github\.com:/)) return null
