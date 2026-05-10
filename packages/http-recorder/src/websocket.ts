@@ -23,7 +23,7 @@ export interface WebSocketExecutor<E> {
 
 export interface WebSocketRecordReplayOptions<E> {
   readonly name: string
-  readonly mode?: "record" | "replay" | "passthrough"
+  readonly mode?: "auto" | "record" | "replay" | "passthrough"
   readonly metadata?: CassetteMetadata
   readonly cassette: CassetteService.Interface
   readonly live: WebSocketExecutor<E>
@@ -71,7 +71,13 @@ export const makeWebSocketExecutor = <E>(
   options: WebSocketRecordReplayOptions<E>,
 ): Effect.Effect<WebSocketExecutor<E>, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const mode = options.mode ?? "replay"
+    const requested = options.mode ?? "auto"
+    const mode =
+      requested === "auto"
+        ? process.env.CI === "true" || (yield* options.cassette.exists(options.name))
+          ? "replay"
+          : "record"
+        : requested
     const redactor = options.redactor ?? defaults()
     const openSnapshot = (request: WebSocketRequest) => {
       const redacted = redactor.request({

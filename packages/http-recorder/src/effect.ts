@@ -17,7 +17,7 @@ import { defaults, type Redactor } from "./redactor"
 import { redactUrl } from "./redaction"
 import { httpInteractions, type CassetteMetadata, type HttpInteraction, type ResponseSnapshot } from "./schema"
 
-export type RecordReplayMode = "record" | "replay" | "passthrough"
+export type RecordReplayMode = "auto" | "record" | "replay" | "passthrough"
 
 export interface RecordReplayOptions {
   readonly mode?: RecordReplayMode
@@ -69,7 +69,13 @@ export const recordingLayer = (
       const cassetteService = yield* CassetteService.Service
       const redactor = options.redactor ?? defaults()
       const match = options.match ?? defaultMatcher
-      const mode = options.mode ?? "replay"
+      const requested = options.mode ?? "auto"
+      const mode =
+        requested === "auto"
+          ? process.env.CI === "true" || (yield* cassetteService.exists(name))
+            ? "replay"
+            : "record"
+          : requested
       const sequential = options.dispatch === "sequential"
       const replay = yield* makeReplayState(cassetteService, name, httpInteractions)
 
@@ -114,7 +120,12 @@ export const recordingLayer = (
         return Effect.gen(function* () {
           const incoming = yield* snapshotRequest(request)
           const interactions = yield* replay.load.pipe(
-            Effect.mapError(() => transportError(request, `Fixture "${name}" not found.`)),
+            Effect.mapError(() =>
+              transportError(
+                request,
+                `Fixture "${name}" not found. Run locally to record it (CI=true forces replay).`,
+              ),
+            ),
           )
           const result = sequential
             ? selectSequential(interactions, incoming, match, yield* replay.cursor)
