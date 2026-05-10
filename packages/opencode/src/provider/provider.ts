@@ -25,7 +25,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
-
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
@@ -450,8 +449,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     "google-vertex": Effect.fnUntraced(function* (provider: Info) {
       const env = yield* dep.env()
+      // models.dev advertises GOOGLE_VERTEX_PROJECT for Vertex; keep the wider
+      // Google Cloud project env names as fallbacks for existing ADC setups.
       const project =
-        provider.options?.project ?? env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
+        provider.options?.project ??
+        env["GOOGLE_VERTEX_PROJECT"] ??
+        env["GOOGLE_CLOUD_PROJECT"] ??
+        env["GCP_PROJECT"] ??
+        env["GCLOUD_PROJECT"]
 
       const location = String(
         provider.options?.location ??
@@ -740,6 +745,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const auth = yield* dep.auth(input.id)
       const env = yield* dep.env()
       const accountId = env["CLOUDFLARE_ACCOUNT_ID"] || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
+      // The Cloudflare auth prompt stores this value as gatewayId metadata.
       const gateway = env["CLOUDFLARE_GATEWAY_ID"] || (auth?.type === "api" ? auth.metadata?.gatewayId : undefined)
 
       if (!accountId || !gateway) {
@@ -1080,11 +1086,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
-const layer: Layer.Layer<
-  Service,
-  never,
-  Config.Service | Auth.Service | Plugin.Service | AppFileSystem.Service | Env.Service | ModelsDev.Service
-> = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
@@ -1375,7 +1377,12 @@ const layer: Layer.Layer<
           for (const [modelID, model] of Object.entries(provider.models)) {
             model.api.id = model.api.id ?? model.id ?? modelID
             if (
-              modelID === "gpt-5-chat-latest" ||
+              // These chat aliases are invalid for the special handling in the
+              // built-in providers below, but custom providers may support them.
+              (modelID === "gpt-5-chat-latest" &&
+                (providerID === ProviderID.openai ||
+                  providerID === ProviderID.githubCopilot ||
+                  providerID === ProviderID.openrouter)) ||
               (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
             )
               delete provider.models[modelID]

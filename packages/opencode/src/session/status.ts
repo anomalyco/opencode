@@ -5,7 +5,6 @@ import { SessionID } from "./schema"
 import { zod } from "@opencode-ai/core/effect-zod"
 import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 import { Effect, Layer, Context, Schema } from "effect"
-import z from "zod"
 
 export const Info = Schema.Union([
   Schema.Struct({

@@ -18,6 +18,7 @@ import { makeRuntime } from "../../src/effect/run-service"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
 const set = (k: string, v: string) => env.runSync((svc) => svc.set(k, v))
+const remove = (k: string) => env.runSync((svc) => svc.remove(k))
 
 async function run<A, E>(fn: (provider: Provider.Interface) => Effect.Effect<A, E, never>) {
   return AppRuntime.runPromise(
@@ -221,6 +222,43 @@ test("model blacklist excludes specific models", async () => {
       expect(providers[ProviderID.anthropic]).toBeDefined()
       const models = Object.keys(providers[ProviderID.anthropic].models)
       expect(models).not.toContain("claude-sonnet-4-20250514")
+    },
+  })
+})
+
+test("custom provider keeps gpt-5-chat-latest model IDs", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-chat": {
+              name: "Custom Chat",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://example.com/v1",
+              options: { apiKey: "test-key" },
+              models: {
+                "gpt-5-chat-latest": {
+                  name: "GPT-5 Chat Latest",
+                  tool_call: true,
+                  limit: { context: 128000, output: 16000 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const provider = providers[ProviderID.make("custom-chat")]
+      expect(provider).toBeDefined()
+      expect(provider.models["gpt-5-chat-latest"]).toBeDefined()
     },
   })
 })
@@ -2349,6 +2387,49 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
 
       expect(model).toBeDefined()
       expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
+    },
+  })
+})
+
+test("Google Vertex: resolves GOOGLE_VERTEX_PROJECT env into provider options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-vertex": {
+              name: "Vertex",
+              npm: "@ai-sdk/google-vertex",
+              env: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION"],
+              models: {
+                "gemini-pro": {
+                  name: "Gemini Pro",
+                  tool_call: true,
+                  limit: { context: 128000, output: 16000 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("GOOGLE_CLOUD_PROJECT")
+      remove("GCP_PROJECT")
+      remove("GCLOUD_PROJECT")
+      set("GOOGLE_VERTEX_PROJECT", "vertex-project")
+      set("GOOGLE_VERTEX_LOCATION", "europe-west4")
+      const providers = await list()
+      const provider = providers[ProviderID.googleVertex]
+      expect(provider).toBeDefined()
+      expect(provider.options.project).toBe("vertex-project")
+      expect(provider.options.location).toBe("europe-west4")
     },
   })
 })
