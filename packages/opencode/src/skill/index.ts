@@ -97,6 +97,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
   if (!parsed.success) return
 
   if (state.skills[parsed.data.name]) {
+    if (state.skills[parsed.data.name].location === match) return
     log.warn("duplicate skill name", {
       name: parsed.data.name,
       existing: state.skills[parsed.data.name].location,
