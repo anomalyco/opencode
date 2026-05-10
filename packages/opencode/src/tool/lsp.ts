@@ -72,15 +72,7 @@ export const LspTool = Tool.define(
           })
 
           const uri = pathToFileURL(file).href
-          const position = { file, line: args.line - 1, character: args.character - 1 }
           const relPath = path.relative(instance.worktree, file)
-          const detail =
-            args.operation === "workspaceSymbol"
-              ? ""
-              : args.operation === "documentSymbol"
-                ? relPath
-                : `${relPath}:${args.line}:${args.character}`
-          const title = detail ? `${args.operation} ${detail}` : args.operation
 
           const exists = yield* fs.existsSafe(file)
           if (!exists) throw new Error(`File not found: ${file}`)
@@ -102,6 +94,10 @@ export const LspTool = Tool.define(
           if (args.line === undefined || args.character === undefined) {
             throw new Error(`line and character are required for operation '${args.operation}'`)
           }
+
+          const position = { file, line: args.line - 1, character: args.character - 1 }
+          const detail = `${relPath}:${args.line}:${args.character}`
+          const title = `${args.operation} ${detail}`
 
           const result: unknown[] = yield* (() => {
             switch (args.operation) {
