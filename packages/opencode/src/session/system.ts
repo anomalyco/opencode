@@ -56,7 +56,7 @@ export const layer = Layer.effect(
             `  Workspace root folder: ${ctx.worktree}`,
             `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
             `  Platform: ${process.platform}`,
-            `  Today's date: ${new Date().toDateString()}`,
+            `  Today's date: ${_cachedDate ??= new Date().toDateString()}`,
             `</env>`,
           ].join("\n"),
         ]
@@ -80,5 +80,11 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer))
+
+let _cachedDate: string | undefined
+
+export function clearCache() {
+  _cachedDate = undefined
+}
 
 export * as SystemPrompt from "./system"
