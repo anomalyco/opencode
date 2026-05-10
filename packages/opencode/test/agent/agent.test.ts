@@ -147,6 +147,10 @@ test("reference config creates scout-backed subagents", async () => {
       config: {
         reference: {
           effect: "github.com/effect/effect-smol",
+          effectDev: {
+            repository: "https://github.com/effect/effect-smol",
+            branch: "dev",
+          },
           effectFull: {
             repository: "Effect-TS/effect",
             branch: "main",
@@ -162,6 +166,7 @@ test("reference config creates scout-backed subagents", async () => {
       directory: tmp.path,
       fn: async () => {
         const effect = await load(tmp.path, (svc) => svc.get("effect"))
+        const effectDev = await load(tmp.path, (svc) => svc.get("effectDev"))
         const effectFull = await load(tmp.path, (svc) => svc.get("effectFull"))
         const local = await load(tmp.path, (svc) => svc.get("localdocs"))
         const localFull = await load(tmp.path, (svc) => svc.get("localdocsFull"))
@@ -172,6 +177,10 @@ test("reference config creates scout-backed subagents", async () => {
         expect(effect?.prompt).toContain(`Cached directory: ${path.join(Global.Path.repos, "github.com", "effect", "effect-smol")}`)
         expect(effect?.prompt).toContain("Do not call repo_clone")
         expect(evalPerm(effect, "repo_clone")).toBe("deny")
+
+        expect(effectDev).toBeDefined()
+        expect(effectDev?.prompt).toContain("Problem: Reference conflicts with @effect")
+        expect(effectDev?.prompt).not.toContain("Cached directory:")
 
         expect(effectFull).toBeDefined()
         expect(effectFull?.mode).toBe("subagent")

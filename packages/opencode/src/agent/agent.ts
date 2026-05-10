@@ -338,12 +338,16 @@ export const layer = Layer.effect(
         }
 
         if (Flag.OPENCODE_EXPERIMENTAL_SCOUT) {
-          for (const [name, reference] of Object.entries(cfg.reference ?? {})) {
-            if (agents[name]) continue
-            const resolved = Reference.resolve({ name, reference, directory: ctx.directory, worktree: ctx.worktree })
+          const resolvedReferences = Reference.resolveAll({
+            references: cfg.reference ?? {},
+            directory: ctx.directory,
+            worktree: ctx.worktree,
+          })
+          for (const resolved of resolvedReferences) {
+            if (agents[resolved.name]) continue
             const localPath = resolved.kind === "invalid" ? undefined : resolved.path
-            agents[name] = {
-              name,
+            agents[resolved.name] = {
+              name: resolved.name,
               description: referenceDescription(resolved),
               permission: Permission.merge(
                 agents.scout.permission,
@@ -362,7 +366,7 @@ export const layer = Layer.effect(
                 ),
               ),
               prompt: referencePrompt(resolved),
-              options: { reference, resolved },
+              options: { reference: cfg.reference?.[resolved.name], resolved },
               mode: "subagent",
               native: false,
             }

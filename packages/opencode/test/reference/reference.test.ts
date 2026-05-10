@@ -110,6 +110,28 @@ describe("reference", () => {
     }),
   )
 
+  it.live("marks same-cache references with different branches invalid", () =>
+    Effect.gen(function* () {
+      const root = path.resolve("opencode-reference-root")
+      const references = Reference.resolveAll({
+        directory: root,
+        worktree: root,
+        references: {
+          main: { repository: "owner/repo", branch: "main" },
+          dev: { repository: "github.com/owner/repo", branch: "dev" },
+          alsoMain: { repository: "https://github.com/owner/repo", branch: "main" },
+        },
+      })
+
+      expect(references.map((reference) => reference.kind)).toEqual(["git", "invalid", "git"])
+      expect(references[1]?.kind).toBe("invalid")
+      if (references[1]?.kind === "invalid") {
+        expect(references[1].message).toContain("conflicts with @main")
+        expect(references[1].message).toContain("@dev requests dev")
+      }
+    }),
+  )
+
   it.live("materializes configured git references during init", () =>
     experimentalScout(
       provideTmpdirInstance(

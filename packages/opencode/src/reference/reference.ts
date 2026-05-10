@@ -77,6 +77,10 @@ function resolveGit(
   }
 }
 
+function branchLabel(branch: string | undefined) {
+  return branch ?? "default branch"
+}
+
 function normalizedTarget(target?: string) {
   if (!target) return
   return process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
@@ -101,6 +105,32 @@ export function resolve(input: { name: string; reference: ReferenceEntry; direct
   return resolveGit({ name: input.name, repository: input.reference.repository, branch: input.reference.branch })
 }
 
+export function resolveAll(input: {
+  references: NonNullable<Config.Info["reference"]>
+  directory: string
+  worktree: string
+}) {
+  const seen = new Map<string, { name: string; branch?: string }>()
+  return Object.entries(input.references).map(([name, reference]) => {
+    const resolved = resolve({ name, reference, directory: input.directory, worktree: input.worktree })
+    if (resolved.kind !== "git") return resolved
+
+    const existing = seen.get(resolved.path)
+    if (!existing) {
+      seen.set(resolved.path, { name, branch: resolved.branch })
+      return resolved
+    }
+    if (existing.branch === resolved.branch) return resolved
+
+    return {
+      name,
+      kind: "invalid" as const,
+      repository: resolved.repository,
+      message: `Reference conflicts with @${existing.name}: both use ${resolved.path}, but @${existing.name} requests ${branchLabel(existing.branch)} and @${name} requests ${branchLabel(resolved.branch)}`,
+    }
+  })
+}
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -112,21 +142,13 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Reference.state")(function* (ctx) {
         const cfg = yield* config.get()
-        const references = Object.entries(cfg.reference ?? {}).map(([name, reference]) =>
-          resolve({ name, reference, directory: ctx.directory, worktree: ctx.worktree }),
-        )
-        const seenBranchByPath = new Map<string, string | undefined>()
-        const conflicts: { reference: Extract<Resolved, { kind: "git" }>; existingBranch?: string }[] = []
+        const references = resolveAll({ references: cfg.reference ?? {}, directory: ctx.directory, worktree: ctx.worktree })
+        const seenPath = new Set<string>()
         const gitReferences = references.filter((reference): reference is Extract<Resolved, { kind: "git" }> => {
           if (reference.kind !== "git") return false
-          if (!seenBranchByPath.has(reference.path)) {
-            seenBranchByPath.set(reference.path, reference.branch)
-            return true
-          }
-          const existingBranch = seenBranchByPath.get(reference.path)
-          if (existingBranch === reference.branch) return false
-          conflicts.push({ reference, existingBranch })
-          return false
+          if (seenPath.has(reference.path)) return false
+          seenPath.add(reference.path)
+          return true
         })
         const materializeByPath = yield* Effect.forEach(
           gitReferences,
@@ -150,17 +172,6 @@ export const layer = Layer.effect(
         const materializeAll = yield* Effect.cached(
           Flag.OPENCODE_EXPERIMENTAL_SCOUT
             ? Effect.gen(function* () {
-                yield* Effect.forEach(
-                  conflicts,
-                  (conflict) =>
-                    Effect.logWarning("skipping reference repository with conflicting branch", {
-                      name: conflict.reference.name,
-                      path: conflict.reference.path,
-                      branch: conflict.reference.branch,
-                      existingBranch: conflict.existingBranch,
-                    }),
-                  { discard: true },
-                )
                 yield* Effect.forEach(
                   materializeByPath,
                   Effect.fnUntraced(function* (item) {
