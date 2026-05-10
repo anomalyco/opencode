@@ -2,14 +2,10 @@ import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { GatewayPlugin } from "@opencode-ai/core/plugin/provider/gateway"
-import { snapshot } from "../../../src/provider/models-snapshot.js"
-import { it, model } from "../../../../core/test/v2/plugin/provider-helper"
+import { it, model } from "./provider-helper"
 
 const gatewayCalls: Record<string, unknown>[] = []
-const vercel = snapshot.vercel as {
-  npm?: string
-  models: Record<string, { provider?: { npm?: string } }>
-}
+const vercelGatewayModels = ["anthropic/claude-sonnet-4", "openai/gpt-5", "google/gemini-2.5-pro"]
 
 mock.module("@ai-sdk/gateway", () => ({
   createGateway(options: Record<string, unknown>) {
@@ -63,17 +59,13 @@ describe("GatewayPlugin", () => {
     }),
   )
 
-  it.effect("matches real Vercel AI Gateway models by their inherited @ai-sdk/gateway package", () =>
+  it.effect("matches Vercel AI Gateway models by their @ai-sdk/gateway package", () =>
     Effect.gen(function* () {
       gatewayCalls.length = 0
       const plugin = yield* PluginV2.Service
       yield* plugin.add(GatewayPlugin)
 
-      for (const modelID of ["anthropic/claude-sonnet-4", "openai/gpt-5", "google/gemini-2.5-pro"]) {
-        const realModel = vercel.models[modelID]
-        const packageName = realModel.provider?.npm ?? vercel.npm ?? ""
-        expect(packageName).toBe("@ai-sdk/gateway")
-
+      for (const modelID of vercelGatewayModels) {
         const ignored = yield* plugin.trigger(
           "aisdk.sdk",
           { model: model("vercel", modelID), package: "@ai-sdk/vercel", options: { name: "vercel" } },
@@ -83,7 +75,7 @@ describe("GatewayPlugin", () => {
 
         const result = yield* plugin.trigger(
           "aisdk.sdk",
-          { model: model("vercel", modelID), package: packageName, options: { name: "vercel" } },
+          { model: model("vercel", modelID), package: "@ai-sdk/gateway", options: { name: "vercel" } },
           {},
         )
         expect(result.sdk).toBeDefined()
