@@ -39,6 +39,7 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { CodeMigration } from "./code-migration"
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -151,6 +152,7 @@ const cli = yargs(args)
       }
       process.stderr.write("Database migration complete." + EOL)
     }
+    CodeMigration.start()
   })
   .usage("")
   .completion("completion", "generate shell completion script")
