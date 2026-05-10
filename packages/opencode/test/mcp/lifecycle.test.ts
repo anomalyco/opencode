@@ -141,9 +141,9 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return { tools: this._state?.tools ?? [] }
     }
 
-    async request(request: { method: string }) {
+    async request(request: { method: string }, schema: { parse: (value: unknown) => unknown }) {
       if (this._state) this._state.requestCalls++
-      if (request.method === "tools/list") return { tools: this._state?.tools ?? [] }
+      if (request.method === "tools/list") return schema.parse({ tools: this._state?.tools ?? [] })
       throw new Error(`unsupported request: ${request.method}`)
     }
 

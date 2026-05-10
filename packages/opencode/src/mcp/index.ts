@@ -6,6 +6,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
+  ToolSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -36,16 +37,7 @@ import { withStatics } from "@opencode-ai/core/schema"
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
 
-const TolerantToolSchema = z.looseObject({
-  name: z.string(),
-  description: z.string().optional(),
-  inputSchema: z
-    .object({
-      type: z.literal("object"),
-      properties: z.record(z.string(), z.object({}).catchall(z.unknown())).optional(),
-      required: z.array(z.string()).optional(),
-    })
-    .catchall(z.unknown()),
+const TolerantToolSchema = ToolSchema.extend({
   outputSchema: z.unknown().optional(),
 })
 
@@ -144,31 +136,19 @@ function isOutputSchemaValidationError(error: Error) {
 }
 
 function listTools(key: string, client: MCPClient, timeout: number) {
-  const timed = <T, E>(effect: Effect.Effect<T, E>) =>
-    effect.pipe(
-      Effect.timeoutOrElse({
-        duration: timeout,
-        orElse: () => Effect.fail(new Error(`Operation timed out after ${timeout}ms`)),
-      }),
-    )
-
-  return timed(
-    Effect.tryPromise({
-      try: () => client.listTools(),
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
-  ).pipe(
+  return Effect.tryPromise({
+    try: () => client.listTools(undefined, { timeout }),
+    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  }).pipe(
     Effect.map((result) => result.tools),
     Effect.catch((error) => {
       if (!isOutputSchemaValidationError(error)) return Effect.fail(error)
 
       log.warn("failed to validate MCP tool output schemas, retrying without output schema validation", { key, error })
-      return timed(
-        Effect.tryPromise({
-          try: () => client.request({ method: "tools/list" }, TolerantListToolsResultSchema),
-          catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-        }),
-      ).pipe(
+      return Effect.tryPromise({
+        try: () => client.request({ method: "tools/list" }, TolerantListToolsResultSchema, { timeout }),
+        catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+      }).pipe(
         Effect.map((result) =>
           result.tools.map((tool) => ({
             name: tool.name,
