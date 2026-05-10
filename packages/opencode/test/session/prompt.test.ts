@@ -15,6 +15,8 @@ import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
+import { Git } from "../../src/git"
+import { Image } from "../../src/image/image"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
@@ -178,6 +180,7 @@ function makeHttp() {
     Layer.provide(Skill.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Git.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provideMerge(todo),
@@ -185,12 +188,17 @@ function makeHttp() {
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps))
+  const proc = SessionProcessor.layer.pipe(
+    Layer.provide(summary),
+    Layer.provide(Image.defaultLayer),
+    Layer.provideMerge(deps),
+  )
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
       Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(Image.defaultLayer),
       Layer.provide(summary),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),

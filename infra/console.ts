@@ -1,5 +1,6 @@
 import { domain } from "./stage"
 import { EMAILOCTOPUS_API_KEY } from "./app"
+import { SECRET } from "./secret"
 
 ////////////////
 // DATABASE
@@ -221,8 +222,6 @@ const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
 const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
   properties: { value: stripeWebhook.secret },
 })
-const INCIDENT_WEBHOOK_SIGNING_SECRET = new sst.Secret("INCIDENT_WEBHOOK_SIGNING_SECRET")
-const DISCORD_INCIDENT_WEBHOOK_URL = new sst.Secret("DISCORD_INCIDENT_WEBHOOK_URL")
 
 const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 
@@ -233,6 +232,7 @@ const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 const bucket = new sst.cloudflare.Bucket("ZenData")
 const bucketNew = new sst.cloudflare.Bucket("ZenDataNew")
 
+const DISCORD_INCIDENT_WEBHOOK_URL = new sst.Secret("DISCORD_INCIDENT_WEBHOOK_URL")
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
 
@@ -254,8 +254,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     database,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
-    INCIDENT_WEBHOOK_SIGNING_SECRET,
     DISCORD_INCIDENT_WEBHOOK_URL,
+    SECRET.HoneycombWebhookSecret,
     STRIPE_SECRET_KEY,
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
