@@ -29,7 +29,7 @@
     },
     "packages/app": {
       "name": "@opencode-ai/app",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -85,7 +85,7 @@
     },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -120,7 +120,7 @@
     },
     "packages/console/core": {
       "name": "@opencode-ai/console-core",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -147,7 +147,7 @@
     },
     "packages/console/function": {
       "name": "@opencode-ai/console-function",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@ai-sdk/anthropic": "3.0.64",
         "@ai-sdk/openai": "3.0.48",
@@ -171,7 +171,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode-ai/console-mail",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -195,7 +195,7 @@
     },
     "packages/core": {
       "name": "@opencode-ai/core",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -229,7 +229,7 @@
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
@@ -283,7 +283,7 @@
     },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
@@ -313,7 +313,7 @@
     },
     "packages/function": {
       "name": "@opencode-ai/function",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -329,7 +329,7 @@
     },
     "packages/http-recorder": {
       "name": "@opencode-ai/http-recorder",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "effect": "catalog:",
@@ -342,7 +342,7 @@
     },
     "packages/llm": {
       "name": "@opencode-ai/llm",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",
@@ -360,7 +360,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -495,7 +495,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "effect": "catalog:",
@@ -533,7 +533,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "cross-spawn": "catalog:",
       },
@@ -548,7 +548,7 @@
     },
     "packages/slack": {
       "name": "@opencode-ai/slack",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "@slack/bolt": "^3.17.1",
@@ -583,7 +583,7 @@
     },
     "packages/ui": {
       "name": "@opencode-ai/ui",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -632,7 +632,7 @@
     },
     "packages/web": {
       "name": "@opencode-ai/web",
-      "version": "1.14.44",
+      "version": "1.14.45",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
