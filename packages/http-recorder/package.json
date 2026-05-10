@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.14.44",
+  "version": "1.14.45",
   "name": "@opencode-ai/http-recorder",
   "type": "module",
   "license": "MIT",
