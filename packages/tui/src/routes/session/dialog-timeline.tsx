@@ -17,6 +17,7 @@ export function DialogTimeline(props: {
 
   onMount(() => {
     dialog.setSize("large")
+    void sync.session.loadAllMessages(props.sessionID)
   })
 
   const options = createMemo((): DialogSelectOption<string>[] => {
