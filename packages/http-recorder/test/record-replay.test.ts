@@ -6,7 +6,8 @@ import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 import { HttpRecorder } from "../src"
-import { redactedErrorRequest } from "../src/diff"
+import { redactedErrorRequest } from "../src/effect"
+import { cassetteFor, formatCassette, parseCassette } from "../src/storage"
 
 const post = (url: string, body: object) =>
   Effect.gen(function* () {
@@ -145,7 +146,7 @@ describe("http-recorder", () => {
   })
 
   test("formats websocket cassettes with shared metadata", () => {
-    const cassette = HttpRecorder.cassetteFor(
+    const cassette = cassetteFor(
       "websocket/basic",
       [
         {
@@ -159,7 +160,7 @@ describe("http-recorder", () => {
     )
 
     expect(cassette.metadata).toMatchObject({ name: "websocket/basic", provider: "openai" })
-    expect(HttpRecorder.parseCassette(HttpRecorder.formatCassette(cassette))).toEqual(cassette)
+    expect(parseCassette(formatCassette(cassette))).toEqual(cassette)
   })
 
   test("replays websocket interactions from the shared cassette service", async () => {
@@ -168,7 +169,7 @@ describe("http-recorder", () => {
         const cassette = yield* HttpRecorder.Cassette.Service
         yield* cassette.write(
           "websocket/replay",
-          HttpRecorder.cassetteFor(
+          cassetteFor(
             "websocket/replay",
             [
               {

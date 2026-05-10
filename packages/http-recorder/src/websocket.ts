@@ -2,10 +2,9 @@ import { Effect, Option, Ref, Scope, Stream } from "effect"
 import type { Headers } from "effect/unstable/http"
 import * as CassetteService from "./cassette"
 import { canonicalizeJson, decodeJson } from "./matching"
-import { redactHeaders, redactUrl, type SecretFinding } from "./redaction"
-import { webSocketInteractions, type CassetteMetadata, type WebSocketFrame, type WebSocketInteraction } from "./schema"
-
-export const DEFAULT_WEBSOCKET_REQUEST_HEADERS: ReadonlyArray<string> = ["content-type", "accept", "openai-beta"]
+import { appendOrFail, makeReplayState } from "./recorder"
+import { defaults, type Redactor } from "./redactor"
+import { webSocketInteractions, type CassetteMetadata, type WebSocketFrame } from "./schema"
 
 export interface WebSocketRequest {
   readonly url: string
@@ -28,63 +27,32 @@ export interface WebSocketRecordReplayOptions<E> {
   readonly metadata?: CassetteMetadata
   readonly cassette: CassetteService.Interface
   readonly live: WebSocketExecutor<E>
-  readonly redact?: {
-    readonly headers?: ReadonlyArray<string>
-    readonly query?: ReadonlyArray<string>
-    readonly url?: (url: string) => string
-  }
-  readonly requestHeaders?: ReadonlyArray<string>
+  readonly redactor?: Redactor
   readonly compareClientMessagesAsJson?: boolean
 }
 
-const headersRecord = (headers: Headers.Headers) =>
+const headersRecord = (headers: Headers.Headers): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(headers as Record<string, unknown>)
-      .filter((entry): entry is [string, string] => typeof entry[1] === "string")
-      .toSorted(([a], [b]) => a.localeCompare(b)),
+    Object.entries(headers as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
   )
 
-const openSnapshot = (
-  request: WebSocketRequest,
-  options: Pick<WebSocketRecordReplayOptions<never>, "redact" | "requestHeaders"> = {},
-) => ({
-  url: redactUrl(request.url, options.redact?.query, options.redact?.url),
-  headers: redactHeaders(
-    headersRecord(request.headers),
-    options.requestHeaders ?? DEFAULT_WEBSOCKET_REQUEST_HEADERS,
-    options.redact?.headers,
-  ),
-})
-
-const textFrame = (body: string): WebSocketFrame => ({ kind: "text", body })
-
-const frameText = (frame: WebSocketFrame) => {
-  if (frame.kind === "text") return frame.body
-  return new TextDecoder().decode(Buffer.from(frame.body, "base64"))
-}
-
-const frameMessage = (frame: WebSocketFrame) =>
-  frame.kind === "text" ? frame.body : new Uint8Array(Buffer.from(frame.body, "base64"))
-
-const receivedFrame = (message: string | Uint8Array): WebSocketFrame =>
+const encodeFrame = (message: string | Uint8Array): WebSocketFrame =>
   typeof message === "string"
-    ? textFrame(message)
+    ? { kind: "text", body: message }
     : { kind: "binary", body: Buffer.from(message).toString("base64"), bodyEncoding: "base64" }
 
-const unsafeCassette = (name: string, findings: ReadonlyArray<SecretFinding>) =>
-  new Error(
-    `Refusing to write WebSocket cassette "${name}" because it contains possible secrets: ${findings
-      .map((item) => `${item.path} (${item.reason})`)
-      .join(", ")}`,
-  )
+const decodeFrameMessage = (frame: WebSocketFrame): string | Uint8Array =>
+  frame.kind === "text" ? frame.body : new Uint8Array(Buffer.from(frame.body, "base64"))
 
-const mismatch = (message: string, actual: unknown, expected: unknown) =>
-  new Error(`${message}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`)
+const decodeFrameText = (frame: WebSocketFrame) =>
+  frame.kind === "text" ? frame.body : new TextDecoder().decode(Buffer.from(frame.body, "base64"))
 
 const assertEqual = (message: string, actual: unknown, expected: unknown) =>
   Effect.sync(() => {
     if (JSON.stringify(actual) === JSON.stringify(expected)) return
-    throw mismatch(message, actual, expected)
+    throw new Error(`${message}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`)
   })
 
 const jsonOrText = (value: string) => Option.match(decodeJson(value), { onNone: () => value, onSome: canonicalizeJson })
@@ -94,7 +62,7 @@ const compareClientMessage = (actual: string, expected: WebSocketFrame | undefin
     return Effect.sync(() => {
       throw new Error(`Unexpected WebSocket client frame ${index + 1}: ${actual}`)
     })
-  const expectedText = frameText(expected)
+  const expectedText = decodeFrameText(expected)
   if (!asJson) return assertEqual(`WebSocket client frame ${index + 1}`, actual, expectedText)
   return assertEqual(`WebSocket client JSON frame ${index + 1}`, jsonOrText(actual), jsonOrText(expectedText))
 }
@@ -104,6 +72,16 @@ export const makeWebSocketExecutor = <E>(
 ): Effect.Effect<WebSocketExecutor<E>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const mode = options.mode ?? "replay"
+    const redactor = options.redactor ?? defaults()
+    const openSnapshot = (request: WebSocketRequest) => {
+      const redacted = redactor.request({
+        method: "GET",
+        url: request.url,
+        headers: headersRecord(request.headers),
+        body: "",
+      })
+      return { url: redacted.url, headers: redacted.headers }
+    }
 
     if (mode === "passthrough") return options.live
 
@@ -118,21 +96,21 @@ export const makeWebSocketExecutor = <E>(
             const closeOnce = Effect.gen(function* () {
               if (yield* Ref.getAndSet(closed, true)) return
               yield* connection.close
-              const result = yield* options.cassette
-                .append(
-                  options.name,
-                  { transport: "websocket", open: openSnapshot(request, options), client, server },
-                  options.metadata,
-                )
-                .pipe(Effect.orDie)
-              if (result.findings.length > 0) yield* Effect.die(unsafeCassette(options.name, result.findings))
+              yield* appendOrFail(
+                options.cassette,
+                options.name,
+                { transport: "websocket", open: openSnapshot(request), client, server },
+                options.metadata,
+              ).pipe(Effect.orDie)
             })
             return {
-              sendText: (message: string) =>
-                connection.sendText(message).pipe(Effect.tap(() => Effect.sync(() => client.push(textFrame(message))))),
+              sendText: (message) =>
+                connection
+                  .sendText(message)
+                  .pipe(Effect.tap(() => Effect.sync(() => client.push(encodeFrame(message))))),
               messages: connection.messages.pipe(
                 Stream.map((message) => {
-                  server.push(receivedFrame(message))
+                  server.push(encodeFrame(message))
                   return message
                 }),
               ),
@@ -142,44 +120,20 @@ export const makeWebSocketExecutor = <E>(
       }
     }
 
-    const replay = yield* Ref.make<{ readonly interactions: ReadonlyArray<WebSocketInteraction> } | undefined>(
-      undefined,
-    )
-    const cursor = yield* Ref.make(0)
-
-    yield* Effect.addFinalizer(() =>
-      Effect.gen(function* () {
-        const input = yield* Ref.get(replay)
-        if (!input) return
-        yield* assertEqual(
-          `Unused recorded WebSocket interactions in ${options.name}`,
-          yield* Ref.get(cursor),
-          input.interactions.length,
-        )
-      }),
-    )
-
-    const loadReplay = Effect.fn("WebSocketRecorder.loadReplay")(function* () {
-      const cached = yield* Ref.get(replay)
-      if (cached) return cached
-      const input = {
-        interactions: webSocketInteractions(yield* options.cassette.read(options.name).pipe(Effect.orDie)),
-      }
-      yield* Ref.set(replay, input)
-      return input
-    })
+    const replay = yield* makeReplayState(options.cassette, options.name, webSocketInteractions)
 
     return {
-      open: (request) => {
-        return Effect.gen(function* () {
-          const input = yield* loadReplay()
-          const index = yield* Ref.getAndUpdate(cursor, (value) => value + 1)
-          const interaction = input.interactions[index]
+      open: (request) =>
+        Effect.gen(function* () {
+          const interactions = yield* replay.load.pipe(Effect.orDie)
+          const index = yield* replay.cursor
+          const interaction = interactions[index]
           if (!interaction) return yield* Effect.die(new Error(`No recorded WebSocket interaction for ${request.url}`))
-          yield* assertEqual(`WebSocket open frame ${index + 1}`, openSnapshot(request, options), interaction.open)
+          yield* replay.advance
+          yield* assertEqual(`WebSocket open frame ${index + 1}`, openSnapshot(request), interaction.open)
           const messageIndex = yield* Ref.make(0)
           return {
-            sendText: (message: string) =>
+            sendText: (message) =>
               Effect.gen(function* () {
                 const current = yield* Ref.getAndUpdate(messageIndex, (value) => value + 1)
                 yield* compareClientMessage(
@@ -189,7 +143,7 @@ export const makeWebSocketExecutor = <E>(
                   options.compareClientMessagesAsJson === true,
                 )
               }),
-            messages: Stream.fromIterable(interaction.server).pipe(Stream.map(frameMessage)),
+            messages: Stream.fromIterable(interaction.server).pipe(Stream.map(decodeFrameMessage)),
             close: Effect.gen(function* () {
               yield* assertEqual(
                 `WebSocket client frame count for interaction ${index + 1}`,
@@ -198,7 +152,6 @@ export const makeWebSocketExecutor = <E>(
               )
             }),
           }
-        })
-      },
+        }),
     }
   })
