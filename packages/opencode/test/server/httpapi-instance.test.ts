@@ -14,22 +14,18 @@ import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-// Flip the experimental HttpApi flag so backend selection telemetry on the
-// production routes reports the right backend, and the experimental
-// workspaces flag so SyncEvent.run actually writes to EventSequenceTable
-// (the source of truth the fence middleware reads). Reset the database
-// around the test so per-instance state does not leak between runs.
-// resetDatabase() already calls disposeAllInstances(), so we don't repeat it.
+// Flip the experimental workspaces flag so SyncEvent.run actually writes to
+// EventSequenceTable (the source of truth the fence middleware reads). Reset
+// the database around the test so per-instance state does not leak between
+// runs. resetDatabase() already calls disposeAllInstances(), so we don't
+// repeat it.
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
     const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.promise(() => resetDatabase())
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
         Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await resetDatabase()
       }),

@@ -1,7 +1,6 @@
 export type Runtime = {
   PublicApi: (typeof import("../../../src/server/routes/instance/httpapi/public"))["PublicApi"]
   ExperimentalHttpApiServer: (typeof import("../../../src/server/routes/instance/httpapi/server"))["ExperimentalHttpApiServer"]
-  Server: (typeof import("../../../src/server/server"))["Server"]
   AppLayer: (typeof import("../../../src/effect/app-runtime"))["AppLayer"]
   InstanceRef: (typeof import("../../../src/effect/instance-ref"))["InstanceRef"]
   Instance: (typeof import("../../../src/project/instance"))["Instance"]
@@ -22,7 +21,6 @@ export function runtime() {
   return (runtimePromise ??= (async () => {
     const publicApi = await import("../../../src/server/routes/instance/httpapi/public")
     const httpApiServer = await import("../../../src/server/routes/instance/httpapi/server")
-    const server = await import("../../../src/server/server")
     const appRuntime = await import("../../../src/effect/app-runtime")
     const instanceRef = await import("../../../src/effect/instance-ref")
     const instance = await import("../../../src/project/instance")
@@ -37,7 +35,6 @@ export function runtime() {
     return {
       PublicApi: publicApi.PublicApi,
       ExperimentalHttpApiServer: httpApiServer.ExperimentalHttpApiServer,
-      Server: server.Server,
       AppLayer: appRuntime.AppLayer,
       InstanceRef: instanceRef.InstanceRef,
       Instance: instance.Instance,
