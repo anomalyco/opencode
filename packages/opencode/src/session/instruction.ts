@@ -37,7 +37,7 @@ function extract(messages: MessageV2.WithParts[]) {
 export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
   readonly systemPaths: () => Effect.Effect<Set<string>, AppFileSystem.Error>
-  readonly system: () => Effect.Effect<string[], AppFileSystem.Error>
+  readonly system: () => Effect.Effect<{ global: string[]; project: string[] }, AppFileSystem.Error>
   readonly find: (dir: string) => Effect.Effect<string | undefined, AppFileSystem.Error>
   readonly resolve: (
     messages: MessageV2.WithParts[],
@@ -106,17 +106,21 @@ export const layer: Layer.Layer<
       s.claims.delete(messageID)
     })
 
-    const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
-      const config = yield* cfg.get()
-      const ctx = yield* InstanceState.context
+    const globalInstructionPaths = Effect.fnUntraced(function* () {
       const paths = new Set<string>()
-
       for (const file of globalFiles) {
         if (yield* fs.existsSafe(file)) {
           paths.add(path.resolve(file))
           break
         }
       }
+      return paths
+    })
+
+    const projectInstructionPaths = Effect.fnUntraced(function* () {
+      const config = yield* cfg.get()
+      const ctx = yield* InstanceState.context
+      const paths = new Set<string>()
 
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
@@ -151,20 +155,39 @@ export const layer: Layer.Layer<
       return paths
     })
 
+    const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
+      const [global, project] = yield* Effect.all([globalInstructionPaths(), projectInstructionPaths()])
+      return new Set([...global, ...project])
+    })
+
     const system = Effect.fn("Instruction.system")(function* () {
       const config = yield* cfg.get()
-      const paths = yield* systemPaths()
       const urls = (config.instructions ?? []).filter(
         (item) => item.startsWith("https://") || item.startsWith("http://"),
       )
 
-      const files = yield* Effect.forEach(Array.from(paths), read, { concurrency: 8 })
-      const remote = yield* Effect.forEach(urls, fetch, { concurrency: 4 })
+      const [global, project, remote] = yield* Effect.all([
+        globalInstructionPaths(),
+        projectInstructionPaths(),
+        Effect.forEach(urls, fetch, { concurrency: 4 }),
+      ])
 
-      return [
-        ...Array.from(paths).flatMap((item, i) => (files[i] ? [`Instructions from: ${item}\n${files[i]}`] : [])),
-        ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
-      ]
+      const [globalFiles, projectFiles] = yield* Effect.all([
+        Effect.forEach(Array.from(global), read, { concurrency: 8 }),
+        Effect.forEach(Array.from(project), read, { concurrency: 8 }),
+      ])
+
+      return {
+        global: Array.from(global).flatMap((item, i) =>
+          globalFiles[i] ? [`Instructions from: ${item}\n${globalFiles[i]}`] : [],
+        ),
+        project: [
+          ...Array.from(project).flatMap((item, i) =>
+            projectFiles[i] ? [`Instructions from: ${item}\n${projectFiles[i]}`] : [],
+          ),
+          ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
+        ],
+      }
     })
 
     const find = Effect.fn("Instruction.find")(function* (dir: string) {

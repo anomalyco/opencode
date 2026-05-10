@@ -32,6 +32,10 @@ type Result = Awaited<ReturnType<typeof streamText>>
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
   mergeDeep(target, source ?? {}) as Record<string, any>
 
+export type SystemSplit =
+  | string[]
+  | { stable: string[]; dynamic: string[] }
+
 export type StreamInput = {
   user: MessageV2.User
   sessionID: string
@@ -39,7 +43,7 @@ export type StreamInput = {
   model: Provider.Model
   agent: Agent.Info
   permission?: Permission.Ruleset
-  system: string[]
+  system: SystemSplit
   messages: ModelMessage[]
   small?: boolean
   tools: Record<string, Tool>
@@ -101,18 +105,33 @@ const live: Layer.Layer<
       const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
 
       const system: string[] = []
-      system.push(
-        [
-          // use agent prompt otherwise provider prompt
+
+      if (!Array.isArray(input.system)) {
+        const stable = [
           ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-          // any custom prompt passed into this call
-          ...input.system,
-          // any custom prompt from last user message
+          ...input.system.stable,
+        ]
+          .filter((x) => x)
+          .join("\n")
+        const dynamic = [
+          ...input.system.dynamic,
           ...(input.user.system ? [input.user.system] : []),
         ]
           .filter((x) => x)
-          .join("\n"),
-      )
+          .join("\n")
+        system.push(stable)
+        system.push(dynamic)
+      } else {
+        system.push(
+          [
+            ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+            ...input.system,
+            ...(input.user.system ? [input.user.system] : []),
+          ]
+            .filter((x) => x)
+            .join("\n"),
+        )
+      }
 
       const header = system[0]
       yield* plugin.trigger(
@@ -121,7 +140,7 @@ const live: Layer.Layer<
         { system },
       )
       // rejoin to maintain 2-part structure for caching if header unchanged
-      if (system.length > 2 && system[0] === header) {
+      if (Array.isArray(input.system) && system.length > 2 && system[0] === header) {
         const rest = system.slice(1)
         system.length = 0
         system.push(header, rest.join("\n"))
