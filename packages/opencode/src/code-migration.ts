@@ -15,10 +15,10 @@ export interface Interface {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/CodeMigration") {}
 
-export const layer = Layer.effect(
+export const make = (build: () => Migration[]) => Layer.effect(
   Service,
   Effect.gen(function* () {
-    const migrations: Migration[] = []
+    const migrations = build()
 
     yield* Effect.gen(function* () {
       if (migrations.length === 0) return
@@ -56,6 +56,8 @@ export const layer = Layer.effect(
     return Service.of({})
   }),
 )
+
+export const layer = make(() => [])
 
 export const defaultLayer = layer
 
