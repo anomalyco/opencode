@@ -71,7 +71,7 @@ const windowThreshold = 24
 const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
-const IDLE_QUEUE_MS = 300
+const IDLE_QUEUE_MS = 1_200
 const scrollDebugKey = "opencode.session.scroll.debug"
 
 function probe(id?: string) {
@@ -739,7 +739,11 @@ export function MessageTimeline(props: {
     const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
     const targetAnchor = captureMessageAnchor(targetId)
     const scrollAnchor =
-      seek && root && targetId ? { id: targetId, top: inset(root) } : props.currentMessageId ? targetAnchor : viewportAnchor
+      seek && root && targetId
+        ? { id: targetId, top: inset(root) }
+        : props.currentMessageId
+          ? targetAnchor
+          : viewportAnchor
 
     const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
     const next = syncWindow(base, pinned ? undefined : targetId)
@@ -807,7 +811,12 @@ export function MessageTimeline(props: {
       const after = snap(root)
       debug("window:anchor-write", { delta: Math.round(delta), prevTop: Math.round(prevTop), afterTop: after.top })
 
-      if (seek) trace("anchor-write", seek, `delta=${Math.round(delta)} prevTop=${Math.round(prevTop)} afterTop=${after.top} anchor=${scrollAnchor.id} target=${targetId || "none"}`)
+      if (seek)
+        trace(
+          "anchor-write",
+          seek,
+          `delta=${Math.round(delta)} prevTop=${Math.round(prevTop)} afterTop=${after.top} anchor=${scrollAnchor.id} target=${targetId || "none"}`,
+        )
       props.onScheduleScrollState(root)
     })
   }
@@ -860,7 +869,10 @@ export function MessageTimeline(props: {
     const ids = rendered()
     const start = Math.max(0, windowed.start - 1)
     const end = Math.min(ids.length, windowed.end + 1)
-    return ids.slice(start, end).filter((id) => turnStage(id) !== "full").slice(0, 3)
+    return ids
+      .slice(start, end)
+      .filter((id) => turnStage(id) !== "full")
+      .slice(0, 1)
   })
 
   const audit = (source: string) => {
@@ -1041,7 +1053,6 @@ export function MessageTimeline(props: {
 
     const sync = () => {
       debug("content-resize")
-      pin("content-resize")
       schedulePin("content-resize")
     }
 
@@ -1137,7 +1148,8 @@ export function MessageTimeline(props: {
   createEffect(
     on(activeMessageID, (id, prev) => {
       if (id === prev) return
-      if (props.seekingMessageId) trace("active-change", props.seekingMessageId, `prev=${prev || "none"} next=${id || "none"}`)
+      if (props.seekingMessageId)
+        trace("active-change", props.seekingMessageId, `prev=${prev || "none"} next=${id || "none"}`)
       windowAdjustVersion += 1
       scheduleWindow()
     }),

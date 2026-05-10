@@ -23,12 +23,138 @@ type Entry = {
   html: string
 }
 
+type Mark = Record<string, string | number | boolean | undefined>
+
+type Sum = {
+  count: number
+  parse: number
+  dom: number
+  cache: number
+  skip: number
+  parseMs: number
+  domMs: number
+  text: number
+  html: number
+  append: number
+  morph: number
+  replace: number
+  other: number
+}
+
 export type MarkdownStage = "lite" | "structure" | "full"
 
 type MarkedApi = ReturnType<typeof useMarked>
 
 const max = 200
 const cache = new Map<string, Entry>()
+const debugKey = "opencode.markdown.debug"
+const sumMs = 5_000
+const sum: Sum = {
+  count: 0,
+  parse: 0,
+  dom: 0,
+  cache: 0,
+  skip: 0,
+  parseMs: 0,
+  domMs: 0,
+  text: 0,
+  html: 0,
+  append: 0,
+  morph: 0,
+  replace: 0,
+  other: 0,
+}
+let sumTimer: ReturnType<typeof setTimeout> | undefined
+
+function debug() {
+  if (isServer) return false
+  try {
+    return window.localStorage.getItem(debugKey) === "1"
+  } catch {
+    return false
+  }
+}
+
+function mark(name: string, data: Mark = {}) {
+  if (!debug()) return
+  console.debug(`[markdown:perf] ${name} ${line(data)}`)
+  collect(name, data)
+}
+
+function line(data: Mark) {
+  return Object.entries(data)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" ")
+}
+
+function collect(name: string, data: Mark) {
+  sum.count++
+  if (name === "parse") {
+    sum.parse++
+    sum.parseMs += Number(data.took ?? 0)
+    sum.text += Number(data.text ?? 0)
+    sum.html += Number(data.html ?? 0)
+  } else if (name === "dom") {
+    sum.dom++
+    sum.domMs += Number(data.took ?? 0)
+    const mode = data.mode
+    if (mode === "append") sum.append++
+    else if (mode === "morph") sum.morph++
+    else if (mode === "replace") sum.replace++
+    else sum.other++
+  } else if (name === "cache-hit") {
+    sum.cache++
+  } else if (name === "skip-math") {
+    sum.skip++
+  }
+  scheduleSummary()
+}
+
+function resetSummary() {
+  sum.count = 0
+  sum.parse = 0
+  sum.dom = 0
+  sum.cache = 0
+  sum.skip = 0
+  sum.parseMs = 0
+  sum.domMs = 0
+  sum.text = 0
+  sum.html = 0
+  sum.append = 0
+  sum.morph = 0
+  sum.replace = 0
+  sum.other = 0
+}
+
+function scheduleSummary() {
+  if (sumTimer !== undefined) return
+  sumTimer = setTimeout(() => {
+    sumTimer = undefined
+    if (sum.count === 0) return
+    console.debug(
+      `[markdown:perf] summary ${line({
+        window: sumMs,
+        count: sum.count,
+        parse: sum.parse,
+        dom: sum.dom,
+        cache: sum.cache,
+        skip: sum.skip,
+        parseMs: Math.round(sum.parseMs),
+        domMs: Math.round(sum.domMs),
+        avgParse: sum.parse ? Math.round(sum.parseMs / sum.parse) : 0,
+        avgDom: sum.dom ? Math.round(sum.domMs / sum.dom) : 0,
+        text: sum.text,
+        html: sum.html,
+        append: sum.append,
+        morph: sum.morph,
+        replace: sum.replace,
+        other: sum.other,
+      })}`,
+    )
+    resetSummary()
+  }, sumMs)
+}
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
@@ -680,10 +806,17 @@ export function Markdown(
         const hit = cache.get(key)
         if (hit && hit.hash === input.hash) {
           touch(key, hit)
+          mark("cache-hit", {
+            key: input.cacheKey ?? input.key,
+            mode: input.mode,
+            math: input.math,
+            text: input.markdown.length,
+          })
           return hit.html
         }
       }
 
+      const time = performance.now()
       const rendered =
         input.mode === "plain"
           ? fallback(input.normalized)
@@ -701,6 +834,15 @@ export function Markdown(
             })
 
       const safe = input.mode === "plain" ? rendered : sanitize(rendered)
+      mark("parse", {
+        key: input.cacheKey ?? input.key,
+        mode: input.mode,
+        math: input.math,
+        streaming: input.streaming,
+        text: input.markdown.length,
+        html: safe.length,
+        took: Math.round(performance.now() - time),
+      })
       if (!input.streaming && key && input.hash) {
         touch(key, { hash: input.hash, html: safe })
       }
@@ -872,6 +1014,18 @@ export function Markdown(
         })
       }
 
+      mark("dom", {
+        key: local.cacheKey ?? "",
+        mode,
+        streaming: isStreaming,
+        upgrading,
+        text: local.text.length,
+        prev: prevHtml.length,
+        next: content.length,
+        nodes: container.childNodes.length,
+        took: Math.round(took),
+      })
+
       if (isStreaming && before) {
         const after = snap(pane)
         if (after) {
@@ -991,6 +1145,11 @@ export function Markdown(
         if (fromEl.isEqualNode(toEl)) return false
         if (stable(fromEl) && stable(toEl) && fromEl.textContent === toEl.textContent) {
           console.debug("[markdown] skip stable math subtree", {
+            key: local.cacheKey ?? "",
+            tag: fromEl.tagName,
+            text: local.text.length,
+          })
+          mark("skip-math", {
             key: local.cacheKey ?? "",
             tag: fromEl.tagName,
             text: local.text.length,
