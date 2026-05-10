@@ -5,11 +5,12 @@ import path from "path"
 import fs from "fs/promises"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Filesystem } from "@/util/filesystem"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const init = () => run(File.Service.use((svc) => svc.init()))
@@ -28,7 +29,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "test.txt")
       await fs.writeFile(filepath, "Hello World", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("test.txt")
@@ -41,7 +42,7 @@ describe("file/index Filesystem patterns", () => {
     test("reads with Filesystem.exists() check", async () => {
       await using tmp = await tmpdir()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           // Non-existent file should return empty content
@@ -57,7 +58,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "test.txt")
       await fs.writeFile(filepath, "  content with spaces  \n\n", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("test.txt")
@@ -71,7 +72,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "empty.txt")
       await fs.writeFile(filepath, "", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("empty.txt")
@@ -86,7 +87,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "multiline.txt")
       await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("multiline.txt")
@@ -103,7 +104,7 @@ describe("file/index Filesystem patterns", () => {
       const binaryContent = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
       await fs.writeFile(filepath, binaryContent)
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("image.png")
@@ -120,7 +121,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "binary.so")
       await fs.writeFile(filepath, Buffer.from([0x7f, 0x45, 0x4c, 0x46]), "binary")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("binary.so")
@@ -137,7 +138,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "test.json")
       await fs.writeFile(filepath, '{"key": "value"}', "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           expect(await Filesystem.mimeType(filepath)).toContain("application/json")
@@ -161,7 +162,7 @@ describe("file/index Filesystem patterns", () => {
         const filepath = path.join(tmp.path, `test.${ext}`)
         await fs.writeFile(filepath, Buffer.from([0x00, 0x00, 0x00, 0x00]), "binary")
 
-        await Instance.provide({
+        await WithInstance.provide({
           directory: tmp.path,
           fn: async () => {
             expect(await Filesystem.mimeType(filepath)).toContain(mime)
@@ -175,7 +176,7 @@ describe("file/index Filesystem patterns", () => {
     test("reads .gitignore via Filesystem.exists() and readText()", async () => {
       await using tmp = await tmpdir({ git: true })
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const gitignorePath = path.join(tmp.path, ".gitignore")
@@ -193,7 +194,7 @@ describe("file/index Filesystem patterns", () => {
     test("reads .ignore file similarly", async () => {
       await using tmp = await tmpdir({ git: true })
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const ignorePath = path.join(tmp.path, ".ignore")
@@ -208,7 +209,7 @@ describe("file/index Filesystem patterns", () => {
     test("handles missing .gitignore gracefully", async () => {
       await using tmp = await tmpdir({ git: true })
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const gitignorePath = path.join(tmp.path, ".gitignore")
@@ -226,7 +227,7 @@ describe("file/index Filesystem patterns", () => {
     test("reads untracked files via Filesystem.readText()", async () => {
       await using tmp = await tmpdir({ git: true })
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const untrackedPath = path.join(tmp.path, "untracked.txt")
@@ -247,7 +248,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "readonly.txt")
       await fs.writeFile(filepath, "content", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const nonExistentPath = path.join(tmp.path, "does-not-exist.txt")
@@ -264,7 +265,7 @@ describe("file/index Filesystem patterns", () => {
     test("handles errors in Filesystem.readArrayBuffer()", async () => {
       await using tmp = await tmpdir()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const nonExistentPath = path.join(tmp.path, "does-not-exist.bin")
@@ -279,7 +280,7 @@ describe("file/index Filesystem patterns", () => {
       const _filepath = path.join(tmp.path, "broken.png")
       // Don't create the file
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           // read() handles missing images gracefully
@@ -297,7 +298,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "test.ts")
       await fs.writeFile(filepath, "export const value = 1", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("test.ts")
@@ -312,7 +313,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "test.mts")
       await fs.writeFile(filepath, "export const value = 1", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("test.mts")
@@ -327,7 +328,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "test.sh")
       await fs.writeFile(filepath, "#!/usr/bin/env bash\necho hello", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("test.sh")
@@ -342,7 +343,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "Dockerfile")
       await fs.writeFile(filepath, "FROM alpine:3.20", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("Dockerfile")
@@ -357,7 +358,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "test.txt")
       await fs.writeFile(filepath, "simple text", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("test.txt")
@@ -372,7 +373,7 @@ describe("file/index Filesystem patterns", () => {
       const filepath = path.join(tmp.path, "test.jpg")
       await fs.writeFile(filepath, Buffer.from([0xff, 0xd8, 0xff, 0xe0]), "binary")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("test.jpg")
@@ -387,7 +388,7 @@ describe("file/index Filesystem patterns", () => {
     test("throws for paths outside project directory", async () => {
       await using tmp = await tmpdir()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await expect(read("../outside.txt")).rejects.toThrow("Access denied")
@@ -398,7 +399,7 @@ describe("file/index Filesystem patterns", () => {
     test("throws for paths outside project directory", async () => {
       await using tmp = await tmpdir()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await expect(read("../outside.txt")).rejects.toThrow("Access denied")
@@ -416,7 +417,7 @@ describe("file/index Filesystem patterns", () => {
       await $`git commit -m "add file"`.cwd(tmp.path).quiet()
       await fs.writeFile(filepath, "modified\nextra line\n", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await status()
@@ -433,7 +434,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir({ git: true })
       await fs.writeFile(path.join(tmp.path, "new.txt"), "line1\nline2\nline3\n", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await status()
@@ -454,7 +455,7 @@ describe("file/index Filesystem patterns", () => {
       await $`git commit -m "add file"`.cwd(tmp.path).quiet()
       await fs.rm(filepath)
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await status()
@@ -477,7 +478,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.rm(path.join(tmp.path, "remove.txt"))
       await fs.writeFile(path.join(tmp.path, "brand-new.txt"), "hello\n", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await status()
@@ -491,7 +492,7 @@ describe("file/index Filesystem patterns", () => {
     test("returns empty for non-git project", async () => {
       await using tmp = await tmpdir()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await status()
@@ -503,7 +504,7 @@ describe("file/index Filesystem patterns", () => {
     test("returns empty for clean repo", async () => {
       await using tmp = await tmpdir({ git: true })
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await status()
@@ -526,7 +527,7 @@ describe("file/index Filesystem patterns", () => {
       for (let i = 0; i < 512; i++) modified[i] = i % 256
       await fs.writeFile(filepath, modified)
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await status()
@@ -547,7 +548,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(path.join(tmp.path, "file.txt"), "content", "utf-8")
       await fs.writeFile(path.join(tmp.path, "subdir", "nested.txt"), "nested", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const nodes = await list()
@@ -571,7 +572,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(path.join(tmp.path, "zz.txt"), "", "utf-8")
       await fs.writeFile(path.join(tmp.path, "aa.txt"), "", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const nodes = await list()
@@ -596,7 +597,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(path.join(tmp.path, ".DS_Store"), "", "utf-8")
       await fs.writeFile(path.join(tmp.path, "visible.txt"), "", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const nodes = await list()
@@ -615,7 +616,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(path.join(tmp.path, "main.ts"), "code", "utf-8")
       await fs.mkdir(path.join(tmp.path, "build"))
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const nodes = await list()
@@ -635,7 +636,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(path.join(tmp.path, "sub", "a.txt"), "", "utf-8")
       await fs.writeFile(path.join(tmp.path, "sub", "b.txt"), "", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const nodes = await list("sub")
@@ -650,7 +651,7 @@ describe("file/index Filesystem patterns", () => {
     test("throws for paths outside project directory", async () => {
       await using tmp = await tmpdir({ git: true })
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await expect(list("../outside")).rejects.toThrow("Access denied")
@@ -662,7 +663,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir()
       await fs.writeFile(path.join(tmp.path, "file.txt"), "hi", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const nodes = await list()
@@ -692,7 +693,7 @@ describe("file/index Filesystem patterns", () => {
     test("empty query returns files", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -706,7 +707,7 @@ describe("file/index Filesystem patterns", () => {
     test("search works before explicit init", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await search({ query: "main", type: "file" })
@@ -718,7 +719,7 @@ describe("file/index Filesystem patterns", () => {
     test("empty query returns dirs sorted with hidden last", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -738,7 +739,7 @@ describe("file/index Filesystem patterns", () => {
     test("fuzzy matches file names", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -752,7 +753,7 @@ describe("file/index Filesystem patterns", () => {
     test("type filter returns only files", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -769,7 +770,7 @@ describe("file/index Filesystem patterns", () => {
     test("type filter returns only directories", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -786,7 +787,7 @@ describe("file/index Filesystem patterns", () => {
     test("respects limit", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -800,7 +801,7 @@ describe("file/index Filesystem patterns", () => {
     test("query starting with dot prefers hidden files", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -815,7 +816,7 @@ describe("file/index Filesystem patterns", () => {
     test("search refreshes after init when files change", async () => {
       await using tmp = await setupSearchableRepo()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -839,7 +840,7 @@ describe("file/index Filesystem patterns", () => {
       await $`git commit -m "add file"`.cwd(tmp.path).quiet()
       await fs.writeFile(filepath, "modified content\n", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("file.txt")
@@ -863,7 +864,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "after\n", "utf-8")
       await $`git add .`.cwd(tmp.path).quiet()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("staged.txt")
@@ -880,7 +881,7 @@ describe("file/index Filesystem patterns", () => {
       await $`git add .`.cwd(tmp.path).quiet()
       await $`git commit -m "add file"`.cwd(tmp.path).quiet()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const result = await read("clean.txt")
@@ -900,7 +901,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(path.join(one.path, "a.ts"), "one", "utf-8")
       await fs.writeFile(path.join(two.path, "b.ts"), "two", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: one.path,
         fn: async () => {
           await init()
@@ -911,7 +912,7 @@ describe("file/index Filesystem patterns", () => {
         },
       })
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: two.path,
         fn: async () => {
           await init()
@@ -927,7 +928,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir({ git: true })
       await fs.writeFile(path.join(tmp.path, "before.ts"), "before", "utf-8")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()
@@ -936,12 +937,12 @@ describe("file/index Filesystem patterns", () => {
         },
       })
 
-      await Instance.disposeAll()
+      await disposeAllInstances()
 
       await fs.writeFile(path.join(tmp.path, "after.ts"), "after", "utf-8")
       await fs.rm(path.join(tmp.path, "before.ts"))
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await init()

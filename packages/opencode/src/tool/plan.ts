@@ -5,7 +5,7 @@ import { Question } from "../question"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../session/message-v2"
 import { Provider } from "@/provider/provider"
-import { Instance } from "../project/instance"
+import { InstanceState } from "@/effect/instance-state"
 import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
@@ -30,8 +30,9 @@ export const PlanExitTool = Tool.define(
       parameters: Parameters,
       execute: (_params: {}, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const instance = yield* InstanceState.context
           const info = yield* session.get(ctx.sessionID)
-          const plan = path.relative(Instance.worktree, Session.plan(info))
+          const plan = path.relative(instance.worktree, Session.plan(info, instance))
           const answers = yield* question.ask({
             sessionID: ctx.sessionID,
             questions: [

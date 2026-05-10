@@ -62,7 +62,12 @@ export type SessionReviewCommentActions = {
 
 export type SessionReviewFocus = { file: string; id: string }
 
-type ReviewDiff = (SnapshotFileDiff | VcsFileDiff) & { preloaded?: PreloadMultiFileDiffResult<any> }
+type RawReviewDiff = (SnapshotFileDiff | VcsFileDiff) & {
+  preloaded?: PreloadMultiFileDiffResult<any>
+}
+type ReviewDiff = ((SnapshotFileDiff & { file: string }) | VcsFileDiff) & {
+  preloaded?: PreloadMultiFileDiffResult<any>
+}
 type Item = ViewDiff & { preloaded?: PreloadMultiFileDiffResult<any> }
 
 function diff(value: unknown): value is ReviewDiff {
@@ -108,7 +113,7 @@ export interface SessionReviewProps {
   classList?: Record<string, boolean | undefined>
   classes?: { root?: string; header?: string; container?: string }
   actions?: JSX.Element
-  diffs: ReviewDiff[]
+  diffs: RawReviewDiff[]
   onViewFile?: (file: string) => void
   readFile?: (path: string) => Promise<FileContent | undefined>
   lineCommentMention?: LineCommentEditorProps["mention"]

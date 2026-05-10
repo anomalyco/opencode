@@ -1,24 +1,26 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { APICallError } from "ai"
-import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime } from "effect"
 import * as Stream from "effect/Stream"
 import z from "zod"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
+import { Image } from "@/image/image"
 import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Token } from "@/util/token"
-import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
-import { provideTmpdirInstance, tmpdir } from "../fixture/fixture"
+import { provideTmpdirInstance, TestInstance, tmpdir } from "../fixture/fixture"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
+import { SessionV2 } from "../../src/v2/session"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Provider } from "@/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
@@ -26,6 +28,7 @@ import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { TestConfig } from "../fixture/config"
 
 void Log.init({ print: false })
 
@@ -143,6 +146,53 @@ async function assistant(sessionID: SessionID, parentID: MessageID, root: string
   return msg
 }
 
+function createUserMessage(sessionID: SessionID, text: string) {
+  return Effect.gen(function* () {
+    const ssn = yield* SessionNs.Service
+    const msg = yield* ssn.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID,
+      agent: "build",
+      model: ref,
+      time: { created: Date.now() },
+    })
+    yield* ssn.updatePart({
+      id: PartID.ascending(),
+      messageID: msg.id,
+      sessionID,
+      type: "text",
+      text,
+    })
+    return msg
+  })
+}
+
+function createAssistantMessage(sessionID: SessionID, parentID: MessageID, root: string) {
+  return SessionNs.Service.use((ssn) =>
+    ssn.updateMessage({
+      id: MessageID.ascending(),
+      role: "assistant",
+      sessionID,
+      mode: "build",
+      agent: "build",
+      path: { cwd: root, root },
+      cost: 0,
+      tokens: {
+        output: 0,
+        input: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: ref.modelID,
+      providerID: ref.providerID,
+      parentID,
+      time: { created: Date.now() },
+      finish: "end_turn",
+    }),
+  )
+}
+
 async function summaryAssistant(sessionID: SessionID, parentID: MessageID, root: string, text: string) {
   const msg: MessageV2.Assistant = {
     id: MessageID.ascending(),
@@ -182,6 +232,14 @@ async function lastCompactionPart(sessionID: SessionID) {
     ?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction")
 }
 
+function readLastCompactionPart(sessionID: SessionID) {
+  return SessionNs.Service.use((ssn) => ssn.messages({ sessionID })).pipe(
+    Effect.map((messages) =>
+      messages.at(-2)?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction"),
+    ),
+  )
+}
+
 function fake(
   input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
   result: "continue" | "compact",
@@ -208,7 +266,7 @@ function layer(result: "continue" | "compact") {
 
 function cfg(compaction?: Config.Info["compaction"]) {
   const base = Config.Info.zod.parse({})
-  return Layer.mock(Config.Service)({
+  return TestConfig.layer({
     get: () => Effect.succeed({ ...base, compaction }),
   })
 }
@@ -234,7 +292,7 @@ function runtime(
 }
 
 const deps = Layer.mergeAll(
-  ProviderTest.fake().layer,
+  wide().layer,
   layer("continue"),
   Agent.defaultLayer,
   Plugin.defaultLayer,
@@ -249,6 +307,30 @@ const env = Layer.mergeAll(
 )
 
 const it = testEffect(env)
+
+const processEnv = Layer.mergeAll(SessionNs.defaultLayer, CrossSpawnSpawner.defaultLayer)
+const itProcess = testEffect(processEnv)
+
+function compactionProcessLayer(options?: {
+  result?: "continue" | "compact"
+  plugin?: Layer.Layer<Plugin.Service>
+  provider?: ReturnType<typeof ProviderTest.fake>
+  config?: Layer.Layer<Config.Service>
+}) {
+  const bus = Bus.layer
+  return SessionCompaction.layer.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        (options?.provider ?? wide()).layer,
+        layer(options?.result ?? "continue"),
+        Agent.defaultLayer,
+        options?.plugin ?? Plugin.defaultLayer,
+        bus,
+        options?.config ?? Config.defaultLayer,
+      ),
+    ),
+  )
+}
 
 function llm() {
   const queue: Array<
@@ -275,7 +357,10 @@ function llm() {
 function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fake(), config = Config.defaultLayer) {
   const bus = Bus.layer
   const status = SessionStatus.layer.pipe(Layer.provide(bus))
-  const processor = SessionProcessorModule.SessionProcessor.layer.pipe(Layer.provide(summary))
+  const processor = SessionProcessorModule.SessionProcessor.layer.pipe(
+    Layer.provide(summary),
+    Layer.provide(Image.defaultLayer),
+  )
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
       Layer.provide(provider.layer),
@@ -595,6 +680,15 @@ describe("session.compaction.create", () => {
           auto: true,
           overflow: true,
         })
+
+        const v2 = yield* SessionV2.Service.use((svc) => svc.messages({ sessionID: info.id })).pipe(
+          Effect.provide(SessionV2.defaultLayer),
+        )
+        expect(v2.at(-1)).toMatchObject({
+          type: "compaction",
+          reason: "auto",
+          summary: "",
+        })
       }),
     ),
   )
@@ -789,253 +883,176 @@ describe("session.compaction.prune", () => {
 })
 
 describe("session.compaction.process", () => {
-  test("throws when parent is not a user message", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const reply = await assistant(session.id, msg.id, tmp.path)
-        const rt = runtime("continue")
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          await expect(
-            rt.runPromise(
-              SessionCompaction.Service.use((svc) =>
-                svc.process({
-                  parentID: reply.id,
-                  messages: msgs,
-                  sessionID: session.id,
-                  auto: false,
-                }),
-              ),
-            ),
-          ).rejects.toThrow(`Compaction parent must be a user message: ${reply.id}`)
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+  it.instance(
+    "throws when parent is not a user message",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const reply = yield* createAssistantMessage(session.id, msg.id, test.directory)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
 
-  test("publishes compacted event on continue", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const msgs = await svc.messages({ sessionID: session.id })
-        const done = defer()
-        let seen = false
-        const rt = runtime("continue", Plugin.defaultLayer, wide())
-        let unsub: (() => void) | undefined
-        try {
-          unsub = await rt.runPromise(
-            Bus.Service.use((svc) =>
-              svc.subscribeCallback(SessionCompaction.Event.Compacted, (evt) => {
-                if (evt.properties.sessionID !== session.id) return
-                seen = true
-                done.resolve()
-              }),
-            ),
-          )
-
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: false,
-              }),
-            ),
-          )
-
-          await Promise.race([
-            done.promise,
-            wait(500).then(() => {
-              throw new Error("timed out waiting for compacted event")
-            }),
-          ])
-          expect(result).toBe("continue")
-          expect(seen).toBe(true)
-        } finally {
-          unsub?.()
-          await rt.dispose()
-        }
-      },
-    })
-  })
-
-  test("marks summary message as errored on compact result", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const rt = runtime("compact", Plugin.defaultLayer, wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: false,
-              }),
-            ),
-          )
-
-          const summary = (await svc.messages({ sessionID: session.id })).find(
-            (msg) => msg.info.role === "assistant" && msg.info.summary,
-          )
-
-          expect(result).toBe("stop")
-          expect(summary?.info.role).toBe("assistant")
-          if (summary?.info.role === "assistant") {
-            expect(summary.info.finish).toBe("error")
-            expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
-          }
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
-
-  test("adds synthetic continue prompt when auto is enabled", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const rt = runtime("continue", Plugin.defaultLayer, wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: true,
-              }),
-            ),
-          )
-
-          const all = await svc.messages({ sessionID: session.id })
-          const last = all.at(-1)
-
-          expect(result).toBe("continue")
-          expect(last?.info.role).toBe("user")
-          expect(last?.parts[0]).toMatchObject({
-            type: "text",
-            synthetic: true,
-            metadata: { compaction_continue: true },
-          })
-          if (last?.parts[0]?.type === "text") {
-            expect(last.parts[0].text).toContain("Continue if you have next steps")
-          }
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
-
-  test("persists tail_start_id for retained recent turns", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        await user(session.id, "first")
-        const keep = await user(session.id, "second")
-        await user(session.id, "third")
-        await SessionCompaction.create({
+      const exit = yield* Effect.exit(
+        SessionCompaction.use.process({
+          parentID: reply.id,
+          messages: msgs,
           sessionID: session.id,
-          agent: "build",
-          model: ref,
           auto: false,
-        })
+        }),
+      )
 
-        const rt = runtime(
-          "continue",
-          Plugin.defaultLayer,
-          wide(),
-          cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }),
-        )
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const parent = msgs.at(-1)?.info.id
-          expect(parent).toBeTruthy()
-          await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: parent!,
-                messages: msgs,
-                sessionID: session.id,
-                auto: false,
-              }),
-            ),
-          )
-
-          const part = await lastCompactionPart(session.id)
-          expect(part?.type).toBe("compaction")
-          expect(part?.tail_start_id).toBe(keep.id)
-        } finally {
-          await rt.dispose()
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(Error)
+        if (error instanceof Error) {
+          expect(error.message).toContain(`Compaction parent must be a user message: ${reply.id}`)
         }
-      },
-    })
-  })
+      }
+    }),
+  )
 
-  test("shrinks retained tail to fit preserve token budget", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        await user(session.id, "first")
-        await user(session.id, "x".repeat(2_000))
-        const keep = await user(session.id, "tiny")
-        await SessionCompaction.create({
-          sessionID: session.id,
-          agent: "build",
-          model: ref,
-          auto: false,
-        })
+  it.instance(
+    "publishes compacted event on continue",
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const done = yield* Deferred.make<void, Error>()
+      let seen = false
+      const unsub = yield* bus.subscribeCallback(SessionCompaction.Event.Compacted, (evt) => {
+        if (evt.properties.sessionID !== session.id) return
+        seen = true
+        Deferred.doneUnsafe(done, Effect.void)
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(unsub))
 
-        const rt = runtime("continue", Plugin.defaultLayer, wide(), cfg({ tail_turns: 2, preserve_recent_tokens: 100 }))
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const parent = msgs.at(-1)?.info.id
-          expect(parent).toBeTruthy()
-          await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: parent!,
-                messages: msgs,
-                sessionID: session.id,
-                auto: false,
-              }),
-            ),
-          )
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
 
-          const part = await lastCompactionPart(session.id)
-          expect(part?.type).toBe("compaction")
-          expect(part?.tail_start_id).toBe(keep.id)
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+      yield* Deferred.await(done).pipe(Effect.timeout("500 millis"))
+      expect(result).toBe("continue")
+      expect(seen).toBe(true)
+    }),
+  )
+
+  itProcess.instance(
+    "marks summary message as errored on compact result",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
+
+      const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+        (msg) => msg.info.role === "assistant" && msg.info.summary,
+      )
+
+      expect(result).toBe("stop")
+      expect(summary?.info.role).toBe("assistant")
+      if (summary?.info.role === "assistant") {
+        expect(summary.info.finish).toBe("error")
+        expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
+      }
+    }).pipe(Effect.provide(compactionProcessLayer({ result: "compact" }))),
+  )
+
+  it.instance(
+    "adds synthetic continue prompt when auto is enabled",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const last = all.at(-1)
+
+      expect(result).toBe("continue")
+      expect(last?.info.role).toBe("user")
+      expect(last?.parts[0]).toMatchObject({
+        type: "text",
+        synthetic: true,
+        metadata: { compaction_continue: true },
+      })
+      if (last?.parts[0]?.type === "text") {
+        expect(last.parts[0].text).toContain("Continue if you have next steps")
+      }
+    }),
+  )
+
+  itProcess.instance(
+    "persists tail_start_id for retained recent turns",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "first")
+      const keep = yield* createUserMessage(session.id, "second")
+      yield* createUserMessage(session.id, "third")
+      yield* SessionCompaction.use.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.at(-1)?.info.id
+      expect(parent).toBeTruthy()
+      yield* SessionCompaction.use.process({
+        parentID: parent!,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
+
+      const part = yield* readLastCompactionPart(session.id)
+      expect(part?.type).toBe("compaction")
+      expect(part?.tail_start_id).toBe(keep.id)
+    }).pipe(Effect.provide(compactionProcessLayer({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) }))),
+  )
+
+  itProcess.instance(
+    "shrinks retained tail to fit preserve token budget",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "first")
+      yield* createUserMessage(session.id, "x".repeat(2_000))
+      const keep = yield* createUserMessage(session.id, "tiny")
+      yield* SessionCompaction.use.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.at(-1)?.info.id
+      expect(parent).toBeTruthy()
+      yield* SessionCompaction.use.process({
+        parentID: parent!,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
+
+      const part = yield* readLastCompactionPart(session.id)
+      expect(part?.type).toBe("compaction")
+      expect(part?.tail_start_id).toBe(keep.id)
+    }).pipe(Effect.provide(compactionProcessLayer({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 100 }) }))),
+  )
 
   test("falls back to full summary when even one recent turn exceeds preserve token budget", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -1046,7 +1063,7 @@ describe("session.compaction.process", () => {
         captured = JSON.stringify(input.messages)
       }),
     )
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1095,7 +1112,7 @@ describe("session.compaction.process", () => {
         captured = JSON.stringify(input.messages)
       }),
     )
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1154,7 +1171,7 @@ describe("session.compaction.process", () => {
         captured = JSON.stringify(input.messages)
       }),
     )
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1206,7 +1223,9 @@ describe("session.compaction.process", () => {
           expect(captured).not.toContain("keep tail")
 
           const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
-          expect(filtered[0]?.info.id).toBe(keep.id)
+          expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
+          expect(filtered[1]?.info.role).toBe("assistant")
+          expect(filtered[1]?.info.role === "assistant" ? filtered[1].info.summary : false).toBe(true)
           expect(filtered.map((msg) => msg.info.id)).not.toContain(large.id)
         } finally {
           await rt.dispose()
@@ -1217,7 +1236,7 @@ describe("session.compaction.process", () => {
 
   test("allows plugins to disable synthetic continue prompt", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1258,91 +1277,70 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("replays the prior user turn on overflow when earlier context exists", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        await user(session.id, "root")
-        const replay = await user(session.id, "image")
-        await svc.updatePart({
-          id: PartID.ascending(),
-          messageID: replay.id,
-          sessionID: session.id,
-          type: "file",
-          mime: "image/png",
-          filename: "cat.png",
-          url: "https://example.com/cat.png",
-        })
-        const msg = await user(session.id, "current")
-        const rt = runtime("continue", Plugin.defaultLayer, wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: true,
-                overflow: true,
-              }),
-            ),
-          )
+  it.instance(
+    "replays the prior user turn on overflow when earlier context exists",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "root")
+      const replay = yield* createUserMessage(session.id, "image")
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: replay.id,
+        sessionID: session.id,
+        type: "file",
+        mime: "image/png",
+        filename: "cat.png",
+        url: "https://example.com/cat.png",
+      })
+      const msg = yield* createUserMessage(session.id, "current")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
 
-          const last = (await svc.messages({ sessionID: session.id })).at(-1)
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+        overflow: true,
+      })
 
-          expect(result).toBe("continue")
-          expect(last?.info.role).toBe("user")
-          expect(last?.parts.some((part) => part.type === "file")).toBe(false)
-          expect(
-            last?.parts.some((part) => part.type === "text" && part.text.includes("Attached image/png: cat.png")),
-          ).toBe(true)
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+      const last = (yield* ssn.messages({ sessionID: session.id })).at(-1)
 
-  test("falls back to overflow guidance when no replayable turn exists", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        await user(session.id, "earlier")
-        const msg = await user(session.id, "current")
+      expect(result).toBe("continue")
+      expect(last?.info.role).toBe("user")
+      expect(last?.parts.some((part) => part.type === "file")).toBe(false)
+      expect(
+        last?.parts.some((part) => part.type === "text" && part.text.includes("Attached image/png: cat.png")),
+      ).toBe(true)
+    }),
+  )
 
-        const rt = runtime("continue", Plugin.defaultLayer, wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: true,
-                overflow: true,
-              }),
-            ),
-          )
+  it.instance(
+    "falls back to overflow guidance when no replayable turn exists",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "earlier")
+      const msg = yield* createUserMessage(session.id, "current")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
 
-          const last = (await svc.messages({ sessionID: session.id })).at(-1)
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+        overflow: true,
+      })
 
-          expect(result).toBe("continue")
-          expect(last?.info.role).toBe("user")
-          if (last?.parts[0]?.type === "text") {
-            expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
-          }
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+      const last = (yield* ssn.messages({ sessionID: session.id })).at(-1)
+
+      expect(result).toBe("continue")
+      expect(last?.info.role).toBe("user")
+      if (last?.parts[0]?.type === "text") {
+        expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
+      }
+    }),
+  )
 
   test("stops quickly when aborted during retry backoff", async () => {
     const stub = llm()
@@ -1368,7 +1366,7 @@ describe("session.compaction.process", () => {
     )
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1442,7 +1440,7 @@ describe("session.compaction.process", () => {
     const ready = defer()
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1544,7 +1542,7 @@ describe("session.compaction.process", () => {
     )
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1586,7 +1584,7 @@ describe("session.compaction.process", () => {
     )
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1638,7 +1636,7 @@ describe("session.compaction.process", () => {
     )
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1706,7 +1704,7 @@ describe("session.compaction.process", () => {
     stub.push(reply("summary one"))
     stub.push(reply("summary two"))
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1778,7 +1776,7 @@ describe("session.compaction.process", () => {
 
   test("ignores previous summaries when sizing the retained tail", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})

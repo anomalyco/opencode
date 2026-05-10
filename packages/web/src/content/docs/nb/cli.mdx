@@ -29,16 +29,16 @@ opencode [project]
 
 #### Flagg
 
-| Flagg        | Kort | Beskrivelse                                                              |
-| ------------ | ---- | ------------------------------------------------------------------------ |
-| `--continue` | `-c` | Fortsett siste økt                                                       |
-| `--session`  | `-s` | Økt ID for å fortsette                                                   |
-| `--fork`     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`) |
-| `--prompt`   |      | Ledetekst som skal brukes                                                |
-| `--model`    | `-m` | Modell å bruke i form av leverandør/modell                               |
-| `--agent`    |      | Agent som skal brukes                                                    |
-| `--port`     |      | Port å lytte på                                                          |
-| `--hostname` |      | Vertsnavn å lytte på                                                     |
+| Flagg                                    | Kort | Beskrivelse                                                              |
+| ---------------------------------------- | ---- | ------------------------------------------------------------------------ |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                       |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                   |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`) |
+| <nobr><code>{"--prompt"}</code></nobr>   |      | Ledetekst som skal brukes                                                |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | Modell å bruke i form av leverandør/modell                               |
+| <nobr><code>{"--agent"}</code></nobr>    |      | Agent som skal brukes                                                    |
+| <nobr><code>{"--port"}</code></nobr>     |      | Port å lytte på                                                          |
+| <nobr><code>{"--hostname"}</code></nobr> |      | Vertsnavn å lytte på                                                     |
 
 ---
 
@@ -78,10 +78,14 @@ opencode attach http://10.20.30.40:4096
 
 #### Flagg
 
-| Flagg       | Kort | Beskrivelse                       |
-| ----------- | ---- | --------------------------------- |
-| `--dir`     |      | Arbeidskatalog for å starte TUI i |
-| `--session` | `-s` | Økt ID for å fortsette            |
+| Flagg                                    | Kort | Beskrivelse                                                                                        |
+| ---------------------------------------- | ---- | -------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Arbeidskatalog for å starte TUI i                                                                  |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                                                 |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                                             |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                           |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Passord for grunnleggende autentisering (standard: `OPENCODE_SERVER_PASSWORD`)                     |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brukernavn for grunnleggende autentisering (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`) |
 
 ---
 
@@ -187,10 +191,10 @@ opencode github run
 
 ##### Flagg
 
-| Flagg     | Beskrivelse                                  |
-| --------- | -------------------------------------------- |
-| `--event` | GitHub mock-hendelse agenten skal kjøres for |
-| `--token` | GitHub personlig tilgangsnøkkel              |
+| Flagg                                 | Beskrivelse                                  |
+| ------------------------------------- | -------------------------------------------- |
+| <nobr><code>{"--event"}</code></nobr> | GitHub mock-hendelse agenten skal kjøres for |
+| <nobr><code>{"--token"}</code></nobr> | GitHub personlig tilgangsnøkkel              |
 
 ---
 
@@ -296,10 +300,10 @@ opencode models anthropic
 
 #### Flagg
 
-| Flagg       | Beskrivelse                                                         |
-| ----------- | ------------------------------------------------------------------- |
-| `--refresh` | Oppdater modellbufferen fra models.dev                              |
-| `--verbose` | Bruk mer detaljert modellutdata (inkluderer metadata som kostnader) |
+| Flagg                                   | Beskrivelse                                                         |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| <nobr><code>{"--refresh"}</code></nobr> | Oppdater modellbufferen fra models.dev                              |
+| <nobr><code>{"--verbose"}</code></nobr> | Bruk mer detaljert modellutdata (inkluderer metadata som kostnader) |
 
 Bruk `--refresh`-flagget for å oppdatere den bufrede modelllisten. Dette er nyttig når nye modeller er lagt til en leverandør og du vil se dem i OpenCode.
 
@@ -335,20 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flagg
 
-| Flagg        | Kort | Beskrivelse                                                              |
-| ------------ | ---- | ------------------------------------------------------------------------ |
-| `--command`  |      | Kommandoen for å kjøre, bruk melding for args                            |
-| `--continue` | `-c` | Fortsett siste økt                                                       |
-| `--session`  | `-s` | Økt ID for å fortsette                                                   |
-| `--fork`     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`) |
-| `--share`    |      | Del økten                                                                |
-| `--model`    | `-m` | Modell å bruke i form av leverandør/modell                               |
-| `--agent`    |      | Agent å bruke                                                            |
-| `--file`     | `-f` | Fil(er) som skal legges ved meldingen                                    |
-| `--format`   |      | Format: standard (formatert) eller json (rå JSON hendelser)              |
-| `--title`    |      | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt) |
-| `--attach`   |      | Koble til en kjørende OpenCode-server (f.eks. http://localhost:4096)     |
-| `--port`     |      | Port for den lokale serveren (standard til tilfeldig port)               |
+| Flagg                                    | Kort | Beskrivelse                                                                                        |
+| ---------------------------------------- | ---- | -------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |      | Kommandoen for å kjøre, bruk melding for args                                                      |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                                                 |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                                             |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                           |
+| <nobr><code>{"--share"}</code></nobr>    |      | Del økten                                                                                          |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | Modell å bruke i form av leverandør/modell                                                         |
+| <nobr><code>{"--agent"}</code></nobr>    |      | Agent å bruke                                                                                      |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | Fil(er) som skal legges ved meldingen                                                              |
+| <nobr><code>{"--format"}</code></nobr>   |      | Format: standard (formatert) eller json (rå JSON hendelser)                                        |
+| <nobr><code>{"--title"}</code></nobr>    |      | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt)                           |
+| <nobr><code>{"--attach"}</code></nobr>   |      | Koble til en kjørende OpenCode-server (f.eks. http://localhost:4096)                               |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Passord for grunnleggende autentisering (standard: `OPENCODE_SERVER_PASSWORD`)                     |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brukernavn for grunnleggende autentisering (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`) |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Katalog å kjøre i, eller sti på fjernserveren ved tilkobling                                       |
+| <nobr><code>{"--variant"}</code></nobr>  |      | Modellvariant (leverandørspesifikk resonneringsinnsats)                                            |
+| <nobr><code>{"--thinking"}</code></nobr> |      | Vis tenkeblokker                                                                                   |
+| <nobr><code>{"--port"}</code></nobr>     |      | Port for den lokale serveren (standard til tilfeldig port)                                         |
 
 ---
 
@@ -364,12 +373,12 @@ Dette starter en HTTP-server som gir API tilgang til OpenCode-funksjonalitet ute
 
 #### Flagg
 
-| Flagg        | Beskrivelse                                        |
-| ------------ | -------------------------------------------------- |
-| `--port`     | Port å lytte på                                    |
-| `--hostname` | Vertsnavn å lytte på                               |
-| `--mdns`     | Aktiver mDNS-oppdagelse                            |
-| `--cors`     | Ytterligere nettleseropprinnelse som tillater CORS |
+| Flagg                                    | Beskrivelse                                        |
+| ---------------------------------------- | -------------------------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | Port å lytte på                                    |
+| <nobr><code>{"--hostname"}</code></nobr> | Vertsnavn å lytte på                               |
+| <nobr><code>{"--mdns"}</code></nobr>     | Aktiver mDNS-oppdagelse                            |
+| <nobr><code>{"--cors"}</code></nobr>     | Ytterligere nettleseropprinnelse som tillater CORS |
 
 ---
 
@@ -393,10 +402,10 @@ opencode session list
 
 ##### Flagg
 
-| Flagg         | Kort | Beskrivelse                              |
-| ------------- | ---- | ---------------------------------------- |
-| `--max-count` | `-n` | Begrens til N siste økter                |
-| `--format`    |      | Utdataformat: tabell eller json (tabell) |
+| Flagg                                     | Kort | Beskrivelse                              |
+| ----------------------------------------- | ---- | ---------------------------------------- |
+| <nobr><code>{"--max-count"}</code></nobr> | `-n` | Begrens til N siste økter                |
+| <nobr><code>{"--format"}</code></nobr>    |      | Utdataformat: tabell eller json (tabell) |
 
 ---
 
@@ -410,12 +419,12 @@ opencode stats
 
 #### Flagg
 
-| Flagg       | Beskrivelse                                                                      |
-| ----------- | -------------------------------------------------------------------------------- |
-| `--days`    | Vis statistikk for de siste N dagene (hele tiden)                                |
-| `--tools`   | Antall verktøy som skal vises (alle)                                             |
-| `--models`  | Vis oversikt over modellbruk (skjult som standard). Gi et tall for å vise topp N |
-| `--project` | Filtrer etter prosjekt (alle prosjekter, tom streng: gjeldende prosjekt)         |
+| Flagg                                   | Beskrivelse                                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------- |
+| <nobr><code>{"--days"}</code></nobr>    | Vis statistikk for de siste N dagene (hele tiden)                                |
+| <nobr><code>{"--tools"}</code></nobr>   | Antall verktøy som skal vises (alle)                                             |
+| <nobr><code>{"--models"}</code></nobr>  | Vis oversikt over modellbruk (skjult som standard). Gi et tall for å vise topp N |
+| <nobr><code>{"--project"}</code></nobr> | Filtrer etter prosjekt (alle prosjekter, tom streng: gjeldende prosjekt)         |
 
 ---
 
@@ -460,12 +469,12 @@ Dette starter en HTTP-server og åpner en nettleser for å få tilgang til OpenC
 
 #### Flagg
 
-| Flagg        | Beskrivelse                                        |
-| ------------ | -------------------------------------------------- |
-| `--port`     | Port å lytte på                                    |
-| `--hostname` | Vertsnavn å lytte på                               |
-| `--mdns`     | Aktiver mDNS-oppdagelse                            |
-| `--cors`     | Ytterligere nettleseropprinnelse som tillater CORS |
+| Flagg                                    | Beskrivelse                                        |
+| ---------------------------------------- | -------------------------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | Port å lytte på                                    |
+| <nobr><code>{"--hostname"}</code></nobr> | Vertsnavn å lytte på                               |
+| <nobr><code>{"--mdns"}</code></nobr>     | Aktiver mDNS-oppdagelse                            |
+| <nobr><code>{"--cors"}</code></nobr>     | Ytterligere nettleseropprinnelse som tillater CORS |
 
 ---
 
@@ -481,11 +490,11 @@ Denne kommandoen starter en ACP-server som kommuniserer via stdin/stdout ved å 
 
 #### Flagg
 
-| Flagg        | Beskrivelse          |
-| ------------ | -------------------- |
-| `--cwd`      | Arbeidskatalog       |
-| `--port`     | Port å lytte på      |
-| `--hostname` | Vertsnavn å lytte på |
+| Flagg                                    | Beskrivelse          |
+| ---------------------------------------- | -------------------- |
+| <nobr><code>{"--cwd"}</code></nobr>      | Arbeidskatalog       |
+| <nobr><code>{"--port"}</code></nobr>     | Port å lytte på      |
+| <nobr><code>{"--hostname"}</code></nobr> | Vertsnavn å lytte på |
 
 ---
 
@@ -499,12 +508,12 @@ opencode uninstall
 
 #### Flagg
 
-| Flagg           | Kort | Beskrivelse                                   |
-| --------------- | ---- | --------------------------------------------- |
-| `--keep-config` | `-c` | Behold konfigurasjonsfiler                    |
-| `--keep-data`   | `-d` | Behold øktdata og øyeblikksbilder             |
-| `--dry-run`     |      | Vis hva som ville blitt fjernet uten å fjerne |
-| `--force`       | `-f` | Hopp over bekreftelsesforespørsler            |
+| Flagg                                       | Kort | Beskrivelse                                   |
+| ------------------------------------------- | ---- | --------------------------------------------- |
+| <nobr><code>{"--keep-config"}</code></nobr> | `-c` | Behold konfigurasjonsfiler                    |
+| <nobr><code>{"--keep-data"}</code></nobr>   | `-d` | Behold øktdata og øyeblikksbilder             |
+| <nobr><code>{"--dry-run"}</code></nobr>     |      | Vis hva som ville blitt fjernet uten å fjerne |
+| <nobr><code>{"--force"}</code></nobr>       | `-f` | Hopp over bekreftelsesforespørsler            |
 
 ---
 
@@ -530,9 +539,9 @@ opencode upgrade v0.1.48
 
 #### Flagg
 
-| Flagg      | Kort | Beskrivelse                                                    |
-| ---------- | ---- | -------------------------------------------------------------- |
-| `--method` | `-m` | Installasjonsmetoden som ble brukt: curl, npm, pnpm, bun, brew |
+| Flagg                                  | Kort | Beskrivelse                                                    |
+| -------------------------------------- | ---- | -------------------------------------------------------------- |
+| <nobr><code>{"--method"}</code></nobr> | `-m` | Installasjonsmetoden som ble brukt: curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -540,12 +549,12 @@ opencode upgrade v0.1.48
 
 OpenCode CLI bruker følgende globale flagg.
 
-| Flagg          | Kort | Beskrivelse                         |
-| -------------- | ---- | ----------------------------------- |
-| `--help`       | `-h` | Vis hjelp                           |
-| `--version`    | `-v` | Skriv ut versjonsnummer             |
-| `--print-logs` |      | Skriv ut logger til stderr          |
-| `--log-level`  |      | Loggnivå (DEBUG, INFO, WARN, ERROR) |
+| Flagg                                      | Kort | Beskrivelse                         |
+| ------------------------------------------ | ---- | ----------------------------------- |
+| <nobr><code>{"--help"}</code></nobr>       | `-h` | Vis hjelp                           |
+| <nobr><code>{"--version"}</code></nobr>    | `-v` | Skriv ut versjonsnummer             |
+| <nobr><code>{"--print-logs"}</code></nobr> |      | Skriv ut logger til stderr          |
+| <nobr><code>{"--log-level"}</code></nobr>  |      | Loggnivå (DEBUG, INFO, WARN, ERROR) |
 
 ---
 

@@ -83,6 +83,26 @@ describe("Session.Info", () => {
     expect(Session.Info.zod.parse(input)).toEqual(input)
   })
 
+  test("accepts migrated summary diffs without file details", () => {
+    const input = {
+      id: sessionID,
+      slug: "legacy-diff",
+      projectID,
+      directory: "/tmp/proj",
+      title: "Legacy diff",
+      version: "0.1.0",
+      summary: {
+        additions: 1,
+        deletions: 0,
+        files: 1,
+        diffs: [{ additions: 1, deletions: 0 }],
+      },
+      time: { created: 1, updated: 2 },
+    }
+    expect(decode(input)).toEqual(input)
+    expect(Session.Info.zod.parse(input)).toEqual(input)
+  })
+
   test("rejects unbranded session id", () => {
     const bad = { id: "not-a-session-id" } as unknown
     expect(() => decode(bad)).toThrow()
@@ -230,8 +250,21 @@ describe("SessionStatus.Info", () => {
     expect(SessionStatus.Info.zod.parse({ type: "idle" })).toEqual({ type: "idle" })
   })
 
-  test("retry carries attempt/message/next", () => {
-    const input = { type: "retry" as const, attempt: 1, message: "transient", next: 500 }
+  test("retry carries attempt/message/action/next", () => {
+    const input = {
+      type: "retry" as const,
+      attempt: 1,
+      message: "transient",
+      action: {
+        reason: "free_tier_limit",
+        provider: "opencode",
+        title: "Free limit reached",
+        message: "Subscribe to OpenCode Go.",
+        label: "subscribe",
+        link: "https://opencode.ai/go",
+      },
+      next: 500,
+    }
     expect(decode(input)).toEqual(input)
     expect(SessionStatus.Info.zod.parse(input)).toEqual(input)
   })

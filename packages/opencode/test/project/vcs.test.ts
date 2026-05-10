@@ -1,12 +1,14 @@
 import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
+import { parsePatch } from "diff"
 import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { GlobalBus } from "../../src/bus/global"
 import { Vcs } from "@/project/vcs"
 
@@ -18,7 +20,7 @@ const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe
 // ---------------------------------------------------------------------------
 
 async function withVcs(directory: string, body: () => Promise<void>) {
-  return Instance.provide({
+  return WithInstance.provide({
     directory,
     fn: async () => {
       await AppRuntime.runPromise(
@@ -36,7 +38,7 @@ async function withVcs(directory: string, body: () => Promise<void>) {
 }
 
 function withVcsOnly(directory: string, body: () => Promise<void>) {
-  return Instance.provide({
+  return WithInstance.provide({
     directory,
     fn: async () => {
       await AppRuntime.runPromise(
@@ -85,7 +87,7 @@ function nextBranchUpdate(directory: string, timeout = 10_000) {
 
 describeVcs("Vcs", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("branch() returns current branch name", async () => {
@@ -158,7 +160,7 @@ describeVcs("Vcs", () => {
 
 describe("Vcs diff", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("defaultBranch() falls back to main", async () => {
@@ -233,6 +235,7 @@ describe("Vcs diff", () => {
           }),
         ]),
       )
+      expect(diff.find((item) => item.file === "file.txt")?.patch).toContain("diff --git")
     })
   })
 
@@ -257,6 +260,56 @@ describe("Vcs diff", () => {
       )
     })
   })
+
+  test("diff('git') keeps batched patches aligned for type changes", async () => {
+    if (process.platform === "win32") return
+
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, "a.txt"), "old\n", "utf-8")
+    await fs.writeFile(path.join(tmp.path, "b.txt"), "old\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add files"`.cwd(tmp.path).quiet()
+    await fs.unlink(path.join(tmp.path, "a.txt"))
+    await fs.symlink("target", path.join(tmp.path, "a.txt"))
+    await fs.writeFile(path.join(tmp.path, "b.txt"), "new\n", "utf-8")
+
+    await withVcsOnly(tmp.path, async () => {
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
+      const a = diff.find((item) => item.file === "a.txt")
+      const b = diff.find((item) => item.file === "b.txt")
+
+      expect(a?.patch).toContain("deleted file mode")
+      expect(a?.patch).toContain("new file mode")
+      expect(b?.patch).toContain("+new")
+    })
+  })
+
+  test("diff('git') keeps carriage returns inside patch hunks", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, "file.txt"), "keep\nsame\rdiff --git inside\ndelete\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+    await fs.writeFile(path.join(tmp.path, "file.txt"), "keep\nadd\nsame\rdiff --git inside\n", "utf-8")
+
+    await withVcsOnly(tmp.path, async () => {
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
+      const file = diff.find((item) => item.file === "file.txt")
+
+      expect(file?.patch).toContain(" same\rdiff --git inside")
+      expect(file?.patch).toContain("-delete")
+      expect(() => parsePatch(file?.patch ?? "")).not.toThrow()
+    })
+  }, 20_000)
 
   test("diff('branch') returns changes against default branch", async () => {
     await using tmp = await tmpdir({ git: true })

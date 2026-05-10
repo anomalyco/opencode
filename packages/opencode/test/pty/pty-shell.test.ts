@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Pty } from "../../src/pty"
 import { Shell } from "../../src/shell/shell"
 import { tmpdir } from "../fixture/fixture"
@@ -17,7 +18,7 @@ describe("pty shell args", () => {
       "does not add login args to pwsh",
       async () => {
         await using dir = await tmpdir()
-        await Instance.provide({
+        await WithInstance.provide({
           directory: dir.path,
           fn: () =>
             AppRuntime.runPromise(
@@ -47,7 +48,7 @@ describe("pty shell args", () => {
       "adds login args to bash",
       async () => {
         await using dir = await tmpdir()
-        await Instance.provide({
+        await WithInstance.provide({
           directory: dir.path,
           fn: () =>
             AppRuntime.runPromise(
@@ -78,7 +79,7 @@ describe("pty configured shell", () => {
       await using dir = await tmpdir({
         config: { shell: Shell.name(configured) },
       })
-      await Instance.provide({
+      await WithInstance.provide({
         directory: dir.path,
         fn: () =>
           AppRuntime.runPromise(

@@ -5,8 +5,9 @@ import path from "path"
 import { Effect } from "effect"
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Filesystem } from "@/util/filesystem"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 
 // Git always outputs /-separated paths internally. Snapshot.patch() joins them
 // with path.join (which produces \ on Windows) then normalizes back to /.
@@ -14,7 +15,7 @@ import { provideInstance, tmpdir } from "../fixture/fixture"
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 async function bootstrap() {
@@ -47,7 +48,7 @@ function run<A>(dir: string, body: (snapshot: Snapshot.Interface) => Effect.Effe
 
 test("tracks deleted files correctly", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -62,7 +63,7 @@ test("tracks deleted files correctly", async () => {
 
 test("revert should remove new files", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -86,7 +87,7 @@ test("revert should remove new files", async () => {
 
 test("revert in subdirectory", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -113,7 +114,7 @@ test("revert in subdirectory", async () => {
 
 test("multiple file operations", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -145,7 +146,7 @@ test("multiple file operations", async () => {
 
 test("empty directory handling", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -160,7 +161,7 @@ test("empty directory handling", async () => {
 
 test("binary file handling", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -184,7 +185,7 @@ test("binary file handling", async () => {
 
 test("symlink handling", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -199,7 +200,7 @@ test("symlink handling", async () => {
 
 test("file under size limit handling", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -214,7 +215,7 @@ test("file under size limit handling", async () => {
 
 test("large added files are skipped", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -231,7 +232,7 @@ test("large added files are skipped", async () => {
 
 test("nested directory revert", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -256,7 +257,7 @@ test("nested directory revert", async () => {
 
 test("special characters in filenames", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -276,7 +277,7 @@ test("special characters in filenames", async () => {
 
 test("revert with empty patches", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       // Should not crash with empty patches
@@ -290,7 +291,7 @@ test("revert with empty patches", async () => {
 
 test("patch with invalid hash", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -309,7 +310,7 @@ test("patch with invalid hash", async () => {
 
 test("revert non-existent file", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -333,7 +334,7 @@ test("revert non-existent file", async () => {
 
 test("unicode filenames", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -373,7 +374,7 @@ test("unicode filenames", async () => {
 
 test.skip("unicode filenames modification and restore", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const chineseFile = fwd(tmp.path, "文件.txt")
@@ -402,7 +403,7 @@ test.skip("unicode filenames modification and restore", async () => {
 
 test("unicode filenames in subdirectories", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -428,7 +429,7 @@ test("unicode filenames in subdirectories", async () => {
 
 test("very long filenames", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -455,7 +456,7 @@ test("very long filenames", async () => {
 
 test("hidden files", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -475,7 +476,7 @@ test("hidden files", async () => {
 
 test("nested symlinks", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -495,7 +496,7 @@ test("nested symlinks", async () => {
 
 test("file permissions and ownership changes", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -516,7 +517,7 @@ test("file permissions and ownership changes", async () => {
 
 test("circular symlinks", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -547,7 +548,7 @@ test("source project gitignore is respected - ignored files are not snapshotted"
     },
   })
 
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -576,7 +577,7 @@ test("source project gitignore is respected - ignored files are not snapshotted"
 
 test("gitignore changes", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -600,7 +601,7 @@ test("gitignore changes", async () => {
 
 test("files tracked in snapshot but now gitignored are filtered out", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       // First, create a file and snapshot it
@@ -634,7 +635,7 @@ test("files tracked in snapshot but now gitignored are filtered out", async () =
 
 test("gitignore updated between track calls filters from diff", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       // a.txt is already committed from bootstrap - track it in snapshot
@@ -669,7 +670,7 @@ test("gitignore updated between track calls filters from diff", async () => {
 
 test("git info exclude changes", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -695,7 +696,7 @@ test("git info exclude changes", async () => {
 
 test("git info exclude keeps global excludes", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const global = `${tmp.path}/global.ignore`
@@ -731,7 +732,7 @@ test("git info exclude keeps global excludes", async () => {
 
 test("concurrent file operations during patch", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -763,7 +764,7 @@ test("snapshot state isolation between projects", async () => {
   await using tmp1 = await bootstrap()
   await using tmp2 = await bootstrap()
 
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp1.path,
     fn: async () => {
       const before1 = await run(tmp1.path, (snapshot) => snapshot.track())
@@ -773,7 +774,7 @@ test("snapshot state isolation between projects", async () => {
     },
   })
 
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp2.path,
     fn: async () => {
       const before2 = await run(tmp2.path, (snapshot) => snapshot.track())
@@ -793,14 +794,14 @@ test("patch detects changes in secondary worktree", async () => {
   await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
 
   try {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         expect(await run(tmp.path, (snapshot) => snapshot.track())).toBeTruthy()
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: worktreePath,
       fn: async () => {
         const before = await run(worktreePath, (snapshot) => snapshot.track())
@@ -825,7 +826,7 @@ test("revert only removes files in invoking worktree", async () => {
   await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
 
   try {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         expect(await run(tmp.path, (snapshot) => snapshot.track())).toBeTruthy()
@@ -834,7 +835,7 @@ test("revert only removes files in invoking worktree", async () => {
     const primaryFile = `${tmp.path}/worktree.txt`
     await Filesystem.write(primaryFile, "primary content")
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: worktreePath,
       fn: async () => {
         const before = await run(worktreePath, (snapshot) => snapshot.track())
@@ -869,14 +870,14 @@ test("diff reports worktree-only/shared edits and ignores primary-only", async (
   await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
 
   try {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         expect(await run(tmp.path, (snapshot) => snapshot.track())).toBeTruthy()
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: worktreePath,
       fn: async () => {
         const before = await run(worktreePath, (snapshot) => snapshot.track())
@@ -903,7 +904,7 @@ test("diff reports worktree-only/shared edits and ignores primary-only", async (
 
 test("track with no changes returns same hash", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const hash1 = await run(tmp.path, (snapshot) => snapshot.track())
@@ -922,7 +923,7 @@ test("track with no changes returns same hash", async () => {
 
 test("diff function with various changes", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -943,7 +944,7 @@ test("diff function with various changes", async () => {
 
 test("restore function", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -977,7 +978,7 @@ test("restore function", async () => {
 
 test("revert should not delete files that existed but were deleted in snapshot", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const snapshot1 = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1007,7 +1008,7 @@ test("revert should not delete files that existed but were deleted in snapshot",
 
 test("revert preserves file that existed in snapshot when deleted then recreated", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       await Filesystem.write(`${tmp.path}/existing.txt`, "original content")
@@ -1044,7 +1045,7 @@ test("revert preserves file that existed in snapshot when deleted then recreated
 
 test("diffFull sets status based on git change type", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       await Filesystem.write(`${tmp.path}/grow.txt`, "one\n")
@@ -1090,7 +1091,7 @@ test("diffFull sets status based on git change type", async () => {
 
 test("diffFull with new file additions", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1115,7 +1116,7 @@ test("diffFull with new file additions", async () => {
 
 test("diffFull with a large interleaved mixed diff", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const ids = Array.from({ length: 60 }, (_, i) => i.toString().padStart(3, "0"))
@@ -1178,7 +1179,7 @@ test("diffFull with a large interleaved mixed diff", async () => {
 
 test("diffFull preserves git diff order across batch boundaries", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const ids = Array.from({ length: 140 }, (_, i) => i.toString().padStart(3, "0"))
@@ -1204,7 +1205,7 @@ test("diffFull preserves git diff order across batch boundaries", async () => {
 
 test("diffFull with file modifications", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1230,7 +1231,7 @@ test("diffFull with file modifications", async () => {
 
 test("diffFull with file deletions", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1255,7 +1256,7 @@ test("diffFull with file deletions", async () => {
 
 test("diffFull with multiple line additions", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1281,7 +1282,7 @@ test("diffFull with multiple line additions", async () => {
 
 test("diffFull with addition and deletion", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1313,7 +1314,7 @@ test("diffFull with addition and deletion", async () => {
 
 test("diffFull with multiple additions and deletions", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1355,7 +1356,7 @@ test("diffFull with multiple additions and deletions", async () => {
 
 test("diffFull with no changes", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1372,7 +1373,7 @@ test("diffFull with no changes", async () => {
 
 test("diffFull with binary file changes", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const before = await run(tmp.path, (snapshot) => snapshot.track())
@@ -1395,7 +1396,7 @@ test("diffFull with binary file changes", async () => {
 
 test("diffFull with whitespace changes", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       await Filesystem.write(`${tmp.path}/whitespace.txt`, "line1\nline2")
@@ -1419,7 +1420,7 @@ test("diffFull with whitespace changes", async () => {
 
 test("revert with overlapping files across patches uses first patch hash", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       // Write initial content and snapshot
@@ -1453,7 +1454,7 @@ test("revert with overlapping files across patches uses first patch hash", async
 
 test("revert preserves patch order when the same hash appears again", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       await $`mkdir -p ${tmp.path}/foo`.quiet()
@@ -1490,7 +1491,7 @@ test("revert preserves patch order when the same hash appears again", async () =
 
 test("revert handles large mixed batches across chunk boundaries", async () => {
   await using tmp = await bootstrap()
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const base = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))

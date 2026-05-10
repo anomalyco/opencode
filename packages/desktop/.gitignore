@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+out/
+
+resources/opencode-cli*
+resources/icons

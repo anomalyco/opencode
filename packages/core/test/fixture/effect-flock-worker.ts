@@ -18,20 +18,17 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
-const msg: Msg = JSON.parse(process.argv[2]!)
+const msg: Msg = JSON.parse(process.argv[2])
 
-const testGlobal = Layer.succeed(
-  Global.Service,
-  Global.Service.of({
-    home: os.homedir(),
-    data: os.tmpdir(),
-    cache: os.tmpdir(),
-    config: os.tmpdir(),
-    state: os.tmpdir(),
-    bin: os.tmpdir(),
-    log: os.tmpdir(),
-  }),
-)
+const testGlobal = Global.layerWith({
+  home: os.homedir(),
+  data: os.tmpdir(),
+  cache: os.tmpdir(),
+  config: os.tmpdir(),
+  state: os.tmpdir(),
+  bin: os.tmpdir(),
+  log: os.tmpdir(),
+})
 
 const testLayer = EffectFlock.layer.pipe(Layer.provide(testGlobal), Layer.provide(AppFileSystem.defaultLayer))
 

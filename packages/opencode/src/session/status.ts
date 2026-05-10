@@ -2,8 +2,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "./schema"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import z from "zod"
 
@@ -13,9 +13,19 @@ export const Info = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("retry"),
-    attempt: Schema.Number,
+    attempt: NonNegativeInt,
     message: Schema.String,
-    next: Schema.Number,
+    action: Schema.optional(
+      Schema.Struct({
+        reason: Schema.String,
+        provider: Schema.String,
+        title: Schema.String,
+        message: Schema.String,
+        label: Schema.String,
+        link: Schema.optional(Schema.String),
+      }),
+    ),
+    next: NonNegativeInt,
   }),
   Schema.Struct({
     type: Schema.Literal("busy"),
