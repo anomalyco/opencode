@@ -178,10 +178,12 @@ async function buildConfigDir(args: {
         // Allow the read+write tool set; disable web/skill/task to keep the
         // agent focused on local code editing.
         permission: {
+          // Glob-keyed `PermissionActionConfig` for file/shell access.
           edit: { "**": "allow" },
           bash: { "*": "allow" },
-          webfetch: { "*": "deny" },
-          websearch: { "*": "deny" },
+          // webfetch / websearch use a different schema (single action, not
+          // a glob map) and we already disable them in `tools` below — no
+          // need for an explicit entry here.
         },
         tools: {
           bash: true,
