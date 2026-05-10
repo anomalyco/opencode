@@ -232,6 +232,32 @@ async function lastCompactionPart(sessionID: SessionID) {
     ?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction")
 }
 
+function createCompactionMarker(sessionID: SessionID) {
+  return SessionNs.Service.use((ssn) =>
+    Effect.gen(function* () {
+      const msg = yield* ssn.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        model: ref,
+        sessionID,
+        agent: "build",
+        time: { created: Date.now() },
+      })
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: msg.id,
+        sessionID: msg.sessionID,
+        type: "compaction",
+        auto: false,
+      })
+    }),
+  )
+}
+
+async function createCompactionMarkerAsync(sessionID: SessionID) {
+  return run(createCompactionMarker(sessionID))
+}
+
 function readLastCompactionPart(sessionID: SessionID) {
   return SessionNs.Service.use((ssn) => ssn.messages({ sessionID })).pipe(
     Effect.map((messages) =>
@@ -1534,12 +1560,7 @@ describe("session.compaction.process", () => {
         await user(session.id, "older context")
         await user(session.id, "keep this turn")
         await user(session.id, "and this one too")
-        await SessionCompaction.create({
-          sessionID: session.id,
-          agent: "build",
-          model: ref,
-          auto: false,
-        })
+        await createCompactionMarkerAsync(session.id)
 
         const rt = liveRuntime(stub.layer, wide())
         try {
@@ -1585,12 +1606,7 @@ describe("session.compaction.process", () => {
         const session = await svc.create({})
         await user(session.id, "older context")
         await user(session.id, "keep this turn")
-        await SessionCompaction.create({
-          sessionID: session.id,
-          agent: "build",
-          model: ref,
-          auto: false,
-        })
+        await createCompactionMarkerAsync(session.id)
 
         const rt = liveRuntime(stub.layer, wide())
         try {
@@ -1609,12 +1625,7 @@ describe("session.compaction.process", () => {
           )
 
           await user(session.id, "latest turn")
-          await SessionCompaction.create({
-            sessionID: session.id,
-            agent: "build",
-            model: ref,
-            auto: false,
-          })
+          await createCompactionMarkerAsync(session.id)
 
           msgs = MessageV2.filterCompacted(MessageV2.stream(session.id))
           parent = msgs.at(-1)?.info.id
@@ -1654,12 +1665,7 @@ describe("session.compaction.process", () => {
         const u1 = await user(session.id, "one")
         const u2 = await user(session.id, "two")
         const u3 = await user(session.id, "three")
-        await SessionCompaction.create({
-          sessionID: session.id,
-          agent: "build",
-          model: ref,
-          auto: false,
-        })
+        await createCompactionMarkerAsync(session.id)
 
         const rt = liveRuntime(stub.layer, wide(), cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }))
         try {
@@ -1678,12 +1684,7 @@ describe("session.compaction.process", () => {
           )
 
           const u4 = await user(session.id, "four")
-          await SessionCompaction.create({
-            sessionID: session.id,
-            agent: "build",
-            model: ref,
-            auto: false,
-          })
+          await createCompactionMarkerAsync(session.id)
 
           msgs = MessageV2.filterCompacted(MessageV2.stream(session.id))
           parent = msgs.at(-1)?.info.id
@@ -1734,12 +1735,7 @@ describe("session.compaction.process", () => {
           text: "keep reply",
         })
 
-        await SessionCompaction.create({
-          sessionID: session.id,
-          agent: "build",
-          model: ref,
-          auto: false,
-        })
+        await createCompactionMarkerAsync(session.id)
         const firstCompaction = (await svc.messages({ sessionID: session.id })).at(-1)?.info.id
         expect(firstCompaction).toBeTruthy()
         await summaryAssistant(session.id, firstCompaction!, tmp.path, "summary ".repeat(800))
@@ -1754,12 +1750,7 @@ describe("session.compaction.process", () => {
           text: "recent reply",
         })
 
-        await SessionCompaction.create({
-          sessionID: session.id,
-          agent: "build",
-          model: ref,
-          auto: false,
-        })
+        await createCompactionMarkerAsync(session.id)
 
         const rt = runtime("continue", Plugin.defaultLayer, wide(), cfg({ tail_turns: 2, preserve_recent_tokens: 500 }))
         try {
