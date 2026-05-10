@@ -1,4 +1,4 @@
-import { type CliRenderer } from "@opentui/core"
+import { type CliRenderer, type Renderable } from "@opentui/core"
 import * as addons from "@opentui/keymap/addons/opentui"
 import { stringifyKeyStroke } from "@opentui/keymap"
 import {
@@ -8,9 +8,10 @@ import {
 import {
   KeymapProvider,
   reactiveMatcherFromSignal,
-  useBindings,
   useKeymap,
   useKeymapSelector,
+  useBindings as useKeymapBindings,
+  type UseBindingsLayer,
 } from "@opentui/keymap/solid"
 import type { Accessor } from "solid-js"
 import type { TuiConfig } from "./config/tui"
@@ -22,9 +23,23 @@ export const LEADER_TOKEN = "leader"
 export const OpencodeKeymapProvider = KeymapProvider
 export const useOpencodeKeymap = useKeymap
 
-export { reactiveMatcherFromSignal, useBindings, useKeymapSelector }
+export { reactiveMatcherFromSignal, useKeymapSelector }
 
 export type OpenTuiKeymap = ReturnType<typeof useKeymap>
+
+const KEY_ALIASES = {
+  enter: "return",
+  esc: "escape",
+} as const
+
+function expandKeyAliases(input: string) {
+  const result = Object.entries(KEY_ALIASES).reduce(
+    (acc, [alias, key]) => acc.replace(new RegExp(`(^|[+\\s>])${alias}(?=$|[+\\s<])`, "gi"), `$1${key}`),
+    input,
+  )
+  if (result === input) return
+  return result
+}
 
 const inputCommands = [
   "input.move.left",
@@ -87,6 +102,26 @@ function formatOptions(config: TuiConfig.Resolved) {
   } as const
 }
 
+function keyAliases(layerAliases: unknown) {
+  if (!layerAliases || typeof layerAliases !== "object" || Array.isArray(layerAliases)) return KEY_ALIASES
+  return {
+    ...KEY_ALIASES,
+    ...(layerAliases as Record<string, string>),
+  }
+}
+
+export function useBindings<TRenderable extends Renderable = Renderable>(
+  createLayer: () => UseBindingsLayer<TRenderable>,
+) {
+  useKeymapBindings(() => {
+    const layer = createLayer()
+    return {
+      ...layer,
+      aliases: keyAliases(layer.aliases),
+    }
+  })
+}
+
 export function formatKeySequence(parts: Parameters<typeof formatKeySequenceExtra>[0], config: TuiConfig.Resolved) {
   return formatKeySequenceExtra(parts, formatOptions(config))
 }
@@ -98,9 +133,19 @@ export function formatKeyBindings(
   return formatCommandBindingsExtra(bindings, formatOptions(config))
 }
 
-export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRenderer, config: TuiConfig.Resolved) {
+export function registerOpencodeKeymap(
+  keymap: OpenTuiKeymap,
+  renderer: CliRenderer,
+  config: Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout">,
+) {
   const offCommaBindings = addons.registerCommaBindings(keymap)
   const offBaseLayout = addons.registerBaseLayoutFallback(keymap)
+  const offAliases = addons.registerAliasesField(keymap)
+  const offAliasExpander = keymap.prependBindingExpander((ctx) => {
+    const key = expandKeyAliases(ctx.input)
+    if (!key) return
+    return [{ key }]
+  })
   const offLeader = addons.registerTimedLeader(keymap, {
     trigger: config.keybinds.get(LEADER_TOKEN),
     name: LEADER_TOKEN,
@@ -108,20 +153,19 @@ export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRende
   })
   const offEscape = addons.registerEscapeClearsPendingSequence(keymap)
   const offBackspace = addons.registerBackspacePopsPendingSequence(keymap)
-  const offInputCommands = addons.registerEditBufferCommands(keymap, renderer)
-  const offInputSuspension = addons.registerTextareaMappingSuspension(keymap, renderer)
-  const offInputBindings = keymap.registerLayer({
+  const offInputBindings = addons.registerManagedTextareaLayer(keymap, renderer, {
     enabled: () => renderer.currentFocusedEditor !== null,
+    aliases: KEY_ALIASES,
     bindings: config.keybinds.gather("input", inputCommands),
   })
 
   return () => {
     offInputBindings()
-    offInputSuspension()
-    offInputCommands()
     offBackspace()
     offEscape()
     offLeader()
+    offAliasExpander()
+    offAliases()
     offBaseLayout()
     offCommaBindings()
   }
