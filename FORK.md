@@ -160,7 +160,7 @@ git rebase upstream/dev
 # 3. After resolving conflicts, diff against backup to check for lost features
 git diff HEAD..backup/dev-YYYYMMDDHHMMSS -- packages/app/src/pages/layout/
 
-# 4. Walk through features 1–9 above and verify each one in the code
+# 4. Walk through features 1–10 above and verify each one in the code
 # 5. Run typecheck
 cd packages/opencode && bun typecheck
 
@@ -185,3 +185,26 @@ systemctl --user stop opencode-serve
 cp dist/opencode-linux-x64/bin/opencode ~/.local/bin/opencode
 systemctl --user start opencode-serve
 ```
+
+### Service Configuration
+
+```ini
+# systemd unit: ~/.config/systemd/user/opencode-serve.service
+ExecStart=opencode serve --hostname "100.108.64.76" --port 4096
+
+# Override: ~/.config/systemd/user/opencode-serve.service.d/override-workingdir.conf
+WorkingDirectory=/home/azureuser/workspace/opencode-deploy-159-OhZXeN
+
+# Override: ~/.config/systemd/user/opencode-serve.service.d/override.conf
+Environment=OPENCODE_INSTANCE_MAX=16
+Environment=OPENCODE_INSTANCE_IDLE_MS=1800000
+```
+
+### Important Deployment Notes
+
+- **Binary embeds the web UI** — `bun run build` in `packages/opencode` runs `vite build` on `packages/app` and bundles the result into the binary. Just pulling code is NOT enough; you must rebuild AND copy the binary.
+- **Service uses `~/.local/bin/opencode`** — the systemd service runs the installed binary, not source code directly.
+- **Cannot overwrite running binary** — must stop the service first (`systemctl --user stop`), then copy, then start.
+- **Service takes ~60s to stop** — MCP child processes need time to terminate. Be patient.
+- **SSH restart may hang** — use `nohup` wrapper if restarting via SSH: `nohup bash -c "systemctl --user restart opencode-serve" &`
+- **Verify after deploy** — `curl http://100.108.64.76:4096/` should return 200, then run the Browser Smoke Test.
