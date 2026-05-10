@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolResultPart } from "ai"
+import type { ModelMessage, TextPart, ImagePart, FilePart, ToolResultPart } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -455,7 +455,7 @@ function applyCompatCaching(msgs: ModelMessage[]): ModelMessage[] {
 
     if (msg.role === "user") {
       // Normalise to array so cache_control goes on the last content block
-      const parts: any[] =
+      const parts: Array<TextPart | ImagePart | FilePart> =
         typeof msg.content === "string"
           ? [{ type: "text" as const, text: msg.content }]
           : Array.isArray(msg.content)
