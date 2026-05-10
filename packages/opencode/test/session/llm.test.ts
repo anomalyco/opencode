@@ -263,6 +263,46 @@ function createChatStream(text: string) {
   })
 }
 
+function createToolChatStream(toolName: string, input: Record<string, unknown>) {
+  const args = JSON.stringify(input)
+  return createEventStream(
+    [
+      {
+        id: "chatcmpl-tool",
+        object: "chat.completion.chunk",
+        choices: [{ delta: { role: "assistant" } }],
+      },
+      {
+        id: "chatcmpl-tool",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_1",
+                  type: "function",
+                  function: {
+                    name: toolName,
+                    arguments: args,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        id: "chatcmpl-tool",
+        object: "chat.completion.chunk",
+        choices: [{ delta: {}, finish_reason: "tool_calls" }],
+      },
+    ],
+    true,
+  )
+}
+
 async function loadFixture(providerID: string, modelID: string) {
   const fixturePath = path.join(import.meta.dir, "../tool/fixtures/models-api.json")
   const data = await Filesystem.readJson<Record<string, ModelsDev.Provider>>(fixturePath)
@@ -300,6 +340,108 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 }
 
 describe("session.llm.stream", () => {
+  test("emits tool input streaming events for openai-compatible tool calls", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "vivgrid"
+    const modelID = "gemini-3.1-pro-preview"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    waitRequest(
+      "/chat/completions",
+      new Response(createToolChatStream("bash", { command: "pwd" }), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            provider: {
+              [providerID]: {
+                ...fixture.provider,
+                models: { [model.id]: model },
+                options: {
+                  apiKey: "test-key",
+                  baseURL: server.url.origin,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    const events = await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-tool-stream")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-tool-stream"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        return await llm.runPromise((svc) =>
+          svc
+            .stream({
+              user,
+              sessionID,
+              model: resolved,
+              agent,
+              system: ["You are a helpful assistant."],
+              messages: [{ role: "user", content: "Run bash" }],
+              tools: {
+                bash: tool({
+                  description: "Stub bash tool",
+                  inputSchema: z.object({ command: z.string() }),
+                  execute: async () => ({ output: "pwd" }),
+                }),
+              },
+            })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunks) => [...chunks]),
+            ),
+        )
+      },
+    })
+
+    expect(events.some((event) => event.type === "tool-input-start" && event.id === "call_1")).toBe(true)
+    expect(
+      events.some(
+        (event) =>
+          event.type === "tool-input-delta" && event.id === "call_1" && event.delta === '{"command":"pwd"}',
+      ),
+    ).toBe(true)
+    expect(events.some((event) => event.type === "tool-input-end" && event.id === "call_1")).toBe(true)
+    expect(
+      events.some(
+        (event) =>
+          event.type === "tool-call" &&
+          event.toolCallId === "call_1" &&
+          JSON.stringify(event.input) === '{"command":"pwd"}',
+      ),
+    ).toBe(true)
+  })
+
   test("sends temperature, tokens, and reasoning options for openai-compatible models", async () => {
     const server = state.server
     if (!server) {

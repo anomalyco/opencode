@@ -158,6 +158,95 @@ test("tool completion stores completed timestamp", () => {
   expect(state.messages[0].content[0].provider).toEqual({ executed: true, metadata: { status: "done" } })
 })
 
+test("tool input delta and ended populate pending input before tool called", () => {
+  const state: SessionMessageUpdater.MemoryState = { messages: [] }
+  const sessionID = SessionID.make("session")
+  const callID = "call"
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    id: EventV2.ID.create(),
+    type: "session.next.step.started",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(1),
+      agent: "build",
+      model: {
+        id: Modelv2.ID.make("model"),
+        providerID: Modelv2.ProviderID.make("provider"),
+        variant: Modelv2.VariantID.make("default"),
+      },
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    id: EventV2.ID.create(),
+    type: "session.next.tool.input.started",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(2),
+      callID,
+      name: "bash",
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    id: EventV2.ID.create(),
+    type: "session.next.tool.input.delta",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(3),
+      callID,
+      delta: '{"command":"pw',
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    id: EventV2.ID.create(),
+    type: "session.next.tool.input.ended",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(4),
+      callID,
+      text: '{"command":"pwd"}',
+    },
+  } satisfies SessionEvent.Event)
+
+  expect(state.messages[0]?.type).toBe("assistant")
+  if (state.messages[0]?.type !== "assistant") return
+  expect(state.messages[0].content[0]).toMatchObject({
+    type: "tool",
+    id: callID,
+    state: {
+      status: "pending",
+      input: '{"command":"pwd"}',
+    },
+  })
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    id: EventV2.ID.create(),
+    type: "session.next.tool.called",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(5),
+      callID,
+      tool: "bash",
+      input: { command: "pwd" },
+      provider: { executed: false },
+    },
+  } satisfies SessionEvent.Event)
+
+  expect(state.messages[0]?.type).toBe("assistant")
+  if (state.messages[0]?.type !== "assistant") return
+  expect(state.messages[0].content[0]).toMatchObject({
+    type: "tool",
+    id: callID,
+    state: {
+      status: "running",
+      input: { command: "pwd" },
+    },
+  })
+})
+
 test("compaction events reduce to compaction message", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")

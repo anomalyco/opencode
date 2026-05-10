@@ -1,6 +1,10 @@
 import { Bus } from "@/bus"
+import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
+import * as InstanceState from "@/effect/instance-state"
+import type { WorkspaceID } from "@/control-plane/schema"
+import type { InstanceContext } from "@/project/instance"
 import * as Log from "@opencode-ai/core/util/log"
-import { Effect, Schema } from "effect"
+import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -39,8 +43,21 @@ function eventData(data: unknown): Sse.Event {
   }
 }
 
-function eventResponse(bus: Bus.Interface) {
-  const events = bus.subscribeAll().pipe(Stream.takeUntil((event) => event.type === Bus.InstanceDisposed.type))
+function eventResponse(context: { instance: InstanceContext; workspace: WorkspaceID | undefined }) {
+  const events = Stream.callback<GlobalBusEvent>((queue) => {
+    const handler = (event: GlobalBusEvent) => {
+      if (event.directory !== context.instance.directory) return
+      if (event.workspace !== context.workspace) return
+      Queue.offerUnsafe(queue, event)
+    }
+    return Effect.acquireRelease(
+      Effect.sync(() => GlobalBus.on("event", handler)),
+      () => Effect.sync(() => GlobalBus.off("event", handler)),
+    )
+  }).pipe(
+    Stream.map((event) => event.payload),
+    Stream.takeUntil((event) => event.type === Bus.InstanceDisposed.type),
+  )
   const heartbeat = Stream.tick("10 seconds").pipe(
     Stream.drop(1),
     Stream.map(() => ({ id: Bus.createID(), type: "server.heartbeat", properties: {} })),
@@ -68,11 +85,13 @@ function eventResponse(bus: Bus.Interface) {
 
 export const eventHandlers = HttpApiBuilder.group(EventApi, "event", (handlers) =>
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
     return handlers.handleRaw(
       "subscribe",
       Effect.fn("EventHttpApi.subscribe")(function* () {
-        return eventResponse(bus)
+        return eventResponse({
+          instance: yield* InstanceState.context,
+          workspace: yield* InstanceState.workspaceID,
+        })
       }),
     )
   }),

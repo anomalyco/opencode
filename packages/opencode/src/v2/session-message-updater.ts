@@ -269,7 +269,16 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         )
       }
     },
-    "session.next.tool.input.ended": () => {},
+    "session.next.tool.input.ended": (event) => {
+      if (currentAssistant) {
+        adapter.updateAssistant(
+          produce(currentAssistant, (draft) => {
+            const match = latestTool(draft, event.data.callID)
+            if (match && match.state.status === "pending") match.state.input = event.data.text
+          }),
+        )
+      }
+    },
     "session.next.tool.called": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(

@@ -187,6 +187,10 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           })
           break
         case "session.next.tool.input.ended":
+          update(event.properties.sessionID, (draft) => {
+            const match = latestTool(activeAssistant(draft), event.properties.callID)
+            if (match?.state.status === "pending") match.state.input = event.properties.text
+          })
           break
         case "session.next.tool.called":
           update(event.properties.sessionID, (draft) => {

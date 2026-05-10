@@ -174,7 +174,11 @@ describe("doStream", () => {
 
     // Check tool calls
     const toolParts = parts.filter(
-      (p) => p.type === "tool-input-start" || p.type === "tool-call" || p.type === "tool-input-end",
+      (p) =>
+        p.type === "tool-input-start" ||
+        p.type === "tool-input-delta" ||
+        p.type === "tool-call" ||
+        p.type === "tool-input-end",
     )
 
     expect(toolParts).toContainEqual({
@@ -196,6 +200,15 @@ describe("doStream", () => {
       id: "call_def456",
       toolName: "read_file",
     })
+    expect(
+      toolParts.some(
+        (part) =>
+          part.type === "tool-input-delta" &&
+          part.id === "call_abc123" &&
+          typeof part.delta === "string" &&
+          part.delta.length > 0,
+      ),
+    ).toBe(true)
 
     // Check finish
     const finish = parts.find((p) => p.type === "finish")
@@ -367,7 +380,11 @@ describe("doStream", () => {
 
     // Check tool call
     const toolParts = parts.filter(
-      (p) => p.type === "tool-input-start" || p.type === "tool-call" || p.type === "tool-input-end",
+      (p) =>
+        p.type === "tool-input-start" ||
+        p.type === "tool-input-delta" ||
+        p.type === "tool-call" ||
+        p.type === "tool-input-end",
     )
 
     expect(toolParts).toContainEqual({
@@ -383,6 +400,15 @@ describe("doStream", () => {
         toolName: "list_project_files",
       }),
     )
+    expect(
+      toolParts.some(
+        (part) =>
+          part.type === "tool-input-delta" &&
+          part.id === "call_MHxqRDd5WVo3NU8wUXRaMmc0MFE" &&
+          typeof part.delta === "string" &&
+          part.delta.length > 0,
+      ),
+    ).toBe(true)
 
     // Check finish
     const finish = parts.find((p) => p.type === "finish")

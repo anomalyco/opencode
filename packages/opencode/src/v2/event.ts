@@ -1,7 +1,6 @@
 import { Identifier } from "@/id/id"
 import { SyncEvent } from "@/sync"
 import { withStatics } from "@opencode-ai/core/schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Schema from "effect/Schema"
 
 export const ID = Schema.String.pipe(
@@ -46,7 +45,6 @@ export function run<Def extends SyncEvent.Definition>(
   data: SyncEvent.Event<Def>["data"],
   options?: { publish?: boolean },
 ) {
-  if (!Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) return
   SyncEvent.run(def, data, options)
 }
 

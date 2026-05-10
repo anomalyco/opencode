@@ -65,6 +65,7 @@ type ToolCall = {
   messageID: MessageV2.ToolPart["messageID"]
   sessionID: MessageV2.ToolPart["sessionID"]
   done: Deferred.Deferred<void>
+  raw: string
 }
 
 interface ProcessorContext extends Input {
@@ -299,20 +300,44 @@ export const layer: Layer.Layer<
               partID: part.id,
               messageID: part.messageID,
               sessionID: part.sessionID,
+              raw: ctx.toolcalls[value.id]?.raw ?? "",
             }
             return
 
-          case "tool-input-delta":
+          case "tool-input-delta": {
+            if (!value.delta) return
+            const call = ctx.toolcalls[value.id]
+            if (!call) return
+            call.raw += value.delta
+            EventV2.run(SessionEvent.Tool.Input.Delta.Sync, {
+              sessionID: ctx.sessionID,
+              callID: value.id,
+              delta: value.delta,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             return
+          }
 
           case "tool-input-end": {
+            const raw = ctx.toolcalls[value.id]?.raw ?? ""
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             EventV2.run(SessionEvent.Tool.Input.Ended.Sync, {
               sessionID: ctx.sessionID,
               callID: value.id,
-              text: "",
+              text: raw,
               timestamp: DateTime.makeUnsafe(Date.now()),
             })
+            yield* updateToolCall(value.id, (match) =>
+              match.state.status === "pending"
+                ? {
+                    ...match,
+                    state: {
+                      ...match.state,
+                      raw,
+                    },
+                  }
+                : match,
+            )
             return
           }
 
@@ -337,7 +362,6 @@ export const layer: Layer.Layer<
               ...match,
               tool: value.toolName,
               state: {
-                ...match.state,
                 status: "running",
                 input: value.input,
                 time: { start: Date.now() },
