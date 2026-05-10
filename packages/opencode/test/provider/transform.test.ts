@@ -2917,6 +2917,42 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/openai-compatible", () => {
+    test("returns empty object for Nemotron reasoning-output models", () => {
+      const model = createMockModel({
+        id: "opencode/nemotron-3-super-free",
+        providerID: "opencode",
+        api: {
+          id: "nemotron-3-super-free",
+          url: "https://opencode.ai/zen/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        capabilities: {
+          reasoning: true,
+          interleaved: { field: "reasoning_content" },
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+
+    test("returns empty object for MiMo reasoning-output models", () => {
+      const model = createMockModel({
+        id: "opencode/mimo-v2-flash-free",
+        providerID: "opencode",
+        api: {
+          id: "mimo-v2-flash-free",
+          url: "https://opencode.ai/zen/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        capabilities: {
+          reasoning: true,
+          interleaved: { field: "reasoning_content" },
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+
     test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
       const model = createMockModel({
         id: "custom-provider/custom-model",
@@ -3030,6 +3066,26 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
       expect(result.low).toEqual({
         reasoningEffort: "low",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      })
+    })
+
+    test("opencode gpt-5-nano keeps OpenAI SDK reasoning variants", () => {
+      const model = createMockModel({
+        id: "gpt-5-nano",
+        providerID: "opencode",
+        api: {
+          id: "gpt-5-nano",
+          url: "https://opencode.ai/zen/v1",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2025-08-07",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
+      expect(result.high).toEqual({
+        reasoningEffort: "high",
         reasoningSummary: "auto",
         include: ["reasoning.encrypted_content"],
       })
