@@ -32,14 +32,29 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+const totalTokens = createMemo(() => {
+    const childTokens = 0
+    const compactedTokens = 0
+
+    return state().tokens + childTokens + compactedTokens
+  })
+
   return (
-    <box>
-      <text fg={theme().text}>
-        <b>Context</b>
-      </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-      <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+    <box flexDirection="column" gap={1}>
+      <box flexDirection="column">
+        <text fg={theme().text}>
+          <b>Context</b>
+        </text>
+        <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
+        <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
+      </box>
+      <box flexDirection="column">
+        <text fg={theme().text}>
+          <b>Total</b>
+        </text>
+        <text fg={theme().textMuted}>{totalTokens().toLocaleString()} tokens</text>
+        <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      </box>
     </box>
   )
 }
