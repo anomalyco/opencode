@@ -5,7 +5,7 @@ import * as Log from "@opencode-ai/core/util/log"
 
 export type Migration = {
   name: string
-  run: (db: TxOrDb) => void | Promise<void>
+  run: (db: TxOrDb) => Effect.Effect<void, unknown>
 }
 
 const log = Log.create({ service: "code-migration" })
@@ -19,43 +19,50 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const migrations: Migration[] = []
 
-    void runPending(migrations).catch((error) => {
-      log.error("failed to run code migrations", { error })
-    })
+    yield* runPending(migrations).pipe(
+      Effect.tapCause((cause) => Effect.sync(() => log.error("failed to run code migrations", { cause }))),
+      Effect.ignore,
+      Effect.forkScoped,
+    )
     return Service.of({})
   }),
 )
 
 export const defaultLayer = layer
 
-async function runPending(migrations: Migration[]) {
+const runPending = Effect.fn("CodeMigration.runPending")(function* (migrations: Migration[]) {
   if (migrations.length === 0) return
 
-  const db = Database.Client()
-  db.run("BEGIN IMMEDIATE")
+  const db = yield* Effect.sync(() => Database.Client())
+  yield* Effect.sync(() => db.run("BEGIN IMMEDIATE"))
 
-  try {
-    const completed = new Set(
-      db
-        .select({ name: CodeMigrationTable.name })
-        .from(CodeMigrationTable)
-        .all()
-        .map((row) => row.name),
+  yield* Effect.gen(function* () {
+    const completed = yield* Effect.sync(
+      () =>
+        new Set(
+          db
+            .select({ name: CodeMigrationTable.name })
+            .from(CodeMigrationTable)
+            .all()
+            .map((row) => row.name),
+        ),
     )
     for (const migration of migrations.filter((item) => !completed.has(item.name))) {
-      log.info("running code migration", { name: migration.name })
-      await migration.run(db)
-      db.insert(CodeMigrationTable)
-        .values({ name: migration.name, time_completed: Date.now() })
-        .onConflictDoNothing()
-        .run()
+      yield* Effect.sync(() => log.info("running code migration", { name: migration.name }))
+      yield* migration.run(db)
+      yield* Effect.sync(() =>
+        db
+          .insert(CodeMigrationTable)
+          .values({ name: migration.name, time_completed: Date.now() })
+          .onConflictDoNothing()
+          .run(),
+      )
       completed.add(migration.name)
     }
-    db.run("COMMIT")
-  } catch (error) {
-    db.run("ROLLBACK")
-    throw error
-  }
-}
+  }).pipe(
+    Effect.tap(() => Effect.sync(() => db.run("COMMIT"))),
+    Effect.tapCause(() => Effect.sync(() => db.run("ROLLBACK")).pipe(Effect.ignore)),
+  )
+})
 
 export * as CodeMigration from "./code-migration"
