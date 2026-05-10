@@ -9765,6 +9765,7 @@ export type SessionMessagesData = {
     workspace?: string
     limit?: number
     before?: string
+    after?: string
   }
   url: "/session/{sessionID}/message"
 }
