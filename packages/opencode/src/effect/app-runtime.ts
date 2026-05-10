@@ -105,7 +105,7 @@ export const AppLayer = Layer.mergeAll(
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
   SyncEvent.defaultLayer,
-  CodeMigration.defaultLayer,
+  CodeMigration.defaultLayer.pipe(Layer.provide(Session.defaultLayer)),
 ).pipe(Layer.provideMerge(InstanceLayer.layer), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

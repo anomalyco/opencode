@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from "effect"
 import { Database } from "./storage/db"
 import { CodeMigrationTable } from "./code-migration.sql"
+import { Session } from "./session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 
@@ -54,7 +55,20 @@ export const make = <R>(build: Effect.Effect<Migration<R>[], never, R>) => Layer
   }),
 )
 
-export const layer = make(Effect.succeed([]))
+export const layer = make(
+  Effect.gen(function* () {
+    const session = yield* Session.Service
+    return [
+      {
+        name: "list-sessions-with-session-service",
+        run: Effect.gen(function* () {
+          const sessions = yield* session.list()
+          log.info("listed sessions with session service", { count: sessions.length })
+        }),
+      },
+    ]
+  }),
+)
 
 export const defaultLayer = layer
 
