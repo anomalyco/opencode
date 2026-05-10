@@ -325,6 +325,41 @@ This skill is loaded from the global home directory.
     }),
   )
 
+  it.live("deduplicates the same .agents skill discovered as global and project skill", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir({ git: true })),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+
+      yield* withHome(
+        tmp.path,
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(tmp.path, ".agents", "skills", "shared-skill", "SKILL.md"),
+              `---
+name: shared-skill
+description: A skill discovered through global and project scan paths.
+---
+
+# Shared Skill
+`,
+            ),
+          )
+
+          yield* Effect.gen(function* () {
+            const skill = yield* Skill.Service
+            const list = yield* skill.all()
+            expect(list.length).toBe(1)
+            expect(list[0].name).toBe("shared-skill")
+            expect((yield* skill.dirs()).length).toBe(1)
+          }).pipe(provideInstance(tmp.path))
+        }),
+      )
+    }),
+  )
+
   it.live("discovers skills from both .claude/skills/ and .agents/skills/", () =>
     provideTmpdirInstance(
       (dir) =>
