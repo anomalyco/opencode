@@ -358,6 +358,60 @@ describe("HttpApi server", () => {
     expect(good.status).toBe(200)
   })
 
+  test("requires credentials for root routes when auth is enabled", async () => {
+    const server = app({ password: "secret" })
+    const auth = { authorization: authorization("opencode", "secret") }
+    const wrongAuth = { authorization: authorization("opencode", "wrong") }
+
+    const [missingConfig, wrongConfig, goodConfig] = await Promise.all([
+      server.request(GlobalPaths.config),
+      server.request(GlobalPaths.config, { headers: wrongAuth }),
+      server.request(GlobalPaths.config, { headers: auth }),
+    ])
+
+    expect(missingConfig.status).toBe(401)
+    expect(wrongConfig.status).toBe(401)
+    expect(goodConfig.status).toBe(200)
+
+    const missingDispose = await server.request(GlobalPaths.dispose, { method: "POST" })
+    expect(missingDispose.status).toBe(401)
+
+    const missingUpgrade = await server.request(GlobalPaths.upgrade, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "not-json",
+    })
+    expect(missingUpgrade.status).toBe(401)
+
+    const invalidUpgrade = await server.request(GlobalPaths.upgrade, {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: "not-json",
+    })
+    expect(invalidUpgrade.status).toBe(400)
+
+    const missingLog = await server.request(ControlPaths.log, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ service: "httpapi-auth-test", level: "info", message: "hello" }),
+    })
+    expect(missingLog.status).toBe(401)
+
+    const missingAuth = await server.request(ControlPaths.auth.replace(":providerID", "test"), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "api", key: "secret" }),
+    })
+    expect(missingAuth.status).toBe(401)
+
+    const invalidAuth = await server.request(ControlPaths.auth.replace(":providerID", "test"), {
+      method: "PUT",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ type: "api" }),
+    })
+    expect(invalidAuth.status).toBe(400)
+  })
+
   test("accepts auth_token query credentials", async () => {
     await using tmp = await tmpdir({ git: true })
     await Bun.write(`${tmp.path}/hello.txt`, "hello")

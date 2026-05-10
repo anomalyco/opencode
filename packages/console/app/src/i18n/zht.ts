@@ -343,7 +343,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "缺少 API 金鑰。",
   "zen.api.error.invalidApiKey": "無效的 API 金鑰。",
   "zen.api.error.subscriptionQuotaExceeded": "超出訂閱配額。請在 {{retryIn}} 後重試。",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels": "超出訂閱配額。你可以繼續使用免費模型。",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "已達 5 小時使用上限，將在 {{retryIn}} 後重置。若要立即繼續使用此模型，請從可用餘額啟用使用量：{{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "已達每週使用上限，將在 {{retryIn}} 後重置。若要立即繼續使用此模型，請從可用餘額啟用使用量：{{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "已達每月使用上限，將在 {{retryIn}} 後重置。若要立即繼續使用此模型，請從可用餘額啟用使用量：{{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "無付款方式。請在此處新增付款方式：{{billingUrl}}",
   "zen.api.error.insufficientBalance": "餘額不足。請在此處管理你的帳務：{{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":

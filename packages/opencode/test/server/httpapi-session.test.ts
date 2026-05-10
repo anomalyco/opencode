@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
@@ -9,6 +9,8 @@ import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { WithInstance } from "../../src/project/with-instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
@@ -30,6 +32,10 @@ void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const workspaceLayer = Workspace.defaultLayer.pipe(
+  Layer.provide(InstanceStore.defaultLayer),
+  Layer.provide(InstanceBootstrap.defaultLayer),
+)
 
 function app(experimental = true) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
@@ -106,7 +112,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
         extra: null,
         projectID: input.projectID,
       }),
-    ).pipe(Effect.provide(Workspace.defaultLayer))
+    ).pipe(Effect.provide(workspaceLayer))
   })
 
 function request(path: string, init?: RequestInit) {

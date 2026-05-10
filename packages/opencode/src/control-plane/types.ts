@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { ProjectID } from "@/project/schema"
 import { WorkspaceID } from "./schema"
 import { zod } from "@/util/effect-zod"
@@ -16,6 +16,11 @@ export const WorkspaceInfo = Schema.Struct({
   .annotate({ identifier: "Workspace" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type WorkspaceInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceInfo>>
+
+export const WorkspaceListedInfo = Schema.Struct(Struct.omit(WorkspaceInfo.fields, ["id"]))
+  .annotate({ identifier: "WorkspaceListedInfo" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type WorkspaceListedInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceListedInfo>>
 
 export const WorkspaceAdapterEntry = Schema.Struct({
   type: Schema.String,
@@ -40,6 +45,7 @@ export type WorkspaceAdapter = {
   description: string
   configure(info: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
   create(info: WorkspaceInfo, env: Record<string, string | undefined>, from?: WorkspaceInfo): Promise<void>
+  list?(): WorkspaceListedInfo[] | Promise<WorkspaceListedInfo[]>
   remove(info: WorkspaceInfo): Promise<void>
   target(info: WorkspaceInfo): Target | Promise<Target>
 }

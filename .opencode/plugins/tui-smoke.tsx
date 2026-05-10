@@ -1,36 +1,88 @@
 /** @jsxImportSource @opentui/solid */
-import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { RGBA, VignetteEffect } from "@opentui/core"
-import type {
-  TuiKeybindSet,
-  TuiPlugin,
-  TuiPluginApi,
-  TuiPluginMeta,
-  TuiPluginModule,
-  TuiSlotPlugin,
-} from "@opencode-ai/plugin/tui"
+import { useTerminalDimensions, type JSX } from "@opentui/solid"
+import { useBindings, useKeymapSelector } from "@opentui/keymap/solid"
+import { RGBA, VignetteEffect, type KeyEvent, type Renderable } from "@opentui/core"
+import { resolveBindingSections, type BindingSectionsConfig, type BindingValue } from "@opentui/keymap/extras"
+import type { Binding } from "@opentui/keymap"
+import type { TuiPlugin, TuiPluginApi, TuiPluginMeta, TuiPluginModule, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
 
 const tabs = ["overview", "counter", "help"]
-const bind = {
-  modal: "ctrl+shift+m",
-  screen: "ctrl+shift+o",
-  home: "escape,ctrl+h",
-  left: "left,h",
-  right: "right,l",
-  up: "up,k",
-  down: "down,j",
-  alert: "a",
-  confirm: "c",
-  prompt: "p",
-  select: "s",
-  modal_accept: "enter,return",
-  modal_close: "escape",
-  dialog_close: "escape",
-  local: "x",
-  local_push: "enter,return",
-  local_close: "q,backspace",
-  host: "z",
+const command = {
+  modal: "plugin.smoke.modal",
+  screen: "plugin.smoke.screen",
+  alert: "plugin.smoke.alert",
+  confirm: "plugin.smoke.confirm",
+  prompt: "plugin.smoke.prompt",
+  select: "plugin.smoke.select",
+  host: "plugin.smoke.host",
+  home: "plugin.smoke.home",
+  toast: "plugin.smoke.toast",
+  dialog_close: "plugin.smoke.dialog.close",
+  local_push: "plugin.smoke.local.push",
+  local_pop: "plugin.smoke.local.pop",
+  screen_home: "plugin.smoke.screen.home",
+  screen_left: "plugin.smoke.screen.left",
+  screen_right: "plugin.smoke.screen.right",
+  screen_up: "plugin.smoke.screen.up",
+  screen_down: "plugin.smoke.screen.down",
+  screen_modal: "plugin.smoke.screen.modal",
+  screen_local: "plugin.smoke.screen.local",
+  screen_host: "plugin.smoke.screen.host",
+  screen_alert: "plugin.smoke.screen.alert",
+  screen_confirm: "plugin.smoke.screen.confirm",
+  screen_prompt: "plugin.smoke.screen.prompt",
+  screen_select: "plugin.smoke.screen.select",
+  modal_accept: "plugin.smoke.modal.accept",
+  modal_close: "plugin.smoke.modal.close",
+} as const
+
+const sectionNames = ["global", "dialog", "local", "screen", "modal"] as const
+type SectionName = (typeof sectionNames)[number]
+type SectionConfig = Record<string, BindingValue<Renderable, KeyEvent>>
+type ResolvedSections = Record<SectionName, Binding<Renderable, KeyEvent>[]>
+type SmokeKeymap = {
+  sections?: Partial<Record<SectionName, SectionConfig>>
 }
+
+type SmokeOptions = {
+  enabled?: boolean
+  label?: unknown
+  route?: unknown
+  vignette?: unknown
+  keymap?: SmokeKeymap
+}
+
+const defaultKeymap = {
+  global: {
+    [command.modal]: "ctrl+shift+m",
+    [command.screen]: "ctrl+shift+o",
+  },
+  dialog: {
+    [command.dialog_close]: "escape",
+  },
+  local: {
+    [command.local_push]: "enter,return",
+    [command.local_pop]: "escape,q,backspace",
+  },
+  screen: {
+    [command.screen_home]: "escape,ctrl+h",
+    [command.screen_left]: "left,h",
+    [command.screen_right]: "right,l",
+    [command.screen_up]: "up,k",
+    [command.screen_down]: "down,j",
+    [command.screen_modal]: "ctrl+shift+m",
+    [command.screen_local]: "x",
+    [command.screen_host]: "z",
+    [command.screen_alert]: "a",
+    [command.screen_confirm]: "c",
+    [command.screen_prompt]: "p",
+    [command.screen_select]: "s",
+  },
+  modal: {
+    [command.modal_accept]: "enter,return",
+    [command.modal_close]: "escape",
+  },
+} satisfies Record<SectionName, SectionConfig>
 
 const pick = (value: unknown, fallback: string) => {
   if (typeof value !== "string") return fallback
@@ -43,16 +95,11 @@ const num = (value: unknown, fallback: number) => {
   return value
 }
 
-const rec = (value: unknown) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return
-  return Object.fromEntries(Object.entries(value))
-}
-
 type Cfg = {
   label: string
   route: string
   vignette: number
-  keybinds: Record<string, unknown> | undefined
+  keymap: SmokeKeymap | undefined
 }
 
 type Route = {
@@ -69,12 +116,12 @@ type State = {
   local: number
 }
 
-const cfg = (options: Record<string, unknown> | undefined) => {
+const cfg = (options: SmokeOptions | undefined) => {
   return {
     label: pick(options?.label, "smoke"),
     route: pick(options?.route, "workspace-smoke"),
     vignette: Math.max(0, num(options?.vignette, 0.35)),
-    keybinds: rec(options?.keybinds),
+    keymap: options?.keymap,
   }
 }
 
@@ -85,7 +132,25 @@ const names = (input: Cfg) => {
   }
 }
 
-type Keys = TuiKeybindSet
+function createKeys(input: SmokeKeymap | undefined): { sections: ResolvedSections } {
+  const sections = resolveBindingSections(
+    {
+      global: { ...defaultKeymap.global, ...input?.sections?.global },
+      dialog: { ...defaultKeymap.dialog, ...input?.sections?.dialog },
+      local: { ...defaultKeymap.local, ...input?.sections?.local },
+      screen: { ...defaultKeymap.screen, ...input?.sections?.screen },
+      modal: { ...defaultKeymap.modal, ...input?.sections?.modal },
+    } satisfies BindingSectionsConfig<Renderable, KeyEvent>,
+    { sections: sectionNames },
+  ).sections
+
+  return {
+    sections,
+  }
+}
+
+type Keys = ReturnType<typeof createKeys>
+
 const ui = {
   panel: "#1d1d1d",
   border: "#4a4a4a",
@@ -292,125 +357,161 @@ const Screen = (props: {
   }
   const pop = (base?: State) => {
     const next = base ?? current(props.api, props.route)
-    const local = Math.max(0, next.local - 1)
-    set(local, next)
+    set(Math.max(0, next.local - 1), next)
   }
   const show = () => {
     setTimeout(() => {
       open()
     }, 0)
   }
-  useKeyboard((evt) => {
-    if (props.api.route.current.name !== props.route.screen) return
-    const next = current(props.api, props.route)
-    if (props.api.ui.dialog.open) {
-      if (props.keys.match("dialog_close", evt)) {
-        evt.preventDefault()
-        evt.stopPropagation()
-        props.api.ui.dialog.clear()
-        return
-      }
-      return
-    }
+  const screenActive = () => props.api.route.current.name === props.route.screen
 
-    if (next.local > 0) {
-      if (evt.name === "escape" || props.keys.match("local_close", evt)) {
-        evt.preventDefault()
-        evt.stopPropagation()
-        pop(next)
-        return
-      }
+  useBindings(() => ({
+    enabled: () => screenActive() && props.api.ui.dialog.open,
+    commands: [
+      {
+        name: command.dialog_close,
+        run() {
+          props.api.ui.dialog.clear()
+        },
+      },
+    ],
+    bindings: props.keys.sections.dialog,
+  }))
 
-      if (props.keys.match("local_push", evt)) {
-        evt.preventDefault()
-        evt.stopPropagation()
-        push(next)
-        return
-      }
-      return
-    }
+  useBindings(() => ({
+    enabled: () => screenActive() && !props.api.ui.dialog.open && current(props.api, props.route).local > 0,
+    commands: [
+      {
+        name: command.local_push,
+        run() {
+          push(current(props.api, props.route))
+        },
+      },
+      {
+        name: command.local_pop,
+        run() {
+          pop(current(props.api, props.route))
+        },
+      },
+    ],
+    bindings: props.keys.sections.local,
+  }))
 
-    if (props.keys.match("home", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      props.api.route.navigate("home")
-      return
-    }
+  useBindings(() => ({
+    enabled: () => screenActive() && !props.api.ui.dialog.open && current(props.api, props.route).local === 0,
+    commands: [
+      {
+        name: command.screen_home,
+        run() {
+          props.api.route.navigate("home")
+        },
+      },
+      {
+        name: command.screen_left,
+        run() {
+          const next = current(props.api, props.route)
+          props.api.route.navigate(props.route.screen, { ...next, tab: (next.tab - 1 + tabs.length) % tabs.length })
+        },
+      },
+      {
+        name: command.screen_right,
+        run() {
+          const next = current(props.api, props.route)
+          props.api.route.navigate(props.route.screen, { ...next, tab: (next.tab + 1) % tabs.length })
+        },
+      },
+      {
+        name: command.screen_up,
+        run() {
+          const next = current(props.api, props.route)
+          props.api.route.navigate(props.route.screen, { ...next, count: next.count + 1 })
+        },
+      },
+      {
+        name: command.screen_down,
+        run() {
+          const next = current(props.api, props.route)
+          props.api.route.navigate(props.route.screen, { ...next, count: next.count - 1 })
+        },
+      },
+      {
+        name: command.screen_modal,
+        run() {
+          props.api.route.navigate(props.route.modal, current(props.api, props.route))
+        },
+      },
+      {
+        name: command.screen_local,
+        run() {
+          open()
+        },
+      },
+      {
+        name: command.screen_host,
+        run() {
+          host(props.api, props.input, skin)
+        },
+      },
+      {
+        name: command.screen_alert,
+        run() {
+          warn(props.api, props.route, current(props.api, props.route))
+        },
+      },
+      {
+        name: command.screen_confirm,
+        run() {
+          check(props.api, props.route, current(props.api, props.route))
+        },
+      },
+      {
+        name: command.screen_prompt,
+        run() {
+          entry(props.api, props.route, current(props.api, props.route))
+        },
+      },
+      {
+        name: command.screen_select,
+        run() {
+          picker(props.api, props.route, current(props.api, props.route))
+        },
+      },
+    ],
+    bindings: props.keys.sections.screen,
+  }))
+  const shortcuts = useKeymapSelector((keymap) => {
+    const bindings = keymap.getCommandBindings({
+      visibility: "registered",
+      commands: [
+        command.screen_home,
+        command.screen_up,
+        command.screen_down,
+        command.screen_modal,
+        command.screen_alert,
+        command.screen_confirm,
+        command.screen_prompt,
+        command.screen_select,
+        command.screen_local,
+        command.screen_host,
+        command.local_push,
+        command.local_pop,
+      ],
+    })
 
-    if (props.keys.match("left", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      props.api.route.navigate(props.route.screen, { ...next, tab: (next.tab - 1 + tabs.length) % tabs.length })
-      return
-    }
-
-    if (props.keys.match("right", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      props.api.route.navigate(props.route.screen, { ...next, tab: (next.tab + 1) % tabs.length })
-      return
-    }
-
-    if (props.keys.match("up", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      props.api.route.navigate(props.route.screen, { ...next, count: next.count + 1 })
-      return
-    }
-
-    if (props.keys.match("down", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      props.api.route.navigate(props.route.screen, { ...next, count: next.count - 1 })
-      return
-    }
-
-    if (props.keys.match("modal", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      props.api.route.navigate(props.route.modal, next)
-      return
-    }
-
-    if (props.keys.match("local", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      open()
-      return
-    }
-
-    if (props.keys.match("host", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      host(props.api, props.input, skin)
-      return
-    }
-
-    if (props.keys.match("alert", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      warn(props.api, props.route, next)
-      return
-    }
-
-    if (props.keys.match("confirm", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      check(props.api, props.route, next)
-      return
-    }
-
-    if (props.keys.match("prompt", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      entry(props.api, props.route, next)
-      return
-    }
-
-    if (props.keys.match("select", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      picker(props.api, props.route, next)
+    return {
+      screen_home: props.api.keys.formatBindings(bindings.get(command.screen_home)) ?? "",
+      screen_up: props.api.keys.formatBindings(bindings.get(command.screen_up)) ?? "",
+      screen_down: props.api.keys.formatBindings(bindings.get(command.screen_down)) ?? "",
+      screen_modal: props.api.keys.formatBindings(bindings.get(command.screen_modal)) ?? "",
+      screen_alert: props.api.keys.formatBindings(bindings.get(command.screen_alert)) ?? "",
+      screen_confirm: props.api.keys.formatBindings(bindings.get(command.screen_confirm)) ?? "",
+      screen_prompt: props.api.keys.formatBindings(bindings.get(command.screen_prompt)) ?? "",
+      screen_select: props.api.keys.formatBindings(bindings.get(command.screen_select)) ?? "",
+      screen_local: props.api.keys.formatBindings(bindings.get(command.screen_local)) ?? "",
+      screen_host: props.api.keys.formatBindings(bindings.get(command.screen_host)) ?? "",
+      local_push: props.api.keys.formatBindings(bindings.get(command.local_push)) ?? "",
+      local_pop: props.api.keys.formatBindings(bindings.get(command.local_pop)) ?? "",
     }
   })
 
@@ -430,7 +531,7 @@ const Screen = (props: {
             <b>{props.input.label} screen</b>
             <span style={{ fg: skin.muted }}> plugin route</span>
           </text>
-          <text fg={skin.muted}>{props.keys.print("home")} home</text>
+          <text fg={skin.muted}>{shortcuts().screen_home} home</text>
         </box>
 
         <box flexDirection="row" gap={1} paddingBottom={1}>
@@ -477,7 +578,7 @@ const Screen = (props: {
             <box flexDirection="column" gap={1}>
               <text fg={skin.text}>Counter: {value.count}</text>
               <text fg={skin.muted}>
-                {props.keys.print("up")} / {props.keys.print("down")} change value
+                {shortcuts().screen_up} / {shortcuts().screen_down} change value
               </text>
             </box>
           ) : null}
@@ -485,17 +586,16 @@ const Screen = (props: {
           {value.tab === 2 ? (
             <box flexDirection="column" gap={1}>
               <text fg={skin.muted}>
-                {props.keys.print("modal")} modal | {props.keys.print("alert")} alert | {props.keys.print("confirm")}{" "}
-                confirm | {props.keys.print("prompt")} prompt | {props.keys.print("select")} select
+                {shortcuts().screen_modal} modal | {shortcuts().screen_alert} alert | {shortcuts().screen_confirm}{" "}
+                confirm | {shortcuts().screen_prompt} prompt | {shortcuts().screen_select} select
               </text>
               <text fg={skin.muted}>
-                {props.keys.print("local")} local stack | {props.keys.print("host")} host stack
+                {shortcuts().screen_local} local stack | {shortcuts().screen_host} host stack
               </text>
               <text fg={skin.muted}>
-                local open: {props.keys.print("local_push")} push nested · esc or {props.keys.print("local_close")}{" "}
-                close
+                local open: {shortcuts().local_push} push nested · {shortcuts().local_pop} close
               </text>
-              <text fg={skin.muted}>{props.keys.print("home")} returns home</text>
+              <text fg={skin.muted}>{shortcuts().screen_home} returns home</text>
             </box>
           ) : null}
         </box>
@@ -548,7 +648,7 @@ const Screen = (props: {
           </text>
           <text fg={skin.muted}>Plugin-owned stack depth: {value.local}</text>
           <text fg={skin.muted}>
-            {props.keys.print("local_push")} push nested · {props.keys.print("local_close")} pop/close
+            {shortcuts().local_push} push nested · {shortcuts().local_pop} pop/close
           </text>
           <box flexDirection="row" gap={1}>
             <Btn txt="push" run={push} skin={skin} on />
@@ -571,20 +671,35 @@ const Modal = (props: {
   const value = parse(props.params)
   const skin = tone(props.api)
 
-  useKeyboard((evt) => {
-    if (props.api.route.current.name !== props.route.modal) return
+  useBindings(() => ({
+    enabled: () => props.api.route.current.name === props.route.modal,
+    commands: [
+      {
+        name: command.modal_accept,
+        run() {
+          props.api.route.navigate(props.route.screen, { ...parse(props.params), source: "modal" })
+        },
+      },
+      {
+        name: command.modal_close,
+        run() {
+          props.api.route.navigate("home")
+        },
+      },
+    ],
+    bindings: props.keys.sections.modal,
+  }))
+  const shortcuts = useKeymapSelector((keymap) => {
+    const bindings = keymap.getCommandBindings({
+      visibility: "registered",
+      commands: [command.modal, command.screen, command.modal_accept, command.modal_close],
+    })
 
-    if (props.keys.match("modal_accept", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      props.api.route.navigate(props.route.screen, { ...value, source: "modal" })
-      return
-    }
-
-    if (props.keys.match("modal_close", evt)) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      props.api.route.navigate("home")
+    return {
+      modal: props.api.keys.formatBindings(bindings.get(command.modal)) ?? "",
+      screen: props.api.keys.formatBindings(bindings.get(command.screen)) ?? "",
+      modal_accept: props.api.keys.formatBindings(bindings.get(command.modal_accept)) ?? "",
+      modal_close: props.api.keys.formatBindings(bindings.get(command.modal_close)) ?? "",
     }
   })
 
@@ -595,10 +710,10 @@ const Modal = (props: {
           <text fg={skin.text}>
             <b>{props.input.label} modal</b>
           </text>
-          <text fg={skin.muted}>{props.keys.print("modal")} modal command</text>
-          <text fg={skin.muted}>{props.keys.print("screen")} screen command</text>
+          <text fg={skin.muted}>{shortcuts().modal} modal command</text>
+          <text fg={skin.muted}>{shortcuts().screen} screen command</text>
           <text fg={skin.muted}>
-            {props.keys.print("modal_accept")} opens screen · {props.keys.print("modal_close")} closes
+            {shortcuts().modal_accept} opens screen · {shortcuts().modal_close} closes
           </text>
           <box flexDirection="row" gap={1}>
             <Btn
@@ -791,120 +906,117 @@ const slot = (api: TuiPluginApi, input: Cfg): TuiSlotPlugin[] => [
 
 const reg = (api: TuiPluginApi, input: Cfg, keys: Keys) => {
   const route = names(input)
-  api.command.register(() => [
-    {
-      title: `${input.label} modal`,
-      value: "plugin.smoke.modal",
-      keybind: keys.get("modal"),
-      category: "Plugin",
-      slash: {
-        name: "smoke",
+  api.keymap.registerLayer({
+    commands: [
+      {
+        name: command.modal,
+        title: `${input.label} modal`,
+        category: "Plugin",
+        namespace: "palette",
+        slashName: "smoke",
+        run() {
+          api.route.navigate(route.modal, { source: "command" })
+        },
       },
-      onSelect: () => {
-        api.route.navigate(route.modal, { source: "command" })
+      {
+        name: command.screen,
+        title: `${input.label} screen`,
+        category: "Plugin",
+        namespace: "palette",
+        slashName: "smoke-screen",
+        run() {
+          api.route.navigate(route.screen, { source: "command", tab: 0, count: 0 })
+        },
       },
-    },
-    {
-      title: `${input.label} screen`,
-      value: "plugin.smoke.screen",
-      keybind: keys.get("screen"),
-      category: "Plugin",
-      slash: {
-        name: "smoke-screen",
+      {
+        name: command.alert,
+        title: `${input.label} alert dialog`,
+        category: "Plugin",
+        namespace: "palette",
+        slashName: "smoke-alert",
+        run() {
+          warn(api, route, current(api, route))
+        },
       },
-      onSelect: () => {
-        api.route.navigate(route.screen, { source: "command", tab: 0, count: 0 })
+      {
+        name: command.confirm,
+        title: `${input.label} confirm dialog`,
+        category: "Plugin",
+        namespace: "palette",
+        slashName: "smoke-confirm",
+        run() {
+          check(api, route, current(api, route))
+        },
       },
-    },
-    {
-      title: `${input.label} alert dialog`,
-      value: "plugin.smoke.alert",
-      category: "Plugin",
-      slash: {
-        name: "smoke-alert",
+      {
+        name: command.prompt,
+        title: `${input.label} prompt dialog`,
+        category: "Plugin",
+        namespace: "palette",
+        slashName: "smoke-prompt",
+        run() {
+          entry(api, route, current(api, route))
+        },
       },
-      onSelect: () => {
-        warn(api, route, current(api, route))
+      {
+        name: command.select,
+        title: `${input.label} select dialog`,
+        category: "Plugin",
+        namespace: "palette",
+        slashName: "smoke-select",
+        run() {
+          picker(api, route, current(api, route))
+        },
       },
-    },
-    {
-      title: `${input.label} confirm dialog`,
-      value: "plugin.smoke.confirm",
-      category: "Plugin",
-      slash: {
-        name: "smoke-confirm",
+      {
+        name: command.host,
+        title: `${input.label} host overlay`,
+        category: "Plugin",
+        namespace: "palette",
+        slashName: "smoke-host",
+        run() {
+          host(api, input, tone(api))
+        },
       },
-      onSelect: () => {
-        check(api, route, current(api, route))
+      {
+        name: command.home,
+        title: `${input.label} go home`,
+        category: "Plugin",
+        namespace: "palette",
+        enabled: () => api.route.current.name !== "home",
+        run() {
+          api.route.navigate("home")
+        },
       },
-    },
-    {
-      title: `${input.label} prompt dialog`,
-      value: "plugin.smoke.prompt",
-      category: "Plugin",
-      slash: {
-        name: "smoke-prompt",
+      {
+        name: command.toast,
+        title: `${input.label} toast`,
+        category: "Plugin",
+        namespace: "palette",
+        run() {
+          api.ui.toast({
+            variant: "info",
+            title: "Smoke",
+            message: "Plugin toast works",
+            duration: 2000,
+          })
+        },
       },
-      onSelect: () => {
-        entry(api, route, current(api, route))
-      },
-    },
-    {
-      title: `${input.label} select dialog`,
-      value: "plugin.smoke.select",
-      category: "Plugin",
-      slash: {
-        name: "smoke-select",
-      },
-      onSelect: () => {
-        picker(api, route, current(api, route))
-      },
-    },
-    {
-      title: `${input.label} host overlay`,
-      value: "plugin.smoke.host",
-      category: "Plugin",
-      slash: {
-        name: "smoke-host",
-      },
-      onSelect: () => {
-        host(api, input, tone(api))
-      },
-    },
-    {
-      title: `${input.label} go home`,
-      value: "plugin.smoke.home",
-      category: "Plugin",
-      enabled: api.route.current.name !== "home",
-      onSelect: () => {
-        api.route.navigate("home")
-      },
-    },
-    {
-      title: `${input.label} toast`,
-      value: "plugin.smoke.toast",
-      category: "Plugin",
-      onSelect: () => {
-        api.ui.toast({
-          variant: "info",
-          title: "Smoke",
-          message: "Plugin toast works",
-          duration: 2000,
-        })
-      },
-    },
-  ])
+    ],
+    bindings: keys.sections.global,
+  })
 }
 
 const tui: TuiPlugin = async (api, options, meta) => {
-  if (options?.enabled === false) return
+  const input = options as SmokeOptions | undefined
+  if (input?.enabled === false) return
 
   await api.theme.install("./smoke-theme.json")
   api.theme.set("smoke-theme")
 
-  const value = cfg(options ?? undefined)
+  const value = cfg(input)
   const route = names(value)
-  const keys = api.keybind.create(bind, value.keybinds)
+  const keys = createKeys(value.keymap)
   const fx = new VignetteEffect(value.vignette)
   const post = fx.apply.bind(fx)
   api.renderer.addPostProcessFn(post)

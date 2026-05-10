@@ -365,8 +365,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Отсутствует API ключ.",
   "zen.api.error.invalidApiKey": "Неверный API ключ.",
   "zen.api.error.subscriptionQuotaExceeded": "Квота подписки превышена. Повторите попытку через {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Квота подписки превышена. Вы можете продолжить использовать бесплатные модели.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "Достигнут лимит использования за 5 часов. Сбросится через {{retryIn}}. Чтобы продолжить использовать эту модель сейчас, включите оплату с доступного баланса: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Достигнут недельный лимит использования. Сбросится через {{retryIn}}. Чтобы продолжить использовать эту модель сейчас, включите оплату с доступного баланса: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Достигнут месячный лимит использования. Сбросится через {{retryIn}}. Чтобы продолжить использовать эту модель сейчас, включите оплату с доступного баланса: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Нет способа оплаты. Добавьте способ оплаты здесь: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Недостаточно средств. Управляйте оплатой здесь: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":

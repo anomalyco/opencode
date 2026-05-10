@@ -15,6 +15,16 @@ export const Info = Schema.Union([
     type: Schema.Literal("retry"),
     attempt: NonNegativeInt,
     message: Schema.String,
+    action: Schema.optional(
+      Schema.Struct({
+        reason: Schema.String,
+        provider: Schema.String,
+        title: Schema.String,
+        message: Schema.String,
+        label: Schema.String,
+        link: Schema.optional(Schema.String),
+      }),
+    ),
     next: NonNegativeInt,
   }),
   Schema.Struct({

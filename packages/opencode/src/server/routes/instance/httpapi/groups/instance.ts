@@ -5,7 +5,7 @@ import { LSP } from "@/lsp/lsp"
 import { Vcs } from "@/project/vcs"
 import { Skill } from "@/skill"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
@@ -23,11 +23,25 @@ export const VcsDiffQuery = Schema.Struct({
   mode: Vcs.Mode,
 })
 
+export class ApiVcsApplyError extends Schema.ErrorClass<ApiVcsApplyError>("VcsApplyError")(
+  {
+    name: Schema.Literal("VcsApplyError"),
+    data: Schema.Struct({
+      message: Schema.String,
+      reason: Schema.Literals(["non-git", "not-clean"]),
+    }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
 export const InstancePaths = {
   dispose: "/instance/dispose",
   path: "/path",
   vcs: "/vcs",
+  vcsStatus: "/vcs/status",
   vcsDiff: "/vcs/diff",
+  vcsDiffRaw: "/vcs/diff/raw",
+  vcsApply: "/vcs/apply",
   command: "/command",
   agent: "/agent",
   skill: "/skill",
@@ -68,6 +82,15 @@ export const InstanceApi = HttpApi.make("instance")
               "Retrieve version control system (VCS) information for the current project, such as git branch.",
           }),
         ),
+        HttpApiEndpoint.get("vcsStatus", InstancePaths.vcsStatus, {
+          success: described(Schema.Array(Vcs.FileStatus), "VCS status"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.status",
+            summary: "Get VCS status",
+            description: "Retrieve changed files in the current working tree without patches.",
+          }),
+        ),
         HttpApiEndpoint.get("vcsDiff", InstancePaths.vcsDiff, {
           query: VcsDiffQuery,
           success: described(Schema.Array(Vcs.FileDiff), "VCS diff"),
@@ -76,6 +99,29 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "vcs.diff",
             summary: "Get VCS diff",
             description: "Retrieve the current git diff for the working tree or against the default branch.",
+          }),
+        ),
+        HttpApiEndpoint.get("vcsDiffRaw", InstancePaths.vcsDiffRaw, {
+          success: described(
+            Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/x-diff; charset=utf-8" })),
+            "Raw VCS diff",
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.diff.raw",
+            summary: "Get raw VCS diff",
+            description: "Retrieve a raw patch for current uncommitted changes.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsApply", InstancePaths.vcsApply, {
+          payload: Vcs.ApplyInput,
+          success: described(Vcs.ApplyResult, "VCS patch applied"),
+          error: ApiVcsApplyError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.apply",
+            summary: "Apply VCS patch",
+            description: "Apply a raw patch to the current working tree.",
           }),
         ),
         HttpApiEndpoint.get("command", InstancePaths.command, {

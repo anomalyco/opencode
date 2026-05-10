@@ -2,8 +2,10 @@ import { beforeAll, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
+import { createTestKeymap } from "@opentui/keymap/testing"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { Global } from "@opencode-ai/core/global"
 import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 import { Filesystem } from "@/util/filesystem"
@@ -79,7 +81,10 @@ async function load(): Promise<Data> {
 
       await Bun.write(
         localPluginPath,
-        `export const ignored = async (_input, options) => {
+        `import { resolveBindingSections } from "@opentui/keymap/extras"
+import { useBindings } from "@opentui/keymap/solid"
+
+export const ignored = async (_input, options) => {
   if (!options?.fn_marker) return
   await Bun.write(options.fn_marker, "called")
 }
@@ -93,10 +98,21 @@ export default {
     const cfg_speed = api.tuiConfig.scroll_speed
     const cfg_accel = api.tuiConfig.scroll_acceleration?.enabled
     const cfg_submit = api.tuiConfig.keybinds?.input_submit
-    const key = api.keybind.create(
-      { modal: "ctrl+shift+m", screen: "ctrl+shift+o", close: "escape" },
-      options.keybinds,
-    )
+    const has_keys = typeof api.keys.formatBindings === "function"
+    const keymap = resolveBindingSections(options.keymap?.sections ?? {
+      main: {
+        "plugin.loader.local": "ctrl+shift+m",
+        "plugin.loader.close": "escape",
+      },
+    }, { sections: ["main"] }).sections
+    const key_modal = keymap.main.find((item) => item.cmd === "plugin.loader.local")?.key
+    const key_close = keymap.main.find((item) => item.cmd === "plugin.loader.close")?.key
+    const key_unknown = "ctrl+k"
+    const off = api.keymap.registerLayer({
+      commands: [{ name: "plugin.loader.local", run() {} }, { name: "plugin.loader.close", run() {} }],
+      bindings: keymap.main,
+    })
+    off()
     const kv_before = api.kv.get(options.kv_key, "missing")
     api.kv.set(options.kv_key, "stored")
     const kv_after = api.kv.get(options.kv_key, "missing")
@@ -132,10 +148,13 @@ export default {
         set_installed,
         selected: api.theme.selected,
         same: first === second,
-        key_modal: key.get("modal"),
-        key_close: key.get("close"),
-        key_unknown: key.get("ctrl+k"),
-        key_print: key.print("modal"),
+        key_modal,
+        key_close,
+        key_unknown,
+        has_keys,
+        has_keymap: typeof api.keymap.registerLayer === "function",
+        has_resolve_binding_sections: typeof resolveBindingSections === "function",
+        has_keymap_solid: typeof useBindings === "function",
         kv_before,
         kv_after,
         kv_ready: api.kv.ready,
@@ -337,7 +356,14 @@ export default {
       theme_name: tmp.extra.localThemeName,
       kv_key: "plugin_state_key",
       session_id: "ses_test",
-      keybinds: { modal: "ctrl+alt+m", close: "q" },
+      keymap: {
+        sections: {
+          main: {
+            "plugin.loader.local": "ctrl+alt+m",
+            "plugin.loader.close": "q",
+          },
+        },
+      },
     }
     const invalidOpts = {
       marker: tmp.extra.invalidMarker,
@@ -356,7 +382,7 @@ export default {
       theme_name: tmp.extra.globalThemeName,
     }
 
-    const config: TuiConfig.Info = {
+    const config = createTuiResolvedConfig({
       plugin: [
         [tmp.extra.localSpec, localOpts],
         [tmp.extra.invalidSpec, invalidOpts],
@@ -373,7 +399,7 @@ export default {
           source: path.join(Global.Path.config, "tui.json"),
         },
       ],
-    }
+    })
 
     await TuiPluginRuntime.init({
       api: createTuiPluginApi({
@@ -385,9 +411,6 @@ export default {
           keybinds: {
             input_submit: "ctrl+enter",
           },
-        },
-        keybind: {
-          print: (key) => `print:${key}`,
         },
         state: {
           session: {
@@ -507,7 +530,7 @@ test("continues loading when a plugin is missing config metadata", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const config: TuiConfig.Info = {
+  const config = createTuiResolvedConfig({
     plugin: [
       [tmp.extra.badSpec, { marker: path.join(tmp.path, "bad.txt") }],
       [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
@@ -525,7 +548,7 @@ test("continues loading when a plugin is missing config metadata", async () => {
         source: path.join(tmp.path, "tui.json"),
       },
     ],
-  }
+  })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
@@ -606,13 +629,13 @@ export default {
     const b = path.join(tmp.path, "order-b.ts")
     const aSpec = pathToFileURL(a).href
     const bSpec = pathToFileURL(b).href
-    const config: TuiConfig.Info = {
+    const config = createTuiResolvedConfig({
       plugin: [aSpec, bSpec],
       plugin_origins: [
         { spec: aSpec, scope: "local", source: path.join(tmp.path, "tui.json") },
         { spec: bSpec, scope: "local", source: path.join(tmp.path, "tui.json") },
       ],
-    }
+    })
     await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
     const lines = (await fs.readFile(tmp.extra.marker, "utf8")).trim().split("\n")
     expect(lines).toEqual(["a-start", "a-end", "b"])
@@ -645,7 +668,10 @@ describe("tui.plugin.loader", () => {
     expect(data.local.key_modal).toBe("ctrl+alt+m")
     expect(data.local.key_close).toBe("q")
     expect(data.local.key_unknown).toBe("ctrl+k")
-    expect(data.local.key_print).toBe("print:ctrl+alt+m")
+    expect(data.local.has_keys).toBe(true)
+    expect(data.local.has_keymap).toBe(true)
+    expect(data.local.has_resolve_binding_sections).toBe(true)
+    expect(data.local.has_keymap_solid).toBe(true)
     expect(data.local.kv_before).toBe("missing")
     expect(data.local.kv_after).toBe("stored")
     expect(data.local.kv_ready).toBe(true)
@@ -701,6 +727,227 @@ describe("tui.plugin.loader", () => {
     expect(data.leaked_local_to_global).toBe(false)
     expect(data.leaked_global_to_local).toBe(false)
   })
+})
+
+test("auto-disposes plugin keymap layers", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "keymap-cleanup-plugin.ts")
+      const spec = pathToFileURL(file).href
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.keymap.cleanup",
+  tui: async (api) => {
+    api.keymap.registerLayer({
+      commands: [{ name: "demo.keymap.cleanup", run() {} }],
+      bindings: [{ key: "ctrl+g", cmd: "demo.keymap.cleanup" }],
+    })
+  },
+}
+`,
+      )
+
+      return { spec }
+    },
+  })
+
+  let command_add = 0
+  let command_drop = 0
+  const keymap = {
+    registerLayer(layer: { commands?: Array<{ name: string }> }) {
+      const tracked = layer.commands?.some((item) => item.name === "demo.keymap.cleanup") ?? false
+      if (tracked) command_add += 1
+      return () => {
+        if (!tracked) return
+        command_drop += 1
+      }
+    },
+  } as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["keymap"]
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ keymap }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+
+    expect(command_add).toBe(1)
+    expect(command_drop).toBe(0)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(command_drop).toBe(1)
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
+test("plugin keymap proxy preserves real keymap receiver", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "keymap-receiver-plugin.ts")
+      const spec = pathToFileURL(file).href
+      const marker = path.join(dir, "keymap-receiver.txt")
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.keymap.receiver",
+  tui: async (api) => {
+    api.keymap.setData("demo.receiver", "ok")
+    await Bun.write(${JSON.stringify(marker)}, String(api.keymap.getData("demo.receiver")))
+  },
+}
+`,
+      )
+
+      return { spec, marker }
+    },
+  })
+
+  const harness = createTestKeymap({ defaultKeys: true })
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({
+        keymap: harness.keymap as unknown as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["keymap"],
+      }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+
+    await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("ok")
+    expect(harness.keymap.getData("demo.receiver")).toBe("ok")
+  } finally {
+    await TuiPluginRuntime.dispose()
+    harness.cleanup()
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
+test("auto-disposes plugin keymap transformers", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "keymap-transformer-cleanup-plugin.ts")
+      const spec = pathToFileURL(file).href
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.keymap.transformer.cleanup",
+  tui: async (api) => {
+    api.keymap.prependLayerBindingsTransformer((bindings) => bindings)
+    api.keymap.appendLayerBindingsTransformer((bindings) => bindings)
+    api.keymap.prependCommandTransformer(() => {})
+    api.keymap.appendCommandTransformer(() => {})
+  },
+}
+`,
+      )
+
+      return { spec }
+    },
+  })
+
+  let add = 0
+  let drop = 0
+  const track = () => {
+    add += 1
+    return () => {
+      drop += 1
+    }
+  }
+  const keymap = {
+    registerLayer: () => () => {},
+    prependLayerBindingsTransformer: track,
+    appendLayerBindingsTransformer: track,
+    prependCommandTransformer: track,
+    appendCommandTransformer: track,
+  } as unknown as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["keymap"]
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ keymap }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+
+    expect(add).toBe(4)
+    expect(drop).toBe(0)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(drop).toBe(4)
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
+test("manual onDispose for plugin keymap layers stays idempotent", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "keymap-cleanup-manual-plugin.ts")
+      const spec = pathToFileURL(file).href
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.keymap.cleanup.manual",
+  tui: async (api) => {
+    const off = api.keymap.registerLayer({
+      commands: [{ name: "demo.keymap.cleanup.manual", run() {} }],
+      bindings: [{ key: "ctrl+h", cmd: "demo.keymap.cleanup.manual" }],
+    })
+    api.lifecycle.onDispose(off)
+  },
+}
+`,
+      )
+
+      return { spec }
+    },
+  })
+
+  let command_drop = 0
+  const keymap = {
+    registerLayer(layer: { commands?: Array<{ name: string }> }) {
+      const tracked = layer.commands?.some((item) => item.name === "demo.keymap.cleanup.manual") ?? false
+      return () => {
+        if (!tracked) return
+        command_drop += 1
+      }
+    },
+  } as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["keymap"]
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ keymap }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(command_drop).toBe(1)
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
 })
 
 test("updates installed theme when plugin metadata changes", async () => {
@@ -766,16 +1013,17 @@ test("updates installed theme when plugin metadata changes", async () => {
       },
     })
 
-  const mkConfig = (): TuiConfig.Info => ({
-    plugin: [[tmp.extra.spec, { theme_path: `./theme-update.json` }]],
-    plugin_origins: [
-      {
-        spec: [tmp.extra.spec, { theme_path: `./theme-update.json` }],
-        scope: "local",
-        source: path.join(tmp.path, "tui.json"),
-      },
-    ],
-  })
+  const mkConfig = () =>
+    createTuiResolvedConfig({
+      plugin: [[tmp.extra.spec, { theme_path: `./theme-update.json` }]],
+      plugin_origins: [
+        {
+          spec: [tmp.extra.spec, { theme_path: `./theme-update.json` }],
+          scope: "local",
+          source: path.join(tmp.path, "tui.json"),
+        },
+      ],
+    })
 
   try {
     await TuiPluginRuntime.init({ api: mkApi(), config: mkConfig() })

@@ -356,8 +356,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "ไม่มี API key",
   "zen.api.error.invalidApiKey": "API key ไม่ถูกต้อง",
   "zen.api.error.subscriptionQuotaExceeded": "โควต้าการสมัครสมาชิกเกินขีดจำกัด ลองใหม่ในอีก {{retryIn}}",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "โควต้าการสมัครสมาชิกเกินขีดจำกัด คุณสามารถดำเนินการต่อโดยใช้โมเดลฟรี",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "ถึงขีดจำกัดการใช้งานในรอบ 5 ชั่วโมงแล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "ถึงขีดจำกัดการใช้งานรายสัปดาห์แล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "ถึงขีดจำกัดการใช้งานรายเดือนแล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "ไม่มีวิธีการชำระเงิน เพิ่มวิธีการชำระเงินที่นี่: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "ยอดเงินคงเหลือไม่เพียงพอ จัดการการเรียกเก็บเงินของคุณที่นี่: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
