@@ -5,6 +5,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
+import { workspaceRoot } from "@/project/instance-context"
 import { Git } from "@/git"
 import { parseRepositoryReference, repositoryCachePath, type Reference as RepositoryReference } from "@/util/repository"
 import { RepositoryCache } from "./repository-cache"
@@ -50,9 +51,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Re
 
 export function referencePath(input: { directory: string; worktree: string; value: string }) {
   if (input.value.startsWith("~/")) return path.join(Global.Path.home, input.value.slice(2))
-  return path.isAbsolute(input.value)
-    ? input.value
-    : path.resolve(input.worktree === "/" ? input.directory : input.worktree, input.value)
+  return path.isAbsolute(input.value) ? input.value : path.resolve(workspaceRoot(input), input.value)
 }
 
 function resolveGit(

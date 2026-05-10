@@ -196,6 +196,26 @@ describe("tool.apply_patch freeform", () => {
     })
   })
 
+  test("uses project-relative paths in non-git projects", async () => {
+    await using fixture = await tmpdir()
+    const { ctx, calls } = makeCtx()
+
+    await WithInstance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "modify.txt")
+        await fs.writeFile(target, "line1\n", "utf-8")
+
+        const patchText = "*** Begin Patch\n*** Update File: modify.txt\n@@\n-line1\n+changed\n*** End Patch"
+
+        const result = await execute({ patchText }, ctx)
+
+        expect(result.output).toMatch(/M modify\.txt/)
+        expect(calls[0]?.metadata.files[0]?.relativePath).toBe("modify.txt")
+      },
+    })
+  })
+
   test("does not invent a first-line diff for BOM files", async () => {
     await using fixture = await tmpdir()
     const { ctx, calls } = makeCtx()

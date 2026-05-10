@@ -8,6 +8,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
 import { InstanceState } from "@/effect/instance-state"
+import { workspaceRoot } from "@/project/instance-context"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
@@ -165,7 +166,7 @@ export const ReadTool = Tool.define(
         filepath = AppFileSystem.normalizePath(filepath)
       }
       yield* reference.ensure(filepath)
-      const title = path.relative(instance.worktree, filepath)
+      const title = path.relative(workspaceRoot(instance), filepath)
 
       const stat = yield* fs.stat(filepath).pipe(
         Effect.catchIf(
@@ -181,7 +182,7 @@ export const ReadTool = Tool.define(
 
       yield* ctx.ask({
         permission: "read",
-        patterns: [path.relative(instance.worktree, filepath)],
+        patterns: [path.relative(workspaceRoot(instance), filepath)],
         always: ["*"],
         metadata: {},
       })

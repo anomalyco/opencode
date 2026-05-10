@@ -11,6 +11,7 @@ import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { InstanceState } from "@/effect/instance-state"
+import { workspaceRoot } from "@/project/instance-context"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
@@ -53,7 +54,7 @@ export const WriteTool = Tool.define(
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
           yield* ctx.ask({
             permission: "edit",
-            patterns: [path.relative(instance.worktree, filepath)],
+            patterns: [path.relative(workspaceRoot(instance), filepath)],
             always: ["*"],
             metadata: {
               filepath,
@@ -90,7 +91,7 @@ export const WriteTool = Tool.define(
           }
 
           return {
-            title: path.relative(instance.worktree, filepath),
+            title: path.relative(workspaceRoot(instance), filepath),
             metadata: {
               diagnostics,
               filepath,

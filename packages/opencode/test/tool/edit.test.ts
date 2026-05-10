@@ -184,6 +184,23 @@ describe("tool.edit", () => {
         },
       })
     })
+
+    test("uses project-relative title in non-git projects", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "new.txt")
+
+      await WithInstance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await resolve()
+          const result = await Effect.runPromise(
+            edit.execute({ filePath: filepath, oldString: "", newString: "content" }, ctx),
+          )
+
+          expect(result.title).toBe("new.txt")
+        },
+      })
+    })
   })
 
   describe("editing existing files", () => {

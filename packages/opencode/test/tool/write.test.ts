@@ -92,6 +92,16 @@ describe("tool.write", () => {
         expect(content).toBe("relative content")
       }),
     )
+
+    it.live("uses project-relative title in non-git projects", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const filepath = path.join(dir, "newfile.txt")
+          const result = yield* run({ filePath: filepath, content: "content" })
+          expect(result.title).toBe("newfile.txt")
+        }),
+      ),
+    )
   })
 
   describe("existing file overwrite", () => {

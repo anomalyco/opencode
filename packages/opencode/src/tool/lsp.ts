@@ -4,6 +4,7 @@ import path from "path"
 import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./lsp.txt"
 import { InstanceState } from "@/effect/instance-state"
+import { workspaceRoot } from "@/project/instance-context"
 import { pathToFileURL } from "url"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -62,7 +63,7 @@ export const LspTool = Tool.define(
 
           const uri = pathToFileURL(file).href
           const position = { file, line: args.line - 1, character: args.character - 1 }
-          const relPath = path.relative(instance.worktree, file)
+          const relPath = path.relative(workspaceRoot(instance), file)
           const detail =
             args.operation === "workspaceSymbol"
               ? ""

@@ -183,5 +183,18 @@ describe("tool.lsp", () => {
         { git: true },
       ),
     )
+
+    it.live("uses project-relative title in non-git projects", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const file = path.join(dir, "test.ts")
+          yield* put(file)
+
+          const result = yield* run({ operation: "goToDefinition", filePath: file, line: 3, character: 7 })
+
+          expect(result.title).toBe("goToDefinition test.ts:3:7")
+        }),
+      ),
+    )
   })
 })

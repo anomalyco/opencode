@@ -4,6 +4,7 @@ import * as Tool from "./tool"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { InstanceState } from "@/effect/instance-state"
+import { workspaceRoot } from "@/project/instance-context"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -189,7 +190,7 @@ export const ApplyPatchTool = Tool.define(
       // Build per-file metadata for UI rendering (used for both permission and result)
       const files = fileChanges.map((change) => ({
         filePath: change.filePath,
-        relativePath: path.relative(instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
+        relativePath: path.relative(workspaceRoot(instance), change.movePath ?? change.filePath).replaceAll("\\", "/"),
         type: change.type,
         patch: change.diff,
         additions: change.additions,
@@ -198,7 +199,7 @@ export const ApplyPatchTool = Tool.define(
       }))
 
       // Check permissions if needed
-      const relativePaths = fileChanges.map((c) => path.relative(instance.worktree, c.filePath).replaceAll("\\", "/"))
+      const relativePaths = fileChanges.map((c) => path.relative(workspaceRoot(instance), c.filePath).replaceAll("\\", "/"))
       yield* ctx.ask({
         permission: "edit",
         patterns: relativePaths,
@@ -269,13 +270,13 @@ export const ApplyPatchTool = Tool.define(
       // Generate output summary
       const summaryLines = fileChanges.map((change) => {
         if (change.type === "add") {
-          return `A ${path.relative(instance.worktree, change.filePath).replaceAll("\\", "/")}`
+          return `A ${path.relative(workspaceRoot(instance), change.filePath).replaceAll("\\", "/")}`
         }
         if (change.type === "delete") {
-          return `D ${path.relative(instance.worktree, change.filePath).replaceAll("\\", "/")}`
+          return `D ${path.relative(workspaceRoot(instance), change.filePath).replaceAll("\\", "/")}`
         }
         const target = change.movePath ?? change.filePath
-        return `M ${path.relative(instance.worktree, target).replaceAll("\\", "/")}`
+        return `M ${path.relative(workspaceRoot(instance), target).replaceAll("\\", "/")}`
       })
       let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
 
@@ -284,7 +285,7 @@ export const ApplyPatchTool = Tool.define(
         const target = change.movePath ?? change.filePath
         const block = LSP.Diagnostic.report(target, diagnostics[AppFileSystem.normalizePath(target)] ?? [])
         if (!block) continue
-        const rel = path.relative(instance.worktree, target).replaceAll("\\", "/")
+        const rel = path.relative(workspaceRoot(instance), target).replaceAll("\\", "/")
         output += `\n\nLSP errors detected in ${rel}, please fix:\n${block}`
       }
 

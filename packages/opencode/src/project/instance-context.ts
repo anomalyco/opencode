@@ -22,3 +22,11 @@ export function containsPath(filepath: string, ctx: InstanceContext): boolean {
   if (ctx.worktree === "/") return false
   return AppFileSystem.contains(ctx.worktree, filepath)
 }
+
+/**
+ * The project root for worktree-relative paths. Returns `directory` when
+ * `worktree` is "/", which `Project.fromDirectory` uses for non-git projects.
+ */
+export function workspaceRoot(ctx: Pick<InstanceContext, "directory" | "worktree">): string {
+  return ctx.worktree === "/" ? ctx.directory : ctx.worktree
+}
