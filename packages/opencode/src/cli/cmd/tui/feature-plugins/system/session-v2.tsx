@@ -6,7 +6,7 @@ import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
+import { TextAttributes, type BoxRenderable, detectLinks, type SyntaxStyle } from "@opentui/core"
 import { useBindings } from "../../keymap"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -242,6 +242,7 @@ function CompactionMessage(props: { message: SessionMessageCompaction }) {
               filetype="markdown"
               drawUnstyledText={false}
               streaming={false}
+              onChunks={detectLinks}
               syntaxStyle={syntax()}
               content={summary().trim()}
               conceal={true}
@@ -368,6 +369,7 @@ function AssistantText(props: { part: SessionMessageAssistantText; syntax: Synta
           filetype="markdown"
           drawUnstyledText={false}
           streaming={true}
+          onChunks={detectLinks}
           syntaxStyle={props.syntax}
           content={props.part.text.trim()}
           conceal={true}
@@ -396,6 +398,7 @@ function AssistantReasoning(props: { part: SessionMessageAssistantReasoning; sub
           filetype="markdown"
           drawUnstyledText={false}
           streaming={true}
+          onChunks={detectLinks}
           syntaxStyle={props.subtleSyntax}
           content={"_Thinking:_ " + content()}
           conceal={true}
