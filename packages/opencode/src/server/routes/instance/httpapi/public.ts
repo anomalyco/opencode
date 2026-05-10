@@ -54,28 +54,34 @@ type OpenApiResponse = {
 // Query schemas describe decoded Effect values, but the generated SDK needs the
 // public call shape. These keep SDK callers passing numbers/booleans while the
 // server still decodes string query params at runtime.
-const QueryNumberParameters = new Set(["start", "limit", "method"])
 const QueryBooleanParameters = new Set(["roots", "archived"])
-const QueryParameterSchemas = {
+const QueryParameterSchemas: Record<string, OpenApiSchema> = {
+  "GET /experimental/session start": { type: "number" },
   "GET /find/file limit": { type: "integer", minimum: 1, maximum: 200 },
   "GET /experimental/session cursor": { type: "number" },
+  "GET /experimental/session limit": { type: "number" },
+  "GET /session start": { type: "number" },
+  "GET /session limit": { type: "number" },
   "GET /session/{sessionID}/diff messageID": { type: "string", pattern: "^msg.*" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
-} satisfies Record<string, OpenApiSchema>
+  "GET /api/session limit": { type: "number" },
+  "GET /api/session start": { type: "number" },
+  "GET /api/session/{sessionID}/message limit": { type: "number" },
+}
 
-const PathParameterSchemas = {
+const PathParameterSchemas: Record<string, OpenApiSchema> = {
   sessionID: { type: "string", pattern: "^ses.*" },
   messageID: { type: "string", pattern: "^msg.*" },
   partID: { type: "string", pattern: "^prt.*" },
   permissionID: { type: "string", pattern: "^per.*" },
   ptyID: { type: "string", pattern: "^pty.*" },
-} satisfies Record<string, OpenApiSchema>
+}
 
-const LegacyComponentDescriptions = {
+const LegacyComponentDescriptions: Record<string, string> = {
   LogLevel: "Log level",
   ServerConfig: "Server configuration for opencode serve and web commands",
   LayoutConfig: "@deprecated Always uses stretch layout.",
-} satisfies Record<string, string>
+}
 
 function matchLegacyOpenApi(input: Record<string, unknown>) {
   const spec = input as OpenApiSpec
@@ -269,7 +275,7 @@ function applyLegacySchemaOverrides(spec: OpenApiSpec) {
 
 function normalizeComponentDescriptions(spec: OpenApiSpec) {
   for (const [name, schema] of Object.entries(spec.components?.schemas ?? {})) {
-    const description = LegacyComponentDescriptions[name as keyof typeof LegacyComponentDescriptions]
+    const description = LegacyComponentDescriptions[name]
     if (description) {
       schema.description = description
       continue
@@ -415,7 +421,7 @@ function fixSelfReferencingComponents(spec: OpenApiSpec) {
     }
   }
   // Simplest fix: generate the raw spec (without transform) to get correct schemas
-  const raw = OpenApi.fromApi(OpenCodeHttpApi) as unknown as OpenApiSpec
+  const raw: OpenApiSpec = OpenApi.fromApi(OpenCodeHttpApi)
   const rawSchemas = raw.components?.schemas
   if (!rawSchemas) return
   for (const name of selfRefs) {
@@ -484,13 +490,9 @@ function normalizeParameter(param: OpenApiParameter, route: string) {
     return
   }
   if (param.in === "query") {
-    const override = QueryParameterSchemas[`${route} ${param.name}` as keyof typeof QueryParameterSchemas]
+    const override = QueryParameterSchemas[`${route} ${param.name}`]
     if (override) {
       param.schema = override
-      return
-    }
-    if (QueryNumberParameters.has(param.name)) {
-      param.schema = { type: "number" }
       return
     }
     if (QueryBooleanParameters.has(param.name)) {
@@ -504,7 +506,7 @@ function normalizeParameter(param: OpenApiParameter, route: string) {
 }
 
 function pathParameterSchema(route: string, name: string) {
-  if (name in PathParameterSchemas) return PathParameterSchemas[name as keyof typeof PathParameterSchemas]
+  if (name in PathParameterSchemas) return PathParameterSchemas[name]
   if (name === "id" && route.startsWith("DELETE /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
   if (name === "id" && route.startsWith("POST /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
   if (name === "requestID" && route.startsWith("POST /permission/")) return { type: "string", pattern: "^per.*" }

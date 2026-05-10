@@ -33,7 +33,8 @@ const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
 type QuerySchema = { readonly fields: Record<string, unknown> }
-type OpenApiParameter = { readonly name: string; readonly in: string }
+type OpenApiSchema = { readonly maximum?: number; readonly minimum?: number; readonly type?: string }
+type OpenApiParameter = { readonly name: string; readonly in: string; readonly schema?: OpenApiSchema }
 type OpenApiOperation = { readonly parameters?: readonly OpenApiParameter[] }
 
 const openApiDriftRoutes = [
@@ -48,6 +49,24 @@ const openApiDriftRoutes = [
   { method: "get", path: "/api/session", query: V2SessionsQuery },
   { method: "get", path: "/api/session/:sessionID/message", query: V2MessagesQuery },
 ] satisfies Array<{ method: Method; path: string; query: QuerySchema }>
+
+const numericSdkQueryParams = [
+  { method: "get", path: ExperimentalPaths.session, name: "start", schema: { type: "number" } },
+  { method: "get", path: ExperimentalPaths.session, name: "cursor", schema: { type: "number" } },
+  { method: "get", path: ExperimentalPaths.session, name: "limit", schema: { type: "number" } },
+  { method: "get", path: FilePaths.findFile, name: "limit", schema: { type: "integer", minimum: 1, maximum: 200 } },
+  { method: "get", path: SessionPaths.list, name: "start", schema: { type: "number" } },
+  { method: "get", path: SessionPaths.list, name: "limit", schema: { type: "number" } },
+  {
+    method: "get",
+    path: SessionPaths.messages,
+    name: "limit",
+    schema: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+  },
+  { method: "get", path: "/api/session", name: "limit", schema: { type: "number" } },
+  { method: "get", path: "/api/session", name: "start", schema: { type: "number" } },
+  { method: "get", path: "/api/session/:sessionID/message", name: "limit", schema: { type: "number" } },
+] satisfies Array<{ method: Method; path: string; name: string; schema: OpenApiSchema }>
 
 function app() {
   return Server.Default().app
@@ -73,6 +92,10 @@ function openApiPath(path: string) {
 
 function queryParameters(operation: OpenApiOperation | undefined) {
   return (operation?.parameters ?? []).filter((param) => param.in === "query").map((param) => param.name)
+}
+
+function queryParameter(operation: OpenApiOperation | undefined, name: string) {
+  return (operation?.parameters ?? []).find((param) => param.in === "query" && param.name === name)
 }
 
 function assertAdvertisedQueryParamsAreRuntimeFields(input: {
@@ -133,6 +156,19 @@ describe("httpapi query schema drift", () => {
           ...route,
           operation: spec.paths[openApiPath(route.path)]?.[route.method],
         })
+      }
+    }),
+  )
+
+  it.effect(
+    "OpenAPI numeric query params preserve generated SDK call shapes",
+    Effect.sync(() => {
+      const spec = OpenApi.fromApi(PublicApi)
+      for (const expected of numericSdkQueryParams) {
+        expect(
+          queryParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
+          `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
+        ).toEqual(expected.schema)
       }
     }),
   )
