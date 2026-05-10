@@ -965,11 +965,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           .get(),
       )
       if (current?.agent !== info.agent) {
-        EventV2.run(SessionEvent.AgentSwitched.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          agent: info.agent,
-        })
+        EventV2.run(
+          SessionEvent.AgentSwitched.Sync,
+          {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            agent: info.agent,
+          },
+          { bypassExperimentalEventSystem: true },
+        )
       }
       if (
         current?.model?.providerID !== info.model.providerID ||

@@ -269,11 +269,15 @@ export const layer = Layer.effect(
       shell: Effect.fn("V2Session.shell")(function* (_input) {}),
       skill: Effect.fn("V2Session.skill")(function* (_input) {}),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
-        EventV2.run(SessionEvent.AgentSwitched.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(Date.now()),
-          agent: input.agent,
-        })
+        EventV2.run(
+          SessionEvent.AgentSwitched.Sync,
+          {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+            agent: input.agent,
+          },
+          { bypassExperimentalEventSystem: true },
+        )
       }),
       switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
         EventV2.run(
