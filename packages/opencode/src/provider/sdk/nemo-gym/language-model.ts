@@ -139,10 +139,14 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
   constructor(modelId: string, cfg: NemoGymLanguageModelConfig) {
     this.modelId = modelId
     this.provider = cfg.provider
+    // Spread first, then coalesce — opencode's provider loader passes
+    // optional fields explicitly as `undefined`, and a default-then-spread
+    // pattern lets those undefineds overwrite the defaults. `??` only
+    // replaces null/undefined, preserving any real caller-supplied value.
     this.cfg = {
-      requestTimeoutMs: 600_000,
-      retries: 3,
       ...cfg,
+      requestTimeoutMs: cfg.requestTimeoutMs ?? 600_000,
+      retries: cfg.retries ?? 3,
     }
   }
 
