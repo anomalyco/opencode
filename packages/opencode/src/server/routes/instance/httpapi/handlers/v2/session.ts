@@ -22,6 +22,26 @@ type SessionCursor = typeof SessionCursor.Type
 
 const decodeCursor = Schema.decodeUnknownSync(SessionCursor)
 
+function hasCursorFilter(query: {
+  readonly order?: unknown
+  readonly directory?: unknown
+  readonly path?: unknown
+  readonly workspace?: unknown
+  readonly roots?: unknown
+  readonly start?: unknown
+  readonly search?: unknown
+}) {
+  return (
+    query.order !== undefined ||
+    query.directory !== undefined ||
+    query.path !== undefined ||
+    query.workspace !== undefined ||
+    query.roots !== undefined ||
+    query.start !== undefined ||
+    query.search !== undefined
+  )
+}
+
 const sessionCursor = {
   encode(
     session: SessionV2.Info,
@@ -46,6 +66,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
       .handle(
         "sessions",
         Effect.fn(function* (ctx) {
+          if (ctx.query.cursor && hasCursorFilter(ctx.query)) return yield* new HttpApiError.BadRequest({})
           const decoded = yield* Effect.try({
             try: () => (ctx.query.cursor ? sessionCursor.decode(ctx.query.cursor) : undefined),
             catch: () => new HttpApiError.BadRequest({}),

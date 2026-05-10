@@ -5,7 +5,11 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQueryFields } from "../middleware/workspace-routing"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
+} from "../middleware/workspace-routing"
 import { ApiNotFoundError } from "../errors"
 import { described } from "./metadata"
 
@@ -37,6 +41,7 @@ export const PtyApi = HttpApi.make("pty")
     HttpApiGroup.make("pty")
       .add(
         HttpApiEndpoint.get("shells", PtyPaths.shells, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(ShellItem), "List of shells"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -46,6 +51,7 @@ export const PtyApi = HttpApi.make("pty")
           }),
         ),
         HttpApiEndpoint.get("list", PtyPaths.list, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Pty.Info), "List of sessions"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -55,6 +61,7 @@ export const PtyApi = HttpApi.make("pty")
           }),
         ),
         HttpApiEndpoint.post("create", PtyPaths.create, {
+          query: WorkspaceRoutingQuery,
           payload: Pty.CreateInput,
           success: described(Pty.Info, "Created session"),
           error: HttpApiError.BadRequest,
@@ -67,6 +74,7 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.get("get", PtyPaths.get, {
           params: { ptyID: PtyID },
+          query: WorkspaceRoutingQuery,
           success: described(Pty.Info, "Session info"),
           error: ApiNotFoundError,
         }).annotateMerge(
@@ -78,6 +86,7 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.put("update", PtyPaths.update, {
           params: { ptyID: PtyID },
+          query: WorkspaceRoutingQuery,
           payload: Pty.UpdateInput,
           success: described(Pty.Info, "Updated session"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
@@ -90,6 +99,7 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.delete("remove", PtyPaths.remove, {
           params: { ptyID: PtyID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Session removed"),
           error: ApiNotFoundError,
         }).annotateMerge(
@@ -101,6 +111,7 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.post("connectToken", PtyPaths.connectToken, {
           params: { ptyID: PtyID },
+          query: WorkspaceRoutingQuery,
           success: described(PtyTicket.ConnectToken, "WebSocket connect token"),
           error: [HttpApiError.Forbidden, ApiNotFoundError],
         }).annotateMerge(
@@ -129,6 +140,7 @@ export const PtyConnectApi = HttpApi.make("pty-connect").add(
     .add(
       HttpApiEndpoint.get("connect", PtyPaths.connect, {
         params: Params,
+        query: WorkspaceRoutingQuery,
         success: described(Schema.Boolean, "Connected session"),
         error: [HttpApiError.Forbidden, HttpApiError.NotFound],
       }).annotateMerge(

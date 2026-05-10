@@ -51,30 +51,14 @@ type OpenApiResponse = {
   content?: Record<string, { schema?: OpenApiSchema }>
 }
 
-// Instance routes use middleware for directory/workspace resolution, but HttpApi
-// doesn't surface middleware query params in the spec. Inject them explicitly.
-const InstanceQueryParameters = [
-  {
-    name: "directory",
-    in: "query",
-    required: false,
-    schema: { type: "string" },
-  },
-  {
-    name: "workspace",
-    in: "query",
-    required: false,
-    schema: { type: "string" },
-  },
-] satisfies OpenApiParameter[]
-
 // Query schemas describe decoded Effect values, but the generated SDK needs the
 // public call shape. These keep SDK callers passing numbers/booleans while the
 // server still decodes string query params at runtime.
-const QueryNumberParameters = new Set(["start", "cursor", "limit", "method"])
+const QueryNumberParameters = new Set(["start", "limit", "method"])
 const QueryBooleanParameters = new Set(["roots", "archived"])
 const QueryParameterSchemas = {
   "GET /find/file limit": { type: "integer", minimum: 1, maximum: 200 },
+  "GET /experimental/session cursor": { type: "number" },
   "GET /session/{sessionID}/diff messageID": { type: "string", pattern: "^msg.*" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
 } satisfies Record<string, OpenApiSchema>
@@ -122,7 +106,6 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
   delete spec.components?.securitySchemes
 
   for (const [path, item] of Object.entries(spec.paths ?? {})) {
-    const isInstanceRoute = !path.startsWith("/global/") && !path.startsWith("/auth/")
     for (const method of ["get", "post", "put", "delete", "patch"] as const) {
       const operation = item[method]
       if (!operation) continue
@@ -183,14 +166,8 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           },
         }
       }
-      if (!isInstanceRoute) continue
-      operation.parameters = [
-        ...InstanceQueryParameters,
-        ...(operation.parameters ?? []).filter(
-          (param) => param.in !== "query" || (param.name !== "directory" && param.name !== "workspace"),
-        ),
-      ]
-      for (const param of operation.parameters) normalizeParameter(param, `${method.toUpperCase()} ${path}`)
+      const route = `${method.toUpperCase()} ${path}`
+      for (const param of operation.parameters ?? []) normalizeParameter(param, route)
     }
   }
   return input

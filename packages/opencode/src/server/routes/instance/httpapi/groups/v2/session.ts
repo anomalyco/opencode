@@ -1,4 +1,3 @@
-import { WorkspaceID } from "@/control-plane/schema"
 import { SessionID } from "@/session/schema"
 import { SessionMessage } from "@/v2/session-message"
 import { Prompt } from "@/v2/session-prompt"
@@ -6,62 +5,41 @@ import { SessionV2 } from "@/v2/session"
 import { Schema, SchemaGetter } from "effect"
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../../middleware/authorization"
+import { WorkspaceRoutingQuery, WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
+
+const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
+  }),
+)
+
+export const SessionsQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  limit: Schema.optional(
+    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
+  ).annotate({
+    description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
+  }),
+  order: Schema.optional(Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")])).annotate({
+    description: "Session order for the first page. Use desc for newest first or asc for oldest first.",
+  }),
+  path: Schema.optional(Schema.String),
+  roots: Schema.optional(QueryBoolean),
+  start: Schema.optional(Schema.NumberFromString),
+  search: Schema.optional(Schema.String),
+  cursor: Schema.optional(
+    Schema.String.annotate({
+      description:
+        "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order or filters.",
+    }),
+  ),
+}).annotate({ identifier: "V2SessionsQuery" })
 
 export const SessionGroup = HttpApiGroup.make("v2.session")
   .add(
     HttpApiEndpoint.get("sessions", "/api/session", {
-      query: Schema.Union([
-        Schema.Struct({
-          limit: Schema.optional(
-            Schema.NumberFromString.check(
-              Schema.isInt(),
-              Schema.isGreaterThanOrEqualTo(1),
-              Schema.isLessThanOrEqualTo(200),
-            ),
-          ).annotate({
-            description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
-          }),
-          order: Schema.optional(Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")])).annotate({
-            description: "Session order for the first page. Use desc for newest first or asc for oldest first.",
-          }),
-          directory: Schema.String.pipe(Schema.optional),
-          path: Schema.String.pipe(Schema.optional),
-          workspace: WorkspaceID.pipe(Schema.optional),
-          roots: Schema.Literals(["true", "false"])
-            .pipe(
-              Schema.decodeTo(Schema.Boolean, {
-                decode: SchemaGetter.transform((value) => value === "true"),
-                encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
-              }),
-            )
-            .pipe(Schema.optional),
-          start: Schema.NumberFromString.pipe(Schema.optional),
-          search: Schema.String.pipe(Schema.optional),
-          cursor: Schema.optional(Schema.Never),
-        }),
-        Schema.Struct({
-          limit: Schema.optional(
-            Schema.NumberFromString.check(
-              Schema.isInt(),
-              Schema.isGreaterThanOrEqualTo(1),
-              Schema.isLessThanOrEqualTo(200),
-            ),
-          ).annotate({
-            description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
-          }),
-          cursor: Schema.String.annotate({
-            description:
-              "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.",
-          }),
-          order: Schema.optional(Schema.Never),
-          directory: Schema.optional(Schema.Never),
-          path: Schema.optional(Schema.Never),
-          workspace: Schema.optional(Schema.Never),
-          roots: Schema.optional(Schema.Never),
-          start: Schema.optional(Schema.Never),
-          search: Schema.optional(Schema.Never),
-        }),
-      ]).annotate({ identifier: "V2SessionsQuery" }),
+      query: SessionsQuery,
       success: Schema.Struct({
         items: Schema.Array(SessionV2.Info),
         cursor: Schema.Struct({
@@ -82,6 +60,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
   .add(
     HttpApiEndpoint.post("prompt", "/api/session/:sessionID/prompt", {
       params: { sessionID: SessionID },
+      query: WorkspaceRoutingQuery,
       payload: Schema.Struct({
         prompt: Prompt,
         delivery: SessionV2.Delivery.pipe(Schema.optional),
@@ -98,6 +77,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
   .add(
     HttpApiEndpoint.post("compact", "/api/session/:sessionID/compact", {
       params: { sessionID: SessionID },
+      query: WorkspaceRoutingQuery,
       success: HttpApiSchema.NoContent,
     }).annotateMerge(
       OpenApi.annotations({
@@ -110,6 +90,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
   .add(
     HttpApiEndpoint.post("wait", "/api/session/:sessionID/wait", {
       params: { sessionID: SessionID },
+      query: WorkspaceRoutingQuery,
       success: HttpApiSchema.NoContent,
     }).annotateMerge(
       OpenApi.annotations({
@@ -122,6 +103,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
   .add(
     HttpApiEndpoint.get("context", "/api/session/:sessionID/context", {
       params: { sessionID: SessionID },
+      query: WorkspaceRoutingQuery,
       success: Schema.Array(SessionMessage.Message),
     }).annotateMerge(
       OpenApi.annotations({
