@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { APICallError } from "ai"
-import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime } from "effect"
 import * as Stream from "effect/Stream"
 import z from "zod"
 import { Bus } from "../../src/bus"
@@ -890,12 +890,12 @@ describe("session.compaction.process", () => {
       const session = yield* ssn.create({})
       const msg = yield* createUserMessage(session.id, "hello")
       const msgs = yield* ssn.messages({ sessionID: session.id })
-      const done = defer()
+      const done = yield* Deferred.make<void, Error>()
       let seen = false
       const unsub = yield* bus.subscribeCallback(SessionCompaction.Event.Compacted, (evt) => {
         if (evt.properties.sessionID !== session.id) return
         seen = true
-        done.resolve()
+        Deferred.doneUnsafe(done, Effect.void)
       })
       yield* Effect.addFinalizer(() => Effect.sync(unsub))
 
@@ -906,14 +906,7 @@ describe("session.compaction.process", () => {
         auto: false,
       })
 
-      yield* Effect.promise(() =>
-        Promise.race([
-          done.promise,
-          wait(500).then(() => {
-            throw new Error("timed out waiting for compacted event")
-          }),
-        ]),
-      )
+      yield* Deferred.await(done).pipe(Effect.timeout("500 millis"))
       expect(result).toBe("continue")
       expect(seen).toBe(true)
     }),
