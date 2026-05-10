@@ -254,7 +254,7 @@ For net-new functionality, start with a design conversation. Open an issue descr
 
 ## Trust & Vouch System
 
-This project uses [vouch](https://github.com/mitchellh/vouch) to manage contributor trust. The vouch list is maintained in [`.github/VOUCHED.td`](.github/VOUCHED.td).
+This project uses [vouch](https://github.com/mitchellh/vouch) to manage contributor trust. The vouch list is maintained by project automation.
 
 ### How it works
 
@@ -273,7 +273,7 @@ Collaborators with write access can manage the vouch list by commenting on any i
 - `denounce @username <reason>` — denounce with a reason
 - `unvouch` / `unvouch @username` — remove someone from the list
 
-Changes are committed automatically to `.github/VOUCHED.td`.
+Changes are applied automatically by the vouch automation.
 
 ### Denouncement policy
 
