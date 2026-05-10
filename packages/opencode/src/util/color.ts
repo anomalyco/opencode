@@ -15,3 +15,5 @@ export function hexToAnsiBold(hex?: string): string | undefined {
   const { r, g, b } = hexToRgb(hex)
   return `\x1b[38;2;${r};${g};${b}m\x1b[1m`
 }
+
+export * as Color from "./color"

@@ -1,25 +1,30 @@
-import { Cause, Deferred, Effect, Layer, Context, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
 import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
+import { Image } from "@/image/image"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider"
+import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
+import { EventV2 } from "@/v2/event"
+import { SessionEvent } from "@/v2/session-event"
+import { Modelv2 } from "@/v2/model"
+import * as DateTime from "effect/DateTime"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
@@ -88,6 +93,7 @@ export const layer: Layer.Layer<
   | LLM.Service
   | Permission.Service
   | Plugin.Service
+  | Image.Service
   | SessionSummary.Service
   | SessionStatus.Service
 > = Layer.effect(
@@ -104,6 +110,7 @@ export const layer: Layer.Layer<
     const summary = yield* SessionSummary.Service
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
+    const image = yield* Image.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -221,6 +228,12 @@ export const layer: Layer.Layer<
 
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
+            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+            EventV2.run(SessionEvent.Reasoning.Started.Sync, {
+              sessionID: ctx.sessionID,
+              reasoningID: value.id,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -248,6 +261,13 @@ export const layer: Layer.Layer<
 
           case "reasoning-end":
             if (!(value.id in ctx.reasoningMap)) return
+            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+            EventV2.run(SessionEvent.Reasoning.Ended.Sync, {
+              sessionID: ctx.sessionID,
+              reasoningID: value.id,
+              text: ctx.reasoningMap[value.id].text,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
             ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
@@ -260,6 +280,13 @@ export const layer: Layer.Layer<
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
+            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+            EventV2.run(SessionEvent.Tool.Input.Started.Sync, {
+              sessionID: ctx.sessionID,
+              callID: value.id,
+              name: value.toolName,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             const part = yield* session.updatePart({
               id: ctx.toolcalls[value.id]?.partID ?? PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -281,13 +308,34 @@ export const layer: Layer.Layer<
           case "tool-input-delta":
             return
 
-          case "tool-input-end":
+          case "tool-input-end": {
+            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+            EventV2.run(SessionEvent.Tool.Input.Ended.Sync, {
+              sessionID: ctx.sessionID,
+              callID: value.id,
+              text: "",
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             return
+          }
 
           case "tool-call": {
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
+            const toolCall = yield* readToolCall(value.toolCallId)
+            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+            EventV2.run(SessionEvent.Tool.Called.Sync, {
+              sessionID: ctx.sessionID,
+              callID: value.toolCallId,
+              tool: value.toolName,
+              input: value.input,
+              provider: {
+                executed: toolCall?.part.metadata?.providerExecuted === true,
+                ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+              },
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             yield* updateToolCall(value.toolCallId, (match) => ({
               ...match,
               tool: value.toolName,
@@ -331,11 +379,72 @@ export const layer: Layer.Layer<
           }
 
           case "tool-result": {
-            yield* completeToolCall(value.toolCallId, value.output)
+            const toolCall = yield* readToolCall(value.toolCallId)
+            const toolAttachments: MessageV2.FilePart[] = (
+              Array.isArray(value.output.attachments) ? value.output.attachments : []
+            ).filter(
+              (attachment: unknown): attachment is MessageV2.FilePart =>
+                isRecord(attachment) &&
+                attachment.type === "file" &&
+                typeof attachment.mime === "string" &&
+                typeof attachment.url === "string",
+            )
+            const normalized = yield* Effect.forEach(toolAttachments, (attachment) =>
+              attachment.mime.startsWith("image/")
+                ? image.normalize(attachment).pipe(Effect.exit)
+                : Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
+            )
+            const omitted = normalized.filter(Exit.isFailure).length
+            const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
+            const output = {
+              ...value.output,
+              output:
+                omitted === 0
+                  ? value.output.output
+                  : `${value.output.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the inline image size limit.]`,
+              attachments: attachments?.length ? attachments : undefined,
+            }
+            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+            EventV2.run(SessionEvent.Tool.Success.Sync, {
+              sessionID: ctx.sessionID,
+              callID: value.toolCallId,
+              structured: output.metadata,
+              content: [
+                {
+                  type: "text",
+                  text: output.output,
+                },
+                ...(output.attachments?.map((item: MessageV2.FilePart) => ({
+                  type: "file",
+                  uri: item.url,
+                  mime: item.mime,
+                  name: item.filename,
+                })) ?? []),
+              ],
+              provider: {
+                executed: toolCall?.part.metadata?.providerExecuted === true,
+              },
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
+            yield* completeToolCall(value.toolCallId, output)
             return
           }
 
           case "tool-error": {
+            const toolCall = yield* readToolCall(value.toolCallId)
+            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+            EventV2.run(SessionEvent.Tool.Failed.Sync, {
+              sessionID: ctx.sessionID,
+              callID: value.toolCallId,
+              error: {
+                type: "unknown",
+                message: errorMessage(value.error),
+              },
+              provider: {
+                executed: toolCall?.part.metadata?.providerExecuted === true,
+              },
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             yield* failToolCall(value.toolCallId, value.error)
             return
           }
@@ -345,6 +454,20 @@ export const layer: Layer.Layer<
 
           case "start-step":
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
+            if (!ctx.assistantMessage.summary) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Step.Started.Sync, {
+                sessionID: ctx.sessionID,
+                agent: input.assistantMessage.agent,
+                model: {
+                  id: Modelv2.ID.make(ctx.model.id),
+                  providerID: Modelv2.ProviderID.make(ctx.model.providerID),
+                  variant: Modelv2.VariantID.make(input.assistantMessage.variant ?? "default"),
+                },
+                snapshot: ctx.snapshot,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -355,18 +478,30 @@ export const layer: Layer.Layer<
             return
 
           case "finish-step": {
+            const completedSnapshot = yield* snapshot.track()
             const usage = Session.getUsage({
               model: ctx.model,
               usage: value.usage,
               metadata: value.providerMetadata,
             })
+            if (!ctx.assistantMessage.summary) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Step.Ended.Sync, {
+                sessionID: ctx.sessionID,
+                finish: value.finishReason,
+                cost: usage.cost,
+                tokens: usage.tokens,
+                snapshot: completedSnapshot,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             ctx.assistantMessage.finish = value.finishReason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.finishReason,
-              snapshot: yield* snapshot.track(),
+              snapshot: completedSnapshot,
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.assistantMessage.sessionID,
               type: "step-finish",
@@ -404,6 +539,13 @@ export const layer: Layer.Layer<
           }
 
           case "text-start":
+            if (!ctx.assistantMessage.summary) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Text.Started.Sync, {
+                sessionID: ctx.sessionID,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             ctx.currentText = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -442,6 +584,14 @@ export const layer: Layer.Layer<
               },
               { text: ctx.currentText.text },
             )).text
+            if (!ctx.assistantMessage.summary) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              EventV2.run(SessionEvent.Text.Ended.Sync, {
+                sessionID: ctx.sessionID,
+                text: ctx.currentText.text,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             {
               const end = Date.now()
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
@@ -528,6 +678,17 @@ export const layer: Layer.Layer<
           yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
+        if (!ctx.assistantMessage.summary) {
+          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+          EventV2.run(SessionEvent.Step.Failed.Sync, {
+            sessionID: ctx.sessionID,
+            error: {
+              type: "unknown",
+              message: errorMessage(e),
+            },
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
         ctx.assistantMessage.error = error
         yield* bus.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
@@ -567,14 +728,27 @@ export const layer: Layer.Layer<
             ),
             Effect.retry(
               SessionRetry.policy({
+                provider: input.model.providerID,
                 parse,
-                set: (info) =>
-                  status.set(ctx.sessionID, {
+                set: (info) => {
+                  // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+                  EventV2.run(SessionEvent.Retried.Sync, {
+                    sessionID: ctx.sessionID,
+                    attempt: info.attempt,
+                    error: {
+                      message: info.message,
+                      isRetryable: true,
+                    },
+                    timestamp: DateTime.makeUnsafe(Date.now()),
+                  })
+                  return status.set(ctx.sessionID, {
                     type: "retry",
                     attempt: info.attempt,
                     message: info.message,
+                    action: info.action,
                     next: info.next,
-                  }),
+                  })
+                },
               }),
             ),
             Effect.catch(halt),
@@ -611,6 +785,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(SessionStatus.defaultLayer),
+    Layer.provide(Image.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
   ),

@@ -6,11 +6,12 @@ import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
-import { Provider } from "../../src/provider"
-import { ProviderTransform } from "../../src/provider"
-import { ModelsDev } from "../../src/provider"
+import { WithInstance } from "../../src/project/with-instance"
+import { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
+import { ModelsDev } from "@/provider/models"
 import { ProviderID, ModelID } from "../../src/provider/schema"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -338,7 +339,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -353,7 +354,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-1"),
+          id: MessageID.make("msg_user-1"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -425,7 +426,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -437,7 +438,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
         const user = {
-          id: MessageID.make("user-service-abort"),
+          id: MessageID.make("msg_user-service-abort"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -515,7 +516,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -528,7 +529,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-tools"),
+          id: MessageID.make("msg_user-tools"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -629,7 +630,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
@@ -643,7 +644,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-2"),
+          id: MessageID.make("msg_user-2"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -745,7 +746,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
@@ -758,7 +759,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-data-url"),
+          id: MessageID.make("msg_user-data-url"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -864,7 +865,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -879,7 +880,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-3"),
+          id: MessageID.make("msg_user-3"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -982,7 +983,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
@@ -994,7 +995,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
         const user = {
-          id: MessageID.make("user-anthropic-tools"),
+          id: MessageID.make("msg_user-anthropic-tools"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -1223,7 +1224,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -1238,7 +1239,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-4"),
+          id: MessageID.make("msg_user-4"),
           sessionID,
           role: "user",
           time: { created: Date.now() },

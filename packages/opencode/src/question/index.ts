@@ -1,11 +1,11 @@
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionID, MessageID } from "@/session/schema"
-import { zod } from "@/util/effect-zod"
-import { Log } from "@/util"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import * as Log from "@opencode-ai/core/util/log"
+import { withStatics } from "@opencode-ai/core/schema"
 import { QuestionID } from "./schema"
 
 const log = Log.create({ service: "question" })

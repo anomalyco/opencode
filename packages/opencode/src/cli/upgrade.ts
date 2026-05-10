@@ -1,5 +1,5 @@
 import { Bus } from "@/bus"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Installation } from "@/installation"

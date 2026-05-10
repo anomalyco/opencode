@@ -1,67 +1,59 @@
 import { test, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import path from "path"
-import { provideInstance, tmpdir } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
-import { Config } from "../../src/config"
+import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { Config } from "@/config/config"
 import { Agent as AgentSvc } from "../../src/agent/agent"
-import { Color } from "../../src/util"
+import { Color } from "@/util/color"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { testEffect } from "../lib/effect"
 
-const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
-const agent = <A>(dir: string, fn: (svc: AgentSvc.Interface) => Effect.Effect<A>) =>
-  Effect.runPromise(provideInstance(dir)(AgentSvc.Service.use(fn)).pipe(Effect.provide(AgentSvc.defaultLayer)))
+const it = testEffect(Layer.mergeAll(AgentSvc.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
-test("agent color parsed from project config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            build: { color: "#FFA500" },
-            plan: { color: "primary" },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const cfg = await load()
+const writeConfig = (dir: string, agent: Config.Info["agent"]) =>
+  Effect.promise(() =>
+    Bun.write(
+      path.join(dir, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        agent,
+      }),
+    ),
+  )
+
+it.live("agent color parsed from project config", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    yield* writeConfig(dir, {
+      build: { color: "#FFA500" },
+      plan: { color: "primary" },
+    })
+
+    yield* Effect.gen(function* () {
+      const cfg = yield* Effect.promise(() => AppRuntime.runPromise(Config.Service.use((svc) => svc.get())))
       expect(cfg.agent?.["build"]?.color).toBe("#FFA500")
       expect(cfg.agent?.["plan"]?.color).toBe("primary")
-    },
-  })
-})
+    }).pipe(provideInstance(dir))
+  }),
+)
 
-test("Agent.get includes color from config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            plan: { color: "#A855F7" },
-            build: { color: "accent" },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const plan = await agent(tmp.path, (svc) => svc.get("plan"))
+it.live("Agent.get includes color from config", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    yield* writeConfig(dir, {
+      plan: { color: "#A855F7" },
+      build: { color: "accent" },
+    })
+
+    yield* Effect.gen(function* () {
+      const plan = yield* AgentSvc.Service.use((svc) => svc.get("plan"))
       expect(plan?.color).toBe("#A855F7")
-      const build = await agent(tmp.path, (svc) => svc.get("build"))
+      const build = yield* AgentSvc.Service.use((svc) => svc.get("build"))
       expect(build?.color).toBe("accent")
-    },
-  })
-})
+    }).pipe(provideInstance(dir))
+  }),
+)
 
 test("Color.hexToAnsiBold converts valid hex to ANSI", () => {
   const result = Color.hexToAnsiBold("#FFA500")

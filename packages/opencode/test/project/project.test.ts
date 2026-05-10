@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { Project } from "../../src/project"
-import { Log } from "../../src/util"
+import { Bus } from "@/bus"
+import { Project } from "@/project/project"
+import * as Log from "@opencode-ai/core/util/log"
 import { $ } from "bun"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
@@ -63,6 +64,7 @@ function mockGitFailure(failArg: string) {
 function projectLayerWithFailure(failArg: string) {
   return Project.layer.pipe(
     Layer.provide(mockGitFailure(failArg)),
+    Layer.provide(Bus.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
   )
