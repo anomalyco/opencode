@@ -75,6 +75,10 @@ const numericSdkQueryParams = [
   { method: "get", path: "/api/session/:sessionID/message", name: "limit", schema: { type: "number" } },
 ] satisfies Array<{ method: Method; path: string; name: string; schema: OpenApiSchema }>
 
+const queryParamPatterns = [
+  { method: "get", path: SessionPaths.diff, name: "messageID", pattern: "^msg" },
+] satisfies Array<{ method: Method; path: string; name: string; pattern: string }>
+
 const pathParamPatterns = [
   { method: "get", path: SessionPaths.get, name: "sessionID", pattern: "^ses" },
   { method: "get", path: SessionPaths.message, name: "messageID", pattern: "^msg" },
@@ -165,6 +169,19 @@ describe("httpapi query schema drift", () => {
 
       for (const input of ["1", "yes", "True", "", true, false]) {
         expect(() => decode(input)).toThrow()
+      }
+    }),
+  )
+
+  it.effect(
+    "OpenAPI query parameter patterns come from runtime schemas",
+    Effect.sync(() => {
+      const spec = OpenApi.fromApi(PublicApi)
+      for (const expected of queryParamPatterns) {
+        expect(
+          queryParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
+          `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
+        ).toEqual({ type: "string", pattern: expected.pattern })
       }
     }),
   )
