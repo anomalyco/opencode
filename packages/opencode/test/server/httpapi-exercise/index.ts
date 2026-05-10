@@ -1002,6 +1002,22 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
+    .post("/session/{sessionID}/fork", "session.fork.noBody")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Fork source without body" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/fork", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        check(typeof body.id === "string", "fork without body should return a session")
+      },
+      "status",
+    ),
+  http.protected
     .post("/session/{sessionID}/abort", "session.abort")
     .mutating()
     .seeded((ctx) => ctx.session({ title: "Abort session" }))
