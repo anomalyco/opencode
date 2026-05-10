@@ -1,12 +1,12 @@
 import { Context, Effect, Layer } from "effect"
-import { Database } from "./storage/db"
+import { Database, type TxOrDb } from "./storage/db"
 import { CodeMigrationTable } from "./code-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 
 export type Migration = {
   name: string
-  run: Effect.Effect<void, unknown>
+  run: (db: TxOrDb) => void | Promise<void>
 }
 
 const log = Log.create({ service: "code-migration" })
@@ -24,24 +24,29 @@ export const layer = Layer.effect(
       if (migrations.length === 0) return
 
       for (const migration of migrations) {
-        Database.transaction(
-          (db) => {
+        yield* Effect.promise(async () => {
+          const db = Database.Client()
+          db.run("BEGIN IMMEDIATE")
+          try {
             const completed = db
               .select({ name: CodeMigrationTable.name })
               .from(CodeMigrationTable)
               .where(eq(CodeMigrationTable.name, migration.name))
               .get()
-            if (completed) return
-
-            log.info("running code migration", { name: migration.name })
-            Effect.runSync(migration.run)
-            db.insert(CodeMigrationTable)
-              .values({ name: migration.name, time_completed: Date.now() })
-              .onConflictDoNothing()
-              .run()
-          },
-          { behavior: "immediate" },
-        )
+            if (!completed) {
+              log.info("running code migration", { name: migration.name })
+              await migration.run(db)
+              db.insert(CodeMigrationTable)
+                .values({ name: migration.name, time_completed: Date.now() })
+                .onConflictDoNothing()
+                .run()
+            }
+            db.run("COMMIT")
+          } catch (error) {
+            db.run("ROLLBACK")
+            throw error
+          }
+        })
       }
     }).pipe(
       Effect.tapCause((cause) => Effect.logError("failed to run code migrations", { cause })),
