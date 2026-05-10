@@ -181,7 +181,13 @@ export class MessagePipeline {
    *    留 followup,先保证有 reply(echo)优于 empty reply。
    */
   private async runOpencode(sessionID: string, text: string, agent: string): Promise<string> {
-    const timeoutMs = this.opts.promptTimeoutMs ?? 5 * 60 * 1000
+    // 默认 30 分钟超时(2026-05-10 由 5min 提)。
+    // 实测出现过 7m18s 才完成的回复(用户问"DeskFox 服务启动后..."触发 75 次工具调用)
+    // 5min 超时强制走 dispatcher partial 路径 → runOpencode 又忽略 partial 改读
+    // session.messages,此时 LLM 还在跑、message 仍空,plugin 返空字符串 → 飞书没回复。
+    // 30min 覆盖典型 agent 长任务上限;真要跑超 30min 的复杂任务,需走 Layer 2 重构
+    // (订阅 message.updated 事件 + time.completed 字段判完成,告别启发式超时)。
+    const timeoutMs = this.opts.promptTimeoutMs ?? 30 * 60 * 1000
 
     const idlePromise = this.opts.dispatcher.register(sessionID, timeoutMs)
 
