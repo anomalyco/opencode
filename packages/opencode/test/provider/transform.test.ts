@@ -506,6 +506,27 @@ describe("ProviderTransform.providerOptions", () => {
       groq: { reasoningFormat: "parsed" },
     })
   })
+
+  test("does not send local stripReasoningContent option to providers", () => {
+    const model = createModel({
+      providerID: "lmstudio",
+      api: {
+        id: "qwen3.6-35b-a3b-mlx",
+        url: "http://127.0.0.1:1234/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+
+    expect(
+      ProviderTransform.providerOptions(model, {
+        stripReasoningContent: true,
+        toolResultsAsUser: true,
+        reasoningEffort: "medium",
+      }),
+    ).toEqual({
+      lmstudio: { reasoningEffort: "medium" },
+    })
+  })
 })
 
 describe("ProviderTransform.schema - gemini array items", () => {
@@ -1120,6 +1141,195 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       { type: "text", text: "Answer" },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+
+  test("LM Studio strips reasoning_content by default for stable prefix caching", () => {
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "This thinking should not be replayed" },
+            {
+              type: "tool-call",
+              toolCallId: "toolu_123",
+              toolName: "read",
+              input: { filePath: "/tmp/example.txt" },
+            },
+          ],
+        },
+      ] as any[],
+      {
+        id: ModelID.make("qwen3.6-35b-a3b-mlx"),
+        providerID: ProviderID.make("lmstudio"),
+        api: {
+          id: "qwen3.6-35b-a3b-mlx",
+          url: "http://127.0.0.1:1234/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        name: "Qwen 3.6 35B MLX",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: { field: "reasoning_content" },
+        },
+        cost: {
+          input: 0,
+          output: 0,
+          cache: { read: 0, write: 0 },
+        },
+        limit: {
+          context: 262144,
+          output: 8192,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-01-01",
+      },
+      {},
+    )
+
+    expect(result[0].content).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "toolu_123",
+        toolName: "read",
+        input: { filePath: "/tmp/example.txt" },
+      },
+    ])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+
+  test("LM Studio reasoning_content strip can be disabled", () => {
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "Keep this thinking" },
+            { type: "text", text: "Answer" },
+          ],
+        },
+      ] as any[],
+      {
+        id: ModelID.make("qwen3.6-35b-a3b-mlx"),
+        providerID: ProviderID.make("lmstudio"),
+        api: {
+          id: "qwen3.6-35b-a3b-mlx",
+          url: "http://127.0.0.1:1234/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        name: "Qwen 3.6 35B MLX",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: { field: "reasoning_content" },
+        },
+        cost: {
+          input: 0,
+          output: 0,
+          cache: { read: 0, write: 0 },
+        },
+        limit: {
+          context: 262144,
+          output: 8192,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-01-01",
+      },
+      { stripReasoningContent: false },
+    )
+
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Keep this thinking")
+  })
+
+  test("LM Studio Qwen normalizes raw OpenAI-compatible body for stable prefix caching", () => {
+    const result = ProviderTransform.openaiCompatibleBody(
+      {
+        id: ModelID.make("qwen3.6-35b-a3b-mlx"),
+        providerID: ProviderID.make("lmstudio"),
+        api: {
+          id: "qwen3.6-35b-a3b-mlx",
+          url: "http://127.0.0.1:1234/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        name: "Qwen 3.6 35B MLX",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: { field: "reasoning_content" },
+        },
+        cost: {
+          input: 0,
+          output: 0,
+          cache: { read: 0, write: 0 },
+        },
+        limit: {
+          context: 262144,
+          output: 8192,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-01-01",
+      },
+      {
+        messages: [
+          {
+            role: "assistant",
+            content: null,
+            reasoning_content: "Hidden thinking",
+            tool_calls: [
+              {
+                id: "toolu_123",
+                type: "function",
+                function: { name: "read", arguments: "{}" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            tool_call_id: "toolu_123",
+            content: "<path>/tmp/example.txt</path>\n<content>Hello</content>",
+          },
+        ],
+      },
+    )
+
+    expect((result as any).messages).toEqual([
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "toolu_123",
+            type: "function",
+            function: { name: "read", arguments: "{}" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content:
+          "Tool response:\n<tool_response>\n<path>/tmp/example.txt</path>\n<content>Hello</content>\n</tool_response>",
+      },
+    ])
   })
 })
 

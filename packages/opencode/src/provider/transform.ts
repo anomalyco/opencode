@@ -18,9 +18,49 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+const LOCAL_PROVIDER_OPTION_KEYS = new Set(["stripReasoningContent", "toolResultsAsUser"])
 
 export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
+}
+
+function isLmStudioOpenAICompatible(model: Provider.Model) {
+  if (model.api.npm !== "@ai-sdk/openai-compatible") return false
+
+  const providerID = model.providerID.toLowerCase()
+  const apiURL = model.api.url.toLowerCase()
+  return (
+    providerID.includes("lmstudio") ||
+    providerID.includes("lm-studio") ||
+    apiURL.includes("127.0.0.1:1234") ||
+    apiURL.includes("localhost:1234")
+  )
+}
+
+function stripReasoningContent(model: Provider.Model, options: Record<string, unknown>) {
+  if (options.stripReasoningContent === true) return true
+  if (options.stripReasoningContent === false) return false
+  return isLmStudioOpenAICompatible(model)
+}
+
+function withoutReasoningContent(msgs: ModelMessage[]): ModelMessage[] {
+  return msgs.map((msg) => {
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+    if (!msg.content.some((part) => part.type === "reasoning")) return msg
+    return {
+      ...msg,
+      content: msg.content.filter((part) => part.type !== "reasoning"),
+    }
+  })
+}
+
+function toolResultsAsUser(model: Provider.Model, options: Record<string, unknown>) {
+  if (options.toolResultsAsUser === true) return true
+  if (options.toolResultsAsUser === false || options.stripReasoningContent === false) return false
+  if (!isLmStudioOpenAICompatible(model)) return false
+
+  const id = `${model.id} ${model.api.id}`.toLowerCase()
+  return id.includes("qwen") || id.includes("qwq")
 }
 
 // Maps npm package to the key the AI SDK expects for providerOptions
@@ -302,7 +342,13 @@ function normalizeMessages(
     })
   }
 
+  const shouldStripReasoningContent = stripReasoningContent(model, _options)
+  if (shouldStripReasoningContent) {
+    msgs = withoutReasoningContent(msgs)
+  }
+
   if (
+    !shouldStripReasoningContent &&
     typeof model.capabilities.interleaved === "object" &&
     model.capabilities.interleaved.field &&
     model.api.npm !== "@openrouter/ai-sdk-provider"
@@ -1228,6 +1274,10 @@ const SLUG_OVERRIDES: Record<string, string> = {
 }
 
 export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+  const requestOptions = Object.fromEntries(
+    Object.entries(options).filter(([key]) => !LOCAL_PROVIDER_OPTION_KEYS.has(key)),
+  )
+
   if (model.api.npm === "@ai-sdk/gateway") {
     // Gateway providerOptions are split across two namespaces:
     // - `gateway`: gateway-native routing/caching controls (order, only, byok, etc.)
@@ -1237,8 +1287,8 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     const i = model.api.id.indexOf("/")
     const rawSlug = i > 0 ? model.api.id.slice(0, i) : undefined
     const slug = rawSlug ? (SLUG_OVERRIDES[rawSlug] ?? rawSlug) : undefined
-    const gateway = options.gateway
-    const rest = Object.fromEntries(Object.entries(options).filter(([k]) => k !== "gateway"))
+    const gateway = requestOptions.gateway
+    const rest = Object.fromEntries(Object.entries(requestOptions).filter(([k]) => k !== "gateway"))
     const has = Object.keys(rest).length > 0
 
     const result: Record<string, any> = {}
@@ -1272,9 +1322,52 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   // providerOptions["openai"], but OpenAIResponsesLanguageModel checks
   // "azure" first. Pass both so model options work on either code path.
   if (model.api.npm === "@ai-sdk/azure") {
-    return { openai: options, azure: options }
+    return { openai: requestOptions, azure: requestOptions }
   }
-  return { [key]: options }
+  return { [key]: requestOptions }
+}
+
+export function openaiCompatibleBody(
+  model: Provider.Model,
+  body: unknown,
+  options: Record<string, unknown> = model.options ?? {},
+) {
+  const shouldStripReasoningContent = stripReasoningContent(model, options)
+  const shouldConvertToolResults = toolResultsAsUser(model, options)
+  if (!shouldStripReasoningContent && !shouldConvertToolResults) return body
+  if (!body || typeof body !== "object") return body
+
+  const request = body as Record<string, unknown>
+  if (!Array.isArray(request.messages)) return body
+
+  let changed = false
+  const messages = request.messages.map((message) => {
+    if (!message || typeof message !== "object") return message
+
+    const item = message as Record<string, unknown>
+    const stripped =
+      shouldStripReasoningContent && item.role === "assistant" && "reasoning_content" in item
+        ? iife(() => {
+            changed = true
+            const { reasoning_content: _reasoningContent, ...rest } = item
+            return rest
+          })
+        : item
+
+    if (!shouldConvertToolResults || stripped.role !== "tool") return stripped
+
+    changed = true
+    return {
+      role: "user",
+      content: `Tool response:\n<tool_response>\n${stripped.content ?? ""}\n</tool_response>`,
+    }
+  })
+
+  if (!changed) return body
+  return {
+    ...request,
+    messages,
+  }
 }
 
 export function maxOutputTokens(model: Provider.Model): number {
