@@ -2,9 +2,9 @@ import { Effect, Option, Ref, Scope, Stream } from "effect"
 import type { Headers } from "effect/unstable/http"
 import * as CassetteService from "./cassette"
 import { canonicalizeJson, decodeJson } from "./matching"
-import { appendOrFail } from "./recorder"
+import { appendOrFail, makeReplayState } from "./recorder"
 import { defaults, type Redactor } from "./redactor"
-import { webSocketInteractions, type CassetteMetadata, type WebSocketFrame, type WebSocketInteraction } from "./schema"
+import { webSocketInteractions, type CassetteMetadata, type WebSocketFrame } from "./schema"
 
 export interface WebSocketRequest {
   readonly url: string
@@ -37,16 +37,6 @@ const headersRecord = (headers: Headers.Headers): Record<string, string> =>
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   )
-
-const openSnapshot = (request: WebSocketRequest, redactor: Redactor) => {
-  const redacted = redactor.request({
-    method: "GET",
-    url: request.url,
-    headers: headersRecord(request.headers),
-    body: "",
-  })
-  return { url: redacted.url, headers: redacted.headers }
-}
 
 const encodeFrame = (message: string | Uint8Array): WebSocketFrame =>
   typeof message === "string"
@@ -83,6 +73,15 @@ export const makeWebSocketExecutor = <E>(
   Effect.gen(function* () {
     const mode = options.mode ?? "replay"
     const redactor = options.redactor ?? defaults()
+    const openSnapshot = (request: WebSocketRequest) => {
+      const redacted = redactor.request({
+        method: "GET",
+        url: request.url,
+        headers: headersRecord(request.headers),
+        body: "",
+      })
+      return { url: redacted.url, headers: redacted.headers }
+    }
 
     if (mode === "passthrough") return options.live
 
@@ -100,7 +99,7 @@ export const makeWebSocketExecutor = <E>(
               yield* appendOrFail(
                 options.cassette,
                 options.name,
-                { transport: "websocket", open: openSnapshot(request, redactor), client, server },
+                { transport: "websocket", open: openSnapshot(request), client, server },
                 options.metadata,
               ).pipe(Effect.orDie)
             })
@@ -121,37 +120,17 @@ export const makeWebSocketExecutor = <E>(
       }
     }
 
-    const replay = yield* Ref.make<ReadonlyArray<WebSocketInteraction> | undefined>(undefined)
-    const cursor = yield* Ref.make(0)
-
-    yield* Effect.addFinalizer(() =>
-      Effect.gen(function* () {
-        const interactions = yield* Ref.get(replay)
-        if (!interactions) return
-        yield* assertEqual(
-          `Unused recorded WebSocket interactions in ${options.name}`,
-          yield* Ref.get(cursor),
-          interactions.length,
-        )
-      }),
-    )
-
-    const loadReplay = Effect.fn("WebSocketRecorder.loadReplay")(function* () {
-      const cached = yield* Ref.get(replay)
-      if (cached) return cached
-      const interactions = webSocketInteractions(yield* options.cassette.read(options.name).pipe(Effect.orDie))
-      yield* Ref.set(replay, interactions)
-      return interactions
-    })
+    const replay = yield* makeReplayState(options.cassette, options.name, webSocketInteractions)
 
     return {
       open: (request) =>
         Effect.gen(function* () {
-          const interactions = yield* loadReplay()
-          const index = yield* Ref.getAndUpdate(cursor, (value) => value + 1)
+          const interactions = yield* replay.load.pipe(Effect.orDie)
+          const index = yield* replay.cursor
           const interaction = interactions[index]
           if (!interaction) return yield* Effect.die(new Error(`No recorded WebSocket interaction for ${request.url}`))
-          yield* assertEqual(`WebSocket open frame ${index + 1}`, openSnapshot(request, redactor), interaction.open)
+          yield* replay.advance
+          yield* assertEqual(`WebSocket open frame ${index + 1}`, openSnapshot(request), interaction.open)
           const messageIndex = yield* Ref.make(0)
           return {
             sendText: (message) =>

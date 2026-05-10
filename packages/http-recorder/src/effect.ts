@@ -1,18 +1,21 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Effect, Layer, Ref } from "effect"
+import { Effect, Layer, Option } from "effect"
 import {
   FetchHttpClient,
+  Headers,
+  HttpBody,
   HttpClient,
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
+  UrlParams,
 } from "effect/unstable/http"
 import * as CassetteService from "./cassette"
-import { mismatchDetail, redactedErrorRequest, requestDiff } from "./diff"
-import { defaultMatcher, type RequestMatcher } from "./matching"
-import { appendOrFail } from "./recorder"
+import { defaultMatcher, selectMatch, selectSequential, type RequestMatcher } from "./matching"
+import { appendOrFail, makeReplayState } from "./recorder"
 import { defaults, type Redactor } from "./redactor"
-import { httpInteractions, type Cassette, type CassetteMetadata, type HttpInteraction, type ResponseSnapshot } from "./schema"
+import { redactUrl } from "./redaction"
+import { httpInteractions, type CassetteMetadata, type HttpInteraction, type ResponseSnapshot } from "./schema"
 
 export type RecordReplayMode = "record" | "replay" | "passthrough"
 
@@ -40,6 +43,9 @@ const captureResponseBody = (response: HttpClientResponse.HttpClientResponse, co
 const decodeResponseBody = (snapshot: ResponseSnapshot) =>
   snapshot.bodyEncoding === "base64" ? Buffer.from(snapshot.body, "base64") : snapshot.body
 
+export const redactedErrorRequest = (request: HttpClientRequest.HttpClientRequest) =>
+  HttpClientRequest.makeWith(request.method, redactUrl(request.url), UrlParams.empty, Option.none(), Headers.empty, HttpBody.empty)
+
 const transportError = (request: HttpClientRequest.HttpClientRequest, description: string) =>
   new HttpClientError.HttpClientError({
     reason: new HttpClientError.TransportError({ request: redactedErrorRequest(request), description }),
@@ -58,8 +64,7 @@ export const recordingLayer = (
       const match = options.match ?? defaultMatcher
       const mode = options.mode ?? "replay"
       const sequential = options.dispatch === "sequential"
-      const replay = yield* Ref.make<Cassette | undefined>(undefined)
-      const cursor = yield* Ref.make(0)
+      const replay = yield* makeReplayState(cassetteService, name, httpInteractions)
 
       const snapshotRequest = (request: HttpClientRequest.HttpClientRequest) =>
         Effect.gen(function* () {
@@ -72,45 +77,17 @@ export const recordingLayer = (
           })
         })
 
-      const selectInteraction = (cassette: Cassette, incoming: HttpInteraction["request"]) =>
-        Effect.gen(function* () {
-          const interactions = httpInteractions(cassette)
-          if (sequential) {
-            const index = yield* Ref.get(cursor)
-            const interaction = interactions[index]
-            if (!interaction)
-              return { interaction, detail: `interaction ${index + 1} of ${interactions.length} not recorded` }
-            if (!match(incoming, interaction.request))
-              return { interaction: undefined, detail: requestDiff(interaction.request, incoming).join("\n") }
-            yield* Ref.update(cursor, (n) => n + 1)
-            return { interaction, detail: "" }
-          }
-          const interaction = interactions.find((candidate) => match(incoming, candidate.request))
-          return { interaction, detail: interaction ? "" : mismatchDetail(cassette, incoming) }
-        })
-
-      const loadReplay = (request: HttpClientRequest.HttpClientRequest) =>
-        Effect.gen(function* () {
-          const cached = yield* Ref.get(replay)
-          if (cached) return cached
-          const cassette = yield* cassetteService
-            .read(name)
-            .pipe(Effect.mapError(() => transportError(request, `Fixture "${name}" not found.`)))
-          yield* Ref.set(replay, cassette)
-          return cassette
-        })
-
       return HttpClient.make((request) => {
         if (mode === "passthrough") return upstream.execute(request)
 
         if (mode === "record") {
           return Effect.gen(function* () {
-            const currentRequest = yield* snapshotRequest(request)
+            const incoming = yield* snapshotRequest(request)
             const response = yield* upstream.execute(request)
             const captured = yield* captureResponseBody(response, response.headers["content-type"])
             const interaction: HttpInteraction = {
               transport: "http",
-              request: currentRequest,
+              request: incoming,
               response: redactor.response({
                 status: response.status,
                 headers: response.headers as Record<string, string>,
@@ -128,14 +105,21 @@ export const recordingLayer = (
         }
 
         return Effect.gen(function* () {
-          const cassette = yield* loadReplay(request)
           const incoming = yield* snapshotRequest(request)
-          const { interaction, detail } = yield* selectInteraction(cassette, incoming)
-          if (!interaction)
-            return yield* Effect.fail(transportError(request, `Fixture "${name}" does not match the current request: ${detail}.`))
+          const interactions = yield* replay.load.pipe(
+            Effect.mapError(() => transportError(request, `Fixture "${name}" not found.`)),
+          )
+          const result = sequential
+            ? selectSequential(interactions, incoming, match, yield* replay.cursor)
+            : selectMatch(interactions, incoming, match)
+          if (!result.interaction)
+            return yield* Effect.fail(
+              transportError(request, `Fixture "${name}" does not match the current request: ${result.detail}.`),
+            )
+          if (sequential) yield* replay.advance
           return HttpClientResponse.fromWeb(
             request,
-            new Response(decodeResponseBody(interaction.response), interaction.response),
+            new Response(decodeResponseBody(result.interaction.response), result.interaction.response),
           )
         })
       })

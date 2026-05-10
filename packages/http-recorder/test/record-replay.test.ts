@@ -6,7 +6,7 @@ import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 import { HttpRecorder } from "../src"
-import { redactedErrorRequest } from "../src/diff"
+import { redactedErrorRequest } from "../src/effect"
 import { cassetteFor, formatCassette, parseCassette } from "../src/storage"
 
 const post = (url: string, body: object) =>

@@ -153,10 +153,17 @@ can live in the same cassette.
 
 ```ts
 import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { Effect } from "effect"
 
-const executor = HttpRecorder.makeWebSocketExecutor(liveExecutor, {
-  name: "ws/subscribe",
-  mode: process.env.RECORD === "true" ? "record" : "replay",
+const program = Effect.gen(function* () {
+  const cassette = yield* HttpRecorder.Cassette.Service
+  const executor = yield* HttpRecorder.makeWebSocketExecutor({
+    name: "ws/subscribe",
+    mode: process.env.RECORD === "true" ? "record" : "replay",
+    cassette,
+    live: liveExecutor,
+  })
+  // use executor.open(...)
 })
 ```
 
@@ -194,15 +201,14 @@ type RecordReplayOptions = {
 
 ## Layout
 
-| File           | Purpose                                                              |
-| -------------- | -------------------------------------------------------------------- |
-| `effect.ts`    | `cassetteLayer` / `recordingLayer` — the `HttpClient` adapter.       |
-| `websocket.ts` | `makeWebSocketExecutor` — WebSocket record/replay.                   |
-| `cassette.ts`  | `Cassette.Service` — reads/writes cassette files, accumulates state. |
-| `recorder.ts`  | `UnsafeCassetteError`, shared findings-aware append helper.          |
-| `redactor.ts`  | Composable `Redactor` — headers, url, body redaction.                |
-| `redaction.ts` | Lower-level header/URL primitives + secret pattern detection.        |
-| `schema.ts`    | Effect Schema definitions for the cassette JSON format.              |
-| `storage.ts`   | Path resolution, JSON encode/decode, sync existence check.           |
-| `matching.ts`  | Canonicalization and the default request matcher.                    |
-| `diff.ts`      | Human-readable mismatch diagnostics.                                 |
+| File           | Purpose                                                                          |
+| -------------- | -------------------------------------------------------------------------------- |
+| `effect.ts`    | `cassetteLayer` / `recordingLayer` — the `HttpClient` adapter.                   |
+| `websocket.ts` | `makeWebSocketExecutor` — WebSocket record/replay.                               |
+| `cassette.ts`  | `Cassette.Service` — reads/writes cassette files, accumulates state.             |
+| `recorder.ts`  | Shared transport plumbing: `UnsafeCassetteError`, `appendOrFail`, `ReplayState`. |
+| `redactor.ts`  | Composable `Redactor` — headers, url, body redaction.                            |
+| `redaction.ts` | Lower-level header/URL primitives + secret pattern detection.                    |
+| `schema.ts`    | Effect Schema definitions for the cassette JSON format.                          |
+| `storage.ts`   | Path resolution, JSON encode/decode, sync existence check.                       |
+| `matching.ts`  | Request matcher, canonicalization, dispatch strategies, mismatch diagnostics.    |
