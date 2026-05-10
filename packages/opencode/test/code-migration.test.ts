@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Layer } from "effect"
 import { eq } from "drizzle-orm"
 import { CodeMigration } from "@/code-migration"
 import { CodeMigrationTable } from "@/code-migration.sql"
@@ -19,10 +19,7 @@ describe("CodeMigration", () => {
       const first = `${prefix}-first`
       const sentinel = `${prefix}-sentinel`
       let runs = 0
-      let complete = () => {}
-      const done = new Promise<void>((resolve) => {
-        complete = resolve
-      })
+      const done = yield* Deferred.make<void>()
 
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
@@ -35,7 +32,7 @@ describe("CodeMigration", () => {
 
       yield* Effect.gen(function* () {
         yield* CodeMigration.Service
-        yield* Effect.promise(() => done)
+        yield* Deferred.await(done)
       }).pipe(
         Effect.provide(
           CodeMigration.make(
@@ -54,9 +51,7 @@ describe("CodeMigration", () => {
               },
               {
                 name: sentinel,
-                run: Effect.sync(() => {
-                  complete()
-                }),
+                run: Deferred.succeed(done, undefined).pipe(Effect.asVoid),
               },
             ]),
           ),
