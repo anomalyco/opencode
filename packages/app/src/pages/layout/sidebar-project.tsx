@@ -1,4 +1,4 @@
-import { createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Button } from "@opencode-ai/ui/button"
@@ -11,14 +11,16 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
-import { displayName, sortedRootSessions } from "./helpers"
+import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
   currentProject: Accessor<LocalProject | undefined>
+  recentMode: Accessor<boolean>
   sidebarOpened: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   hoverProject: Accessor<string | undefined>
+  nav: Accessor<HTMLElement | undefined>
   onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
@@ -31,7 +33,8 @@ export type ProjectSidebarContext = {
   workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
   workspaceLabel: (directory: string, branch?: string, projectId?: string) => string
-  sessionProps: Omit<SessionItemProps, "session" | "list" | "slug" | "mobile" | "dense">
+  sessionProps: Omit<SessionItemProps, "session" | "list" | "slug" | "children" | "mobile" | "dense" | "popover">
+  setHoverSession: (id: string | undefined) => void
 }
 
 export const ProjectDragOverlay = (props: {
@@ -53,10 +56,10 @@ export const ProjectDragOverlay = (props: {
 const ProjectTile = (props: {
   project: LocalProject
   mobile?: boolean
+  nav: Accessor<HTMLElement | undefined>
   sidebarHovering: Accessor<boolean>
   selected: Accessor<boolean>
   active: Accessor<boolean>
-  isWorking: Accessor<boolean>
   overlay: Accessor<boolean>
   suppressHover: Accessor<boolean>
   dirs: Accessor<string[]>
@@ -144,7 +147,7 @@ const ProjectTile = (props: {
         }}
         onBlur={() => props.setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify working={props.isWorking()} />
+        <ProjectIcon project={props.project} notify />
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>
@@ -193,7 +196,9 @@ const ProjectPreviewPanel = (props: {
   workspaces: Accessor<string[]>
   label: (directory: string) => string
   projectSessions: Accessor<ReturnType<typeof sortedRootSessions>>
+  projectChildren: Accessor<Map<string, string[]>>
   workspaceSessions: (directory: string) => ReturnType<typeof sortedRootSessions>
+  workspaceChildren: (directory: string) => Map<string, string[]>
   ctx: ProjectSidebarContext
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => (
@@ -214,8 +219,9 @@ const ProjectPreviewPanel = (props: {
                 list={props.projectSessions()}
                 slug={base64Encode(props.project.worktree)}
                 dense
-                showTooltip
                 mobile={props.mobile}
+                popover={false}
+                children={props.projectChildren()}
               />
             )}
           </For>
@@ -224,8 +230,10 @@ const ProjectPreviewPanel = (props: {
         <For each={props.workspaces()}>
           {(directory) => {
             const sessions = createMemo(() => props.workspaceSessions(directory))
+            const children = createMemo(() => props.workspaceChildren(directory))
+            const sandbox = () => directory !== props.project.worktree
             return (
-              <div class="flex flex-col gap-1">
+              <div class="flex flex-col gap-1" style={{ "padding-left": sandbox() ? "12px" : undefined }}>
                 <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
                   <div class="shrink-0 size-6 flex items-center justify-center">
                     <Icon name="branch" size="small" class="text-icon-base" />
@@ -240,8 +248,9 @@ const ProjectPreviewPanel = (props: {
                       list={sessions()}
                       slug={base64Encode(directory)}
                       dense
-                      showTooltip
                       mobile={props.mobile}
+                      popover={false}
+                      children={children()}
                     />
                   )}
                 </For>
@@ -277,7 +286,9 @@ export const SortableProject = (props: {
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const sortable = createSortable(props.project.worktree)
-  const selected = createMemo(() => props.ctx.currentProject()?.worktree === props.project.worktree)
+  const selected = createMemo(
+    () => !props.ctx.recentMode() && props.ctx.currentProject()?.worktree === props.project.worktree,
+  )
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
@@ -302,25 +313,24 @@ export const SortableProject = (props: {
   }
 
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
-  const isWorking = createMemo(() =>
-    dirs().some((directory) => {
-      const [store] = globalSync.child(directory, { bootstrap: false })
-      return Object.values(store.session_status).some((status) => status?.type === "busy" || status?.type === "retry")
-    }),
-  )
   const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
+  const projectChildren = createMemo(() => childMapByParent(projectStore().session))
   const workspaceSessions = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
     return sortedRootSessions(data, props.sortNow())
+  }
+  const workspaceChildren = (directory: string) => {
+    const [data] = globalSync.child(directory, { bootstrap: false })
+    return childMapByParent(data.session)
   }
   const tile = () => (
     <ProjectTile
       project={props.project}
       mobile={props.mobile}
+      nav={props.ctx.nav}
       sidebarHovering={props.ctx.sidebarHovering}
       selected={selected}
       active={active}
-      isWorking={isWorking}
       overlay={overlay}
       suppressHover={() => state.suppressHover}
       dirs={dirs}
@@ -354,6 +364,7 @@ export const SortableProject = (props: {
             if (state.menu) return
             if (value && state.suppressHover) return
             props.ctx.onHoverOpenChanged(props.project.worktree, value)
+            if (value) props.ctx.setHoverSession(undefined)
           }}
         >
           <ProjectPreviewPanel
@@ -364,7 +375,9 @@ export const SortableProject = (props: {
             workspaces={workspaces}
             label={label}
             projectSessions={projectSessions}
+            projectChildren={projectChildren}
             workspaceSessions={workspaceSessions}
+            workspaceChildren={workspaceChildren}
             ctx={props.ctx}
             language={language}
           />

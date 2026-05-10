@@ -28,25 +28,60 @@ const ModelList: Component<{
   const model = props.model ?? useLocal().model
   const language = useLanguage()
 
-  const models = createMemo(() =>
-    model
+  type BaseModel = ReturnType<ModelState["list"]>[number]
+  type ModelItem = BaseModel & {
+    _group: "recent" | "provider"
+    _key: string
+  }
+
+  const current = createMemo<ModelItem | undefined>(() => {
+    const item = model.current()
+    if (!item) return undefined
+    return {
+      ...item,
+      _group: "provider",
+      _key: `provider:${item.provider.id}:${item.id}`,
+    }
+  })
+
+  const items = createMemo(() => {
+    const visible: ModelItem[] = model
       .list()
       .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
-      .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
-  )
+      .filter((m) => (props.provider ? m.provider.id === props.provider : true))
+      .map((m) => ({
+        ...m,
+        _group: "provider" as const,
+        _key: `provider:${m.provider.id}:${m.id}`,
+      }))
+    const recent: ModelItem[] = (model.recent?.() ?? [])
+      .flatMap((m) => {
+        if (!m) return []
+        return [m]
+      })
+      .filter((m) => (props.provider ? m.provider.id === props.provider : true))
+      .map((m) => ({
+        ...m,
+        _group: "recent" as const,
+        _key: `recent:${m.provider.id}:${m.id}`,
+      }))
+    return [...recent, ...visible]
+  })
 
   return (
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
-      key={(x) => `${x.provider.id}:${x.id}`}
-      items={models}
-      current={model.current()}
+      key={(x) => x._key}
+      items={items}
+      current={current()}
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={(x) => x.provider.name}
+      groupBy={(x) => (x._group === "recent" ? "Recently Used" : x.provider.name)}
       sortGroupsBy={(a, b) => {
+        if (a.items[0]?._group === "recent") return -1
+        if (b.items[0]?._group === "recent") return 1
         const aProvider = a.items[0].provider.id
         const bProvider = b.items[0].provider.id
         if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1

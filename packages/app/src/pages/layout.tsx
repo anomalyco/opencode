@@ -156,6 +156,7 @@ export default function Layout(props: ParentProps) {
     autoselect: !initialDirectory,
     busyWorkspaces: {} as Record<string, boolean>,
     hoverProject: undefined as string | undefined,
+    hoverSession: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
     sortNow: Date.now(),
@@ -986,7 +987,7 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  async function archiveSession(session: Session) {
+  async function archiveSession(session: Session): Promise<boolean> {
     const [store, setStore] = globalSync.child(session.directory)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
@@ -1010,6 +1011,7 @@ export default function Layout(props: ParentProps) {
         navigate(`/${params.dir}/session`)
       }
     }
+    return true
   }
 
   command.register("layout", () => {
@@ -1968,6 +1970,9 @@ export default function Layout(props: ParentProps) {
     navList: currentSessions,
     sidebarExpanded,
     sidebarHovering,
+    nav: () => state.nav,
+    hoverSession: () => state.hoverSession,
+    setHoverSession: (id) => setState("hoverSession", id),
     clearHoverProjectSoon,
     prefetchSession,
     archiveSession,
@@ -1993,9 +1998,11 @@ export default function Layout(props: ParentProps) {
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir,
     currentProject,
+    recentMode: () => store.sidebarView === "recent",
     sidebarOpened: () => layout.sidebar.opened(),
     sidebarHovering,
     hoverProject: () => state.hoverProject,
+    nav: () => state.nav,
     onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
     onProjectMouseLeave: (worktree) => aim.leave(worktree),
     onProjectFocus: (worktree) => aim.activate(worktree),
@@ -2011,9 +2018,14 @@ export default function Layout(props: ParentProps) {
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
     workspaceIds,
     workspaceLabel,
+    setHoverSession: (id) => setState("hoverSession", id),
     sessionProps: {
       navList: currentSessions,
       sidebarExpanded,
+      sidebarHovering,
+      nav: () => state.nav,
+      hoverSession: () => state.hoverSession,
+      setHoverSession: (id) => setState("hoverSession", id),
       clearHoverProjectSoon,
       prefetchSession,
       archiveSession,

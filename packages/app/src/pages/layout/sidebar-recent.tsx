@@ -4,7 +4,6 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type GlobalSession, type Session } from "@opencode-ai/sdk/v2/client"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { organizeRecentSessions } from "@/utils/recent-session"
@@ -66,6 +65,7 @@ export const RecentSidebarPanel = (props: {
   const language = useLanguage()
   const merged = createMemo(() => props.mobile || (props.merged ?? props.sidebarOpened()))
   const hover = createMemo(() => !props.mobile && props.merged === false && !props.sidebarOpened())
+  const popover = createMemo(() => !!props.mobile || props.merged === false || props.sidebarOpened())
 
   const [store, setStore] = createStore({
     sessions: [] as GlobalSession[],
@@ -107,9 +107,10 @@ export const RecentSidebarPanel = (props: {
     timer = setTimeout(() => setStore("search", val), 300)
   }
 
-  const slug = (session: GlobalSession) => base64Encode(session.directory)
+  const slug = (_session: GlobalSession) => "recent"
   const archiveSession = async (session: Session) => {
-    await props.sessionProps.archiveSession(session)
+    const ok = await props.sessionProps.archiveSession(session)
+    if (!ok) return false
 
     const drop = new Set<string>()
     const walk = (id: string) => {
@@ -123,6 +124,7 @@ export const RecentSidebarPanel = (props: {
     walk(session.id)
     setStore("sessions", (prev) => prev.filter((item) => !drop.has(item.id)))
     void load(true)
+    return true
   }
 
   return (
@@ -186,6 +188,10 @@ export const RecentSidebarPanel = (props: {
                       list={store.sessions}
                       slug={slug(session)}
                       mobile={props.mobile}
+                      popover={popover()}
+                      children={data().children}
+                      lookup={data().lookup}
+                      prefixes={data().prefixes}
                       archiveSession={archiveSession}
                     />
                   )}
