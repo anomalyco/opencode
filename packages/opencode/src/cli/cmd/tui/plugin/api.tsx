@@ -148,7 +148,9 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
         return sync.data.session.length
       },
       diff(sessionID) {
-        return sync.data.session_diff[sessionID] ?? []
+        return (sync.data.session_diff[sessionID] ?? []).flatMap((item) =>
+          item.file === undefined ? [] : [{ ...item, file: item.file }],
+        )
       },
       todo(sessionID) {
         return sync.data.todo[sessionID] ?? []

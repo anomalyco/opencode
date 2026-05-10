@@ -287,7 +287,7 @@ describe("HttpApi UI fallback", () => {
   })
 
   test("keeps matched API routes ahead of the UI fallback", async () => {
-    const response = await Server.Default().app.request("/session/nope")
+    const response = await Server.Default().app.request("/session/ses_nope")
 
     expect(response.status).toBe(404)
   })
