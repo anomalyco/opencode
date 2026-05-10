@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Readable } from "node:stream"
-import { detectLinks, getLinkId, StyledText, TextRenderable } from "@opentui/core"
+import { CodeRenderable, detectLinks, getLinkId, StyledText, SyntaxStyle, TextRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 
 function ids(attrs: Uint32Array, cols: number, row: number, len: number) {
@@ -85,6 +85,48 @@ describe("tui markdown link wrap", () => {
     for (const row of all) {
       expect(row.size).toBe(1)
       expect(row).toEqual(all[0])
+    }
+  })
+
+  test("CodeRenderable with onChunks={detectLinks} keeps one hyperlink id across wrapped visual lines", async () => {
+    const url = "file:///tmp/" + "very-long-path/".repeat(4) + "file.txt"
+
+    const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
+      width: 20,
+      height: 10,
+      stdin: new Readable({ read() {} }) as NodeJS.ReadStream,
+    })
+
+    try {
+      const code = new CodeRenderable(renderer, {
+        width: "100%",
+        filetype: "markdown",
+        content: url,
+        syntaxStyle: SyntaxStyle.create(),
+        onChunks: detectLinks,
+      })
+      renderer.root.add(code)
+
+      await code.highlightingDone
+      await renderOnce()
+
+      const lines = captureCharFrame()
+        .split("\n")
+        .map((l) => l.trimEnd())
+        .filter(Boolean)
+
+      expect(lines.length).toBeGreaterThan(1)
+
+      const attrs = renderer.currentRenderBuffer.buffers.attributes
+      const all = lines.map((line, row) => ids(attrs, renderer.currentRenderBuffer.width, row, line.length))
+
+      for (const row of all) {
+        expect(row.size).toBe(1)
+        expect(row).toEqual(all[0])
+      }
+      expect([...all[0]!][0]).toBeGreaterThan(0)
+    } finally {
+      renderer.destroy()
     }
   })
 })
