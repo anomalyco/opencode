@@ -2,6 +2,7 @@ import { Context, Effect, Layer } from "effect"
 import { Database, type TxOrDb } from "./storage/db"
 import { CodeMigrationTable } from "./code-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
+import { eq } from "drizzle-orm"
 
 export type Migration = {
   name: string
@@ -22,29 +23,28 @@ export const layer = Layer.effect(
     yield* Effect.gen(function* () {
       if (migrations.length === 0) return
 
-      yield* Effect.sync(() =>
-        Database.transaction(
-          (db) => {
-            const completed = new Set(
-              db
+      for (const migration of migrations) {
+        yield* Effect.sync(() =>
+          Database.transaction(
+            (db) => {
+              const completed = db
                 .select({ name: CodeMigrationTable.name })
                 .from(CodeMigrationTable)
-                .all()
-                .map((row) => row.name),
-            )
-            for (const migration of migrations.filter((item) => !completed.has(item.name))) {
+                .where(eq(CodeMigrationTable.name, migration.name))
+                .get()
+              if (completed) return
+
               log.info("running code migration", { name: migration.name })
               Effect.runSync(migration.run(db))
               db.insert(CodeMigrationTable)
                 .values({ name: migration.name, time_completed: Date.now() })
                 .onConflictDoNothing()
                 .run()
-              completed.add(migration.name)
-            }
-          },
-          { behavior: "immediate" },
-        ),
-      )
+            },
+            { behavior: "immediate" },
+          ),
+        )
+      }
     }).pipe(
       Effect.tapCause((cause) => Effect.sync(() => log.error("failed to run code migrations", { cause }))),
       Effect.ignore,
