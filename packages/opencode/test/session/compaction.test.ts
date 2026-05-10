@@ -285,7 +285,7 @@ function runtime(
 }
 
 const deps = Layer.mergeAll(
-  ProviderTest.fake().layer,
+  wide().layer,
   layer("continue"),
   Agent.defaultLayer,
   Plugin.defaultLayer,
@@ -882,55 +882,42 @@ describe("session.compaction.process", () => {
     }),
   )
 
-  test("publishes compacted event on continue", async () => {
-    await using tmp = await tmpdir()
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const msgs = await svc.messages({ sessionID: session.id })
-        const done = defer()
-        let seen = false
-        const rt = runtime("continue", Plugin.defaultLayer, wide())
-        let unsub: (() => void) | undefined
-        try {
-          unsub = await rt.runPromise(
-            Bus.Service.use((svc) =>
-              svc.subscribeCallback(SessionCompaction.Event.Compacted, (evt) => {
-                if (evt.properties.sessionID !== session.id) return
-                seen = true
-                done.resolve()
-              }),
-            ),
-          )
+  it.instance(
+    "publishes compacted event on continue",
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const done = defer()
+      let seen = false
+      const unsub = yield* bus.subscribeCallback(SessionCompaction.Event.Compacted, (evt) => {
+        if (evt.properties.sessionID !== session.id) return
+        seen = true
+        done.resolve()
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(unsub))
 
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: false,
-              }),
-            ),
-          )
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
 
-          await Promise.race([
-            done.promise,
-            wait(500).then(() => {
-              throw new Error("timed out waiting for compacted event")
-            }),
-          ])
-          expect(result).toBe("continue")
-          expect(seen).toBe(true)
-        } finally {
-          unsub?.()
-          await rt.dispose()
-        }
-      },
-    })
-  })
+      yield* Effect.promise(() =>
+        Promise.race([
+          done.promise,
+          wait(500).then(() => {
+            throw new Error("timed out waiting for compacted event")
+          }),
+        ]),
+      )
+      expect(result).toBe("continue")
+      expect(seen).toBe(true)
+    }),
+  )
 
   test("marks summary message as errored on compact result", async () => {
     await using tmp = await tmpdir()
@@ -970,46 +957,36 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("adds synthetic continue prompt when auto is enabled", async () => {
-    await using tmp = await tmpdir()
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const rt = runtime("continue", Plugin.defaultLayer, wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const result = await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: true,
-              }),
-            ),
-          )
+  it.instance(
+    "adds synthetic continue prompt when auto is enabled",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
 
-          const all = await svc.messages({ sessionID: session.id })
-          const last = all.at(-1)
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
 
-          expect(result).toBe("continue")
-          expect(last?.info.role).toBe("user")
-          expect(last?.parts[0]).toMatchObject({
-            type: "text",
-            synthetic: true,
-            metadata: { compaction_continue: true },
-          })
-          if (last?.parts[0]?.type === "text") {
-            expect(last.parts[0].text).toContain("Continue if you have next steps")
-          }
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const last = all.at(-1)
+
+      expect(result).toBe("continue")
+      expect(last?.info.role).toBe("user")
+      expect(last?.parts[0]).toMatchObject({
+        type: "text",
+        synthetic: true,
+        metadata: { compaction_continue: true },
+      })
+      if (last?.parts[0]?.type === "text") {
+        expect(last.parts[0].text).toContain("Continue if you have next steps")
+      }
+    }),
+  )
 
   test("persists tail_start_id for retained recent turns", async () => {
     await using tmp = await tmpdir()
