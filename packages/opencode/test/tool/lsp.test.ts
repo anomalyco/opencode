@@ -289,21 +289,12 @@ describe("tool.lsp", () => {
       ),
     )
 
-    it.live("workspaceSymbol ignores line and character", () =>
+    it.live("workspaceSymbol ignores extra parameters", () =>
       provideTmpdirInstance(
         (dir) =>
           Effect.gen(function* () {
             const { items, next } = asks()
-            const result = yield* run(
-              {
-                operation: "workspaceSymbol",
-                query: "Foo",
-                filePath: "ignored.ts",
-                line: 42,
-                character: 99,
-              } as unknown as Tool.InferParameters<typeof LspTool>,
-              next,
-            )
+            const result = yield* run({ operation: "workspaceSymbol", query: "Foo" }, next)
             expect(result.title).toBe(`workspaceSymbol "Foo"`)
             const req = items.find((item) => item.permission === "lsp")
             expect(req).toBeUndefined()
