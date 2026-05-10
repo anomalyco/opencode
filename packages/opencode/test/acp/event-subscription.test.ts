@@ -99,6 +99,7 @@ function completedToolEvent(
     tool: string
     input: Record<string, unknown>
     output: string
+    title?: string
     attachments?: ToolStateCompleted["attachments"]
   },
 ): GlobalEventEnvelope {
@@ -106,7 +107,7 @@ function completedToolEvent(
     status: "completed",
     input: opts.input,
     output: opts.output,
-    title: opts.tool,
+    title: opts.title ?? opts.tool,
     metadata: {},
     time: { start: Date.now() - 1, end: Date.now() },
     ...(opts.attachments && { attachments: opts.attachments }),
@@ -685,6 +686,7 @@ describe("acp.agent event subscription", () => {
             tool: "read",
             input: { filePath: "/tmp/image.png" },
             output: "Image read successfully",
+            title: "/tmp/image.png",
             attachments: [
               {
                 id: "part_image",
@@ -710,6 +712,7 @@ describe("acp.agent event subscription", () => {
         await new Promise((r) => setTimeout(r, 20))
 
         const update = completedToolUpdate(sessionUpdates, sessionId, "call_image")
+        expect(update?.title).toBe("read")
         expect(update?.content).toContainEqual({
           type: "content",
           content: { type: "text", text: "Image read successfully" },
@@ -755,7 +758,7 @@ describe("acp.agent event subscription", () => {
                     status: "completed",
                     input: { url: "https://example.com/image.png" },
                     output: "Image fetched successfully",
-                    title: "webfetch",
+                    title: "https://example.com/image.png",
                     metadata: {},
                     time: { start: Date.now() - 1, end: Date.now() },
                     attachments: [
@@ -779,6 +782,7 @@ describe("acp.agent event subscription", () => {
         await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
 
         const update = completedToolUpdate(sessionUpdates, sessionId, "call_replay_image")
+        expect(update?.title).toBe("webfetch")
         expect(update?.content).toContainEqual({
           type: "content",
           content: { type: "text", text: "Image fetched successfully" },
