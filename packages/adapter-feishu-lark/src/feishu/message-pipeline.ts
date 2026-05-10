@@ -233,13 +233,7 @@ export class MessagePipeline {
     const data = wrap.data
     if (data.length === 0) return ""
 
-    let assistantEntry: (typeof data)[number] | undefined
-    for (let i = data.length - 1; i >= 0; i--) {
-      if (data[i]!.info.role === "assistant") {
-        assistantEntry = data[i]
-        break
-      }
-    }
+    const assistantEntry = findLastUsefulAssistant(data)
     if (!assistantEntry) return ""
 
     // 检查 LLM 错误(opencode 把 LLM API error 存进 assistant message.error)
@@ -333,4 +327,58 @@ export class MessagePipeline {
       },
     })
   }
+}
+
+// ============================================================
+// findLastUsefulAssistant — 倒序找有内容的 assistant message
+// ============================================================
+//
+// 背景:opencode agent loop 在某些回复(工具调用 / 多步)尾部会追加一条 0-token 空 step
+// placeholder message,parts 形状固定为 step-start → text("") → step-finish,parentID 跟
+// 它前面那条真 reply 的 parentID 一样,瞬时完成(time.completed === time.created)。
+// 简单倒序找 last assistant 会取到这条 placeholder → 返回空字符串 → 飞书侧没回复。
+//
+// 修法:倒序时跳过空 placeholder(无 error 且无非空 text part),继续往前找真 reply。
+// 短回复(无 placeholder 跟随)不受影响 — 倒序第一条就是真 reply 命中。
+//
+// 此函数纯函数,作为 Logic 清单覆盖到 100% 行(R5 关键模块清单 helper extract 模式)。
+
+/** SDK session.messages 返回 entry 的子集类型(仅本 helper 需要的字段)*/
+export type AssistantMessageEntry = {
+  info: {
+    role?: string
+    error?: { message?: string; data?: { message?: string } }
+  }
+  parts: Array<{ type?: string; text?: string; synthetic?: boolean; ignored?: boolean }>
+}
+
+/**
+ * 倒序找最近一条"有用"的 assistant message。
+ *
+ * 有用 = 有 error(error 也是有效信号,caller 会抛出去)或 有非空 text part。
+ * 跳过条件 = 0-token / 空文本 placeholder ghost(text 全空 + 无 error)。
+ *
+ * 返回 undefined → 整个 data 里没有任何 assistant role 的 entry,或全是 placeholder。
+ */
+export function findLastUsefulAssistant(
+  data: ReadonlyArray<AssistantMessageEntry>,
+): AssistantMessageEntry | undefined {
+  for (let i = data.length - 1; i >= 0; i--) {
+    const m = data[i]
+    if (!m || m.info.role !== "assistant") continue
+
+    if (m.info.error) return m
+
+    const hasRealText = m.parts.some(
+      (p) =>
+        p.type === "text" &&
+        typeof p.text === "string" &&
+        p.text.trim() !== "" &&
+        !p.synthetic &&
+        !p.ignored,
+    )
+    if (hasRealText) return m
+    // 否则:placeholder ghost,继续往前扫
+  }
+  return undefined
 }
