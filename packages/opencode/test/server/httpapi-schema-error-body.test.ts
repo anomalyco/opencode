@@ -103,6 +103,46 @@ describe("schema-rejection wire shape", () => {
   )
 
   it.live(
+    "Query schema rejection returns NamedError-shaped JSON",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        // /find/file?limit=999999 violates the limit constraint check.
+        const url = `/find/file?query=foo&limit=999999&directory=${encodeURIComponent(tmp.path)}`
+        const res = yield* Effect.promise(async () => Server.Default().app.request(url))
+        const body = yield* Effect.promise(async () => res.text())
+        expect(res.status).toBe(400)
+        const parsed = JSON.parse(body)
+        expect(parsed).toMatchObject({ name: "BadRequest", data: { kind: "Query" } })
+      }),
+    ),
+  )
+
+  it.live(
+    "rejected request body never echoes back unbounded — message is capped",
+    // Defense against DoS-amplification + secret-echo: Effect's Issue formatter
+    // dumps the rejected `actual` verbatim. A multi-MB invalid array would
+    // become a multi-MB 400 response and log line. Cap kicks in around 1KB.
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const huge = "X".repeat(50_000)
+        const res = yield* Effect.promise(async () =>
+          Server.Default().app.request(SyncPaths.history, {
+            method: "POST",
+            headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
+            body: JSON.stringify({ aggregate: huge }),
+          }),
+        )
+        const body = yield* Effect.promise(async () => res.text())
+        expect(res.status).toBe(400)
+        // 1 KB cap + small JSON envelope ≈ <2 KB — never tens of KB.
+        expect(body.length).toBeLessThan(2 * 1024)
+        const parsed = JSON.parse(body)
+        expect(parsed.data.message).not.toContain(huge)
+      }),
+    ),
+  )
+
+  it.live(
     "response-encode failure: corrupted stored row returns NamedError-shaped JSON with field path",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
