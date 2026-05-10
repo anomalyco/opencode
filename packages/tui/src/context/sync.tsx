@@ -337,25 +337,6 @@ export const {
               draft.splice(result.index, 0, event.properties.info)
             }),
           )
-          const updated = store.message[event.properties.info.sessionID]
-          if (updated.length > 100) {
-            const oldest = updated[0]
-            batch(() => {
-              setStore(
-                "message",
-                event.properties.info.sessionID,
-                produce((draft) => {
-                  draft.shift()
-                }),
-              )
-              setStore(
-                "part",
-                produce((draft) => {
-                  delete draft[oldest.id]
-                }),
-              )
-            })
-          }
           break
         }
         case "message.removed": {
