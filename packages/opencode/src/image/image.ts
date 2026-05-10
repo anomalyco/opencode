@@ -10,8 +10,6 @@ const AUTO_RESIZE = true
 const JPEG_QUALITIES = [80, 85, 70, 55, 40]
 const log = Log.create({ service: "image" })
 
-type Photon = typeof import("@silvia-odwyer/photon-node")
-
 export class PhotonUnavailableError extends Schema.TaggedErrorClass<PhotonUnavailableError>()(
   "ImagePhotonUnavailableError",
   {},
@@ -62,8 +60,10 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const loadPhoton = yield* Effect.cached(
       Effect.promise(async () => {
-        const photonWasm = (await import("@silvia-odwyer/photon-node/photon_rs_bg.wasm", { with: { type: "file" } })).default
-        ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH = photonWasm
+        const photonWasm = (await import("@silvia-odwyer/photon-node/photon_rs_bg.wasm", { with: { type: "file" } }))
+          .default
+        ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
+          photonWasm
         try {
           return await import("@silvia-odwyer/photon-node")
         } catch {
@@ -121,12 +121,13 @@ export const layer = Layer.effect(
             width: Math.max(1, Math.round(originalWidth * scale)),
             height: Math.max(1, Math.round(originalHeight * scale)),
           }
-          const next = acc.length === 0
-            ? previous
-            : {
-                width: previous.width === 1 ? 1 : Math.max(1, Math.floor(previous.width * 0.75)),
-                height: previous.height === 1 ? 1 : Math.max(1, Math.floor(previous.height * 0.75)),
-              }
+          const next =
+            acc.length === 0
+              ? previous
+              : {
+                  width: previous.width === 1 ? 1 : Math.max(1, Math.floor(previous.width * 0.75)),
+                  height: previous.height === 1 ? 1 : Math.max(1, Math.floor(previous.height * 0.75)),
+                }
           return acc.some((item) => item.width === next.width && item.height === next.height) ? acc : [...acc, next]
         }, [])) {
           const resized = photon.resize(decoded, size.width, size.height, photon.SamplingFilter.Lanczos3)
