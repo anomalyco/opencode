@@ -1,5 +1,6 @@
 import { OpenApi } from "effect/unstable/httpapi"
 import { OpenCodeHttpApi } from "./api"
+import { QueryBooleanOpenApi } from "./groups/query"
 
 type OpenApiParameter = {
   name: string
@@ -54,27 +55,21 @@ type OpenApiResponse = {
 // Query schemas describe decoded Effect values, but the generated SDK needs the
 // public call shape. These keep SDK callers passing numbers/booleans while the
 // server still decodes string query params at runtime.
-const QueryBooleanParameters = new Set(["roots", "archived"])
 const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /experimental/session start": { type: "number" },
+  "GET /experimental/session roots": QueryBooleanOpenApi,
+  "GET /experimental/session archived": QueryBooleanOpenApi,
   "GET /find/file limit": { type: "integer", minimum: 1, maximum: 200 },
   "GET /experimental/session cursor": { type: "number" },
   "GET /experimental/session limit": { type: "number" },
   "GET /session start": { type: "number" },
+  "GET /session roots": QueryBooleanOpenApi,
   "GET /session limit": { type: "number" },
-  "GET /session/{sessionID}/diff messageID": { type: "string", pattern: "^msg.*" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
   "GET /api/session limit": { type: "number" },
   "GET /api/session start": { type: "number" },
+  "GET /api/session roots": QueryBooleanOpenApi,
   "GET /api/session/{sessionID}/message limit": { type: "number" },
-}
-
-const PathParameterSchemas: Record<string, OpenApiSchema> = {
-  sessionID: { type: "string", pattern: "^ses.*" },
-  messageID: { type: "string", pattern: "^msg.*" },
-  partID: { type: "string", pattern: "^prt.*" },
-  permissionID: { type: "string", pattern: "^per.*" },
-  ptyID: { type: "string", pattern: "^pty.*" },
 }
 
 const LegacyComponentDescriptions: Record<string, string> = {
@@ -489,7 +484,7 @@ function flattenOptions(options: OpenApiSchema[] | undefined): OpenApiSchema[] |
 function normalizeParameter(param: OpenApiParameter, route: string) {
   if (!param.schema || typeof param.schema !== "object") return
   if (param.in === "path") {
-    param.schema = pathParameterSchema(route, param.name) ?? stripOptionalNull(param.schema)
+    param.schema = stripOptionalNull(param.schema)
     return
   }
   if (param.in === "query") {
@@ -498,23 +493,8 @@ function normalizeParameter(param: OpenApiParameter, route: string) {
       param.schema = override
       return
     }
-    if (QueryBooleanParameters.has(param.name)) {
-      param.schema = {
-        anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
-      }
-      return
-    }
   }
   param.schema = stripOptionalNull(param.schema)
-}
-
-function pathParameterSchema(route: string, name: string) {
-  if (name in PathParameterSchemas) return PathParameterSchemas[name]
-  if (name === "id" && route.startsWith("DELETE /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
-  if (name === "id" && route.startsWith("POST /experimental/workspace/")) return { type: "string", pattern: "^wrk.*" }
-  if (name === "requestID" && route.startsWith("POST /permission/")) return { type: "string", pattern: "^per.*" }
-  if (name === "requestID" && route.startsWith("POST /question/")) return { type: "string", pattern: "^que.*" }
-  return undefined
 }
 
 export const PublicApi = OpenCodeHttpApi.annotateMerge(

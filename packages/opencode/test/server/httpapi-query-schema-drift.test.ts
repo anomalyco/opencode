@@ -17,14 +17,16 @@ import {
   ToolListQuery,
 } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { InstancePaths, VcsDiffQuery } from "../../src/server/routes/instance/httpapi/groups/instance"
+import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
   ListQuery as SessionListQuery,
   MessagesQuery,
   SessionPaths,
 } from "../../src/server/routes/instance/httpapi/groups/session"
+import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { MessagesQuery as V2MessagesQuery } from "../../src/server/routes/instance/httpapi/groups/v2/message"
 import { SessionsQuery as V2SessionsQuery } from "../../src/server/routes/instance/httpapi/groups/v2/session"
-import { QueryBoolean } from "../../src/server/routes/instance/httpapi/groups/query"
+import { QueryBoolean, QueryBooleanOpenApi } from "../../src/server/routes/instance/httpapi/groups/query"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
@@ -33,7 +35,14 @@ const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
 type QuerySchema = { readonly fields: Record<string, unknown> }
-type OpenApiSchema = { readonly maximum?: number; readonly minimum?: number; readonly type?: string }
+type OpenApiSchema = {
+  readonly anyOf?: readonly OpenApiSchema[]
+  readonly enum?: readonly string[]
+  readonly maximum?: number
+  readonly minimum?: number
+  readonly pattern?: string
+  readonly type?: string
+}
 type OpenApiParameter = { readonly name: string; readonly in: string; readonly schema?: OpenApiSchema }
 type OpenApiOperation = { readonly parameters?: readonly OpenApiParameter[] }
 
@@ -68,6 +77,28 @@ const numericSdkQueryParams = [
   { method: "get", path: "/api/session/:sessionID/message", name: "limit", schema: { type: "number" } },
 ] satisfies Array<{ method: Method; path: string; name: string; schema: OpenApiSchema }>
 
+const booleanSdkQueryParams = [
+  { method: "get", path: ExperimentalPaths.session, name: "roots" },
+  { method: "get", path: ExperimentalPaths.session, name: "archived" },
+  { method: "get", path: SessionPaths.list, name: "roots" },
+  { method: "get", path: "/api/session", name: "roots" },
+] satisfies Array<{ method: Method; path: string; name: string }>
+
+const queryParamPatterns = [
+  { method: "get", path: SessionPaths.diff, name: "messageID", pattern: "^msg" },
+] satisfies Array<{ method: Method; path: string; name: string; pattern: string }>
+
+const pathParamPatterns = [
+  { method: "get", path: SessionPaths.get, name: "sessionID", pattern: "^ses" },
+  { method: "get", path: SessionPaths.message, name: "messageID", pattern: "^msg" },
+  { method: "patch", path: SessionPaths.updatePart, name: "partID", pattern: "^prt" },
+  { method: "post", path: SessionPaths.permissions, name: "permissionID", pattern: "^per" },
+  { method: "post", path: "/permission/:requestID/reply", name: "requestID", pattern: "^per" },
+  { method: "post", path: "/question/:requestID/reply", name: "requestID", pattern: "^que" },
+  { method: "put", path: PtyPaths.update, name: "ptyID", pattern: "^pty" },
+  { method: "delete", path: WorkspacePaths.remove, name: "id", pattern: "^wrk" },
+] satisfies Array<{ method: Method; path: string; name: string; pattern: string }>
+
 function app() {
   return Server.Default().app
 }
@@ -96,6 +127,10 @@ function queryParameters(operation: OpenApiOperation | undefined) {
 
 function queryParameter(operation: OpenApiOperation | undefined, name: string) {
   return (operation?.parameters ?? []).find((param) => param.in === "query" && param.name === name)
+}
+
+function pathParameter(operation: OpenApiOperation | undefined, name: string) {
+  return (operation?.parameters ?? []).find((param) => param.in === "path" && param.name === name)
 }
 
 function assertAdvertisedQueryParamsAreRuntimeFields(input: {
@@ -148,7 +183,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.effect(
-    "OpenAPI workspace query params are declared by runtime query schemas",
+    "OpenAPI query params are declared by runtime query schemas",
     Effect.sync(() => {
       const spec = OpenApi.fromApi(PublicApi)
       for (const route of openApiDriftRoutes) {
@@ -161,7 +196,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.effect(
-    "OpenAPI numeric query params preserve generated SDK call shapes",
+    "OpenAPI query and path schemas preserve compatibility metadata",
     Effect.sync(() => {
       const spec = OpenApi.fromApi(PublicApi)
       for (const expected of numericSdkQueryParams) {
@@ -169,6 +204,24 @@ describe("httpapi query schema drift", () => {
           queryParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
           `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
         ).toEqual(expected.schema)
+      }
+      for (const expected of booleanSdkQueryParams) {
+        expect(
+          queryParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
+          `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
+        ).toEqual(QueryBooleanOpenApi)
+      }
+      for (const expected of queryParamPatterns) {
+        expect(
+          queryParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
+          `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
+        ).toEqual({ type: "string", pattern: expected.pattern })
+      }
+      for (const expected of pathParamPatterns) {
+        expect(
+          pathParameter(spec.paths[openApiPath(expected.path)]?.[expected.method], expected.name)?.schema,
+          `${expected.method.toUpperCase()} ${expected.path} ${expected.name}`,
+        ).toEqual({ type: "string", pattern: expected.pattern })
       }
     }),
   )

@@ -1,0 +1,14 @@
+diff --git a/photon_rs.js b/photon_rs.js
+index 8f4144d..b83e9a9 100644
+--- a/photon_rs.js
++++ b/photon_rs.js
+@@ -4509,7 +4509,8 @@ module.exports.__wbindgen_init_externref_table = function() {
+     ;
+ };
+ 
+-const path = require('path').join(__dirname, 'photon_rs_bg.wasm');
++// Allow opencode's Bun compiled binary to point photon-node at its embedded wasm asset.
++const path = globalThis.__OPENCODE_PHOTON_WASM_PATH || require('path').join(__dirname, 'photon_rs_bg.wasm');
+ const bytes = require('fs').readFileSync(path);
+ 
+ const wasmModule = new WebAssembly.Module(bytes);
