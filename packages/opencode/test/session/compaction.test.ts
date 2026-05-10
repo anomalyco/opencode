@@ -1448,88 +1448,74 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("does not allow tool calls while generating the summary", async () => {
-    const stub = llm()
-    stub.push(
-      Stream.make(
-        { type: "start" } satisfies LLM.Event,
-        { type: "tool-input-start", id: "call-1", toolName: "_noop" } satisfies LLM.Event,
-        { type: "tool-call", toolCallId: "call-1", toolName: "_noop", input: {} } satisfies LLM.Event,
-        {
-          type: "finish-step",
-          finishReason: "tool-calls",
-          rawFinishReason: "tool_calls",
-          response: { id: "res", modelId: "test-model", timestamp: new Date() },
-          providerMetadata: undefined,
-          usage: {
-            inputTokens: 1,
-            outputTokens: 1,
-            totalTokens: 2,
-            inputTokenDetails: {
-              noCacheTokens: undefined,
-              cacheReadTokens: undefined,
-              cacheWriteTokens: undefined,
+  itProcess.instance(
+    "does not allow tool calls while generating the summary",
+    () => {
+      const stub = llm()
+      stub.push(
+        Stream.make(
+          { type: "start" } satisfies LLM.Event,
+          { type: "tool-input-start", id: "call-1", toolName: "_noop" } satisfies LLM.Event,
+          { type: "tool-call", toolCallId: "call-1", toolName: "_noop", input: {} } satisfies LLM.Event,
+          {
+            type: "finish-step",
+            finishReason: "tool-calls",
+            rawFinishReason: "tool_calls",
+            response: { id: "res", modelId: "test-model", timestamp: new Date() },
+            providerMetadata: undefined,
+            usage: {
+              inputTokens: 1,
+              outputTokens: 1,
+              totalTokens: 2,
+              inputTokenDetails: {
+                noCacheTokens: undefined,
+                cacheReadTokens: undefined,
+                cacheWriteTokens: undefined,
+              },
+              outputTokenDetails: {
+                textTokens: undefined,
+                reasoningTokens: undefined,
+              },
             },
-            outputTokenDetails: {
-              textTokens: undefined,
-              reasoningTokens: undefined,
+          } satisfies LLM.Event,
+          {
+            type: "finish",
+            finishReason: "tool-calls",
+            rawFinishReason: "tool_calls",
+            totalUsage: {
+              inputTokens: 1,
+              outputTokens: 1,
+              totalTokens: 2,
+              inputTokenDetails: {
+                noCacheTokens: undefined,
+                cacheReadTokens: undefined,
+                cacheWriteTokens: undefined,
+              },
+              outputTokenDetails: {
+                textTokens: undefined,
+                reasoningTokens: undefined,
+              },
             },
-          },
-        } satisfies LLM.Event,
-        {
-          type: "finish",
-          finishReason: "tool-calls",
-          rawFinishReason: "tool_calls",
-          totalUsage: {
-            inputTokens: 1,
-            outputTokens: 1,
-            totalTokens: 2,
-            inputTokenDetails: {
-              noCacheTokens: undefined,
-              cacheReadTokens: undefined,
-              cacheWriteTokens: undefined,
-            },
-            outputTokenDetails: {
-              textTokens: undefined,
-              reasoningTokens: undefined,
-            },
-          },
-        } satisfies LLM.Event,
-      ),
-    )
+          } satisfies LLM.Event,
+        ),
+      )
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const msg = yield* createUserMessage(session.id, "hello")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        yield* SessionCompaction.use.process({ parentID: msg.id, messages: msgs, sessionID: session.id, auto: false })
 
-    await using tmp = await tmpdir({ git: true })
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const msg = await user(session.id, "hello")
-        const rt = liveRuntime(stub.layer, wide())
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: msg.id,
-                messages: msgs,
-                sessionID: session.id,
-                auto: false,
-              }),
-            ),
-          )
+        const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+          (item) => item.info.role === "assistant" && item.info.summary,
+        )
 
-          const summary = (await svc.messages({ sessionID: session.id })).find(
-            (item) => item.info.role === "assistant" && item.info.summary,
-          )
-
-          expect(summary?.info.role).toBe("assistant")
-          expect(summary?.parts.some((part) => part.type === "tool")).toBe(false)
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+        expect(summary?.info.role).toBe("assistant")
+        expect(summary?.parts.some((part) => part.type === "tool")).toBe(false)
+      }).pipe(Effect.provide(compactionProcessLayer({ llm: stub.layer })))
+    },
+    { git: true },
+  )
 
   test("summarizes only the head while keeping recent tail out of summary input", async () => {
     const stub = llm()
