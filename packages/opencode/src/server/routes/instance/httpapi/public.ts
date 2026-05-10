@@ -62,7 +62,6 @@ const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /experimental/session limit": { type: "number" },
   "GET /session start": { type: "number" },
   "GET /session limit": { type: "number" },
-  "GET /session/{sessionID}/diff messageID": { type: "string", pattern: "^msg.*" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
   "GET /api/session limit": { type: "number" },
   "GET /api/session start": { type: "number" },
