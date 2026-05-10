@@ -205,21 +205,22 @@ export class MessagePipeline {
   /**
    * 启动 prompt + 等 dispatcher 拿 reply。
    *
-   * v2(2026-05-10 起):走 dispatcher 的强完成信号 — `message.updated` 事件里
-   * `info.time.completed` 字段。dispatcher 锁定 first 新 assistant message id +
-   * 累积该 message 的 text parts → 完成时直接 resolve 文本,不再调 session.messages
-   * 兜底查询。
-   *
    * register waiter 必须在 promptAsync **之前**(防错过早期 events)。
    *
-   * timeout 默认 30 分钟,作为**事件丢失的最终兜底**(opencode-cli 崩 / 网络抖动等
-   * 极端场景),不是主信号。正常情况下 message.updated 完成时直接 resolve,远早于
-   * timeout。
+   * !! 已知 bug:dispatcher 累积所有 text part(包括 user prompt 的 part)→ reply echo user 输入。
+   *    修需要按 message role 区分(part 没 role 字段,得通过 message.updated event 反查)。
+   *    留 followup,先保证有 reply(echo)优于 empty reply。
    */
   private async runOpencode(sessionID: string, text: string, agent: string): Promise<string> {
+    // 默认 30 分钟超时(2026-05-10 由 5min 提)。
+    // 实测出现过 7m18s 才完成的回复(用户问"DeskFox 服务启动后..."触发 75 次工具调用)
+    // 5min 超时强制走 dispatcher partial 路径 → runOpencode 又忽略 partial 改读
+    // session.messages,此时 LLM 还在跑、message 仍空,plugin 返空字符串 → 飞书没回复。
+    // 30min 覆盖典型 agent 长任务上限;真要跑超 30min 的复杂任务,需走 Layer 2 重构
+    // (订阅 message.updated 事件 + time.completed 字段判完成,告别启发式超时)。
     const timeoutMs = this.opts.promptTimeoutMs ?? 30 * 60 * 1000
 
-    const completionPromise = this.opts.dispatcher.register(sessionID, timeoutMs)
+    const idlePromise = this.opts.dispatcher.register(sessionID, timeoutMs)
 
     const accountModel = this.opts.account.model
     void this.opts.opencodeClient.session
@@ -238,20 +239,56 @@ export class MessagePipeline {
         console.error(`[pipeline ${this.opts.accountId}] promptAsync error:`, err)
       })
 
-    const result = await completionPromise
+    // 等 idle 信号(不依赖 dispatcher 累积 part — race condition 见 dispatcher 注释)
+    await idlePromise
 
-    if (result.kind === "error") {
-      const errMsg =
-        result.error.data?.message ?? result.error.message ?? "opencode LLM error"
-      throw new Error(errMsg)
+    // setImmediate 跳出当前 event hook 的 microtask scope,确保 server 端 message/part db 写完 + auth context 正常
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    // 直接拉 messages 取 last assistant text(role 准确,不会 echo user prompt)
+    const msgsRes = await this.opts.opencodeClient.session.messages({
+      path: { id: sessionID },
+      query: { directory: FEISHU_WORKSPACE },
+    })
+    const wrap = msgsRes as {
+      data?: Array<{
+        info: {
+          role?: string
+          error?: { message?: string; data?: { message?: string } }
+        }
+        parts: Array<{ type?: string; text?: string; synthetic?: boolean; ignored?: boolean }>
+      }>
+      error?: unknown
+      response?: { status?: number }
     }
-    if (result.kind === "no-message") {
+    if (!wrap.data) {
       console.warn(
-        `[pipeline ${this.opts.accountId}] no assistant message captured: ${result.reason}`,
+        `[pipeline ${this.opts.accountId}] messages fetch failed status=${wrap.response?.status}, fallback ""`,
       )
       return ""
     }
-    return result.text
+    const data = wrap.data
+    if (data.length === 0) return ""
+
+    const assistantEntry = findLastUsefulAssistant(data)
+    if (!assistantEntry) return ""
+
+    // 检查 LLM 错误(opencode 把 LLM API error 存进 assistant message.error)
+    const err = assistantEntry.info.error
+    if (err) {
+      const errMsg =
+        (err as { data?: { message?: string } }).data?.message ?? err.message ?? "opencode LLM error"
+      throw new Error(errMsg)
+    }
+
+    // 拼 text parts(skip step-start / step-finish / reasoning / tool 等;只取 type=text)
+    const texts: string[] = []
+    for (const p of assistantEntry.parts) {
+      if (p.type === "text" && typeof p.text === "string" && !p.synthetic && !p.ignored) {
+        texts.push(p.text)
+      }
+    }
+    return texts.join("").trim()
   }
 
   /** 测试 / debug 入口:外部调用直接驱动 handle(传 ImMessageEvent 模拟飞书消息) */
@@ -327,4 +364,58 @@ export class MessagePipeline {
       },
     })
   }
+}
+
+// ============================================================
+// findLastUsefulAssistant — 倒序找有内容的 assistant message
+// ============================================================
+//
+// 背景:opencode agent loop 在某些回复(工具调用 / 多步)尾部会追加一条 0-token 空 step
+// placeholder message,parts 形状固定为 step-start → text("") → step-finish,parentID 跟
+// 它前面那条真 reply 的 parentID 一样,瞬时完成(time.completed === time.created)。
+// 简单倒序找 last assistant 会取到这条 placeholder → 返回空字符串 → 飞书侧没回复。
+//
+// 修法:倒序时跳过空 placeholder(无 error 且无非空 text part),继续往前找真 reply。
+// 短回复(无 placeholder 跟随)不受影响 — 倒序第一条就是真 reply 命中。
+//
+// 此函数纯函数,作为 Logic 清单覆盖到 100% 行(R5 关键模块清单 helper extract 模式)。
+
+/** SDK session.messages 返回 entry 的子集类型(仅本 helper 需要的字段)*/
+export type AssistantMessageEntry = {
+  info: {
+    role?: string
+    error?: { message?: string; data?: { message?: string } }
+  }
+  parts: Array<{ type?: string; text?: string; synthetic?: boolean; ignored?: boolean }>
+}
+
+/**
+ * 倒序找最近一条"有用"的 assistant message。
+ *
+ * 有用 = 有 error(error 也是有效信号,caller 会抛出去)或 有非空 text part。
+ * 跳过条件 = 0-token / 空文本 placeholder ghost(text 全空 + 无 error)。
+ *
+ * 返回 undefined → 整个 data 里没有任何 assistant role 的 entry,或全是 placeholder。
+ */
+export function findLastUsefulAssistant(
+  data: ReadonlyArray<AssistantMessageEntry>,
+): AssistantMessageEntry | undefined {
+  for (let i = data.length - 1; i >= 0; i--) {
+    const m = data[i]
+    if (!m || m.info.role !== "assistant") continue
+
+    if (m.info.error) return m
+
+    const hasRealText = m.parts.some(
+      (p) =>
+        p.type === "text" &&
+        typeof p.text === "string" &&
+        p.text.trim() !== "" &&
+        !p.synthetic &&
+        !p.ignored,
+    )
+    if (hasRealText) return m
+    // 否则:placeholder ghost,继续往前扫
+  }
+  return undefined
 }
