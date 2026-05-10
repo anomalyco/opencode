@@ -59,8 +59,21 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
     const handleEvent = (event: GlobalEvent) => {
       queue.push(event)
-      const elapsed = Date.now() - last
 
+      // Streaming text deltas must render immediately — bypassing the 16 ms
+      // batching window — so that bursty upstream SSE delivery (e.g. Copilot's
+      // /v1/messages shim for Claude) is not held back an extra frame. Other
+      // events (session status, tool results, etc.) still benefit from batching.
+      if (event.payload?.type === "message.part.delta") {
+        if (timer) {
+          clearTimeout(timer)
+          timer = undefined
+        }
+        flush()
+        return
+      }
+
+      const elapsed = Date.now() - last
       if (timer) return
       // If we just flushed recently (within 16ms), batch this with future events
       // Otherwise, process immediately to avoid latency
