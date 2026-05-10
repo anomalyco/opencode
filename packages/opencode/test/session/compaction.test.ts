@@ -313,21 +313,42 @@ const itProcess = testEffect(processEnv)
 
 function compactionProcessLayer(options?: {
   result?: "continue" | "compact"
+  llm?: Layer.Layer<LLM.Service>
   plugin?: Layer.Layer<Plugin.Service>
   provider?: ReturnType<typeof ProviderTest.fake>
   config?: Layer.Layer<Config.Service>
 }) {
   const bus = Bus.layer
-  return SessionCompaction.layer.pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        (options?.provider ?? wide()).layer,
-        layer(options?.result ?? "continue"),
-        Agent.defaultLayer,
-        options?.plugin ?? Plugin.defaultLayer,
-        bus,
-        options?.config ?? Config.defaultLayer,
-      ),
+  const status = SessionStatus.layer.pipe(Layer.provide(bus))
+  const processor = options?.llm
+    ? SessionProcessorModule.SessionProcessor.layer.pipe(
+        Layer.provide(summary),
+        Layer.provide(Image.defaultLayer),
+        Layer.provide(status),
+      )
+    : layer(options?.result ?? "continue")
+  return Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
+    Layer.provide(SessionNs.defaultLayer),
+    Layer.provide((options?.provider ?? wide()).layer),
+    Layer.provide(Snapshot.defaultLayer),
+    Layer.provide(options?.llm ?? LLM.defaultLayer),
+    Layer.provide(Permission.defaultLayer),
+    Layer.provide(Agent.defaultLayer),
+    Layer.provide(options?.plugin ?? Plugin.defaultLayer),
+    Layer.provide(status),
+    Layer.provide(bus),
+    Layer.provide(options?.config ?? Config.defaultLayer),
+  )
+}
+
+function createSummaryCompaction(sessionID: SessionID) {
+  return SessionCompaction.use.create({ sessionID, agent: "build", model: ref, auto: false })
+}
+
+function readCompactionPart(sessionID: SessionID) {
+  return SessionNs.Service.use((ssn) => ssn.messages({ sessionID })).pipe(
+    Effect.map((messages) =>
+      messages.at(-2)?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction"),
     ),
   )
 }
@@ -1054,54 +1075,36 @@ describe("session.compaction.process", () => {
     }).pipe(Effect.provide(compactionProcessLayer({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 100 }) }))),
   )
 
-  test("falls back to full summary when even one recent turn exceeds preserve token budget", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const stub = llm()
-    let captured = ""
-    stub.push(
-      reply("summary", (input) => {
-        captured = JSON.stringify(input.messages)
-      }),
-    )
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        await user(session.id, "first")
-        await user(session.id, "y".repeat(2_000))
-        await SessionCompaction.create({
-          sessionID: session.id,
-          agent: "build",
-          model: ref,
-          auto: false,
-        })
+  itProcess.instance(
+    "falls back to full summary when even one recent turn exceeds preserve token budget",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "first")
+        yield* createUserMessage(session.id, "y".repeat(2_000))
+        yield* createSummaryCompaction(session.id)
 
-        const rt = liveRuntime(stub.layer, wide(), cfg({ tail_turns: 1, preserve_recent_tokens: 20 }))
-        try {
-          const msgs = await svc.messages({ sessionID: session.id })
-          const parent = msgs.at(-1)?.info.id
-          expect(parent).toBeTruthy()
-          await rt.runPromise(
-            SessionCompaction.Service.use((svc) =>
-              svc.process({
-                parentID: parent!,
-                messages: msgs,
-                sessionID: session.id,
-                auto: false,
-              }),
-            ),
-          )
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
 
-          const part = await lastCompactionPart(session.id)
-          expect(part?.type).toBe("compaction")
-          expect(part?.tail_start_id).toBeUndefined()
-          expect(captured).toContain("yyyy")
-        } finally {
-          await rt.dispose()
-        }
-      },
-    })
-  })
+        const part = yield* readCompactionPart(session.id)
+        expect(part?.type).toBe("compaction")
+        expect(part?.tail_start_id).toBeUndefined()
+        expect(captured).toContain("yyyy")
+      }).pipe(
+        Effect.provide(
+          compactionProcessLayer({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 20 }) }),
+        ),
+      )
+    },
+    { git: true },
+  )
 
   test("falls back to full summary when retained tail media exceeds preserve token budget", async () => {
     await using tmp = await tmpdir({ git: true })
