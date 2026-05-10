@@ -460,6 +460,11 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
 
   const server = Bun.serve({
     port: options.port ?? 0,
+    // 显式绑 loopback — Bun.serve 默认 hostname 为 "0.0.0.0"(所有接口),会让 Win Firewall
+    // 弹"是否允许公网访问"提示(标 "Bun"+publisher "Oven",对 user 困惑且看起来像恶意软件)
+    // 同时把 plugin server 暴露到 LAN — 虽然有 basic auth 但攻击面应降到 0。
+    // (2026-05-10 加;参考 feishu-server-loopback-bind feat-id)
+    hostname: "127.0.0.1",
     fetch: handler,
   })
 
