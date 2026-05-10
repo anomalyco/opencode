@@ -88,9 +88,8 @@ export const Info = Schema.Struct({
         setCacheKey: Schema.optional(Schema.Boolean).annotate({
           description: "Enable promptCacheKey for this provider (default false)",
         }),
-        cacheStrategy: Schema.optional(Schema.Literals(["bedrock"])).annotate({
-          description:
-            "Cache strategy for openai-compatible providers. Set to 'bedrock' when routing through a proxy (e.g. Bifrost, LiteLLM) to AWS Bedrock Claude models to inject cache_control: {type: 'ephemeral'} into message content blocks instead of promptCacheKey.",
+        cacheStrategy: Schema.optional(Schema.Literal("bedrock")).annotate({
+          description: "Cache injection strategy for openai-compatible providers proxying Bedrock. 'bedrock' injects cache_control blocks instead of promptCacheKey.",
         }),
         timeout: Schema.optional(
           Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
