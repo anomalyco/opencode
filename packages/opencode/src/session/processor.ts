@@ -26,6 +26,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session-event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
@@ -497,6 +498,13 @@ export const layer = Layer.effect(
               usage: value.usage,
               metadata: value.providerMetadata,
             })
+            if (Flag.OPENCODE_EXPERIMENTAL_CACHE_AUDIT) {
+              const totalInputTokens = usage.tokens.input + usage.tokens.cache.read + usage.tokens.cache.write
+              const cacheHitPercent = totalInputTokens > 0 ? ((usage.tokens.cache.read / totalInputTokens) * 100).toFixed(1) : "0.0"
+              log.info(
+                `[CACHE] ${ctx.model.id}  input=${totalInputTokens} (cache_read=${usage.tokens.cache.read} cache_write=${usage.tokens.cache.write} new=${usage.tokens.input})  hit=${cacheHitPercent}%  output=${usage.tokens.output}  total=${usage.tokens.total ?? 0}`,
+              )
+            }
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (flags.experimentalEventSystem) {
