@@ -10,8 +10,6 @@ export type Migration = {
 
 const log = Log.create({ service: "code-migration" })
 
-export const All: Migration[] = []
-
 export interface Interface {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/CodeMigration") {}
@@ -19,7 +17,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Co
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    void runPending().catch((error) => {
+    const migrations: Migration[] = []
+
+    void runPending(migrations).catch((error) => {
       log.error("failed to run code migrations", { error })
     })
     return Service.of({})
@@ -28,8 +28,8 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer
 
-async function runPending() {
-  if (All.length === 0) return
+async function runPending(migrations: Migration[]) {
+  if (migrations.length === 0) return
 
   const db = Database.Client()
   db.run("BEGIN IMMEDIATE")
@@ -42,7 +42,7 @@ async function runPending() {
         .all()
         .map((row) => row.name),
     )
-    for (const migration of All.filter((item) => !completed.has(item.name))) {
+    for (const migration of migrations.filter((item) => !completed.has(item.name))) {
       log.info("running code migration", { name: migration.name })
       await migration.run(db)
       db.insert(CodeMigrationTable)
