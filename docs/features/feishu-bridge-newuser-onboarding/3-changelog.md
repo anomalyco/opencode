@@ -17,7 +17,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | `3590f9cb4` | A1 — `fix(feishu-plugin-install): 路径失效自愈 — user 拖 .app 到 Applications 后插件不再卡死` |
 | `42bac78df` | A4 — `feat(feishu-bridge): default model 缺失检测 + 友好降级回复` |
 | `08ff26115` | A3 — `feat(branding): .dmg 拖拽引导背景图 + 显式 dmg layout` |
-| (本笔)| A4.A follow-up — `fix(feishu-bridge): A4.A 检测逻辑修 — data.default key 是 provider id 不是 agent name` |
+| `a9f24c636` | A4.A follow-up — `fix(feishu-bridge): A4.A 检测逻辑修 — data.default key 是 provider id 不是 agent name` |
 
 ## A1 — plugin 路径失效自愈(`3590f9cb4`)
 
