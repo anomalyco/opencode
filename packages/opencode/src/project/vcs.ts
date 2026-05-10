@@ -234,8 +234,8 @@ export const FileDiff = Schema.Struct({
   // populates patch, but loosening matches the sibling schema so a
   // future code path that omits it can't crash /instance/vcs/diff.
   patch: Schema.optional(Schema.String),
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
 })
   .annotate({ identifier: "VcsFileDiff" })
@@ -244,8 +244,8 @@ export type FileDiff = Schema.Schema.Type<typeof FileDiff>
 
 export const FileStatus = Schema.Struct({
   file: Schema.String,
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
   status: Schema.Literals(["added", "deleted", "modified"]),
 })
   .annotate({ identifier: "VcsFileStatus" })

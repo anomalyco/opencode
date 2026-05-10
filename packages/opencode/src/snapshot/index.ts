@@ -25,8 +25,8 @@ export const FileDiff = Schema.Struct({
   // session response and broke session loading on Desktop.
   file: Schema.optional(Schema.String),
   patch: Schema.optional(Schema.String),
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
 })
   .annotate({ identifier: "SnapshotFileDiff" })
