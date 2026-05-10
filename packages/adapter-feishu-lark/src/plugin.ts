@@ -74,7 +74,42 @@ export const FeishuBridgePlugin = async (input: PluginInput): Promise<Hooks> => 
 
   return {
     event: async ({ event }) => {
-      localDispatcher.dispatch(event as { type: string; properties?: Record<string, unknown> })
+      const evt = event as { type: string; properties?: Record<string, unknown> }
+      localDispatcher.dispatch(evt)
+
+      // permission.asked 事件 → 找拥有该 sessionID 的 pipeline → 弹飞书权限卡片
+      if (evt.type === "permission.asked" && evt.properties) {
+        const req = evt.properties as {
+          id?: string
+          sessionID?: string
+          permission?: string
+          patterns?: ReadonlyArray<string>
+          metadata?: Record<string, unknown>
+          always?: ReadonlyArray<string>
+          tool?: { messageID: string; callID: string }
+        }
+        if (!req.id || !req.sessionID || !req.permission) return
+        for (const pipeline of pipelines.values()) {
+          if (pipeline.hasSession(req.sessionID)) {
+            try {
+              await pipeline.handlePermissionAsked({
+                id: req.id,
+                sessionID: req.sessionID,
+                permission: req.permission,
+                patterns: req.patterns ?? [],
+                metadata: req.metadata ?? {},
+                always: req.always ?? [],
+                tool: req.tool,
+              })
+            } catch (err) {
+              console.error(`[feishu-plugin] handlePermissionAsked error:`, err)
+            }
+            break
+          }
+        }
+        // 如果没 pipeline 拥有这个 session(主 GUI / TUI session)→ 不动,
+        // opencode 走原 GUI 对话框路径,user 在主 GUI 处理
+      }
     },
   }
 }
@@ -187,18 +222,41 @@ async function syncAccounts(): Promise<void> {
   }
 
   if (!wssManager) {
-    wssManager = new WSSClientManager(async (event: ImMessageEvent) => {
-      const pipeline = pipelines.get(event.accountId)
-      if (!pipeline) {
-        console.warn(`[feishu-plugin] no pipeline for account ${event.accountId}`)
-        return
-      }
-      try {
-        await pipeline.handle(event)
-      } catch (err) {
-        console.error(`[feishu-plugin] pipeline error:`, err)
-      }
-    })
+    wssManager = new WSSClientManager(
+      async (event: ImMessageEvent) => {
+        const pipeline = pipelines.get(event.accountId)
+        if (!pipeline) {
+          console.warn(`[feishu-plugin] no pipeline for account ${event.accountId}`)
+          return
+        }
+        try {
+          await pipeline.handle(event)
+        } catch (err) {
+          console.error(`[feishu-plugin] pipeline error:`, err)
+        }
+      },
+      // onCardAction:user 在飞书点交互卡片按钮(本期 permission 卡片)→ 路由到 pipeline
+      async (accountId, cardEvent) => {
+        const pipeline = pipelines.get(accountId)
+        if (!pipeline) {
+          console.warn(`[feishu-plugin] card action for unknown account ${accountId}`)
+          return
+        }
+        // 解码 action.value → 看是不是 permission_reply
+        const { parseCardAction } = await import("./feishu/permission-card")
+        const parsed = parseCardAction({
+          action: { value: cardEvent.actionValue, tag: cardEvent.actionTag },
+          open_id: cardEvent.openId,
+          open_message_id: cardEvent.cardMessageId,
+        })
+        if (!parsed) return // 不是我们的 permission 卡片,忽略
+        try {
+          await pipeline.handleCardActionReply(parsed)
+        } catch (err) {
+          console.error(`[feishu-plugin] handleCardActionReply error:`, err)
+        }
+      },
+    )
   }
 
   await wssManager.sync(accounts)

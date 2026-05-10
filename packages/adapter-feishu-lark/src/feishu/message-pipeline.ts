@@ -22,6 +22,11 @@ import type { createOpencodeClient } from "@opencode-ai/sdk"
 import type { FeishuAccount } from "../core/config-schema"
 import { readSecret } from "../core/secret-ref"
 import type { ChatSessionStore } from "./chat-session-store"
+import {
+  PermissionCardController,
+  type ParsedCardAction,
+  type PermissionRequest,
+} from "./permission-card"
 import type { PromptDispatcher } from "./prompt-dispatcher"
 import type { ImMessageEvent } from "./wss-client"
 
@@ -117,6 +122,10 @@ export class MessagePipeline {
   private readonly larkClient: Client
   /** chatId → opencode sessionID(in-memory cache,真持久化在 chatSessionStore)*/
   private readonly chatToSession = new Map<string, string>()
+  /** sessionID → chatId 反查(用于 permission.asked 事件路由)*/
+  private readonly sessionToChat = new Map<string, string>()
+  /** 飞书 CardKit 权限卡片控制器(LLM 调工具触发权限时弹卡片让 user 在飞书选)*/
+  readonly permissionController: PermissionCardController
 
   constructor(opts: PipelineOptions) {
     this.opts = opts
@@ -126,6 +135,42 @@ export class MessagePipeline {
       appSecret,
       domain: FEISHU_OPEN_API_DOMAIN[opts.account.domain],
     })
+    this.permissionController = new PermissionCardController({
+      opencodeClient: opts.opencodeClient,
+      larkClient: this.larkClient,
+      workspaceDir: FEISHU_WORKSPACE,
+    })
+  }
+
+  /**
+   * 给 plugin 用 — 判断本 pipeline 是否拥有此 sessionID(用于 permission.asked 事件路由)。
+   * 仅复用 *本 sidecar lifecycle 内* 创建的 session(in-memory cache),跟 chatToSession 同步。
+   */
+  hasSession(sessionID: string): boolean {
+    return this.sessionToChat.has(sessionID)
+  }
+
+  /**
+   * 收到 permission.asked event → 渲染卡片发到对应 chat。
+   * sessionID 不属于本 pipeline 时静默 noop(plugin 应已通过 hasSession 路由,这里再防御一次)。
+   */
+  async handlePermissionAsked(request: PermissionRequest): Promise<void> {
+    const chatId = this.sessionToChat.get(request.sessionID)
+    if (!chatId) {
+      console.warn(
+        `[pipeline ${this.opts.accountId}] permission.asked for unknown sessionID ${request.sessionID}`,
+      )
+      return
+    }
+    await this.permissionController.start(request, chatId)
+  }
+
+  /**
+   * 收到 card.action.trigger event(WSS)→ 解析 + 路由到 controller.handleReply。
+   * 不属于本 pipeline 的 card action(其他卡片 / 其他 account)静默 noop。
+   */
+  async handleCardActionReply(parsed: ParsedCardAction): Promise<void> {
+    await this.permissionController.handleReply(parsed)
   }
 
   async handle(event: ImMessageEvent): Promise<void> {
@@ -178,6 +223,7 @@ export class MessagePipeline {
         if (!id) throw new Error("session.create returned no id")
         sessionID = id
         this.chatToSession.set(event.chatId, sessionID)
+        this.sessionToChat.set(sessionID, event.chatId)
         // 落盘:plugin 重启后同 chat 仍能复用此 session
         this.opts.chatSessionStore.set(this.opts.accountId, event.chatId, sessionID)
         // 🚨 立即 archive 飞书 plugin 创建的 session,user GUI sidebar 不显示

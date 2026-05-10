@@ -41,10 +41,26 @@ export interface ImMessageEvent {
 
 export type OnMessageHandler = (event: ImMessageEvent) => Promise<void> | void
 
+/** 飞书 CardKit user 点击交互卡片按钮时触发的事件子集 */
+export interface CardActionEvent {
+  /** 触发的 user open_id */
+  openId?: string
+  /** 卡片 message_id */
+  cardMessageId?: string
+  /** action.value 原始 payload(由具体卡片业务自己 decode)*/
+  actionValue: unknown
+  /** 触发的 button tag */
+  actionTag?: string
+}
+
+export type OnCardActionHandler = (event: CardActionEvent) => Promise<void> | void
+
 export interface WssClientOptions {
   account: FeishuAccount
   accountId: string
   onMessage: OnMessageHandler
+  /** 飞书交互卡片按钮触发(本期用于 permission 卡片;不传则跳过 card.action.trigger 订阅 )*/
+  onCardAction?: OnCardActionHandler
 }
 
 export class FeishuWSSClient {
@@ -105,6 +121,32 @@ export class FeishuWSSClient {
         })
       },
     })
+
+    // 卡片按钮触发事件 — 仅当调用方注入了 onCardAction handler 才注册(本期 permission 卡片)。
+    if (opts.onCardAction) {
+      this.dispatcher.register({
+        "card.action.trigger": async (data: unknown) => {
+          // 飞书 InteractiveCardActionEvent 实际 payload 形状:
+          //   { action: {value, tag}, open_id, open_message_id, token, ... }
+          const evt = data as Record<string, unknown> | undefined
+          if (!evt) return
+          const action = evt.action as Record<string, unknown> | undefined
+          const cardEvent: CardActionEvent = {
+            openId: typeof evt.open_id === "string" ? evt.open_id : undefined,
+            cardMessageId: typeof evt.open_message_id === "string" ? evt.open_message_id : undefined,
+            actionValue: action?.value,
+            actionTag: typeof action?.tag === "string" ? (action.tag as string) : undefined,
+          }
+          try {
+            await opts.onCardAction!(cardEvent)
+          } catch (err) {
+            console.error(`[wss ${opts.accountId}] onCardAction error:`, err)
+          }
+          // CardActionHandler 路径要求返响应,WSS 路径 SDK 通常忽略返值;返空对象兜一下
+          return {}
+        },
+      })
+    }
   }
 
   /** 启动连接(SDK 自带 autoReconnect,start 一次即可) */
@@ -138,9 +180,15 @@ export class FeishuWSSClient {
 export class WSSClientManager {
   private readonly clients = new Map<string, FeishuWSSClient>()
   private readonly onMessage: OnMessageHandler
+  /** 卡片交互事件 handler(可选,plugin 用于 permission 卡片路由)*/
+  private readonly onCardAction?: (accountId: string, event: CardActionEvent) => Promise<void> | void
 
-  constructor(onMessage: OnMessageHandler) {
+  constructor(
+    onMessage: OnMessageHandler,
+    onCardAction?: (accountId: string, event: CardActionEvent) => Promise<void> | void,
+  ) {
     this.onMessage = onMessage
+    this.onCardAction = onCardAction
   }
 
   /** 同步当前 accounts 列表:新 account 起 WSS,失败 account silently 跳过 */
@@ -152,6 +200,9 @@ export class WSSClientManager {
         account,
         accountId,
         onMessage: this.onMessage,
+        onCardAction: this.onCardAction
+          ? (event) => this.onCardAction!(accountId, event)
+          : undefined,
       })
       try {
         await client.start()
