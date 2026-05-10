@@ -400,7 +400,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               if (!isActive())
                 layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
 
-              navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
+              navigate(`/${props.slug}/session/${props.session.id}#message-${message.id}`)
             }}
             trigger={item}
           />

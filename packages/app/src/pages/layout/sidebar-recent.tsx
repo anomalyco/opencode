@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { type GlobalSession, type Session } from "@opencode-ai/sdk/v2/client"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
@@ -107,7 +108,7 @@ export const RecentSidebarPanel = (props: {
     timer = setTimeout(() => setStore("search", val), 300)
   }
 
-  const slug = (_session: GlobalSession) => "recent"
+  const slug = (session: GlobalSession) => base64Encode(session.directory)
   const archiveSession = async (session: Session) => {
     const ok = await props.sessionProps.archiveSession(session)
     if (!ok) return false

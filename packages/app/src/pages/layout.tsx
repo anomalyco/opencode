@@ -2353,6 +2353,7 @@ export default function Layout(props: ParentProps) {
           onClick={() => {
             setStore("sidebarView", "recent")
             if (!layout.sidebar.opened()) layout.sidebar.open()
+            navigate("/recent")
           }}
         />
       )}
