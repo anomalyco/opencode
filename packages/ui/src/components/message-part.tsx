@@ -264,6 +264,7 @@ function getDirectory(path: string | undefined) {
 }
 
 import type { IconProps } from "./icon"
+import { normalize } from "./session-diff"
 
 export type ToolInfo = {
   icon: IconProps["name"]
@@ -1878,6 +1879,29 @@ ToolRegistry.register({
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
+
+    const fileCompProps = createMemo(() => {
+      if (props.metadata?.filediff) {
+        const diff = normalize({
+          ...props.metadata?.filediff,
+          status: "modified",
+        })
+        const fileDiff = diff.fileDiff
+        if (fileDiff) return { fileDiff, hunkSeparators: fileDiff.isPartial ? "simple" : "line-info-basic" }
+      }
+
+      return {
+        before: {
+          name: props.metadata?.filediff?.file || props.input.filePath,
+          contents: props.metadata?.filediff?.before || props.input.oldString || "",
+        },
+        after: {
+          name: props.metadata?.filediff?.file || props.input.filePath,
+          contents: props.metadata?.filediff?.after || props.input.newString || "",
+        },
+      }
+    })
+
     return (
       <div data-component="edit-tool">
         <BasicTool
@@ -1919,18 +1943,7 @@ ToolRegistry.register({
               }
             >
               <div data-component="edit-content">
-                <Dynamic
-                  component={fileComponent}
-                  mode="diff"
-                  before={{
-                    name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.before || props.input.oldString || "",
-                  }}
-                  after={{
-                    name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.after || props.input.newString || "",
-                  }}
-                />
+                <Dynamic component={fileComponent} mode="diff" {...fileCompProps()} />
               </div>
             </ToolFileAccordion>
           </Show>
