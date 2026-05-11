@@ -4,7 +4,6 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
-import { Image } from "@/image/image"
 import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
@@ -256,7 +255,6 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
   const processor = options?.llm
     ? SessionProcessorModule.SessionProcessor.layer.pipe(
         Layer.provide(summary),
-        Layer.provide(Image.defaultLayer),
         Layer.provide(status),
       )
     : layer(options?.result ?? "continue")
