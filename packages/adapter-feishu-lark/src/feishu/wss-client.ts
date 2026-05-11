@@ -118,23 +118,13 @@ export class FeishuWSSClient {
 
         // dedup 第二层:同 chatId + text(10s)— 防飞书 IM 客户端连击/retry 发出**不同 message_id 但内容一致**的多条 message
         // 只对 text 消息有效(其它 messageType 如 image / file 不走 text dedup,messageId 已第一层覆盖)
-        if (event.messageType === "text") {
-          let txt = ""
-          try {
-            const parsed = JSON.parse(event.content) as { text?: string }
-            txt = (parsed.text ?? "").trim()
-          } catch {
-            // content 解析不出 text(可能是 sticker / @mention 元数据格式)→ 不走 text dedup
-          }
-          if (txt) {
-            const textKey = `${event.chatId}::${txt}`
-            if (this.textDedup.hasAndMark(textKey)) {
-              console.log(
-                `[wss ${opts.accountId}] text-dedup skip ${event.messageId} (同 chat 10s 内重复发"${txt.slice(0, 40)}")`,
-              )
-              return
-            }
-          }
+        const textKey = makeTextDedupKey(event.messageType, event.chatId, event.content)
+        if (textKey && this.textDedup.hasAndMark(textKey)) {
+          const txt = textKey.split("::").slice(1).join("::") // 取 :: 之后(还原 text)
+          console.log(
+            `[wss ${opts.accountId}] text-dedup skip ${event.messageId} (同 chat 10s 内重复发"${txt.slice(0, 40)}")`,
+          )
+          return
         }
 
         // chatQueue:同 chat 串行处理
@@ -248,4 +238,32 @@ export class WSSClientManager {
   has(accountId: string): boolean {
     return this.clients.has(accountId)
   }
+}
+
+/**
+ * 给 wss-client 第二层 text dedup 算 dedup key。
+ *
+ * - 仅 messageType === "text" 才返 key,其它(image/file/sticker)返 null(不走 text dedup)
+ * - content 是 JSON 字符串 `{"text": "..."}`,失败 → null
+ * - trim 后空 string → null
+ * - key 格式:`<chatId>::<trimmedText>`(:: 是分隔符,chatId 跟 text 不应含 ::)
+ *
+ * export 给单测;wss-client handler 直接调。
+ * [feat: wss-text-dedup] 2026-05-12
+ */
+export function makeTextDedupKey(
+  messageType: string,
+  chatId: string,
+  content: string,
+): string | null {
+  if (messageType !== "text") return null
+  let txt = ""
+  try {
+    const parsed = JSON.parse(content) as { text?: string }
+    txt = (parsed.text ?? "").trim()
+  } catch {
+    return null
+  }
+  if (!txt) return null
+  return `${chatId}::${txt}`
 }
