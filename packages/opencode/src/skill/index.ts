@@ -242,13 +242,11 @@ export const layer = Layer.effect(
         const s: State = { skills: {}, dirs: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
         // skill with the same name can override it.
-        if (Flag.OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL) {
-          s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
-            name: CUSTOMIZE_OPENCODE_SKILL_NAME,
-            description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
-            location: "<built-in>",
-            content: CUSTOMIZE_OPENCODE_SKILL_BODY,
-          }
+        s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
+          name: CUSTOMIZE_OPENCODE_SKILL_NAME,
+          description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
+          location: "<built-in>",
+          content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
         return s
