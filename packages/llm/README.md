@@ -35,25 +35,24 @@ Run `LLMClient.stream(request)` instead of `generate` when you want incremental 
 
 ## Caching
 
-Prompt caching is unified across providers. Mark content with a `CacheHint` and each protocol translates it to its wire format (`cache_control` on Anthropic, `cachePoint` on Bedrock; OpenAI's implicit caching needs no markers).
+Prompt caching is **on by default**. Every `LLMRequest` resolves to `cache: "auto"` unless the caller opts out with `cache: "none"`. Each protocol translates `CacheHint`s to its wire format (`cache_control` on Anthropic, `cachePoint` on Bedrock; OpenAI and Gemini do implicit caching server-side and don't need inline markers — auto is a no-op there).
 
 ### Auto placement
 
-The simplest path is `cache: "auto"` on the request:
+`"auto"` places three breakpoints — last tool definition, last system part, latest user message. The last-user-message boundary is the load-bearing detail: in a tool-use loop, a single user turn expands into many assistant/tool round-trips, all sharing that prefix. Caching at that boundary lets every intra-turn API call hit.
+
+The math justifies the default: Anthropic's 5-minute cache write is 1.25× base, read is 0.1×, so a single reuse within 5 minutes already wins. One-shot completions below the per-model minimum-cacheable-token threshold silently no-op on the wire, so the worst case is harmless.
+
+### Opting out
 
 ```ts
 LLM.request({
   model,
   system,
-  messages,
-  tools,
-  cache: "auto",
+  prompt: "one-off question",
+  cache: "none",
 })
 ```
-
-`"auto"` places three breakpoints — last tool definition, last system part, latest user message. The last-user-message boundary is the load-bearing detail: in a tool-use loop, a single user turn expands into many assistant/tool round-trips, all sharing that prefix. Caching at that boundary lets every intra-turn API call hit.
-
-On OpenAI and Gemini `"auto"` is a no-op (their wire formats don't accept inline markers — both use implicit caching). On Anthropic and Bedrock it emits provider-native cache markers.
 
 ### Granular policy
 
