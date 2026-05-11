@@ -15,7 +15,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | commit | 简述 |
 |---|---|
 | `5e81491f8` | feat(feishu-bridge): imbot 安全 agent + setup hook 注入 + 默认 saveAccount agent |
-| (本笔 docs) | docs(feishu-bridge-imbot-agent): 三文档 + INDEX + 改动日志 |
+| `361913b5e` | docs(feishu-bridge-imbot-agent): 三文档 + INDEX + 改动日志 |
 
 ## 改动文件
 
