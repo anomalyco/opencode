@@ -15,7 +15,29 @@
 
 
 
-## [Windows] 2026.5.11.2 - 2026-05-11 15:22
+## [Windows] 2026.5.11.4 - 2026-05-11 23:02
+
+**主题**:5.11.x 系列 ship 修复(vite chunking 非确定性 workaround) + imbot 安全 agent 终于推给 Win 用户
+
+5.11.1 / 5.11.2 / 5.11.3 三次 ship 全撞 **vite chunking 非确定性 bug** — 同源码不同时刻 build 出来的 prod bundle,有时 OK 有时启动期 `castError` 撞死(SolidJS createResource → session.sync → SDK falsy-error fallback 抛 `{}` → SolidJS castError → 错误页)。详见 [`win-ship-prod-5.11.4` 3-changelog](features/win-ship-prod-5.11.4/3-changelog.md) bug 调查段。
+
+- **win-ship-prod-5.11.4** ([changelog](features/win-ship-prod-5.11.4/3-changelog.md))— workaround:用当前 known-working `target/release/DeskFox.exe`(`b268ce694` dev tip 这次 build 实测多轮 UI 正常)**直接 ISCC 重打 installer,不重新 vite build**,避免再撞非确定性。**接受 mismatch**:installer 文件名 + Windows 控制面板显示 `5.11.4` / DeskFox UI 左下角版本牌显示 `v2026.5.11.2`(bundle 没动)
+- 失败 ship 记录(均撤回 GitHub + Gitee):
+  - `[Windows] 2026.5.11.1` — 用户实测装完立刻崩(撞 castError)
+  - `[Windows] 2026.5.11.2` ([changelog](features/win-ship-imbot-5.11.2/3-changelog.md))— 同上,**已从 GitHub draft 删除 + 从 Gitee release 删除**(2026-05-11 16:50 清理)
+  - `[Windows] 2026.5.11.3` — 本地 build 5.11.3 第二次重试,仍崩,未推外网
+
+installer 路径:`packages/branding/installer/Output/DeskFox-2026.5.11.4-setup.exe`(59.2 MB,本地 ISCC pack,**target/release 沿用 22:53:13 dev tip 那次 build 的 binary**)
+
+**用户视觉警告**:装出来 UI 显示 `v2026.5.11.2` 是预期,**不是 bug**。Windows "已安装应用"显示 `5.11.4` 才是 ship 标识。两个版本号都对应同一个 ship。
+
+**根因还没真修**,留 backlog(vite manualChunks 显式分块 / SDK falsy-error fallback 改 Error 而非 `{}` / 下次 ship 时干净 rebuild 消除 mismatch),详见 5.11.4 changelog 后续 backlog 段。
+
+---
+
+## [Windows] 2026.5.11.2 - 2026-05-11 15:22 — **撤回**
+
+> ⚠️ **此版本已撤回,GitHub + Gitee 两端 release 已删除**。安装会撞 vite chunking bug 启动期崩。新装请用 [`5.11.4`](#windows-202651114---2026-05-11-2302)。本 entry 保留作历史记录。
 
 **主题**:Win 端补 ship 把 `feishu-bridge-imbot-agent` 安全 agent 推给 Win 用户(对齐 Mac 5.11.1)
 
