@@ -600,6 +600,7 @@ export const RunCommand = effectCmd({
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          const sessions = new Set([sessionID])
           let error: string | undefined
 
           for await (const event of events.stream) {
@@ -618,7 +619,7 @@ export const RunCommand = effectCmd({
 
             if (event.type === "message.part.updated") {
               const part = event.properties.part
-              if (part.sessionID !== sessionID) continue
+              if (!sessions.has(part.sessionID)) continue
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
@@ -630,12 +631,11 @@ export const RunCommand = effectCmd({
                 UI.error(part.state.error)
               }
 
-              if (
-                part.type === "tool" &&
-                part.tool === "task" &&
-                part.state.status === "running" &&
-                args.format !== "json"
-              ) {
+              if (part.type === "tool" && part.tool === "task" && part.state.status === "running") {
+                // Track child session IDs so subagent output and errors are mirrored too.
+                const metadata = "metadata" in part.state ? part.state.metadata : undefined
+                if (metadata && typeof metadata.sessionId === "string") sessions.add(metadata.sessionId)
+                if (args.format === "json") continue
                 if (toggles.get(part.id) === true) continue
                 await tool(part)
                 toggles.set(part.id, true)
@@ -679,7 +679,7 @@ export const RunCommand = effectCmd({
 
             if (event.type === "session.error") {
               const props = event.properties
-              if (props.sessionID !== sessionID || !props.error) continue
+              if (!props.sessionID || !sessions.has(props.sessionID) || !props.error) continue
               let err = String(props.error.name)
               if ("data" in props.error && props.error.data && "message" in props.error.data) {
                 err = String(props.error.data.message)
