@@ -14,6 +14,23 @@
 
 
 
+
+## [macOS] 2026.5.11.1 — 2026-05-11 13:49
+
+**主题**:Mac 端跟随 Win [`2026.5.11.1`](#windows-2026511---2026-05-11-815) 同期更新,**新增 `imbot` 安全 agent 收紧飞书桥接 unattended 危险工具默认权限**
+
+自 [`[macOS] 2026.5.7.1`](#macos-202657---2026-05-07-1418)(2026-05-07)以来 dev 主干推进约 50 commits,Mac 端首次 ship。除 Win 端 5.11.1 主题(权限卡片 + 4 笔机制 fix + pack-installer 修)外,Mac 端独立 ship 加 `feishu-bridge-imbot-agent` feat,主要包括:
+
+- **feishu-bridge-imbot-agent** ([changelog](features/feishu-bridge-imbot-agent/3-changelog.md),merge `4a8970f50`)— 飞书桥接默认 agent `build` → `imbot`(setup hook 自动注入到 user opencode.jsonc,idempotent)。同 build 能力同 system prompt,但收紧 `bash` / `edit` / `write` / `apply_patch` / `webfetch` + 敏感目录 read(SSH / AWS / Kube / GPG / Keychain / Crypto)默认 ask。**安全闭环**:LLM 经 webfetch 拉 prompt injection 网页被诱导用 bash 数据 exfil 时,user 在飞书看到权限卡可即时拒绝。**主 GUI 0 影响**(仍走 build agent)
+- **feishu-bridge-newuser-onboarding** ([changelog](features/feishu-bridge-newuser-onboarding/3-changelog.md))— 全新用户拿 .dmg 装完即用 happy path 加固:A1 plugin 路径失效自愈 / A4 default model 缺失检测 + 友好降级 / A3 .dmg 拖拽引导背景图(Swift CoreGraphics 660×400 PNG)
+- **feishu-bridge-permission-card** + **feishu-bridge-empty-reply-ghost** + **feishu-server-loopback-bind** + **network-bind-safety-guard** + **feishu-plugin-install-win-path** 等 Win 同源 feat(同步进 Mac 端)
+- 实测验证:**不通过飞书 IM 界面也能 e2e 测**(plugin server `/debug/simulate-message` curl + log 实证 imbot 真触发 + plugin permission card 完整渲染),memory `reference_imbot_agent.md` 已沉淀技巧
+
+installer 路径:`packages/desktop/src-tauri/target/release/bundle/dmg/DeskFox_1.14.33_aarch64.dmg`(arch=aarch64 / Apple Silicon)
+
+**首次打开**:不签名 .dmg → 拖 .app 到 Applications → 右键 .app → 打开 → "仍要打开"(.dmg 内置 A3 背景图已引导)
+
+---
 ## [Windows] 2026.5.11.1 - 2026-05-11 08:15
 
 **主题**:飞书桥接 v1 深度迭代(权限卡片真互动 + 4 笔机制 fix)+ Win 网络监听安全规则 + pack-installer 顺序错位修
