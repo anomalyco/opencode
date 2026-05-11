@@ -2115,7 +2115,7 @@ ToolRegistry.register({
                                   component={fileComponent}
                                   mode="diff"
                                   fileDiff={file.view.fileDiff}
-                                  hunkSeparators="simple"
+                                  hunkSeparators={file.view.fileDiff.isPartial ? "simple" : "line-info-basic"}
                                 />
                               </div>
                             </Show>
