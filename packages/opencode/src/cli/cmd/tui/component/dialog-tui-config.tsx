@@ -1,7 +1,6 @@
 import path from "path"
 import { rename } from "fs/promises"
-import { createMemo } from "solid-js"
-import { useTuiConfig } from "@tui/context/tui-config"
+import { createMemo, createResource, createSignal } from "solid-js"
 import { useToast } from "@tui/ui/toast"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -50,10 +49,20 @@ const tuiConfigFields: TuiConfigField[] = [
   },
 ]
 
+const tuiConfigPath = path.join(Global.Path.config, "tui.json")
+
 export function DialogTuiConfig(props: { gotoKey?: string }) {
   const dialog = useDialog()
-  const tuiConfig = useTuiConfig()
   const toast = useToast()
+
+  const [refreshTick, setRefreshTick] = createSignal(0)
+
+  const [tuiFileConfig] = createResource(
+    refreshTick,
+    async () => {
+      return Filesystem.readJson<Record<string, unknown>>(tuiConfigPath).catch(() => ({}))
+    },
+  )
 
   const gotoField = props.gotoKey ? tuiConfigFields.find((f) => f.key === props.gotoKey) : undefined
 
@@ -78,11 +87,10 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
         parsedValue = field.type.example ?? ""
       }
 
-      const configPath = path.join(Global.Path.config, "tui.json")
-      const existing = await Filesystem.readJson<Record<string, unknown>>(configPath).catch(() => ({}))
+      const existing = await Filesystem.readJson<Record<string, unknown>>(tuiConfigPath).catch(() => ({}))
 
       // Backup existing config before modification
-      const backupPath = `${configPath}.bak`
+      const backupPath = `${tuiConfigPath}.bak`
       await Filesystem.write(backupPath, JSON.stringify(existing, null, 2))
 
       const updated = { ...existing, [field.key]: parsedValue }
@@ -96,11 +104,12 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
       }
 
       // Atomic write: write to temp file then rename
-      const tempPath = `${configPath}.${process.pid}.${Date.now()}.tmp`
+      const tempPath = `${tuiConfigPath}.${process.pid}.${Date.now()}.tmp`
       await Filesystem.writeJson(tempPath, updated)
-      await rename(tempPath, configPath)
+      await rename(tempPath, tuiConfigPath)
 
       toast.show({ message: `Updated ${field.key}`, variant: "success" })
+      setRefreshTick((t) => t + 1)
       return true
     } catch (error) {
       toast.show({
@@ -111,8 +120,12 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
     }
   }
 
+  function getCurrentValue(field: TuiConfigField): unknown {
+    return tuiFileConfig()?.[field.key]
+  }
+
   function openEdit(field: TuiConfigField) {
-    const currentValue = (tuiConfig as Record<string, unknown>)[field.key]
+    const currentValue = getCurrentValue(field)
     dialog.replace(() => (
       <DialogTuiConfigEdit
         field={field}
@@ -126,7 +139,7 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
   }
 
   if (gotoField) {
-    const currentValue = (tuiConfig as Record<string, unknown>)[gotoField.key]
+    const currentValue = getCurrentValue(gotoField)
     return (
       <DialogTuiConfigEdit
         field={gotoField}
@@ -139,17 +152,18 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
     )
   }
 
-  const options = createMemo(() =>
-    tuiConfigFields.map((field) => {
-      const currentValue = (tuiConfig as Record<string, unknown>)[field.key]
+  const options = createMemo(() => {
+    const config = tuiFileConfig() ?? {}
+    return tuiConfigFields.map((field) => {
+      const currentValue = config[field.key]
       const currentText = currentValue !== undefined ? ` = ${JSON.stringify(currentValue)}` : " (not set)"
       return {
         title: field.key,
         value: field,
         description: field.description + currentText,
       }
-    }),
-  )
+    })
+  })
 
   return (
     <DialogSelect
