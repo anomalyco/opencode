@@ -27,7 +27,7 @@ const sessionID = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3
 const sessionIDChild = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2L")
 const messageID = Schema.decodeUnknownSync(MessageID)("msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M")
 const partID = Schema.decodeUnknownSync(PartID)("prt_01J5Y5H0AH4Q4NXJ6P4C3P5V2N")
-const projectID = ProjectID.zod.parse("proj-alpha")
+const projectID = ProjectID.make("proj-alpha")
 const workspaceID = Schema.decodeUnknownSync(WorkspaceID)("wrk-primary")
 
 function decodeUnknown<S extends Schema.Top>(schema: S) {
