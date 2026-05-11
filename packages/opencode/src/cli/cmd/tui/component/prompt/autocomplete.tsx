@@ -20,6 +20,7 @@ import { useFrecency } from "./frecency"
 import { useBindings } from "../../keymap"
 import { Reference } from "@/reference/reference"
 import type { Config } from "@/config/config"
+import { mentionTriggerIndex } from "./autocomplete-trigger"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -786,14 +787,9 @@ export function Autocomplete(props: {
           return
         }
 
-        // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
-        const text = value.slice(0, offset)
-        const idx = text.lastIndexOf("@")
-        if (idx === -1) return
-
-        const between = text.slice(idx)
-        const before = idx === 0 ? undefined : value[idx - 1]
-        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+        // cursorOffset is in terminal cells, so use Textarea ranges instead of JS string indexes.
+        const idx = mentionTriggerIndex(props.input().getTextRange(0, offset))
+        if (idx !== undefined) {
           show("@")
           setStore("index", idx)
         }
