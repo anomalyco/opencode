@@ -97,10 +97,9 @@ function file(file: string, patch: string, before: string, after: string, partia
   const hit = cache.get(patch)
   if (hit) return hit
 
-  let value: FileDiffMetadata
-  if (partial) {
-    value = parsePatchFiles(patch)[0].files[0]!
-  } else value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  let value: FileDiffMetadata | undefined
+  if (partial) value = parsePatchFiles(patch)[0]?.files[0]
+  if (value === undefined) value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
 
   cache.set(patch, value)
   return value
