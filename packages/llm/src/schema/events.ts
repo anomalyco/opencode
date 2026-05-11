@@ -3,15 +3,70 @@ import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, ResponseID,
 import { ModelRef } from "./options"
 import { ToolResultValue } from "./messages"
 
+/**
+ * Token usage reported by an LLM provider.
+ *
+ * **Inclusive totals** (match AI SDK / OpenAI / LangChain convention — a
+ * reader from any of those ecosystems sees the number they expect):
+ *
+ * - `inputTokens` — total prompt tokens, *including* cached reads/writes.
+ * - `outputTokens` — total output tokens, *including* reasoning.
+ * - `totalTokens` — provider-supplied total, or `inputTokens + outputTokens`.
+ *
+ * **Non-overlapping breakdown** (every field is independently meaningful;
+ * consumers never have to subtract):
+ *
+ * - `nonCachedInputTokens` — the "fresh" portion of the prompt.
+ * - `cacheReadInputTokens` — input tokens served from cache.
+ * - `cacheWriteInputTokens` — input tokens written to cache.
+ * - `reasoningTokens` — subset of `outputTokens` spent on hidden reasoning.
+ *
+ * **Invariant**: `nonCachedInputTokens + cacheReadInputTokens +
+ * cacheWriteInputTokens = inputTokens`, and `reasoningTokens ≤ outputTokens`.
+ * Each protocol mapper computes whichever side it doesn't get natively,
+ * with `Math.max(0, …)` clamping for defense against provider bugs. Because
+ * every breakdown field is stored independently, downstream consumers can
+ * read whatever they need (cost-by-category, context-pressure, AI-SDK-style
+ * inclusive total) without ever subtracting — eliminating the underflow
+ * class of bug where a clamped difference would silently store the wrong
+ * value.
+ *
+ * **Semantics by provider**:
+ *
+ * - OpenAI Chat / Responses / Gemini / Bedrock: provider reports inclusive
+ *   `inputTokens` and an inclusive `outputTokens`; mapper subtracts to
+ *   derive the breakdown.
+ * - Anthropic: provider reports the breakdown natively (`input_tokens` is
+ *   non-cached only); mapper sums to derive the inclusive `inputTokens`.
+ *   Anthropic does *not* break extended-thinking out of `output_tokens`, so
+ *   `reasoningTokens` is `undefined` and `outputTokens` carries the
+ *   combined total — a documented limitation of the Anthropic API.
+ *
+ * `providerMetadata` always carries the provider's raw usage payload —
+ * keyed by provider name (`{ openai: ... }`, `{ anthropic: ... }`, etc.)
+ * — for fields we don't normalize and for billing-level audit trails.
+ * Matches the same escape-hatch field on `LLMEvent`.
+ */
 export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   inputTokens: Schema.optional(Schema.Number),
   outputTokens: Schema.optional(Schema.Number),
-  reasoningTokens: Schema.optional(Schema.Number),
+  nonCachedInputTokens: Schema.optional(Schema.Number),
   cacheReadInputTokens: Schema.optional(Schema.Number),
   cacheWriteInputTokens: Schema.optional(Schema.Number),
+  reasoningTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
-  native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {}
+  providerMetadata: Schema.optional(ProviderMetadata),
+}) {
+  /**
+   * Visible output tokens — `outputTokens` minus `reasoningTokens`, clamped
+   * to zero. The one place subtraction happens in this contract; the clamp
+   * means a provider reporting `reasoningTokens > outputTokens` produces a
+   * harmless zero rather than a negative that crashes downstream schemas.
+   */
+  get visibleOutputTokens() {
+    return Math.max(0, (this.outputTokens ?? 0) - (this.reasoningTokens ?? 0))
+  }
+}
 
 export const RequestStart = Schema.Struct({
   type: Schema.tag("request-start"),
