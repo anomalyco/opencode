@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
@@ -239,13 +238,13 @@ describe("session.list", () => {
 
   test("includes metadata in listed sessions", async () => {
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const meta = { source: "sdk", trace: { id: "abc" } }
         const session = await svc.create({ title: "meta-session", metadata: meta })
 
-        const listed = [...svc.list({ search: "meta-session" })].find((item) => item.id === session.id)
+        const listed = (await svc.list({ search: "meta-session" })).find((item) => item.id === session.id)
 
         expect(listed?.metadata).toEqual(meta)
       },

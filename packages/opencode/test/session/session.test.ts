@@ -187,7 +187,7 @@ describe("Session", () => {
   test("persists metadata and copies it on fork by default", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const meta = { source: "sdk", trace: { id: "abc" } }
@@ -210,7 +210,7 @@ describe("Session", () => {
   test("can fork without copying metadata", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await create({ metadata: { source: "sdk" } })
@@ -229,7 +229,7 @@ describe("Session", () => {
   test("defaults metadata to an empty object", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await create({ title: "empty-meta" })

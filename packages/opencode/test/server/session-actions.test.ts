@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { Session as SessionNs } from "@/session/session"
@@ -32,7 +31,7 @@ afterEach(async () => {
 describe("session action routes", () => {
   test("session routes expose metadata on create, update, get, and fork", async () => {
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const app = Server.Default().app

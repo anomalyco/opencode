@@ -46,6 +46,7 @@ describe("Session.Info", () => {
       directory: "/tmp/proj",
       title: "First session",
       version: "0.1.0",
+      metadata: {},
       time: { created: 1, updated: 2 },
     }
     expect(decode(input)).toEqual(input)
@@ -70,6 +71,7 @@ describe("Session.Info", () => {
       share: { url: "https://share.example.com/s/1" },
       title: "Full session",
       version: "1.0.0",
+      metadata: { source: "test" },
       time: { created: 100, updated: 200, compacting: 150, archived: 300 },
       permission: [{ action: "allow" as const, pattern: "*", permission: "read" }],
       revert: {
@@ -91,6 +93,7 @@ describe("Session.Info", () => {
       directory: "/tmp/proj",
       title: "Legacy diff",
       version: "0.1.0",
+      metadata: {},
       summary: {
         additions: 1,
         deletions: 0,
@@ -140,6 +143,7 @@ describe("Session.GlobalInfo", () => {
       directory: "/tmp/proj",
       title: "global",
       version: "0",
+      metadata: {},
       time: { created: 0, updated: 0 },
       project: null,
     }
@@ -155,6 +159,7 @@ describe("Session.GlobalInfo", () => {
       directory: "/tmp/proj",
       title: "global",
       version: "0",
+      metadata: {},
       time: { created: 0, updated: 0 },
       project: { id: projectID, worktree: "/tmp/wt", name: "alpha" },
     }
@@ -172,6 +177,7 @@ describe("Session input schemas", () => {
     const populated = {
       parentID: sessionID,
       title: "child",
+      metadata: { source: "test" },
       permission: [{ action: "ask" as const, pattern: "*", permission: "bash" }],
       workspaceID,
     }
@@ -181,7 +187,7 @@ describe("Session input schemas", () => {
 
   test("ForkInput round-trips", () => {
     const decode = decodeUnknown(Session.ForkInput)
-    const input = { sessionID, messageID }
+    const input = { sessionID, messageID, copyMetadata: false }
     expect(decode(input)).toEqual(input)
     expect(Session.ForkInput.zod.parse(input)).toEqual(input)
     // messageID is optional
