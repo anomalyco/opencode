@@ -7,6 +7,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
+import { Reference } from "@/reference/reference"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -25,6 +26,7 @@ export const GrepTool = Tool.define(
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const rg = yield* Ripgrep.Service
+    const reference = yield* Reference.Service
 
     return {
       description: DESCRIPTION,
@@ -57,10 +59,12 @@ export const GrepTool = Tool.define(
               ? (params.path ?? ins.directory)
               : path.join(ins.directory, params.path ?? "."),
           )
+          yield* reference.ensure(search)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           const cwd = info?.type === "Directory" ? search : path.dirname(search)
           const file = info?.type === "Directory" ? undefined : [path.relative(cwd, search)]
           yield* assertExternalDirectoryEffect(ctx, search, {
+            bypass: yield* reference.contains(search),
             kind: info?.type === "Directory" ? "directory" : "file",
           })
 
