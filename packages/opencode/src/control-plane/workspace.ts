@@ -641,7 +641,7 @@ export const layer = Layer.effect(
 
             // "claim" this session so any future events coming from
             // the old workspace are ignored
-            SyncEvent.claim(input.sessionID, input.workspaceID ?? previous.projectID)
+            yield* sync.claim(input.sessionID, input.workspaceID ?? previous.projectID)
           }
         }
 
