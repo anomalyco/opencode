@@ -35,6 +35,11 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  /**
+   * Optional hook for injecting structured context (e.g. project metadata,
+   * session stats) into the system prompt alongside environment and skills.
+   */
+  readonly structuredContext?: Effect.Effect<string | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -75,6 +80,7 @@ export const layer = Layer.effect(
           Skill.fmt(list, { verbose: true }),
         ].join("\n")
       }),
+      structuredContext: undefined,
     })
   }),
 )

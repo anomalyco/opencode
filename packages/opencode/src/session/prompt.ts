@@ -1762,7 +1762,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            const structuredCtx = sys.structuredContext ? yield* sys.structuredContext : undefined
+            const system = [
+              ...env,
+              ...instructions,
+              ...(skills ? [skills] : []),
+              ...(structuredCtx ? [structuredCtx] : []),
+            ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
