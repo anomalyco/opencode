@@ -4,6 +4,7 @@ import { createBindingLookup } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer, Schema } from "effect"
 import { ConfigParse } from "@/config/parse"
+import { InvalidError } from "@/config/error"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
 import { KeymapLeaderTimeoutDefault, TuiInfo } from "./tui-schema"
@@ -90,7 +91,17 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       if (!isRecord(data)) return {} as Info
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      const validated = ConfigParse.schema(Info, normalize(data), configFilepath)
+      const normalized = normalize(data)
+      if (isRecord(normalized.keybinds)) {
+        const invalid = TuiKeybind.unknownKeys(normalized.keybinds)
+        if (invalid.length) {
+          throw new InvalidError({
+            path: configFilepath,
+            message: `Unrecognized keybind${invalid.length === 1 ? "" : "s"}: ${invalid.join(", ")}`,
+          })
+        }
+      }
+      const validated = ConfigParse.schema(Info, normalized, configFilepath)
       return yield* resolvePlugins(validated, configFilepath)
     }).pipe(
       // catchCause (not tapErrorCause + orElseSucceed) because JSONC parsing and validation

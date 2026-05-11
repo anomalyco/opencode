@@ -221,6 +221,7 @@ export const Definitions = {
 } satisfies Record<string, Definition>
 
 type KeybindName = keyof typeof Definitions
+const KeybindNames = new Set<string>(Object.keys(Definitions))
 
 export const KeybindOverrides = Schema.Struct(
   Object.fromEntries(
@@ -410,6 +411,8 @@ export function defaultValue(name: KeybindName) {
 }
 
 export function parse(keybinds: KeybindOverrides): Keybinds {
+  const invalid = unknownKeys(keybinds)
+  if (invalid.length) throw new Error(`Unrecognized keybind${invalid.length === 1 ? "" : "s"}: ${invalid.join(", ")}`)
   return Object.fromEntries(
     Object.entries(Definitions).map(([name, item]) => [
       name,
@@ -419,6 +422,10 @@ export function parse(keybinds: KeybindOverrides): Keybinds {
 }
 
 export const Keybinds = { parse }
+
+export function unknownKeys(input: object) {
+  return Object.keys(input).filter((key) => !KeybindNames.has(key))
+}
 
 export function bindingDefaults(): BindingDefaults<Renderable, KeyEvent> {
   return ({ command, binding }) => {
