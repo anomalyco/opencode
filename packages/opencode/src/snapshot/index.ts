@@ -2,7 +2,6 @@ import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, S
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
-import z from "zod"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -10,13 +9,11 @@ import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
-import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
-import { zod } from "@opencode-ai/core/effect-zod"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
   files: Schema.mutable(Schema.Array(Schema.String)),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type Patch = typeof Patch.Type
 
 export const FileDiff = Schema.Struct({
@@ -28,9 +25,7 @@ export const FileDiff = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
-})
-  .annotate({ identifier: "SnapshotFileDiff" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SnapshotFileDiff" })
 export type FileDiff = typeof FileDiff.Type
 
 const log = Log.create({ service: "snapshot" })
