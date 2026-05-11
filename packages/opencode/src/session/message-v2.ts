@@ -64,24 +64,19 @@ export const ContextOverflowError = namedSchemaError("ContextOverflowError", {
 
 export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
   type: Schema.Literal("text"),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
   type: Schema.Literal("json_schema"),
   schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
   retryCount: NonNegativeInt.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
-const _Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
+export const Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
   discriminator: "type",
   identifier: "OutputFormat",
 })
-export const Format = Object.assign(_Format, { zod: zod(_Format) })
-export type OutputFormat = Schema.Schema.Type<typeof _Format>
+export type OutputFormat = Schema.Schema.Type<typeof Format>
 
 const partBase = {
   id: PartID,
@@ -381,7 +376,7 @@ export const User = Schema.Struct({
   time: Schema.Struct({
     created: NonNegativeInt,
   }),
-  format: Schema.optional(_Format),
+  format: Schema.optional(Format),
   summary: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.String),
@@ -397,9 +392,7 @@ export const User = Schema.Struct({
   }),
   system: Schema.optional(Schema.String),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
-})
-  .annotate({ identifier: "UserMessage" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "UserMessage" })
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
 
 export const Part = Schema.Union([
@@ -550,9 +543,7 @@ export const Assistant = Schema.Struct({
   structured: Schema.optional(Schema.Any),
   variant: Schema.optional(Schema.String),
   finish: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "AssistantMessage" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "AssistantMessage" })
 export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {
   error?: AssistantError
 }
