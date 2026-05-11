@@ -926,14 +926,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        const visualRow = input ? input.scrollY + input.visualCursor.visualRow : -1
-        return (
-          inputTarget() !== undefined &&
-          !props.disabled &&
-          !auto()?.visible &&
-          input !== undefined &&
-          (input.cursorOffset === 0 || visualRow === 0)
-        )
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -941,6 +934,7 @@ export function Prompt(props: PromptProps) {
           title: "Previous prompt history",
           category: "Prompt",
           run() {
+            if (input.cursorOffset !== 0 && input.scrollY + input.visualCursor.visualRow !== 0) return false
             const item = history.move(-1, input.plainText)
             if (!item) return false
             input.setText(item.input)
@@ -960,15 +954,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        const visualRow = input ? input.scrollY + input.visualCursor.visualRow : -1
-        return (
-          inputTarget() !== undefined &&
-          !props.disabled &&
-          !auto()?.visible &&
-          input !== undefined &&
-          (input.cursorOffset === input.plainText.length ||
-            visualRow === Math.max(0, input.editorView.getTotalVirtualLineCount() - 1))
-        )
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -976,6 +962,11 @@ export function Prompt(props: PromptProps) {
           title: "Next prompt history",
           category: "Prompt",
           run() {
+            if (
+              input.cursorOffset !== input.plainText.length &&
+              input.scrollY + input.visualCursor.visualRow !== Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
+            )
+              return false
             const item = history.move(1, input.plainText)
             if (!item) return false
             input.setText(item.input)
