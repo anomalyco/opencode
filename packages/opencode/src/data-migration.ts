@@ -36,7 +36,7 @@ export const layer = Layer.effect(
         if (completed) continue
 
         log.info("running data migration", { name: migration.name })
-        yield* migration.run
+        yield* migration.run.pipe(Effect.withSpan("DataMigration", { attributes: { name: migration.name } }))
         Database.use((db) =>
           db
             .insert(DataMigrationTable)

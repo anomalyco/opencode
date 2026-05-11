@@ -51,6 +51,7 @@ export const textRequest = (input: {
     model: input.model,
     system: "You are concise.",
     prompt: input.prompt ?? "Reply with exactly: Hello!",
+    cache: "none",
     generation:
       input.temperature === false
         ? { maxTokens: input.maxTokens ?? 20 }
@@ -70,6 +71,7 @@ export const weatherToolRequest = (input: {
     prompt: "Call get_weather with city exactly Paris.",
     tools: [weatherTool],
     toolChoice: LLM.toolChoice(weatherTool),
+    cache: "none",
     generation:
       input.temperature === false
         ? { maxTokens: input.maxTokens ?? 80 }
@@ -88,6 +90,7 @@ export const weatherToolLoopRequest = (input: {
     model: input.model,
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
     prompt: "What is the weather in Paris?",
+    cache: "none",
     generation:
       input.temperature === false
         ? { maxTokens: input.maxTokens ?? 80 }

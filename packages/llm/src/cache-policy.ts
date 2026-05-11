@@ -24,15 +24,15 @@ const AUTO: CachePolicyObject = {
 const NONE: CachePolicyObject = {}
 
 // Resolution rules:
-//   - undefined   → "none" (opt-in default so the policy never changes wire
-//                   shape for existing callers; downstream code can flip to
-//                   `cache: "auto"` once they audit the placement choices).
-//   - "auto"      → the recommended policy: tools + system + latest user msg.
+//   - undefined   → "auto" — caching is on by default. The math favors it:
+//                   Anthropic 5m-cache write is 1.25x base, read is 0.1x,
+//                   so a single reuse within 5 minutes already wins.
+//   - "auto"      → tools + system + latest user msg.
 //   - "none"      → no auto placement; manual `CacheHint`s still flow.
 //   - object form → exactly what the caller asked for.
 const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
-  if (policy === undefined || policy === "none") return NONE
-  if (policy === "auto") return AUTO
+  if (policy === undefined || policy === "auto") return AUTO
+  if (policy === "none") return NONE
   return policy
 }
 
