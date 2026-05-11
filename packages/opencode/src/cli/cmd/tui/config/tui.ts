@@ -8,7 +8,7 @@ import { ConfigParse } from "@/config/parse"
 import { InvalidError } from "@/config/error"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { KeymapLeaderTimeoutDefault, TuiInfo, TuiJsonSchemaInfo } from "./tui-schema"
+import { KeymapLeaderTimeoutDefault, TuiInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@opencode-ai/core/global"
@@ -26,7 +26,6 @@ import { Npm } from "@opencode-ai/core/npm"
 const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiInfo
-export const JsonSchemaInfo = TuiJsonSchemaInfo
 export type Info = z.output<typeof Info>
 
 type Acc = {

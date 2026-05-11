@@ -3,7 +3,10 @@
 import { z } from "zod"
 import { Config } from "@/config/config"
 import { zodObject } from "@opencode-ai/core/effect-zod"
-import { TuiConfig } from "../src/cli/cmd/tui/config/tui"
+import { TuiJsonSchema } from "../src/cli/cmd/tui/config/tui-json-schema"
+import { Schema } from "effect"
+
+type JsonSchema = Record<string, unknown>
 
 function generate(schema: z.ZodType) {
   const result = z.toJSONSchema(schema, {
@@ -34,7 +37,7 @@ function generate(schema: z.ZodType) {
           schema.examples = [schema.default]
         }
 
-        schema.description = [schema.description || "", `default: \`${String(schema.default)}\``]
+        schema.description = [schema.description || "", `default: \`${formatDefault(schema.default)}\``]
           .filter(Boolean)
           .join("\n\n")
           .trim()
@@ -52,6 +55,55 @@ function generate(schema: z.ZodType) {
   return result
 }
 
+function formatDefault(value: unknown) {
+  if (typeof value !== "object" || value === null) return String(value)
+  return JSON.stringify(value)
+}
+
+function generateEffect(schema: Schema.Top) {
+  const document = Schema.toJsonSchemaDocument(schema)
+  const normalized = normalize({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    ...document.schema,
+    $defs: document.definitions,
+  })
+  if (!isRecord(normalized)) throw new Error("schema generator produced a non-object schema")
+  normalized.allowComments = true
+  normalized.allowTrailingCommas = true
+  return normalized
+}
+
+function normalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalize)
+  if (!isRecord(value)) return value
+
+  const schema = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalize(item)]))
+
+  if (Array.isArray(schema.anyOf)) {
+    const anyOf = schema.anyOf.filter((item) => !isRecord(item) || item.type !== "null")
+    if (anyOf.length !== schema.anyOf.length) {
+      const { anyOf: _, ...rest } = schema
+      if (anyOf.length === 1 && isRecord(anyOf[0])) return normalize({ ...anyOf[0], ...rest })
+      return { ...rest, anyOf }
+    }
+  }
+
+  if (Array.isArray(schema.allOf) && schema.allOf.length === 1 && isRecord(schema.allOf[0])) {
+    const { allOf: _, ...rest } = schema
+    return normalize({ ...schema.allOf[0], ...rest })
+  }
+
+  if (schema.type === "integer" && schema.maximum === undefined) {
+    return { ...schema, maximum: Number.MAX_SAFE_INTEGER }
+  }
+
+  return schema
+}
+
+function isRecord(value: unknown): value is JsonSchema {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 const configFile = process.argv[2]
 const tuiFile = process.argv[3]
 
@@ -60,5 +112,5 @@ await Bun.write(configFile, JSON.stringify(generate(zodObject(Config.Info).stric
 
 if (tuiFile) {
   console.log(tuiFile)
-  await Bun.write(tuiFile, JSON.stringify(generate(TuiConfig.JsonSchemaInfo), null, 2))
+  await Bun.write(tuiFile, JSON.stringify(generateEffect(TuiJsonSchema.Info), null, 2))
 }

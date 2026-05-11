@@ -2,7 +2,7 @@ export * as TuiKeybind from "./keybind"
 
 import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
-import type { BindingCommandMap, BindingConfig, BindingDefaults, BindingValue } from "@opentui/keymap/extras"
+import type { BindingCommandMap, BindingConfig, BindingDefaults } from "@opentui/keymap/extras"
 import z from "zod"
 
 const KeyStroke = z
@@ -38,7 +38,7 @@ export const LeaderDefault = "ctrl+x"
 
 const keybind = (value: Definition["default"], description: string): Definition => ({ default: value, description })
 
-const Definitions = {
+export const Definitions = {
   leader: keybind(LeaderDefault, "Leader key for keybind combinations"),
 
   app_exit: keybind("ctrl+c,ctrl+d,<leader>q", "Exit the application"),
