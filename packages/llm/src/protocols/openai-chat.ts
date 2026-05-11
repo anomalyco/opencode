@@ -290,15 +290,24 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   return "unknown"
 }
 
+// OpenAI Chat reports `prompt_tokens` (inclusive total) with a
+// `cached_tokens` subset, and `completion_tokens` (inclusive total) with
+// a `reasoning_tokens` subset. We pass the inclusive totals through and
+// derive the non-cached breakdown so the `LLM.Usage` contract is
+// satisfied on both sides.
 const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
+  const cached = usage.prompt_tokens_details?.cached_tokens
+  const reasoning = usage.completion_tokens_details?.reasoning_tokens
+  const nonCached = ProviderShared.subtractTokens(usage.prompt_tokens, cached)
   return new Usage({
     inputTokens: usage.prompt_tokens,
     outputTokens: usage.completion_tokens,
-    reasoningTokens: usage.completion_tokens_details?.reasoning_tokens,
-    cacheReadInputTokens: usage.prompt_tokens_details?.cached_tokens,
+    nonCachedInputTokens: nonCached,
+    cacheReadInputTokens: cached,
+    reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.prompt_tokens, usage.completion_tokens, usage.total_tokens),
-    native: usage,
+    providerMetadata: { openai: usage },
   })
 }
 

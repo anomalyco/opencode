@@ -726,7 +726,6 @@ export function Prompt(props: PromptProps) {
       ...input.traits,
       ...computePromptTraits({
         mode: store.mode,
-        disabled: !!props.disabled,
         autocompleteVisible: !!auto()?.visible,
       }),
     }
@@ -941,13 +940,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return (
-          inputTarget() !== undefined &&
-          !props.disabled &&
-          !auto()?.visible &&
-          input !== undefined &&
-          (input.cursorOffset === 0 || input.visualCursor.visualRow === 0)
-        )
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -956,12 +949,12 @@ export function Prompt(props: PromptProps) {
           category: "Prompt",
           run() {
             if (input.cursorOffset !== 0) {
-              input.cursorOffset = 0
-              return
+              if (input.scrollY + input.visualCursor.visualRow === 0) input.cursorOffset = 0
+              return false
             }
 
             const item = history.move(-1, input.plainText)
-            if (!item) return
+            if (!item) return false
             input.setText(item.input)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
@@ -979,13 +972,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return (
-          inputTarget() !== undefined &&
-          !props.disabled &&
-          !auto()?.visible &&
-          input !== undefined &&
-          (input.cursorOffset === input.plainText.length || input.visualCursor.visualRow === input.height - 1)
-        )
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -994,12 +981,16 @@ export function Prompt(props: PromptProps) {
           category: "Prompt",
           run() {
             if (input.cursorOffset !== input.plainText.length) {
-              input.cursorOffset = input.plainText.length
-              return
+              if (
+                input.scrollY + input.visualCursor.visualRow ===
+                Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
+              )
+                input.cursorOffset = input.plainText.length
+              return false
             }
 
             const item = history.move(1, input.plainText)
-            if (!item) return
+            if (!item) return false
             input.setText(item.input)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")

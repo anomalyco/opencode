@@ -93,7 +93,6 @@ const appBindingCommands = [
   "theme.mode.lock",
   "help.show",
   "docs.open",
-  "app.exit",
   "app.debug",
   "app.console",
   "app.heap_snapshot",
@@ -648,11 +647,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         title: "Exit the app",
         slashName: "exit",
         slashAliases: ["quit", "q"],
-        enabled: () => {
-          const current = promptRef.current
-          if (!current?.focused) return true
-          return current.current.input === ""
-        },
         run: () => exit(),
         category: "System",
       },
@@ -783,6 +777,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   useBindings(() => ({
     enabled: command.matcher,
     bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
+  }))
+
+  useBindings(() => ({
+    enabled: () => {
+      const ok = command.matcher.get()
+      if (!ok) return false
+      const current = promptRef.current
+      if (!current?.focused) return true
+      return current.current.input === ""
+    },
+    bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
   }))
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {
