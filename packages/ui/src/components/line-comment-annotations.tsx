@@ -1,9 +1,11 @@
 import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { render as renderSolid } from "solid-js/web"
+import { useI18n } from "../context/i18n"
 import { createHoverCommentUtility } from "../pierre/comment-hover"
 import { cloneSelectedLineRange, formatSelectedLineLabel, lineInSelectedRange } from "../pierre/selection-bridge"
-import { LineComment, LineCommentEditor } from "./line-comment"
+import { LineComment, LineCommentEditor, type LineCommentEditorProps } from "./line-comment"
 
 export type LineCommentAnnotationMeta<T> =
   | { kind: "comment"; key: string; comment: T }
@@ -53,6 +55,7 @@ type LineCommentControllerProps<T extends LineCommentShape> = {
   comments: Accessor<T[]>
   draftKey: Accessor<string>
   label: string
+  mention?: LineCommentEditorProps["mention"]
   state: LineCommentStateProps<string>
   onSubmit: (input: { comment: string; selection: SelectedLineRange }) => void
   onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange }) => void
@@ -83,6 +86,7 @@ type CommentProps = {
 type DraftProps = {
   value: string
   selection: JSX.Element
+  mention?: LineCommentEditorProps["mention"]
   onInput: (value: string) => void
   onCancel: VoidFunction
   onSubmit: (value: string) => void
@@ -146,6 +150,7 @@ export function createLineCommentAnnotationRenderer<T>(props: {
               onPopoverFocusOut={view().editor!.onPopoverFocusOut}
               cancelLabel={view().editor!.cancelLabel}
               submitLabel={view().editor!.submitLabel}
+              mention={view().editor!.mention}
             />
           </Show>
         )
@@ -165,6 +170,7 @@ export function createLineCommentAnnotationRenderer<T>(props: {
           onCancel={view().onCancel}
           onSubmit={view().onSubmit}
           onPopoverFocusOut={view().onPopoverFocusOut}
+          mention={view().mention}
         />
       )
     }, host)
@@ -200,8 +206,14 @@ export function createLineCommentAnnotationRenderer<T>(props: {
 }
 
 export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
-  const [draft, setDraft] = createSignal("")
-  const [editing, setEditing] = createSignal<T | null>(null)
+  const [state, setState] = createStore({
+    draft: "",
+    editing: null as T | null,
+  })
+  const draft = () => state.draft
+  const setDraft = (value: string) => setState("draft", value)
+  const editing = () => state.editing
+  const setEditing = (value: T | null) => setState("editing", typeof value === "function" ? () => value : value)
 
   const toRange = (range: SelectedLineRange | null) => (range ? cloneSelectedLineRange(range) : null)
   const setSelected = (range: SelectedLineRange | null) => {
@@ -261,7 +273,7 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
     closeComment()
     setSelected(range)
     props.setCommenting(null)
-    setEditing(() => id)
+    setEditing(id)
     setDraft(value)
   }
 
@@ -281,11 +293,6 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
     setSelected(range)
     cancelDraft()
   }
-
-  createEffect(() => {
-    props.commenting()
-    setDraft("")
-  })
 
   return {
     draft,
@@ -334,6 +341,7 @@ export function createLineCommentController<T extends LineCommentShape>(
 export function createLineCommentController<T extends LineCommentShape>(
   props: LineCommentControllerProps<T> | LineCommentControllerWithSideProps<T>,
 ) {
+  const i18n = useI18n()
   const note = createLineCommentState<string>(props.state)
 
   const annotations =
@@ -369,7 +377,7 @@ export function createLineCommentController<T extends LineCommentShape>(
           return note.isOpen(comment.id) || note.isEditing(comment.id)
         },
         comment: comment.comment,
-        selection: formatSelectedLineLabel(comment.selection),
+        selection: formatSelectedLineLabel(comment.selection, i18n.t),
         get actions() {
           return props.renderCommentActions?.(comment, { edit, remove })
         },
@@ -379,7 +387,8 @@ export function createLineCommentController<T extends LineCommentShape>(
                 get value() {
                   return note.draft()
                 },
-                selection: formatSelectedLineLabel(comment.selection),
+                selection: formatSelectedLineLabel(comment.selection, i18n.t),
+                mention: props.mention,
                 onInput: note.setDraft,
                 onCancel: note.cancelDraft,
                 onSubmit: (value: string) => {
@@ -405,7 +414,8 @@ export function createLineCommentController<T extends LineCommentShape>(
       get value() {
         return note.draft()
       },
-      selection: formatSelectedLineLabel(range),
+      selection: formatSelectedLineLabel(range, i18n.t),
+      mention: props.mention,
       onInput: note.setDraft,
       onCancel: note.cancelDraft,
       onSubmit: (comment) => {

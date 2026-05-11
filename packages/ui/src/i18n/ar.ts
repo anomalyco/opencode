@@ -60,7 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "النظر في الخطوات التالية",
 
   "ui.messagePart.questions.dismissed": "تم رفض الأسئلة",
-  "ui.messagePart.compaction": "تم ضغط السجل",
+  "ui.messagePart.compaction": "تم ضغط الجلسة",
   "ui.messagePart.context.read.one": "{{count}} قراءة",
   "ui.messagePart.context.read.other": "{{count}} قراءات",
   "ui.messagePart.context.search.one": "{{count}} بحث",
@@ -95,7 +95,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "جلب الويب",
   "ui.tool.websearch": "بحث الويب",
-  "ui.tool.codesearch": "بحث الكود",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "تصحيح",
   "ui.tool.todos": "المهام",
@@ -145,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "حدد كل ما ينطبق",
   "ui.question.singleHint": "حدد إجابة واحدة",
   "ui.question.custom.placeholder": "اكتب إجابتك...",
+
+  "ui.fileSearch.placeholder": "بحث",
+  "ui.fileSearch.previousMatch": "المطابقة السابقة",
+  "ui.fileSearch.nextMatch": "المطابقة التالية",
+  "ui.fileSearch.close": "إغلاق البحث",
+  "ui.tool.task": "مهمة",
+  "ui.tool.skill": "مهارة",
+  "ui.basicTool.called": "تم استدعاء `{{tool}}`",
+  "ui.toolErrorCard.failed": "فشل",
+  "ui.toolErrorCard.copyError": "نسخ الخطأ",
+  "ui.message.duration.seconds": "{{count}}ث",
+  "ui.message.duration.minutesSeconds": "{{minutes}}د {{seconds}}ث",
 }

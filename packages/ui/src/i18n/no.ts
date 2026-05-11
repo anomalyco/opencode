@@ -63,7 +63,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
 
   "ui.messagePart.questions.dismissed": "Spørsmål avvist",
-  "ui.messagePart.compaction": "Historikk komprimert",
+  "ui.messagePart.compaction": "Økt komprimert",
   "ui.messagePart.context.read.one": "{{count}} lest",
   "ui.messagePart.context.read.other": "{{count}} lest",
   "ui.messagePart.context.search.one": "{{count}} søk",
@@ -98,7 +98,6 @@ export const dict: Record<Keys, string> = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webhenting",
   "ui.tool.websearch": "Nettsøk",
-  "ui.tool.codesearch": "Kodesøk",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Gjøremål",
@@ -148,4 +147,16 @@ export const dict: Record<Keys, string> = {
   "ui.question.multiHint": "Velg alle som gjelder",
   "ui.question.singleHint": "Velg ett svar",
   "ui.question.custom.placeholder": "Skriv svaret ditt...",
+
+  "ui.fileSearch.placeholder": "Finn",
+  "ui.fileSearch.previousMatch": "Forrige treff",
+  "ui.fileSearch.nextMatch": "Neste treff",
+  "ui.fileSearch.close": "Lukk søk",
+  "ui.tool.task": "Oppgave",
+  "ui.tool.skill": "Ferdighet",
+  "ui.basicTool.called": "Kalte `{{tool}}`",
+  "ui.toolErrorCard.failed": "Mislyktes",
+  "ui.toolErrorCard.copyError": "Kopier feil",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

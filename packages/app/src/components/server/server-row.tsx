@@ -1,15 +1,16 @@
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   children,
   createEffect,
   createMemo,
   createSignal,
   type JSXElement,
-  onCleanup,
   onMount,
   type ParentProps,
   Show,
 } from "solid-js"
+import { useLanguage } from "@/context/language"
 import { type ServerConnection, serverName } from "@/context/server"
 import type { ServerHealth } from "@/utils/server-health"
 
@@ -25,6 +26,7 @@ interface ServerRowProps extends ParentProps {
 }
 
 export function ServerRow(props: ServerRowProps) {
+  const language = useLanguage()
   const [truncated, setTruncated] = createSignal(false)
   let nameRef: HTMLSpanElement | undefined
   let versionRef: HTMLSpanElement | undefined
@@ -44,12 +46,9 @@ export function ServerRow(props: ServerRowProps) {
   })
 
   onMount(() => {
-    check()
     if (typeof ResizeObserver !== "function") return
-    const observer = new ResizeObserver(check)
-    if (nameRef) observer.observe(nameRef)
-    if (versionRef) observer.observe(versionRef)
-    onCleanup(() => observer.disconnect())
+    createResizeObserver([nameRef, versionRef], check)
+    check()
   })
 
   const tooltipValue = () => (
@@ -100,7 +99,7 @@ export function ServerRow(props: ServerRowProps) {
                   {conn().http.username ? (
                     <span class="text-text-weak">{conn().http.username}</span>
                   ) : (
-                    <span class="text-text-weaker">no username</span>
+                    <span class="text-text-weaker">{language.t("server.row.noUsername")}</span>
                   )}
                 </span>
                 {conn().http.password && <span class="text-text-weak">••••••••</span>}

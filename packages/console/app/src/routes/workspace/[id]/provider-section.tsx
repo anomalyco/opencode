@@ -21,9 +21,9 @@ function maskCredentials(credentials: string) {
 
 const removeProvider = action(async (form: FormData) => {
   "use server"
-  const provider = form.get("provider")?.toString()
+  const provider = form.get("provider") as string | null
   if (!provider) return { error: formError.providerRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
   return json(await withActor(() => Provider.remove({ provider }), workspaceID), {
     revalidate: listProviders.key,
@@ -32,11 +32,11 @@ const removeProvider = action(async (form: FormData) => {
 
 const saveProvider = action(async (form: FormData) => {
   "use server"
-  const provider = form.get("provider")?.toString()
-  const credentials = form.get("credentials")?.toString()
+  const provider = form.get("provider") as string | null
+  const credentials = form.get("credentials") as string | null
   if (!provider) return { error: formError.providerRequired }
   if (!credentials) return { error: formError.apiKeyRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
   return json(
     await withActor(
@@ -59,10 +59,13 @@ function ProviderRow(props: { provider: Provider }) {
   const params = useParams()
   const i18n = useI18n()
   const providers = createAsync(() => listProviders(params.id!))
-  const saveSubmission = useSubmission(saveProvider, ([fd]) => fd.get("provider")?.toString() === props.provider.key)
+  const saveSubmission = useSubmission(
+    saveProvider,
+    ([fd]) => (fd.get("provider") as string | null) === props.provider.key,
+  )
   const removeSubmission = useSubmission(
     removeProvider,
-    ([fd]) => fd.get("provider")?.toString() === props.provider.key,
+    ([fd]) => (fd.get("provider") as string | null) === props.provider.key,
   )
   const [store, setStore] = createStore({ editing: false })
 

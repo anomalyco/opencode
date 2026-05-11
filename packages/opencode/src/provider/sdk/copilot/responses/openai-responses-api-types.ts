@@ -13,6 +13,7 @@ export type OpenAIResponsesInputItem =
   | OpenAIResponsesLocalShellCallOutput
   | OpenAIResponsesReasoning
   | OpenAIResponsesItemReference
+  | OpenAIResponsesMcpApprovalResponse
 
 export type OpenAIResponsesIncludeValue =
   | "web_search_call.action.sources"
@@ -91,6 +92,12 @@ export type OpenAIResponsesLocalShellCallOutput = {
 export type OpenAIResponsesItemReference = {
   type: "item_reference"
   id: string
+}
+
+export type OpenAIResponsesMcpApprovalResponse = {
+  type: "mcp_approval_response"
+  approval_request_id: string
+  approve: boolean
 }
 
 /**

@@ -53,7 +53,7 @@ export function Card(props: CardProps) {
       data-variant={variant()}
       style={mix(split.style, accent())}
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -76,7 +76,7 @@ export function CardTitle(props: CardTitleProps) {
       {...rest}
       data-slot="card-title"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -97,7 +97,7 @@ export function CardDescription(props: ComponentProps<"div">) {
       {...rest}
       data-slot="card-description"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -113,7 +113,7 @@ export function CardActions(props: ComponentProps<"div">) {
       {...rest}
       data-slot="card-actions"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
