@@ -48,6 +48,11 @@ export const SearchArgs = Schema.Struct({
   contextMaxCharacters: Schema.optional(Schema.Number),
 })
 
+export const CodeArgs = Schema.Struct({
+  query: Schema.String,
+  tokensNum: Schema.Number,
+})
+
 export const ParallelSearchArgs = Schema.Struct({
   objective: Schema.String,
   search_queries: Schema.Array(Schema.String),

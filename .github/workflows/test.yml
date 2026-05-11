@@ -68,6 +68,11 @@ jobs:
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
+      - name: Run HttpApi exerciser gates
+        if: runner.os == 'Linux'
+        working-directory: packages/opencode
+        run: bun run test:httpapi
+
       - name: Publish unit reports
         if: always()
         uses: mikepenz/action-junit-report@v6

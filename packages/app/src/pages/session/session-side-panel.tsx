@@ -28,6 +28,12 @@ import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type S
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
+type RenderDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
+
+function renderDiff(value: SnapshotFileDiff | VcsFileDiff): value is RenderDiff {
+  return typeof value.file === "string"
+}
+
 export function SessionSidePanel(props: {
   canReview: () => boolean
   diffs: () => (SnapshotFileDiff | VcsFileDiff)[]
@@ -70,7 +76,8 @@ export function SessionSidePanel(props: {
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
 
-  const diffFiles = createMemo(() => props.diffs().map((d) => d.file))
+  const diffs = createMemo(() => props.diffs().filter(renderDiff))
+  const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
       if (!a) return b
@@ -81,7 +88,7 @@ export function SessionSidePanel(props: {
     const normalize = (p: string) => p.replaceAll("\\\\", "/").replace(/\/+$/, "")
 
     const out = new Map<string, "add" | "del" | "mix">()
-    for (const diff of props.diffs()) {
+    for (const diff of diffs()) {
       const file = normalize(diff.file)
       const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
 

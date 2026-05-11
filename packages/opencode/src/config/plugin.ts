@@ -2,8 +2,8 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { Schema } from "effect"
 import { pathToFileURL } from "url"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 import path from "path"
 
 export const Options = Schema.Record(Schema.String, Schema.Unknown).pipe(withStatics((s) => ({ zod: zod(s) })))

@@ -43,6 +43,7 @@ import { Format } from "@/format"
 import { InstanceLayer } from "@/project/instance-layer"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
+import { Reference } from "@/reference/reference"
 import { Workspace } from "@/control-plane/workspace"
 import { Worktree } from "@/worktree"
 import { Pty } from "@/pty"
@@ -53,6 +54,7 @@ import { SessionShare } from "@/share/session"
 import { SyncEvent } from "@/sync"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { DataMigration } from "@/data-migration"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -96,6 +98,7 @@ export const AppLayer = Layer.mergeAll(
   Format.defaultLayer,
   Project.defaultLayer,
   Vcs.defaultLayer,
+  Reference.defaultLayer,
   Workspace.defaultLayer,
   Worktree.appLayer,
   Pty.defaultLayer,
@@ -104,6 +107,7 @@ export const AppLayer = Layer.mergeAll(
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
   SyncEvent.defaultLayer,
+  DataMigration.defaultLayer,
 ).pipe(Layer.provideMerge(InstanceLayer.layer), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
