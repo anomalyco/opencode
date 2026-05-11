@@ -7,6 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY . .
 RUN bun install --frozen-lockfile --ignore-scripts
+
+ARG VITE_MODEL_PIN
+ARG VITE_MODEL_PIN_TIER
+ENV VITE_MODEL_PIN=${VITE_MODEL_PIN} \
+    VITE_MODEL_PIN_TIER=${VITE_MODEL_PIN_TIER}
+
 ENV OPENCODE_CHANNEL=latest OPENCODE_VERSION=0.0.0-enk
 RUN cd packages/opencode && bun run build --single
 
