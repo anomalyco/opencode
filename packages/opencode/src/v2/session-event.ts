@@ -1,5 +1,5 @@
 import { SessionID } from "@/session/schema"
-import { NonNegativeInt } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { EventV2 } from "./event"
 import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
@@ -118,12 +118,12 @@ export namespace Step {
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
-        input: NonNegativeInt,
-        output: NonNegativeInt,
-        reasoning: NonNegativeInt,
+        input: Schema.Finite,
+        output: Schema.Finite,
+        reasoning: Schema.Finite,
         cache: Schema.Struct({
-          read: NonNegativeInt,
-          write: NonNegativeInt,
+          read: Schema.Finite,
+          write: Schema.Finite,
         }),
       }),
       snapshot: Schema.String.pipe(Schema.optional),
@@ -305,7 +305,7 @@ export namespace Tool {
 
 export const RetryError = Schema.Struct({
   message: Schema.String,
-  statusCode: NonNegativeInt.pipe(Schema.optional),
+  statusCode: Schema.Finite.pipe(Schema.optional),
   isRetryable: Schema.Boolean,
   responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   responseBody: Schema.String.pipe(Schema.optional),
@@ -320,7 +320,7 @@ export const Retried = EventV2.define({
   aggregate: "sessionID",
   schema: {
     ...Base,
-    attempt: NonNegativeInt,
+    attempt: Schema.Finite,
     error: RetryError,
   },
 })

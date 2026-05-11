@@ -10,6 +10,7 @@ import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Reference } from "@/reference/reference"
 
 const it = testEffect(
   Layer.mergeAll(
@@ -18,12 +19,13 @@ const it = testEffect(
     Ripgrep.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
+    Reference.defaultLayer,
   ),
 )
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),

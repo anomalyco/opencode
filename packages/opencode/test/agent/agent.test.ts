@@ -141,7 +141,7 @@ test("scout agent allows repo cloning and repo cache reads", async () => {
   })
 })
 
-test("reference config creates scout-backed subagents", async () => {
+test("reference config does not create subagents", async () => {
   await withExperimentalScout(true, async () => {
     await using tmp = await tmpdir({
       config: {
@@ -161,36 +161,13 @@ test("reference config creates scout-backed subagents", async () => {
     await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
-        const effect = await load(tmp.path, (svc) => svc.get("effect"))
-        const effectFull = await load(tmp.path, (svc) => svc.get("effectFull"))
-        const local = await load(tmp.path, (svc) => svc.get("localdocs"))
-        const localFull = await load(tmp.path, (svc) => svc.get("localdocsFull"))
-
-        expect(effect).toBeDefined()
-        expect(effect?.mode).toBe("subagent")
-        expect(effect?.prompt).toContain("Repository: github.com/effect/effect-smol")
-        expect(evalPerm(effect, "repo_clone")).toBe("allow")
-
-        expect(effectFull).toBeDefined()
-        expect(effectFull?.mode).toBe("subagent")
-        expect(effectFull?.prompt).toContain("Repository: Effect-TS/effect")
-        expect(effectFull?.prompt).toContain("Branch/ref: main")
-        expect(evalPerm(effectFull, "repo_clone")).toBe("allow")
-
-        expect(local).toBeDefined()
-        expect(local?.mode).toBe("subagent")
-        expect(local?.prompt).toContain(`Local directory: ${path.resolve(tmp.path, "../docs")}`)
-        expect(
-          Permission.evaluate(
-            "external_directory",
-            path.join(path.resolve(tmp.path, "../docs"), "README.md"),
-            local!.permission,
-          ).action,
-        ).toBe("allow")
-
-        expect(localFull).toBeDefined()
-        expect(localFull?.mode).toBe("subagent")
-        expect(localFull?.prompt).toContain(`Local directory: ${path.resolve(tmp.path, "../local-docs")}`)
+        const agents = await load(tmp.path, (svc) => svc.list())
+        const names = agents.map((agent) => agent.name)
+        expect(names).toContain("scout")
+        expect(names).not.toContain("effect")
+        expect(names).not.toContain("effectFull")
+        expect(names).not.toContain("localdocs")
+        expect(names).not.toContain("localdocsFull")
       },
     })
   })

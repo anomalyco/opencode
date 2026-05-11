@@ -6,6 +6,18 @@ import { tool } from "../src/tool"
 
 export const weatherToolName = "get_weather"
 
+// A deterministic system prompt long enough to clear every supported provider's
+// minimum cacheable-prefix threshold (Anthropic Haiku 3.5: 2048 tokens; Anthropic
+// Opus/Haiku 4.5: 4096 tokens; OpenAI/Gemini/Bedrock: lower). Built by repeating
+// a fixed sentence — the cassette replays bit-for-bit, so the exact text matters
+// only when re-recording with `RECORD=true`.
+export const LARGE_CACHEABLE_SYSTEM = (() => {
+  const sentence = "You are a concise, factual assistant. Answer precisely and avoid filler. Cite numbers when known. "
+  // ~100 chars per sentence × 250 repeats ≈ 25,000 chars ≈ 5k+ tokens, safely
+  // above every provider's threshold.
+  return sentence.repeat(250)
+})()
+
 export const weatherTool = LLM.toolDefinition({
   name: weatherToolName,
   description: "Get current weather for a city.",
@@ -39,6 +51,7 @@ export const textRequest = (input: {
     model: input.model,
     system: "You are concise.",
     prompt: input.prompt ?? "Reply with exactly: Hello!",
+    cache: "none",
     generation:
       input.temperature === false
         ? { maxTokens: input.maxTokens ?? 20 }
@@ -58,6 +71,7 @@ export const weatherToolRequest = (input: {
     prompt: "Call get_weather with city exactly Paris.",
     tools: [weatherTool],
     toolChoice: LLM.toolChoice(weatherTool),
+    cache: "none",
     generation:
       input.temperature === false
         ? { maxTokens: input.maxTokens ?? 80 }
@@ -76,6 +90,7 @@ export const weatherToolLoopRequest = (input: {
     model: input.model,
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
     prompt: "What is the weather in Paris?",
+    cache: "none",
     generation:
       input.temperature === false
         ? { maxTokens: input.maxTokens ?? 80 }
