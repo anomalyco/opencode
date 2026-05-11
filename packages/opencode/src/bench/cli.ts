@@ -24,6 +24,9 @@ import path from "node:path"
 import os from "node:os"
 import { spawn } from "node:child_process"
 import { runDeepReset } from "./deep_reset"
+// opencode's built-in anthropic system prompt — Bun bundles .txt as a string.
+// Used as the default when no --system-prompt override is passed.
+import PROMPT_ANTHROPIC from "../session/prompt/anthropic.txt"
 
 interface CliArgs {
   instanceDictPath: string
@@ -135,17 +138,17 @@ function loadGymConfig(configPath: string): Record<string, unknown> {
   return JSON.parse(readFileSync(configPath, "utf8"))
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are an autonomous software engineer fixing a known issue in a checked-out git repository.
+// Default is opencode's built-in anthropic system prompt + a short SWE-bench
+// addendum (workspace is git-tracked, harness captures git diff as the patch,
+// don't commit/format the diff yourself, don't modify the test files).
+const SWE_BENCH_ADDENDUM = `
 
-Work in small, deliberate steps:
-1. Read the issue and explore the relevant files.
-2. Reproduce the issue if applicable.
-3. Edit the source to fix the issue.
-4. Run the project's tests to verify the fix.
-5. Iterate until the issue is resolved.
+# SWE-bench harness context
 
-Use the available tools (bash, edit, read, glob, grep) to investigate and act. Do NOT modify the test files unless the task explicitly says so. The harness will capture the final \`git diff\` of the workspace as your patch — do not commit or format the diff yourself.
+You are running inside a SWE-bench evaluation harness on a checked-out git repository. The harness will capture the final \`git diff\` of the workspace as your patch — do not commit, push, or format the diff yourself. Do NOT modify the test files unless the task explicitly says so. Stop calling tools once you are confident the issue is fully resolved.
 `
+
+const DEFAULT_SYSTEM_PROMPT = PROMPT_ANTHROPIC + SWE_BENCH_ADDENDUM
 
 async function buildConfigDir(args: {
   instanceId: string
