@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { JsonSchema, MessageRole, ProviderMetadata } from "./ids"
-import { CacheHint, GenerationOptions, HttpOptions, ModelRef, ProviderOptions } from "./options"
+import { CacheHint, CachePolicy, GenerationOptions, HttpOptions, ModelRef, ProviderOptions } from "./options"
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -206,6 +206,7 @@ export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
   responseFormat: Schema.optional(ResponseFormat),
+  cache: Schema.optional(CachePolicy),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
@@ -223,6 +224,7 @@ export namespace LLMRequest {
     providerOptions: request.providerOptions,
     http: request.http,
     responseFormat: request.responseFormat,
+    cache: request.cache,
     metadata: request.metadata,
   })
 

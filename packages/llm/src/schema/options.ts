@@ -200,3 +200,35 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),
   ttlSeconds: Schema.optional(Schema.Number),
 }) {}
+
+// Auto-placement policy for prompt caching. The protocol-neutral lowering step
+// reads this and injects `CacheHint`s at the configured boundaries; the
+// per-protocol body builders then translate those hints into wire markers as
+// usual. `"auto"` is the recommended default for agent loops — it places one
+// breakpoint at the last tool definition, one at the last system part, and one
+// at the latest user message. The combination of provider invalidation
+// hierarchy (tools → system → messages) and Anthropic/Bedrock's 20-block
+// lookback means three trailing breakpoints reliably cover the static prefix.
+//
+// Pass `"none"` to opt out entirely (the legacy behavior). Pass the granular
+// object form to override individual choices.
+export const CachePolicyObject = Schema.Struct({
+  tools: Schema.optional(Schema.Boolean),
+  system: Schema.optional(Schema.Boolean),
+  messages: Schema.optional(
+    Schema.Union([
+      Schema.Literal("latest-user-message"),
+      Schema.Literal("latest-assistant"),
+      Schema.Struct({ tail: Schema.Number }),
+    ]),
+  ),
+  ttlSeconds: Schema.optional(Schema.Number),
+})
+export type CachePolicyObject = Schema.Schema.Type<typeof CachePolicyObject>
+
+export const CachePolicy = Schema.Union([
+  Schema.Literal("auto"),
+  Schema.Literal("none"),
+  CachePolicyObject,
+])
+export type CachePolicy = Schema.Schema.Type<typeof CachePolicy>
