@@ -67,7 +67,12 @@ export class FeishuWSSClient {
   private readonly wsClient: WSClient
   private readonly dispatcher: EventDispatcher
   private readonly chatQueue = new ChatQueue()
+  /** 第一层:同 messageId+ts 12h dedup(防 WSS 重连重放,飞书 message_id 同 = 真正重复)*/
   private readonly dedup = new DedupCache()
+  /** 第二层:同 chatId+text 10s 短期 dedup(防飞书 IM 客户端连击/retry 发出**不同 message_id 但内容一致**
+   *  的 2 条消息 — 飞书后台分配新 id 第一层拦不住,但 user 实际是想发一次)
+   *  [feat: permission-card-ux-fixes] 2026-05-12 */
+  private readonly textDedup = new DedupCache({ ttlMs: 10_000, maxEntries: 200 })
   private readonly opts: WssClientOptions
   private started = false
 
@@ -104,11 +109,32 @@ export class FeishuWSSClient {
           })),
         }
 
-        // dedup:同 messageId + ts 重放过滤
+        // dedup 第一层:同 messageId + ts(12h)— 防 WSS 重连重放
         const dedupKey = makeDedupKey(event.messageId, event.ts)
         if (this.dedup.hasAndMark(dedupKey)) {
           console.log(`[wss ${opts.accountId}] dedup skip ${event.messageId}`)
           return
+        }
+
+        // dedup 第二层:同 chatId + text(10s)— 防飞书 IM 客户端连击/retry 发出**不同 message_id 但内容一致**的多条 message
+        // 只对 text 消息有效(其它 messageType 如 image / file 不走 text dedup,messageId 已第一层覆盖)
+        if (event.messageType === "text") {
+          let txt = ""
+          try {
+            const parsed = JSON.parse(event.content) as { text?: string }
+            txt = (parsed.text ?? "").trim()
+          } catch {
+            // content 解析不出 text(可能是 sticker / @mention 元数据格式)→ 不走 text dedup
+          }
+          if (txt) {
+            const textKey = `${event.chatId}::${txt}`
+            if (this.textDedup.hasAndMark(textKey)) {
+              console.log(
+                `[wss ${opts.accountId}] text-dedup skip ${event.messageId} (同 chat 10s 内重复发"${txt.slice(0, 40)}")`,
+              )
+              return
+            }
+          }
         }
 
         // chatQueue:同 chat 串行处理
