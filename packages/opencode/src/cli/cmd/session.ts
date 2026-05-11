@@ -82,6 +82,11 @@ export const SessionListCommand = effectCmd({
         type: "string",
         choices: ["table", "json"],
         default: "table",
+      })
+      .option("pager", {
+        describe: "use pager for table output to terminal",
+        type: "boolean",
+        default: true,
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
     const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount }))
@@ -90,7 +95,7 @@ export const SessionListCommand = effectCmd({
 
     const output = args.format === "json" ? formatSessionJSON(sessions) : formatSessionTable(sessions)
 
-    const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
+    const shouldPaginate = args.pager !== false && process.stdout.isTTY && !args.maxCount && args.format === "table"
 
     if (shouldPaginate) {
       yield* Effect.promise(async () => {
