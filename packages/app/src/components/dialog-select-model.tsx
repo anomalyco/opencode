@@ -17,6 +17,11 @@ const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
 type ModelState = ReturnType<typeof useLocal>["model"]
+type ModelItem = NonNullable<ReturnType<ModelState["current"]>>
+
+function itemKey(item: ModelItem) {
+  return `${item.provider.id}:${item.id}`
+}
 
 const ModelList: Component<{
   provider?: string
@@ -28,60 +33,43 @@ const ModelList: Component<{
   const model = props.model ?? useLocal().model
   const language = useLanguage()
 
-  type BaseModel = ReturnType<ModelState["list"]>[number]
-  type ModelItem = BaseModel & {
-    _group: "recent" | "provider"
-    _key: string
-  }
-
-  const current = createMemo<ModelItem | undefined>(() => {
-    const item = model.current()
-    if (!item) return undefined
-    return {
-      ...item,
-      _group: "provider",
-      _key: `provider:${item.provider.id}:${item.id}`,
-    }
-  })
-
-  const items = createMemo(() => {
-    const visible: ModelItem[] = model
+  const recent = () => "Recently Used"
+  const models = createMemo(() =>
+    model
       .list()
       .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true))
-      .map((m) => ({
-        ...m,
-        _group: "provider" as const,
-        _key: `provider:${m.provider.id}:${m.id}`,
-      }))
-    const recent: ModelItem[] = (model.recent?.() ?? [])
-      .flatMap((m) => {
-        if (!m) return []
-        return [m]
-      })
-      .filter((m) => (props.provider ? m.provider.id === props.provider : true))
-      .map((m) => ({
-        ...m,
-        _group: "recent" as const,
-        _key: `recent:${m.provider.id}:${m.id}`,
-      }))
-    return [...recent, ...visible]
-  })
+      .map((m) => m as ModelItem),
+  )
+  const recents = createMemo(
+    () =>
+      new Map(
+        (model.recent?.() ?? []).flatMap((item, index) => {
+          if (!item) return []
+          return [[itemKey(item as ModelItem), index] as const]
+        }),
+      ),
+  )
 
   return (
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
-      key={(x) => x._key}
-      items={items}
-      current={current()}
+      key={itemKey}
+      items={models}
+      current={model.current() as ModelItem | undefined}
       filterKeys={["provider.name", "name", "id"]}
-      sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={(x) => (x._group === "recent" ? "Recently Used" : x.provider.name)}
+      sortBy={(a, b) => {
+        const ai = recents().get(itemKey(a))
+        const bi = recents().get(itemKey(b))
+        if (ai !== undefined && bi !== undefined) return ai - bi
+        return a.name.localeCompare(b.name)
+      }}
+      groupBy={(item) => (recents().has(itemKey(item)) ? recent() : item.provider.name)}
       sortGroupsBy={(a, b) => {
-        if (a.items[0]?._group === "recent") return -1
-        if (b.items[0]?._group === "recent") return 1
+        if (a.category === recent()) return -1
+        if (b.category === recent()) return 1
         const aProvider = a.items[0].provider.id
         const bProvider = b.items[0].provider.id
         if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1

@@ -5,6 +5,31 @@ Use this as a checklist after every rebase on `upstream/dev` to verify nothing w
 
 ---
 
+## ✅ Recovered after rebase regression (2026-05-11)
+
+Source refs:
+- `dev-backup-20260509-031153`
+- `7e2b59d82` (voice controls + Edge TTS integration)
+- `b04367638` (recently active model/session UX baseline)
+
+Recovered fixes:
+- Restored browser STT controls in `packages/app/src/components/prompt-input.tsx` (mic capture + transcript insertion into prompt).
+- Restored assistant TTS auto-play path in `packages/app/src/pages/session/message-timeline.tsx` using `/tts/edge` with browser speech-synthesis fallback.
+- Restored required runtime guards in `packages/app/src/utils/runtime-adapters.ts` (media devices, permissions, speech synthesis).
+- Restored model picker recent-group behavior/wiring in `packages/app/src/components/dialog-select-model.tsx` (recent ordering/grouping without duplicated entries).
+
+## ✅ Recovered backend regressions (issue #193, 2026-05-11)
+
+Source refs:
+- `dev-backup-20260509-031153`
+- `7aaa1cb90` (`feat(tools): add rename tool for AI-driven session naming`)
+- `760b20fbd` (`fix: enforce PR naming rule in rename tool`)
+
+Recovered fixes:
+- Restored `packages/opencode/src/tool/rename.ts` in the Effect-based tool framework with tool id `rename` and session title updates via `Session.Service.setTitle`.
+- Re-registered `rename` in `packages/opencode/src/tool/registry.ts` (init + built-in tool list).
+- Restored concise session naming guidance in `packages/opencode/src/session/system.ts` so agents rename early once task scope is clear.
+
 ## ⚠️ Rebase Survival Checklist
 
 After rebasing on `upstream/dev`, verify each feature still works:

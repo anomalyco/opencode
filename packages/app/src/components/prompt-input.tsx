@@ -34,8 +34,16 @@ import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { showToast } from "@opencode-ai/ui/toast"
+import {
+  getMediaDevices,
+  getPermissions,
+  getSpeechRecognitionCtor,
+  getSpeechSynthesis,
+} from "@/utils/runtime-adapters"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
@@ -101,6 +109,70 @@ const EXAMPLES = [
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 
+type SpeechAlternative = {
+  transcript?: string
+}
+
+type SpeechResult = {
+  isFinal?: boolean
+  0?: SpeechAlternative
+  length: number
+  [index: number]: SpeechAlternative | undefined
+}
+
+type SpeechEvent = {
+  resultIndex?: number
+  results: ArrayLike<SpeechResult>
+}
+
+type SpeechErrorEvent = {
+  error?: string
+  message?: string
+}
+
+type SpeechRecognitionLike = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onstart: ((event: Event) => void) | null
+  onend: ((event: Event) => void) | null
+  onerror: ((event: SpeechErrorEvent) => void) | null
+  onresult: ((event: SpeechEvent) => void) | null
+  start(): void
+  stop(): void
+  abort(): void
+}
+
+type MediaTrackLike = {
+  stop?: () => void
+}
+
+type MediaStreamLike = {
+  getTracks(): ArrayLike<MediaTrackLike>
+}
+
+type MediaDevicesLike = {
+  getUserMedia(constraints: { audio: boolean }): Promise<MediaStreamLike>
+}
+
+type PermissionStateLike = "granted" | "denied" | "prompt"
+
+type PermissionStatusLike = {
+  state: PermissionStateLike
+}
+
+type PermissionsLike = {
+  query(desc: { name: "microphone" }): Promise<PermissionStatusLike>
+}
+
+const transcriptInsert = (input: { transcript: string; before: string; after: string }) => {
+  const text = input.transcript.replace(/\s+/g, " ").trim()
+  if (!text) return
+  const lead = input.before && !/\s$/.test(input.before) ? " " : ""
+  const tail = input.after && !/^[\s,.;:!?)}\]]/.test(input.after) ? " " : ""
+  return `${lead}${text}${tail}`
+}
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const globalSDK = useGlobalSDK()
@@ -117,6 +189,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const settings = useSettings()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -259,6 +332,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    voice: "idle" | "starting" | "listening"
   }>({
     popover: null,
     historyIndex: -1,
@@ -267,6 +341,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    voice: "idle",
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -279,6 +354,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const buttons = createMemo(() => motion(buttonsSpring()))
   const shell = createMemo(() => motion(1 - buttonsSpring()))
   const control = createMemo(() => ({ height: "28px", ...buttons() }))
+  const voiceSupported = createMemo(() =>
+    typeof window === "undefined" ? false : !!getSpeechRecognitionCtor<SpeechRecognitionLike>(window),
+  )
+  const speakerSupported = createMemo(() => {
+    if (typeof window === "undefined") return false
+    if (typeof window.Audio === "function") return true
+    return !!getSpeechSynthesis<{ cancel: () => void }>(window)
+  })
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
@@ -986,6 +1069,181 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
+  let rec: SpeechRecognitionLike | undefined
+  let voiceStop = false
+
+  const stopVoice = (mode: "stop" | "abort" = "stop") => {
+    voiceStop = true
+    const current = rec
+    if (!current) return
+    if (mode === "abort") current.abort()
+    if (mode === "stop") current.stop()
+  }
+
+  const commitTranscript = (value: string) => {
+    const raw = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    const cursor = prompt.cursor() ?? promptLength(prompt.current())
+    const content = transcriptInsert({
+      transcript: value,
+      before: raw.slice(0, cursor),
+      after: raw.slice(cursor),
+    })
+    if (!content) return
+    addPart({ type: "text", content, start: 0, end: 0 })
+  }
+
+  const readSpeechError = (value: SpeechErrorEvent) => {
+    if (value.error === "aborted" || value.error === "no-speech") return
+    if (value.error === "not-allowed" || value.error === "service-not-allowed") {
+      showToast({
+        title: "Voice input blocked",
+        description: "Microphone access was denied by your browser.",
+      })
+      return
+    }
+    showToast({
+      title: "Voice input failed",
+      description: value.message || value.error || "Could not capture voice input.",
+    })
+  }
+
+  const readMicError = (value: unknown) => {
+    const name =
+      value instanceof DOMException
+        ? value.name
+        : typeof value === "object" && value !== null && "name" in value && typeof value.name === "string"
+          ? value.name
+          : undefined
+    if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      showToast({
+        title: "No microphone found",
+        description: "Connect a microphone and try again.",
+      })
+      return
+    }
+    if (name === "TypeError" && typeof window !== "undefined" && !window.isSecureContext) {
+      showToast({
+        title: "Voice input requires HTTPS",
+        description: "Open this app in a secure context to use microphone capture.",
+      })
+      return
+    }
+    if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+      showToast({
+        title: "Microphone permission denied",
+        description: "Allow microphone access in your browser settings.",
+      })
+      return
+    }
+    showToast({
+      title: "Voice input failed",
+      description: value instanceof Error ? value.message : "Could not capture voice input.",
+    })
+  }
+
+  const requestMic = async () => {
+    const perms = typeof window === "undefined" ? undefined : getPermissions<PermissionsLike>(window)
+    const state = await perms
+      ?.query({ name: "microphone" })
+      .then((x) => x.state)
+      .catch(() => undefined)
+    if (state === "denied") throw { name: "NotAllowedError" }
+    const media = typeof window === "undefined" ? undefined : getMediaDevices<MediaDevicesLike>(window)
+    if (!media) return true
+    const stream = await media.getUserMedia({ audio: true })
+    for (const track of Array.from(stream.getTracks())) track.stop?.()
+    return true
+  }
+
+  const toggleVoice = async () => {
+    if (store.mode !== "normal") return
+    if (store.voice === "starting" || store.voice === "listening") {
+      stopVoice()
+      return
+    }
+    const Ctor = typeof window === "undefined" ? undefined : getSpeechRecognitionCtor<SpeechRecognitionLike>(window)
+    if (!Ctor) {
+      showToast({
+        title: "Voice input unavailable",
+        description: "This browser does not support speech recognition.",
+      })
+      return
+    }
+    voiceStop = false
+    setStore("voice", "starting")
+    const granted = await requestMic().catch((err) => {
+      readMicError(err)
+      return false
+    })
+    if (!granted || voiceStop) {
+      voiceStop = false
+      setStore("voice", "idle")
+      return
+    }
+    const current = new Ctor()
+    rec = current
+    current.continuous = false
+    current.interimResults = false
+    current.lang = navigator.language || "en-US"
+    current.onstart = () => setStore("voice", "listening")
+    current.onresult = (event) => {
+      const start = event.resultIndex ?? 0
+      let text = ""
+      for (let i = start; i < event.results.length; i++) {
+        const result = event.results[i]
+        if (!result?.isFinal) continue
+        text += result[0]?.transcript ?? ""
+      }
+      commitTranscript(text)
+    }
+    current.onerror = (event) => {
+      if (!voiceStop) readSpeechError(event)
+    }
+    current.onend = () => {
+      rec = undefined
+      voiceStop = false
+      setStore("voice", "idle")
+      requestAnimationFrame(() => editorRef?.focus())
+    }
+    try {
+      current.start()
+    } catch (err) {
+      rec = undefined
+      setStore("voice", "idle")
+      showToast({
+        title: "Voice input failed",
+        description: err instanceof Error ? err.message : "Could not capture voice input.",
+      })
+    }
+  }
+
+  const toggleSpeaker = () => {
+    if (!speakerSupported()) {
+      showToast({
+        title: "Voice playback unavailable",
+        description: "This browser cannot play spoken responses.",
+      })
+      return
+    }
+    const next = !settings.voice.autoSpeak()
+    settings.voice.setAutoSpeak(next)
+    if (next) return
+    const synth = typeof window === "undefined" ? undefined : getSpeechSynthesis<{ cancel: () => void }>(window)
+    synth?.cancel()
+  }
+
+  const voiceLabel = createMemo(() => {
+    if (store.voice === "starting") return "Starting voice input…"
+    if (store.voice === "listening") return "Stop voice input"
+    return "Start voice input"
+  })
+  const speakerLabel = createMemo(() => (settings.voice.autoSpeak() ? "Mute voice playback" : "Enable voice playback"))
+
+  onCleanup(() => stopVoice("abort"))
+
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
@@ -1329,7 +1587,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
-            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+            if (
+              target.closest(
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-voice"], [data-action="prompt-speaker"]',
+              )
+            ) {
               return
             }
             editorRef?.focus()
@@ -1423,7 +1685,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="pointer-events-none absolute bottom-2 left-2">
             <div
               aria-hidden={store.mode !== "normal"}
-              class="pointer-events-auto"
+              class="pointer-events-auto flex items-center gap-1"
               style={{
                 "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
               }}
@@ -1447,6 +1709,54 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Icon name="plus" class="size-4.5" />
                 </Button>
               </TooltipKeybind>
+              <Show when={voiceSupported()}>
+                <Tooltip placement="top" value={voiceLabel()}>
+                  <Button
+                    data-action="prompt-voice"
+                    type="button"
+                    variant="ghost"
+                    classList={{
+                      "size-8 p-0": true,
+                      "animate-pulse": store.voice === "starting" || store.voice === "listening",
+                      "hover:bg-surface-success-base": store.voice === "starting" || store.voice === "listening",
+                    }}
+                    style={buttons()}
+                    onClick={toggleVoice}
+                    disabled={store.mode !== "normal"}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    aria-label={voiceLabel()}
+                    aria-pressed={store.voice === "starting" || store.voice === "listening"}
+                  >
+                    <Icon
+                      name="microphone"
+                      classList={{
+                        "text-icon-success-base": store.voice === "starting" || store.voice === "listening",
+                      }}
+                    />
+                  </Button>
+                </Tooltip>
+              </Show>
+              <Show when={speakerSupported()}>
+                <Tooltip placement="top" value={speakerLabel()}>
+                  <Button
+                    data-action="prompt-speaker"
+                    type="button"
+                    variant="ghost"
+                    classList={{
+                      "size-8 p-0": true,
+                      "hover:bg-surface-success-base": settings.voice.autoSpeak(),
+                    }}
+                    style={buttons()}
+                    onClick={toggleSpeaker}
+                    disabled={store.mode !== "normal"}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    aria-label={speakerLabel()}
+                    aria-pressed={settings.voice.autoSpeak()}
+                  >
+                    <Icon name="speaker" classList={{ "text-icon-success-base": settings.voice.autoSpeak() }} />
+                  </Button>
+                </Tooltip>
+              </Show>
             </div>
           </div>
         </div>

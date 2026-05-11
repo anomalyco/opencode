@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   disposeIfDisposable,
+  getMediaDevices,
+  getPermissions,
   getHoveredLinkText,
   getSpeechRecognitionCtor,
+  getSpeechSynthesis,
+  getSpeechSynthesisUtteranceCtor,
   hasSetOption,
   isDisposable,
   setOptionIfSupported,
@@ -60,5 +64,45 @@ describe("runtime adapters", () => {
   test("returns undefined when no valid speech constructor exists", () => {
     expect(getSpeechRecognitionCtor({ SpeechRecognition: "nope" })).toBeUndefined()
     expect(getSpeechRecognitionCtor(undefined)).toBeUndefined()
+  })
+
+  test("returns media devices when getUserMedia exists", () => {
+    const media = {
+      getUserMedia: async () => ({
+        getTracks: () => [],
+      }),
+    }
+    expect(getMediaDevices<typeof media>({ navigator: { mediaDevices: media } })).toBe(media)
+    expect(getMediaDevices({ navigator: { mediaDevices: {} } })).toBeUndefined()
+    expect(getMediaDevices(undefined)).toBeUndefined()
+  })
+
+  test("returns permissions when query exists", () => {
+    const perms = {
+      query: async () => ({ state: "prompt" }),
+    }
+    expect(getPermissions<typeof perms>({ navigator: { permissions: perms } })).toBe(perms)
+    expect(getPermissions({ navigator: { permissions: {} } })).toBeUndefined()
+    expect(getPermissions(undefined)).toBeUndefined()
+  })
+
+  test("returns speech synthesis when required methods exist", () => {
+    const synth = {
+      cancel() {},
+      speak() {},
+    }
+    expect(getSpeechSynthesis<typeof synth>({ speechSynthesis: synth })).toBe(synth)
+    expect(getSpeechSynthesis({ speechSynthesis: { speak() {} } })).toBeUndefined()
+    expect(getSpeechSynthesis(undefined)).toBeUndefined()
+  })
+
+  test("returns speech synthesis utterance constructor when present", () => {
+    // oxlint-disable-next-line no-extraneous-class
+    class Ctor {
+      constructor(readonly text = "") {}
+    }
+    expect(getSpeechSynthesisUtteranceCtor({ SpeechSynthesisUtterance: Ctor })).toBe(Ctor)
+    expect(getSpeechSynthesisUtteranceCtor({ SpeechSynthesisUtterance: "nope" })).toBeUndefined()
+    expect(getSpeechSynthesisUtteranceCtor(undefined)).toBeUndefined()
   })
 })

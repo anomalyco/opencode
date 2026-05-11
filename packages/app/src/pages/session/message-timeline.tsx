@@ -26,6 +26,7 @@ import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -33,6 +34,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { makeTimer } from "@solid-primitives/timer"
+import { getSpeechSynthesis, getSpeechSynthesisUtteranceCtor } from "@/utils/runtime-adapters"
 
 type MessageComment = {
   path: string
@@ -45,6 +47,17 @@ type MessageComment = {
 
 const emptyMessages: MessageType[] = []
 const idle = { type: "idle" as const }
+
+type SpeechSynthLike = {
+  cancel(): void
+  speak(utterance: unknown): void
+}
+
+type SpeechUtteranceLike = {
+  lang: string
+  rate: number
+}
+
 type UserActions = {
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -236,6 +249,7 @@ export function MessageTimeline(props: {
   const globalSDK = useGlobalSDK()
   const sdk = useSDK()
   const sync = useSync()
+  const server = useServer()
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
@@ -254,6 +268,26 @@ export function MessageTimeline(props: {
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
     ),
   )
+  const spoken = createMemo(() => {
+    const list = sessionMessages()
+    for (let i = list.length - 1; i >= 0; i--) {
+      const message = list[i]
+      if (message.role !== "assistant") continue
+      if (typeof message.time.completed !== "number") continue
+      const text = (sync.data.part[message.id] ?? [])
+        .flatMap((part) => {
+          if (part.type !== "text") return []
+          if (part.synthetic || part.ignored) return []
+          const value = part.text.trim()
+          if (!value) return []
+          return [value]
+        })
+        .join("\n")
+        .trim()
+      if (!text) continue
+      return { id: message.id, text }
+    }
+  })
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
@@ -268,6 +302,30 @@ export function MessageTimeline(props: {
     if (working()) return "showing"
     if (prev === "showing" || !timeoutDone()) return "hiding"
     return "hidden"
+  })
+
+  let audio: HTMLAudioElement | undefined
+  let audioUrl: string | undefined
+  let speakRequest = 0
+  let speakController: AbortController | undefined
+
+  const clearAudio = () => {
+    audio?.pause()
+    audio = undefined
+    if (!audioUrl) return
+    URL.revokeObjectURL(audioUrl)
+    audioUrl = undefined
+  }
+
+  const cancelSpeak = () => {
+    speakRequest += 1
+    speakController?.abort()
+    speakController = undefined
+  }
+
+  onCleanup(() => {
+    cancelSpeak()
+    clearAudio()
   })
 
   createEffect(() => {
@@ -360,6 +418,87 @@ export function MessageTimeline(props: {
 
   let more: HTMLButtonElement | undefined
   let head: HTMLDivElement | undefined
+  let spokenSession = ""
+  let spokenMessage = ""
+
+  const speak = (input: { messageID: string; text: string }) => {
+    spokenMessage = input.messageID
+    const conn = server.current?.http
+    const request = speakRequest + 1
+    speakRequest = request
+    speakController?.abort()
+    const controller = typeof AbortController === "undefined" ? undefined : new AbortController()
+    speakController = controller
+    const isCurrent = () => request === speakRequest && !controller?.signal.aborted
+    const run = async () => {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+      if (conn?.password) {
+        headers.Authorization = `Basic ${btoa(`${conn.username ?? "opencode"}:${conn.password}`)}`
+      }
+      const res = await (platform.fetch ?? fetch)(new URL("/tts/edge", conn?.url ?? globalSDK.url).toString(), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ text: input.text }),
+        signal: controller?.signal,
+      })
+      if (!res.ok) throw new Error(`Edge TTS request failed (${res.status})`)
+      const blob = await res.blob()
+      if (!isCurrent()) return
+      clearAudio()
+      if (!isCurrent()) return
+      audioUrl = URL.createObjectURL(blob)
+      audio = new Audio(audioUrl)
+      await audio.play()
+    }
+    void run()
+      .catch((err) => {
+        if (!isCurrent()) return
+        if (err instanceof Error && err.name === "AbortError") return
+        const synth = typeof window === "undefined" ? undefined : getSpeechSynthesis<SpeechSynthLike>(window)
+        const Ctor =
+          typeof window === "undefined" ? undefined : getSpeechSynthesisUtteranceCtor<SpeechUtteranceLike>(window)
+        if (!synth || !Ctor) {
+          showToast({
+            title: "Voice playback unavailable",
+            description: "Unable to play spoken response in this browser.",
+          })
+          return
+        }
+        const utterance = new Ctor(input.text)
+        utterance.lang =
+          typeof document !== "undefined" ? document.documentElement.lang || navigator.language || "en-US" : "en-US"
+        utterance.rate = 1
+        synth.cancel()
+        synth.speak(utterance)
+      })
+      .finally(() => {
+        if (speakController !== controller) return
+        speakController = undefined
+      })
+  }
+
+  createEffect(() => {
+    if (settings.voice.autoSpeak()) return
+    cancelSpeak()
+    clearAudio()
+    const synth = typeof window === "undefined" ? undefined : getSpeechSynthesis<SpeechSynthLike>(window)
+    synth?.cancel()
+  })
+
+  createEffect(() => {
+    const session = sessionID() ?? ""
+    const latest = spoken()
+    if (session !== spokenSession) {
+      spokenSession = session
+      spokenMessage = latest?.id ?? ""
+      return
+    }
+    if (!settings.voice.autoSpeak()) return
+    if (!latest?.id || latest.id === spokenMessage) return
+    speak({ messageID: latest.id, text: latest.text })
+  })
 
   createResizeObserver(
     () => head,
