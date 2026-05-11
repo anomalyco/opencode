@@ -402,7 +402,7 @@ export const User = Schema.Struct({
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
 
-const _Part = Schema.Union([
+export const Part = Schema.Union([
   TextPart,
   SubtaskPart,
   ReasoningPart,
@@ -416,7 +416,6 @@ const _Part = Schema.Union([
   RetryPart,
   CompactionPart,
 ]).annotate({ discriminator: "type", identifier: "Part" })
-export const Part = _Part
 export type Part =
   | TextPart
   | SubtaskPart
@@ -558,13 +557,12 @@ export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assista
   error?: AssistantError
 }
 
-const _Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
-export const Info = _Info
+export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
 export type Info = User | Assistant
 
 const UpdatedEventSchema = Schema.Struct({
   sessionID: SessionID,
-  info: _Info,
+  info: Info,
 })
 
 const RemovedEventSchema = Schema.Struct({
@@ -574,7 +572,7 @@ const RemovedEventSchema = Schema.Struct({
 
 const PartUpdatedEventSchema = Schema.Struct({
   sessionID: SessionID,
-  part: _Part,
+  part: Part,
   time: NonNegativeInt,
 })
 
@@ -622,8 +620,8 @@ export const Event = {
 }
 
 export const WithParts = Schema.Struct({
-  info: _Info,
-  parts: Schema.Array(_Part),
+  info: Info,
+  parts: Schema.Array(Part),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type WithParts = {
   info: Info
