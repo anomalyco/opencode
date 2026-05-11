@@ -10,6 +10,7 @@ import { useI18n } from "../context/i18n"
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
   error: string
+  title?: string
   defaultOpen?: boolean
   subtitle?: string
   href?: string
@@ -23,8 +24,9 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   })
   const open = () => state.open
   const copied = () => state.copied
-  const [split, rest] = splitProps(props, ["tool", "error", "defaultOpen", "subtitle", "href"])
+  const [split, rest] = splitProps(props, ["tool", "error", "title", "defaultOpen", "subtitle", "href"])
   const name = createMemo(() => {
+    if (split.title) return split.title
     const map: Record<string, string> = {
       read: "ui.tool.read",
       list: "ui.tool.list",

@@ -1,12 +1,12 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
-import { zod, ZodOverride } from "@/util/effect-zod"
-import { Newtype } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { Newtype } from "@opencode-ai/core/schema"
 
 export class PermissionID extends Newtype<PermissionID>()(
   "PermissionID",
-  Schema.String.annotate({ [ZodOverride]: Identifier.schema("permission") }),
+  Schema.String.check(Schema.isStartsWith("per")),
 ) {
   static ascending(id?: string): PermissionID {
     return this.make(Identifier.ascending("permission", id))

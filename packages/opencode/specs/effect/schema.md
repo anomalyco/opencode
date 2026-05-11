@@ -8,7 +8,7 @@ Zod-first definitions to Effect Schema with Zod compatibility shims.
 Use Effect Schema as the source of truth for domain models, IDs, inputs,
 outputs, and typed errors. Keep Zod available at existing HTTP, tool, and
 compatibility boundaries by exposing a `.zod` static derived from the Effect
-schema via `@/util/effect-zod`.
+schema via `@opencode-ai/core/effect-zod`.
 
 The long-term driver is `specs/effect/http-api.md` — once the HTTP server
 moves to `@effect/platform`, every Schema-first DTO can flow through
@@ -97,7 +97,7 @@ creating a parallel schema source of truth.
 
 ## Escape hatches
 
-The walker in `@/util/effect-zod` exposes two explicit escape hatches for
+The walker in `@opencode-ai/core/effect-zod` exposes two explicit escape hatches for
 cases the pure-Schema path cannot express. Each one stays in the codebase
 only as long as its upstream or local dependency requires it — inline
 comments document when each can be deleted.
@@ -389,7 +389,7 @@ piecewise.
 
 ## Notes
 
-- Use `@/util/effect-zod` for all Schema → Zod conversion.
+- Use `@opencode-ai/core/effect-zod` for all Schema → Zod conversion.
 - Prefer one canonical schema definition. Avoid maintaining parallel Zod and
   Effect definitions for the same domain type.
 - Keep the migration incremental. Converting the domain model first is more

@@ -834,7 +834,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
 
-        expect(result.map((item) => item.info.id)).toEqual([u2, a2, c1, s1, u3, a3])
+        expect(result.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
 
         await svc.remove(session.id)
       },
@@ -889,7 +889,7 @@ describe("MessageV2.filterCompacted", () => {
         })
 
         const parentFiltered = MessageV2.filterCompacted(MessageV2.stream(session.id))
-        expect(parentFiltered.map((item) => item.info.id)).toEqual([u2, a2, c1, s1, u3, a3])
+        expect(parentFiltered.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
 
         const forked = await svc.fork({ sessionID: session.id })
         const childFiltered = MessageV2.filterCompacted(MessageV2.stream(forked.id))
@@ -964,7 +964,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
 
-        expect(result.map((item) => item.info.id)).toEqual([a3, c1, s1, u3, a4])
+        expect(result.map((item) => item.info.id)).toEqual([c1, s1, a3, u3, a4])
 
         await svc.remove(session.id)
       },
@@ -1041,7 +1041,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
 
-        expect(result.map((item) => item.info.id)).toEqual([u3, a3, c2, s2, u4, a4])
+        expect(result.map((item) => item.info.id)).toEqual([c2, s2, u3, a3, u4, a4])
 
         await svc.remove(session.id)
       },

@@ -11,21 +11,21 @@ import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 
 function activeAssistant(messages: SessionMessage[]) {
-  const index = messages.findLastIndex((message) => message.type === "assistant" && !message.time.completed)
+  const index = messages.findIndex((message) => message.type === "assistant" && !message.time.completed)
   if (index < 0) return
   const assistant = messages[index]
   return assistant?.type === "assistant" ? assistant : undefined
 }
 
 function activeCompaction(messages: SessionMessage[]) {
-  const index = messages.findLastIndex((message) => message.type === "compaction")
+  const index = messages.findIndex((message) => message.type === "compaction")
   if (index < 0) return
   const compaction = messages[index]
   return compaction?.type === "compaction" ? compaction : undefined
 }
 
 function activeShell(messages: SessionMessage[], callID: string) {
-  const index = messages.findLastIndex((message) => message.type === "shell" && message.callID === callID)
+  const index = messages.findIndex((message) => message.type === "shell" && message.callID === callID)
   if (index < 0) return
   const shell = messages[index]
   return shell?.type === "shell" ? shell : undefined
@@ -74,7 +74,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       switch (event.type) {
         case "session.next.prompted": {
           update(event.properties.sessionID, (draft) => {
-            draft.push({
+            draft.unshift({
               id: event.id,
               type: "user",
               text: event.properties.prompt.text,
@@ -87,7 +87,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         }
         case "session.next.synthetic":
           update(event.properties.sessionID, (draft) => {
-            draft.push({
+            draft.unshift({
               id: event.id,
               type: "synthetic",
               sessionID: event.properties.sessionID,
@@ -98,7 +98,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.shell.started":
           update(event.properties.sessionID, (draft) => {
-            draft.push({
+            draft.unshift({
               id: event.id,
               type: "shell",
               callID: event.properties.callID,
@@ -120,7 +120,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           update(event.properties.sessionID, (draft) => {
             const currentAssistant = activeAssistant(draft)
             if (currentAssistant) currentAssistant.time.completed = event.properties.timestamp
-            draft.push({
+            draft.unshift({
               id: event.id,
               type: "assistant",
               agent: event.properties.agent,
@@ -259,7 +259,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.compaction.started":
           update(event.properties.sessionID, (draft) => {
-            draft.push({
+            draft.unshift({
               id: event.id,
               type: "compaction",
               reason: event.properties.reason,

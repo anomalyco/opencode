@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createSignal, onMount } from "solid-js"
 import { Logo } from "../component/logo"
 import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
@@ -9,6 +9,7 @@ import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import { useEditorContext } from "@tui/context/editor"
 
 let once = false
 const placeholder = {
@@ -24,7 +25,12 @@ export function Home() {
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
+  const editor = useEditorContext()
   let sent = false
+
+  onMount(() => {
+    editor.clearSelection()
+  })
 
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
