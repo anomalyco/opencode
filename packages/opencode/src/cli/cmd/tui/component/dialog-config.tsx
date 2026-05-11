@@ -1,4 +1,4 @@
-import { createMemo } from "solid-js"
+import { createMemo, createResource } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useSDK } from "@tui/context/sdk"
 import { useToast } from "@tui/ui/toast"
@@ -71,15 +71,27 @@ const configFields: ConfigField[] = [
   },
 ]
 
-export function DialogConfig(props: { gotoKey?: string }) {
+type ConfigScope = "project" | "global"
+
+export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
   const dialog = useDialog()
   const sync = useSync()
   const sdk = useSDK()
   const toast = useToast()
 
+  const resolvedScope = props.scope ?? (props.gotoKey ? "project" : undefined)
+
+  const [globalConfig] = createResource(
+    () => resolvedScope === "global",
+    async () => {
+      const result = await sdk.client.global.config.get({ throwOnError: true })
+      return result.data ?? {}
+    },
+  )
+
   const gotoField = props.gotoKey ? configFields.find((f) => f.key === props.gotoKey) : undefined
 
-  async function saveField(field: ConfigField, value: unknown): Promise<boolean> {
+  async function saveField(field: ConfigField, value: unknown, targetScope: ConfigScope): Promise<boolean> {
     try {
       let parsedValue: unknown = value
       if (field.type.kind === "boolean") {
@@ -92,16 +104,25 @@ export function DialogConfig(props: { gotoKey?: string }) {
         else if (value === "false") parsedValue = false
       }
 
-      const result = await sdk.client.config.update(
-        { config: { [field.key]: parsedValue } },
-        { throwOnError: true },
-      )
-
-      if (result.error) {
-        throw new Error(result.error.message || "Failed to update config")
+      if (targetScope === "global") {
+        const result = await sdk.client.global.config.update(
+          { config: { [field.key]: parsedValue } },
+          { throwOnError: true },
+        )
+        if (result.error) {
+          throw new Error(result.error.message || "Failed to update global config")
+        }
+      } else {
+        const result = await sdk.client.config.update(
+          { config: { [field.key]: parsedValue } },
+          { throwOnError: true },
+        )
+        if (result.error) {
+          throw new Error(result.error.message || "Failed to update project config")
+        }
       }
 
-      toast.show({ message: `Updated ${field.key}`, variant: "success" })
+      toast.show({ message: `Updated ${field.key} (${targetScope})`, variant: "success" })
       return true
     } catch (error) {
       toast.show({
@@ -112,52 +133,75 @@ export function DialogConfig(props: { gotoKey?: string }) {
     }
   }
 
-  function openEdit(field: ConfigField) {
-    const currentValue = sync.data.config[field.key as keyof typeof sync.data.config]
+  function openEdit(field: ConfigField, targetScope: ConfigScope) {
+    const currentValue =
+      targetScope === "global"
+        ? globalConfig()?.[field.key as keyof typeof globalConfig]
+        : sync.data.config[field.key as keyof typeof sync.data.config]
     dialog.replace(() => (
       <DialogConfigEdit
         field={field}
         currentValue={currentValue}
         onSave={async (value) => {
-          const success = await saveField(field, value)
-          if (success) dialog.replace(() => <DialogConfig />)
+          const success = await saveField(field, value, targetScope)
+          if (success) dialog.replace(() => <DialogConfig gotoKey={props.gotoKey} scope={targetScope} />)
         }}
       />
     ))
   }
 
-  if (gotoField) {
-    const currentValue = sync.data.config[gotoField.key as keyof typeof sync.data.config]
+  if (!resolvedScope && !gotoField) {
+    return (
+      <DialogSelect
+        title="Config Scope"
+        placeholder="Choose config scope..."
+        options={[
+          { title: "Project config", value: "project", description: "Edit config.json in the current directory" },
+          { title: "Global config", value: "global", description: "Edit ~/.config/opencode/opencode.json" },
+        ]}
+        onSelect={(option) => {
+          dialog.replace(() => <DialogConfig gotoKey={props.gotoKey} scope={option.value as ConfigScope} />)
+        }}
+      />
+    )
+  }
+
+  if (gotoField && resolvedScope) {
+    const currentValue =
+      resolvedScope === "global"
+        ? globalConfig()?.[gotoField.key as keyof typeof globalConfig]
+        : sync.data.config[gotoField.key as keyof typeof sync.data.config]
     return (
       <DialogConfigEdit
         field={gotoField}
         currentValue={currentValue}
         onSave={async (value) => {
-          const success = await saveField(gotoField, value)
+          const success = await saveField(gotoField, value, resolvedScope)
           if (success) dialog.replace(() => <DialogConfig />)
         }}
       />
     )
   }
 
-  const options = createMemo(() =>
-    configFields.map((field) => {
-      const currentValue = sync.data.config[field.key as keyof typeof sync.data.config]
+  const options = createMemo(() => {
+    const configSource = resolvedScope === "global" ? (globalConfig() ?? {}) : sync.data.config
+    return configFields.map((field) => {
+      const currentValue = configSource[field.key as keyof typeof configSource]
       const currentText = currentValue !== undefined ? ` = ${JSON.stringify(currentValue)}` : " (not set)"
       return {
         title: field.key,
         value: field,
         description: field.description + currentText,
       }
-    }),
-  )
+    })
+  })
 
   return (
     <DialogSelect
-      title="Config"
+      title={`Config (${resolvedScope})`}
       placeholder="Search config..."
       options={options()}
-      onSelect={(option) => openEdit(option.value)}
+      onSelect={(option) => openEdit(option.value, resolvedScope!)}
     />
   )
 }
