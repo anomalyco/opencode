@@ -527,14 +527,18 @@ You can also define commands using markdown files in `~/.config/opencode/command
 
 ### Keybinds
 
-Customize keybinds in `tui.json`.
+Customize TUI keyboard shortcuts in `tui.json` with `keybinds`.
 
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
-  "keybinds": {}
+  "keybinds": {
+    "command_list": "ctrl+p"
+  }
 }
 ```
+
+`keybinds` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
 
 [Learn more here](/docs/keybinds).
 

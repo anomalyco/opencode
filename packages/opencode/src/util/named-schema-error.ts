@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import z from "zod"
-import { zod } from "@/util/effect-zod"
+import { zod } from "@opencode-ai/core/effect-zod"
 
 /**
  * Create a Schema-backed NamedError-shaped class.

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { PtyID } from "../../src/pty/schema"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
@@ -17,16 +16,13 @@ import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const testPty = process.platform === "win32" ? test.skip : test
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     yield* Effect.promise(() => resetDatabase())
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
         await resetDatabase()
       }),
     )
@@ -51,7 +47,6 @@ const effectIt = testEffect(
 )
 
 function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
   return Server.Default().app
 }
 
@@ -62,7 +57,6 @@ function serverUrl() {
 const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
   await resetDatabase()
 })
