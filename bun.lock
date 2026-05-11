@@ -152,12 +152,10 @@
         "@ai-sdk/anthropic": "3.0.64",
         "@ai-sdk/openai": "3.0.48",
         "@ai-sdk/openai-compatible": "2.0.37",
-        "@hono/zod-validator": "catalog:",
         "@openauthjs/openauth": "0.0.0-20250322224806",
         "@opencode-ai/console-core": "workspace:*",
         "@opencode-ai/console-resource": "workspace:*",
         "ai": "catalog:",
-        "hono": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -1234,8 +1232,6 @@
     "@hono/node-server": ["@hono/node-server@1.19.11", "", { "peerDependencies": { "hono": "^4" } }, "sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g=="],
 
     "@hono/standard-validator": ["@hono/standard-validator@0.1.5", "", { "peerDependencies": { "@standard-schema/spec": "1.0.0", "hono": ">=3.9.0" } }, "sha512-EIyZPPwkyLn6XKwFj5NBEWHXhXbgmnVh2ceIFo5GO7gKI9WmzTjPDKnppQB0KrqKeAkq3kpoW4SIbu5X1dgx3w=="],
-
-    "@hono/zod-validator": ["@hono/zod-validator@0.4.2", "", { "peerDependencies": { "hono": ">=3.9.0", "zod": "^3.19.1" } }, "sha512-1rrlBg+EpDPhzOV4hT9pxr5+xDVmKuz6YJl+la7VCwK6ass5ldyKm5fD+umJdV2zhHD6jROoCCv8NbTwyfhT0g=="],
 
     "@ibm/plex": ["@ibm/plex@6.4.1", "", { "dependencies": { "@ibm/telemetry-js": "^1.5.1" } }, "sha512-fnsipQywHt3zWvsnlyYKMikcVI7E2fEwpiPnIHFqlbByXVfQfANAAeJk1IV4mNnxhppUIDlhU0TzwYwL++Rn2g=="],
 
@@ -5468,8 +5464,6 @@
     "@hey-api/openapi-ts/open": ["open@11.0.0", "", { "dependencies": { "default-browser": "^5.4.0", "define-lazy-prop": "^3.0.0", "is-in-ssh": "^1.0.0", "is-inside-container": "^1.0.0", "powershell-utils": "^0.1.0", "wsl-utils": "^0.3.0" } }, "sha512-smsWv2LzFjP03xmvFoJ331ss6h+jixfA4UUV/Bsiyuu4YJPfN+FIQGOIiv4w9/+MoHkfkJ22UIaQWRVFRfH6Vw=="],
 
     "@hey-api/openapi-ts/semver": ["semver@7.7.3", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-SdsKMrI9TdgjdweUSR9MweHA4EJ8YxHn8DFaDisvhVlUOe4BF1tLD7GAj0lIqWVl+dPb/rExr0Btby5loQm20Q=="],
-
-    "@hono/zod-validator/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
 
     "@jimp/core/mime": ["mime@3.0.0", "", { "bin": { "mime": "cli.js" } }, "sha512-jSCU7/VB1loIWBZe14aEYHU/+1UMEHoaO7qxCOVJOw9GgH72VAWppxNcjU+x9a2k3GSIBXNKxXQFqRvvZ7vr3A=="],
 
