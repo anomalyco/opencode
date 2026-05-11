@@ -23,7 +23,7 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Schema, Types } from "effect"
-import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
+import { zod } from "@opencode-ai/core/effect-zod"
 import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
@@ -416,22 +416,7 @@ const _Part = Schema.Union([
   RetryPart,
   CompactionPart,
 ]).annotate({ discriminator: "type", identifier: "Part" })
-export const Part = Object.assign(_Part, {
-  zod: zod(_Part) as unknown as z.ZodType<
-    | TextPart
-    | SubtaskPart
-    | ReasoningPart
-    | FilePart
-    | ToolPart
-    | StepStartPart
-    | StepFinishPart
-    | SnapshotPart
-    | PatchPart
-    | AgentPart
-    | RetryPart
-    | CompactionPart
-  >,
-})
+export const Part = _Part
 export type Part =
   | TextPart
   | SubtaskPart
@@ -574,9 +559,7 @@ export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assista
 }
 
 const _Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
-export const Info = Object.assign(_Info, {
-  zod: zod(_Info) as unknown as z.ZodType<User | Assistant>,
-})
+export const Info = _Info
 export type Info = User | Assistant
 
 const UpdatedEventSchema = Schema.Struct({
