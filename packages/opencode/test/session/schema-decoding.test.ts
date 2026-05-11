@@ -14,12 +14,7 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 // Covers the session-domain Effect Schema migration. For each migrated
 // schema we assert:
 //   1. The Effect decoder (`Schema.decodeUnknownSync`) accepts valid input.
-//   2. The derived Zod (`X.zod.parse`) accepts the same input and returns the
-//      same shape for schemas that still expose Zod statics.
-//   3. Clearly-invalid input is rejected by both paths where both exist.
-//
-// The point is to lock down the Schema <-> Zod bridge so a future edit to
-// any input schema can't silently drop or widen a field on one side.
+//   2. Clearly-invalid input is rejected.
 
 // Representative valid IDs — the branded schemas require the right prefix
 // (see src/id/id.ts).
