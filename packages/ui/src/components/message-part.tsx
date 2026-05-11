@@ -1881,14 +1881,16 @@ ToolRegistry.register({
     const pending = () => props.status === "pending" || props.status === "running"
 
     const fileCompProps = createMemo(() => {
-      if (props.metadata?.filediff) {
-        const diff = normalize({
-          ...props.metadata?.filediff,
-          status: "modified",
-        })
-        const fileDiff = diff.fileDiff
-        if (fileDiff) return { fileDiff, hunkSeparators: fileDiff.isPartial ? "simple" : "line-info-basic" }
-      }
+      try {
+        if (props.metadata?.filediff) {
+          const diff = normalize({
+            ...props.metadata?.filediff,
+            status: "modified",
+          })
+          const fileDiff = diff.fileDiff
+          if (fileDiff) return { fileDiff, hunkSeparators: fileDiff.isPartial ? "simple" : "line-info-basic" }
+        }
+      } catch {}
 
       return {
         before: {
