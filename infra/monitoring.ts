@@ -41,7 +41,7 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
         expression:
           product === "go"
             ? `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401")), NOT(EQUALS($status, "429"))), 1, 0)`
-            : `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
+            : `IF(AND(EQUALS($status, "429"), $isFreeTier), 0, AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
       },
     ],
     calculations: [
