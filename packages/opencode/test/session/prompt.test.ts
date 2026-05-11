@@ -46,9 +46,11 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Database from "../../src/storage/db"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
+import { Reference } from "../../src/reference/reference"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
+import { SyncEvent } from "@/sync"
 
 void Log.init({ print: false })
 
@@ -173,6 +175,7 @@ function makeHttp() {
     mcp,
     AppFileSystem.defaultLayer,
     status,
+    SyncEvent.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -181,6 +184,7 @@ function makeHttp() {
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Git.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provideMerge(todo),
