@@ -81,6 +81,7 @@ const baseState = (input: Partial<State> = {}) =>
     limit: 10,
     message: {},
     part: {},
+    streamed_part_text: {},
     ...input,
   }) as State
 

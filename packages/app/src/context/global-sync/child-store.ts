@@ -231,6 +231,7 @@ export function createChildStoreManager(input: {
             limit: 5,
             message: {},
             part: {},
+            streamed_part_text: {},
           })
           children[key] = child
           disposers.set(key, dispose)

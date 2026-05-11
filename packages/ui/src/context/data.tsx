@@ -24,6 +24,9 @@ type Data = {
   part: {
     [messageID: string]: Part[]
   }
+  streamed_part_text?: {
+    [partID: string]: string
+  }
 }
 
 export type NavigateToSessionFn = (sessionID: string) => void
