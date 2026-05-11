@@ -4,7 +4,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useToast } from "@tui/ui/toast"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
-import { DialogPrompt } from "@tui/ui/dialog-prompt"
+import { SimplePrompt } from "@tui/component/dialog-simple-prompt"
 
 type ConfigFieldType =
   | { kind: "enum"; values: string[] }
@@ -264,7 +264,7 @@ function DialogConfigEdit(props: {
     : (props.field.type.example ?? "")
 
   return (
-    <DialogPrompt
+    <SimplePrompt
       title={`Edit ${props.field.key}`}
       description={() => (
         <text>{props.field.description}</text>
