@@ -23,6 +23,7 @@ import { existsSync, promises as fs, readFileSync } from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { spawn } from "node:child_process"
+import { runDeepReset } from "./deep_reset"
 
 interface CliArgs {
   instanceDictPath: string
@@ -103,6 +104,7 @@ interface InstanceDict {
   repo?: string
   repo_name?: string
   workspace?: string
+  base_commit?: string
   [key: string]: unknown
 }
 
@@ -356,6 +358,9 @@ async function main() {
     // Disable opencode's built-in plugin loaders; the bench harness doesn't need them.
     OPENCODE_PURE: "1",
   }
+
+  // Prune git history past base_commit so the agent can't reach future commits.
+  await runDeepReset(workspaceRoot, String(instance.base_commit ?? ""))
 
   const opencodeBin = detectOpencodeBin()
   const result = await runOpencode({
