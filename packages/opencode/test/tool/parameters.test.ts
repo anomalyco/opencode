@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Result, Schema } from "effect"
-import { toJsonSchema } from "../../src/util/effect-zod"
+import { toJsonSchema } from "@opencode-ai/core/effect-zod"
 
 // Each tool exports its parameters schema at module scope so this test can
 // import them without running the tool's Effect-based init. The JSON Schema

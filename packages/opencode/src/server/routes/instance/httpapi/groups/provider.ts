@@ -5,7 +5,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/provider"
@@ -15,6 +15,7 @@ export const ProviderApi = HttpApi.make("provider")
     HttpApiGroup.make("provider")
       .add(
         HttpApiEndpoint.get("list", root, {
+          query: WorkspaceRoutingQuery,
           success: described(Provider.ListResult, "List of providers"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -24,6 +25,7 @@ export const ProviderApi = HttpApi.make("provider")
           }),
         ),
         HttpApiEndpoint.get("auth", `${root}/auth`, {
+          query: WorkspaceRoutingQuery,
           success: described(ProviderAuth.Methods, "Provider auth methods"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -34,6 +36,7 @@ export const ProviderApi = HttpApi.make("provider")
         ),
         HttpApiEndpoint.post("authorize", `${root}/:providerID/oauth/authorize`, {
           params: { providerID: ProviderID },
+          query: WorkspaceRoutingQuery,
           payload: ProviderAuth.AuthorizeInput,
           success: described(Schema.UndefinedOr(ProviderAuth.Authorization), "Authorization URL and method"),
           error: HttpApiError.BadRequest,
@@ -46,6 +49,7 @@ export const ProviderApi = HttpApi.make("provider")
         ),
         HttpApiEndpoint.post("callback", `${root}/:providerID/oauth/callback`, {
           params: { providerID: ProviderID },
+          query: WorkspaceRoutingQuery,
           payload: ProviderAuth.CallbackInput,
           success: described(Schema.Boolean, "OAuth callback processed successfully"),
           error: HttpApiError.BadRequest,

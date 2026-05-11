@@ -87,9 +87,6 @@ export function Autocomplete(props: {
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
@@ -528,6 +525,8 @@ export function Autocomplete(props: {
     commands: [
       {
         name: "prompt.autocomplete.prev",
+        title: "Previous autocomplete item",
+        category: "Autocomplete",
         run() {
           setStore("input", "keyboard")
           move(-1)
@@ -535,6 +534,8 @@ export function Autocomplete(props: {
       },
       {
         name: "prompt.autocomplete.next",
+        title: "Next autocomplete item",
+        category: "Autocomplete",
         run() {
           setStore("input", "keyboard")
           move(1)
@@ -542,18 +543,24 @@ export function Autocomplete(props: {
       },
       {
         name: "prompt.autocomplete.hide",
+        title: "Hide autocomplete",
+        category: "Autocomplete",
         run() {
           hide()
         },
       },
       {
         name: "prompt.autocomplete.select",
+        title: "Select autocomplete item",
+        category: "Autocomplete",
         run() {
           select()
         },
       },
       {
         name: "prompt.autocomplete.complete",
+        title: "Complete autocomplete item",
+        category: "Autocomplete",
         run() {
           const selected = options()[store.selected]
           if (selected?.isDirectory) {
@@ -565,7 +572,13 @@ export function Autocomplete(props: {
         },
       },
     ],
-    bindings: sections.autocomplete,
+    bindings: tuiConfig.keybinds.gather("prompt.autocomplete", [
+      "prompt.autocomplete.prev",
+      "prompt.autocomplete.next",
+      "prompt.autocomplete.hide",
+      "prompt.autocomplete.select",
+      "prompt.autocomplete.complete",
+    ]),
   }))
 
   function show(mode: "@" | "/") {

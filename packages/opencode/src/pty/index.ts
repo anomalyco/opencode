@@ -10,8 +10,8 @@ import type { Proc } from "#pty"
 import * as Log from "@opencode-ai/core/util/log"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context, Schema, Types } from "effect"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, PositiveInt, withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, PositiveInt, withStatics } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "pty" })
 
