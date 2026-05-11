@@ -21,7 +21,14 @@ export function deriveSubagentSessionPermission(input: {
 }): Permission.Ruleset {
   const canTask = input.subagent.permission.some((rule) => rule.permission === "task")
   const canTodo = input.subagent.permission.some((rule) => rule.permission === "todowrite")
-  const parentAgentDenies = input.parentAgent?.permission.filter((rule) => rule.action === "deny") ?? []
+  // Only inherit edit-class denies from the parent agent (Plan Mode ceiling).
+  // Other parent denies describe what the parent itself cannot do and must not
+  // constrain the subagent's own explicit allowlist.
+  const EDIT_PERMISSIONS = ["edit", "write", "apply_patch"]
+  const parentAgentDenies =
+    input.parentAgent?.permission.filter(
+      (rule) => rule.action === "deny" && EDIT_PERMISSIONS.includes(rule.permission),
+    ) ?? []
   return [
     ...parentAgentDenies,
     ...input.parentSessionPermission.filter(
