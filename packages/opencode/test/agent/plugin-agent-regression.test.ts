@@ -1,18 +1,18 @@
 import { expect } from "bun:test"
-import { Npm } from "@opencode-ai/core/npm"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Layer } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Account } from "../../src/account/account"
 import { Agent } from "../../src/agent/agent"
-import { Auth } from "../../src/auth"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
 import { Env } from "../../src/env"
 import { Plugin } from "../../src/plugin"
-import { Skill } from "../../src/skill"
+import { AccountTest } from "../fake/account"
+import { AuthTest } from "../fake/auth"
+import { NpmTest } from "../fake/npm"
 import { ProviderTest } from "../fake/provider"
+import { SkillTest } from "../fake/skill"
 import { testEffect } from "../lib/effect"
 import { PLUGIN_AGENT } from "../fixture/agent-plugin.constants"
 
@@ -21,36 +21,19 @@ import { PLUGIN_AGENT } from "../fixture/agent-plugin.constants"
 // to verify plugin → config hook → Agent.list.
 const pluginUrl = pathToFileURL(path.join(import.meta.dir, "..", "fixture", "agent-plugin.ts")).href
 
-const emptyAccount = Layer.mock(Account.Service)({
-  active: () => Effect.succeed(Option.none()),
-  activeOrg: () => Effect.succeed(Option.none()),
-})
-
-const emptyAuth = Layer.mock(Auth.Service)({
-  all: () => Effect.succeed({}),
-})
-
-const emptySkill = Layer.mock(Skill.Service)({
-  dirs: () => Effect.succeed([]),
-})
-
-const noopNpm = Layer.mock(Npm.Service)({
-  install: () => Effect.void,
-})
-
 const provider = ProviderTest.fake()
 const configLayer = Config.layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Env.defaultLayer),
-  Layer.provide(emptyAuth),
-  Layer.provide(emptyAccount),
-  Layer.provide(noopNpm),
+  Layer.provide(AuthTest.empty),
+  Layer.provide(AccountTest.empty),
+  Layer.provide(NpmTest.noop),
 )
 const pluginLayer = Plugin.layer.pipe(Layer.provide(Bus.layer), Layer.provide(configLayer))
 const agentLayer = Agent.layer.pipe(
   Layer.provide(configLayer),
-  Layer.provide(emptyAuth),
-  Layer.provide(emptySkill),
+  Layer.provide(AuthTest.empty),
+  Layer.provide(SkillTest.empty),
   Layer.provide(provider.layer),
   Layer.provide(pluginLayer),
 )
