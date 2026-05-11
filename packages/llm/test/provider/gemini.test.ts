@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMError } from "../../src"
+import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
 import { it } from "../lib/effect"
@@ -49,12 +49,12 @@ describe("Gemini route", () => {
           ],
           toolChoice: { type: "tool", name: "lookup" },
           messages: [
-            LLM.user([
+            Message.user([
               { type: "text", text: "What is in this image?" },
               { type: "media", mediaType: "image/png", data: "AAECAw==" },
             ]),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
         }),
       )
@@ -198,32 +198,36 @@ describe("Gemini route", () => {
       expect(response.reasoning).toBe("thinking")
       expect(response.usage).toMatchObject({
         inputTokens: 5,
-        outputTokens: 2,
-        reasoningTokens: 1,
+        outputTokens: 3,
+        nonCachedInputTokens: 4,
         cacheReadInputTokens: 1,
+        reasoningTokens: 1,
         totalTokens: 7,
       })
       expect(response.events).toEqual([
-        { type: "reasoning-delta", text: "thinking" },
-        { type: "text-delta", text: "Hello" },
-        { type: "text-delta", text: "!" },
+        { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
+        { type: "text-delta", id: "text-0", text: "Hello" },
+        { type: "text-delta", id: "text-0", text: "!" },
         {
           type: "request-finish",
           reason: "stop",
-          usage: {
+          usage: new Usage({
             inputTokens: 5,
-            outputTokens: 2,
-            reasoningTokens: 1,
+            outputTokens: 3,
+            nonCachedInputTokens: 4,
             cacheReadInputTokens: 1,
+            reasoningTokens: 1,
             totalTokens: 7,
-            native: {
-              promptTokenCount: 5,
-              candidatesTokenCount: 2,
-              totalTokenCount: 7,
-              thoughtsTokenCount: 1,
-              cachedContentTokenCount: 1,
+            providerMetadata: {
+              google: {
+                promptTokenCount: 5,
+                candidatesTokenCount: 2,
+                totalTokenCount: 7,
+                thoughtsTokenCount: 1,
+                cachedContentTokenCount: 1,
+              },
             },
-          },
+          }),
         },
       ])
     }),
@@ -257,12 +261,13 @@ describe("Gemini route", () => {
         {
           type: "request-finish",
           reason: "tool-calls",
-          usage: {
+          usage: new Usage({
             inputTokens: 5,
             outputTokens: 1,
+            nonCachedInputTokens: 5,
             totalTokens: 6,
-            native: { promptTokenCount: 5, candidatesTokenCount: 1 },
-          },
+            providerMetadata: { google: { promptTokenCount: 5, candidatesTokenCount: 1 } },
+          }),
         },
       ])
     }),
@@ -348,7 +353,7 @@ describe("Gemini route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 

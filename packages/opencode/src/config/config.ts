@@ -145,7 +145,7 @@ export const Info = Schema.Struct({
   }),
   skills: Schema.optional(ConfigSkills.Info).annotate({ description: "Additional skill folder paths" }),
   reference: Schema.optional(ConfigReference.Info).annotate({
-    description: "Named git or local directory references that can be @ mentioned as Scout-backed subagents",
+    description: "Named git or local directory references that can be mentioned as @alias or @alias/path",
   }),
   watcher: Schema.optional(
     Schema.Struct({
@@ -273,10 +273,10 @@ export const Info = Schema.Struct({
       }),
       tail_turns: Schema.optional(NonNegativeInt).annotate({
         description:
-          "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
+          "Number of recent user turns, including their following assistant/tool responses, to serialize into the compaction summary (default: 2)",
       }),
       preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
-        description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
+        description: "Maximum number of tokens from recent turns to serialize into the compaction summary",
       }),
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",

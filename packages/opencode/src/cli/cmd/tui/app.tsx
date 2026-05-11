@@ -74,6 +74,17 @@ const appBindingCommands = [
   "command.palette.show",
   "session.list",
   "session.new",
+  "session.cycle_recent",
+  "session.cycle_recent_reverse",
+  "session.quick_switch.1",
+  "session.quick_switch.2",
+  "session.quick_switch.3",
+  "session.quick_switch.4",
+  "session.quick_switch.5",
+  "session.quick_switch.6",
+  "session.quick_switch.7",
+  "session.quick_switch.8",
+  "session.quick_switch.9",
   "model.list",
   "model.cycle_recent",
   "model.cycle_recent_reverse",
@@ -93,7 +104,6 @@ const appBindingCommands = [
   "theme.mode.lock",
   "help.show",
   "docs.open",
-  "app.exit",
   "app.debug",
   "app.console",
   "app.heap_snapshot",
@@ -463,6 +473,37 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           dialog.clear()
         },
       },
+      ...(Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
+        ? [
+            {
+              name: "session.cycle_recent",
+              title: "Cycle to previous recent session",
+              category: "Session",
+              hidden: true,
+              run: () => {
+                local.session.cycleRecent(1)
+              },
+            },
+            {
+              name: "session.cycle_recent_reverse",
+              title: "Cycle to next recent session",
+              category: "Session",
+              hidden: true,
+              run: () => {
+                local.session.cycleRecent(-1)
+              },
+            },
+            ...Array.from({ length: 9 }, (_, i) => ({
+              name: `session.quick_switch.${i + 1}`,
+              title: `Switch to session in quick slot ${i + 1}`,
+              category: "Session",
+              hidden: true,
+              run: () => {
+                local.session.quickSwitch(i + 1)
+              },
+            })),
+          ]
+        : []),
       {
         name: "model.list",
         title: "Switch model",
@@ -648,11 +689,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         title: "Exit the app",
         slashName: "exit",
         slashAliases: ["quit", "q"],
-        enabled: () => {
-          const current = promptRef.current
-          if (!current?.focused) return true
-          return current.current.input === ""
-        },
         run: () => exit(),
         category: "System",
       },
@@ -782,7 +818,25 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useBindings(() => ({
     enabled: command.matcher,
-    bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
+    bindings: tuiConfig.keybinds.gather(
+      "app",
+      Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
+        ? appBindingCommands
+        : appBindingCommands.filter(
+            (c) => !c.startsWith("session.cycle_recent") && !c.startsWith("session.quick_switch"),
+          ),
+    ),
+  }))
+
+  useBindings(() => ({
+    enabled: () => {
+      const ok = command.matcher.get()
+      if (!ok) return false
+      const current = promptRef.current
+      if (!current?.focused) return true
+      return current.current.input === ""
+    },
+    bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
   }))
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {
