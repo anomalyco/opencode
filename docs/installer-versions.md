@@ -15,6 +15,22 @@
 
 
 
+## [Windows] 2026.5.11.2 - 2026-05-11 15:22
+
+**主题**:Win 端补 ship 把 `feishu-bridge-imbot-agent` 安全 agent 推给 Win 用户(对齐 Mac 5.11.1)
+
+[`2026.5.11.1`](#windows-2026511---2026-05-11-815) ship 时序撞 imbot merge 之前(10:24 ship → 13:14 imbot merge → 13:53 Mac ship),导致 Win 5.11.1 不含 imbot,同号 Mac 5.11.1 含。Win 用户飞书桥接 unattended 默认全权限,**安全 regression(相对 Mac)**,本笔补齐:
+
+- **win-ship-imbot-5.11.2** ([changelog](features/win-ship-imbot-5.11.2/3-changelog.md))— Win 跨平台代码 0 改动需求(`feishu_plugin_install.rs` / `config-schema.ts` / `account-store.ts` 全部跨平台原生设计,含 Win UNC 路径处理 + Win Crypto 敏感目录),只走 ship 层补齐。前置审计(`chore/win-port-audit-mac-pack-installer` 分支已销毁)+ 三层 e2e 验证(独立 Rust binary 5 场景 / TS 16 unit / dev installer 实地装 + jsonc 注入确认)全过
+- 走 [win-ship-local-pack-switch](features/win-ship-local-pack-switch/3-changelog.md) 第二次实战:本地 `pack-installer.ps1 -Env prod` build + 手动 `gh release create --draft` 带 `.exe` 附件 + curl Gitee API 创 release + `mirror-asset-to-gitee.ps1` 传附件
+
+installer 路径:`packages/branding/installer/Output/DeskFox-2026.5.11.2-setup.exe`(59.4 MB,本地 build)
+
+---
+
+
+---
+
 ## [macOS] 2026.5.11.1 — 2026-05-11 13:49
 
 **主题**:Mac 端跟随 Win [`2026.5.11.1`](#windows-2026511---2026-05-11-815) 同期更新,**新增 `imbot` 安全 agent 收紧飞书桥接 unattended 危险工具默认权限**
