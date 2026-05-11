@@ -397,7 +397,7 @@ export function Prompt(props: PromptProps) {
       if (msg.agent && isPrimaryAgent) {
         // Keep command line --agent if specified.
         if (!args.agent) local.agent.set(msg.agent)
-        if (msg.model) {
+        if (msg.model && !args.model) {
           local.model.set(msg.model)
           local.model.variant.set(msg.model.variant)
         }
