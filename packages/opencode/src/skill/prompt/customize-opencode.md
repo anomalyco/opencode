@@ -1,7 +1,8 @@
 <!--
   Built-in skill. Name and description are registered in code at
-  packages/opencode/src/skill/index.ts (see SKILL_NAME and SKILL_DESCRIPTION).
-  The body below becomes the skill's content.
+  packages/opencode/src/skill/index.ts (see CUSTOMIZE_OPENCODE_SKILL_NAME
+  and CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION). The body below becomes the
+  skill's content.
 -->
 
 # Customizing opencode
@@ -12,8 +13,8 @@ is wrong. The shapes below cover the common surface area, but they are a
 
 ## Full schema reference
 
-The authoritative list of every config option, with exact field types, enums,
-defaults, and descriptions, lives in the published JSON Schema:
+The authoritative list of every config option — with field types, enums,
+defaults, and descriptions — lives in the published JSON Schema:
 
 **<https://opencode.ai/config.json>**
 
@@ -22,8 +23,17 @@ shape before writing config, **fetch that URL and read the schema directly**
 rather than guessing. opencode hard-fails on invalid config, so the cost of a
 wrong shape is a broken startup.
 
-Every `opencode.json` should also declare `"$schema": "https://opencode.ai/config.json"`
-so the user's editor catches mistakes as they type.
+Independently, every `opencode.json` should declare
+`"$schema": "https://opencode.ai/config.json"` so the user's editor catches
+mistakes as they type.
+
+## Applying changes
+
+Config is loaded once when opencode starts and is not hot-reloaded. After
+saving changes to `opencode.json`, an agent file, a skill, a plugin, or any
+other config-time file, **tell the user to quit and restart opencode** for
+the changes to take effect. The running session will keep using the
+already-loaded config until then.
 
 ## Where files live
 
@@ -355,13 +365,13 @@ When a user's config is broken and opencode won't start, these env vars help:
 ## When proposing edits
 
 - Validate against the schema before writing. If you are unsure of a field's
-  exact shape, or the field is not covered above, fetch
+  exact shape, or the field is not covered in this skill, fetch
   `https://opencode.ai/config.json` and read the schema rather than guessing.
 - Preserve `$schema` and any existing fields the user did not ask to change.
 - For agent, skill, and plugin definitions, prefer creating new files in the
   correct location over inlining everything in `opencode.json`.
 - If the user's existing config is malformed, point them at the env-var escape
-  hatch above so they can edit from inside opencode without breaking their
+  hatches above so they can edit from inside opencode without breaking their
   session.
-- opencode hard-fails on invalid config by design. There is no graceful
-  degradation, so get the shape right the first time.
+- After saving any config change, remind the user to quit and restart opencode
+  — running sessions keep using the already-loaded config.
