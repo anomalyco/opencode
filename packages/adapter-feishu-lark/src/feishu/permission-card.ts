@@ -8,15 +8,17 @@
 //   3. 记 Map<requestID, {chatId, cardMessageId, timeoutHandle, sessionID}>
 //   4. WSS 收到 card.action.trigger event → wss-client 调 controller.handleReply
 //   5. handleReply 调 client.permission.reply({requestID, reply}) → opencode unblocks agent
-//   6. 5min 超时无响应 → 自动 reply "reject" 解锁
+//   6. 30min 超时无响应 → 自动 reply "reject" 解锁(对齐 promptTimeoutMs 默认 30min)
 //
 // 类比 OpenClaw `tools/ask-user-question.js`,但走 opencode 标准 SDK + Bus event 而非内嵌 runtime。
 
 import type { Client } from "@larksuiteoapi/node-sdk"
 import type { OpencodeSDKClient } from "./message-pipeline"
 
-/** 默认 5 分钟超时 — 防 user 关掉飞书后 chatQueue 永久卡死 */
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
+/** 默认 30 分钟超时(对齐 promptTimeoutMs 默认 30min,2026-05-11 imbot v2 务实档调整;
+ *  v1 5min 太短 — user 在飞书慢慢点完整 ship 流程很容易撞,且对齐 prompt timeout 才不会出现
+ *  "permission card 已 auto-reject 但 prompt 还在等" 的状态不一致)*/
+const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000
 
 /** opencode permission.asked event payload(从 packages/opencode/src/permission/index.ts:Request 提子集)*/
 export interface PermissionRequest {
