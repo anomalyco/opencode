@@ -1,10 +1,12 @@
-import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { batch, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
-  subscribe: (directory: string | undefined, handler: (event: Event) => void) => Promise<() => void>
+  subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
 }
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
@@ -32,12 +34,14 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     let sdk = createSDK()
 
     const emitter = createGlobalEmitter<{
-      [key in Event["type"]]: Extract<Event, { type: key }>
+      event: GlobalEvent
     }>()
 
-    let queue: Event[] = []
+    let queue: GlobalEvent[] = []
     let timer: Timer | undefined
     let last = 0
+    const retryDelay = 1000
+    const maxRetryDelay = 30000
 
     const flush = () => {
       if (queue.length === 0) return
@@ -48,12 +52,12 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       // Batch all event emissions so all store updates result in a single render
       batch(() => {
         for (const event of events) {
-          emitter.emit(event.type, event)
+          emitter.emit("event", event)
         }
       })
     }
 
-    const handleEvent = (event: Event) => {
+    const handleEvent = (event: GlobalEvent) => {
       queue.push(event)
       const elapsed = Date.now() - last
 
@@ -72,9 +76,20 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       const ctrl = new AbortController()
       sse = ctrl
       ;(async () => {
+        let attempt = 0
         while (true) {
           if (abort.signal.aborted || ctrl.signal.aborted) break
-          const events = await sdk.event.subscribe({}, { signal: ctrl.signal })
+
+          const events = await sdk.global.event({
+            signal: ctrl.signal,
+            sseMaxRetryAttempts: 0,
+          })
+
+          if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+            // Start syncing workspaces, it's important to do this after
+            // we've started listening to events
+            await sdk.sync.start().catch(() => {})
+          }
 
           for await (const event of events.stream) {
             if (ctrl.signal.aborted) break
@@ -83,14 +98,26 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
           if (timer) clearTimeout(timer)
           if (queue.length > 0) flush()
+          attempt += 1
+          if (abort.signal.aborted || ctrl.signal.aborted) break
+
+          // Exponential backoff
+          const backoff = Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay)
+          await new Promise((resolve) => setTimeout(resolve, backoff))
         }
       })().catch(() => {})
     }
 
     onMount(async () => {
       if (props.events) {
-        const unsub = await props.events.subscribe(props.directory, handleEvent)
+        const unsub = await props.events.subscribe(handleEvent)
         onCleanup(unsub)
+
+        if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+          // Start syncing workspaces, it's important to do this after
+          // we've started listening to events
+          await sdk.sync.start().catch(() => {})
+        }
       } else {
         startSSE()
       }

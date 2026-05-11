@@ -2,35 +2,38 @@ import { afterEach, describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "../../src/filesystem"
-import { FileTime } from "../../src/file/time"
-import { LSP } from "../../src/lsp"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { Global } from "@opencode-ai/core/global"
+import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
-import { Tool } from "../../src/tool/tool"
-import { Filesystem } from "../../src/util/filesystem"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { Truncate } from "@/tool/truncate"
+import { Tool } from "@/tool/tool"
+import { Filesystem } from "@/util/filesystem"
+import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Reference } from "@/reference/reference"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
 const it = testEffect(
@@ -38,15 +41,16 @@ const it = testEffect(
     Agent.defaultLayer,
     AppFileSystem.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
-    FileTime.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
+    Reference.defaultLayer,
+    Truncate.defaultLayer,
   ),
 )
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
-  return yield* Effect.promise(() => info.init())
+  return yield* info.init()
 })
 
 const run = Effect.fn("ReadToolTest.run")(function* (
@@ -54,7 +58,7 @@ const run = Effect.fn("ReadToolTest.run")(function* (
   next: Tool.Context = ctx,
 ) {
   const tool = yield* init()
-  return yield* Effect.promise(() => tool.execute(args, next))
+  return yield* tool.execute(args, next)
 })
 
 const exec = Effect.fn("ReadToolTest.exec")(function* (
@@ -81,6 +85,49 @@ const fail = Effect.fn("ReadToolTest.fail")(function* (
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
+const experimentalScout = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Flag.OPENCODE_EXPERIMENTAL_SCOUT
+      Flag.OPENCODE_EXPERIMENTAL_SCOUT = true
+      return previous
+    }),
+    () => self,
+    (previous) =>
+      Effect.sync(() => {
+        Flag.OPENCODE_EXPERIMENTAL_SCOUT = previous
+      }),
+  )
+const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
+      process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = url
+      return previous
+    }),
+    () => self,
+    (previous) =>
+      Effect.sync(() => {
+        if (previous) process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = previous
+        else delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
+      }),
+  )
+const git = Effect.fn("ReadToolTest.git")(function* (cwd: string, args: string[]) {
+  return yield* Effect.promise(async () => {
+    const proc = Bun.spawn(["git", ...args], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ])
+    if (code !== 0) throw new Error(stderr.trim() || stdout.trim() || `git ${args.join(" ")} failed`)
+    return stdout.trim()
+  })
+})
 const put = Effect.fn("ReadToolTest.put")(function* (p: string, content: string | Buffer | Uint8Array) {
   const fs = yield* AppFileSystem.Service
   yield* fs.writeWithDirs(p, content)
@@ -95,9 +142,10 @@ const asks = () => {
     items,
     next: {
       ...ctx,
-      ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-        items.push(req)
-      },
+      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+        Effect.sync(() => {
+          items.push(req)
+        }),
     },
   }
 }
@@ -154,10 +202,23 @@ describe("tool.read external_directory permission", () => {
         yield* exec(dir, { filePath: alt }, next)
         const read = items.find((item) => item.permission === "read")
         expect(read).toBeDefined()
-        expect(read!.patterns).toEqual([full(target)])
+        expect(read!.patterns).toEqual([path.relative(dir, full(target))])
       }),
     )
   }
+
+  it.live("uses worktree-relative path for read permission so user rules match like edit/write", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "src", "secret.ts"), "shh")
+
+      const { items, next } = asks()
+      yield* exec(dir, { filePath: path.join(dir, "src", "secret.ts") }, next)
+      const read = items.find((item) => item.permission === "read")
+      expect(read).toBeDefined()
+      expect(read!.patterns).toEqual([path.join("src", "secret.ts")])
+    }),
+  )
 
   it.live("asks for directory-scoped external_directory permission when reading external directory", () =>
     Effect.gen(function* () {
@@ -198,6 +259,46 @@ describe("tool.read external_directory permission", () => {
       expect(ext).toBeUndefined()
     }),
   )
+
+  it.live("does not ask for external_directory permission when reading configured references", () =>
+    experimentalScout(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const cache = path.join(Global.Path.repos, "github.com", "opencode-read-reference", "repo")
+        yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
+        yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
+
+        const source = yield* tmpdirScoped({ git: true })
+        const remoteRoot = yield* tmpdirScoped()
+        const remoteDir = path.join(remoteRoot, "opencode-read-reference")
+        const remoteRepo = path.join(remoteDir, "repo.git")
+        yield* put(path.join(source, "notes.md"), "reference notes")
+        yield* git(source, ["add", "."])
+        yield* git(source, ["commit", "-m", "add notes"])
+        yield* fs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
+        yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
+
+        const dir = yield* tmpdirScoped({
+          git: true,
+          config: {
+            reference: {
+              docs: "opencode-read-reference/repo",
+            },
+          },
+        })
+
+        const { items, next } = asks()
+        const result = yield* githubBase(
+          `file://${remoteRoot}/`,
+          exec(dir, { filePath: path.join(cache, "notes.md") }, next),
+        )
+        const ext = items.find((item) => item.permission === "external_directory")
+
+        expect(result.output).toContain("reference notes")
+        expect(ext).toBeUndefined()
+      }),
+    ),
+  )
 })
 
 describe("tool.read env file permissions", () => {
@@ -226,17 +327,18 @@ describe("tool.read env file permissions", () => {
                 let asked = false
                 const next = {
                   ...ctx,
-                  ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-                    for (const pattern of req.patterns) {
-                      const rule = Permission.evaluate(req.permission, pattern, info.permission)
-                      if (rule.action === "ask" && req.permission === "read") {
-                        asked = true
+                  ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+                    Effect.sync(() => {
+                      for (const pattern of req.patterns) {
+                        const rule = Permission.evaluate(req.permission, pattern, info.permission)
+                        if (rule.action === "ask" && req.permission === "read") {
+                          asked = true
+                        }
+                        if (rule.action === "deny") {
+                          throw new Permission.DeniedError({ ruleset: info.permission })
+                        }
                       }
-                      if (rule.action === "deny") {
-                        throw new Permission.DeniedError({ ruleset: info.permission })
-                      }
-                    }
-                  },
+                    }),
                 }
 
                 yield* run({ filePath: path.join(dir, filename) }, next)
@@ -253,28 +355,28 @@ describe("tool.read env file permissions", () => {
 })
 
 describe("tool.read truncation", () => {
-  it.live("truncates large file by bytes and sets truncated metadata", () =>
+  it.instance("truncates large file by bytes and sets truncated metadata", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
+      const test = yield* TestInstance
       const base = yield* load(path.join(FIXTURES_DIR, "models-api.json"))
       const target = 60 * 1024
       const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
-      yield* put(path.join(dir, "large.json"), content)
+      yield* put(path.join(test.directory, "large.json"), content)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "large.json") })
+      const result = yield* run({ filePath: path.join(test.directory, "large.json") })
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Output capped at")
       expect(result.output).toContain("Use offset=")
     }),
   )
 
-  it.live("truncates by line count when limit is specified", () =>
+  it.instance("truncates by line count when limit is specified", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
+      const test = yield* TestInstance
       const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
-      yield* put(path.join(dir, "many-lines.txt"), lines)
+      yield* put(path.join(test.directory, "many-lines.txt"), lines)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "many-lines.txt"), limit: 10 })
+      const result = yield* run({ filePath: path.join(test.directory, "many-lines.txt"), limit: 10 })
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Showing lines 1-10 of 100")
       expect(result.output).toContain("Use offset=11")
@@ -284,12 +386,12 @@ describe("tool.read truncation", () => {
     }),
   )
 
-  it.live("does not truncate small file", () =>
+  it.instance("does not truncate small file", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
-      yield* put(path.join(dir, "small.txt"), "hello world")
+      const test = yield* TestInstance
+      yield* put(path.join(test.directory, "small.txt"), "hello world")
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "small.txt") })
+      const result = yield* run({ filePath: path.join(test.directory, "small.txt") })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file")
     }),
@@ -392,6 +494,19 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  it.live("detects attachment media from file contents", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01])
+      yield* put(path.join(dir, "image.bin"), jpeg)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "image.bin") })
+      expect(result.output).toBe("Image read successfully")
+      expect(result.attachments?.[0].mime).toBe("image/jpeg")
+      expect(result.attachments?.[0].url.startsWith("data:image/jpeg;base64,")).toBe(true)
+    }),
+  )
+
   it.live("large image files are properly attached without error", () =>
     Effect.gen(function* () {
       const result = yield* exec(FIXTURES_DIR, { filePath: path.join(FIXTURES_DIR, "large-image.png") })
@@ -423,6 +538,24 @@ root_type Monster;`
       expect(result.attachments).toBeUndefined()
       expect(result.output).toContain("namespace MyGame")
       expect(result.output).toContain("table Monster")
+    }),
+  )
+
+  it.live("falls through unsupported image mime types to text", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const cases = [
+        ["image.bmp", "BM text content"],
+        ["photo.tiff", "II text content"],
+        ["photo.avif", "avif text content"],
+      ] as const
+
+      for (const item of cases) {
+        yield* put(path.join(dir, item[0]), item[1])
+        const result = yield* exec(dir, { filePath: path.join(dir, item[0]) })
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain(item[1])
+      }
     }),
   )
 })

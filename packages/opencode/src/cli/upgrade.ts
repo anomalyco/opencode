@@ -1,10 +1,13 @@
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
-import { Flag } from "@/flag/flag"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Installation } from "@/installation"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
 export async function upgrade() {
-  const config = await Config.getGlobal()
+  const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
+  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
   const method = await Installation.method()
   const latest = await Installation.latest(method).catch(() => {})
   if (!latest) return
@@ -14,10 +17,9 @@ export async function upgrade() {
     return
   }
 
-  if (Installation.VERSION === latest) return
-  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
+  if (InstallationVersion === latest) return
 
-  const kind = Installation.getReleaseType(Installation.VERSION, latest)
+  const kind = Installation.getReleaseType(InstallationVersion, latest)
 
   if (config.autoupdate === "notify" || kind !== "patch") {
     await Bus.publish(Installation.Event.UpdateAvailable, { version: latest })

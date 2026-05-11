@@ -17,6 +17,9 @@ permissions:
   contents: read
   checks: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   unit:
     name: unit (${{ matrix.settings.name }})
@@ -37,6 +40,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -59,6 +67,11 @@ jobs:
         run: bun turbo test:ci
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Run HttpApi exerciser gates
+        if: runner.os == 'Linux'
+        working-directory: packages/opencode
+        run: bun run test:httpapi
 
       - name: Publish unit reports
         if: always()
@@ -102,13 +115,18 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
       - name: Read Playwright version
         id: playwright-version
         run: |
-          version=$(node -e 'console.log(require("./packages/app/package.json").devDependencies["@playwright/test"])')
+          version=$(node -e 'console.log(require("./package.json").workspaces.catalog["@playwright/test"])')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers

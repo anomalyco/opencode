@@ -11,13 +11,15 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
-import { retry } from "@opencode-ai/util/retry"
+import { getFilename } from "@opencode-ai/core/util/path"
+import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
+import { QueryClient, queryOptions } from "@tanstack/solid-query"
+import { loadMcpQuery } from "../global-sync"
 
 type GlobalStore = {
   ready: boolean
@@ -81,62 +83,51 @@ function showErrors(input: {
   })
 }
 
+export const loadGlobalConfigQuery = (sdk: OpencodeClient) =>
+  queryOptions({
+    queryKey: ["config"],
+    queryFn: () => retry(() => sdk.global.config.get().then((x) => x.data!)),
+  })
+
+export const loadProjectsQuery = (sdk: OpencodeClient) =>
+  queryOptions({
+    queryKey: ["project"],
+    queryFn: () =>
+      retry(() =>
+        sdk.project.list().then((x) => {
+          return (x.data ?? [])
+            .filter((p) => !!p?.id)
+            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+            .slice()
+            .sort((a, b) => cmp(a.id, b.id))
+        }),
+      ),
+  })
+
 export async function bootstrapGlobal(input: {
   globalSDK: OpencodeClient
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
   formatMoreCount: (count: number) => string
   setGlobalStore: SetStoreFunction<GlobalStore>
+  queryClient: QueryClient
 }) {
-  const fast = [
-    () =>
-      retry(() =>
-        input.globalSDK.global.config.get().then((x) => {
-          input.setGlobalStore("config", x.data!)
-        }),
-      ),
-    () =>
-      retry(() =>
-        input.globalSDK.provider.list().then((x) => {
-          input.setGlobalStore("provider", normalizeProviderList(x.data!))
-        }),
-      ),
-  ]
-
   const slow = [
+    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.globalSDK)),
+    () => input.queryClient.fetchQuery(loadProvidersQuery(null, input.globalSDK)),
+    () => input.queryClient.fetchQuery(loadPathQuery(null, input.globalSDK)),
     () =>
-      retry(() =>
-        input.globalSDK.path.get().then((x) => {
-          input.setGlobalStore("path", x.data!)
-        }),
-      ),
-    () =>
-      retry(() =>
-        input.globalSDK.project.list().then((x) => {
-          const projects = (x.data ?? [])
-            .filter((p) => !!p?.id)
-            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
-            .slice()
-            .sort((a, b) => cmp(a.id, b.id))
-          input.setGlobalStore("project", projects)
-        }),
-      ),
+      input.queryClient
+        .fetchQuery(loadProjectsQuery(input.globalSDK))
+        .then((data) => input.setGlobalStore("project", data)),
   ]
-
-  showErrors({
-    errors: errors(await runAll(fast)),
-    title: input.requestFailedTitle,
-    translate: input.translate,
-    formatMoreCount: input.formatMoreCount,
-  })
-  await waitForPaint()
-  showErrors({
-    errors: errors(await runAll(slow)),
-    title: input.requestFailedTitle,
-    translate: input.translate,
-    formatMoreCount: input.formatMoreCount,
-  })
-  input.setGlobalStore("ready", true)
+  await runAll(slow)
+  // showErrors({
+  //   errors: errors(),
+  //   title: input.requestFailedTitle,
+  //   translate: input.translate,
+  //   formatMoreCount: input.formatMoreCount,
+  // })
 }
 
 function groupBySession<T extends { id: string; sessionID: string }>(input: T[]) {
@@ -187,6 +178,24 @@ function warmSessions(input: {
   ).then(() => undefined)
 }
 
+export const loadProvidersQuery = (directory: string | null, sdk: OpencodeClient) =>
+  queryOptions({
+    queryKey: [directory, "providers"],
+    queryFn: () => retry(() => sdk.provider.list().then((x) => normalizeProviderList(x.data!))),
+  })
+
+export const loadAgentsQuery = (directory: string | null, sdk: OpencodeClient) =>
+  queryOptions({
+    queryKey: [directory, "agents"],
+    queryFn: () => retry(() => sdk.app.agents().then((x) => normalizeAgentList(x.data))),
+  })
+
+export const loadPathQuery = (directory: string | null, sdk: OpencodeClient) =>
+  queryOptions<Path>({
+    queryKey: [directory, "path"],
+    queryFn: () => retry(() => sdk.path.get().then((x) => x.data!)),
+  })
+
 export async function bootstrapDirectory(input: {
   directory: string
   sdk: OpencodeClient
@@ -201,160 +210,124 @@ export async function bootstrapDirectory(input: {
     project: Project[]
     provider: ProviderListResponse
   }
+  queryClient: QueryClient
 }) {
   const loading = input.store.status !== "complete"
   const seededProject = projectID(input.directory, input.global.project)
   const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
   if (seededProject) input.setStore("project", seededProject)
   if (seededPath) input.setStore("path", seededPath)
-  if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
-    input.setStore("provider", input.global.provider)
-  }
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
-    input.setStore("config", input.global.config)
+    input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
-  if (loading || input.store.provider.all.length === 0) {
-    input.setStore("provider_ready", false)
-  }
-  input.setStore("mcp_ready", false)
-  input.setStore("mcp", {})
-  input.setStore("lsp_ready", false)
-  input.setStore("lsp", [])
   if (loading) input.setStore("status", "partial")
-
-  const fast = [
-    () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))),
-    () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
-    () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
-  ]
-
-  const slow = [
-    () =>
-      seededProject
-        ? Promise.resolve()
-        : retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id)),
-    () =>
-      seededPath
-        ? Promise.resolve()
-        : retry(() =>
-            input.sdk.path.get().then((x) => {
-              input.setStore("path", x.data!)
-              const next = projectID(x.data?.directory ?? input.directory, input.global.project)
-              if (next) input.setStore("project", next)
-            }),
-          ),
-    () =>
-      retry(() =>
-        input.sdk.vcs.get().then((x) => {
-          const next = x.data ?? input.store.vcs
-          input.setStore("vcs", next)
-          if (next) input.vcsCache.setStore("value", next)
-        }),
-      ),
-    () => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? []))),
-    () =>
-      retry(() =>
-        input.sdk.permission.list().then((x) => {
-          const ids = (x.data ?? []).map((perm) => perm?.sessionID).filter((id): id is string => !!id)
-          const grouped = groupBySession(
-            (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
-          )
-          return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
-            batch(() => {
-              for (const sessionID of Object.keys(input.store.permission)) {
-                if (grouped[sessionID]) continue
-                input.setStore("permission", sessionID, [])
-              }
-              for (const [sessionID, permissions] of Object.entries(grouped)) {
-                input.setStore(
-                  "permission",
-                  sessionID,
-                  reconcile(
-                    permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
-                    { key: "id" },
-                  ),
-                )
-              }
-            }),
-          )
-        }),
-      ),
-    () =>
-      retry(() =>
-        input.sdk.question.list().then((x) => {
-          const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
-          const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
-          return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
-            batch(() => {
-              for (const sessionID of Object.keys(input.store.question)) {
-                if (grouped[sessionID]) continue
-                input.setStore("question", sessionID, [])
-              }
-              for (const [sessionID, questions] of Object.entries(grouped)) {
-                input.setStore(
-                  "question",
-                  sessionID,
-                  reconcile(
-                    questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
-                    { key: "id" },
-                  ),
-                )
-              }
-            }),
-          )
-        }),
-      ),
-    () => Promise.resolve(input.loadSessions(input.directory)),
-    () =>
-      retry(() =>
-        input.sdk.mcp.status().then((x) => {
-          input.setStore("mcp", x.data!)
-          input.setStore("mcp_ready", true)
-        }),
-      ),
-  ]
-
-  const errs = errors(await runAll(fast))
-  if (errs.length > 0) {
-    console.error("Failed to bootstrap instance", errs[0])
-    const project = getFilename(input.directory)
-    showToast({
-      variant: "error",
-      title: input.translate("toast.project.reloadFailed.title", { project }),
-      description: formatServerError(errs[0], input.translate),
-    })
-  }
-
-  await waitForPaint()
-  const slowErrs = errors(await runAll(slow))
-  if (slowErrs.length > 0) {
-    console.error("Failed to finish bootstrap instance", slowErrs[0])
-    const project = getFilename(input.directory)
-    showToast({
-      variant: "error",
-      title: input.translate("toast.project.reloadFailed.title", { project }),
-      description: formatServerError(slowErrs[0], input.translate),
-    })
-  }
-
-  if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
 
   const rev = (providerRev.get(input.directory) ?? 0) + 1
   providerRev.set(input.directory, rev)
-  void retry(() => input.sdk.provider.list())
-    .then((x) => {
-      if (providerRev.get(input.directory) !== rev) return
-      input.setStore("provider", normalizeProviderList(x.data!))
-      input.setStore("provider_ready", true)
-    })
-    .catch((err) => {
-      if (providerRev.get(input.directory) !== rev) return
-      console.error("Failed to refresh provider list", err)
+  ;(async () => {
+    const slow = [
+      () => Promise.resolve(input.loadSessions(input.directory)),
+      () =>
+        input.queryClient
+          .ensureQueryData(loadAgentsQuery(input.directory, input.sdk))
+          .then((data) => input.setStore("agent", data)),
+      () =>
+        retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
+      () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
+      !seededProject &&
+        (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
+      !seededPath &&
+        (() =>
+          input.queryClient.ensureQueryData(loadPathQuery(input.directory, input.sdk)).then((data) => {
+            const next = projectID(data.directory ?? input.directory, input.global.project)
+            if (next) input.setStore("project", next)
+          })),
+      () =>
+        retry(() =>
+          input.sdk.vcs.get().then((x) => {
+            const next = x.data ?? input.store.vcs
+            input.setStore("vcs", next)
+            if (next) input.vcsCache.setStore("value", next)
+          }),
+        ),
+      () => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? []))),
+      () =>
+        retry(() =>
+          input.sdk.permission.list().then((x) => {
+            const ids = (x.data ?? []).map((perm) => perm?.sessionID).filter((id): id is string => !!id)
+            const grouped = groupBySession(
+              (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
+            )
+            return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
+              batch(() => {
+                for (const sessionID of Object.keys(input.store.permission)) {
+                  if (grouped[sessionID]) continue
+                  input.setStore("permission", sessionID, [])
+                }
+                for (const [sessionID, permissions] of Object.entries(grouped)) {
+                  input.setStore(
+                    "permission",
+                    sessionID,
+                    reconcile(
+                      permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
+                      { key: "id" },
+                    ),
+                  )
+                }
+              }),
+            )
+          }),
+        ),
+      () =>
+        retry(() =>
+          input.sdk.question.list().then((x) => {
+            const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
+            const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
+            return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
+              batch(() => {
+                for (const sessionID of Object.keys(input.store.question)) {
+                  if (grouped[sessionID]) continue
+                  input.setStore("question", sessionID, [])
+                }
+                for (const [sessionID, questions] of Object.entries(grouped)) {
+                  input.setStore(
+                    "question",
+                    sessionID,
+                    reconcile(
+                      questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
+                      { key: "id" },
+                    ),
+                  )
+                }
+              }),
+            )
+          }),
+        ),
+      () => Promise.resolve(input.loadSessions(input.directory)),
+      () => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk)),
+      () =>
+        input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
+          const project = getFilename(input.directory)
+          showToast({
+            variant: "error",
+            title: input.translate("toast.project.reloadFailed.title", { project }),
+            description: formatServerError(err, input.translate),
+          })
+        }),
+    ].filter(Boolean) as (() => Promise<any>)[]
+
+    await waitForPaint()
+    const slowErrs = errors(await runAll(slow))
+    if (slowErrs.length > 0) {
+      console.error("Failed to finish bootstrap instance", slowErrs[0])
       const project = getFilename(input.directory)
       showToast({
         variant: "error",
         title: input.translate("toast.project.reloadFailed.title", { project }),
-        description: formatServerError(err, input.translate),
+        description: formatServerError(slowErrs[0], input.translate),
       })
-    })
+    }
+
+    if (loading && slowErrs.length === 0) input.setStore("status", "complete")
+  })()
 }

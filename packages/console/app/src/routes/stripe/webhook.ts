@@ -9,6 +9,7 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Resource } from "@opencode-ai/console-resource"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { BlackData } from "@opencode-ai/console-core/black.js"
+import { User } from "@opencode-ai/console-core/user.js"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(
@@ -109,6 +110,8 @@ export async function POST(input: APIEvent) {
       if (type === "lite") {
         const workspaceID = body.data.object.metadata?.workspaceID
         const userID = body.data.object.metadata?.userID
+        const userEmail = body.data.object.metadata?.userEmail
+        const coupon = body.data.object.metadata?.coupon
         const customerID = body.data.object.customer as string
         const invoiceID = body.data.object.latest_invoice as string
         const subscriptionID = body.data.object.id as string
@@ -156,6 +159,18 @@ export async function POST(input: APIEvent) {
               id: Identifier.create("lite"),
               userID: userID,
             })
+
+            if (userEmail) {
+              if (coupon === LiteData.firstMonth100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
+              } else if (coupon === LiteData.threeMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO3MONTHS100")
+              } else if (coupon === LiteData.sixMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO6MONTHS100")
+              } else if (coupon === LiteData.twelveMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
+              }
+            }
           })
         })
       }

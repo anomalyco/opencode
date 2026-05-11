@@ -48,7 +48,7 @@ export namespace Log {
   function use() {
     try {
       return ctx.use()
-    } catch (e) {
+    } catch {
       return { tags: {} }
     }
   }

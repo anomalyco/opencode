@@ -45,6 +45,7 @@ const getModelsInfo = query(async (workspaceID: string) => {
       all: Object.entries(ZenData.list("full").models)
         .filter(([id, _model]) => !["claude-3-5-haiku"].includes(id))
         .filter(([id, _model]) => !id.startsWith("alpha-"))
+        .filter(([id, _model]) => !id.endsWith(":global"))
         .sort(([idA, modelA], [idB, modelB]) => {
           const priority = ["big-pickle", "minimax", "grok", "claude", "gpt", "gemini"]
           const getPriority = (id: string) => {
@@ -67,11 +68,11 @@ const getModelsInfo = query(async (workspaceID: string) => {
 
 const updateModel = action(async (form: FormData) => {
   "use server"
-  const model = form.get("model")?.toString()
+  const model = form.get("model") as string | null
   if (!model) return { error: formError.modelRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
-  const enabled = form.get("enabled")?.toString() === "true"
+  const enabled = (form.get("enabled") as string | null) === "true"
   return json(
     withActor(async () => {
       if (enabled) {
@@ -163,7 +164,7 @@ export function ModelSection() {
                           <form action={updateModel} method="post">
                             <input type="hidden" name="model" value={id} />
                             <input type="hidden" name="workspaceID" value={params.id} />
-                            <input type="hidden" name="enabled" value={isEnabled().toString()} />
+                            <input type="hidden" name="enabled" value={String(isEnabled())} />
                             <label data-slot="model-toggle-label">
                               <input
                                 type="checkbox"

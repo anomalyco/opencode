@@ -1,7 +1,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { RGBA, type CliRenderer } from "@opentui/core"
-import { createPluginKeybind } from "../../src/cli/cmd/tui/context/plugin-keybinds"
 import type { HostPluginApi } from "../../src/cli/cmd/tui/plugin/slots"
+import { createTuiResolvedConfig } from "./tui-runtime"
 
 type Count = {
   event_add: number
@@ -84,8 +84,8 @@ type Opts = {
   client?: HostPluginApi["client"] | (() => HostPluginApi["client"])
   renderer?: HostPluginApi["renderer"]
   count?: Count
-  keybind?: Partial<HostPluginApi["keybind"]>
-  tuiConfig?: HostPluginApi["tuiConfig"]
+  keymap?: HostPluginApi["keymap"]
+  tuiConfig?: Partial<HostPluginApi["tuiConfig"]>
   app?: Partial<HostPluginApi["app"]>
   state?: {
     ready?: HostPluginApi["state"]["ready"]
@@ -93,7 +93,6 @@ type Opts = {
     provider?: HostPluginApi["state"]["provider"]
     path?: HostPluginApi["state"]["path"]
     vcs?: HostPluginApi["state"]["vcs"]
-    workspace?: Partial<HostPluginApi["state"]["workspace"]>
     session?: Partial<HostPluginApi["state"]["session"]>
     part?: HostPluginApi["state"]["part"]
     lsp?: HostPluginApi["state"]["lsp"]
@@ -107,6 +106,13 @@ type Opts = {
     mode?: HostPluginApi["theme"]["mode"]
     ready?: boolean
     current?: HostPluginApi["theme"]["current"]
+  }
+}
+
+function tuiConfig(input?: Partial<HostPluginApi["tuiConfig"]>): HostPluginApi["tuiConfig"] {
+  return {
+    ...createTuiResolvedConfig(),
+    ...input,
   }
 }
 
@@ -129,10 +135,6 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
   let size: "medium" | "large" | "xlarge" = "medium"
   const has = opts.theme?.has ?? (() => false)
   let selected = opts.theme?.selected ?? "opencode"
-  const key = {
-    match: opts.keybind?.match ?? (() => false),
-    print: opts.keybind?.print ?? ((name: string) => name),
-  }
   const set =
     opts.theme?.set ??
     ((name: string) => {
@@ -146,6 +148,26 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       return this
     },
   }
+  const keymap =
+    opts.keymap ??
+    ({
+      acquireResource(_key: symbol, setup: () => () => void) {
+        const dispose = setup()
+        return () => {
+          dispose()
+        }
+      },
+      registerLayer() {
+        if (count) count.command_add += 1
+        return () => {
+          if (!count) return
+          count.command_drop += 1
+        }
+      },
+      runCommand() {
+        return { ok: true } as const
+      },
+    } as unknown as HostPluginApi["keymap"])
 
   function kvGet(name: string): unknown
   function kvGet<Value>(name: string, fallback: Value): Value
@@ -160,6 +182,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       get version() {
         return opts.app?.version ?? "0.0.0-test"
       },
+    },
+    keys: {
+      formatSequence: () => "",
+      formatBindings: () => undefined,
     },
     get client() {
       return client()
@@ -193,17 +219,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return () => {}
       },
     },
-    command: {
-      register: () => {
-        if (count) count.command_add += 1
-        return () => {
-          if (!count) return
-          count.command_drop += 1
-        }
-      },
-      trigger: () => {},
-      show: () => {},
-    },
+    keymap,
     route: {
       register: () => {
         if (count) count.route_add += 1
@@ -248,15 +264,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         },
       },
     },
-    keybind: {
-      ...key,
-      create:
-        opts.keybind?.create ??
-        ((defaults, over) => {
-          return createPluginKeybind(key, defaults, over)
-        }),
-    },
-    tuiConfig: opts.tuiConfig ?? {},
+    tuiConfig: tuiConfig(opts.tuiConfig),
     kv: {
       get: kvGet,
       set(name, value) {
@@ -277,14 +285,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return opts.state?.provider ?? []
       },
       get path() {
-        return opts.state?.path ?? { state: "", config: "", worktree: "", directory: "" }
+        return opts.state?.path ?? { home: "", state: "", config: "", worktree: "", directory: "" }
       },
       get vcs() {
         return opts.state?.vcs
-      },
-      workspace: {
-        list: opts.state?.workspace?.list ?? (() => []),
-        get: opts.state?.workspace?.get ?? (() => undefined),
       },
       session: {
         count: opts.state?.session?.count ?? (() => 0),

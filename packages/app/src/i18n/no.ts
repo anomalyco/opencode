@@ -230,7 +230,7 @@ export const dict = {
   "common.default": "Standard",
   "common.attachment": "vedlegg",
 
-  "prompt.placeholder.shell": "Skriv inn shell-kommando...",
+  "prompt.placeholder.shell": "Skriv inn shell-kommando... {{example}}",
   "prompt.placeholder.normal": 'Spør om hva som helst... "{{example}}"',
   "prompt.placeholder.simple": "Spør om hva som helst...",
   "prompt.placeholder.summarizeComments": "Oppsummer kommentarer…",
@@ -450,6 +450,8 @@ export const dict = {
   "error.page.description": "Det oppstod en feil under lasting av applikasjonen.",
   "error.page.details.label": "Feildetaljer",
   "error.page.action.restart": "Start på nytt",
+  "error.page.action.report": "Rapporter feil",
+  "error.page.action.reported": "Feil rapportert",
   "error.page.action.checking": "Sjekker...",
   "error.page.action.checkUpdates": "Se etter oppdateringer",
   "error.page.action.updateTo": "Oppdater til {{version}}",
@@ -640,7 +642,9 @@ export const dict = {
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.theme.description": "Tilpass hvordan OpenCode er tematisert.",
   "settings.general.row.font.title": "Kodefont",
-  "settings.general.row.font.description": "Tilpass skrifttypen som brukes i kodeblokker og terminaler",
+  "settings.general.row.font.description": "Tilpass skrifttypen som brukes i kodeblokker",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI-skrift",
   "settings.general.row.uiFont.description": "Tilpass skrifttypen som brukes i hele grensesnittet",
   "settings.general.row.followup.title": "Oppfølgingsadferd",
@@ -654,6 +658,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Utvid edit-verktøydeler",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-verktøydeler utvidet som standard i tidslinjen",
+  "settings.general.row.showSessionProgressBar.title": "Vis fremdriftslinje for sesjonen",
+  "settings.general.row.showSessionProgressBar.description":
+    "Vis den animerte fremdriftslinjen øverst i sesjonen når agenten jobber",
   "settings.general.row.wayland.title": "Bruk innebygd Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Krever omstart.",
   "settings.general.row.wayland.tooltip":
@@ -802,8 +809,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Hent innhold fra en URL",
   "settings.permissions.tool.websearch.title": "Websøk",
   "settings.permissions.tool.websearch.description": "Søk på nettet",
-  "settings.permissions.tool.codesearch.title": "Kodesøk",
-  "settings.permissions.tool.codesearch.description": "Søk etter kode på nettet",
   "settings.permissions.tool.external_directory.title": "Ekstern mappe",
   "settings.permissions.tool.external_directory.description": "Få tilgang til filer utenfor prosjektmappen",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",

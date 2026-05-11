@@ -1,18 +1,30 @@
 import { describe, expect, test } from "bun:test"
-import { Project } from "../../src/project/project"
-import { Database, eq } from "../../src/storage/db"
+import { Project } from "@/project/project"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { SessionTable } from "../../src/session/session.sql"
 import { ProjectTable } from "../../src/project/project.sql"
 import { ProjectID } from "../../src/project/schema"
 import { SessionID } from "../../src/session/schema"
-import { Log } from "../../src/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { $ } from "bun"
 import { tmpdir } from "../fixture/fixture"
+import { Effect } from "effect"
 
 Log.init({ print: false })
 
-function uid() {
-  return SessionID.make(crypto.randomUUID())
+function run<A>(fn: (svc: Project.Interface) => Effect.Effect<A>) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const svc = yield* Project.Service
+      return yield* fn(svc)
+    }).pipe(Effect.provide(Project.defaultLayer)),
+  )
+}
+
+function legacySessionID() {
+  // Global-session migration covers persisted IDs from before prefixed session IDs.
+  return crypto.randomUUID() as SessionID
 }
 
 function seed(opts: { id: SessionID; dir: string; project: ProjectID }) {
@@ -58,17 +70,17 @@ describe("migrateFromGlobal", () => {
     await $`git config user.name "Test"`.cwd(tmp.path).quiet()
     await $`git config user.email "test@opencode.test"`.cwd(tmp.path).quiet()
     await $`git config commit.gpgsign false`.cwd(tmp.path).quiet()
-    const { project: pre } = await Project.fromDirectory(tmp.path)
+    const { project: pre } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(pre.id).toBe(ProjectID.global)
 
     // 2. Seed a session under "global" with matching directory
-    const id = uid()
+    const id = legacySessionID()
     seed({ id, dir: tmp.path, project: ProjectID.global })
 
     // 3. Make a commit so the project gets a real ID
     await $`git commit --allow-empty -m "root"`.cwd(tmp.path).quiet()
 
-    const { project: real } = await Project.fromDirectory(tmp.path)
+    const { project: real } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(real.id).not.toBe(ProjectID.global)
 
     // 4. The session should have been migrated to the real project ID
@@ -80,7 +92,7 @@ describe("migrateFromGlobal", () => {
   test("migrates global sessions even when project row already exists", async () => {
     // 1. Create a repo with a commit — real project ID created immediately
     await using tmp = await tmpdir({ git: true })
-    const { project } = await Project.fromDirectory(tmp.path)
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(project.id).not.toBe(ProjectID.global)
 
     // 2. Ensure "global" project row exists (as it would from a prior no-git session)
@@ -89,12 +101,12 @@ describe("migrateFromGlobal", () => {
     // 3. Seed a session under "global" with matching directory.
     //    This simulates a session created before git init that wasn't
     //    present when the real project row was first created.
-    const id = uid()
+    const id = legacySessionID()
     seed({ id, dir: tmp.path, project: ProjectID.global })
 
     // 4. Call fromDirectory again — project row already exists,
     //    so the current code skips migration entirely. This is the bug.
-    await Project.fromDirectory(tmp.path)
+    await run((svc) => svc.fromDirectory(tmp.path))
 
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     expect(row).toBeDefined()
@@ -103,17 +115,17 @@ describe("migrateFromGlobal", () => {
 
   test("does not claim sessions with empty directory", async () => {
     await using tmp = await tmpdir({ git: true })
-    const { project } = await Project.fromDirectory(tmp.path)
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(project.id).not.toBe(ProjectID.global)
 
     ensureGlobal()
 
     // Legacy sessions may lack a directory value.
     // Without a matching origin directory, they should remain global.
-    const id = uid()
+    const id = legacySessionID()
     seed({ id, dir: "", project: ProjectID.global })
 
-    await Project.fromDirectory(tmp.path)
+    await run((svc) => svc.fromDirectory(tmp.path))
 
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     expect(row).toBeDefined()
@@ -122,16 +134,16 @@ describe("migrateFromGlobal", () => {
 
   test("does not steal sessions from unrelated directories", async () => {
     await using tmp = await tmpdir({ git: true })
-    const { project } = await Project.fromDirectory(tmp.path)
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path))
     expect(project.id).not.toBe(ProjectID.global)
 
     ensureGlobal()
 
     // Seed a session under "global" but for a DIFFERENT directory
-    const id = uid()
+    const id = legacySessionID()
     seed({ id, dir: "/some/other/dir", project: ProjectID.global })
 
-    await Project.fromDirectory(tmp.path)
+    await run((svc) => svc.fromDirectory(tmp.path))
 
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     expect(row).toBeDefined()
