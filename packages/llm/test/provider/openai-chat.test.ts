@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError } from "../../src"
+import { LLM, LLMError, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
@@ -230,20 +230,23 @@ describe("OpenAI Chat route", () => {
         {
           type: "request-finish",
           reason: "stop",
-          usage: {
+          usage: new Usage({
             inputTokens: 5,
             outputTokens: 2,
-            reasoningTokens: 0,
+            nonCachedInputTokens: 4,
             cacheReadInputTokens: 1,
+            reasoningTokens: 0,
             totalTokens: 7,
-            native: {
-              prompt_tokens: 5,
-              completion_tokens: 2,
-              total_tokens: 7,
-              prompt_tokens_details: { cached_tokens: 1 },
-              completion_tokens_details: { reasoning_tokens: 0 },
+            providerMetadata: {
+              openai: {
+                prompt_tokens: 5,
+                completion_tokens: 2,
+                total_tokens: 7,
+                prompt_tokens_details: { cached_tokens: 1 },
+                completion_tokens_details: { reasoning_tokens: 0 },
+              },
             },
-          },
+          }),
         },
       ])
     }),

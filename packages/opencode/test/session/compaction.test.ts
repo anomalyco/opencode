@@ -27,6 +27,7 @@ import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestConfig } from "../fixture/config"
+import { SyncEvent } from "@/sync"
 
 void Log.init({ print: false })
 
@@ -223,6 +224,7 @@ const deps = Layer.mergeAll(
   Plugin.defaultLayer,
   Bus.layer,
   Config.defaultLayer,
+  SyncEvent.defaultLayer,
 )
 
 const env = Layer.mergeAll(
@@ -269,6 +271,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     Layer.provide(status),
     Layer.provide(bus),
     Layer.provide(options?.config ?? Config.defaultLayer),
+    Layer.provide(SyncEvent.defaultLayer),
   )
 }
 

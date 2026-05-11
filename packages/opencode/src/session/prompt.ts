@@ -43,7 +43,6 @@ import { Shell } from "@/shell/shell"
 import { ShellID } from "@/tool/shell/id"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Truncate } from "@/tool/truncate"
-import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
@@ -54,7 +53,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
-import { EventV2 } from "@/v2/event"
+import { SyncEvent } from "@/sync"
 import { SessionEvent } from "@/v2/session-event"
 import { Modelv2 } from "@/v2/model"
 import { AgentAttachment, FileAttachment, Source } from "@/v2/session-prompt"
@@ -81,10 +80,10 @@ const elog = EffectLogger.create({ service: "session.prompt" })
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error>
+  readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
   readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
-  readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts, Image.Error>
+  readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -109,7 +108,6 @@ export const layer = Layer.effect(
     const lsp = yield* LSP.Service
     const registry = yield* ToolRegistry.Service
     const truncate = yield* Truncate.Service
-    const image = yield* Image.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const scope = yield* Scope.Scope
     const instruction = yield* Instruction.Service
@@ -118,6 +116,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const sync = yield* SyncEvent.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
     })
@@ -125,7 +124,7 @@ export const layer = Layer.effect(
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
-        prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
+        prompt: (input: PromptInput) => prompt(input),
       } satisfies TaskPromptOps
     })
 
@@ -809,12 +808,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               },
             }
             yield* sessions.updatePart(part)
-            EventV2.run(SessionEvent.Shell.Started.Sync, {
-              sessionID: input.sessionID,
-              timestamp: DateTime.makeUnsafe(started),
-              callID,
-              command: input.command,
-            })
+            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+              yield* sync.run(SessionEvent.Shell.Started.Sync, {
+                sessionID: input.sessionID,
+                timestamp: DateTime.makeUnsafe(started),
+                callID,
+                command: input.command,
+              })
+            }
             return { msg, part, cwd: ctx.directory }
           }).pipe(Effect.ensuring(markReady))
 
@@ -830,12 +831,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
               }
               const completed = Date.now()
-              EventV2.run(SessionEvent.Shell.Ended.Sync, {
-                sessionID: input.sessionID,
-                timestamp: DateTime.makeUnsafe(completed),
-                callID: part.callID,
-                output,
-              })
+              if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+                yield* sync.run(SessionEvent.Shell.Ended.Sync, {
+                  sessionID: input.sessionID,
+                  timestamp: DateTime.makeUnsafe(completed),
+                  callID: part.callID,
+                  output,
+                })
+              }
               if (!msg.time.completed) {
                 msg.time.completed = completed
                 yield* sessions.updateMessage(msg)
@@ -975,34 +978,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
 
       if (current?.agent !== info.agent) {
-        EventV2.run(
-          SessionEvent.AgentSwitched.Sync,
-          {
-            sessionID: input.sessionID,
-            timestamp: DateTime.makeUnsafe(info.time.created),
-            agent: info.agent,
-          },
-          { bypassExperimentalEventSystem: true },
-        )
+        yield* sync.run(SessionEvent.AgentSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          agent: info.agent,
+        })
       }
       if (
         current?.model?.providerID !== info.model.providerID ||
         current.model.id !== info.model.modelID ||
         (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant
       ) {
-        EventV2.run(
-          SessionEvent.ModelSwitched.Sync,
-          {
-            sessionID: input.sessionID,
-            timestamp: DateTime.makeUnsafe(info.time.created),
-            model: {
-              id: Modelv2.ID.make(info.model.modelID),
-              providerID: Modelv2.ProviderID.make(info.model.providerID),
-              variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
-            },
+        yield* sync.run(SessionEvent.ModelSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          model: {
+            id: Modelv2.ID.make(info.model.modelID),
+            providerID: Modelv2.ProviderID.make(info.model.providerID),
+            variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
           },
-          { bypassExperimentalEventSystem: true },
-        )
+        })
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
@@ -1295,9 +1290,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         { message: info, parts: resolvedParts },
       )
 
-      const parts = yield* Effect.forEach(resolvedParts, (part) =>
-        part.type === "file" && part.mime.startsWith("image/") ? image.normalize(part) : Effect.succeed(part),
-      )
+      const parts = resolvedParts
 
       const parsed = MessageV2.Info.zod.safeParse(info)
       if (!parsed.success) {
@@ -1371,47 +1364,51 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      EventV2.run(SessionEvent.Prompted.Sync, {
-        sessionID: input.sessionID,
-        timestamp: DateTime.makeUnsafe(info.time.created),
-        prompt: {
-          text: nextPrompt.text.join("\n"),
-          files: nextPrompt.files,
-          agents: nextPrompt.agents,
-        },
-      })
-      for (const text of nextPrompt.synthetic) {
-        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        EventV2.run(SessionEvent.Synthetic.Sync, {
+      if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+        yield* sync.run(SessionEvent.Prompted.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
-          text,
+          prompt: {
+            text: nextPrompt.text.join("\n"),
+            files: nextPrompt.files,
+            agents: nextPrompt.agents,
+          },
         })
+      }
+      for (const text of nextPrompt.synthetic) {
+        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+        if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+          yield* sync.run(SessionEvent.Synthetic.Sync, {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            text,
+          })
+        }
       }
 
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error> = Effect.fn(
-      "SessionPrompt.prompt",
-    )(function* (input: PromptInput) {
-      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      yield* revert.cleanup(session)
-      const message = yield* createUserMessage(input)
-      yield* sessions.touch(input.sessionID)
+    const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
+      function* (input: PromptInput) {
+        const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+        yield* revert.cleanup(session)
+        const message = yield* createUserMessage(input)
+        yield* sessions.touch(input.sessionID)
 
-      const permissions: Permission.Ruleset = []
-      for (const [t, enabled] of Object.entries(input.tools ?? {})) {
-        permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
-      }
-      if (permissions.length > 0) {
-        session.permission = permissions
-        yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
-      }
+        const permissions: Permission.Ruleset = []
+        for (const [t, enabled] of Object.entries(input.tools ?? {})) {
+          permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
+        }
+        if (permissions.length > 0) {
+          session.permission = permissions
+          yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
+        }
 
-      if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
-    })
+        if (input.noReply === true) return message
+        return yield* loop({ sessionID: input.sessionID })
+      },
+    )
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
@@ -1812,7 +1809,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
-    Layer.provide(Image.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
         Agent.defaultLayer,
@@ -1820,6 +1816,7 @@ export const defaultLayer = Layer.suspend(() =>
         LLM.defaultLayer,
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
+        SyncEvent.defaultLayer,
       ),
     ),
   ),

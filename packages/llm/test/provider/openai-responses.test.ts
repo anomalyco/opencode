@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError } from "../../src"
+import { LLM, LLMError, Usage } from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
@@ -342,20 +342,23 @@ describe("OpenAI Responses route", () => {
           type: "request-finish",
           reason: "stop",
           providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
-          usage: {
+          usage: new Usage({
             inputTokens: 5,
             outputTokens: 2,
-            reasoningTokens: 0,
+            nonCachedInputTokens: 4,
             cacheReadInputTokens: 1,
+            reasoningTokens: 0,
             totalTokens: 7,
-            native: {
-              input_tokens: 5,
-              output_tokens: 2,
-              total_tokens: 7,
-              input_tokens_details: { cached_tokens: 1 },
-              output_tokens_details: { reasoning_tokens: 0 },
+            providerMetadata: {
+              openai: {
+                input_tokens: 5,
+                output_tokens: 2,
+                total_tokens: 7,
+                input_tokens_details: { cached_tokens: 1 },
+                output_tokens_details: { reasoning_tokens: 0 },
+              },
             },
-          },
+          }),
         },
       ])
     }),
@@ -411,7 +414,13 @@ describe("OpenAI Responses route", () => {
         {
           type: "request-finish",
           reason: "tool-calls",
-          usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6, native: { input_tokens: 5, output_tokens: 1 } },
+          usage: new Usage({
+            inputTokens: 5,
+            outputTokens: 1,
+            nonCachedInputTokens: 5,
+            totalTokens: 6,
+            providerMetadata: { openai: { input_tokens: 5, output_tokens: 1 } },
+          }),
         },
       ])
     }),
