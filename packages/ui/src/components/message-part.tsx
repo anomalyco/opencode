@@ -2005,7 +2005,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const fileComponent = useFileComponent()
-    const files = createMemo(() => patchFiles(props.metadata.files, true))
+    const files = createMemo(() => patchFiles(props.metadata.files))
     const pending = createMemo(() => props.status === "pending" || props.status === "running")
     const single = createMemo(() => {
       const list = files()

@@ -35,7 +35,7 @@ function status(type: Kind): "added" | "deleted" | "modified" {
   return "modified"
 }
 
-export function patchFile(raw: unknown, partial = false): ApplyPatchFile | undefined {
+export function patchFile(raw: unknown): ApplyPatchFile | undefined {
   if (!raw || typeof raw !== "object") return
 
   const value = raw as Raw
@@ -60,22 +60,19 @@ export function patchFile(raw: unknown, partial = false): ApplyPatchFile | undef
     additions,
     deletions,
     movePath,
-    view: normalize(
-      {
-        file: relativePath,
-        patch,
-        before,
-        after,
-        additions,
-        deletions,
-        status: status(type),
-      },
-      partial,
-    ),
+    view: normalize({
+      file: relativePath,
+      patch,
+      before,
+      after,
+      additions,
+      deletions,
+      status: status(type),
+    }),
   }
 }
 
-export function patchFiles(raw: unknown, partial = false) {
+export function patchFiles(raw: unknown) {
   if (!Array.isArray(raw)) return []
-  return raw.map((v) => patchFile(v, partial)).filter((file): file is ApplyPatchFile => !!file)
+  return raw.map(patchFile).filter((file): file is ApplyPatchFile => !!file)
 }
