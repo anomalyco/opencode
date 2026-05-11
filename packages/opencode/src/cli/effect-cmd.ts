@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { Effect, Schema } from "effect"
 import { AppRuntime, type AppServices } from "@/effect/app-runtime"
+import { Automation } from "@/automation/automation"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceRef } from "@/effect/instance-ref"
 import { cmd, type WithDoubleDash } from "./cmd/cmd"
@@ -86,7 +87,14 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
         InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
       )
       try {
-        await AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx)))
+        await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            yield* Automation.Service.use((automation) =>
+              automation.init().pipe(Effect.catchCause((cause) => Effect.logWarning("automation init failed", { cause }))),
+            )
+            return yield* opts.handler(args)
+          }).pipe(Effect.provideService(InstanceRef, ctx)),
+        )
       } finally {
         await AppRuntime.runPromise(store.dispose(ctx))
       }

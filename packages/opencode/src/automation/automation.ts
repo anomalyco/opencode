@@ -1518,7 +1518,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionPrompt.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(Provider.defaultLayer),
-    Layer.provide(Worktree.defaultLayer),
+    Layer.provide(Worktree.appLayer),
   ),
 )
 

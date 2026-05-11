@@ -18,6 +18,7 @@ import { workspaceRouterMiddleware } from "../../src/server/routes/instance/http
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { withFixedWorkspaceID } from "../fixture/flag"
+import { noopAutomationLayer } from "../fixture/automation"
 import { workspaceLayerWithRuntimeFlags } from "../fixture/workspace"
 import { waitGlobalBusEvent } from "./global-bus"
 import { testEffect } from "../lib/effect"
@@ -49,7 +50,7 @@ const it = testEffect(
 
 const instanceContextTestLayer = instanceRouterMiddleware
   .combine(workspaceRouterMiddleware)
-  .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+  .layer.pipe(Layer.provide(noopAutomationLayer), Layer.provide(Socket.layerWebSocketConstructorGlobal))
 
 const localAdapter = (directory: string): WorkspaceAdapter => ({
   name: "Local Test",

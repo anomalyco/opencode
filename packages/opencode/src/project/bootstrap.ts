@@ -1,6 +1,5 @@
 import { Plugin } from "../plugin"
 import { Format } from "../format"
-import { Automation } from "@/automation/automation"
 import { LSP } from "@/lsp/lsp"
 import { File } from "../file"
 import { Snapshot } from "../snapshot"
@@ -24,7 +23,6 @@ export const layer = Layer.effect(
     // Yield each bootstrap dep at layer init so `run` itself has R = never.
     // InstanceStore imports only the lightweight tag from bootstrap-service.ts,
     // so it can depend on bootstrap without importing this implementation graph.
-    const automation = yield* Automation.Service
     const config = yield* Config.Service
     const file = yield* File.Service
     const fileWatcher = yield* FileWatcher.Service
@@ -47,7 +45,7 @@ export const layer = Layer.effect(
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
       yield* Effect.forEach(
-        [automation, reference, lsp, shareNext, format, file, fileWatcher, vcs, snapshot, project],
+        [reference, lsp, shareNext, format, file, fileWatcher, vcs, snapshot, project],
         (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
@@ -59,7 +57,6 @@ export const layer = Layer.effect(
 
 export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide([
-    Automation.defaultLayer,
     Bus.layer,
     Config.defaultLayer,
     File.defaultLayer,
