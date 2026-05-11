@@ -68,6 +68,7 @@ export interface Options {
   readonly cwd: string
   readonly env?: Record<string, string>
   readonly maxOutputBytes?: number
+  readonly stdin?: ChildProcess.CommandInput
 }
 
 export interface Interface {
@@ -85,6 +86,7 @@ export interface Interface {
   readonly patchAll: (cwd: string, ref: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly patchUntracked: (cwd: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly statUntracked: (cwd: string, file: string) => Effect.Effect<Stat | undefined>
+  readonly applyPatch: (cwd: string, patch: string) => Effect.Effect<Result>
 }
 
 const kind = (code: string): Kind => {
@@ -101,6 +103,8 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const encoder = new TextEncoder()
+    const stdin = (text: string) => Stream.make(encoder.encode(text))
 
     const run = Effect.fn("Git.run")(
       function* (args: string[], opts: Options) {
@@ -108,7 +112,7 @@ export const layer = Layer.effect(
           cwd: opts.cwd,
           env: opts.env,
           extendEnv: true,
-          stdin: "ignore",
+          stdin: opts.stdin ?? "ignore",
           stdout: "pipe",
           stderr: "pipe",
         })
@@ -316,9 +320,13 @@ export const layer = Layer.effect(
         cwd,
         maxOutputBytes: 4096,
       })
+
       if (result.truncated) return
-      const parts = result.text().split("\t")
+      const text = result.text()
+
+      const parts = text.split("\t")
       if (parts.length < 2) return
+
       const additions = parts[0] === "-" ? 0 : Number.parseInt(parts[0] || "0", 10)
       const deletions = parts[1] === "-" ? 0 : Number.parseInt(parts[1] || "0", 10)
       return {
@@ -326,6 +334,10 @@ export const layer = Layer.effect(
         additions: Number.isFinite(additions) ? additions : 0,
         deletions: Number.isFinite(deletions) ? deletions : 0,
       } satisfies Stat
+    })
+
+    const applyPatch = Effect.fn("Git.applyPatch")(function* (cwd: string, patch: string) {
+      return yield* run(["apply", "-"], { cwd, stdin: stdin(patch) })
     })
 
     return Service.of({
@@ -343,6 +355,7 @@ export const layer = Layer.effect(
       patchAll,
       patchUntracked,
       statUntracked,
+      applyPatch,
     })
   }),
 )

@@ -13,8 +13,8 @@ import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
-import { NonNegativeInt, withStatics } from "@/util/schema"
-import { zod, ZodOverride } from "@/util/effect-zod"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
+import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
 
 const log = Log.create({ service: "lsp" })
 

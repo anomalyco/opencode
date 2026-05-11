@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import z from "zod"
-import { zod, ZodOverride } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 // The original Zod schema carried an external $ref pointing at the models.dev
 // JSON schema. That external reference is not a named SDK component — it is a

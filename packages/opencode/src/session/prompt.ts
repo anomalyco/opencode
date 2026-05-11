@@ -1,7 +1,6 @@
 import path from "path"
 import os from "os"
-import z from "zod"
-import * as EffectZod from "@/util/effect-zod"
+import * as EffectZod from "@opencode-ai/core/effect-zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import * as Log from "@opencode-ai/core/util/log"
@@ -44,11 +43,12 @@ import { Shell } from "@/shell/shell"
 import { ShellID } from "@/tool/shell/id"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Truncate } from "@/tool/truncate"
+import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
@@ -56,6 +56,7 @@ import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
 import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
+import { Modelv2 } from "@/v2/model"
 import { AgentAttachment, FileAttachment, Source } from "@/v2/session-prompt"
 import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
@@ -80,10 +81,10 @@ const elog = EffectLogger.create({ service: "session.prompt" })
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
+  readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error>
   readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
-  readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
+  readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts, Image.Error>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -108,6 +109,7 @@ export const layer = Layer.effect(
     const lsp = yield* LSP.Service
     const registry = yield* ToolRegistry.Service
     const truncate = yield* Truncate.Service
+    const image = yield* Image.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const scope = yield* Scope.Scope
     const instruction = yield* Instruction.Service
@@ -120,11 +122,10 @@ export const layer = Layer.effect(
       return yield* EffectBridge.make()
     })
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
-      const run = yield* runner()
       return {
-        cancel: (sessionID: SessionID) => run.fork(cancel(sessionID)),
+        cancel: (sessionID: SessionID) => cancel(sessionID),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
-        prompt: (input: PromptInput) => prompt(input),
+        prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
       } satisfies TaskPromptOps
     })
 
@@ -745,7 +746,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const markReady = ready ? ready.open.pipe(Effect.asVoid) : Effect.void
           const { msg, part, cwd } = yield* Effect.gen(function* () {
             const ctx = yield* InstanceState.context
-            const session = yield* sessions.get(input.sessionID)
+            const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
             if (session.revert) {
               yield* revert.cleanup(session)
             }
@@ -757,7 +758,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
               throw error
             }
-            const model = input.model ?? agent.model ?? (yield* lastModel(input.sessionID))
+            const model = input.model ?? agent.model ?? (yield* currentModel(input.sessionID))
             const userMsg: MessageV2.User = {
               id: input.messageID ?? MessageID.ascending(),
               sessionID: input.sessionID,
@@ -915,7 +916,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return yield* Effect.failCause(exit.cause)
     })
 
-    const lastModel = Effect.fnUntraced(function* (sessionID: SessionID) {
+    const currentModel = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const current = Database.use((db) =>
+        db.select({ model: SessionTable.model }).from(SessionTable).where(eq(SessionTable.id, sessionID)).get(),
+      )
+      if (current?.model) {
+        return {
+          providerID: ProviderID.make(current.model.providerID),
+          modelID: ModelID.make(current.model.id),
+          ...(current.model.variant && current.model.variant !== "default" ? { variant: current.model.variant } : {}),
+        }
+      }
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
       return yield* provider.defaultModel()
@@ -932,7 +943,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw error
       }
 
-      const model = input.model ?? ag.model ?? (yield* lastModel(input.sessionID))
+      const current = Database.use((db) =>
+        db
+          .select({ agent: SessionTable.agent, model: SessionTable.model })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get(),
+      )
+      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
@@ -956,32 +974,35 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         format: input.format,
       }
 
-      const current = Database.use((db) =>
-        db
-          .select({ agent: SessionTable.agent, model: SessionTable.model })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, input.sessionID))
-          .get(),
-      )
       if (current?.agent !== info.agent) {
-        EventV2.run(SessionEvent.AgentSwitched.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          agent: info.agent,
-        })
+        EventV2.run(
+          SessionEvent.AgentSwitched.Sync,
+          {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            agent: info.agent,
+          },
+          { bypassExperimentalEventSystem: true },
+        )
       }
       if (
         current?.model?.providerID !== info.model.providerID ||
         current.model.id !== info.model.modelID ||
-        current.model.variant !== info.model.variant
+        (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant
       ) {
-        EventV2.run(SessionEvent.ModelSwitched.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          id: info.model.modelID,
-          providerID: info.model.providerID,
-          variant: info.model.variant,
-        })
+        EventV2.run(
+          SessionEvent.ModelSwitched.Sync,
+          {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            model: {
+              id: Modelv2.ID.make(info.model.modelID),
+              providerID: Modelv2.ProviderID.make(info.model.providerID),
+              variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
+            },
+          },
+          { bypassExperimentalEventSystem: true },
+        )
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
@@ -1258,7 +1279,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
-      const parts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
+      const resolvedParts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
         Effect.map((x) => x.flat().map(assign)),
       )
 
@@ -1271,7 +1292,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           messageID: input.messageID,
           variant: input.variant,
         },
-        { message: info, parts },
+        { message: info, parts: resolvedParts },
+      )
+
+      const parts = yield* Effect.forEach(resolvedParts, (part) =>
+        part.type === "file" && part.mime.startsWith("image/") ? image.normalize(part) : Effect.succeed(part),
       )
 
       const parsed = MessageV2.Info.zod.safeParse(info)
@@ -1367,26 +1392,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.prompt")(
-      function* (input: PromptInput) {
-        const session = yield* sessions.get(input.sessionID)
-        yield* revert.cleanup(session)
-        const message = yield* createUserMessage(input)
-        yield* sessions.touch(input.sessionID)
+    const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.prompt",
+    )(function* (input: PromptInput) {
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      yield* revert.cleanup(session)
+      const message = yield* createUserMessage(input)
+      yield* sessions.touch(input.sessionID)
 
-        const permissions: Permission.Ruleset = []
-        for (const [t, enabled] of Object.entries(input.tools ?? {})) {
-          permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
-        }
-        if (permissions.length > 0) {
-          session.permission = permissions
-          yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
-        }
+      const permissions: Permission.Ruleset = []
+      for (const [t, enabled] of Object.entries(input.tools ?? {})) {
+        permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
+      }
+      if (permissions.length > 0) {
+        session.permission = permissions
+        yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
+      }
 
-        if (input.noReply === true) return message
-        return yield* loop({ sessionID: input.sessionID })
-      },
-    )
+      if (input.noReply === true) return message
+      return yield* loop({ sessionID: input.sessionID })
+    })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
@@ -1400,9 +1425,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         const slog = elog.with({ sessionID })
-        let structured: unknown | undefined
+        let structured: unknown
         let step = 0
-        const session = yield* sessions.get(sessionID)
+        const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -1697,7 +1722,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           if (cmdAgent?.model) return cmdAgent.model
         }
         if (input.model) return Provider.parseModel(input.model)
-        return yield* lastModel(input.sessionID)
+        return yield* currentModel(input.sessionID)
       })
 
       yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
@@ -1730,7 +1755,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const userModel = isSubtask
         ? input.model
           ? Provider.parseModel(input.model)
-          : yield* lastModel(input.sessionID)
+          : yield* currentModel(input.sessionID)
         : taskModel
 
       yield* plugin.trigger(
@@ -1787,6 +1812,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
+    Layer.provide(Image.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
         Agent.defaultLayer,

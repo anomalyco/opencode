@@ -178,12 +178,13 @@ describe("Worktree", () => {
   })
 
   describe("createFromInfo", () => {
-    wintest("creates and bootstraps git worktree", () =>
+    wintest("creates git worktree and boots asynchronously", () =>
       provideTmpdirInstance(
         (dir) =>
           Effect.gen(function* () {
             const svc = yield* Worktree.Service
             const info = yield* svc.makeWorktreeInfo("from-info-test")
+            const ready = waitReady()
             yield* svc.createFromInfo(info)
 
             const list = yield* Effect.promise(() => $`git worktree list --porcelain`.cwd(dir).quiet().text())
@@ -191,7 +192,37 @@ describe("Worktree", () => {
             const normalizedDir = info.directory.replace(/\\/g, "/")
             expect(normalizedList).toContain(normalizedDir)
 
+            yield* Effect.promise(() => ready)
             yield* svc.remove({ directory: info.directory })
+          }),
+        { git: true },
+      ),
+    )
+  })
+
+  describe("list", () => {
+    it.live("uses parent folder name when worktree basename matches the primary worktree", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const svc = yield* Worktree.Service
+            const parent = path.join(path.dirname(dir), `${path.basename(dir)}-parent`)
+            const target = path.join(parent, path.basename(dir))
+            const branch = `same-basename-list-${Date.now()}`
+
+            yield* Effect.promise(() => fs.mkdir(parent, { recursive: true }))
+            yield* Effect.promise(() => $`git worktree add -b ${branch} ${target}`.cwd(dir).quiet())
+
+            const list = yield* svc.list()
+            const directory = yield* Effect.promise(() => fs.realpath(target).catch(() => target))
+
+            expect(list).toContainEqual({
+              name: path.basename(parent),
+              branch,
+              directory: directory.toLowerCase(),
+            })
+
+            yield* svc.remove({ directory: target })
           }),
         { git: true },
       ),
