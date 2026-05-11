@@ -111,6 +111,9 @@ function normalizeMessages(
           msg.content = sanitizeSurrogates(msg.content)
         } else {
           msg.content = msg.content.map((content) => {
+            if (content.type === "reasoning" && content.providerOptions) {
+              return content
+            }
             if (content.type === "text" || content.type === "reasoning") {
               content.text = sanitizeSurrogates(content.text)
             }
@@ -129,12 +132,13 @@ function normalizeMessages(
   if (model.api.npm === "@ai-sdk/anthropic") {
     msgs = msgs
       .map((msg) => {
+        if (msg.role === "assistant") return msg
         if (typeof msg.content === "string") {
           if (msg.content === "") return undefined
           return msg
         }
         if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
+        const filtered = (msg.content as any[]).filter((part: any) => {
           if (part.type === "text") {
             return part.text !== ""
           }
@@ -157,12 +161,13 @@ function normalizeMessages(
   if (model.api.npm === "@ai-sdk/amazon-bedrock") {
     msgs = msgs
       .map((msg) => {
+        if (msg.role === "assistant") return msg
         if (typeof msg.content === "string") {
           if (msg.content === "") return undefined
           return msg
         }
         if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
+        const filtered = (msg.content as any[]).filter((part: any) => {
           if (part.type === "text") {
             return part.text !== ""
           }
@@ -429,6 +434,22 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 }
 
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+  // The Anthropic/Bedrock API requires thinking blocks in the latest assistant
+  // message to be replayed exactly. For all other assistant messages, strip
+  // reasoning blocks entirely to avoid signature validation failures.
+  if (model.api.npm === "@ai-sdk/amazon-bedrock" || model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+    const lastAsstIdx = msgs.findLastIndex((m) => m.role === "assistant")
+    for (let i = 0; i < msgs.length; i++) {
+      if (i === lastAsstIdx) continue
+      const msg = msgs[i]
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+      const filtered = (msg.content as any[]).filter((p: any) => p.type !== "reasoning")
+      if (filtered.length !== (msg.content as any[]).length) {
+        msgs[i] = { ...msg, content: filtered } as any
+      }
+    }
+  }
+
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (

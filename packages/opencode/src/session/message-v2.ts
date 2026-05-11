@@ -837,7 +837,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       // the neighboring signed reasoning blocks.
       const hasSignedReasoning = msg.parts.some((part) => {
         if (part.type !== "reasoning") return false
-        return part.metadata?.anthropic?.signature != null
+        return part.metadata?.anthropic?.signature != null || part.metadata?.bedrock?.signature != null
       })
       for (const part of msg.parts) {
         if (msg.info.summary && part.type !== "text") continue

@@ -1385,7 +1385,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content).toBe("World")
   })
 
-  test("filters out empty text parts from array content", () => {
+  test("preserves empty text parts in assistant array content (to avoid breaking thinking block signatures)", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1400,11 +1400,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(1)
-    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+    expect(result[0].content).toHaveLength(3)
   })
 
-  test("filters out empty reasoning parts from array content", () => {
+  test("preserves empty reasoning parts in assistant array content (to avoid breaking thinking block signatures)", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1419,11 +1418,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(1)
-    expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
+    expect(result[0].content).toHaveLength(3)
   })
 
-  test("removes entire message when all parts are empty", () => {
+  test("preserves assistant message even when all parts are empty (to avoid breaking thinking block signatures)", () => {
     const msgs = [
       { role: "user", content: "Hello" },
       {
@@ -1438,12 +1436,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
-    expect(result).toHaveLength(2)
-    expect(result[0].content).toBe("Hello")
-    expect(result[1].content).toBe("World")
+    expect(result).toHaveLength(3)
   })
 
-  test("keeps non-text/reasoning parts even if text parts are empty", () => {
+  test("preserves all parts in assistant messages including empty text (to avoid breaking thinking block signatures)", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1457,16 +1453,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(1)
-    expect(result[0].content[0]).toEqual({
-      type: "tool-call",
-      toolCallId: "123",
-      toolName: "bash",
-      input: { command: "ls" },
-    })
+    expect(result[0].content).toHaveLength(2)
   })
 
-  test("keeps messages with valid text alongside empty parts", () => {
+  test("preserves all content in assistant messages with reasoning (to avoid breaking thinking block signatures)", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1481,12 +1471,11 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content).toHaveLength(3)
     expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
-    expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
   })
 
-  test("filters empty content for bedrock provider", () => {
+  test("preserves assistant content for bedrock provider (to avoid breaking thinking block signatures)", () => {
     const bedrockModel = {
       ...anthropicModel,
       id: "amazon-bedrock/anthropic.claude-opus-4-6",
@@ -1512,10 +1501,11 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, bedrockModel, {})
 
+    // empty string assistant message is still filtered, but array content is preserved
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
-    expect(result[1].content).toHaveLength(1)
-    expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
+    // assistant messages with array content are preserved as-is
+    expect(result[1].content).toHaveLength(2)
   })
 
   test("does not filter for non-anthropic providers", () => {
@@ -3684,5 +3674,197 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.message - reasoning block stripping for compaction safety", () => {
+  const bedrockModel = {
+    id: "amazon-bedrock/anthropic.claude-opus-4-7",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "anthropic.claude-opus-4-7",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+    name: "Claude Opus 4.7",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.015, output: 0.075, cache: { read: 0.0015, write: 0.01875 } },
+    limit: { context: 200000, output: 16384 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const anthropicModel = {
+    ...bedrockModel,
+    id: "anthropic/claude-opus-4-7",
+    providerID: "anthropic",
+    api: {
+      id: "claude-opus-4-7-20250415",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+  }
+
+  test("strips reasoning blocks from non-latest assistant messages (bedrock)", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking", providerOptions: { bedrock: { signature: "sig1" } } },
+          { type: "tool-call", toolCallId: "t1", toolName: "read", input: {} },
+        ],
+      },
+      { role: "user", content: [{ type: "text", text: "continue" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "more thinking", providerOptions: { bedrock: { signature: "sig2" } } },
+          { type: "text", text: "final answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    // First assistant (non-latest) should have reasoning stripped
+    const firstAssistant = result.find((m, i) => m.role === "assistant" && i === 1)!
+    expect(firstAssistant.content).toHaveLength(1)
+    expect(firstAssistant.content[0].type).toBe("tool-call")
+
+    // Last assistant should keep reasoning intact
+    const lastAssistant = result.findLast((m: any) => m.role === "assistant")!
+    expect(lastAssistant.content).toHaveLength(2)
+    expect(lastAssistant.content[0].type).toBe("reasoning")
+    expect(lastAssistant.content[0].providerOptions.bedrock.signature).toBe("sig2")
+  })
+
+  test("strips reasoning blocks from non-latest assistant messages (anthropic)", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking", providerOptions: { anthropic: { signature: "sig1" } } },
+          { type: "text", text: "response" },
+        ],
+      },
+      { role: "user", content: [{ type: "text", text: "more" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking again", providerOptions: { anthropic: { signature: "sig2" } } },
+          { type: "text", text: "final" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    const firstAssistant = result[1]
+    expect(firstAssistant.content.some((p: any) => p.type === "reasoning")).toBe(false)
+
+    const lastAssistant = result[3]
+    expect(lastAssistant.content[0].type).toBe("reasoning")
+  })
+
+  test("preserves reasoning on the only assistant message", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking", providerOptions: { bedrock: { signature: "sig1" } } },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    expect(result[1].content).toHaveLength(2)
+    expect(result[1].content[0].type).toBe("reasoning")
+    expect(result[1].content[0].text).toBe("thinking")
+  })
+
+  test("does not strip reasoning for non-anthropic providers", () => {
+    const openaiModel = {
+      ...bedrockModel,
+      providerID: "openai",
+      api: { id: "gpt-4", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
+    }
+
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking", providerOptions: { openai: { foo: "bar" } } },
+          { type: "text", text: "response" },
+        ],
+      },
+      { role: "user", content: [{ type: "text", text: "more" }] },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "final" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {}) as any[]
+
+    expect(result[1].content).toHaveLength(2)
+    expect(result[1].content[0].type).toBe("reasoning")
+  })
+
+  test("does not modify assistant messages without reasoning blocks", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "response" },
+          { type: "tool-call", toolCallId: "t1", toolName: "read", input: {} },
+        ],
+      },
+      { role: "user", content: [{ type: "text", text: "more" }] },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "final" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    expect(result[1].content).toHaveLength(2)
+    expect(result[1].content[0].type).toBe("text")
+    expect(result[1].content[1].type).toBe("tool-call")
+  })
+
+  test("skips sanitizeSurrogates on signed reasoning parts", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking with special chars", providerOptions: { bedrock: { signature: "sig" } } },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    const reasoning = result[1].content.find((p: any) => p.type === "reasoning")
+    expect(reasoning.text).toBe("thinking with special chars")
+    expect(reasoning.providerOptions.bedrock.signature).toBe("sig")
   })
 })
