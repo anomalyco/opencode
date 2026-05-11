@@ -1999,7 +1999,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   onMount(() => {
     if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      void sync.session.sync(props.metadata.sessionId)
+      void sync.session.sync(props.metadata.sessionId).catch(() => {})
   })
 
   const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
@@ -2045,6 +2045,10 @@ function Task(props: ToolProps<typeof TaskTool>) {
     return content.join("\n")
   })
 
+  const childExists = createMemo(() =>
+    props.metadata.sessionId ? sync.data.session.some((s) => s.id === props.metadata.sessionId) : false,
+  )
+
   return (
     <InlineTool
       icon="│"
@@ -2053,7 +2057,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
       pending="Delegating..."
       part={props.part}
       onClick={() => {
-        if (props.metadata.sessionId) {
+        if (props.metadata.sessionId && childExists()) {
           navigate({ type: "session", sessionID: props.metadata.sessionId })
         }
       }}
