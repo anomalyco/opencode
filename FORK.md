@@ -18,7 +18,7 @@ Recovered fixes:
 - Restored required runtime guards in `packages/app/src/utils/runtime-adapters.ts` (media devices, permissions, speech synthesis).
 - Restored model picker recent-group behavior/wiring in `packages/app/src/components/dialog-select-model.tsx` (recent ordering/grouping without duplicated entries).
 
-## ✅ Recovered backend regressions (issue #193, 2026-05-11)
+## ✅ Recovered backend regressions (issue #190, 2026-05-11)
 
 Source refs:
 - `dev-backup-20260509-031153`
@@ -40,7 +40,7 @@ After rebasing on `upstream/dev`, verify each feature still works:
 
 - The model picker dialog shows a **"Recently Used"** group at the top
 - Recent models are sourced from `model.recent?.()` in the models context
-- Each model item has a `_group` ("recent" | "provider") and discriminated `_key` to avoid duplicate key conflicts
+- A `recents` map keyed by `provider:id` is used to keep recents ordered and de-duplicated
 - The "Recently Used" group is always pinned first via `sortGroupsBy`
 
 **How to verify:** Open model picker (Cmd+M or the model button) → you should see "Recently Used" group at the top with previously used models.
@@ -104,21 +104,37 @@ After rebasing on `upstream/dev`, verify each feature still works:
 2. Open "More options" dropdown on a session → "Rename" item appears → clicking opens inline title editor
 3. If auto-title fails, check that the configured provider has a working "small" model available
 
-### 8. TTS (Text-to-Speech) Support
+### 8. Voice Support (STT + TTS)
 
 **Files:**
-- `packages/opencode/src/server/routes/tts.ts` — TTS HTTP endpoint
+- `packages/app/src/components/prompt-input.tsx` — mic input (STT) and speaker toggle controls
+- `packages/app/src/pages/session/message-timeline.tsx` — assistant auto-speak playback flow
+- `packages/app/src/utils/runtime-adapters.ts` — browser speech/media adapter guards
+- `packages/app/src/context/settings.tsx` — `voice.autoSpeak` setting
+- `packages/opencode/src/server/routes/tts.ts` — `/tts/edge` endpoint
 
-**How to verify:** Check that the TTS route exists and responds (GET/POST to `/tts/...`).
+**How to verify:**
+1. Prompt toolbar shows mic/speaker controls in supported browsers
+2. Mic input inserts transcript text into prompt
+3. Assistant playback calls `/tts/edge` and falls back to browser speech synthesis if needed
 
-### 9. Auto-Resume on Serve
+### 9. Session Rename Tool (Agent-Side)
+
+**Files:**
+- `packages/opencode/src/tool/rename.ts` — `rename` tool implementation
+- `packages/opencode/src/tool/registry.ts` — `rename` tool registration
+- `packages/opencode/src/session/system.ts` — session naming guidance in system prompt
+
+**How to verify:** In an agent session, tool list includes `rename`, and session titles are updated early in task flow.
+
+### 10. Auto-Resume on Serve
 
 **Files:**
 - `packages/opencode/src/cli/cmd/serve.ts` — `autoresume()` function dedupes sessions and resumes by recency
 
 **How to verify:** Start `opencode serve`, sessions with pending questions should auto-resume.
 
-### 10. Multi-Instance Serve
+### 11. Multi-Instance Serve
 
 **Files:**
 - `packages/opencode/src/cli/cmd/serve.ts` — `OPENCODE_INSTANCE_MAX` env var support
@@ -145,6 +161,8 @@ After every rebase + deploy, run through this checklist in the browser:
 | 10 | Open "More options" on a session | "Rename" option present; clicking opens inline editor |
 | 11 | Send a message in new session | After first response, title auto-updates from "New session - ..." |
 | 12 | Verify back/forward navigation | Browser back/forward buttons work between sessions |
+| 13 | Toggle speaker control in prompt | Auto-speak setting toggles and current playback stops when disabled |
+| 14 | Trigger voice playback and STT | Mic capture inserts text; `/tts/edge` returns playable audio for assistant speech |
 
 ---
 
@@ -156,10 +174,25 @@ These files are frequently modified by both upstream and this fork. Pay extra at
 |------|------|-------------------|
 | `sidebar-items.tsx` | **HIGH** | `SessionItemProps` type, `SessionRow`, `SessionItem`, `SessionHoverPreview` |
 | `sidebar-recent.tsx` | **HIGH** | Props passed to `SessionItem` (children, lookup, prefixes, popover) |
+| `layout.tsx` | **HIGH** | `RecentSidebarPanel` wiring, `/recent` navigation, and `recentSessionProps.collapsible = true` |
 | `sidebar-project.tsx` | MEDIUM | `childMapByParent` usage, `sessionProps` Omit type, `setHoverSession` |
 | `sidebar-workspace.tsx` | MEDIUM | `childMapByParent` usage, `workspaceKey` import, removed `useIsFetching` |
 | `helpers.ts` | MEDIUM | `childMapByParent()`, `workspaceKey()` functions |
 | `dialog-select-model.tsx` | LOW | Recently used models grouping logic |
+| `prompt-input.tsx` | **HIGH** | STT controls, mic permission flow, transcript insertion |
+| `message-timeline.tsx` | **HIGH** | TTS playback, stale-request cancellation, mute behavior |
+| `settings.tsx` | MEDIUM | `voice.autoSpeak` defaulting and persistence |
+| `tool/registry.ts` | **HIGH** | `rename` tool registration in built-in list |
+| `tool/rename.ts` | **HIGH** | `rename` tool id/parameters/Session title update behavior |
+| `session/system.ts` | MEDIUM | session naming guidance so agent actually calls `rename` |
+
+## Remaining Backup-Only Patches (not ported 1:1)
+
+These commits still differ from current `dev` and should be periodically re-evaluated:
+
+- `54386d715` — memory leak hardening (`util/queue.ts` close/drain/isClosed, MCP/bus cleanup). Current `util/queue.ts` is still minimal and does not include close/drain APIs.
+- `33956770e` — long-running quiet command heartbeat in legacy `tool/bash.ts`; current code uses `tool/shell.ts`, so this was not ported directly.
+- `7b51f4526` — `bin/opencode.cjs` packaging path migration; current upstream/fork packaging still targets `bin/opencode`.
 
 ## Import Path Differences
 
@@ -185,7 +218,7 @@ git rebase upstream/dev
 # 3. After resolving conflicts, diff against backup to check for lost features
 git diff HEAD..backup/dev-YYYYMMDDHHMMSS -- packages/app/src/pages/layout/
 
-# 4. Walk through features 1–10 above and verify each one in the code
+# 4. Walk through features 1–11 above and verify each one in the code
 # 5. Run typecheck
 cd packages/opencode && bun typecheck
 
@@ -194,7 +227,7 @@ cd packages/opencode && bun run build
 # Copy binary to ~/.local/bin/opencode on the remote
 # Restart service: systemctl --user restart opencode-serve
 
-# 7. Run the Browser Smoke Test (10-item checklist above) on the deployed instance
+# 7. Run the Browser Smoke Test checklist above on the deployed instance
 ```
 
 ## Deployment Quick Reference
