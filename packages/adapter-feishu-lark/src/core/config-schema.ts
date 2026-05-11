@@ -103,8 +103,8 @@ export const FeishuAccountSchema = z.object({
   groups: z.record(z.string(), FeishuGroupConfigSchema).default(() => ({})),
   /** 副用户绑定码池(运行时 in-memory,不写盘 — 这里 schema 仅占位) */
   // secondaryBindingCodes 不进 schema(运行时状态)
-  /** opencode agent 名(默认 "build" — opencode 内置主 agent,执行 tools) */
-  agent: z.string().default("build"),
+  /** opencode agent 名(默认 "imbot" — DeskFox setup hook 注入的安全 agent,同 build 能力但 unattended 危险工具默认 ask)*/
+  agent: z.string().default("imbot"),
   /**
    * per-account 模型选择(可选)。
    * 不设 → plugin promptAsync 不传 model → opencode 用 user 全局 default。

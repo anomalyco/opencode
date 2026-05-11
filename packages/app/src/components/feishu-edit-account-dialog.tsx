@@ -59,8 +59,10 @@ export const FeishuEditAccountDialog: Component<{
     currentProviderModels().map((m) => ({ value: m.id, label: m.name || m.id })),
   )
 
-  // 全局默认 model — opencode config providers 返 { default: { build: "providerID/modelID" } }
-  // 取 build agent 的 default(飞书 plugin 固定用 build agent)
+  // 全局默认 model — opencode config providers 返 { default: { <providerID>: <modelID> } }
+  // 飞书桥接 v3 起绑账号默认 agent = "imbot"(setup hook 注入,同 build 能力但收紧危险工具)
+  // 注:data.default?.build latent bug — default key 是 provider id 不是 agent name,本字段值实际永远是 undefined
+  //     此组件目前不依赖该结果阻塞功能,留 FUTURE 顺手修(同 settings-feishu.tsx 修法)
   const defaultModelLabel = () => {
     const data = providersData()
     if (!data) return ""

@@ -48,6 +48,12 @@ pub fn ensure_feishu_plugin_in_config(app: &AppHandle) {
     if let Err(err) = inject_plugin(&config_path, &plugin_dir) {
         tracing::warn!("[feishu-plugin] inject failed: {err}");
     }
+
+    // FORK: 注入 imbot 安全 agent(unattended IM 桥接默认 agent)
+    // [feat: feishu-bridge-imbot-agent] 2026-05-11
+    if let Err(err) = inject_imbot_agent(&config_path) {
+        tracing::warn!("[feishu-plugin] imbot agent inject failed: {err}");
+    }
 }
 
 fn resolve_plugin_dir(app: &AppHandle) -> Option<PathBuf> {
@@ -196,6 +202,79 @@ fn inject_plugin(config_path: &Path, plugin_dir: &Path) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+/// 注入 `imbot` 安全 agent 到 user opencode.jsonc。
+/// 飞书 / IM 桥接是 unattended 远程触发场景,默认 agent 全权限太危险 — 抽出 imbot,
+/// 跟 build agent 同 system prompt(都 fallback 到 provider default)同能力,
+/// 只把 bash/edit/write/apply_patch/webfetch + 敏感目录 read 改成 ask。
+///
+/// idempotent:
+///   - user config 已有 `agent.imbot` → 完全跳过(尊重 user 手动调整)
+///   - user config 有 `agent` 但没 `imbot` → merge 加 imbot,其他 agent 不动
+///   - user config 没 `agent` 字段 → 加整个 agent 对象 + imbot
+fn inject_imbot_agent(config_path: &Path) -> Result<(), String> {
+    let raw = fs::read_to_string(config_path).map_err(|e| format!("read config: {e}"))?;
+
+    let mut json: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => {
+            let stripped = strip_comments(&raw);
+            serde_json::from_str(&stripped).map_err(|e| format!("parse config: {e}"))?
+        }
+    };
+
+    let obj = json
+        .as_object_mut()
+        .ok_or_else(|| "config root is not an object".to_string())?;
+
+    let agent_obj = obj
+        .entry("agent".to_string())
+        .or_insert_with(|| Value::Object(serde_json::Map::new()))
+        .as_object_mut()
+        .ok_or_else(|| "agent field is not an object".to_string())?;
+
+    if agent_obj.contains_key("imbot") {
+        tracing::info!("[feishu-plugin] imbot agent already in user config, skipping");
+        return Ok(());
+    }
+
+    agent_obj.insert("imbot".to_string(), imbot_agent_spec());
+
+    let pretty = serde_json::to_string_pretty(&json).map_err(|e| format!("serialize: {e}"))?;
+    fs::write(config_path, pretty).map_err(|e| format!("write config: {e}"))?;
+    tracing::info!(
+        "[feishu-plugin] injected imbot agent into {}",
+        config_path.display()
+    );
+    Ok(())
+}
+
+/// imbot agent 配置 spec — 不设 prompt(fallback 到 provider default,跟 build agent 同 system prompt)。
+/// 收紧的工具:bash / edit / write / apply_patch / webfetch + 敏感目录 read。
+fn imbot_agent_spec() -> Value {
+    serde_json::json!({
+        "description": "DeskFox IM 桥接专用 agent — 同 build 能力,但 unattended 场景下危险工具默认 ask",
+        "permission": {
+            "bash": "ask",
+            "edit": "ask",
+            "write": "ask",
+            "apply_patch": "ask",
+            "webfetch": "ask",
+            "read": {
+                "*": "allow",
+                "*.env": "ask",
+                "*.env.*": "ask",
+                "*.env.example": "allow",
+                "**/.ssh/**": "ask",
+                "**/.aws/**": "ask",
+                "**/.kube/**": "ask",
+                "**/.gnupg/**": "ask",
+                "**/Library/Keychains/**": "ask",
+                "**/AppData/Roaming/Microsoft/Crypto/**": "ask"
+            }
+        }
+    })
 }
 
 /// 字符串路径(可能带 file:// 前缀,可能是裸路径)→ 判断对应文件系统路径是否存在
@@ -429,5 +508,133 @@ mod tests {
         assert!(path_still_valid(&url));
         fs::remove_dir_all(&dir).unwrap();
         assert!(!path_still_valid(&url));
+    }
+
+    // ---- inject_imbot_agent 测试覆盖 ----
+
+    fn read_imbot_agent(cfg: &Path) -> Option<Value> {
+        let raw = fs::read_to_string(cfg).unwrap();
+        let v: Value = serde_json::from_str(&raw).unwrap();
+        v.get("agent")?.get("imbot").cloned()
+    }
+
+    #[test]
+    fn imbot_inject_into_empty_config_adds_agent_and_imbot() {
+        let s = Sandbox::new("imbot-empty");
+        let cfg = s.root.join("opencode.json");
+        fs::write(&cfg, r#"{ "$schema": "x" }"#).unwrap();
+        inject_imbot_agent(&cfg).unwrap();
+        let imbot = read_imbot_agent(&cfg).expect("imbot should be injected");
+        assert_eq!(
+            imbot
+                .get("permission")
+                .and_then(|p| p.get("bash"))
+                .and_then(|x| x.as_str()),
+            Some("ask"),
+            "bash must be ask"
+        );
+        assert_eq!(
+            imbot.get("permission").and_then(|p| p.get("webfetch")).and_then(|x| x.as_str()),
+            Some("ask")
+        );
+    }
+
+    #[test]
+    fn imbot_idempotent_when_already_present() {
+        let s = Sandbox::new("imbot-idem");
+        let cfg = s.root.join("opencode.json");
+        fs::write(
+            &cfg,
+            r#"{
+              "agent": {
+                "imbot": {
+                  "description": "user customized",
+                  "permission": { "bash": "allow" }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+        let mtime_before = fs::metadata(&cfg).unwrap().modified().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        inject_imbot_agent(&cfg).unwrap();
+        // user 自己改成 allow,inject 必须尊重不动
+        let imbot = read_imbot_agent(&cfg).unwrap();
+        assert_eq!(
+            imbot.get("permission").and_then(|p| p.get("bash")).and_then(|x| x.as_str()),
+            Some("allow"),
+            "user customized value must be preserved"
+        );
+        let mtime_after = fs::metadata(&cfg).unwrap().modified().unwrap();
+        assert_eq!(mtime_before, mtime_after, "no-op inject must not rewrite");
+    }
+
+    #[test]
+    fn imbot_merges_alongside_user_other_agents() {
+        let s = Sandbox::new("imbot-merge");
+        let cfg = s.root.join("opencode.json");
+        // user 已有自己的 agent,不能丢
+        fs::write(
+            &cfg,
+            r#"{
+              "agent": {
+                "my_custom": {
+                  "description": "user's own agent",
+                  "permission": { "bash": "deny" }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+        inject_imbot_agent(&cfg).unwrap();
+        let raw = fs::read_to_string(&cfg).unwrap();
+        let v: Value = serde_json::from_str(&raw).unwrap();
+        let agent_obj = v.get("agent").unwrap().as_object().unwrap();
+        assert!(agent_obj.contains_key("my_custom"), "user agent must be preserved");
+        assert!(agent_obj.contains_key("imbot"), "imbot must be added");
+        assert_eq!(
+            agent_obj.get("my_custom").unwrap().get("permission").unwrap().get("bash").unwrap().as_str(),
+            Some("deny"),
+            "user agent permission must not be altered"
+        );
+    }
+
+    #[test]
+    fn imbot_handles_jsonc_with_comments() {
+        let s = Sandbox::new("imbot-jsonc");
+        let cfg = s.root.join("opencode.jsonc");
+        // jsonc 含行注释 + 块注释,inject 应通过 strip_comments fallback
+        fs::write(
+            &cfg,
+            r#"{
+              // 这是 user 配的
+              "$schema": "https://opencode.ai/config.json"
+              /* 块注释 */
+            }"#,
+        )
+        .unwrap();
+        inject_imbot_agent(&cfg).unwrap();
+        let imbot = read_imbot_agent(&cfg).expect("imbot must be injected even with jsonc comments");
+        assert_eq!(
+            imbot.get("permission").and_then(|p| p.get("bash")).and_then(|x| x.as_str()),
+            Some("ask")
+        );
+    }
+
+    #[test]
+    fn imbot_read_pattern_includes_ssh_and_env() {
+        // 验证敏感目录 read 规则都进了
+        let s = Sandbox::new("imbot-read");
+        let cfg = s.root.join("opencode.json");
+        fs::write(&cfg, r#"{}"#).unwrap();
+        inject_imbot_agent(&cfg).unwrap();
+        let imbot = read_imbot_agent(&cfg).unwrap();
+        let read_perm = imbot.get("permission").and_then(|p| p.get("read")).unwrap();
+        let read_obj = read_perm.as_object().unwrap();
+        assert_eq!(read_obj.get("*").and_then(|v| v.as_str()), Some("allow"));
+        assert_eq!(read_obj.get("*.env").and_then(|v| v.as_str()), Some("ask"));
+        assert_eq!(read_obj.get("**/.ssh/**").and_then(|v| v.as_str()), Some("ask"));
+        assert_eq!(read_obj.get("**/.aws/**").and_then(|v| v.as_str()), Some("ask"));
+        assert_eq!(read_obj.get("**/Library/Keychains/**").and_then(|v| v.as_str()), Some("ask"));
     }
 }

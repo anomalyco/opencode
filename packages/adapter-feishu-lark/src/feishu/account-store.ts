@@ -135,8 +135,9 @@ export function saveAccount(input: SaveAccountInput): SavedAccount {
     groupPolicy: existing?.groupPolicy ?? "allowlist",
     groupAllowFrom: existing?.groupAllowFrom ?? [],
     groups: existing?.groups ?? {},
-    // 飞书桥接默认绑 opencode "build" agent(主 agent,执行 tools);v2 加 per-account 选 agent
-    agent: existing?.agent ?? "build",
+    // 飞书桥接默认绑 "imbot" agent(DeskFox setup hook 注入的安全 agent,同 build 能力但 unattended 危险工具默认 ask)
+    // 已有 account.agent(老 user 绑过 "build")保持不动 — user 自行在 edit dialog 切换
+    agent: existing?.agent ?? "imbot",
     systemPrompt: existing?.systemPrompt,
     tools: existing?.tools,
     heartbeat: existing?.heartbeat,

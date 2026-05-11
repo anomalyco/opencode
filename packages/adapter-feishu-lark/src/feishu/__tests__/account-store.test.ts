@@ -121,6 +121,41 @@ describe("saveAccount", () => {
     expect(restored).toBe("secret_value_123")
   })
 
+  test("新绑账号默认 agent = 'imbot'(不是 'build')[feat: feishu-bridge-imbot-agent]", () => {
+    const r = saveAccount({
+      domain: "feishu",
+      appId: "cli_imbot_default",
+      appSecret: "s",
+      openId: "o",
+      configPath: configPath(),
+    })
+    expect(r.account.agent).toBe("imbot")
+  })
+
+  test("已绑账号(老 user agent=build)第二次 save 保留旧 agent 不动", () => {
+    // 模拟老 user:第一次 save 后手动改 agent → build(走 v2 老路径)
+    saveAccount({
+      domain: "feishu",
+      appId: "cli_legacy_build",
+      appSecret: "s",
+      openId: "o",
+      configPath: configPath(),
+    })
+    const cfg = loadConfig(configPath())
+    cfg.accounts["cli_legacy_build"].agent = "build"
+    saveConfig(cfg, configPath())
+
+    // 第二次 saveAccount(refresh) 应**保留** existing agent=build,不强制升级到 imbot
+    const r2 = saveAccount({
+      domain: "feishu",
+      appId: "cli_legacy_build",
+      appSecret: "s2",
+      openId: "o",
+      configPath: configPath(),
+    })
+    expect(r2.account.agent).toBe("build")
+  })
+
   test("自定 accountId 覆盖 appId", () => {
     const r = saveAccount({
       accountId: "company-a",
