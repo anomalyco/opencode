@@ -29,8 +29,21 @@ export class AgentAttachment extends Schema.Class<AgentAttachment>("Prompt.Agent
   source: Source.pipe(Schema.optional),
 }) {}
 
+export class ReferenceAttachment extends Schema.Class<ReferenceAttachment>("Prompt.ReferenceAttachment")({
+  name: Schema.String,
+  kind: Schema.Literals(["local", "git", "invalid"]),
+  uri: Schema.String.pipe(Schema.optional),
+  repository: Schema.String.pipe(Schema.optional),
+  branch: Schema.String.pipe(Schema.optional),
+  target: Schema.String.pipe(Schema.optional),
+  targetUri: Schema.String.pipe(Schema.optional),
+  problem: Schema.String.pipe(Schema.optional),
+  source: Source.pipe(Schema.optional),
+}) {}
+
 export class Prompt extends Schema.Class<Prompt>("Prompt")({
   text: Schema.String,
   files: Schema.Array(FileAttachment).pipe(Schema.optional),
   agents: Schema.Array(AgentAttachment).pipe(Schema.optional),
+  references: Schema.Array(ReferenceAttachment).pipe(Schema.optional),
 }) {}

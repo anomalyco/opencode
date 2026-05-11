@@ -1,6 +1,8 @@
 import { SECRET } from "./secret"
 import { domain } from "./stage"
 
+const description = "Managed by SST (Don't edit in Honeycomb UI)"
+
 const webhookRecipient = new honeycomb.WebhookRecipient("DiscordAlerts", {
   name: $app.stage === "production" ? "Discord Alerts" : `Discord Alerts (${$app.stage})`,
   url: `https://${domain}/honeycomb/webhook`,
@@ -25,6 +27,16 @@ const webhookRecipient = new honeycomb.WebhookRecipient("DiscordAlerts", {
   ],
 })
 
+// Honeycomb can keep stale query-local calculated fields when the name is unchanged,
+// so tie the field name to the expression while avoiding deploy-to-deploy churn.
+// https://github.com/honeycombio/terraform-provider-honeycombio/issues/852
+const calculatedField = (field: { name: string; expression: string }) => ({
+  ...field,
+  name: `${field.name}_${(
+    Array.from(field.expression).reduce((result, char) => Math.imul(31, result) + char.charCodeAt(0), 0) >>> 0
+  ).toString(36)}`,
+})
+
 const modelHttpErrorsQuery = (product: "go" | "zen") => {
   const filters = [
     { column: "model", op: "exists" },
@@ -32,21 +44,26 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
     { column: "user_agent", op: "contains", value: "opencode" },
     { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
   ]
+  const failedHttpStatus = calculatedField({
+    name: "is_failed_http_status",
+    expression:
+      product === "go"
+        ? `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401")), NOT(EQUALS($status, "429"))), 1, 0)`
+        : `IF(AND(EQUALS($status, "429"), $isFreeTier), 0, AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
+  })
 
   return honeycomb.getQuerySpecificationOutput({
     breakdowns: ["model"],
-    calculatedFields: [
-      {
-        name: "is_failed_http_status",
-        expression:
-          product === "go"
-            ? `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401")), NOT(EQUALS($status, "429"))), 1, 0)`
-            : `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
-      },
-    ],
+    calculatedFields: [failedHttpStatus],
     calculations: [
       { op: "COUNT", name: "TOTAL", filterCombination: "AND", filters },
-      { op: "SUM", name: "FAILED", column: "is_failed_http_status", filterCombination: "AND", filters },
+      {
+        op: "SUM",
+        name: "FAILED",
+        column: failedHttpStatus.name,
+        filterCombination: "AND",
+        filters,
+      },
     ],
     formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 100), DIV($FAILED, $TOTAL), 0)" }],
     timeRange: 900,
@@ -59,31 +76,30 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
     { column: "user_agent", op: "contains", value: "opencode" },
     { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
   ]
+  const successHttpStatus = calculatedField({
+    name: "is_success_http_status",
+    expression: `IF(AND(GTE($status, "200"), LT($status, "400")), 1, 0)`,
+  })
+  const failedProviderHttpStatus = calculatedField({
+    name: "is_failed_provider_http_status",
+    expression: `IF(GT($llm.error.code, "400"), 1, 0)`,
+  })
 
   return honeycomb.getQuerySpecificationOutput({
     breakdowns: ["provider"],
-    calculatedFields: [
-      {
-        name: "is_success_http_status",
-        expression: `IF(AND(GTE($status, "200"), LT($status, "400")), 1, 0)`,
-      },
-      {
-        name: "is_failed_provider_http_status",
-        expression: `IF(GT($llm.error.code, "400"), 1, 0)`,
-      },
-    ],
+    calculatedFields: [successHttpStatus, failedProviderHttpStatus],
     calculations: [
       {
         op: "SUM",
         name: "SUCCESS",
-        column: "is_success_http_status",
+        column: successHttpStatus.name,
         filterCombination: "AND",
         filters: [...filters, { column: "event_type", op: "=", value: "completions" }],
       },
       {
         op: "SUM",
         name: "FAILED",
-        column: "is_failed_provider_http_status",
+        column: failedProviderHttpStatus.name,
         filterCombination: "AND",
         filters: [...filters, { column: "event_type", op: "=", value: "llm.error" }],
       },
@@ -94,8 +110,6 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
     timeRange: 900,
   }).json
 }
-
-const description = "Managed by SST (Don't edit in Honeycomb UI)"
 
 new honeycomb.Trigger("IncreasedModelHttpErrorsGo", {
   name: "Increased Model HTTP Errors [Go]",

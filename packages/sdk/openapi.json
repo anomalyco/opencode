@@ -5536,6 +5536,16 @@
               }
             }
           },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "NotFoundError",
             "content": {
@@ -8530,7 +8540,7 @@
                     ]
                   }
                 },
-                "required": ["type", "branch"],
+                "required": ["type"],
                 "additionalProperties": false
               }
             }
@@ -11110,6 +11120,12 @@
             "items": {
               "$ref": "#/components/schemas/PromptAgentAttachment"
             }
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptReferenceAttachment"
+            }
           }
         },
         "required": ["text"],
@@ -12787,7 +12803,7 @@
             "type": "string"
           }
         },
-        "required": ["name", "branch", "directory"],
+        "required": ["name", "directory"],
         "additionalProperties": false
       },
       "WorktreeRemoveInput": {
@@ -14011,7 +14027,7 @@
             ]
           }
         },
-        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID", "timeUsed"],
+        "required": ["id", "type", "name", "projectID", "timeUsed"],
         "additionalProperties": false
       },
       "WorkspaceWarpError": {
@@ -16564,7 +16580,7 @@
                 "type": "string"
               }
             },
-            "required": ["name", "branch"],
+            "required": ["name"],
             "additionalProperties": false
           }
         },
@@ -17027,6 +17043,41 @@
           }
         },
         "required": ["name"],
+        "additionalProperties": false
+      },
+      "PromptReferenceAttachment": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["local", "git", "invalid"]
+          },
+          "uri": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "targetUri": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PromptSource"
+          }
+        },
+        "required": ["name", "kind"],
         "additionalProperties": false
       },
       "EventSessionNextPrompted": {
@@ -18219,6 +18270,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PromptAgentAttachment"
+            }
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptReferenceAttachment"
             }
           },
           "type": {

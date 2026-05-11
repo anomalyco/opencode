@@ -24,9 +24,7 @@ import { Effect, Context, Layer, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics, type DeepMutable } from "@opencode-ai/core/schema"
-import { Reference } from "@/reference/reference"
+import { type DeepMutable } from "@opencode-ai/core/schema"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -48,9 +46,7 @@ export const Info = Schema.Struct({
   prompt: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Unknown),
   steps: Schema.optional(Schema.Finite),
-})
-  .annotate({ identifier: "Agent" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Agent" })
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export interface Interface {
@@ -299,76 +295,6 @@ export const layer = Layer.effect(
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
-        }
-
-        function referencePrompt(reference: Reference.Resolved) {
-          if (reference.kind === "local") {
-            return [
-              `You are configured reference @${reference.name}, a read-only research agent for external reference material.`,
-              `Local directory: ${reference.path}`,
-              `Inspect this directory as the primary reference source. Prefer repo_overview with path ${JSON.stringify(reference.path)} before broader searches. Do not edit files.`,
-              `Return exact absolute file paths for findings whenever possible.`,
-            ].join("\n\n")
-          }
-
-          if (reference.kind === "invalid") {
-            return [
-              `You are configured reference @${reference.name}, but this reference is not usable yet.`,
-              `Configured repository: ${reference.repository}`,
-              `Problem: ${reference.message}`,
-              `Explain this configuration problem if invoked. Do not edit files or attempt fallback clones.`,
-            ].join("\n\n")
-          }
-
-          return [
-            `You are configured reference @${reference.name}, a read-only research agent for external reference material.`,
-            `Repository: ${reference.repository}`,
-            ...(reference.branch ? [`Branch/ref: ${reference.branch}`] : []),
-            `Cached directory: ${reference.path}`,
-            `OpenCode materializes this configured repository before use. Do not call repo_clone for this reference.`,
-            `Inspect the cached directory as the primary reference source. Prefer repo_overview with path ${JSON.stringify(reference.path)} before broader searches, then use Glob, Grep, and Read inside that directory. Do not edit files.`,
-            `Return exact absolute file paths for findings whenever possible.`,
-          ].join("\n\n")
-        }
-
-        function referenceDescription(reference: Reference.Resolved) {
-          if (reference.kind === "local") return `Scout reference for local directory ${reference.path}`
-          if (reference.kind === "git") return `Scout reference for repository ${reference.repository}`
-          return `Invalid Scout reference for repository ${reference.repository}`
-        }
-
-        if (Flag.OPENCODE_EXPERIMENTAL_SCOUT) {
-          const resolvedReferences = Reference.resolveAll({
-            references: cfg.reference ?? {},
-            directory: ctx.directory,
-            worktree: ctx.worktree,
-          })
-          for (const resolved of resolvedReferences) {
-            if (agents[resolved.name]) continue
-            const localPath = resolved.kind === "invalid" ? undefined : resolved.path
-            agents[resolved.name] = {
-              name: resolved.name,
-              description: referenceDescription(resolved),
-              permission: Permission.merge(
-                agents.scout.permission,
-                Permission.fromConfig({
-                  repo_clone: "deny",
-                  ...(localPath
-                    ? {
-                        external_directory: {
-                          [localPath]: "allow",
-                          [path.join(localPath, "*")]: "allow",
-                        },
-                      }
-                    : {}),
-                }),
-              ),
-              prompt: referencePrompt(resolved),
-              options: { reference: cfg.reference?.[resolved.name], resolved },
-              mode: "subagent",
-              native: false,
-            }
-          }
         }
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured

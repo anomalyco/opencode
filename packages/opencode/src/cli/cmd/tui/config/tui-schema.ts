@@ -31,5 +31,3 @@ export const TuiInfo = z
   })
   .extend(TuiOptions.shape)
   .strict()
-
-export const TuiJsonSchemaInfo = TuiInfo

@@ -771,6 +771,7 @@ export type Prompt = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  references?: Array<PromptReferenceAttachment>
 }
 
 export type GlobalEvent = {
@@ -1397,7 +1398,7 @@ export type WorktreeCreateInput = {
 
 export type Worktree = {
   name: string
-  branch: string
+  branch?: string
   directory: string
 }
 
@@ -1794,9 +1795,9 @@ export type Workspace = {
   id: string
   type: string
   name: string
-  branch: string | null
-  directory: string | null
-  extra: unknown | null
+  branch?: string | null
+  directory?: string | null
+  extra?: unknown | null
   projectID: string
   timeUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
@@ -2565,7 +2566,7 @@ export type EventWorktreeReady = {
   type: "worktree.ready"
   properties: {
     name: string
-    branch: string
+    branch?: string
   }
 }
 
@@ -2715,6 +2716,18 @@ export type PromptFileAttachment = {
 
 export type PromptAgentAttachment = {
   name: string
+  source?: PromptSource
+}
+
+export type PromptReferenceAttachment = {
+  name: string
+  kind: "local" | "git" | "invalid"
+  uri?: string
+  repository?: string
+  branch?: string
+  target?: string
+  targetUri?: string
+  problem?: string
   source?: PromptSource
 }
 
@@ -3121,6 +3134,7 @@ export type SessionMessageUser = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  references?: Array<PromptReferenceAttachment>
   type: "user"
 }
 
@@ -5663,6 +5677,10 @@ export type SessionForkData = {
 
 export type SessionForkErrors = {
   /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
    * NotFoundError
    */
   404: NotFoundError
@@ -6845,7 +6863,7 @@ export type ExperimentalWorkspaceCreateData = {
   body?: {
     id?: string
     type: string
-    branch: string | null
+    branch?: string | null
     extra?: unknown | null
   }
   path?: never

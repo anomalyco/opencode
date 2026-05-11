@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import z from "zod"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Project } from "@/project/project"
 import { Session as SessionNs } from "@/session/session"
@@ -19,7 +17,7 @@ const svc = {
   create(input?: SessionNs.CreateInput) {
     return run(SessionNs.Service.use((svc) => svc.create(input)))
   },
-  setArchived(input: z.output<typeof SessionNs.SetArchivedInput.zod>) {
+  setArchived(input: typeof SessionNs.SetArchivedInput.Type) {
     return run(SessionNs.Service.use((svc) => svc.setArchived(input)))
   },
 }

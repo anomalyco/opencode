@@ -46,8 +46,6 @@ import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
@@ -57,7 +55,8 @@ import { SyncEvent } from "@/sync"
 import { SessionEvent } from "@/v2/session-event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { AgentAttachment, FileAttachment, Source } from "@opencode-ai/core/session-prompt"
+import { AgentAttachment, FileAttachment, ReferenceAttachment, Source } from "@opencode-ai/core/session-prompt"
+import { Reference } from "@/reference/reference"
 import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
@@ -81,6 +80,88 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
+
+type ReferencePromptMetadata = {
+  name: string
+  kind: "local" | "git" | "invalid"
+  path?: string
+  repository?: string
+  branch?: string
+  target?: string
+  targetPath?: string
+  problem?: string
+  source: { value: string; start: number; end: number }
+}
+
+function stringField(record: Record<string, unknown>, key: string) {
+  return typeof record[key] === "string" ? record[key] : undefined
+}
+
+function referencePromptMetadata(input: unknown): ReferencePromptMetadata | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return
+  const record = input as Record<string, unknown>
+  const name = stringField(record, "name")
+  const kind = stringField(record, "kind")
+  if (!name || (kind !== "local" && kind !== "git" && kind !== "invalid")) return
+  if (!record.source || typeof record.source !== "object" || Array.isArray(record.source)) return
+  const source = record.source as Record<string, unknown>
+  const value = stringField(source, "value")
+  if (!value || typeof source.start !== "number" || typeof source.end !== "number") return
+  return {
+    name,
+    kind,
+    path: stringField(record, "path"),
+    repository: stringField(record, "repository"),
+    branch: stringField(record, "branch"),
+    target: stringField(record, "target"),
+    targetPath: stringField(record, "targetPath"),
+    problem: stringField(record, "problem"),
+    source: { value, start: source.start, end: source.end },
+  }
+}
+
+function referenceTextPart(input: {
+  reference: Reference.Resolved
+  source: ReferencePromptMetadata["source"]
+  target?: string
+  targetPath?: string
+  problem?: string
+}): MessageV2.TextPartInput {
+  const metadata: ReferencePromptMetadata = {
+    name: input.reference.name,
+    kind: input.reference.kind,
+    ...(input.reference.kind === "invalid"
+      ? { repository: input.reference.repository }
+      : { path: input.reference.path }),
+    ...(input.reference.kind === "git"
+      ? { repository: input.reference.repository, branch: input.reference.branch }
+      : {}),
+    ...(input.target === undefined ? {} : { target: input.target }),
+    ...(input.targetPath ? { targetPath: input.targetPath } : {}),
+    problem: input.problem ?? (input.reference.kind === "invalid" ? input.reference.message : undefined),
+    source: input.source,
+  }
+  const label = metadata.target === undefined ? `@${metadata.name}` : `@${metadata.name}/${metadata.target}`
+  return {
+    type: "text",
+    synthetic: true,
+    text: [
+      `Referenced configured reference ${label}.`,
+      ...(metadata.kind === "local" ? ["Kind: local directory"] : []),
+      ...(metadata.kind === "git" ? ["Kind: git repository"] : []),
+      ...(metadata.repository ? [`Repository: ${metadata.repository}`] : []),
+      ...(metadata.branch ? [`Branch/ref: ${metadata.branch}`] : []),
+      ...(metadata.path ? [`Reference root: ${metadata.path}`] : []),
+      ...(metadata.targetPath ? [`Resolved path: ${metadata.targetPath}`] : []),
+      ...(metadata.problem
+        ? [`Problem: ${metadata.problem}`]
+        : [
+            "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
+          ]),
+    ].join("\n"),
+    metadata: { reference: metadata },
+  }
+}
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -120,6 +201,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const references = yield* Reference.Service
     const sync = yield* SyncEvent.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
@@ -142,12 +224,74 @@ export const layer = Layer.effect(
       const parts: Types.DeepMutable<PromptInput["parts"]> = [{ type: "text", text: template }]
       const files = ConfigMarkdown.files(template)
       const seen = new Set<string>()
+      const mentionSource = (match: RegExpMatchArray) => {
+        const start = match.index ?? 0
+        return { value: match[0], start, end: start + match[0].length }
+      }
       yield* Effect.forEach(
         files,
         Effect.fnUntraced(function* (match) {
           const name = match[1]
+          if (!name) return
           if (seen.has(name)) return
           seen.add(name)
+
+          const slash = name.indexOf("/")
+          const alias = slash === -1 ? name : name.slice(0, slash)
+          const reference = yield* references.get(alias)
+          if (reference) {
+            const source = mentionSource(match)
+            if (reference.kind === "invalid") {
+              parts.push(
+                referenceTextPart({ reference, source, target: slash === -1 ? undefined : name.slice(slash + 1) }),
+              )
+              return
+            }
+
+            yield* references.ensure(reference.path)
+            if (slash === -1) {
+              parts.push(referenceTextPart({ reference, source }))
+              return
+            }
+
+            const target = name.slice(slash + 1)
+            const targetPath = path.resolve(reference.path, target)
+            if (!AppFileSystem.contains(reference.path, targetPath)) {
+              parts.push(
+                referenceTextPart({
+                  reference,
+                  source,
+                  target,
+                  targetPath,
+                  problem: `Path escapes configured reference @${alias}: ${target}`,
+                }),
+              )
+              return
+            }
+
+            const info = yield* fsys.stat(targetPath).pipe(Effect.option)
+            if (Option.isNone(info)) {
+              parts.push(
+                referenceTextPart({
+                  reference,
+                  source,
+                  target,
+                  targetPath,
+                  problem: `Path does not exist inside configured reference @${alias}: ${target}`,
+                }),
+              )
+              return
+            }
+
+            parts.push({
+              type: "file",
+              url: pathToFileURL(targetPath).href,
+              filename: name,
+              mime: info.value.type === "Directory" ? "application/x-directory" : "text/plain",
+            })
+            return
+          }
+
           const filepath = name.startsWith("~/")
             ? path.join(os.homedir(), name.slice(2))
             : path.resolve(ctx.worktree, name)
@@ -1012,6 +1156,30 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         id: part.id ? PartID.make(part.id) : PartID.ascending(),
       })
 
+      const referenceContextFromFilePart = Effect.fnUntraced(function* (
+        part: Extract<PromptInput["parts"][number], { type: "file" }>,
+        filepath: string,
+      ) {
+        const name = part.filename?.replace(/#\d+(?:-\d*)?$/, "")
+        if (!name) return
+        const slash = name.indexOf("/")
+        if (slash === -1) return
+
+        const reference = yield* references.get(name.slice(0, slash))
+        if (!reference || reference.kind === "invalid") return
+        if (!AppFileSystem.contains(reference.path, filepath)) return
+
+        const target = path.relative(reference.path, filepath).split(path.sep).join("/")
+        if (!target || target.startsWith("../") || target === "..") return
+
+        return referenceTextPart({
+          reference,
+          source: part.source?.text ?? { value: `@${name}`, start: 0, end: name.length + 1 },
+          target,
+          targetPath: filepath,
+        })
+      })
+
       const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<MessageV2.Part>[]> = Effect.fn(
         "SessionPrompt.resolveUserPart",
       )(function* (part) {
@@ -1094,6 +1262,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             case "file:": {
               log.info("file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
+              const referenceContext = yield* referenceContextFromFilePart(part, filepath)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
 
               const { read } = yield* registry.named()
@@ -1139,6 +1308,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 }
                 const args = { filePath: filepath, offset, limit }
                 const pieces: Draft<MessageV2.Part>[] = [
+                  ...(referenceContext
+                    ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                    : []),
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -1204,6 +1376,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     error: new NamedError.Unknown({ message }).toObject(),
                   })
                   return [
+                    ...(referenceContext
+                      ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                      : []),
                     {
                       messageID: info.id,
                       sessionID: input.sessionID,
@@ -1214,6 +1389,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   ]
                 }
                 return [
+                  ...(referenceContext
+                    ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                    : []),
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -1233,6 +1411,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
 
               return [
+                ...(referenceContext ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }] : []),
                 {
                   messageID: info.id,
                   sessionID: input.sessionID,
@@ -1327,6 +1506,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           if (part.type === "text") {
             if (part.synthetic) result.synthetic.push(part.text)
             else result.text.push(part.text)
+            const reference = referencePromptMetadata(part.metadata?.reference)
+            if (reference) {
+              result.references.push(
+                new ReferenceAttachment({
+                  name: reference.name,
+                  kind: reference.kind,
+                  uri: reference.path ? pathToFileURL(reference.path).href : undefined,
+                  repository: reference.repository,
+                  branch: reference.branch,
+                  target: reference.target,
+                  targetUri: reference.targetPath ? pathToFileURL(reference.targetPath).href : undefined,
+                  problem: reference.problem,
+                  source: new Source({
+                    start: reference.source.start,
+                    end: reference.source.end,
+                    text: reference.source.value,
+                  }),
+                }),
+              )
+            }
           }
           if (part.type === "file") {
             result.files.push(
@@ -1364,6 +1563,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           text: [] as string[],
           files: [] as FileAttachment[],
           agents: [] as AgentAttachment[],
+          references: [] as ReferenceAttachment[],
           synthetic: [] as string[],
         },
       )
@@ -1376,6 +1576,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             text: nextPrompt.text.join("\n"),
             files: nextPrompt.files,
             agents: nextPrompt.agents,
+            references: nextPrompt.references,
           },
         })
       }
@@ -1818,6 +2019,7 @@ export const defaultLayer = Layer.suspend(() =>
         Agent.defaultLayer,
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,
+        Reference.defaultLayer,
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
         SyncEvent.defaultLayer,
@@ -1851,14 +2053,12 @@ export const PromptInput = Schema.Struct({
       MessageV2.SubtaskPartInput,
     ]).annotate({ discriminator: "type" }),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type PromptInput = Schema.Schema.Type<typeof PromptInput>
 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 export const ShellInput = Schema.Struct({
   sessionID: SessionID,
@@ -1866,7 +2066,7 @@ export const ShellInput = Schema.Struct({
   agent: Schema.String,
   model: Schema.optional(ModelRef),
   command: Schema.String,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ShellInput = Schema.Schema.Type<typeof ShellInput>
 
 export const CommandInput = Schema.Struct({
@@ -1894,7 +2094,7 @@ export const CommandInput = Schema.Struct({
       ]).annotate({ discriminator: "type" }),
     ),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type CommandInput = Schema.Schema.Type<typeof CommandInput>
 
 /** @internal Exported for testing */

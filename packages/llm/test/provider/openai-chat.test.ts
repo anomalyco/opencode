@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, Usage } from "../../src"
+import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
@@ -149,9 +149,9 @@ describe("OpenAI Chat route", () => {
           id: "req_tool_result",
           model,
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
         }),
       )
@@ -185,7 +185,7 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 
@@ -199,7 +199,7 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           id: "req_reasoning",
           model,
-          messages: [LLM.assistant({ type: "reasoning", text: "hidden" })],
+          messages: [Message.assistant({ type: "reasoning", text: "hidden" })],
         }),
       ).pipe(Effect.flip)
 
