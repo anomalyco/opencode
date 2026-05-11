@@ -1055,6 +1055,7 @@ export default function Layout(props: ParentProps) {
         return {
           id: `project.${number}`,
           category: language.t("command.category.project"),
+          title: `Open Project {number}`,
           keybind: `mod+${number}`,
           disabled: layout.projects.list().length <= index,
           hidden: true,

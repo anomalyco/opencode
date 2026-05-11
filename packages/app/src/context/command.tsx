@@ -74,7 +74,7 @@ export interface Keybind {
 
 export interface CommandOption {
   id: string
-  title?: string
+  title: string
   description?: string
   category?: string
   keybind?: KeybindConfig
