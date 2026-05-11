@@ -119,21 +119,15 @@ export function DialogConfig(props: { scope?: ConfigScope }) {
       }
 
       if (targetScope === "global") {
-        const result = await sdk.client.global.config.update(
+        await sdk.client.global.config.update(
           { config: { [field.key]: parsedValue } },
           { throwOnError: true },
         )
-        if (result.error) {
-          throw new Error(result.error.message || "Failed to update global config")
-        }
       } else {
-        const result = await sdk.client.config.update(
+        await sdk.client.config.update(
           { config: { [field.key]: parsedValue } },
           { throwOnError: true },
         )
-        if (result.error) {
-          throw new Error(result.error.message || "Failed to update project config")
-        }
       }
 
       toast.show({ message: `Updated ${field.key} (${targetScope})`, variant: "success" })

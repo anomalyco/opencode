@@ -60,7 +60,7 @@ export function DialogTuiConfig() {
   const [tuiFileConfig] = createResource(
     refreshTick,
     async () => {
-      return Filesystem.readJson<Record<string, unknown>>(tuiConfigPath).catch(() => ({}))
+      return Filesystem.readJson<Record<string, unknown>>(tuiConfigPath).catch((): Record<string, unknown> => ({}))
     },
   )
 
