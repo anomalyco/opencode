@@ -197,7 +197,7 @@ async function buildConfigDir(args: {
           websearch: false,
           task: false,
           skill: false,
-          todowrite: false,
+          todowrite: true,
         },
         steps: args.maxTurns,
         options: {},
