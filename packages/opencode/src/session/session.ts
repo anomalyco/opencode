@@ -263,6 +263,7 @@ export type ListInput = {
   start?: number
   search?: string
   limit?: number
+  archived?: boolean
 }
 
 const CreatedEventSchema = Schema.Struct({
@@ -846,6 +847,9 @@ function* listByProject(
   }
   if (input.search) {
     conditions.push(like(SessionTable.title, `%${input.search}%`))
+  }
+  if (!input.archived) {
+    conditions.push(isNull(SessionTable.time_archived))
   }
 
   const limit = input.limit ?? 100
