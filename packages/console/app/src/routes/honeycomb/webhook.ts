@@ -3,7 +3,7 @@ import { z } from "zod"
 import { Resource } from "@opencode-ai/console-resource"
 import { safeEqual } from "@opencode-ai/console-core/util/crypto.js"
 
-const DISCORD_ALERT_ROLE_ID = "1501447160175136838"
+const DISCORD_ALERT_USER_IDS = ["983897940269629511", "221233210179321856"]
 
 const basePayload = z.object({
   name: z.string().optional(),
@@ -38,7 +38,7 @@ const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayloa
     group && names.length > 0 ? `Affected ${group}s:` : undefined,
     ...names.map((name) => `- ${name}`),
     "",
-    `<@&${DISCORD_ALERT_ROLE_ID}>`,
+    DISCORD_ALERT_USER_IDS.map((id) => `<@${id}>`).join(" "),
   ]
     .filter((line) => line !== undefined)
     .join("\n")
@@ -48,7 +48,7 @@ const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayloa
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       content,
-      allowed_mentions: { roles: [DISCORD_ALERT_ROLE_ID] },
+      allowed_mentions: { users: DISCORD_ALERT_USER_IDS },
       flags: 4,
     }),
   })
