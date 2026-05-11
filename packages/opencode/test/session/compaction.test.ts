@@ -926,12 +926,12 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
-    "persists tail_start_id for retained recent turns",
+    "does not persist tail_start_id for serialized recent turns",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
       const session = yield* ssn.create({})
       yield* createUserMessage(session.id, "first")
-      const keep = yield* createUserMessage(session.id, "second")
+      yield* createUserMessage(session.id, "second")
       yield* createUserMessage(session.id, "third")
       yield* createSummaryCompaction(session.id)
 
@@ -947,18 +947,18 @@ describe("session.compaction.process", () => {
 
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
-      expect(part?.tail_start_id).toBe(keep.id)
+      expect(part?.tail_start_id).toBeUndefined()
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) })),
   )
 
   itCompaction.instance(
-    "shrinks retained tail to fit preserve token budget",
+    "does not persist tail_start_id when shrinking serialized tail",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
       const session = yield* ssn.create({})
       yield* createUserMessage(session.id, "first")
       yield* createUserMessage(session.id, "x".repeat(2_000))
-      const keep = yield* createUserMessage(session.id, "tiny")
+      yield* createUserMessage(session.id, "tiny")
       yield* createSummaryCompaction(session.id)
 
       const msgs = yield* ssn.messages({ sessionID: session.id })
@@ -973,7 +973,7 @@ describe("session.compaction.process", () => {
 
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
-      expect(part?.tail_start_id).toBe(keep.id)
+      expect(part?.tail_start_id).toBeUndefined()
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 100 }) })),
   )
 
@@ -1005,7 +1005,7 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
-    "falls back to full summary when retained tail media exceeds preserve token budget",
+    "serializes retained tail media as text in the summary input",
     () => {
       const stub = llm()
       let captured = ""
@@ -1078,15 +1078,16 @@ describe("session.compaction.process", () => {
 
         const part = yield* readCompactionPart(session.id)
         expect(part?.type).toBe("compaction")
-        expect(part?.tail_start_id).toBe(keep.id)
+        expect(part?.tail_start_id).toBeUndefined()
         expect(captured).toContain("zzzz")
-        expect(captured).not.toContain("keep tail")
+        expect(captured).toContain("keep tail")
 
         const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
-        expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
+        expect(filtered.map((msg) => msg.info.id)).toEqual([parent!, expect.any(String)])
         expect(filtered[1]?.info.role).toBe("assistant")
         expect(filtered[1]?.info.role === "assistant" ? filtered[1].info.summary : false).toBe(true)
         expect(filtered.map((msg) => msg.info.id)).not.toContain(large.id)
+        expect(filtered.map((msg) => msg.info.id)).not.toContain(keep.id)
       }).pipe(withCompaction({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 100 }) }))
     },
     { git: true },
@@ -1353,13 +1354,13 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
-    "summarizes only the head while keeping recent tail out of summary input",
+    "summarizes the head while serializing recent tail into summary input",
     () => {
       const stub = llm()
-      let captured = ""
+      let captured: LLM.StreamInput["messages"] = []
       stub.push(
         reply("summary", (input) => {
-          captured = JSON.stringify(input.messages)
+          captured = input.messages
         }),
       )
       return Effect.gen(function* () {
@@ -1380,10 +1381,15 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        expect(captured).toContain("older context")
-        expect(captured).not.toContain("keep this turn")
-        expect(captured).not.toContain("and this one too")
-        expect(captured).not.toContain("What did we do so far?")
+        const head = JSON.stringify(captured.slice(0, -1))
+        const prompt = JSON.stringify(captured.at(-1))
+        expect(head).toContain("older context")
+        expect(head).not.toContain("keep this turn")
+        expect(head).not.toContain("and this one too")
+        expect(prompt).toContain("keep this turn")
+        expect(prompt).toContain("and this one too")
+        expect(prompt).toContain("recent-conversation-tail")
+        expect(prompt).not.toContain("What did we do so far?")
       }).pipe(withCompaction({ llm: stub.layer }))
     },
     { git: true },
@@ -1431,7 +1437,7 @@ describe("session.compaction.process", () => {
     { git: true },
   )
 
-  itCompaction.instance("keeps recent pre-compaction turns across repeated compactions", () => {
+  itCompaction.instance("does not replay recent pre-compaction turns across repeated compactions", () => {
     const stub = llm()
     stub.push(reply("summary one"))
     stub.push(reply("summary two"))
@@ -1462,8 +1468,8 @@ describe("session.compaction.process", () => {
 
       expect(ids).not.toContain(u1.id)
       expect(ids).not.toContain(u2.id)
-      expect(ids).toContain(u3.id)
-      expect(ids).toContain(u4.id)
+      expect(ids).not.toContain(u3.id)
+      expect(ids).not.toContain(u4.id)
       expect(filtered.some((msg) => msg.info.role === "assistant" && msg.info.summary)).toBe(true)
       expect(
         filtered.some((msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction")),
@@ -1472,7 +1478,7 @@ describe("session.compaction.process", () => {
   })
 
   itCompaction.instance(
-    "ignores previous summaries when sizing the retained tail",
+    "ignores previous summaries when sizing the serialized tail",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
       const test = yield* TestInstance
@@ -1511,7 +1517,7 @@ describe("session.compaction.process", () => {
 
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
-      expect(part?.tail_start_id).toBe(keep.id)
+      expect(part?.tail_start_id).toBeUndefined()
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 500 }) })),
   )
 })
