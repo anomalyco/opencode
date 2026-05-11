@@ -49,7 +49,6 @@ describe("Session.Info", () => {
       time: { created: 1, updated: 2 },
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.Info.zod.parse(input)).toEqual(input)
   })
 
   test("round-trips every optional field", () => {
@@ -80,7 +79,6 @@ describe("Session.Info", () => {
       },
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.Info.zod.parse(input)).toEqual(input)
   })
 
   test("accepts migrated summary diffs without file details", () => {
@@ -100,19 +98,16 @@ describe("Session.Info", () => {
       time: { created: 1, updated: 2 },
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.Info.zod.parse(input)).toEqual(input)
   })
 
   test("rejects unbranded session id", () => {
     const bad = { id: "not-a-session-id" } as unknown
     expect(() => decode(bad)).toThrow()
-    expect(() => Session.Info.zod.parse(bad)).toThrow()
   })
 
   test("rejects missing required fields", () => {
     const bad = { id: sessionID } as unknown
     expect(() => decode(bad)).toThrow()
-    expect(() => Session.Info.zod.parse(bad)).toThrow()
   })
 })
 
@@ -124,8 +119,6 @@ describe("Session.ProjectInfo", () => {
     const withName = { ...noName, name: "alpha" }
     expect(decode(noName)).toEqual(noName)
     expect(decode(withName)).toEqual(withName)
-    expect(Session.ProjectInfo.zod.parse(noName)).toEqual(noName)
-    expect(Session.ProjectInfo.zod.parse(withName)).toEqual(withName)
   })
 })
 
@@ -144,7 +137,6 @@ describe("Session.GlobalInfo", () => {
       project: null,
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.GlobalInfo.zod.parse(input)).toEqual(input)
   })
 
   test("accepts populated project", () => {
@@ -159,7 +151,6 @@ describe("Session.GlobalInfo", () => {
       project: { id: projectID, worktree: "/tmp/wt", name: "alpha" },
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.GlobalInfo.zod.parse(input)).toEqual(input)
   })
 })
 
@@ -167,7 +158,6 @@ describe("Session input schemas", () => {
   test("CreateInput accepts undefined and populated forms", () => {
     const decode = decodeUnknown(Session.CreateInput)
     expect(decode(undefined)).toBeUndefined()
-    expect(Session.CreateInput.zod.parse(undefined)).toBeUndefined()
 
     const populated = {
       parentID: sessionID,
@@ -176,23 +166,19 @@ describe("Session input schemas", () => {
       workspaceID,
     }
     expect(decode(populated)).toEqual(populated)
-    expect(Session.CreateInput.zod.parse(populated)).toEqual(populated)
   })
 
   test("ForkInput round-trips", () => {
     const decode = decodeUnknown(Session.ForkInput)
     const input = { sessionID, messageID }
     expect(decode(input)).toEqual(input)
-    expect(Session.ForkInput.zod.parse(input)).toEqual(input)
     // messageID is optional
     const bare = { sessionID }
     expect(decode(bare)).toEqual(bare)
-    expect(Session.ForkInput.zod.parse(bare)).toEqual(bare)
   })
 
   test("SetTitleInput rejects missing title", () => {
     expect(() => decodeUnknown(Session.SetTitleInput)({ sessionID })).toThrow()
-    expect(() => Session.SetTitleInput.zod.parse({ sessionID })).toThrow()
   })
 
   test("SetArchivedInput accepts both with and without time", () => {
