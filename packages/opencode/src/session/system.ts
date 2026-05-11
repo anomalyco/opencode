@@ -46,6 +46,11 @@ export const layer = Layer.effect(
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
+        // Bench / RL mode: skip the dynamic env block entirely. It includes
+        // `new Date().toDateString()` which would shift prompt tokens across a
+        // midnight rollover and break the RL contiguity invariant
+        // (prompt_token_ids[N+1] must extend prompt_token_ids[N]).
+        if (process.env.OPENCODE_DISABLE_ENV_PROMPT === "1") return []
         const ctx = yield* InstanceState.context
         return [
           [

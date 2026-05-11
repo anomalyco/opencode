@@ -373,6 +373,10 @@ async function main() {
     OPENCODE_CONFIG: configFile,
     // Disable opencode's built-in plugin loaders; the bench harness doesn't need them.
     OPENCODE_PURE: "1",
+    // Skip the dynamic env block (working dir + Today's date) in the system
+    // prompt — keeps the RL prompt-token prefix invariant stable across turns
+    // (a midnight rollover would otherwise shift `Today's date: ...`).
+    OPENCODE_DISABLE_ENV_PROMPT: "1",
   }
 
   // Prune git history past base_commit so the agent can't reach future commits.
