@@ -32,6 +32,14 @@ export const OAuth = Schema.Struct({
   redirectUri: Schema.optional(Schema.String).annotate({
     description: "OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).",
   }),
+  authorizationEndpoint: Schema.optional(Schema.String).annotate({
+    description:
+      "OAuth authorization endpoint URL. Required for servers that do not support RFC 8414 metadata discovery (e.g. Google Workspace MCP servers).",
+  }),
+  tokenEndpoint: Schema.optional(Schema.String).annotate({
+    description:
+      "OAuth token endpoint URL. Required for servers that do not support RFC 8414 metadata discovery (e.g. Google Workspace MCP servers).",
+  }),
 })
   .annotate({ identifier: "McpOAuthConfig" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))

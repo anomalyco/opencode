@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { UnauthorizedError, auth as sdkAuth } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
   ToolSchema,
@@ -794,6 +794,8 @@ export const layer = Layer.effect(
           clientSecret: oauthConfig?.clientSecret,
           scope: oauthConfig?.scope,
           redirectUri: oauthConfig?.redirectUri,
+          authorizationEndpoint: oauthConfig?.authorizationEndpoint,
+          tokenEndpoint: oauthConfig?.tokenEndpoint,
         },
         {
           onRedirect: async (url) => {
@@ -820,6 +822,42 @@ export const layer = Layer.effect(
             return Effect.succeed({ authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult)
           }
           return Effect.die(error)
+        }),
+        Effect.flatMap((result) => {
+          if (result.authorizationUrl || !oauthConfig?.authorizationEndpoint || !oauthConfig?.tokenEndpoint) {
+            return Effect.succeed(result)
+          }
+
+          const existingTokens = Effect.promise(() => authProvider.tokens())
+          return existingTokens.pipe(
+            Effect.flatMap((tokens) => {
+              if (tokens) return Effect.succeed(result)
+
+              log.info("server connected without auth challenge but oauth config has explicit endpoints, triggering OAuth", { mcpName })
+
+              if ("client" in result && result.client) {
+                Effect.runPromise(Effect.tryPromise(() => result.client!.close()).pipe(Effect.ignore))
+              }
+
+              return Effect.tryPromise({
+                try: () =>
+                  sdkAuth(authProvider, {
+                    serverUrl: url.toString(),
+                    scope: oauthConfig.scope,
+                  }),
+                catch: (error) => error,
+              }).pipe(
+                Effect.map(() => {
+                  if (capturedUrl) {
+                    pendingOAuthTransports.set(mcpName, transport)
+                    return { authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult
+                  }
+                  return { authorizationUrl: "", oauthState } satisfies AuthResult
+                }),
+                Effect.catch(() => Effect.succeed({ authorizationUrl: "", oauthState } satisfies AuthResult)),
+              )
+            }),
+          )
         }),
       )
     })

@@ -101,6 +101,7 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 // Mock UnauthorizedError in the auth module so instanceof checks work
 void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
+  auth: async () => "AUTHORIZED" as const,
 }))
 
 beforeEach(() => {
@@ -277,6 +278,71 @@ test("authenticate() stores a connected client when auth completes without redir
           }),
         ).pipe(Effect.provide(MCP.defaultLayer)),
       )
+    },
+  })
+})
+
+test("discoveryState() returns metadata from config when explicit endpoints are provided", async () => {
+  const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
+  const { McpAuth } = await import("../../src/mcp/auth")
+
+  await using tmp = await tmpdir()
+
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const auth = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* McpAuth.Service
+        }).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
+      const provider = new McpOAuthProvider(
+        "test-discovery",
+        "https://example.com/mcp",
+        {
+          clientId: "test-client",
+          authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+          tokenEndpoint: "https://oauth2.googleapis.com/token",
+        },
+        { onRedirect: async () => {} },
+        auth,
+      )
+
+      const state = await provider.discoveryState()
+      expect(state).toBeDefined()
+      expect(state!.authorizationServerUrl).toBe("https://accounts.google.com")
+      expect(state!.authorizationServerMetadata?.authorization_endpoint).toBe(
+        "https://accounts.google.com/o/oauth2/v2/auth",
+      )
+      expect(state!.authorizationServerMetadata?.token_endpoint).toBe("https://oauth2.googleapis.com/token")
+    },
+  })
+})
+
+test("discoveryState() returns undefined when no explicit endpoints configured", async () => {
+  const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
+  const { McpAuth } = await import("../../src/mcp/auth")
+
+  await using tmp = await tmpdir()
+
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const auth = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* McpAuth.Service
+        }).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
+      const provider = new McpOAuthProvider(
+        "test-no-discovery",
+        "https://example.com/mcp",
+        { clientId: "test-client" },
+        { onRedirect: async () => {} },
+        auth,
+      )
+
+      const state = await provider.discoveryState()
+      expect(state).toBeUndefined()
     },
   })
 })
