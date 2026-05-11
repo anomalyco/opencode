@@ -135,19 +135,38 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
 
   private readonly cfg: NemoGymLanguageModelConfig
   private cookies: Record<string, string> = {}
+  // Per-session turn counter. opencode's session header is `x-session-affinity`;
+  // subagents spawned via the task tool get their own sessionID, so keeping
+  // a Map keeps their dump filenames from clobbering the main session's.
+  private readonly turnCounters: Map<string, number> = new Map()
 
   constructor(modelId: string, cfg: NemoGymLanguageModelConfig) {
     this.modelId = modelId
     this.provider = cfg.provider
-    // Spread first, then coalesce — opencode's provider loader passes
-    // optional fields explicitly as `undefined`, and a default-then-spread
-    // pattern lets those undefineds overwrite the defaults. `??` only
-    // replaces null/undefined, preserving any real caller-supplied value.
     this.cfg = {
       ...cfg,
       requestTimeoutMs: cfg.requestTimeoutMs ?? 600_000,
       retries: cfg.retries ?? 3,
     }
+  }
+
+  private _nextTurn(sessionID: string): number {
+    const n = (this.turnCounters.get(sessionID) ?? -1) + 1
+    this.turnCounters.set(sessionID, n)
+    return n
+  }
+
+  private _sessionFromHeaders(headers: unknown): { sessionID: string; parentSessionID: string | undefined } {
+    let sid = ""
+    let pid: string | undefined
+    if (headers && typeof headers === "object") {
+      const h = headers as Record<string, unknown>
+      const v = h["x-session-affinity"] ?? h["X-Session-Affinity"]
+      if (typeof v === "string") sid = v
+      const p = h["x-parent-session-id"] ?? h["X-Parent-Session-Id"]
+      if (typeof p === "string") pid = p
+    }
+    return { sessionID: sid || "main", parentSessionID: pid }
   }
 
   get supportedUrls() {
@@ -158,6 +177,7 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
   // implement doGenerate for completeness / future direct-use.
   async doGenerate(options: LanguageModelV3CallOptions) {
     const { warnings, messages, requestParams } = await this._buildRequestParams(options)
+    const session = this._sessionFromHeaders(options.headers)
     const { responseJson } = await this._postChat(requestParams)
 
     const choice = responseJson.choices[0]
@@ -186,6 +206,7 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
       response: responseJson,
       providerSpecificFields,
       requestParams,
+      session,
     })
 
     return {
@@ -201,6 +222,7 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
 
   async doStream(options: LanguageModelV3CallOptions) {
     const { warnings, messages, requestParams } = await this._buildRequestParams(options)
+    const session = this._sessionFromHeaders(options.headers)
 
     // Fire the HTTP call eagerly so any error surfaces synchronously when the
     // stream is consumed. We then synthesize parts in `start`.
@@ -274,6 +296,7 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
             response: responseJson,
             providerSpecificFields,
             requestParams,
+            session,
           })
 
           controller.enqueue({
@@ -494,8 +517,9 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
     response: ChatResponse
     providerSpecificFields: Record<string, unknown>
     requestParams: Record<string, unknown>
+    session: { sessionID: string; parentSessionID: string | undefined }
   }) {
-    const turn = this.cfg.turnCounter ? this.cfg.turnCounter.next() : Date.now()
+    const turn = this._nextTurn(args.session.sessionID)
     if (this.cfg.onCompletion) {
       try {
         await this.cfg.onCompletion({ turn, ...args })
@@ -510,7 +534,10 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
       await fs.mkdir(this.cfg.completionsDir, { recursive: true })
       const turnStr = String(turn).padStart(4, "0")
       const safeModel = this.modelId.replace(/\//g, "__")
-      const fname = `${safeModel}-${turnStr}-${Date.now()}.json`
+      // sessionID is part of the filename so subagent dumps don't clobber the
+      // main session's. Sanitized for filesystem safety.
+      const safeSession = args.session.sessionID.replace(/[^A-Za-z0-9_-]/g, "_")
+      const fname = `${safeModel}-${safeSession}-${turnStr}-${Date.now()}.json`
       const fpath = path.join(this.cfg.completionsDir, fname)
       const kwargs: Record<string, unknown> = {}
       for (const [k, v] of Object.entries(args.requestParams)) {
@@ -521,6 +548,9 @@ export class NemoGymLanguageModel implements LanguageModelV3 {
         response: args.response,
         provider_specific_fields: args.providerSpecificFields,
         kwargs,
+        session_id: args.session.sessionID,
+        parent_session_id: args.session.parentSessionID ?? null,
+        turn,
         timestamp: Date.now() / 1000,
       }
       const tmp = `${fpath}.tmp`

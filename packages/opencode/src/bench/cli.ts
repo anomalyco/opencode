@@ -39,10 +39,18 @@ interface CliArgs {
   /** Pre-rendered user message file (workspace_path baked in by gym). */
   userMessageFile: string
   systemPromptPath?: string
+  /** Enable opencode's `task` tool (spawns subagent sessions). */
+  enableSubagents: boolean
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const out: Partial<CliArgs> = { maxTurns: 100, agentCls: "OpenCodeAgent", dataset: "", split: "test" }
+  const out: Partial<CliArgs> = {
+    maxTurns: 100,
+    agentCls: "OpenCodeAgent",
+    dataset: "",
+    split: "test",
+    enableSubagents: false,
+  }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => argv[++i]
@@ -79,6 +87,9 @@ function parseArgs(argv: string[]): CliArgs {
         break
       case "--system-prompt":
         out.systemPromptPath = next()
+        break
+      case "--enable-subagents":
+        out.enableSubagents = true
         break
       default:
         if (a.startsWith("--")) throw new Error(`Unknown flag: ${a}`)
@@ -143,6 +154,7 @@ async function buildConfigDir(args: {
   completionsDir: string
   maxTurns: number
   systemPromptPath?: string
+  enableSubagents: boolean
 }): Promise<{ tmpRoot: string; configFile: string }> {
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), `bench-${args.instanceId}-`))
   await fs.mkdir(tmpRoot, { recursive: true })
@@ -197,7 +209,7 @@ async function buildConfigDir(args: {
           apply_patch: true,
           webfetch: false,
           websearch: false,
-          task: false,
+          task: args.enableSubagents,
           skill: false,
           todowrite: true,
         },
@@ -346,6 +358,7 @@ async function main() {
     completionsDir,
     maxTurns: args.maxTurns,
     systemPromptPath: args.systemPromptPath,
+    enableSubagents: args.enableSubagents,
   })
 
   const startedAt = Date.now()

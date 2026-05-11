@@ -110,6 +110,9 @@ cmd=(
 if [ -n "$SYSTEM_PROMPT_PATH" ]; then
     cmd+=(--system-prompt "$SYSTEM_PROMPT_PATH")
 fi
+if [ "${ENABLE_SUBAGENTS:-0}" = "1" ] || [ "${ENABLE_SUBAGENTS:-}" = "true" ]; then
+    cmd+=(--enable-subagents)
+fi
 
 echo "Executing: ${cmd[*]}"
 exec "${cmd[@]}"
