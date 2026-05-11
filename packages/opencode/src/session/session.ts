@@ -583,7 +583,11 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       Effect.gen(function* () {
         yield* sync.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg })
         return msg
-      }).pipe(Effect.withSpan("Session.updateMessage"))
+      }).pipe(
+        Effect.withSpan("Session.updateMessage", {
+          attributes: { "session.id": msg.sessionID, "message.id": msg.id },
+        }),
+      )
 
     const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
@@ -593,7 +597,15 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
           time: Date.now(),
         })
         return part
-      }).pipe(Effect.withSpan("Session.updatePart"))
+      }).pipe(
+        Effect.withSpan("Session.updatePart", {
+          attributes: {
+            "session.id": part.sessionID,
+            "message.id": part.messageID,
+            "part.id": part.id,
+          },
+        }),
+      )
 
     const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
       const row = Database.use((db) =>
@@ -719,6 +731,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       sessionID: SessionID
       summary: Info["summary"]
     }) {
+      yield* Effect.annotateCurrentSpan({ "session.id": input.sessionID })
       yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary })
     })
 
@@ -729,6 +742,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     })
 
     const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
+      yield* Effect.annotateCurrentSpan({ "session.id": input.sessionID })
       if (input.limit) {
         return MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items
       }
@@ -774,6 +788,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       sessionID: SessionID,
       predicate: (msg: MessageV2.WithParts) => boolean,
     ) {
+      yield* Effect.annotateCurrentSpan({ "session.id": sessionID })
       for (const item of MessageV2.stream(sessionID)) {
         if (predicate(item)) return Option.some(item)
       }

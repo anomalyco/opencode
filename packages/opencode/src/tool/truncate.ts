@@ -53,6 +53,7 @@ export const layer = Layer.effect(
     const fs = yield* AppFileSystem.Service
 
     const cleanup = Effect.fn("Truncate.cleanup")(function* () {
+      yield* Effect.annotateCurrentSpan({ "truncate.dir": TRUNCATION_DIR })
       const cutoff = Identifier.timestamp(
         Identifier.create("tool", "ascending", Date.now() - Duration.toMillis(RETENTION)),
       )
@@ -60,10 +61,13 @@ export const layer = Layer.effect(
         Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
         Effect.catch(() => Effect.succeed([])),
       )
+      let removed = 0
       for (const entry of entries) {
         if (Identifier.timestamp(entry) >= cutoff) continue
         yield* fs.remove(path.join(TRUNCATION_DIR, entry)).pipe(Effect.catch(() => Effect.void))
+        removed++
       }
+      yield* Effect.annotateCurrentSpan({ "truncate.scanned": entries.length, "truncate.removed": removed })
     })
 
     const write = Effect.fn("Truncate.write")(function* (text: string) {

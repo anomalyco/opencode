@@ -1564,9 +1564,10 @@ const layer: Layer.Layer<
       }
     }
 
-    const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderID) =>
-      InstanceState.use(state, (s) => s.providers[providerID]),
-    )
+    const getProvider = Effect.fn("Provider.getProvider")(function* (providerID: ProviderID) {
+      yield* Effect.annotateCurrentSpan({ "provider.id": providerID })
+      return yield* InstanceState.use(state, (s) => s.providers[providerID])
+    })
 
     const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
       const s = yield* InstanceState.get(state)
@@ -1587,6 +1588,7 @@ const layer: Layer.Layer<
     })
 
     const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
+      yield* Effect.annotateCurrentSpan({ "provider.id": model.providerID, "model.id": model.id })
       const s = yield* InstanceState.get(state)
       const envs = yield* env.all()
       const key = `${model.providerID}/${model.id}`

@@ -636,6 +636,10 @@ export const layer: Layer.Layer<
       })
 
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
+        yield* Effect.annotateCurrentSpan({
+          "session.id": ctx.sessionID,
+          "message.id": ctx.assistantMessage.id,
+        })
         if (ctx.snapshot) {
           const patch = yield* snapshot.patch(ctx.snapshot)
           if (patch.files.length) {
@@ -725,6 +729,10 @@ export const layer: Layer.Layer<
       })
 
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
+        yield* Effect.annotateCurrentSpan({
+          "session.id": ctx.sessionID,
+          "message.id": ctx.assistantMessage.id,
+        })
         slog.info("process")
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true

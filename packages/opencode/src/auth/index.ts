@@ -57,6 +57,7 @@ export const layer = Layer.effect(
     const decode = Schema.decodeUnknownOption(Info)
 
     const all = Effect.fn("Auth.all")(function* () {
+      yield* Effect.annotateCurrentSpan({ "auth.file": file })
       if (process.env.OPENCODE_AUTH_CONTENT) {
         try {
           return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
@@ -68,6 +69,7 @@ export const layer = Layer.effect(
     })
 
     const get = Effect.fn("Auth.get")(function* (providerID: string) {
+      yield* Effect.annotateCurrentSpan({ "provider.id": providerID })
       return (yield* all())[providerID]
     })
 

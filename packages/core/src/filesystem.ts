@@ -80,6 +80,7 @@ export namespace AppFileSystem {
       })
 
       const readJson = Effect.fn("FileSystem.readJson")(function* (path: string) {
+        yield* Effect.annotateCurrentSpan({ "file.path": path })
         const text = yield* fs.readFileString(path)
         return JSON.parse(text)
       })
@@ -99,6 +100,7 @@ export namespace AppFileSystem {
         content: string | Uint8Array,
         mode?: number,
       ) {
+        yield* Effect.annotateCurrentSpan({ "file.path": path })
         const write = typeof content === "string" ? fs.writeFileString(path, content) : fs.writeFile(path, content)
 
         yield* write.pipe(
@@ -122,6 +124,7 @@ export namespace AppFileSystem {
       })
 
       const findUp = Effect.fn("FileSystem.findUp")(function* (target: string, start: string, stop?: string) {
+        yield* Effect.annotateCurrentSpan({ "file.target": target, "file.start": start })
         const result: string[] = []
         let current = start
         while (true) {

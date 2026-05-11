@@ -750,7 +750,9 @@ export const layer: Layer.Layer<
         return yield* InstanceState.useEffect(state, (s) => s.cleanup())
       }),
       track: Effect.fn("Snapshot.track")(function* () {
-        return yield* InstanceState.useEffect(state, (s) => s.track())
+        const hash = yield* InstanceState.useEffect(state, (s) => s.track())
+        if (hash) yield* Effect.annotateCurrentSpan({ "snapshot.hash": hash })
+        return hash
       }),
       patch: Effect.fn("Snapshot.patch")(function* (hash: string) {
         return yield* InstanceState.useEffect(state, (s) => s.patch(hash))

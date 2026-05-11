@@ -81,6 +81,7 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: MessageV2.WithParts[] }) {
+      yield* Effect.annotateCurrentSpan({ "messages.count": input.messages.length })
       let from: string | undefined
       let to: string | undefined
       for (const item of input.messages) {
@@ -104,6 +105,7 @@ export const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
+      yield* Effect.annotateCurrentSpan({ "session.id": input.sessionID, "message.id": input.messageID })
       const all = yield* sessions.messages({ sessionID: input.sessionID })
       if (!all.length) return
 

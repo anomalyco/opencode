@@ -319,6 +319,7 @@ export const layer: Layer.Layer<
     // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
     // calls, then erases output of older tool calls to free context space
     const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
+      yield* Effect.annotateCurrentSpan({ "session.id": input.sessionID })
       const cfg = yield* config.get()
       if (!cfg.compaction?.prune) return
       log.info("pruning")

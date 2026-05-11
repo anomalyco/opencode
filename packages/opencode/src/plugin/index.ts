@@ -260,6 +260,7 @@ export const layer = Layer.effect(
       Input = Parameters<Required<Hooks>[Name]>[0],
       Output = Parameters<Required<Hooks>[Name]>[1],
     >(name: Name, input: Input, output: Output) {
+      yield* Effect.annotateCurrentSpan({ "plugin.hook": name })
       if (!name) return output
       const s = yield* InstanceState.get(state)
       for (const hook of s.hooks) {

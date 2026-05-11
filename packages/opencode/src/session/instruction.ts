@@ -99,6 +99,7 @@ export const layer: Layer.Layer<
     })
 
     const clear = Effect.fn("Instruction.clear")(function* (messageID: MessageID) {
+      yield* Effect.annotateCurrentSpan({ "message.id": messageID })
       const s = yield* InstanceState.get(state)
       s.claims.delete(messageID)
     })
