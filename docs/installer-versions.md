@@ -33,7 +33,7 @@
 - ✅ 安装包文件名 `DeskFox-2026.5.11.1` + 装出来 UI 左下角显示 `v2026.5.11.1` 对齐(pack-installer fix 修通)
 - ✅ 飞书 user 任务遇 opencode 权限请求 → 飞书侧弹交互卡片 → 点[允许一次]后 LLM 解锁继续,settled 卡片绿色 + 移除按钮
 - ✅ user 点[拒绝]后,本轮无 useful assistant text → plugin 不回飞书,不再回放上一轮答案
-- ⏳ 飞书"始终允许"路径单测覆盖,真飞书未实测(下次复测时验)
+- ✅ "始终允许"路径真飞书实测通过(2026-05-11 user 复测)
 - ⏳ Mac 端跟随 ship 未启动(本笔仅 Win)
 
 **Release**:等 user 决定走 GitHub Actions release-deskfox.yml workflow(push `ship-prod-2026.5.11.1` tag 触发)还是仅本地存档
