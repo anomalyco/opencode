@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/sync"
@@ -46,6 +46,7 @@ export const SyncApi = HttpApi.make("sync")
     HttpApiGroup.make("sync")
       .add(
         HttpApiEndpoint.post("start", SyncPaths.start, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Workspace sync started"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -55,6 +56,7 @@ export const SyncApi = HttpApi.make("sync")
           }),
         ),
         HttpApiEndpoint.post("replay", SyncPaths.replay, {
+          query: WorkspaceRoutingQuery,
           payload: ReplayPayload,
           success: described(ReplayResponse, "Replayed sync events"),
           error: HttpApiError.BadRequest,
@@ -66,6 +68,7 @@ export const SyncApi = HttpApi.make("sync")
           }),
         ),
         HttpApiEndpoint.post("steal", SyncPaths.steal, {
+          query: WorkspaceRoutingQuery,
           payload: SessionPayload,
           success: described(SessionPayload, "Session stolen into workspace"),
           error: HttpApiError.BadRequest,
@@ -77,6 +80,7 @@ export const SyncApi = HttpApi.make("sync")
           }),
         ),
         HttpApiEndpoint.post("history", SyncPaths.history, {
+          query: WorkspaceRoutingQuery,
           payload: HistoryPayload,
           success: described(Schema.Array(HistoryEvent), "Sync events"),
           error: HttpApiError.BadRequest,

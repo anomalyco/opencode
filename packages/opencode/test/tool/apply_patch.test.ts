@@ -27,7 +27,7 @@ const runtime = ManagedRuntime.make(
 
 const baseCtx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),

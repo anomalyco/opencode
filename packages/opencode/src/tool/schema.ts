@@ -1,10 +1,10 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
-import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
+import { zod } from "@opencode-ai/core/effect-zod"
 import { withStatics } from "@opencode-ai/core/schema"
 
-const toolIdSchema = Schema.String.annotate({ [ZodOverride]: Identifier.schema("tool") }).pipe(Schema.brand("ToolID"))
+const toolIdSchema = Schema.String.check(Schema.isStartsWith("tool")).pipe(Schema.brand("ToolID"))
 
 export type ToolID = typeof toolIdSchema.Type
 
