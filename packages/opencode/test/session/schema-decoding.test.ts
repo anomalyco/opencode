@@ -282,7 +282,6 @@ describe("SessionPrompt input schemas", () => {
   test("LoopInput is just sessionID", () => {
     const decode = decodeUnknown(SessionPrompt.LoopInput)
     expect(decode({ sessionID })).toEqual({ sessionID })
-    expect(SessionPrompt.LoopInput.zod.parse({ sessionID } as unknown)).toEqual({ sessionID })
   })
 
   test("ShellInput requires agent + command", () => {
@@ -290,7 +289,6 @@ describe("SessionPrompt input schemas", () => {
     const expected = { sessionID, agent: "build", command: "echo hi" }
     const input: unknown = expected
     expect(decode(input)).toEqual(expected)
-    expect(SessionPrompt.ShellInput.zod.parse(input as unknown)).toEqual(expected)
     expect(() => decode({ sessionID })).toThrow()
   })
 
@@ -308,9 +306,6 @@ describe("SessionPrompt input schemas", () => {
     expect(decoded.parts).toHaveLength(2)
     expect(decoded.parts[0]).toMatchObject({ type: "text", text: "hello" })
     expect(decoded.parts[1]).toMatchObject({ type: "file", mime: "image/png" })
-
-    const viaZod = SessionPrompt.PromptInput.zod.parse(input)
-    expect(viaZod.parts).toHaveLength(2)
   })
 
   test("PromptInput rejects unknown part type", () => {
@@ -320,7 +315,6 @@ describe("SessionPrompt input schemas", () => {
       parts: [{ type: "nonsense", payload: 42 }],
     }
     expect(() => decode(bad)).toThrow()
-    expect(() => SessionPrompt.PromptInput.zod.parse(bad)).toThrow()
   })
 
   test("CommandInput round-trips core fields", () => {
@@ -332,6 +326,5 @@ describe("SessionPrompt input schemas", () => {
     }
     const input: unknown = expected
     expect(decode(input)).toEqual(expected)
-    expect(SessionPrompt.CommandInput.zod.parse(input)).toEqual(expected)
   })
 })
