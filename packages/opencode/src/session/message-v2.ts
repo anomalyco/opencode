@@ -721,6 +721,34 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  const replayedAssistantParents = new Set(
+    input.flatMap((msg) => {
+      if (msg.info.role !== "assistant") return []
+      if (
+        msg.info.error &&
+        !(
+          AbortedError.isInstance(msg.info.error) &&
+          msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+        )
+      )
+        return []
+      if (!msg.parts.some((part) => part.type !== "step-start")) return []
+      return [msg.info.parentID]
+    }),
+  )
+  const orphanedFailedUserMessages = new Set(
+    input.flatMap((msg) => {
+      if (msg.info.role !== "assistant") return []
+      if (!msg.info.error) return []
+      if (
+        AbortedError.isInstance(msg.info.error) &&
+        msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+      )
+        return []
+      if (replayedAssistantParents.has(msg.info.parentID)) return []
+      return [msg.info.parentID]
+    }),
+  )
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support that media type in tool results.
   //
@@ -780,6 +808,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (msg.parts.length === 0) continue
 
     if (msg.info.role === "user") {
+      if (orphanedFailedUserMessages.has(msg.info.id)) continue
       const userMessage: UIMessage = {
         id: msg.info.id,
         role: "user",

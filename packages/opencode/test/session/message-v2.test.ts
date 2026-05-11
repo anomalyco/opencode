@@ -985,6 +985,55 @@ describe("session.message-v2.toModelMessage", () => {
     expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
+  test("drops the parent user message when the assistant failed before replayable output", async () => {
+    const firstUserID = "m-user-1"
+    const assistantID = "m-assistant"
+    const retryUserID = "m-user-2"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(firstUserID),
+        parts: [
+          {
+            ...basePart(firstUserID, "u1"),
+            type: "text",
+            text: "same prompt",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(
+          assistantID,
+          firstUserID,
+          new MessageV2.APIError({ message: "Model unloaded.", isRetryable: true }).toObject() as MessageV2.APIError,
+        ),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "step-start",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: userInfo(retryUserID),
+        parts: [
+          {
+            ...basePart(retryUserID, "u2"),
+            type: "text",
+            text: "same prompt",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "same prompt" }],
+      },
+    ])
+  })
+
   test("includes aborted assistant messages only when they have non-step-start/reasoning content", async () => {
     const assistantID1 = "m-assistant-1"
     const assistantID2 = "m-assistant-2"
