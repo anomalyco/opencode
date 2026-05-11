@@ -8,6 +8,7 @@ import { useEvent } from "@tui/context/event"
 import { uniqueBy } from "remeda"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { iife } from "@/util/iife"
 import { useToast } from "../ui/toast"
 import { useArgs } from "./args"
@@ -470,22 +471,24 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         prune(evt.properties.info.id)
       })
 
-      createEffect(
-        on(
-          () => (sessionStore.ready && route.data.type === "session" ? route.data.sessionID : undefined),
-          (sessionID) => {
-            if (!sessionID) return
-            if (cycling) {
-              cycling = false
-              return
-            }
-            const filtered = sessionStore.recentOrder.filter((x) => x !== sessionID)
-            const next = [sessionID, ...filtered].slice(0, 20)
-            setSessionStore("recentOrder", next)
-            save()
-          },
-        ),
-      )
+      if (Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING) {
+        createEffect(
+          on(
+            () => (sessionStore.ready && route.data.type === "session" ? route.data.sessionID : undefined),
+            (sessionID) => {
+              if (!sessionID) return
+              if (cycling) {
+                cycling = false
+                return
+              }
+              const filtered = sessionStore.recentOrder.filter((x) => x !== sessionID)
+              const next = [sessionID, ...filtered].slice(0, 20)
+              setSessionStore("recentOrder", next)
+              save()
+            },
+          ),
+        )
+      }
 
       return {
         get ready() {

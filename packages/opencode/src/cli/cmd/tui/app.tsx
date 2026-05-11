@@ -473,33 +473,37 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           dialog.clear()
         },
       },
-      {
-        name: "session.cycle_recent",
-        title: "Cycle to previous recent session",
-        category: "Session",
-        hidden: true,
-        run: () => {
-          local.session.cycleRecent(1)
-        },
-      },
-      {
-        name: "session.cycle_recent_reverse",
-        title: "Cycle to next recent session",
-        category: "Session",
-        hidden: true,
-        run: () => {
-          local.session.cycleRecent(-1)
-        },
-      },
-      ...Array.from({ length: 9 }, (_, i) => ({
-        name: `session.quick_switch.${i + 1}`,
-        title: `Switch to session in quick slot ${i + 1}`,
-        category: "Session",
-        hidden: true,
-        run: () => {
-          local.session.quickSwitch(i + 1)
-        },
-      })),
+      ...(Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
+        ? [
+            {
+              name: "session.cycle_recent",
+              title: "Cycle to previous recent session",
+              category: "Session",
+              hidden: true,
+              run: () => {
+                local.session.cycleRecent(1)
+              },
+            },
+            {
+              name: "session.cycle_recent_reverse",
+              title: "Cycle to next recent session",
+              category: "Session",
+              hidden: true,
+              run: () => {
+                local.session.cycleRecent(-1)
+              },
+            },
+            ...Array.from({ length: 9 }, (_, i) => ({
+              name: `session.quick_switch.${i + 1}`,
+              title: `Switch to session in quick slot ${i + 1}`,
+              category: "Session",
+              hidden: true,
+              run: () => {
+                local.session.quickSwitch(i + 1)
+              },
+            })),
+          ]
+        : []),
       {
         name: "model.list",
         title: "Switch model",
@@ -814,7 +818,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useBindings(() => ({
     enabled: command.matcher,
-    bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
+    bindings: tuiConfig.keybinds.gather(
+      "app",
+      Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
+        ? appBindingCommands
+        : appBindingCommands.filter(
+            (c) => !c.startsWith("session.cycle_recent") && !c.startsWith("session.quick_switch"),
+          ),
+    ),
   }))
 
   useBindings(() => ({

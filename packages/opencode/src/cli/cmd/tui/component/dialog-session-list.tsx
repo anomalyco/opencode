@@ -133,6 +133,7 @@ export function DialogSessionList() {
   const RECENT_LIMIT = 5
 
   const options = createMemo(() => {
+    const enabled = Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
     const today = new Date().toDateString()
     const sessionMap = new Map(
       sessions()
@@ -143,14 +144,16 @@ export function DialogSessionList() {
     const searchResult = searchResults()
     const displayOrder = searchResult ? orderByRecency(searchResult) : browseOrder()
 
-    const dismissed = new Set(local.session.dismissedRecent())
-    const pinned = local.session.pinned().filter((id) => sessionMap.has(id))
+    const dismissed = enabled ? new Set(local.session.dismissedRecent()) : new Set<string>()
+    const pinned = enabled ? local.session.pinned().filter((id) => sessionMap.has(id)) : []
     const pinnedSet = new Set(pinned)
-    const slotByID = new Map(local.session.slots().map((id, i) => [id, i + 1]))
+    const slotByID = enabled
+      ? new Map<string, number>(local.session.slots().map((id, i) => [id, i + 1]))
+      : new Map<string, number>()
 
-    const recent = displayOrder
-      .filter((id) => !pinnedSet.has(id) && !dismissed.has(id))
-      .slice(0, RECENT_LIMIT)
+    const recent = enabled
+      ? displayOrder.filter((id) => !pinnedSet.has(id) && !dismissed.has(id)).slice(0, RECENT_LIMIT)
+      : []
     const recentSet = new Set(recent)
 
     function buildOption(id: string, category: string) {
@@ -233,28 +236,32 @@ export function DialogSessionList() {
         dialog.clear()
       }}
       actions={[
-        {
-          command: "session.pin.toggle",
-          title: "pin/unpin",
-          onTrigger: (option) => {
-            local.session.togglePin(option.value)
-          },
-        },
-        {
-          command: "session.toggle.recent",
-          title: "toggle recent",
-          onTrigger: (option) => {
-            if (local.session.isPinned(option.value)) {
-              toast.show({
-                variant: "info",
-                message: "Unpin the session first to toggle it in Recent",
-                duration: 3000,
-              })
-              return
-            }
-            local.session.toggleRecent(option.value)
-          },
-        },
+        ...(Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
+          ? [
+              {
+                command: "session.pin.toggle",
+                title: "pin/unpin",
+                onTrigger: (option: { value: string }) => {
+                  local.session.togglePin(option.value)
+                },
+              },
+              {
+                command: "session.toggle.recent",
+                title: "toggle recent",
+                onTrigger: (option: { value: string }) => {
+                  if (local.session.isPinned(option.value)) {
+                    toast.show({
+                      variant: "info",
+                      message: "Unpin the session first to toggle it in Recent",
+                      duration: 3000,
+                    })
+                    return
+                  }
+                  local.session.toggleRecent(option.value)
+                },
+              },
+            ]
+          : []),
         {
           command: "session.delete",
           title: "delete",
