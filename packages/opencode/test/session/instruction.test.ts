@@ -61,7 +61,7 @@ const tmpWithFiles = (files: Record<string, string>) =>
 
 function loaded(filepath: string): MessageV2.WithParts[] {
   const sessionID = SessionID.make("session-loaded-1")
-  const messageID = MessageID.make("message-loaded-1")
+  const messageID = MessageID.make("msg_message-loaded-1")
 
   return [
     {
@@ -78,7 +78,7 @@ function loaded(filepath: string): MessageV2.WithParts[] {
       },
       parts: [
         {
-          id: PartID.make("part-loaded-1"),
+          id: PartID.make("prt_part-loaded-1"),
           messageID,
           sessionID,
           type: "tool",
@@ -106,7 +106,7 @@ describe("Instruction.resolve", () => {
         const system = yield* svc.systemPaths()
         expect(system.has(path.join(dir, "AGENTS.md"))).toBe(true)
 
-        const results = yield* svc.resolve([], path.join(dir, "src", "file.ts"), MessageID.make("message-test-1"))
+        const results = yield* svc.resolve([], path.join(dir, "src", "file.ts"), MessageID.make("msg_message-test-1"))
         expect(results).toEqual([])
       }),
     ),
@@ -122,7 +122,7 @@ describe("Instruction.resolve", () => {
         const results = yield* svc.resolve(
           [],
           path.join(dir, "subdir", "nested", "file.ts"),
-          MessageID.make("message-test-2"),
+          MessageID.make("msg_message-test-2"),
         )
         expect(results.length).toBe(1)
         expect(results[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
@@ -138,7 +138,7 @@ describe("Instruction.resolve", () => {
         const system = yield* svc.systemPaths()
         expect(system.has(filepath)).toBe(false)
 
-        const results = yield* svc.resolve([], filepath, MessageID.make("message-test-3"))
+        const results = yield* svc.resolve([], filepath, MessageID.make("msg_message-test-3"))
         expect(results).toEqual([])
       }),
     ),
@@ -149,7 +149,7 @@ describe("Instruction.resolve", () => {
       Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
-        const id = MessageID.make("message-claim-1")
+        const id = MessageID.make("msg_message-claim-1")
 
         const first = yield* svc.resolve([], filepath, id)
         const second = yield* svc.resolve([], filepath, id)
@@ -166,7 +166,7 @@ describe("Instruction.resolve", () => {
       Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
-        const id = MessageID.make("message-claim-2")
+        const id = MessageID.make("msg_message-claim-2")
 
         const first = yield* svc.resolve([], filepath, id)
         yield* svc.clear(id)
@@ -185,7 +185,7 @@ describe("Instruction.resolve", () => {
         const svc = yield* Instruction.Service
         const agents = path.join(dir, "subdir", "AGENTS.md")
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
-        const id = MessageID.make("message-claim-3")
+        const id = MessageID.make("msg_message-claim-3")
 
         const results = yield* svc.resolve(loaded(agents), filepath, id)
         expect(results).toEqual([])

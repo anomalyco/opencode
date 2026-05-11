@@ -1,19 +1,20 @@
 export * as TuiConfig from "./tui"
 
-import z from "zod"
+import type z from "zod"
+import { createBindingLookup } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { TuiInfo } from "./tui-schema"
+import { KeymapLeaderTimeoutDefault, TuiInfo, TuiJsonSchemaInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@opencode-ai/core/global"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
-import { ConfigKeybinds } from "@/config/keybinds"
+import { TuiKeybind } from "./keybind"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Filesystem } from "@/util/filesystem"
@@ -24,23 +25,23 @@ import { Npm } from "@opencode-ai/core/npm"
 const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiInfo
+export const JsonSchemaInfo = TuiJsonSchemaInfo
+export type Info = z.output<typeof Info>
 
 type Acc = {
   result: Info
+  plugin_origins: ConfigPlugin.Origin[]
 }
 
-type State = {
-  config: Info
-  deps: Array<Fiber.Fiber<void, AppFileSystem.Error>>
-}
-
-export type Info = z.output<typeof Info> & {
+export type Resolved = Omit<Info, "keybinds" | "leader_timeout"> & {
+  keybinds: TuiKeybind.BindingLookupView
+  leader_timeout: number
   // Internal resolved plugin list used by runtime loading.
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
 export interface Interface {
-  readonly get: () => Effect.Effect<Info>
+  readonly get: () => Effect.Effect<Resolved>
   readonly waitForDependencies: () => Effect.Effect<void>
 }
 
@@ -128,11 +129,11 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
 
       const scope = pluginScope(file, ctx)
       const plugins = ConfigPlugin.deduplicatePluginOrigins([
-        ...(acc.result.plugin_origins ?? []),
+        ...acc.plugin_origins,
         ...data.plugin.map((spec) => ({ spec, scope, source: file })),
       ])
       acc.result.plugin = plugins.map((item) => item.spec)
-      acc.result.plugin_origins = plugins
+      acc.plugin_origins = plugins
     })
 
   // Every config dir we may read from: global config dir, any `.opencode`
@@ -144,6 +145,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
 
   const acc: Acc = {
     result: {},
+    plugin_origins: [],
   }
 
   // 1. Global tui config (lowest precedence).
@@ -181,14 +183,23 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     keybinds.terminal_suspend = "none"
     keybinds.input_undo ??= unique([
       "ctrl+z",
-      ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(","),
+      ...String(TuiKeybind.Keybinds.shape.input_undo.parse(undefined)).split(","),
     ]).join(",")
   }
-  acc.result.keybinds = ConfigKeybinds.Keybinds.parse(keybinds)
+  const parsedKeybinds = TuiKeybind.Keybinds.parse(keybinds)
+  const result: Resolved = {
+    ...acc.result,
+    keybinds: createBindingLookup(TuiKeybind.toBindingConfig(parsedKeybinds), {
+      commandMap: TuiKeybind.CommandMap,
+      bindingDefaults: TuiKeybind.bindingDefaults(),
+    }),
+    leader_timeout: acc.result.leader_timeout ?? KeymapLeaderTimeoutDefault,
+    plugin_origins: acc.plugin_origins.length ? acc.plugin_origins : undefined,
+  }
 
   return {
-    config: acc.result,
-    dirs: acc.result.plugin?.length ? dirs : [],
+    config: result,
+    dirs: result.plugin?.length ? dirs : [],
   }
 })
 

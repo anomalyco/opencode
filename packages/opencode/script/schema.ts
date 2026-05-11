@@ -59,5 +59,5 @@ await Bun.write(configFile, JSON.stringify(generate(Config.Info.zod), null, 2))
 
 if (tuiFile) {
   console.log(tuiFile)
-  await Bun.write(tuiFile, JSON.stringify(generate(TuiConfig.Info), null, 2))
+  await Bun.write(tuiFile, JSON.stringify(generate(TuiConfig.JsonSchemaInfo), null, 2))
 }

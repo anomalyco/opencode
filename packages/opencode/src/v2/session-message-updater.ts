@@ -109,11 +109,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
           id: event.id,
           type: "model-switched",
           metadata: event.metadata,
-          model: {
-            id: event.data.id,
-            providerID: event.data.providerID,
-            variant: event.data.variant,
-          },
+          model: event.data.model,
           time: { created: event.data.timestamp },
         }),
       )
