@@ -29,9 +29,8 @@ const recorded = recordedTests({
   provider: "google",
   protocol: "gemini",
   requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
-  // Two identical requests in one cassette — match by recording order so the
-  // second call replays the cached-hit interaction.
-  options: { dispatch: "sequential" },
+  // Two identical requests in one cassette — replay walks the cassette in
+  // recording order so the second call replays the cached-hit interaction.
 })
 
 describe("Gemini cache recorded", () => {

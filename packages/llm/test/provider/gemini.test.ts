@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMError, Usage } from "../../src"
+import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
 import { it } from "../lib/effect"
@@ -49,12 +49,12 @@ describe("Gemini route", () => {
           ],
           toolChoice: { type: "tool", name: "lookup" },
           messages: [
-            LLM.user([
+            Message.user([
               { type: "text", text: "What is in this image?" },
               { type: "media", mediaType: "image/png", data: "AAECAw==" },
             ]),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
         }),
       )
@@ -353,7 +353,7 @@ describe("Gemini route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 

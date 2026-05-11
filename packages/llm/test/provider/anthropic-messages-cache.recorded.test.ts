@@ -31,10 +31,9 @@ const recorded = recordedTests({
   provider: "anthropic",
   protocol: "anthropic-messages",
   requires: ["ANTHROPIC_API_KEY"],
-  // Two identical requests in one cassette — match by recording order so the
-  // second call replays the cached-hit interaction.
+  // Two identical requests in one cassette — replay walks the cassette in
+  // recording order so the second call replays the cached-hit interaction.
   options: {
-    dispatch: "sequential",
     redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }),
   },
 })
