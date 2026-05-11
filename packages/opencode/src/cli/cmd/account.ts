@@ -1,9 +1,9 @@
 import { cmd } from "./cmd"
 import { Duration, Effect, Match, Option } from "effect"
 import { UI } from "../ui"
-import { runtime } from "@/effect/runtime"
-import { AccountID, AccountService, OrgID, PollExpired, type PollResult } from "@/account/service"
-import { type AccountError } from "@/account/schema"
+import { Account } from "@/account/account"
+import { AccountID, OrgID, PollExpired, type PollResult, type AccountError } from "@/account/schema"
+import { effectCmd } from "../effect-cmd"
 import * as Prompt from "../effect/prompt"
 import open from "open"
 
@@ -11,8 +11,33 @@ const openBrowser = (url: string) => Effect.promise(() => open(url).catch(() => 
 
 const println = (msg: string) => Effect.sync(() => UI.println(msg))
 
+const dim = (value: string) => UI.Style.TEXT_DIM + value + UI.Style.TEXT_NORMAL
+
+const activeSuffix = (isActive: boolean) => (isActive ? dim(" (active)") : "")
+
+export const formatAccountLabel = (account: { email: string; url: string }, isActive: boolean) =>
+  `${account.email} ${dim(account.url)}${activeSuffix(isActive)}`
+
+const formatOrgChoiceLabel = (account: { email: string }, org: { name: string }, isActive: boolean) =>
+  `${org.name} (${account.email})${activeSuffix(isActive)}`
+
+export const formatOrgLine = (
+  account: { email: string; url: string },
+  org: { id: string; name: string },
+  isActive: boolean,
+) => {
+  const dot = isActive ? UI.Style.TEXT_SUCCESS + "●" + UI.Style.TEXT_NORMAL : " "
+  const name = isActive ? UI.Style.TEXT_HIGHLIGHT_BOLD + org.name + UI.Style.TEXT_NORMAL : org.name
+  return `  ${dot} ${name}  ${dim(account.email)}  ${dim(account.url)}  ${dim(org.id)}`
+}
+
+const isActiveOrgChoice = (
+  active: Option.Option<{ id: AccountID; active_org_id: OrgID | null }>,
+  choice: { accountID: AccountID; orgID: OrgID },
+) => Option.isSome(active) && active.value.id === choice.accountID && active.value.active_org_id === choice.orgID
+
 const loginEffect = Effect.fn("login")(function* (url: string) {
-  const service = yield* AccountService
+  const service = yield* Account.Service
 
   yield* Prompt.intro("Log in")
   const login = yield* service.login(url)
@@ -53,7 +78,7 @@ const loginEffect = Effect.fn("login")(function* (url: string) {
 })
 
 const logoutEffect = Effect.fn("logout")(function* (email?: string) {
-  const service = yield* AccountService
+  const service = yield* Account.Service
   const accounts = yield* service.list()
   if (accounts.length === 0) return yield* println("Not logged in")
 
@@ -72,10 +97,9 @@ const logoutEffect = Effect.fn("logout")(function* (email?: string) {
 
   const opts = accounts.map((a) => {
     const isActive = Option.isSome(activeID) && activeID.value === a.id
-    const server = UI.Style.TEXT_DIM + a.url + UI.Style.TEXT_NORMAL
     return {
       value: a,
-      label: isActive ? `${a.email} ${server}` + UI.Style.TEXT_DIM + " (active)" : `${a.email} ${server}`,
+      label: formatAccountLabel(a, isActive),
     }
   })
 
@@ -93,22 +117,19 @@ interface OrgChoice {
 }
 
 const switchEffect = Effect.fn("switch")(function* () {
-  const service = yield* AccountService
+  const service = yield* Account.Service
 
   const groups = yield* service.orgsByAccount()
   if (groups.length === 0) return yield* println("Not logged in")
 
   const active = yield* service.active()
-  const activeOrgID = Option.flatMap(active, (a) => Option.fromNullishOr(a.active_org_id))
 
   const opts = groups.flatMap((group) =>
     group.orgs.map((org) => {
-      const isActive = Option.isSome(activeOrgID) && activeOrgID.value === org.id
+      const isActive = isActiveOrgChoice(active, { accountID: group.account.id, orgID: org.id })
       return {
         value: { orgID: org.id, accountID: group.account.id, label: org.name },
-        label: isActive
-          ? `${org.name} (${group.account.email})` + UI.Style.TEXT_DIM + " (active)"
-          : `${org.name} (${group.account.email})`,
+        label: formatOrgChoiceLabel(group.account, org, isActive),
       }
     }),
   )
@@ -125,77 +146,96 @@ const switchEffect = Effect.fn("switch")(function* () {
 })
 
 const orgsEffect = Effect.fn("orgs")(function* () {
-  const service = yield* AccountService
+  const service = yield* Account.Service
 
   const groups = yield* service.orgsByAccount()
   if (groups.length === 0) return yield* println("No accounts found")
   if (!groups.some((group) => group.orgs.length > 0)) return yield* println("No orgs found")
 
   const active = yield* service.active()
-  const activeOrgID = Option.flatMap(active, (a) => Option.fromNullishOr(a.active_org_id))
 
   for (const group of groups) {
     for (const org of group.orgs) {
-      const isActive = Option.isSome(activeOrgID) && activeOrgID.value === org.id
-      const dot = isActive ? UI.Style.TEXT_SUCCESS + "●" + UI.Style.TEXT_NORMAL : " "
-      const name = isActive ? UI.Style.TEXT_HIGHLIGHT_BOLD + org.name + UI.Style.TEXT_NORMAL : org.name
-      const email = UI.Style.TEXT_DIM + group.account.email + UI.Style.TEXT_NORMAL
-      const id = UI.Style.TEXT_DIM + org.id + UI.Style.TEXT_NORMAL
-      yield* println(`  ${dot} ${name}  ${email}  ${id}`)
+      const isActive = isActiveOrgChoice(active, { accountID: group.account.id, orgID: org.id })
+      yield* println(formatOrgLine(group.account, org, isActive))
     }
   }
 })
 
-export const LoginCommand = cmd({
+const openEffect = Effect.fn("open")(function* () {
+  const service = yield* Account.Service
+  const active = yield* service.active()
+  if (Option.isNone(active)) return yield* println("No active account")
+
+  const url = active.value.url
+  yield* openBrowser(url)
+  yield* Prompt.outro("Opened " + url)
+})
+
+export const LoginCommand = effectCmd({
   command: "login <url>",
   describe: false,
+  instance: false,
   builder: (yargs) =>
     yargs.positional("url", {
       describe: "server URL",
       type: "string",
       demandOption: true,
     }),
-  async handler(args) {
+  handler: Effect.fn("Cli.account.login")(function* (args) {
     UI.empty()
-    await runtime.runPromise(loginEffect(args.url))
-  },
+    yield* Effect.orDie(loginEffect(args.url))
+  }),
 })
 
-export const LogoutCommand = cmd({
+export const LogoutCommand = effectCmd({
   command: "logout [email]",
   describe: false,
+  instance: false,
   builder: (yargs) =>
     yargs.positional("email", {
       describe: "account email to log out from",
       type: "string",
     }),
-  async handler(args) {
+  handler: Effect.fn("Cli.account.logout")(function* (args) {
     UI.empty()
-    await runtime.runPromise(logoutEffect(args.email))
-  },
+    yield* Effect.orDie(logoutEffect(args.email))
+  }),
 })
 
-export const SwitchCommand = cmd({
+export const SwitchCommand = effectCmd({
   command: "switch",
   describe: false,
-  async handler() {
+  instance: false,
+  handler: Effect.fn("Cli.account.switch")(function* () {
     UI.empty()
-    await runtime.runPromise(switchEffect())
-  },
+    yield* Effect.orDie(switchEffect())
+  }),
 })
 
-export const OrgsCommand = cmd({
+export const OrgsCommand = effectCmd({
   command: "orgs",
   describe: false,
-  async handler() {
+  instance: false,
+  handler: Effect.fn("Cli.account.orgs")(function* () {
     UI.empty()
-    await runtime.runPromise(orgsEffect())
-  },
+    yield* Effect.orDie(orgsEffect())
+  }),
+})
+
+export const OpenCommand = effectCmd({
+  command: "open",
+  describe: false,
+  instance: false,
+  handler: Effect.fn("Cli.account.open")(function* () {
+    UI.empty()
+    yield* Effect.orDie(openEffect())
+  }),
 })
 
 export const ConsoleCommand = cmd({
   command: "console",
-  describe: "manage console account",
+  describe: false,
   builder: (yargs) =>
     yargs
       .command({
@@ -213,6 +253,10 @@ export const ConsoleCommand = cmd({
       .command({
         ...OrgsCommand,
         describe: "list orgs",
+      })
+      .command({
+        ...OpenCommand,
+        describe: "open active console account",
       })
       .demandCommand(),
   async handler() {},

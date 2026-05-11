@@ -60,7 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Considerando siguientes pasos",
 
   "ui.messagePart.questions.dismissed": "Preguntas descartadas",
-  "ui.messagePart.compaction": "Historial compactado",
+  "ui.messagePart.compaction": "Sesión compactada",
   "ui.messagePart.context.read.one": "{{count}} lectura",
   "ui.messagePart.context.read.other": "{{count}} lecturas",
   "ui.messagePart.context.search.one": "{{count}} búsqueda",
@@ -95,7 +95,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "Búsqueda web",
-  "ui.tool.codesearch": "Búsqueda de código",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Parche",
   "ui.tool.todos": "Tareas",
@@ -145,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "Selecciona todas las que correspondan",
   "ui.question.singleHint": "Selecciona una respuesta",
   "ui.question.custom.placeholder": "Escribe tu respuesta...",
+
+  "ui.fileSearch.placeholder": "Buscar",
+  "ui.fileSearch.previousMatch": "Anterior",
+  "ui.fileSearch.nextMatch": "Siguiente",
+  "ui.fileSearch.close": "Cerrar búsqueda",
+  "ui.tool.task": "Tarea",
+  "ui.tool.skill": "Habilidad",
+  "ui.basicTool.called": "Llamado `{{tool}}`",
+  "ui.toolErrorCard.failed": "Falló",
+  "ui.toolErrorCard.copyError": "Copiar error",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

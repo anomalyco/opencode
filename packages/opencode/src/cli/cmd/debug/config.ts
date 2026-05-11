@@ -1,16 +1,14 @@
 import { EOL } from "os"
-import { Config } from "../../../config/config"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
+import { Effect } from "effect"
+import { Config } from "@/config/config"
+import { effectCmd } from "../../effect-cmd"
 
-export const ConfigCommand = cmd({
+export const ConfigCommand = effectCmd({
   command: "config",
   describe: "show resolved configuration",
   builder: (yargs) => yargs,
-  async handler() {
-    await bootstrap(process.cwd(), async () => {
-      const config = await Config.get()
-      process.stdout.write(JSON.stringify(config, null, 2) + EOL)
-    })
-  },
+  handler: Effect.fn("Cli.debug.config")(function* () {
+    const config = yield* Config.Service.use((cfg) => cfg.get())
+    process.stdout.write(JSON.stringify(config, null, 2) + EOL)
+  }),
 })

@@ -64,7 +64,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "正在考慮下一步",
 
   "ui.messagePart.questions.dismissed": "問題已略過",
-  "ui.messagePart.compaction": "歷史已壓縮",
+  "ui.messagePart.compaction": "工作階段已壓縮",
   "ui.messagePart.context.read.one": "{{count}} 次讀取",
   "ui.messagePart.context.read.other": "{{count}} 次讀取",
   "ui.messagePart.context.search.one": "{{count}} 次搜尋",
@@ -99,7 +99,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "網頁搜尋",
-  "ui.tool.codesearch": "程式碼搜尋",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "修補",
   "ui.tool.todos": "待辦",
@@ -149,4 +148,16 @@ export const dict = {
   "ui.question.multiHint": "可多選",
   "ui.question.singleHint": "選擇一個答案",
   "ui.question.custom.placeholder": "輸入你的答案...",
+
+  "ui.fileSearch.placeholder": "搜尋",
+  "ui.fileSearch.previousMatch": "上一個",
+  "ui.fileSearch.nextMatch": "下一個",
+  "ui.fileSearch.close": "關閉搜尋",
+  "ui.tool.task": "任務",
+  "ui.tool.skill": "技能",
+  "ui.basicTool.called": "呼叫了 `{{tool}}`",
+  "ui.toolErrorCard.failed": "失敗",
+  "ui.toolErrorCard.copyError": "複製錯誤",
+  "ui.message.duration.seconds": "{{count}}秒",
+  "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
 } satisfies Partial<Record<Keys, string>>

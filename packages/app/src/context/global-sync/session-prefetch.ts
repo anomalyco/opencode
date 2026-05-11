@@ -4,8 +4,21 @@ export const SESSION_PREFETCH_TTL = 15_000
 
 type Meta = {
   limit: number
+  cursor?: string
   complete: boolean
   at: number
+}
+
+export function shouldSkipSessionPrefetch(input: { message: boolean; info?: Meta; chunk: number; now?: number }) {
+  if (input.message) {
+    if (!input.info) return true
+    if (input.info.complete) return true
+    if (input.info.limit > input.chunk) return true
+  } else {
+    if (!input.info) return false
+  }
+
+  return (input.now ?? Date.now()) - input.info.at < SESSION_PREFETCH_TTL
 }
 
 const cache = new Map<string, Meta>()
@@ -53,11 +66,13 @@ export function setSessionPrefetch(input: {
   directory: string
   sessionID: string
   limit: number
+  cursor?: string
   complete: boolean
   at?: number
 }) {
   cache.set(key(input.directory, input.sessionID), {
     limit: input.limit,
+    cursor: input.cursor,
     complete: input.complete,
     at: input.at ?? Date.now(),
   })

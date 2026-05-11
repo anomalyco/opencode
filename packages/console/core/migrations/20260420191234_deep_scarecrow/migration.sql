@@ -1,0 +1,1 @@
+DROP TABLE `model_rate_limit`;

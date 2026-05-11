@@ -1,9 +1,9 @@
-import { LSP } from "../../../lsp"
-import { bootstrap } from "../../bootstrap"
+import { LSP } from "@/lsp/lsp"
+import { Effect } from "effect"
+import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
-import { Log } from "../../../util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { EOL } from "os"
-import { setTimeout as sleep } from "node:timers/promises"
 
 export const LSPCommand = cmd({
   command: "lsp",
@@ -13,41 +13,39 @@ export const LSPCommand = cmd({
   async handler() {},
 })
 
-const DiagnosticsCommand = cmd({
+const DiagnosticsCommand = effectCmd({
   command: "diagnostics <file>",
   describe: "get diagnostics for a file",
   builder: (yargs) => yargs.positional("file", { type: "string", demandOption: true }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      await LSP.touchFile(args.file, true)
-      await sleep(1000)
-      process.stdout.write(JSON.stringify(await LSP.diagnostics(), null, 2) + EOL)
-    })
-  },
+  handler: Effect.fn("Cli.debug.lsp.diagnostics")(function* (args) {
+    const out = yield* LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        yield* lsp.touchFile(args.file, "full")
+        return yield* lsp.diagnostics()
+      }),
+    )
+    process.stdout.write(JSON.stringify(out, null, 2) + EOL)
+  }),
 })
 
-export const SymbolsCommand = cmd({
+export const SymbolsCommand = effectCmd({
   command: "symbols <query>",
   describe: "search workspace symbols",
   builder: (yargs) => yargs.positional("query", { type: "string", demandOption: true }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      using _ = Log.Default.time("symbols")
-      const results = await LSP.workspaceSymbol(args.query)
-      process.stdout.write(JSON.stringify(results, null, 2) + EOL)
-    })
-  },
+  handler: Effect.fn("Cli.debug.lsp.symbols")(function* (args) {
+    using _ = Log.Default.time("symbols")
+    const results = yield* LSP.Service.use((lsp) => lsp.workspaceSymbol(args.query))
+    process.stdout.write(JSON.stringify(results, null, 2) + EOL)
+  }),
 })
 
-export const DocumentSymbolsCommand = cmd({
+export const DocumentSymbolsCommand = effectCmd({
   command: "document-symbols <uri>",
   describe: "get symbols from a document",
   builder: (yargs) => yargs.positional("uri", { type: "string", demandOption: true }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      using _ = Log.Default.time("document-symbols")
-      const results = await LSP.documentSymbol(args.uri)
-      process.stdout.write(JSON.stringify(results, null, 2) + EOL)
-    })
-  },
+  handler: Effect.fn("Cli.debug.lsp.documentSymbols")(function* (args) {
+    using _ = Log.Default.time("document-symbols")
+    const results = yield* LSP.Service.use((lsp) => lsp.documentSymbol(args.uri))
+    process.stdout.write(JSON.stringify(results, null, 2) + EOL)
+  }),
 })

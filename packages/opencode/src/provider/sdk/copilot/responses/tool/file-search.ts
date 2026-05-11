@@ -1,4 +1,4 @@
-import { createProviderDefinedToolFactoryWithOutputSchema } from "@ai-sdk/provider-utils"
+import { createProviderToolFactoryWithOutputSchema } from "@ai-sdk/provider-utils"
 import type {
   OpenAIResponsesFileSearchToolComparisonFilter,
   OpenAIResponsesFileSearchToolCompoundFilter,
@@ -43,7 +43,7 @@ export const fileSearchOutputSchema = z.object({
     .nullable(),
 })
 
-export const fileSearch = createProviderDefinedToolFactoryWithOutputSchema<
+export const fileSearch = createProviderToolFactoryWithOutputSchema<
   {},
   {
     /**
@@ -122,7 +122,6 @@ export const fileSearch = createProviderDefinedToolFactoryWithOutputSchema<
   }
 >({
   id: "openai.file_search",
-  name: "file_search",
   inputSchema: z.object({}),
   outputSchema: fileSearchOutputSchema,
 })

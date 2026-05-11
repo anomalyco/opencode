@@ -50,7 +50,7 @@
     "diffAddedBg": "#20303b",
     "diffRemovedBg": "#37222c",
     "diffContextBg": "darkPanel",
-    "diffLineNumber": "darkGutter",
+    "diffLineNumber": "diffContext",
     "diffAddedLineNumberBg": "#1b2b34",
     "diffRemovedLineNumberBg": "#2d1f26",
     "markdownText": "darkFg",

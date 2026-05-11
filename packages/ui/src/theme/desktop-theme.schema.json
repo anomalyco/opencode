@@ -87,7 +87,7 @@
       "type": "object",
       "description": "A compact semantic palette used to derive the full theme programmatically",
       "additionalProperties": false,
-      "required": ["neutral", "primary", "success", "warning", "error", "info"],
+      "required": ["neutral", "ink", "primary", "success", "warning", "error", "info"],
       "properties": {
         "neutral": {
           "$ref": "#/definitions/HexColor",
@@ -95,7 +95,7 @@
         },
         "ink": {
           "$ref": "#/definitions/HexColor",
-          "description": "Optional foreground or chrome color used to derive text and border tones"
+          "description": "Foreground or chrome color used to derive text and border tones"
         },
         "primary": {
           "$ref": "#/definitions/HexColor",

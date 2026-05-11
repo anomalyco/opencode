@@ -1,4 +1,4 @@
-import { createProviderDefinedToolFactoryWithOutputSchema } from "@ai-sdk/provider-utils"
+import { createProviderToolFactoryWithOutputSchema } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 
 export const imageGenerationArgsSchema = z
@@ -92,7 +92,7 @@ type ImageGenerationArgs = {
   size?: "auto" | "1024x1024" | "1024x1536" | "1536x1024"
 }
 
-const imageGenerationToolFactory = createProviderDefinedToolFactoryWithOutputSchema<
+const imageGenerationToolFactory = createProviderToolFactoryWithOutputSchema<
   {},
   {
     /**
@@ -103,7 +103,6 @@ const imageGenerationToolFactory = createProviderDefinedToolFactoryWithOutputSch
   ImageGenerationArgs
 >({
   id: "openai.image_generation",
-  name: "image_generation",
   inputSchema: z.object({}),
   outputSchema: imageGenerationOutputSchema,
 })

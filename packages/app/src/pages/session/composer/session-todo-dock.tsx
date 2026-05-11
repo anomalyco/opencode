@@ -6,8 +6,13 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
-import { Index, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { Index, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useLanguage } from "@/context/language"
+
+const doneToken = "\u0000done\u0000"
+const totalToken = "\u0000total\u0000"
 
 function dot(status: Todo["status"]) {
   if (status !== "in_progress") return undefined
@@ -35,12 +40,13 @@ function dot(status: Todo["status"]) {
 }
 
 export function SessionTodoDock(props: {
+  sessionID?: string
   todos: Todo[]
-  title: string
   collapseLabel: string
   expandLabel: string
   dockProgress: number
 }) {
+  const language = useLanguage()
   const [store, setStore] = createStore({
     collapsed: false,
     height: 320,
@@ -50,7 +56,12 @@ export function SessionTodoDock(props: {
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
-  const label = createMemo(() => `${done()} of ${total()} ${props.title.toLowerCase()} completed`)
+  const label = createMemo(() => language.t("session.todo.progress", { done: done(), total: total() }))
+  const progress = createMemo(() =>
+    language
+      .t("session.todo.progress", { done: doneToken, total: totalToken })
+      .split(/(\u0000done\u0000|\u0000total\u0000)/),
+  )
 
   const active = createMemo(
     () =>
@@ -78,9 +89,7 @@ export function SessionTodoDock(props: {
       setStore("height", el.getBoundingClientRect().height)
     }
     update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    onCleanup(() => observer.disconnect())
+    createResizeObserver(el, update)
   })
 
   return (
@@ -106,20 +115,28 @@ export function SessionTodoDock(props: {
           }}
         >
           <span
-            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 whitespace-nowrap overflow-visible"
+            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 overflow-visible"
             aria-label={label()}
             style={{
               "--tool-motion-odometer-ms": "600ms",
               "--tool-motion-mask": "18%",
               "--tool-motion-mask-height": "0px",
               "--tool-motion-spring-ms": "560ms",
+              "white-space": "pre",
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
             }}
           >
-            <AnimatedNumber value={done()} />
-            <span class="mx-1">of</span>
-            <AnimatedNumber value={total()} />
-            <span>&nbsp;{props.title.toLowerCase()} completed</span>
+            <Index each={progress()}>
+              {(item) =>
+                item() === doneToken ? (
+                  <AnimatedNumber value={done()} />
+                ) : item() === totalToken ? (
+                  <AnimatedNumber value={total()} />
+                ) : (
+                  <span>{item()}</span>
+                )
+              }
+            </Index>
           </span>
           <div
             data-slot="session-todo-preview"
@@ -173,76 +190,25 @@ export function SessionTodoDock(props: {
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
           }}
         >
-          <TodoList todos={props.todos} open={!store.collapsed} />
+          <TodoList todos={props.todos} />
         </div>
       </div>
     </DockTray>
   )
 }
 
-function TodoList(props: { todos: Todo[]; open: boolean }) {
+function TodoList(props: { todos: Todo[] }) {
   const [store, setStore] = createStore({
     stuck: false,
-    scrolling: false,
-  })
-  let scrollRef!: HTMLDivElement
-  let timer: number | undefined
-
-  const inProgress = createMemo(() => props.todos.findIndex((todo) => todo.status === "in_progress"))
-
-  const ensure = () => {
-    if (!props.open) return
-    if (store.scrolling) return
-    if (!scrollRef || scrollRef.offsetParent === null) return
-
-    const el = scrollRef.querySelector("[data-in-progress]")
-    if (!(el instanceof HTMLElement)) return
-
-    const topFade = 16
-    const bottomFade = 44
-    const container = scrollRef.getBoundingClientRect()
-    const rect = el.getBoundingClientRect()
-    const top = rect.top - container.top + scrollRef.scrollTop
-    const bottom = rect.bottom - container.top + scrollRef.scrollTop
-    const viewTop = scrollRef.scrollTop + topFade
-    const viewBottom = scrollRef.scrollTop + scrollRef.clientHeight - bottomFade
-
-    if (top < viewTop) {
-      scrollRef.scrollTop = Math.max(0, top - topFade)
-    } else if (bottom > viewBottom) {
-      scrollRef.scrollTop = bottom - (scrollRef.clientHeight - bottomFade)
-    }
-
-    setStore("stuck", scrollRef.scrollTop > 0)
-  }
-
-  createEffect(
-    on([() => props.open, inProgress], () => {
-      if (!props.open || inProgress() < 0) return
-      requestAnimationFrame(ensure)
-    }),
-  )
-
-  onCleanup(() => {
-    if (!timer) return
-    window.clearTimeout(timer)
   })
 
   return (
     <div class="relative">
       <div
         class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar"
-        ref={scrollRef}
         style={{ "overflow-anchor": "none" }}
         onScroll={(e) => {
           setStore("stuck", e.currentTarget.scrollTop > 0)
-          setStore("scrolling", true)
-          if (timer) window.clearTimeout(timer)
-          timer = window.setTimeout(() => {
-            setStore("scrolling", false)
-            if (inProgress() < 0) return
-            requestAnimationFrame(ensure)
-          }, 250)
         }}
       >
         <Index each={props.todos}>

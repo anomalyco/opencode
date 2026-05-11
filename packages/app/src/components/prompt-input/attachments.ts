@@ -1,29 +1,32 @@
-import { onCleanup, onMount } from "solid-js"
+import { onMount } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
 import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
+import { attachmentMime } from "./files"
+import { normalizePaste, pasteMode } from "./paste"
 
-export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
-export const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
-const LARGE_PASTE_CHARS = 8000
-const LARGE_PASTE_BREAKS = 120
-
-function largePaste(text: string) {
-  if (text.length >= LARGE_PASTE_CHARS) return true
-  let breaks = 0
-  for (const char of text) {
-    if (char !== "\n") continue
-    breaks += 1
-    if (breaks >= LARGE_PASTE_BREAKS) return true
-  }
-  return false
+function dataUrl(file: File, mime: string) {
+  return new Promise<string>((resolve) => {
+    const reader = new FileReader()
+    reader.addEventListener("error", () => resolve(""))
+    reader.addEventListener("load", () => {
+      const value = typeof reader.result === "string" ? reader.result : ""
+      const idx = value.indexOf(",")
+      if (idx === -1) {
+        resolve(value)
+        return
+      }
+      resolve(`data:${mime};base64,${value.slice(idx + 1)}`)
+    })
+    reader.readAsDataURL(file)
+  })
 }
 
 type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
-  isFocused: () => boolean
   isDialogActive: () => boolean
   setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
@@ -35,58 +38,73 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   const prompt = usePrompt()
   const language = useLanguage()
 
-  const addImageAttachment = async (file: File) => {
-    if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      const editor = input.editor()
-      if (!editor) return
-      const dataUrl = reader.result as string
-      const attachment: ImageAttachmentPart = {
-        type: "image",
-        id: uuid(),
-        filename: file.name,
-        mime: file.type,
-        dataUrl,
-      }
-      const cursorPosition = prompt.cursor() ?? getCursorPosition(editor)
-      prompt.set([...prompt.current(), attachment], cursorPosition)
-    }
-    reader.readAsDataURL(file)
+  const warn = () => {
+    showToast({
+      title: language.t("prompt.toast.pasteUnsupported.title"),
+      description: language.t("prompt.toast.pasteUnsupported.description"),
+    })
   }
 
-  const removeImageAttachment = (id: string) => {
+  const add = async (file: File, toast = true) => {
+    const mime = await attachmentMime(file)
+    if (!mime) {
+      if (toast) warn()
+      return false
+    }
+
+    const editor = input.editor()
+    if (!editor) return false
+
+    const url = await dataUrl(file, mime)
+    if (!url) return false
+
+    const attachment: ImageAttachmentPart = {
+      type: "image",
+      id: uuid(),
+      filename: file.name,
+      mime,
+      dataUrl: url,
+    }
+    const cursor = prompt.cursor() ?? getCursorPosition(editor)
+    prompt.set([...prompt.current(), attachment], cursor)
+    return true
+  }
+
+  const addAttachment = (file: File) => add(file)
+
+  const addAttachments = async (files: File[], toast = true) => {
+    let found = false
+
+    for (const file of files) {
+      const ok = await add(file, false)
+      if (ok) found = true
+    }
+
+    if (!found && files.length > 0 && toast) warn()
+    return found
+  }
+
+  const removeAttachment = (id: string) => {
     const current = prompt.current()
     const next = current.filter((part) => part.type !== "image" || part.id !== id)
     prompt.set(next, prompt.cursor())
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
-    if (!input.isFocused()) return
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
     event.preventDefault()
     event.stopPropagation()
 
-    const items = Array.from(clipboardData.items)
-    const fileItems = items.filter((item) => item.kind === "file")
-    const imageItems = fileItems.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
+    const files = Array.from(clipboardData.items).flatMap((item) => {
+      if (item.kind !== "file") return []
+      const file = item.getAsFile()
+      return file ? [file] : []
+    })
 
-    if (imageItems.length > 0) {
-      for (const item of imageItems) {
-        const file = item.getAsFile()
-        if (file) await addImageAttachment(file)
-      }
-      return
-    }
-
-    if (fileItems.length > 0) {
-      showToast({
-        title: language.t("prompt.toast.pasteUnsupported.title"),
-        description: language.t("prompt.toast.pasteUnsupported.description"),
-      })
+    if (files.length > 0) {
+      await addAttachments(files)
       return
     }
 
@@ -96,23 +114,30 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     if (input.readClipboardImage && !plainText) {
       const file = await input.readClipboardImage()
       if (file) {
-        await addImageAttachment(file)
+        await addAttachment(file)
         return
       }
     }
 
     if (!plainText) return
 
-    if (largePaste(plainText)) {
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+    const text = normalizePaste(plainText)
+
+    const put = () => {
+      if (input.addPart({ type: "text", content: text, start: 0, end: 0 })) return true
       input.focusEditor()
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+      return input.addPart({ type: "text", content: text, start: 0, end: 0 })
     }
 
-    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
+    if (pasteMode(text) === "manual") {
+      put()
+      return
+    }
+
+    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, text)
     if (inserted) return
 
-    input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
+    put()
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {
@@ -153,28 +178,19 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     const dropped = event.dataTransfer?.files
     if (!dropped) return
 
-    for (const file of Array.from(dropped)) {
-      if (ACCEPTED_FILE_TYPES.includes(file.type)) {
-        await addImageAttachment(file)
-      }
-    }
+    await addAttachments(Array.from(dropped))
   }
 
   onMount(() => {
-    document.addEventListener("dragover", handleGlobalDragOver)
-    document.addEventListener("dragleave", handleGlobalDragLeave)
-    document.addEventListener("drop", handleGlobalDrop)
-  })
-
-  onCleanup(() => {
-    document.removeEventListener("dragover", handleGlobalDragOver)
-    document.removeEventListener("dragleave", handleGlobalDragLeave)
-    document.removeEventListener("drop", handleGlobalDrop)
+    makeEventListener(document, "dragover", handleGlobalDragOver)
+    makeEventListener(document, "dragleave", handleGlobalDragLeave)
+    makeEventListener(document, "drop", handleGlobalDrop)
   })
 
   return {
-    addImageAttachment,
-    removeImageAttachment,
+    addAttachment,
+    addAttachments,
+    removeAttachment,
     handlePaste,
   }
 }
