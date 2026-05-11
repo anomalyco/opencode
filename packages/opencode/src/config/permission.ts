@@ -1,7 +1,7 @@
 export * as ConfigPermission from "./permission"
 import { Schema, SchemaGetter } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 export const Action = Schema.Literals(["ask", "allow", "deny"])
   .annotate({ identifier: "PermissionActionConfig" })
@@ -18,17 +18,9 @@ export const Rule = Schema.Union([Action, Object])
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Rule = Schema.Schema.Type<typeof Rule>
 
-// Known permission keys get explicit types — most are full Rule (either a
-// single Action or a per-pattern object), but a handful of tools take no
-// sub-target patterns and are Action-only. Unknown keys fall through the
-// Record rest signature as Rule.
-//
-// StructWithRest canonicalises key order on decode (known first, then rest),
-// which used to require the `__originalKeys` preprocess hack because
-// `Permission.fromConfig` depended on the user's insertion order. That
-// dependency is gone — `fromConfig` now sorts top-level keys so wildcard
-// permissions come before specifics, making the final precedence
-// order-independent.
+// Known permission keys get explicit types in the Effect schema for generated
+// docs/types. Runtime config parsing uses Effect's `propertyOrder: "original"`
+// parse option so user key order is preserved for permission precedence.
 const InputObject = Schema.StructWithRest(
   Schema.Struct({
     read: Schema.optional(Rule),
@@ -44,6 +36,8 @@ const InputObject = Schema.StructWithRest(
     webfetch: Schema.optional(Action),
     websearch: Schema.optional(Action),
     codesearch: Schema.optional(Action),
+    repo_clone: Schema.optional(Rule),
+    repo_overview: Schema.optional(Rule),
     lsp: Schema.optional(Rule),
     doom_loop: Schema.optional(Action),
     skill: Schema.optional(Rule),

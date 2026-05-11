@@ -1,7 +1,7 @@
 import { PlanExitTool } from "./plan"
-import { Session } from "../session"
+import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
-import { BashTool } from "./bash"
+import { ShellTool } from "./shell"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -13,40 +13,53 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import * as Tool from "./tool"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
+import { Schema } from "effect"
 import z from "zod"
+import { ZodOverride } from "@opencode-ai/core/effect-zod"
 import { Plugin } from "../plugin"
-import { Provider } from "../provider"
+import { Provider } from "@/provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
-import { Flag } from "@/flag/flag"
-import { Log } from "@/util"
+import { RepoCloneTool } from "./repo_clone"
+import { RepoOverviewTool } from "./repo_overview"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
-import { LSP } from "../lsp"
+import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
+import { Git } from "@/git"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
+import { Reference } from "@/reference/reference"
 
 const log = Log.create({ service: "tool.registry" })
+
+export function webSearchEnabled(
+  providerID: ProviderID,
+  flags = { exa: Flag.OPENCODE_ENABLE_EXA, parallel: Flag.OPENCODE_ENABLE_PARALLEL },
+) {
+  return providerID === ProviderID.opencode || flags.exa || flags.parallel
+}
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
@@ -78,6 +91,8 @@ export const layer: Layer.Layer<
   | Skill.Service
   | Session.Service
   | Provider.Service
+  | Git.Service
+  | Reference.Service
   | LSP.Service
   | Instruction.Service
   | AppFileSystem.Service
@@ -105,8 +120,10 @@ export const layer: Layer.Layer<
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
-    const bash = yield* BashTool
     const codesearch = yield* CodeSearchTool
+    const repoClone = yield* RepoCloneTool
+    const repoOverview = yield* RepoOverviewTool
+    const shell = yield* ShellTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
     const edit = yield* EditTool
@@ -120,9 +137,17 @@ export const layer: Layer.Layer<
         const custom: Tool.Def[] = []
 
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
+          // Plugin tools define their args as a raw Zod shape. Wrap the
+          // derived Zod object in a `Schema.declare` so it slots into the
+          // Schema-typed framework, and annotate with `ZodOverride` so the
+          // walker emits the original Zod object for LLM JSON Schema.
+          const zodParams = z.object(def.args)
+          const parameters = Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success).annotate({
+            [ZodOverride]: zodParams,
+          })
           return {
             id,
-            parameters: z.object(def.args),
+            parameters,
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
@@ -146,7 +171,16 @@ export const layer: Layer.Layer<
                     ...(out.truncated && { outputPath: out.outputPath }),
                   },
                 }
-              }),
+              }).pipe(
+                Effect.withSpan("Tool.execute", {
+                  attributes: {
+                    "tool.name": id,
+                    "session.id": toolCtx.sessionID,
+                    "message.id": toolCtx.messageID,
+                    ...(toolCtx.callID ? { "tool.call_id": toolCtx.callID } : {}),
+                  },
+                }),
+              ),
           }
         }
 
@@ -178,7 +212,7 @@ export const layer: Layer.Layer<
 
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
-          bash: Tool.init(bash),
+          shell: Tool.init(shell),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -189,6 +223,8 @@ export const layer: Layer.Layer<
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           code: Tool.init(codesearch),
+          repo_clone: Tool.init(repoClone),
+          repo_overview: Tool.init(repoOverview),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
@@ -201,7 +237,7 @@ export const layer: Layer.Layer<
           builtin: [
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
-            tool.bash,
+            tool.shell,
             tool.read,
             tool.glob,
             tool.grep,
@@ -211,7 +247,7 @@ export const layer: Layer.Layer<
             tool.fetch,
             tool.todo,
             tool.search,
-            tool.code,
+            ...(Flag.OPENCODE_EXPERIMENTAL_SCOUT ? [tool.code, tool.repo_clone, tool.repo_overview] : []),
             tool.skill,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
@@ -268,8 +304,8 @@ export const layer: Layer.Layer<
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
-        if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
-          return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+        if (tool.id === WebSearchTool.id) {
+          return webSearchEnabled(input.providerID)
         }
 
         const usePatch =
@@ -326,6 +362,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Session.defaultLayer),
     Layer.provide(Provider.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
     Layer.provide(LSP.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
@@ -337,3 +375,5 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Truncate.defaultLayer),
   ),
 )
+
+export * as ToolRegistry from "./registry"

@@ -64,7 +64,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
           [
             ripgrep
           ]
-          # bun runs sysctl to detect if dunning on rosetta2
+          # bun runs sysctl to detect if running on rosetta2
           ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
         )
       }

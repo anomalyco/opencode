@@ -1,8 +1,7 @@
 import { Schema } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
-
-const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
+import { zod } from "@opencode-ai/core/effect-zod"
+import { PositiveInt, withStatics } from "@opencode-ai/core/schema"
+import { ModelStatus } from "@/provider/model-status"
 
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),
@@ -23,25 +22,25 @@ export const Model = Schema.Struct({
   ),
   cost: Schema.optional(
     Schema.Struct({
-      input: Schema.Number,
-      output: Schema.Number,
-      cache_read: Schema.optional(Schema.Number),
-      cache_write: Schema.optional(Schema.Number),
+      input: Schema.Finite,
+      output: Schema.Finite,
+      cache_read: Schema.optional(Schema.Finite),
+      cache_write: Schema.optional(Schema.Finite),
       context_over_200k: Schema.optional(
         Schema.Struct({
-          input: Schema.Number,
-          output: Schema.Number,
-          cache_read: Schema.optional(Schema.Number),
-          cache_write: Schema.optional(Schema.Number),
+          input: Schema.Finite,
+          output: Schema.Finite,
+          cache_read: Schema.optional(Schema.Finite),
+          cache_write: Schema.optional(Schema.Finite),
         }),
       ),
     }),
   ),
   limit: Schema.optional(
     Schema.Struct({
-      context: Schema.Number,
-      input: Schema.optional(Schema.Number),
-      output: Schema.Number,
+      context: Schema.Finite,
+      input: Schema.optional(Schema.Finite),
+      output: Schema.Finite,
     }),
   ),
   modalities: Schema.optional(
@@ -51,7 +50,7 @@ export const Model = Schema.Struct({
     }),
   ),
   experimental: Schema.optional(Schema.Boolean),
-  status: Schema.optional(Schema.Literals(["alpha", "beta", "deprecated"])),
+  status: Schema.optional(ModelStatus),
   provider: Schema.optional(
     Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
   ),

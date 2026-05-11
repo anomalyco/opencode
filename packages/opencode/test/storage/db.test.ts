@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Global } from "../../src/global"
-import { InstallationChannel } from "../../src/installation/version"
-import { Database } from "../../src/storage"
+import { Global } from "@opencode-ai/core/global"
+import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { Database } from "@/storage/db"
 
 describe("Database.Path", () => {
   test("returns database path for the current channel", () => {

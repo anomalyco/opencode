@@ -1,6 +1,6 @@
-import type { Config } from "@/config"
-import type { Provider } from "@/provider"
-import { ProviderTransform } from "@/provider"
+import type { Config } from "@/config/config"
+import type { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
 import type { MessageV2 } from "./message-v2"
 
 const COMPACTION_BUFFER = 20_000

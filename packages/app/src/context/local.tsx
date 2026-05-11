@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { base64Encode } from "@opencode-ai/shared/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -382,7 +382,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
-            variant: msg.model.variant ?? null,
+            variant: msg.model?.variant ?? null,
           })
         },
       },

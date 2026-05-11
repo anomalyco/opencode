@@ -201,3 +201,5 @@ export async function copy(text: string): Promise<void> {
   const method = await getCopyMethod()
   await method(text)
 }
+
+export * as Clipboard from "./clipboard"

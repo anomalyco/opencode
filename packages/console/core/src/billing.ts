@@ -176,13 +176,13 @@ export namespace Billing {
     )
   }
 
-  export const hasCoupon = async (email: string, type: (typeof CouponType)[number]) => {
+  export const getCoupons = async (email: string) => {
     return await Database.use((tx) =>
       tx
-        .select()
+        .select({ type: CouponTable.type, timeRedeemed: CouponTable.timeRedeemed })
         .from(CouponTable)
-        .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type), isNull(CouponTable.timeRedeemed)))
-        .then((rows) => rows.length > 0),
+        .where(and(eq(CouponTable.email, email), isNull(CouponTable.timeRedeemed)))
+        .then((rows) => rows.map((row) => row.type)),
     )
   }
 
@@ -290,9 +290,16 @@ export namespace Billing {
       if (billing.subscriptionID) throw new Error("Already subscribed to Black")
       if (billing.liteSubscriptionID) throw new Error("Already subscribed to Lite")
 
-      const coupon = (await Billing.hasCoupon(email, "GOFREEMONTH"))
-        ? LiteData.firstMonth100Coupon
-        : LiteData.firstMonth50Coupon
+      const coupons = await Billing.getCoupons(email)
+      const coupon = coupons.includes("GO12MONTHS100")
+        ? LiteData.twelveMonths100Coupon
+        : coupons.includes("GO6MONTHS100")
+          ? LiteData.sixMonths100Coupon
+          : coupons.includes("GO3MONTHS100")
+            ? LiteData.threeMonths100Coupon
+            : coupons.includes("GOFREEMONTH")
+              ? LiteData.firstMonth100Coupon
+              : LiteData.firstMonth50Coupon
       const createSession = () =>
         Billing.stripe().checkout.sessions.create({
           mode: "subscription",

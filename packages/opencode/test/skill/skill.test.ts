@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideInstance, provideTmpdirInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import path from "path"
@@ -158,6 +158,37 @@ Just some content without YAML frontmatter.
 
           const skill = yield* Skill.Service
           expect(yield* skill.all()).toEqual([])
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("discovers skills without descriptions", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "manual-skill", "SKILL.md"),
+              `---
+name: manual-skill
+---
+
+# Manual Skill
+
+Instructions here.
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = yield* skill.all()
+          expect(list.length).toBe(1)
+          const item = list.find((x) => x.name === "manual-skill")
+          expect(item).toBeDefined()
+          expect(item!.description).toBeUndefined()
+          expect(Skill.fmt(list, { verbose: false })).toBe("No skills are currently available.")
+          expect(Skill.fmt(list, { verbose: true })).toBe("No skills are currently available.")
         }),
       { git: true },
     ),

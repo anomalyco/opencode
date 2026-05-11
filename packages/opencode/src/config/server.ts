@@ -1,9 +1,9 @@
 import { Schema } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { PositiveInt, withStatics } from "@opencode-ai/core/schema"
 
 export const Server = Schema.Struct({
-  port: Schema.optional(Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))).annotate({
+  port: Schema.optional(PositiveInt).annotate({
     description: "Port to listen on",
   }),
   hostname: Schema.optional(Schema.String).annotate({ description: "Hostname to listen on" }),

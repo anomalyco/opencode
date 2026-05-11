@@ -1,16 +1,17 @@
-import z from "zod"
-import { Effect, Option, Scope } from "effect"
+import { Effect, Option, Schema, Scope } from "effect"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { createReadStream } from "fs"
 import * as path from "path"
 import { createInterface } from "readline"
 import * as Tool from "./tool"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { LSP } from "../lsp"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
-import { Instance } from "../project/instance"
+import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
-import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { Reference } from "@/reference/reference"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -18,11 +19,21 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
+const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 
-const parameters = z.object({
-  filePath: z.string().describe("The absolute path to the file or directory to read"),
-  offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),
-  limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
+// `offset` and `limit` were originally `z.coerce.number()` — the runtime
+// coercion was useful when the tool was called from a shell but serves no
+// purpose in the LLM tool-call path (the model emits typed JSON). The JSON
+// Schema output is identical (`type: "number"`), so the LLM view is
+// unchanged; purely CLI-facing uses must now send numbers rather than strings.
+export const Parameters = Schema.Struct({
+  filePath: Schema.String.annotate({ description: "The absolute path to the file or directory to read" }),
+  offset: Schema.optional(NonNegativeInt).annotate({
+    description: "The line number to start reading from (1-indexed)",
+  }),
+  limit: Schema.optional(NonNegativeInt).annotate({
+    description: "The maximum number of lines to read (defaults to 2000)",
+  }),
 })
 
 export const ReadTool = Tool.define(
@@ -31,6 +42,7 @@ export const ReadTool = Tool.define(
     const fs = yield* AppFileSystem.Service
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
+    const reference = yield* Reference.Service
     const scope = yield* Scope.Scope
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
@@ -75,7 +87,7 @@ export const ReadTool = Tool.define(
     })
 
     const warm = Effect.fn("ReadTool.warm")(function* (filepath: string) {
-      yield* lsp.touchFile(filepath, false).pipe(Effect.ignore, Effect.forkIn(scope))
+      yield* lsp.touchFile(filepath).pipe(Effect.ignore, Effect.forkIn(scope))
     })
 
     const readSample = Effect.fn("ReadTool.readSample")(function* (
@@ -140,19 +152,20 @@ export const ReadTool = Tool.define(
       return nonPrintableCount / bytes.length > 0.3
     }
 
-    const run = Effect.fn("ReadTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
-      if (params.offset !== undefined && params.offset < 1) {
-        return yield* Effect.fail(new Error("offset must be greater than or equal to 1"))
-      }
-
+    const run = Effect.fn("ReadTool.execute")(function* (
+      params: Schema.Schema.Type<typeof Parameters>,
+      ctx: Tool.Context,
+    ) {
+      const instance = yield* InstanceState.context
       let filepath = params.filePath
       if (!path.isAbsolute(filepath)) {
-        filepath = path.resolve(Instance.directory, filepath)
+        filepath = path.resolve(instance.directory, filepath)
       }
       if (process.platform === "win32") {
         filepath = AppFileSystem.normalizePath(filepath)
       }
-      const title = path.relative(Instance.worktree, filepath)
+      yield* reference.ensure(filepath)
+      const title = path.relative(instance.worktree, filepath)
 
       const stat = yield* fs.stat(filepath).pipe(
         Effect.catchIf(
@@ -162,13 +175,13 @@ export const ReadTool = Tool.define(
       )
 
       yield* assertExternalDirectoryEffect(ctx, filepath, {
-        bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
+        bypass: Boolean(ctx.extra?.["bypassCwdCheck"]) || (yield* reference.contains(filepath)),
         kind: stat?.type === "Directory" ? "directory" : "file",
       })
 
       yield* ctx.ask({
         permission: "read",
-        patterns: [filepath],
+        patterns: [path.relative(instance.worktree, filepath)],
         always: ["*"],
         metadata: {},
       })
@@ -178,7 +191,7 @@ export const ReadTool = Tool.define(
       if (stat.type === "Directory") {
         const items = yield* list(filepath)
         const limit = params.limit ?? DEFAULT_READ_LIMIT
-        const offset = params.offset ?? 1
+        const offset = params.offset || 1
         const start = offset - 1
         const sliced = items.slice(start, start + limit)
         const truncated = start + sliced.length < items.length
@@ -207,7 +220,9 @@ export const ReadTool = Tool.define(
       const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
 
       const mime = sniffAttachmentMime(sample, AppFileSystem.mimeType(filepath))
-      if (isImageAttachment(mime) || isPdfAttachment(mime)) {
+      const isImage = SUPPORTED_IMAGE_MIMES.has(mime)
+
+      if (isImage || isPdfAttachment(mime)) {
         const bytes = yield* fs.readFile(filepath)
         const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
         return {
@@ -233,7 +248,7 @@ export const ReadTool = Tool.define(
       }
 
       const file = yield* Effect.promise(() =>
-        lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset ?? 1 }),
+        lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 }),
       )
       if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
         return yield* Effect.fail(
@@ -275,8 +290,9 @@ export const ReadTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters,
-      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+        run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

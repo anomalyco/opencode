@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Pty } from "../../src/pty"
 import { Shell } from "../../src/shell/shell"
 import { tmpdir } from "../fixture/fixture"
@@ -17,7 +18,7 @@ describe("pty shell args", () => {
       "does not add login args to pwsh",
       async () => {
         await using dir = await tmpdir()
-        await Instance.provide({
+        await WithInstance.provide({
           directory: dir.path,
           fn: () =>
             AppRuntime.runPromise(
@@ -47,7 +48,7 @@ describe("pty shell args", () => {
       "adds login args to bash",
       async () => {
         await using dir = await tmpdir()
-        await Instance.provide({
+        await WithInstance.provide({
           directory: dir.path,
           fn: () =>
             AppRuntime.runPromise(
@@ -66,4 +67,39 @@ describe("pty shell args", () => {
       { timeout: 30000 },
     )
   }
+})
+
+describe("pty configured shell", () => {
+  test(
+    "uses configured shell for default PTY command",
+    async () => {
+      const configured = process.platform === "win32" ? Bun.which("pwsh") || Bun.which("powershell") : Bun.which("bash")
+      if (!configured) return
+
+      await using dir = await tmpdir({
+        config: { shell: Shell.name(configured) },
+      })
+      await WithInstance.provide({
+        directory: dir.path,
+        fn: () =>
+          AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const pty = yield* Pty.Service
+              const info = yield* pty.create({ title: "configured" })
+              try {
+                if (process.platform === "win32") {
+                  expect(info.command.toLowerCase()).toBe(configured.toLowerCase())
+                } else {
+                  expect(info.command).toBe(configured)
+                }
+                expect(info.args).toEqual(process.platform === "win32" ? [] : ["-l"])
+              } finally {
+                yield* pty.remove(info.id)
+              }
+            }),
+          ),
+      })
+    },
+    { timeout: 30000 },
+  )
 })

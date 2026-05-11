@@ -1,7 +1,7 @@
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import matter from "gray-matter"
 import { z } from "zod"
-import { Filesystem } from "../util"
+import { Filesystem } from "@/util/filesystem"
 
 export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 export const SHELL_REGEX = /!`([^`]+)`/g
@@ -95,3 +95,5 @@ export const FrontmatterError = NamedError.create(
     message: z.string(),
   }),
 )
+
+export * as ConfigMarkdown from "./markdown"

@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import z from "zod"
-import { zod } from "@/util/effect-zod"
+import { zod } from "@opencode-ai/core/effect-zod"
 
 /**
  * Create a Schema-backed NamedError-shaped class.
@@ -26,10 +26,17 @@ export function namedSchemaError<Tag extends string, Fields extends Schema.Struc
     })
     .meta({ ref: tag })
 
+  // Effect Schema for the wire shape — used by HttpApi OpenAPI generation.
+  const effectSchema = Schema.Struct({
+    name: Schema.Literal(tag),
+    data: dataSchema,
+  }).annotate({ identifier: tag })
+
   type Data = Schema.Schema.Type<typeof dataSchema>
 
   class NamedSchemaError extends Error {
     static readonly Schema = wire
+    static readonly EffectSchema = effectSchema
     static readonly tag = tag
     public static isInstance(input: unknown): input is NamedSchemaError {
       return typeof input === "object" && input !== null && "name" in input && (input as { name: unknown }).name === tag

@@ -5,6 +5,8 @@ import {
   type AuthenticateRequest,
   type AuthMethod,
   type CancelNotification,
+  type CloseSessionRequest,
+  type CloseSessionResponse,
   type ForkSessionRequest,
   type ForkSessionResponse,
   type InitializeRequest,
@@ -31,29 +33,31 @@ import {
   type Usage,
 } from "@agentclientprotocol/sdk"
 
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { pathToFileURL } from "url"
-import { Filesystem } from "../util"
-import { Hash } from "@opencode-ai/shared/util/hash"
+import { Filesystem } from "@/util/filesystem"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
-import { Provider } from "../provider"
+import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
-import { z } from "zod"
+import { Result, Schema } from "effect"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
-import { InstallationVersion } from "@/installation/version"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { ShellID } from "@/tool/shell/id"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
+const decodeTodos = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Array(Todo.Info)))
 
 const DEFAULT_VARIANT_VALUE = "default"
 
@@ -128,7 +132,7 @@ async function sendUsageUpdate(
     })
 }
 
-export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
+export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
   return {
     create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
       return new Agent(connection, fullConfig)
@@ -143,7 +147,7 @@ export class Agent implements ACPAgent {
   private sessionManager: ACPSessionManager
   private eventAbort = new AbortController()
   private eventStarted = false
-  private bashSnapshots = new Map<string, string>()
+  private shellSnapshots = new Map<string, string>()
   private toolStarts = new Set<string>()
   private permissionQueues = new Map<string, Promise<void>>()
   private permissionOptions: PermissionOption[] = [
@@ -282,16 +286,16 @@ export class Agent implements ACPAgent {
 
           switch (part.state.status) {
             case "pending":
-              this.bashSnapshots.delete(part.callID)
+              this.shellSnapshots.delete(part.callID)
               return
 
             case "running":
-              const output = this.bashOutput(part)
+              const output = this.shellOutput(part)
               const content: ToolCallContent[] = []
               if (output) {
                 const hash = Hash.fast(output)
-                if (part.tool === "bash") {
-                  if (this.bashSnapshots.get(part.callID) === hash) {
+                if (part.tool === ShellID.ToolID) {
+                  if (this.shellSnapshots.get(part.callID) === hash) {
                     await this.connection
                       .sessionUpdate({
                         sessionId,
@@ -310,7 +314,7 @@ export class Agent implements ACPAgent {
                       })
                     return
                   }
-                  this.bashSnapshots.set(part.callID, hash)
+                  this.shellSnapshots.set(part.callID, hash)
                 }
                 content.push({
                   type: "content",
@@ -341,45 +345,19 @@ export class Agent implements ACPAgent {
 
             case "completed": {
               this.toolStarts.delete(part.callID)
-              this.bashSnapshots.delete(part.callID)
+              this.shellSnapshots.delete(part.callID)
               const kind = toToolKind(part.tool)
-              const content: ToolCallContent[] = [
-                {
-                  type: "content",
-                  content: {
-                    type: "text",
-                    text: part.state.output,
-                  },
-                },
-              ]
-
-              if (kind === "edit") {
-                const input = part.state.input
-                const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
-                const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
-                const newText =
-                  typeof input["newString"] === "string"
-                    ? input["newString"]
-                    : typeof input["content"] === "string"
-                      ? input["content"]
-                      : ""
-                content.push({
-                  type: "diff",
-                  path: filePath,
-                  oldText,
-                  newText,
-                })
-              }
+              const content = completedToolContent(part, kind)
 
               if (part.tool === "todowrite") {
-                const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
-                if (parsedTodos.success) {
+                const parsedTodos = decodeTodos(part.state.output)
+                if (Result.isSuccess(parsedTodos)) {
                   await this.connection
                     .sessionUpdate({
                       sessionId,
                       update: {
                         sessionUpdate: "plan",
-                        entries: parsedTodos.data.map((todo) => {
+                        entries: parsedTodos.success.map((todo) => {
                           const status: PlanEntry["status"] =
                             todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                           return {
@@ -394,7 +372,7 @@ export class Agent implements ACPAgent {
                       log.error("failed to send session update for todo", { error })
                     })
                 } else {
-                  log.error("failed to parse todo output", { error: parsedTodos.error })
+                  log.error("failed to parse todo output", { error: parsedTodos.failure })
                 }
               }
 
@@ -409,10 +387,7 @@ export class Agent implements ACPAgent {
                     content,
                     title: part.state.title,
                     rawInput: part.state.input,
-                    rawOutput: {
-                      output: part.state.output,
-                      metadata: part.state.metadata,
-                    },
+                    rawOutput: completedToolRawOutput(part),
                   },
                 })
                 .catch((error) => {
@@ -422,7 +397,7 @@ export class Agent implements ACPAgent {
             }
             case "error":
               this.toolStarts.delete(part.callID)
-              this.bashSnapshots.delete(part.callID)
+              this.shellSnapshots.delete(part.callID)
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -563,6 +538,7 @@ export class Agent implements ACPAgent {
           image: true,
         },
         sessionCapabilities: {
+          close: {},
           fork: {},
           list: {},
           resume: {},
@@ -625,6 +601,9 @@ export class Agent implements ACPAgent {
       // Store ACP session state
       await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
 
+      const messages = await this.loadSessionMessages(directory, sessionId)
+      this.restoreSessionStateFromMessages(sessionId, messages)
+
       log.info("load_session", { sessionId, mcpServers: params.mcpServers.length })
 
       const result = await this.loadSessionMode({
@@ -632,39 +611,6 @@ export class Agent implements ACPAgent {
         mcpServers: params.mcpServers,
         sessionId,
       })
-
-      // Replay session history
-      const messages = await this.sdk.session
-        .messages(
-          {
-            sessionID: sessionId,
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((x) => x.data)
-        .catch((err) => {
-          log.error("unexpected error when fetching message", { error: err })
-          return undefined
-        })
-
-      const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
-      if (lastUser?.role === "user") {
-        result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
-        this.sessionManager.setModel(sessionId, {
-          providerID: ProviderID.make(lastUser.model.providerID),
-          modelID: ModelID.make(lastUser.model.modelID),
-        })
-        if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
-          result.modes.currentModeId = lastUser.agent
-          this.sessionManager.setMode(sessionId, lastUser.agent)
-        }
-        result.configOptions = buildConfigOptions({
-          currentModelId: result.models.currentModelId,
-          availableModels: result.models.availableModels,
-          modes: result.modes,
-        })
-      }
 
       for (const msg of messages ?? []) {
         log.debug("replay message", msg)
@@ -754,6 +700,9 @@ export class Agent implements ACPAgent {
       const sessionId = forked.id
       await this.sessionManager.load(sessionId, directory, mcpServers, model)
 
+      const messages = await this.loadSessionMessages(directory, sessionId)
+      this.restoreSessionStateFromMessages(sessionId, messages)
+
       log.info("fork_session", { sessionId, mcpServers: mcpServers.length })
 
       const mode = await this.loadSessionMode({
@@ -761,20 +710,6 @@ export class Agent implements ACPAgent {
         mcpServers,
         sessionId,
       })
-
-      const messages = await this.sdk.session
-        .messages(
-          {
-            sessionID: sessionId,
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((x) => x.data)
-        .catch((err) => {
-          log.error("unexpected error when fetching message", { error: err })
-          return undefined
-        })
 
       for (const msg of messages ?? []) {
         log.debug("replay message", msg)
@@ -795,7 +730,7 @@ export class Agent implements ACPAgent {
     }
   }
 
-  async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+  async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
     const directory = params.cwd
     const sessionId = params.sessionId
     const mcpServers = params.mcpServers ?? []
@@ -803,6 +738,9 @@ export class Agent implements ACPAgent {
     try {
       const model = await defaultModel(this.config, directory)
       await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+      const messages = await this.loadSessionMessages(directory, sessionId, 20)
+      this.restoreSessionStateFromMessages(sessionId, messages)
 
       log.info("resume_session", { sessionId, mcpServers: mcpServers.length })
 
@@ -826,6 +764,27 @@ export class Agent implements ACPAgent {
     }
   }
 
+  async closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
+    const session = this.sessionManager.remove(params.sessionId)
+    if (!session) return {}
+
+    await this.sdk.session
+      .abort(
+        {
+          sessionID: params.sessionId,
+          directory: session.cwd,
+        },
+        { throwOnError: true },
+      )
+      .catch((error) => {
+        log.error("failed to abort session while closing ACP session", { error, sessionID: params.sessionId })
+      })
+
+    this.permissionQueues.delete(params.sessionId)
+    log.info("close_session", { sessionId: params.sessionId })
+    return {}
+  }
+
   private async processMessage(message: SessionMessageResponse) {
     log.debug("process message", message)
     if (message.info.role !== "assistant" && message.info.role !== "user") return
@@ -836,10 +795,10 @@ export class Agent implements ACPAgent {
         await this.toolStart(sessionId, part)
         switch (part.state.status) {
           case "pending":
-            this.bashSnapshots.delete(part.callID)
+            this.shellSnapshots.delete(part.callID)
             break
           case "running":
-            const output = this.bashOutput(part)
+            const output = this.shellOutput(part)
             const runningContent: ToolCallContent[] = []
             if (output) {
               runningContent.push({
@@ -870,45 +829,19 @@ export class Agent implements ACPAgent {
             break
           case "completed":
             this.toolStarts.delete(part.callID)
-            this.bashSnapshots.delete(part.callID)
+            this.shellSnapshots.delete(part.callID)
             const kind = toToolKind(part.tool)
-            const content: ToolCallContent[] = [
-              {
-                type: "content",
-                content: {
-                  type: "text",
-                  text: part.state.output,
-                },
-              },
-            ]
-
-            if (kind === "edit") {
-              const input = part.state.input
-              const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
-              const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
-              const newText =
-                typeof input["newString"] === "string"
-                  ? input["newString"]
-                  : typeof input["content"] === "string"
-                    ? input["content"]
-                    : ""
-              content.push({
-                type: "diff",
-                path: filePath,
-                oldText,
-                newText,
-              })
-            }
+            const content = completedToolContent(part, kind)
 
             if (part.tool === "todowrite") {
-              const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
-              if (parsedTodos.success) {
+              const parsedTodos = decodeTodos(part.state.output)
+              if (Result.isSuccess(parsedTodos)) {
                 await this.connection
                   .sessionUpdate({
                     sessionId,
                     update: {
                       sessionUpdate: "plan",
-                      entries: parsedTodos.data.map((todo) => {
+                      entries: parsedTodos.success.map((todo) => {
                         const status: PlanEntry["status"] =
                           todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                         return {
@@ -923,7 +856,7 @@ export class Agent implements ACPAgent {
                     log.error("failed to send session update for todo", { error: err })
                   })
               } else {
-                log.error("failed to parse todo output", { error: parsedTodos.error })
+                log.error("failed to parse todo output", { error: parsedTodos.failure })
               }
             }
 
@@ -938,10 +871,7 @@ export class Agent implements ACPAgent {
                   content,
                   title: part.state.title,
                   rawInput: part.state.input,
-                  rawOutput: {
-                    output: part.state.output,
-                    metadata: part.state.metadata,
-                  },
+                  rawOutput: completedToolRawOutput(part),
                 },
               })
               .catch((err) => {
@@ -950,7 +880,7 @@ export class Agent implements ACPAgent {
             break
           case "error":
             this.toolStarts.delete(part.callID)
-            this.bashSnapshots.delete(part.callID)
+            this.shellSnapshots.delete(part.callID)
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -1104,8 +1034,8 @@ export class Agent implements ACPAgent {
     }
   }
 
-  private bashOutput(part: ToolPart) {
-    if (part.tool !== "bash") return
+  private shellOutput(part: ToolPart) {
+    if (part.tool !== ShellID.ToolID) return
     if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
     const output = part.state.metadata["output"]
     if (typeof output !== "string") return
@@ -1157,23 +1087,26 @@ export class Agent implements ACPAgent {
     sessionId: string,
   ): Promise<{ availableModes: ModeOption[]; currentModeId?: string }> {
     const availableModes = await this.loadAvailableModes(directory)
-    const currentModeId =
-      this.sessionManager.get(sessionId).modeId ||
-      (await (async () => {
-        if (!availableModes.length) return undefined
-        const defaultAgentName = await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent()))
-        const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
-        this.sessionManager.setMode(sessionId, resolvedModeId)
-        return resolvedModeId
-      })())
+    const storedModeId = this.sessionManager.get(sessionId).modeId
+    if (storedModeId && availableModes.some((mode) => mode.id === storedModeId)) {
+      return { availableModes, currentModeId: storedModeId }
+    }
+
+    const currentModeId = await (async () => {
+      if (!availableModes.length) return undefined
+      const defaultAgentName = await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent()))
+      const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+      this.sessionManager.setMode(sessionId, resolvedModeId)
+      return resolvedModeId
+    })()
 
     return { availableModes, currentModeId }
   }
 
   private async loadSessionMode(params: LoadSessionRequest) {
     const directory = params.cwd
-    const model = await defaultModel(this.config, directory)
     const sessionId = params.sessionId
+    const model = this.sessionManager.get(sessionId).model ?? (await defaultModel(this.config, directory))
 
     const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
     const entries = sortProvidersByName(providers)
@@ -1182,7 +1115,7 @@ export class Agent implements ACPAgent {
     if (currentVariant && !availableVariants.includes(currentVariant)) {
       this.sessionManager.setVariant(sessionId, undefined)
     }
-    const availableModels = buildAvailableModels(entries, { includeVariants: true })
+    const availableModels = buildAvailableModels(entries)
     const modeState = await this.resolveModeState(directory, sessionId)
     const currentModeId = modeState.currentModeId
     const modes = currentModeId
@@ -1265,13 +1198,15 @@ export class Agent implements ACPAgent {
     return {
       sessionId,
       models: {
-        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, false),
         availableModels,
       },
       modes,
       configOptions: buildConfigOptions({
-        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+        currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, false),
         availableModels,
+        currentVariant,
+        availableVariants,
         modes,
       }),
       _meta: buildVariantMeta({
@@ -1294,6 +1229,24 @@ export class Agent implements ACPAgent {
 
     const entries = sortProvidersByName(providers)
     const availableVariants = modelVariantsFromProviders(entries, selection.model)
+    const modeState = await this.resolveModeState(session.cwd, session.id)
+    const modes = modeState.currentModeId
+      ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
+      : undefined
+
+    await this.connection.sessionUpdate({
+      sessionId: session.id,
+      update: {
+        sessionUpdate: "config_option_update",
+        configOptions: buildConfigOptions({
+          currentModelId: formatModelIdWithVariant(selection.model, selection.variant, availableVariants, false),
+          availableModels: buildAvailableModels(entries),
+          currentVariant: selection.variant,
+          availableVariants,
+          modes,
+        }),
+      },
+    })
 
     return {
       _meta: buildVariantMeta({
@@ -1325,6 +1278,14 @@ export class Agent implements ACPAgent {
       const selection = parseModelSelection(params.value, providers)
       this.sessionManager.setModel(session.id, selection.model)
       this.sessionManager.setVariant(session.id, selection.variant)
+    } else if (params.configId === "effort") {
+      if (typeof params.value !== "string") throw RequestError.invalidParams("effort value must be a string")
+      const current = session.model ?? (await defaultModel(this.config, session.cwd))
+      const availableVariants = modelVariantsFromProviders(entries, current)
+      if (!availableVariants.includes(params.value)) {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Effort not found: ${params.value}` }))
+      }
+      this.sessionManager.setVariant(session.id, params.value)
     } else if (params.configId === "mode") {
       if (typeof params.value !== "string") throw RequestError.invalidParams("mode value must be a string")
       const availableModes = await this.loadAvailableModes(session.cwd)
@@ -1339,15 +1300,21 @@ export class Agent implements ACPAgent {
     const updatedSession = this.sessionManager.get(session.id)
     const model = updatedSession.model ?? (await defaultModel(this.config, session.cwd))
     const availableVariants = modelVariantsFromProviders(entries, model)
-    const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, true)
-    const availableModels = buildAvailableModels(entries, { includeVariants: true })
+    const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, false)
+    const availableModels = buildAvailableModels(entries)
     const modeState = await this.resolveModeState(session.cwd, session.id)
     const modes = modeState.currentModeId
       ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
       : undefined
 
     return {
-      configOptions: buildConfigOptions({ currentModelId, availableModels, modes }),
+      configOptions: buildConfigOptions({
+        currentModelId,
+        availableModels,
+        currentVariant: updatedSession.variant,
+        availableVariants,
+        modes,
+      }),
     }
   }
 
@@ -1544,13 +1511,46 @@ export class Agent implements ACPAgent {
       { throwOnError: true },
     )
   }
+
+  private async loadSessionMessages(directory: string, sessionId: string, limit?: number) {
+    return this.sdk.session
+      .messages(
+        {
+          sessionID: sessionId,
+          directory,
+          limit,
+        },
+        { throwOnError: true },
+      )
+      .then((x) => x.data)
+      .catch((error) => {
+        log.error("unexpected error when fetching message", { error })
+        return undefined
+      })
+  }
+
+  private restoreSessionStateFromMessages(sessionId: string, messages: SessionMessageResponse[] | undefined) {
+    const lastUser = messages?.findLast((message) => message.info.role === "user")?.info
+    if (lastUser?.role !== "user") return
+
+    this.sessionManager.setModel(sessionId, {
+      providerID: ProviderID.make(lastUser.model.providerID),
+      modelID: ModelID.make(lastUser.model.modelID),
+    })
+    this.sessionManager.setVariant(sessionId, lastUser.model.variant)
+    if (lastUser.agent) {
+      this.sessionManager.setMode(sessionId, lastUser.agent)
+    }
+  }
 }
 
 function toToolKind(toolName: string): ToolKind {
   const tool = toolName.toLocaleLowerCase()
+
   switch (tool) {
-    case "bash":
+    case ShellID.ToolID:
       return "execute"
+
     case "webfetch":
       return "fetch"
 
@@ -1561,6 +1561,8 @@ function toToolKind(toolName: string): ToolKind {
 
     case "grep":
     case "glob":
+    case "repo_clone":
+    case "repo_overview":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
       return "search"
@@ -1575,6 +1577,7 @@ function toToolKind(toolName: string): ToolKind {
 
 function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {
   const tool = toolName.toLocaleLowerCase()
+
   switch (tool) {
     case "read":
     case "edit":
@@ -1583,11 +1586,79 @@ function toLocations(toolName: string, input: Record<string, any>): { path: stri
     case "glob":
     case "grep":
       return input["path"] ? [{ path: input["path"] }] : []
-    case "bash":
+    case "repo_clone":
+      return input["path"] ? [{ path: input["path"] }] : []
+    case "repo_overview":
+      return input["path"] ? [{ path: input["path"] }] : []
+    case ShellID.ToolID:
       return []
     default:
       return []
   }
+}
+
+function completedToolContent(part: ToolPart, kind: ToolKind): ToolCallContent[] {
+  if (part.state.status !== "completed") return []
+
+  const content: ToolCallContent[] = [
+    {
+      type: "content",
+      content: {
+        type: "text",
+        text: part.state.output,
+      },
+    },
+  ]
+
+  if (kind === "edit") {
+    const input = part.state.input
+    const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
+    const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
+    const newText =
+      typeof input["newString"] === "string"
+        ? input["newString"]
+        : typeof input["content"] === "string"
+          ? input["content"]
+          : ""
+    content.push({
+      type: "diff",
+      path: filePath,
+      oldText,
+      newText,
+    })
+  }
+
+  content.push(...imageContents(part.state.attachments ?? []))
+  return content
+}
+
+function completedToolRawOutput(part: ToolPart) {
+  if (part.state.status !== "completed") return {}
+  return {
+    output: part.state.output,
+    metadata: part.state.metadata,
+    ...(part.state.attachments?.length ? { attachments: part.state.attachments } : {}),
+  }
+}
+
+function imageContents(attachments: Array<{ mime: string; url: string }>): ToolCallContent[] {
+  return attachments.flatMap((attachment): ToolCallContent[] => {
+    const match = attachment.url.match(/^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$/)
+    const mime = match?.[1] ?? attachment.mime
+    if (!mime.startsWith("image/")) return []
+    const data = match?.[2]
+    if (data === undefined) return []
+    return [
+      {
+        type: "content" as const,
+        content: {
+          type: "image" as const,
+          mimeType: mime,
+          data,
+        },
+      },
+    ]
+  })
 }
 
 async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ providerID: ProviderID; modelID: ModelID }> {
@@ -1624,11 +1695,11 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
 
   if (specified && !providers.length) return specified
 
+  const lastUsed = await lastUsedModel(sdk, directory, providers)
+  if (lastUsed) return lastUsed
+
   const opencodeProvider = providers.find((p) => p.id === "opencode")
   if (opencodeProvider) {
-    if (opencodeProvider.models["big-pickle"]) {
-      return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
-    }
     const [best] = Provider.sort(Object.values(opencodeProvider.models))
     if (best) {
       return {
@@ -1648,8 +1719,38 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
   }
 
   if (specified) return specified
+  throw new Error("No models available")
+}
 
-  return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
+async function lastUsedModel(
+  sdk: OpencodeClient,
+  directory: string,
+  providers: Array<{ id: string; models: Record<string, unknown> }>,
+): Promise<{ providerID: ProviderID; modelID: ModelID } | undefined> {
+  const session = await sdk.session
+    .list({ directory, roots: true, limit: 1 }, { throwOnError: true })
+    .then((x) => x.data?.[0])
+    .catch((error) => {
+      log.error("failed to list sessions for default model", { error })
+      return undefined
+    })
+  if (!session) return
+
+  const lastUser = await sdk.session
+    .messages({ sessionID: session.id, directory, limit: 20 }, { throwOnError: true })
+    .then((x) => x.data?.findLast((message) => message.info.role === "user")?.info)
+    .catch((error) => {
+      log.error("failed to load session messages for default model", { error, sessionID: session.id })
+      return undefined
+    })
+  if (lastUser?.role !== "user") return
+
+  const provider = providers.find((entry) => entry.id === lastUser.model.providerID)
+  if (!provider?.models[lastUser.model.modelID]) return
+  return {
+    providerID: ProviderID.make(lastUser.model.providerID),
+    modelID: ModelID.make(lastUser.model.modelID),
+  }
 }
 
 function parseUri(
@@ -1752,8 +1853,14 @@ function formatModelIdWithVariant(
   includeVariant: boolean,
 ) {
   const base = `${model.providerID}/${model.modelID}`
-  if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
-  return `${base}/${variant}`
+  if (!includeVariant || availableVariants.length === 0) return base
+  const selectedVariant =
+    variant && availableVariants.includes(variant)
+      ? variant
+      : availableVariants.includes(DEFAULT_VARIANT_VALUE)
+        ? DEFAULT_VARIANT_VALUE
+        : availableVariants[0]
+  return `${base}/${selectedVariant}`
 }
 
 function buildVariantMeta(input: {
@@ -1805,6 +1912,8 @@ function parseModelSelection(
 function buildConfigOptions(input: {
   currentModelId: string
   availableModels: ModelOption[]
+  currentVariant?: string
+  availableVariants?: string[]
   modes?: { availableModes: ModeOption[]; currentModeId: string } | undefined
 }): SessionConfigOption[] {
   const options: SessionConfigOption[] = [
@@ -1817,6 +1926,22 @@ function buildConfigOptions(input: {
       options: input.availableModels.map((m) => ({ value: m.modelId, name: m.name })),
     },
   ]
+  if (input.availableVariants?.length) {
+    options.push({
+      id: "effort",
+      name: "Effort",
+      description: "Available effort levels for this model",
+      category: "thought_level",
+      type: "select",
+      currentValue:
+        input.currentVariant && input.availableVariants.includes(input.currentVariant)
+          ? input.currentVariant
+          : input.availableVariants.includes(DEFAULT_VARIANT_VALUE)
+            ? DEFAULT_VARIANT_VALUE
+            : input.availableVariants[0],
+      options: input.availableVariants.map((variant) => ({ value: variant, name: formatVariantName(variant) })),
+    })
+  }
   if (input.modes) {
     options.push({
       id: "mode",
@@ -1832,6 +1957,13 @@ function buildConfigOptions(input: {
     })
   }
   return options
+}
+
+function formatVariantName(variant: string) {
+  return variant
+    .split(/[_-]/)
+    .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+    .join(" ")
 }
 
 export * as ACP from "./agent"
