@@ -19,25 +19,41 @@
 #   7. 在 GitHub UI 把 draft Release 转 publish
 #
 # 文件名规则(强制):*-deskfox.yml,跟上游 0 重名,pre-commit hook 自动豁免
+#
+# ─── 🚧 2026-05-11 起 DISABLED ────────────────────────────────────────
+# Win ship 改为本地打包 + 手动上传 GitHub Release + 跑 mirror-asset-to-gitee.ps1
+# 原因:`bun run build --single` 在 GH Actions windows-latest runner 上撞
+# sidecar build deadlock(line 934 `Resolved, downloaded and extracted [5]` 后
+# stdout 静默挂死,60min job timeout 被 cancel),根因待新会话查。
+# 本地打包 + 手动上传流程在 docs/governance/win-ship-local-pack.md(待补)。
+# 复活方式:取消下方 `on:` 块注释 + 删 disabled 段。
+# ──────────────────────────────────────────────────────────────────────
 
 name: release-deskfox
 
+# on:  # DISABLED 2026-05-11 — 见上方注释
+#   push:
+#     tags:
+#       - 'ship-prod-*'
+#       - 'ship-beta-*'
+#   workflow_dispatch:
+#     inputs:
+#       env:
+#         description: 'Build env'
+#         required: true
+#         default: 'dev'
+#         type: choice
+#         options:
+#           - dev
+#           - beta
+#           - prod
 on:
-  push:
-    tags:
-      - 'ship-prod-*'
-      - 'ship-beta-*'
   workflow_dispatch:
     inputs:
-      env:
-        description: 'Build env'
-        required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - beta
-          - prod
+      _disabled_notice:
+        description: 'DISABLED — 本 workflow 暂停,见文件头部注释'
+        required: false
+        default: 'disabled-since-2026-05-11'
 
 permissions:
   contents: write    # 创建 GitHub Release 必需
