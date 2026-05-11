@@ -2,7 +2,7 @@
 
 import { Config } from "@/config/config"
 import { Schema } from "effect"
-import { TuiJsonSchema } from "../src/cli/cmd/tui/config/tui-json-schema"
+import { TuiInfo } from "../src/cli/cmd/tui/config/tui-schema"
 
 type JsonSchema = Record<string, unknown>
 const MODEL_REF = "https://models.dev/model-schema.json#/$defs/Model"
@@ -72,5 +72,5 @@ await Bun.write(configFile, JSON.stringify(generateEffect(Config.Info), null, 2)
 
 if (tuiFile) {
   console.log(tuiFile)
-  await Bun.write(tuiFile, JSON.stringify(generateEffect(TuiJsonSchema.Info), null, 2))
+  await Bun.write(tuiFile, JSON.stringify(generateEffect(TuiInfo), null, 2))
 }
