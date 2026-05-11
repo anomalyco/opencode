@@ -1247,6 +1247,87 @@ describe("ProviderTransform.message - Cerebras reasoning replay", () => {
   })
 })
 
+describe("ProviderTransform.message - OpenAI-compatible reasoning replay", () => {
+  test.each([
+    {
+      id: "opencode/kimi-k2.6",
+      apiId: "kimi-k2.6",
+      name: "Kimi K2.6",
+    },
+    {
+      id: "opencode/glm-4.7",
+      apiId: "glm-4.7",
+      name: "GLM-4.7",
+    },
+  ])("$name with tool calls includes reasoning_content in providerOptions", ({ id, apiId }) => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me think about this..." },
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "bash",
+            input: { command: "echo hello" },
+          },
+          { type: "text", text: "Done" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: ModelID.make(id),
+        providerID: ProviderID.make("opencode"),
+        api: {
+          id: apiId,
+          url: "https://opencode.ai/zen/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        name: apiId,
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: {
+            field: "reasoning_content",
+          },
+        },
+        cost: {
+          input: 0.001,
+          output: 0.002,
+          cache: { read: 0.0001, write: 0.0002 },
+        },
+        limit: {
+          context: 128000,
+          output: 4096,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-04-21",
+      },
+      {},
+    )
+
+    expect(result[0].content).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "test",
+        toolName: "bash",
+        input: { command: "echo hello" },
+      },
+      { type: "text", text: "Done" },
+    ])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
+  })
+})
+
 describe("ProviderTransform.message - surrogate sanitization", () => {
   const model = {
     id: "test/test-model",
