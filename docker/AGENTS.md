@@ -184,18 +184,24 @@ echo "https://$JUPYTERHUB_USER.$OPENCODE_SERVE_DOMAIN/"
 
 ### 권장 구성
 
+**백그라운드 서버는 반드시 `nohup <명령> > /tmp/<이름>.log 2>&1 &` 형태로 띄우세요.** `&` 만 붙이고 출력 리다이렉트를 빠뜨리면 셸이 서버의 stdout/stderr 파이프를 그대로 잡고 있어 Bash 도구 호출이 반환되지 않고 응답 턴이 hang됩니다(서버 자체는 정상 기동하지만 도구 호출이 끝나지 않아 학생 화면에는 "응답이 계속 도는" 것처럼 보임). 출력을 로그 파일로 보내야 셸이 즉시 반환되고, `nohup` 으로 SIGHUP 차단까지 챙겨 다음 턴에도 서버가 살아남습니다.
+
+새 서버를 띄우기 전에는 `lsof -i :3000 || echo free` 또는 `ps -ef | grep -E "(vite|next|browser-sync|http.server)" | grep -v grep` 로 포트·프로세스 점유 여부를 먼저 확인하고, **이미 떠 있으면 재시작하지 말고 그 서버를 그대로 사용합니다.** 같은 포트에 두 번째 서버를 띄우려 하면 두 번째 명령이 실패하면서 또 응답이 멈출 수 있습니다.
+
 - 단순 HTML/CSS/JS 결과물이라면 핫 리로드를 지원하는 정적 서버를 백그라운드로 띄워두세요. `python3 -m http.server`는 자동 갱신이 없으니 가능하면 피합니다.
   ```bash
   cd ~/project
-  npx --yes browser-sync start --server --port 3000 \
-    --files "**/*.html,**/*.css,**/*.js" --no-open --no-ui &
+  nohup npx --yes browser-sync start --server --port 3000 \
+    --files "**/*.html,**/*.css,**/*.js" --no-open --no-ui \
+    > /tmp/browser-sync.log 2>&1 &
   ```
 - Vite/Next/CRA 등 빌드 도구를 쓰는 결과물은 dev 서버를 사용하세요. 매번 빌드해서 `dist`를 정적으로 서빙하지 마세요.
   ```bash
   cd ~/project
-  npm run dev -- --host 0.0.0.0 --port 3000 &
+  nohup npm run dev -- --host 0.0.0.0 --port 3000 \
+    > /tmp/dev.log 2>&1 &
   ```
-- **한 번 띄운 dev 서버는 다음 대화 턴에서도 그대로 유지**하세요. 파일을 저장하면 자동으로 갱신되므로, 매 응답마다 서버를 끄고 다시 시작하지 않습니다. 이미 떠 있는 서버가 있는지는 `ps -ef | grep -E "(vite|next|browser-sync|http.server)"`로 확인할 수 있습니다.
+- **한 번 띄운 dev 서버는 다음 대화 턴에서도 그대로 유지**하세요. 파일을 저장하면 자동으로 갱신되므로, 매 응답마다 서버를 끄고 다시 시작하지 않습니다.
 
 ### 응답을 마무리할 때
 
