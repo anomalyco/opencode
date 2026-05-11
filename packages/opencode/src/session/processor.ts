@@ -627,6 +627,14 @@ export const layer: Layer.Layer<
             return
 
           case "finish":
+            // When using custom provider plugins via wrapLanguageModel, the finish-step
+            // event may not carry finishReason (e.g. when the middleware's stream transform
+            // strips it). The "finish" event always has finishReason, so use it as a
+            // fallback to ensure the prompt loop can detect completion and exit.
+            if (!ctx.assistantMessage.finish && value.finishReason) {
+              ctx.assistantMessage.finish = value.finishReason
+              yield* session.updateMessage(ctx.assistantMessage)
+            }
             return
 
           default:

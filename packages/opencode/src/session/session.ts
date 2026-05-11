@@ -355,6 +355,12 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
     if (!Number.isFinite(value)) return 0
     return Math.max(0, value)
   }
+  if (!input.usage) {
+    return {
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    }
+  }
   const inputTokens = safe(input.usage.inputTokens ?? 0)
   const outputTokens = safe(input.usage.outputTokens ?? 0)
   const reasoningTokens = safe(input.usage.outputTokenDetails?.reasoningTokens ?? input.usage.reasoningTokens ?? 0)
