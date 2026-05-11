@@ -4,7 +4,7 @@ import { createMemo, createResource, createSignal } from "solid-js"
 import { useToast } from "@tui/ui/toast"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
-import { SimplePrompt } from "@tui/component/dialog-simple-prompt"
+import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { TuiInfo } from "@/cli/cmd/tui/config/tui-schema"
@@ -198,7 +198,7 @@ function DialogTuiConfigEdit(props: {
     : (props.field.type.example ?? "")
 
   return (
-    <SimplePrompt
+    <DialogPrompt
       title={`Edit ${props.field.key}`}
       description={() => <text>{props.field.description}</text>}
       value={initialValue}
