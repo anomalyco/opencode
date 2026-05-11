@@ -815,11 +815,11 @@ export const layer = Layer.effect(
         Effect.flatMap((subprocess) =>
           Effect.callback<void, Error>((resume) => {
             const timer = setTimeout(() => resume(Effect.void), 500)
-            subprocess.on("error", (err) => {
+            subprocess.once("error", (err) => {
               clearTimeout(timer)
               resume(Effect.fail(err))
             })
-            subprocess.on("exit", (code) => {
+            subprocess.once("exit", (code) => {
               if (code !== null && code !== 0) {
                 clearTimeout(timer)
                 resume(Effect.fail(new Error(`Browser open failed with exit code ${code}`)))

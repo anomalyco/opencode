@@ -1,20 +1,51 @@
 export class AsyncQueue<T> implements AsyncIterable<T> {
   private queue: T[] = []
-  private resolvers: ((value: T) => void)[] = []
+  private resolvers: ((result: IteratorResult<T>) => void)[] = []
+  private closed = false
 
   push(item: T) {
+    if (this.closed) return
     const resolve = this.resolvers.shift()
-    if (resolve) resolve(item)
-    else this.queue.push(item)
+    if (resolve) {
+      resolve({ value: item, done: false })
+      return
+    }
+    this.queue.push(item)
   }
 
-  async next(): Promise<T> {
-    if (this.queue.length > 0) return this.queue.shift()!
+  close() {
+    if (this.closed) return
+    this.closed = true
+    while (this.resolvers.length > 0) {
+      this.resolvers.shift()!({ value: undefined, done: true })
+    }
+  }
+
+  drain() {
+    if (this.queue.length === 0) return []
+    const items = this.queue
+    this.queue = []
+    return items
+  }
+
+  get isClosed() {
+    return this.closed
+  }
+
+  private async nextResult(): Promise<IteratorResult<T>> {
+    if (this.queue.length > 0) return { value: this.queue.shift()!, done: false }
+    if (this.closed) return { value: undefined, done: true }
     return new Promise((resolve) => this.resolvers.push(resolve))
   }
 
-  async *[Symbol.asyncIterator]() {
-    while (true) yield await this.next()
+  async next(): Promise<T> {
+    return (await this.nextResult()).value as T
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<T> {
+    return {
+      next: () => this.nextResult(),
+    }
   }
 }
 

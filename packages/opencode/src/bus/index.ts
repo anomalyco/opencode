@@ -66,6 +66,7 @@ export const layer = Layer.effect(
             for (const ps of typed.values()) {
               yield* PubSub.shutdown(ps)
             }
+            typed.clear()
           }),
         )
 
