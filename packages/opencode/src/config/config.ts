@@ -22,9 +22,10 @@ import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath } from "../project/instance-context"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@opencode-ai/core/schema"
 import { ConfigAgent } from "./agent"
+import { ConfigAttachment } from "./attachment"
 import { ConfigCommand } from "./command"
 import { ConfigFormatter } from "./formatter"
 import { ConfigLayout } from "./layout"
@@ -37,6 +38,7 @@ import { ConfigPaths } from "./paths"
 import { ConfigPermission } from "./permission"
 import { ConfigPlugin } from "./plugin"
 import { ConfigProvider } from "./provider"
+import { ConfigReference } from "./reference"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
@@ -70,6 +72,36 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   return copy
 }
 
+async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: string; source: string }) {
+  if (!isRecord(input.value) || typeof input.value.url !== "string") return
+
+  const url = await ConfigVariable.substitute({
+    text: input.value.url,
+    type: "virtual",
+    dir: input.dir,
+    source: input.source,
+  })
+  const headers = isRecord(input.value.headers)
+    ? Object.fromEntries(
+        await Promise.all(
+          Object.entries(input.value.headers)
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+            .map(async ([key, value]) => [
+              key,
+              await ConfigVariable.substitute({
+                text: value,
+                type: "virtual",
+                dir: input.dir,
+                source: input.source,
+              }),
+            ]),
+        ),
+      )
+    : undefined
+
+  return { url, headers }
+}
+
 async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(config: T, filepath: string) {
   if (!config.plugin) return config
   for (let i = 0; i < config.plugin.length; i++) {
@@ -90,12 +122,12 @@ const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate
 })
 
 // The Effect Schema is the canonical source of truth. The `.zod` compatibility
-// surface is derived so existing Hono validators keep working without a parallel
-// Zod definition.
+// surface is derived from it so plugin/SDK Zod consumers keep working without
+// a parallel hand-maintained Zod definition.
 //
 // The walker emits `z.object({...})` which is non-strict by default. Config
 // historically uses `.strict()` (additionalProperties: false in openapi.json),
-// so layer that on after derivation.  Re-apply the Config ref afterward
+// so layer that on after derivation. Re-apply the Config ref afterward
 // since `.strict()` strips the walker's meta annotation.
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String).annotate({
@@ -112,6 +144,9 @@ export const Info = Schema.Struct({
     description: "Command configuration, see https://opencode.ai/docs/commands",
   }),
   skills: Schema.optional(ConfigSkills.Info).annotate({ description: "Additional skill folder paths" }),
+  reference: Schema.optional(ConfigReference.Info).annotate({
+    description: "Named git or local directory references that can be @ mentioned as Scout-backed subagents",
+  }),
   watcher: Schema.optional(
     Schema.Struct({
       ignore: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
@@ -171,6 +206,7 @@ export const Info = Schema.Struct({
         // subagent
         general: Schema.optional(ConfigAgent.Info),
         explore: Schema.optional(ConfigAgent.Info),
+        scout: Schema.optional(ConfigAgent.Info),
         // specialized
         title: Schema.optional(ConfigAgent.Info),
         summary: Schema.optional(ConfigAgent.Info),
@@ -206,6 +242,9 @@ export const Info = Schema.Struct({
   layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermission.Info),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  attachment: Schema.optional(ConfigAttachment.Info).annotate({
+    description: "Attachment processing configuration, including image size limits and resizing behavior",
+  }),
   enterprise: Schema.optional(
     Schema.Struct({
       url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }),
@@ -234,10 +273,10 @@ export const Info = Schema.Struct({
       }),
       tail_turns: Schema.optional(NonNegativeInt).annotate({
         description:
-          "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
+          "Number of recent user turns, including their following assistant/tool responses, to serialize into the compaction summary (default: 2)",
       }),
       preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
-        description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
+        description: "Maximum number of tokens from recent turns to serialize into the compaction summary",
       }),
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
@@ -272,7 +311,7 @@ export const Info = Schema.Struct({
     })),
   )
 
-// Uses the shared `DeepMutable` from `@/util/schema`. See the definition
+// Uses the shared `DeepMutable` from `@opencode-ai/core/schema`. See the definition
 // there for why the local variant is needed over `Types.DeepMutable` from
 // effect-smol (the upstream version collapses `unknown` to `{}`).
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
@@ -494,8 +533,28 @@ export const layer = Layer.effect(
             if (!response.ok) {
               throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
             }
-            const wellknown = (yield* Effect.promise(() => response.json())) as { config?: Record<string, unknown> }
-            const remoteConfig = wellknown.config ?? {}
+            const wellknown = (yield* Effect.promise(() => response.json())) as {
+              config?: Record<string, unknown>
+              remote_config?: unknown
+            }
+            const remote = yield* Effect.promise(() =>
+              substituteWellKnownRemoteConfig({
+                value: wellknown.remote_config,
+                dir: url,
+                source: `${url}/.well-known/opencode`,
+              }),
+            )
+            const fetchedConfig = remote
+              ? ((yield* Effect.promise(async () => {
+                  log.debug("fetching remote config", { url: remote.url })
+                  const response = await fetch(remote.url, { headers: remote.headers })
+                  if (!response.ok)
+                    throw new Error(`failed to fetch remote config from ${remote.url}: ${response.status}`)
+                  const data = await response.json()
+                  return isRecord(data) && isRecord(data.config) ? data.config : data
+                })) as Record<string, unknown>)
+              : {}
+            const remoteConfig = mergeConfig(wellknown.config ?? {}, fetchedConfig as Info)
             if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
             const source = `${url}/.well-known/opencode`
             const next = yield* loadConfig(JSON.stringify(remoteConfig), {

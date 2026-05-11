@@ -7,6 +7,7 @@ import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/inst
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
 import { getScrollAcceleration } from "../../util/scroll"
+import { WorkspaceLabel } from "../../component/workspace-label"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const project = useProject()
@@ -14,17 +15,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
   const session = createMemo(() => sync.session.get(props.sessionID))
-  const workspaceStatus = () => {
+  const workspace = () => {
     const workspaceID = session()?.workspaceID
-    if (!workspaceID) return "error"
-    return project.workspace.status(workspaceID) ?? "error"
-  }
-  const workspaceLabel = () => {
-    const workspaceID = session()?.workspaceID
-    if (!workspaceID) return "unknown"
-    const info = project.workspace.get(workspaceID)
-    if (!info) return "unknown"
-    return `${info.type}: ${info.name}`
+    if (!workspaceID) return
+    return project.workspace.get(workspaceID)
   }
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
@@ -67,8 +61,19 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </Show>
                 <Show when={session()!.workspaceID}>
                   <text fg={theme.textMuted}>
-                    <span style={{ fg: workspaceStatus() === "connected" ? theme.success : theme.error }}>●</span>{" "}
-                    {workspaceLabel()}
+                    <Show
+                      when={workspace()}
+                      fallback={<WorkspaceLabel type="unknown" name={session()!.workspaceID!} status="error" icon />}
+                    >
+                      {(item) => (
+                        <WorkspaceLabel
+                          type={item().type}
+                          name={item().name}
+                          status={project.workspace.status(item().id) ?? "error"}
+                          icon
+                        />
+                      )}
+                    </Show>
                   </text>
                 </Show>
                 <Show when={session()!.share?.url}>

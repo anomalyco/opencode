@@ -304,7 +304,7 @@ jobs:
 
       - name: Prepare
         run: bun ./scripts/prepare.ts
-        working-directory: packages/desktop-electron
+        working-directory: packages/desktop
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
@@ -315,7 +315,7 @@ jobs:
 
       - name: Build
         run: bun run build
-        working-directory: packages/desktop-electron
+        working-directory: packages/desktop
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -329,7 +329,7 @@ jobs:
       - name: Package and publish
         if: needs.version.outputs.release
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish always --config electron-builder.config.ts
-        working-directory: packages/desktop-electron
+        working-directory: packages/desktop
         timeout-minutes: 60
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
@@ -343,14 +343,14 @@ jobs:
       - name: Package (no publish)
         if: ${{ !needs.version.outputs.release }}
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
-        working-directory: packages/desktop-electron
+        working-directory: packages/desktop
         timeout-minutes: 60
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
       - name: Create and upload macOS .app.tar.gz
         if: runner.os == 'macOS' && needs.version.outputs.release
-        working-directory: packages/desktop-electron/dist
+        working-directory: packages/desktop/dist
         env:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
@@ -377,9 +377,9 @@ jobs:
         shell: pwsh
         run: |
           $files = @()
-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*.exe" | Select-Object -ExpandProperty FullName
-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\*.exe" | Select-Object -ExpandProperty FullName
-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop-electron\dist\*unpacked\resources\opencode-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*.exe" | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*unpacked\*.exe" | Select-Object -ExpandProperty FullName
+          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\dist\*unpacked\resources\opencode-cli.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
 
           foreach ($file in $files | Select-Object -Unique) {
             $sig = Get-AuthenticodeSignature $file
@@ -391,13 +391,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: opencode-desktop-${{ matrix.settings.target }}
-          path: packages/desktop-electron/dist/*
+          path: packages/desktop/dist/*
 
       - uses: actions/upload-artifact@v4
         if: needs.version.outputs.release
         with:
           name: latest-yml-${{ matrix.settings.target }}
-          path: packages/desktop-electron/dist/latest*.yml
+          path: packages/desktop/dist/latest*.yml
 
   publish:
     needs:

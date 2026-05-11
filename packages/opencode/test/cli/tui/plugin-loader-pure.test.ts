@@ -4,6 +4,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
@@ -37,7 +38,7 @@ test("skips external tui plugins in pure mode", async () => {
   process.env.OPENCODE_PURE = "1"
   process.env.OPENCODE_PLUGIN_META_FILE = tmp.extra.meta
 
-  const config: TuiConfig.Info = {
+  const config = createTuiResolvedConfig({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_origins: [
       {
@@ -46,7 +47,7 @@ test("skips external tui plugins in pure mode", async () => {
         source: path.join(tmp.path, "tui.json"),
       },
     ],
-  }
+  })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 

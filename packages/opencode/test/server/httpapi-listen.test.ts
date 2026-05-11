@@ -10,7 +10,6 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 void Log.init({ print: false })
 
 const original = {
-  OPENCODE_EXPERIMENTAL_HTTPAPI: Flag.OPENCODE_EXPERIMENTAL_HTTPAPI,
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
   OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
   envPassword: process.env.OPENCODE_SERVER_PASSWORD,
@@ -20,7 +19,6 @@ const auth = { username: "opencode", password: "listen-secret" }
 const testPty = process.platform === "win32" ? test.skip : test
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
   if (original.envPassword === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
@@ -31,8 +29,7 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-async function startListener(backend: "effect-httpapi" | "hono" = "effect-httpapi") {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = backend === "effect-httpapi"
+async function startListener() {
   Flag.OPENCODE_SERVER_PASSWORD = auth.password
   Flag.OPENCODE_SERVER_USERNAME = auth.username
   process.env.OPENCODE_SERVER_PASSWORD = auth.password
@@ -41,7 +38,6 @@ async function startListener(backend: "effect-httpapi" | "hono" = "effect-httpap
 }
 
 async function startNoAuthListener() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = false
   Flag.OPENCODE_SERVER_PASSWORD = undefined
   Flag.OPENCODE_SERVER_USERNAME = auth.username
   delete process.env.OPENCODE_SERVER_PASSWORD
@@ -212,22 +208,6 @@ describe("HttpApi Server.listen", () => {
     }
   })
 
-  testPty("serves PTY websocket tickets through legacy Hono Server.listen", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const listener = await startListener("hono")
-    try {
-      const info = await createCat(listener, tmp.path)
-      const ticket = await connectTicket(listener, info.id, tmp.path)
-      const ws = await openSocket(socketURL(listener, info.id, tmp.path, ticket.ticket))
-      const message = waitForMessage(ws, (message) => message.includes("ping-hono-ticket"))
-      ws.send("ping-hono-ticket\n")
-      expect(await message).toContain("ping-hono-ticket")
-      ws.close(1000)
-    } finally {
-      await stop(listener, "timed out cleaning up hono listener").catch(() => undefined)
-    }
-  })
-
   testPty("rejects unsafe PTY ticket mint and connect requests", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const listener = await startListener()
@@ -254,6 +234,49 @@ describe("HttpApi Server.listen", () => {
       })
     } finally {
       await stop(listener, "timed out cleaning up rejected ticket listener").catch(() => undefined)
+    }
+  })
+
+  // Regression for #25698 (Ope): the app's SDK call to
+  // `client.pty.connectToken({ ptyID })` originally omitted `directory`, so
+  // the server resolved the PTY in its own cwd context — where the project
+  // PTY isn't registered — and returned 404. The fix is to always pass
+  // `directory` from the app side; this test locks in two contracts:
+  //   1. Mint without directory cannot find a PTY registered in another dir.
+  //   2. Mint with the project directory succeeds; the resulting ticket
+  //      consumes cleanly when the WS upgrade carries the same directory.
+  testPty("PTY connect token requires matching directory across mint and connect", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const listener = await startListener()
+    try {
+      const info = await createCat(listener, tmp.path)
+
+      // Mint without directory — server uses its own cwd, can't find the PTY.
+      const ambiguous = await fetch(new URL(PtyPaths.connectToken.replace(":ptyID", info.id), listener.url), {
+        method: "POST",
+        headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+      })
+      expect(ambiguous.status).toBe(404)
+
+      // Mint with the project directory — succeeds, ticket binds to that scope.
+      const scoped = await fetch(
+        new URL(
+          `${PtyPaths.connectToken.replace(":ptyID", info.id)}?directory=${encodeURIComponent(tmp.path)}`,
+          listener.url,
+        ),
+        {
+          method: "POST",
+          headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+        },
+      )
+      expect(scoped.status).toBe(200)
+      const mint = (await scoped.json()) as { ticket: string }
+
+      // Same directory on the WS upgrade → consume succeeds.
+      const ws = await openSocket(socketURL(listener, info.id, tmp.path, mint.ticket))
+      ws.close(1000)
+    } finally {
+      await stop(listener, "timed out cleaning up directory-scope listener").catch(() => undefined)
     }
   })
 
