@@ -1,6 +1,5 @@
 import path from "path"
 import { Effect, Layer, Record, Result, Schema, Context } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -33,7 +32,7 @@ export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
 }) {}
 
 const _Info = Schema.Union([Oauth, Api, WellKnown]).annotate({ discriminator: "type", identifier: "Auth" })
-export const Info = Object.assign(_Info, { zod: zod(_Info) })
+export const Info = _Info
 export type Info = Schema.Schema.Type<typeof _Info>
 
 export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError", {

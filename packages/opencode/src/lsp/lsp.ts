@@ -13,8 +13,8 @@ import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
-import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
-import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { ZodOverride } from "@opencode-ai/core/effect-zod"
 
 const log = Log.create({ service: "lsp" })
 
@@ -30,9 +30,7 @@ const Position = Schema.Struct({
 export const Range = Schema.Struct({
   start: Position,
   end: Position,
-})
-  .annotate({ identifier: "Range" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Range" })
 export type Range = typeof Range.Type
 
 export const Symbol = Schema.Struct({
@@ -42,9 +40,7 @@ export const Symbol = Schema.Struct({
     uri: Schema.String,
     range: Range,
   }),
-})
-  .annotate({ identifier: "Symbol" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Symbol" })
 export type Symbol = typeof Symbol.Type
 
 export const DocumentSymbol = Schema.Struct({
@@ -53,9 +49,7 @@ export const DocumentSymbol = Schema.Struct({
   kind: NonNegativeInt,
   range: Range,
   selectionRange: Range,
-})
-  .annotate({ identifier: "DocumentSymbol" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "DocumentSymbol" })
 export type DocumentSymbol = typeof DocumentSymbol.Type
 
 export const Status = Schema.Struct({
@@ -65,9 +59,7 @@ export const Status = Schema.Struct({
   status: Schema.Literals(["connected", "error"]).annotate({
     [ZodOverride]: z.union([z.literal("connected"), z.literal("error")]),
   }),
-})
-  .annotate({ identifier: "LSPStatus" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "LSPStatus" })
 export type Status = typeof Status.Type
 
 enum SymbolKind {
