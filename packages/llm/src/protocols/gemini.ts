@@ -281,15 +281,30 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // =============================================================================
 // Stream Parsing
 // =============================================================================
+// Gemini reports `promptTokenCount` (inclusive total) with a
+// `cachedContentTokenCount` subset. `candidatesTokenCount` is *exclusive*
+// of `thoughtsTokenCount` — visible-only, not a total — so we sum the two
+// to produce the inclusive `outputTokens` the rest of the contract expects.
 const mapUsage = (usage: GeminiUsage | undefined) => {
   if (!usage) return undefined
+  const cached = usage.cachedContentTokenCount
+  const nonCached = ProviderShared.subtractTokens(usage.promptTokenCount, cached)
+  // `candidatesTokenCount` is visible-only; sum with thoughts to produce the
+  // inclusive `outputTokens` the contract expects. Only compute the total
+  // when the visible component is reported — otherwise we'd fabricate an
+  // inclusive number from a partial breakdown.
+  const outputTokens =
+    usage.candidatesTokenCount !== undefined
+      ? usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0)
+      : undefined
   return new Usage({
     inputTokens: usage.promptTokenCount,
-    outputTokens: usage.candidatesTokenCount,
+    outputTokens,
+    nonCachedInputTokens: nonCached,
+    cacheReadInputTokens: cached,
     reasoningTokens: usage.thoughtsTokenCount,
-    cacheReadInputTokens: usage.cachedContentTokenCount,
-    totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, usage.candidatesTokenCount, usage.totalTokenCount),
-    native: usage,
+    totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, outputTokens, usage.totalTokenCount),
+    providerMetadata: { google: usage },
   })
 }
 

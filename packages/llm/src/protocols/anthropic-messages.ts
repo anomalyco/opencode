@@ -404,34 +404,56 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   return "unknown"
 }
 
+// Anthropic reports the non-overlapping breakdown natively — its
+// `input_tokens` is the *non-cached* count per the Messages API docs, with
+// cache reads and writes as separate fields. We sum them to derive the
+// inclusive `inputTokens` the rest of the contract expects. Extended
+// thinking tokens are *not* broken out by Anthropic — they're billed as
+// part of `output_tokens`, so `reasoningTokens` stays `undefined` and
+// `outputTokens` carries the combined total.
 const mapUsage = (usage: AnthropicUsage | undefined): Usage | undefined => {
   if (!usage) return undefined
+  const nonCached = usage.input_tokens
+  const cacheRead = usage.cache_read_input_tokens ?? undefined
+  const cacheWrite = usage.cache_creation_input_tokens ?? undefined
+  const inputTokens = ProviderShared.sumTokens(nonCached, cacheRead, cacheWrite)
   return new Usage({
-    inputTokens: usage.input_tokens,
+    inputTokens,
     outputTokens: usage.output_tokens,
-    cacheReadInputTokens: usage.cache_read_input_tokens ?? undefined,
-    cacheWriteInputTokens: usage.cache_creation_input_tokens ?? undefined,
-    totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, undefined),
-    native: usage,
+    nonCachedInputTokens: nonCached,
+    cacheReadInputTokens: cacheRead,
+    cacheWriteInputTokens: cacheWrite,
+    totalTokens: ProviderShared.totalTokens(inputTokens, usage.output_tokens, undefined),
+    providerMetadata: { anthropic: usage },
   })
 }
 
 // Anthropic emits usage on `message_start` and again on `message_delta` — the
 // final delta carries the authoritative totals. Right-biased merge: each
-// field prefers `right` when defined, falls back to `left`. `totalTokens` is
-// recomputed from the merged input/output to stay consistent.
+// field prefers `right` when defined, falls back to `left`. `inputTokens` is
+// recomputed from the merged breakdown so the inclusive total stays
+// consistent with `nonCached + cacheRead + cacheWrite`.
 const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
   if (!left) return right
   if (!right) return left
-  const inputTokens = right.inputTokens ?? left.inputTokens
+  const nonCachedInputTokens = right.nonCachedInputTokens ?? left.nonCachedInputTokens
+  const cacheReadInputTokens = right.cacheReadInputTokens ?? left.cacheReadInputTokens
+  const cacheWriteInputTokens = right.cacheWriteInputTokens ?? left.cacheWriteInputTokens
+  const inputTokens = ProviderShared.sumTokens(nonCachedInputTokens, cacheReadInputTokens, cacheWriteInputTokens)
   const outputTokens = right.outputTokens ?? left.outputTokens
   return new Usage({
     inputTokens,
     outputTokens,
-    cacheReadInputTokens: right.cacheReadInputTokens ?? left.cacheReadInputTokens,
-    cacheWriteInputTokens: right.cacheWriteInputTokens ?? left.cacheWriteInputTokens,
+    nonCachedInputTokens,
+    cacheReadInputTokens,
+    cacheWriteInputTokens,
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
-    native: { ...left.native, ...right.native },
+    providerMetadata: {
+      anthropic: {
+        ...(left.providerMetadata?.["anthropic"] ?? {}),
+        ...(right.providerMetadata?.["anthropic"] ?? {}),
+      },
+    },
   })
 }
 

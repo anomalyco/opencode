@@ -42,6 +42,13 @@ export interface ToolAccumulator {
  * supplied total; otherwise falls back to `inputTokens + outputTokens` only
  * when at least one is defined. Returns `undefined` when neither input nor
  * output is known so routes don't publish a misleading `0`.
+ *
+ * Under the additive `LLM.Usage` contract, `inputTokens` and `outputTokens`
+ * are the non-cached input and visible output only. The provider-supplied
+ * `total` is the source of truth when present; the computed fallback
+ * under-counts cache and reasoning by design and exists mainly so
+ * Anthropic-style providers (which don't surface a total) still get a
+ * sensible aggregate on the input + output axes.
  */
 export const totalTokens = (
   inputTokens: number | undefined,
@@ -51,6 +58,38 @@ export const totalTokens = (
   if (total !== undefined) return total
   if (inputTokens === undefined && outputTokens === undefined) return undefined
   return (inputTokens ?? 0) + (outputTokens ?? 0)
+}
+
+/**
+ * Subtract `subtrahend` from `total`, clamping to zero if the provider
+ * reports a non-sensical breakdown (e.g. `cached_tokens > prompt_tokens`).
+ * Used by protocol mappers when deriving a non-overlapping breakdown field
+ * from a provider's inclusive total — `nonCachedInputTokens` from
+ * `inputTokens - cacheReadInputTokens - cacheWriteInputTokens`.
+ *
+ * If `total` is `undefined`, returns `undefined` (we don't fabricate
+ * counts). If `subtrahend` is `undefined`, returns `total` unchanged. The
+ * provider-native breakdown stays available on `Usage.native` for debugging.
+ */
+export const subtractTokens = (
+  total: number | undefined,
+  subtrahend: number | undefined,
+): number | undefined => {
+  if (total === undefined) return undefined
+  if (subtrahend === undefined) return total
+  return Math.max(0, total - subtrahend)
+}
+
+/**
+ * Sum a list of optional token counts, returning `undefined` only when
+ * every value is `undefined` (so we don't fabricate a `0`). Used by
+ * protocol mappers to derive the inclusive `inputTokens` total from a
+ * provider that natively reports a non-overlapping breakdown
+ * (e.g. Anthropic, whose `input_tokens` is already non-cached only).
+ */
+export const sumTokens = (...values: ReadonlyArray<number | undefined>): number | undefined => {
+  if (values.every((value) => value === undefined)) return undefined
+  return values.reduce<number>((acc, value) => acc + (value ?? 0), 0)
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
