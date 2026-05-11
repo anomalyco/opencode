@@ -33,7 +33,7 @@ function normalize(value: unknown): unknown {
     if (anyOf.length !== schema.anyOf.length) {
       const { anyOf: _, ...rest } = schema
       if (anyOf.length === 1 && isRecord(anyOf[0])) return normalize({ ...anyOf[0], ...rest })
-      return order({ ...rest, anyOf })
+      return { ...rest, anyOf }
     }
   }
 
@@ -43,10 +43,10 @@ function normalize(value: unknown): unknown {
   }
 
   if (schema.type === "integer" && schema.maximum === undefined) {
-    return order({ ...schema, maximum: Number.MAX_SAFE_INTEGER })
+    return { ...schema, maximum: Number.MAX_SAFE_INTEGER }
   }
 
-  return order(schema)
+  return schema
 }
 
 function restoreModelRefs(value: unknown, key?: string): unknown {
@@ -55,44 +55,9 @@ function restoreModelRefs(value: unknown, key?: string): unknown {
 
   const schema = Object.fromEntries(Object.entries(value).map(([name, item]) => [name, restoreModelRefs(item, name)]))
   if ((key === "model" || key === "small_model") && schema.type === "string") {
-    return order({ ...schema, $ref: MODEL_REF })
+    return { ...schema, $ref: MODEL_REF }
   }
-  return order(schema)
-}
-
-function order(schema: JsonSchema) {
-  const result: JsonSchema = {}
-  for (const key of [
-    "$schema",
-    "$ref",
-    "type",
-    "const",
-    "enum",
-    "anyOf",
-    "properties",
-    "required",
-    "propertyNames",
-    "additionalProperties",
-    "items",
-    "prefixItems",
-    "$defs",
-    "minimum",
-    "exclusiveMinimum",
-    "maximum",
-    "exclusiveMaximum",
-    "pattern",
-    "description",
-    "default",
-    "examples",
-    "allowComments",
-    "allowTrailingCommas",
-  ]) {
-    if (key in schema) result[key] = schema[key]
-  }
-  for (const [key, value] of Object.entries(schema)) {
-    if (!(key in result)) result[key] = value
-  }
-  return result
+  return schema
 }
 
 function isRecord(value: unknown): value is JsonSchema {
