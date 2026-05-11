@@ -1351,7 +1351,7 @@ export type Automation = {
       }
   executionMode: "local" | "worktree"
   model: string
-  reasoningEffort?: "none" | "low" | "medium" | "high"
+  reasoningEffort?: "low" | "medium" | "high"
   permissionProfile:
     | "read_only"
     | "repo_write_no_network"
@@ -1393,7 +1393,7 @@ export type AutomationCreateInput = {
       }
   executionMode?: "local" | "worktree"
   model?: string
-  reasoningEffort?: "none" | "low" | "medium" | "high"
+  reasoningEffort?: "low" | "medium" | "high"
   permissionProfile?:
     | "read_only"
     | "repo_write_no_network"
@@ -1506,7 +1506,7 @@ export type AutomationUpdateInput = {
       }
   executionMode?: "local" | "worktree"
   model?: string
-  reasoningEffort?: "none" | "low" | "medium" | "high"
+  reasoningEffort?: "low" | "medium" | "high"
   permissionProfile?:
     | "read_only"
     | "repo_write_no_network"

@@ -115,7 +115,7 @@ export const Info = Schema.Struct({
   schedule: ScheduleConfig,
   executionMode: ExecutionMode,
   model: Schema.String,
-  reasoningEffort: Schema.optional(Schema.Literals(["none", "low", "medium", "high"])),
+  reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high"])),
   permissionProfile: PermissionProfile,
   notificationBehavior: Schema.Literals(["inbox", "auto_archive_no_findings"]),
   maxRuntimeMinutes: Schema.optional(Schema.Finite),
@@ -164,7 +164,7 @@ export const CreateInput = Schema.Struct({
   schedule: ScheduleConfig,
   executionMode: Schema.optional(ExecutionMode),
   model: Schema.optional(Schema.String),
-  reasoningEffort: Schema.optional(Schema.Literals(["none", "low", "medium", "high"])),
+  reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high"])),
   permissionProfile: Schema.optional(PermissionProfile),
   notificationBehavior: Schema.optional(Schema.Literals(["inbox", "auto_archive_no_findings"])),
   maxRuntimeMinutes: Schema.optional(Schema.Finite),
@@ -183,7 +183,7 @@ export const UpdateInput = Schema.Struct({
   schedule: Schema.optional(ScheduleConfig),
   executionMode: Schema.optional(ExecutionMode),
   model: Schema.optional(Schema.String),
-  reasoningEffort: Schema.optional(Schema.Literals(["none", "low", "medium", "high"])),
+  reasoningEffort: Schema.optional(Schema.Literals(["low", "medium", "high"])),
   permissionProfile: Schema.optional(PermissionProfile),
   notificationBehavior: Schema.optional(Schema.Literals(["inbox", "auto_archive_no_findings"])),
   maxRuntimeMinutes: Schema.optional(Schema.Finite),
@@ -829,8 +829,12 @@ export const layer = Layer.effect(
 
     const create = Effect.fn("Automation.create")(function* (input: CreateInput) {
       const ctx = yield* InstanceState.context
-      const defaultRef = input.model ? undefined : yield* provider.defaultModel()
-      const defaultModel = input.model ?? `${defaultRef!.providerID}/${defaultRef!.modelID}`
+      const defaultModel =
+        input.model ??
+        (yield* provider.defaultModel().pipe(
+          Effect.map((model) => `${model.providerID}/${model.modelID}`),
+          Effect.orDie,
+        ))
       const now = Date.now()
       const enabled = input.enabled ?? true
       const kind = input.kind ?? "standalone"
@@ -1186,7 +1190,7 @@ export const layer = Layer.effect(
         updateLiveRunStatus(runID, "preparing")
         let worktreeInfo: Worktree.Info | undefined
         if (automation.executionMode === "worktree") {
-          worktreeInfo = yield* worktree.makeWorktreeInfo(`automation-${Slug.create()}`)
+          worktreeInfo = yield* worktree.makeWorktreeInfo({ name: `automation-${Slug.create()}` })
           yield* patchRun(runID, {
             worktree_path: worktreeInfo.directory,
             branch_name: worktreeInfo.branch,
