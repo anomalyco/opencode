@@ -218,6 +218,10 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "show thinking blocks",
       })
+      .option("replay-limit", {
+        type: "number",
+        describe: "cap interactive replay bootstrap to the newest N messages",
+      })
       .option("interactive", {
         alias: ["i"],
         type: "boolean",
@@ -267,6 +271,17 @@ export const RunCommand = effectCmd({
 
       if (args.interactive && args.format === "json") {
         die("--interactive cannot be used with --format json")
+      }
+
+      if (args["replay-limit"] !== undefined && !args.interactive) {
+        die("--replay-limit requires --interactive")
+      }
+
+      if (
+        args["replay-limit"] !== undefined &&
+        (!Number.isInteger(args["replay-limit"]) || args["replay-limit"] <= 0)
+      ) {
+        die("--replay-limit must be a positive integer")
       }
 
       if (args.interactive && !process.stdout.isTTY) {
@@ -786,6 +801,7 @@ export const RunCommand = effectCmd({
             sessionID,
             sessionTitle: sess.title,
             resume: Boolean(args.session || args.continue) && !args.fork,
+            replayLimit: args["replay-limit"],
             agent,
             model,
             variant: args.variant,
@@ -821,6 +837,7 @@ export const RunCommand = effectCmd({
             agent: args.agent,
             model,
             variant: args.variant,
+            replayLimit: args["replay-limit"],
             files,
             initialInput,
             thinking,
