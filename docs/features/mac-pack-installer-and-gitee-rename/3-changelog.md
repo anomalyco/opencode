@@ -14,7 +14,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 | commit | 简述 |
 |---|---|
-| `(本笔)` | docs(mac-pack-installer-and-gitee-rename): legal docs Gitee URL 改名 + 三文档落盘 + INDEX + 改动日志 |
+| `72b0325ed` | docs(mac-pack-installer-and-gitee-rename): legal docs Gitee URL 改名 + 三文档落盘 + INDEX + 改动日志 |
 
 ## 远端动作(无 commit)
 
