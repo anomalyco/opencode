@@ -14,9 +14,53 @@
 
 
 
+## [Windows] 2026.5.11.1 - 2026-05-11 08:15
+
+**主题**:飞书桥接 v1 深度迭代(权限卡片真互动 + 4 笔机制 fix)+ Win 网络监听安全规则 + pack-installer 顺序错位修
+
+自 [`2026.5.10.1`](#windows-2026511---2026-05-10-1154) 以来 dev 主干推进约 30 commits,主要 feature:
+
+- **feishu-bridge-permission-card** ([changelog](features/feishu-bridge-permission-card/3-changelog.md),merge `8d86d440d`)— opencode `permission.asked` Bus event 拦截 → 飞书 CardKit 渲染交互卡片(允许一次 / 始终允许 / 拒绝)→ user 飞书侧点击 → plugin 走 v1 SDK `postSessionIdPermissionsPermissionId` 回写 opencode 解锁。**保持 user 显式批准 trust 边界,不做 auto-allow**。实测踩 4 个坑陆续修通(v1 vs v2 SDK / patch 不刷新视觉 → delete+send / parentID 约束防 reject 回放上轮答案)
+- **feishu-bridge-system-prompt-disable-question** + **feishu-server-loopback-bind** + **network-bind-safety-guard** + **feishu-bridge-completion-signal-rewire** ([4 笔机制 fix changelog 见各自 features/](features/),merge `183183119`)— ① 注入 system prompt 禁 LLM `question` 反问工具(修 agent loop 死锁,user 在飞书无法回答的场景)② plugin server bind 127.0.0.1 only(Win Firewall "Bun" 弹窗消除) ③ R6 网络监听安全规则 + pre-commit 4.5 hook 拦截 `Bun.serve(` 默认 0.0.0.0 ④ Layer 2 dispatcher 切换尝试 revert(opencode 多 assistant 消息序列锁第一条问题暴露,Layer 2.1 backlog)
+- **office-installer-mirror-cascade** (`2d54b184d`)— LibreOffice 自动安装 mirror cascade fallback,单 mirror 失败不再 break 整流程(R4 override 延续 office 引擎 fork-only 链)
+- **pack-installer-rebuild-step** ([changelog](features/pack-installer-rebuild-step/3-changelog.md),merge `b91e5f353`)— `pack-installer.ps1` 加 step 1.5 自动重 build,修 bump→build→ISCC 顺序错位 SOP bug(本笔 ship 即首次实战验证 — UI 版本号跟 installer 文件名对齐)
+
+**Installer**:`packages/branding/installer/Output/DeskFox-2026.5.11.1-setup.exe`(62,263,972 bytes / 59.4 MB)
+
+**配套 plugin**:`packages/branding/plugin/feishu-bridge/dist/`(plugin 已 bundle 进 installer,无独立分发)
+
+**user 实测验证**(本笔 ship 即验证场景):
+- ✅ 安装包文件名 `DeskFox-2026.5.11.1` + 装出来 UI 左下角显示 `v2026.5.11.1` 对齐(pack-installer fix 修通)
+- ✅ 飞书 user 任务遇 opencode 权限请求 → 飞书侧弹交互卡片 → 点[允许一次]后 LLM 解锁继续,settled 卡片绿色 + 移除按钮
+- ✅ user 点[拒绝]后,本轮无 useful assistant text → plugin 不回飞书,不再回放上一轮答案
+- ⏳ 飞书"始终允许"路径单测覆盖,真飞书未实测(下次复测时验)
+- ⏳ Mac 端跟随 ship 未启动(本笔仅 Win)
+
+**Release**:等 user 决定走 GitHub Actions release-deskfox.yml workflow(push `ship-prod-2026.5.11.1` tag 触发)还是仅本地存档
+
+**上游 baseline**:跟 dev 同步(sync-2026-05-03-2 后基线,~1.14.x + 上游推进)
+
+---
+
 ## [Windows] 2026.5.10.1 - 2026-05-10 11:54
 
-(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
+**主题**:飞书桥接 v1 首发 ship — adapter / OAuth Device Flow / WSS / plugin 架构 + Inno Setup 加 plugin bundle(让首装即用)
+
+自 [`ship-prod-2026.5.9.1`](https://github.com/zoulukuang/deskfox/releases/tag/ship-prod-2026.5.9.1) 以来 dev 主干推进约 65 commits,主要 feature:
+
+- **feishu-bridge** ([changelog 系列](features/) — `feishu-bridge` / `feishu-bridge-newuser-onboarding` 等多 feat 协同)— 飞书 IM 接入 opencode 的完整桥接 v1:adapter-feishu-lark workspace(SecretRef 三档凭证 + zod config schema + opencode HTTP client + OAuth Device Flow + localhost server + WSS 长连接 + chatQueue 串行 + FlushController CardKit/Patch 双路径节流 + DedupCache LRU)/ 桌面 system tray + close GUI ≠ exit + Tauri commands / Settings 飞书桥接 Tab + i18n 三本字典 + 扫码绑定弹窗 / chat-session-store(chatId → sessionID 持久化映射)/ per-account model 编辑 + hot reload / plugin + server(architecture X1:plugin 自带 server 多 IM 演进路径)
+- **feishu-installer-bundle-plugin** (`39e487f75`,本笔 bump commit)— Win Inno Setup `DeskFox.iss` 加飞书 plugin bundle,prod installer 打 `packages/branding/plugin/feishu-bridge/dist/` 进 resource_dir,装完插件直接可用(修 bug-repro:之前 installer 不打 plugin → resource_dir 找不到 plugin → 飞书桥接永远显示"未启动")
+- **feishu-bridge-empty-reply-ghost** ([changelog](features/feishu-bridge-empty-reply-ghost/3-changelog.md),merge `9ccaa391e`)— 5 条丢失 reply 修复(ghost filter + timeout 30min)
+
+**Installer**:`packages/branding/installer/Output/DeskFox-2026.5.10.1-setup.exe`(61,462,332 bytes / 58.6 MB)
+
+**user 实测验证**:
+- ✅ 装出来飞书桥接 Settings 可见,OAuth 扫码绑定走通
+- ⚠️ **已知 UI 版本号 mismatch bug**(本笔触发后立修)— user 装 .10.1 后想再 ship .11.1,跑 `pack-installer.ps1` 出 `DeskFox-2026.5.11.1-setup.exe`,但脚本顺序错位(先 bump JSON 再 ISCC 编但中间没 rebuild exe)导致**文件名 .11.1 + 内部 UI 仍 .10.1**。本版本身 .10.1 文件名 + UI 一致,可用。但触发 `pack-installer-rebuild-step` 修(见 [`2026.5.11.1`](#windows-2026511---2026-05-11-0815))
+
+**Release**:本地存档,未上 GitHub Release(快速被 [`2026.5.11.1`](#windows-2026511---2026-05-11-0815) 取代)
+
+**上游 baseline**:跟 dev 同步
 
 ---
 
