@@ -214,8 +214,8 @@ export async function bootstrapDirectory(input: {
   const loading = input.store.status !== "complete"
   const seededProject = projectID(input.directory, input.global.project)
   const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
-  const seededEnv =
-    input.global.env.serveDomain || input.global.env.jupyterhubUser ? input.global.env : undefined
+  // Env 스키마에 새 필드가 추가되어도 seed 판정이 자동 포함되도록 일반화한다.
+  const seededEnv = Object.values(input.global.env).some(Boolean) ? input.global.env : undefined
   if (seededProject) input.setStore("project", seededProject)
   if (seededPath) input.setStore("path", seededPath)
   if (seededEnv) input.setStore("env", seededEnv)
