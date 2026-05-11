@@ -15,20 +15,20 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 // schema we assert:
 //   1. The Effect decoder (`Schema.decodeUnknownSync`) accepts valid input.
 //   2. The derived Zod (`X.zod.parse`) accepts the same input and returns the
-//      same shape.
-//   3. Clearly-invalid input is rejected by both paths.
+//      same shape for schemas that still expose Zod statics.
+//   3. Clearly-invalid input is rejected by both paths where both exist.
 //
 // The point is to lock down the Schema <-> Zod bridge so a future edit to
 // any input schema can't silently drop or widen a field on one side.
 
 // Representative valid IDs — the branded schemas require the right prefix
 // (see src/id/id.ts).
-const sessionID = SessionID.zod.parse("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2K")
-const sessionIDChild = SessionID.zod.parse("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2L")
-const messageID = MessageID.zod.parse("msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M")
-const partID = PartID.zod.parse("prt_01J5Y5H0AH4Q4NXJ6P4C3P5V2N")
+const sessionID = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2K")
+const sessionIDChild = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2L")
+const messageID = Schema.decodeUnknownSync(MessageID)("msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M")
+const partID = Schema.decodeUnknownSync(PartID)("prt_01J5Y5H0AH4Q4NXJ6P4C3P5V2N")
 const projectID = ProjectID.zod.parse("proj-alpha")
-const workspaceID = WorkspaceID.zod.parse("wrk-primary")
+const workspaceID = Schema.decodeUnknownSync(WorkspaceID)("wrk-primary")
 
 function decodeUnknown<S extends Schema.Top>(schema: S) {
   const decode = Schema.decodeUnknownSync(schema as any)
