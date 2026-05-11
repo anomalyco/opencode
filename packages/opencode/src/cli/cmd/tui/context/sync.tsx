@@ -131,7 +131,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
-    event.subscribe((event) => {
+    event.subscribe((event, { workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -364,7 +364,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "vcs.branch.updated": {
-          setStore("vcs", { branch: event.properties.branch })
+          if (workspace === project.workspace.current()) {
+            setStore("vcs", { branch: event.properties.branch })
+          }
           break
         }
       }
