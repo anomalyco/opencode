@@ -3,6 +3,15 @@ import { Readable } from "node:stream"
 import { CodeRenderable, detectLinks, getLinkId, StyledText, SyntaxStyle, TextRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 
+// TODO: testRender from @opentui/solid requires resolving the Effect version
+// mismatch in the test environment. Every test that imports `@opentui/solid`
+// fails under bun 1.3.11 (installed) with:
+//   error: Cannot find module 'effect/Context'
+//   SyntaxError: Export named 'Context' not found in module 'effect/dist/index.js'
+// The repo requires bun ^1.3.13 per packageManager field in root package.json.
+// Once that version is available, add Solid-level tests that render the
+// actual `<code filetype="markdown" onChunks={detectLinks}>` element.
+
 function ids(attrs: Uint32Array, cols: number, row: number, len: number) {
   return new Set(Array.from({ length: len }, (_, i) => getLinkId(attrs[row * cols + i])).filter(Boolean))
 }
