@@ -23,6 +23,19 @@ export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
 
+function isLmStudioOpenAICompatible(model: Provider.Model) {
+  if (model.api.npm !== "@ai-sdk/openai-compatible") return false
+
+  const providerID = model.providerID.toLowerCase()
+  const apiURL = model.api.url.toLowerCase()
+  return (
+    providerID.includes("lmstudio") ||
+    providerID.includes("lm-studio") ||
+    apiURL.includes("127.0.0.1:1234") ||
+    apiURL.includes("localhost:1234")
+  )
+}
+
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
   switch (npm) {
@@ -432,7 +445,8 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (
-    (model.providerID === "anthropic" ||
+    (isLmStudioOpenAICompatible(model) ||
+      model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
       model.api.id.includes("anthropic") ||
       model.api.id.includes("claude") ||

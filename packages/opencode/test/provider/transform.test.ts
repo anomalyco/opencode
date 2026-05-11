@@ -2226,6 +2226,37 @@ describe("ProviderTransform.message - cache control on gateway", () => {
     })
   })
 
+  test("LM Studio OpenAI-compatible models get cache control after discovery", () => {
+    const model = createModel({
+      id: "qwen3.6-27b-mlx-oq5",
+      providerID: "lmstudio",
+      api: {
+        id: "qwen3.6-27b-mlx-oq5",
+        url: "http://127.0.0.1:1234/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Qwen 3.6 27B MLX oQ5",
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions?.openaiCompatible).toEqual({
+      cache_control: {
+        type: "ephemeral",
+      },
+    })
+  })
+
   test("google-vertex-anthropic applies cache control", () => {
     const model = createModel({
       providerID: "google-vertex-anthropic",
