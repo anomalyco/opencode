@@ -9,6 +9,13 @@
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
 
+## Development server
+
+- Running `bun dev` from `packages/opencode` starts the live interactive TUI. Do not run it as a blocking foreground command when you need to inspect the result.
+- Start it in `tmux` instead: `tmux new-session -d -s opencode-dev 'bun dev'`.
+- Capture the current TUI output with: `tmux capture-pane -pt opencode-dev`.
+- Stop the session explicitly when done: `tmux kill-session -t opencode-dev`.
+
 # Module shape
 
 Do not use `export namespace Foo { ... }` for module organization. It is not

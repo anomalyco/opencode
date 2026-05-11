@@ -11,20 +11,19 @@ import {
   UrlParams,
 } from "effect/unstable/http"
 import * as CassetteService from "./cassette"
-import { defaultMatcher, selectMatch, selectSequential, type RequestMatcher } from "./matching"
-import { appendOrFail, makeReplayState } from "./recorder"
+import { defaultMatcher, selectSequential, type RequestMatcher } from "./matching"
+import { appendOrFail, makeReplayState, resolveAutoMode } from "./recorder"
 import { defaults, type Redactor } from "./redactor"
 import { redactUrl } from "./redaction"
 import { httpInteractions, type CassetteMetadata, type HttpInteraction, type ResponseSnapshot } from "./schema"
 
-export type RecordReplayMode = "record" | "replay" | "passthrough"
+export type RecordReplayMode = "auto" | "record" | "replay" | "passthrough"
 
 export interface RecordReplayOptions {
   readonly mode?: RecordReplayMode
   readonly directory?: string
   readonly metadata?: CassetteMetadata
   readonly redactor?: Redactor
-  readonly dispatch?: "match" | "sequential"
   readonly match?: RequestMatcher
 }
 
@@ -69,8 +68,8 @@ export const recordingLayer = (
       const cassetteService = yield* CassetteService.Service
       const redactor = options.redactor ?? defaults()
       const match = options.match ?? defaultMatcher
-      const mode = options.mode ?? "replay"
-      const sequential = options.dispatch === "sequential"
+      const requested = options.mode ?? "auto"
+      const mode = requested === "auto" ? yield* resolveAutoMode(cassetteService, name) : requested
       const replay = yield* makeReplayState(cassetteService, name, httpInteractions)
 
       const snapshotRequest = (request: HttpClientRequest.HttpClientRequest) =>
@@ -114,16 +113,16 @@ export const recordingLayer = (
         return Effect.gen(function* () {
           const incoming = yield* snapshotRequest(request)
           const interactions = yield* replay.load.pipe(
-            Effect.mapError(() => transportError(request, `Fixture "${name}" not found.`)),
+            Effect.mapError(() =>
+              transportError(request, `Fixture "${name}" not found. Run locally to record it (CI=true forces replay).`),
+            ),
           )
-          const result = sequential
-            ? selectSequential(interactions, incoming, match, yield* replay.cursor)
-            : selectMatch(interactions, incoming, match)
+          const result = selectSequential(interactions, incoming, match, yield* replay.cursor)
           if (!result.interaction)
             return yield* Effect.fail(
               transportError(request, `Fixture "${name}" does not match the current request: ${result.detail}.`),
             )
-          if (sequential) yield* replay.advance
+          yield* replay.advance
           return HttpClientResponse.fromWeb(
             request,
             new Response(decodeResponseBody(result.interaction.response), result.interaction.response),
@@ -135,7 +134,7 @@ export const recordingLayer = (
 
 export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): Layer.Layer<HttpClient.HttpClient> =>
   recordingLayer(name, options).pipe(
-    Layer.provide(CassetteService.layer({ directory: options.directory })),
+    Layer.provide(CassetteService.fileSystem({ directory: options.directory })),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(NodeFileSystem.layer),
   )

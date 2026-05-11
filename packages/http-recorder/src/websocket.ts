@@ -2,7 +2,8 @@ import { Effect, Option, Ref, Scope, Stream } from "effect"
 import type { Headers } from "effect/unstable/http"
 import * as CassetteService from "./cassette"
 import { canonicalizeJson, decodeJson } from "./matching"
-import { appendOrFail, makeReplayState } from "./recorder"
+import { appendOrFail, makeReplayState, resolveAutoMode } from "./recorder"
+import type { RecordReplayMode } from "./effect"
 import { defaults, type Redactor } from "./redactor"
 import { webSocketInteractions, type CassetteMetadata, type WebSocketFrame } from "./schema"
 
@@ -23,7 +24,7 @@ export interface WebSocketExecutor<E> {
 
 export interface WebSocketRecordReplayOptions<E> {
   readonly name: string
-  readonly mode?: "record" | "replay" | "passthrough"
+  readonly mode?: RecordReplayMode
   readonly metadata?: CassetteMetadata
   readonly cassette: CassetteService.Interface
   readonly live: WebSocketExecutor<E>
@@ -71,7 +72,8 @@ export const makeWebSocketExecutor = <E>(
   options: WebSocketRecordReplayOptions<E>,
 ): Effect.Effect<WebSocketExecutor<E>, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const mode = options.mode ?? "replay"
+    const requested = options.mode ?? "auto"
+    const mode = requested === "auto" ? yield* resolveAutoMode(options.cassette, options.name) : requested
     const redactor = options.redactor ?? defaults()
     const openSnapshot = (request: WebSocketRequest) => {
       const redacted = redactor.request({

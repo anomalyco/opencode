@@ -7,9 +7,9 @@ export type {
   WebSocketFrame,
   WebSocketInteraction,
 } from "./schema"
-export { hasCassetteSync } from "./storage"
+export { CassetteNotFoundError, hasCassetteSync } from "./cassette"
 export { defaultMatcher, type RequestMatcher } from "./matching"
-export { cassetteSecretFindings, redactHeaders, redactUrl, type SecretFinding } from "./redaction"
+export { redactHeaders, redactUrl, secretFindings, type SecretFinding } from "./redaction"
 export { UnsafeCassetteError } from "./recorder"
 export { cassetteLayer, recordingLayer, type RecordReplayMode, type RecordReplayOptions } from "./effect"
 export {

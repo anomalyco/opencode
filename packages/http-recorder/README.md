@@ -16,8 +16,9 @@ import { HttpRecorder } from "@opencode-ai/http-recorder"
 ## Quickstart
 
 Provide `cassetteLayer(name)` in place of (or layered over) your `HttpClient`.
-The first run records to `test/fixtures/recordings/<name>.json`; subsequent
-runs replay from it.
+By default the layer records on first run and replays on subsequent runs —
+no env-var ternary at the call site, and `CI=true` forces strict replay so
+missing cassettes fail loudly in CI rather than silently re-recording.
 
 ```ts
 import { Effect } from "effect"
@@ -30,28 +31,22 @@ const program = Effect.gen(function* () {
   return yield* response.json
 })
 
-// Replay (default). Fails if the cassette is missing.
+// Records if the cassette is missing, replays if it exists.
+// In CI (CI=true) always replays — fails loudly on missing fixtures.
 Effect.runPromise(program.pipe(Effect.provide(HttpRecorder.cassetteLayer("users/get-one"))))
 
-// Record. Hits the upstream and writes the cassette.
+// Force a refresh — always hits upstream and overwrites.
 Effect.runPromise(program.pipe(Effect.provide(HttpRecorder.cassetteLayer("users/get-one", { mode: "record" }))))
-```
-
-Set the mode from the environment in your test setup:
-
-```ts
-HttpRecorder.cassetteLayer("users/get-one", {
-  mode: process.env.RECORD === "true" ? "record" : "replay",
-})
 ```
 
 ## Modes
 
-| Mode          | Behavior                                                             |
-| ------------- | -------------------------------------------------------------------- |
-| `replay`      | Default. Match the request to a recorded interaction; error if none. |
-| `record`      | Execute upstream, append the interaction, write the cassette.        |
-| `passthrough` | Bypass the recorder entirely — just call upstream.                   |
+| Mode          | Behavior                                                                            |
+| ------------- | ----------------------------------------------------------------------------------- |
+| `auto`        | Default. Replay if the cassette exists; record if missing. `CI=true` forces replay. |
+| `replay`      | Strict — match the request to a recorded interaction; error if none.                |
+| `record`      | Execute upstream, append the interaction, write the cassette.                       |
+| `passthrough` | Bypass the recorder entirely — just call upstream.                                  |
 
 ## Cassette format
 
@@ -75,19 +70,15 @@ Cassettes are normal source files — review them, diff them, commit them.
 
 ## Request matching
 
-By default, requests match on canonicalized method, URL, headers, and JSON
-body (object keys sorted). Two dispatch strategies are available:
+Replay walks the cassette in record order via an internal cursor: the Nth
+request executed at runtime is served by the Nth recorded interaction, and
+each one is validated as the cursor advances. Request equality is computed
+on canonicalized method, URL, headers, and JSON body (object keys sorted).
 
-- **`match`** (default) — find the first recorded interaction whose request
-  matches the incoming request. Same request twice returns the same response.
-- **`sequential`** — return interactions in the order they were recorded,
-  validating each one matches as the cursor advances. Use for ordered flows
-  where the same URL is hit multiple times with meaningful state changes
-  (pagination, retries, polling).
-
-```ts
-HttpRecorder.cassetteLayer("flow/poll-until-done", { dispatch: "sequential" })
-```
+This is deliberately strict — content-based dispatch was removed because
+it silently returns the first recorded response for repeated identical
+requests, masking state changes that retry/polling/cache-hit tests need to
+observe. If you reorder requests in a test, re-record the cassette.
 
 Supply your own matcher via `match: (incoming, recorded) => boolean` for
 custom equivalence (e.g. ignoring a timestamp field in the body).
@@ -101,7 +92,6 @@ secrets escape. Redaction is configured by composing a `Redactor`:
 import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
 
 HttpRecorder.cassetteLayer("anthropic/messages", {
-  mode: process.env.RECORD === "true" ? "record" : "replay",
   redactor: Redactor.defaults({
     requestHeaders: { allow: ["content-type", "anthropic-version"] },
     url: { transform: (url) => url.replace(/\/accounts\/[^/]+/, "/accounts/{account}") },
@@ -157,7 +147,6 @@ const program = Effect.gen(function* () {
   const cassette = yield* HttpRecorder.Cassette.Service
   const executor = yield* HttpRecorder.makeWebSocketExecutor({
     name: "ws/subscribe",
-    mode: process.env.RECORD === "true" ? "record" : "replay",
     cassette,
     live: liveExecutor,
   })
@@ -167,9 +156,9 @@ const program = Effect.gen(function* () {
 
 ## Inspecting cassettes programmatically
 
-`Cassette.Service` exposes `read`, `write`, `append`, `exists`, `list`, and
-`scan` (re-running the secret detector over an existing cassette). Useful
-for CI checks:
+`Cassette.Service` exposes `read`, `append`, `exists`, and `list`. `read`
+returns the recorded interactions for a name; the file format is hidden
+behind the seam. Useful for CI checks:
 
 ```ts
 import { HttpRecorder } from "@opencode-ai/http-recorder"
@@ -177,22 +166,30 @@ import { Effect } from "effect"
 
 const audit = Effect.gen(function* () {
   const cassettes = yield* HttpRecorder.Cassette.Service
-  const findings = yield* Effect.forEach(yield* cassettes.list(), (entry) =>
-    cassettes.read(entry.name).pipe(Effect.map((c) => ({ entry, findings: cassettes.scan(c) }))),
+  const entries = yield* cassettes.list()
+  const issues = yield* Effect.forEach(entries, (entry) =>
+    cassettes
+      .read(entry.name)
+      .pipe(Effect.map((interactions) => ({ name: entry.name, findings: HttpRecorder.secretFindings(interactions) }))),
   )
-  return findings.filter((r) => r.findings.length > 0)
+  return issues.filter((i) => i.findings.length > 0)
 })
 ```
+
+`cassetteLayer` is the batteries-included entry point — it provides
+`Cassette.fileSystem({ directory })` automatically. If you want to provide
+your own `Cassette.Service` (e.g. an in-memory adapter for the recorder's
+own unit tests), use `recordingLayer` and supply `Cassette.fileSystem` /
+`Cassette.memory` yourself.
 
 ## Options reference
 
 ```ts
 type RecordReplayOptions = {
-  mode?: "record" | "replay" | "passthrough" // default: "replay"
+  mode?: "auto" | "replay" | "record" | "passthrough" // default: "auto" (CI=true forces "replay")
   directory?: string // default: <cwd>/test/fixtures/recordings
   metadata?: Record<string, unknown> // merged into cassette.metadata
   redactor?: Redactor // default: Redactor.defaults()
-  dispatch?: "match" | "sequential" // default: "match"
   match?: (incoming, recorded) => boolean // custom matcher
 }
 ```
@@ -209,4 +206,4 @@ type RecordReplayOptions = {
 | `redaction.ts` | Lower-level header/URL primitives + secret pattern detection.                    |
 | `schema.ts`    | Effect Schema definitions for the cassette JSON format.                          |
 | `storage.ts`   | Path resolution, JSON encode/decode, sync existence check.                       |
-| `matching.ts`  | Request matcher, canonicalization, dispatch strategies, mismatch diagnostics.    |
+| `matching.ts`  | Request matcher, canonicalization, sequential cursor, mismatch diagnostics.      |

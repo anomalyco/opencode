@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src"
+import { LLM, Message, ToolCallPart } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
@@ -157,9 +157,9 @@ describe("OpenAI-compatible Chat route", () => {
           ],
           toolChoice: "lookup",
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
         }),
       )

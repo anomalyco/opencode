@@ -6,3 +6,7 @@ export const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
     encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
   }),
 )
+
+export const QueryBooleanOpenApi = {
+  anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
+}
