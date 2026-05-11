@@ -210,7 +210,9 @@ describe("Instruction.system", () => {
 
         const rules = yield* svc.system()
         expect(rules.global).toEqual([`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Instructions`])
-        expect(rules.project).toEqual([`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`])
+        expect(rules.project).toEqual([
+          `Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`,
+        ])
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )

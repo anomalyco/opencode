@@ -60,9 +60,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
               <b>Cache Audit</b>
             </text>
             <text fg={theme().textMuted}>{cache().input.toLocaleString()} input tokens</text>
-            <text fg={theme().textMuted}>  {cache().uncached.toLocaleString()} new</text>
-            <text fg={theme().textMuted}>  {cache().read.toLocaleString()} cache read</text>
-            <text fg={theme().textMuted}>  {cache().write.toLocaleString()} cache write</text>
+            <text fg={theme().textMuted}> {cache().uncached.toLocaleString()} new</text>
+            <text fg={theme().textMuted}> {cache().read.toLocaleString()} cache read</text>
+            <text fg={theme().textMuted}> {cache().write.toLocaleString()} cache write</text>
             <text fg={theme().textMuted}>{cache().hitPercent}% hit rate</text>
             <text fg={theme().textMuted}>{cache().output.toLocaleString()} output tokens</text>
           </box>

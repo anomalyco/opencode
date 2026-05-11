@@ -167,7 +167,9 @@ export const layer: Layer.Layer<
       const remote = yield* Effect.forEach(urls, fetch, { concurrency: 4 })
 
       const result = {
-        global: globalPaths.flatMap((item, i) => (globalFiles[i] ? [`Instructions from: ${item}\n${globalFiles[i]}`] : [])),
+        global: globalPaths.flatMap((item, i) =>
+          globalFiles[i] ? [`Instructions from: ${item}\n${globalFiles[i]}`] : [],
+        ),
         project: [
           ...projectPaths.flatMap((item, i) =>
             projectFiles[i] ? [`Instructions from: ${item}\n${projectFiles[i]}`] : [],

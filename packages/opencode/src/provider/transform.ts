@@ -366,7 +366,8 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model, extendedTTL?:
   }
 
   for (const msg of unique([...system, ...final])) {
-    const options = msg === system[0] ? { ...providerOptions, anthropic: { cacheControl: anthropicCacheControl } } : providerOptions
+    const options =
+      msg === system[0] ? { ...providerOptions, anthropic: { cacheControl: anthropicCacheControl } } : providerOptions
     const useMessageLevelOptions =
       model.providerID === "anthropic" ||
       model.providerID.includes("bedrock") ||
@@ -444,7 +445,11 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.api.npm === "@ai-sdk/alibaba") &&
     model.api.npm !== "@ai-sdk/gateway"
   ) {
-    msgs = applyCaching(msgs, model, (options.extendedTTL as boolean | undefined) ?? Flag.OPENCODE_EXPERIMENTAL_CACHE_1H_TTL)
+    msgs = applyCaching(
+      msgs,
+      model,
+      (options.extendedTTL as boolean | undefined) ?? Flag.OPENCODE_EXPERIMENTAL_CACHE_1H_TTL,
+    )
   }
 
   // Remap providerOptions keys from stored providerID to expected SDK key

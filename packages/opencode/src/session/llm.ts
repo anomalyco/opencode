@@ -109,9 +109,13 @@ const live: Layer.Layer<
             // block 1: provider/agent prompt + global instructions (stable across repos)
             [...prompt, ...input.system.slice(0, split)].filter(Boolean).join("\n"),
             // block 2: env + project instructions + any custom prompt from last user message (dynamic)
-            [...input.system.slice(split), ...(input.user.system ? [input.user.system] : [])].filter(Boolean).join("\n"),
+            [...input.system.slice(split), ...(input.user.system ? [input.user.system] : [])]
+              .filter(Boolean)
+              .join("\n"),
           ].filter(Boolean)
-        : [[...prompt, ...input.system, ...(input.user.system ? [input.user.system] : [])].filter(Boolean).join("\n")].filter(Boolean)
+        : [
+            [...prompt, ...input.system, ...(input.user.system ? [input.user.system] : [])].filter(Boolean).join("\n"),
+          ].filter(Boolean)
 
       const header = system[0]
       yield* plugin.trigger(

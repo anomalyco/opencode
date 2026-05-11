@@ -79,13 +79,11 @@ export const layer = Layer.effect(
           // version of them here and a less verbose version in tool description, rather than vice versa.
         ].join("\n")
 
-        const global = globalSkills.length > 0 ? [preamble, Skill.fmt(globalSkills, { verbose: true })].join("\n") : undefined
+        const global =
+          globalSkills.length > 0 ? [preamble, Skill.fmt(globalSkills, { verbose: true })].join("\n") : undefined
         const project =
           projectSkills.length > 0
-            ? [
-                ...(globalSkills.length === 0 ? [preamble] : []),
-                Skill.fmt(projectSkills, { verbose: true }),
-              ].join("\n")
+            ? [...(globalSkills.length === 0 ? [preamble] : []), Skill.fmt(projectSkills, { verbose: true })].join("\n")
             : undefined
 
         return { global, project }
