@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "7ec240f8-b00e-4f17-926c-5df041a03396",
+  "id": "fdfcccee-fb3a-481f-b801-b9835fa30d5d",
   "prevIds": [
     "630a93f2-c6c6-4191-a351-868d8f3a05d4"
   ],
@@ -19,11 +19,11 @@
       "entityType": "tables"
     },
     {
-      "name": "code_migration",
+      "name": "workspace",
       "entityType": "tables"
     },
     {
-      "name": "workspace",
+      "name": "data_migration",
       "entityType": "tables"
     },
     {
@@ -262,26 +262,6 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "name",
-      "entityType": "columns",
-      "table": "code_migration"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_completed",
-      "entityType": "columns",
-      "table": "code_migration"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
       "name": "id",
       "entityType": "columns",
       "table": "workspace"
@@ -355,6 +335,26 @@
       "name": "time_used",
       "entityType": "columns",
       "table": "workspace"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "data_migration"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_completed",
+      "entityType": "columns",
+      "table": "data_migration"
     },
     {
       "type": "text",
@@ -1306,20 +1306,20 @@
     },
     {
       "columns": [
-        "name"
-      ],
-      "nameExplicit": false,
-      "name": "code_migration_pk",
-      "table": "code_migration",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
         "id"
       ],
       "nameExplicit": false,
       "name": "workspace_pk",
       "table": "workspace",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "name"
+      ],
+      "nameExplicit": false,
+      "name": "data_migration_pk",
+      "table": "data_migration",
       "entityType": "pks"
     },
     {

@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { Database } from "./storage/db"
-import { CodeMigrationTable } from "./code-migration.sql"
+import { DataMigrationTable } from "./data-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 
@@ -9,11 +9,11 @@ export type Migration<R = never> = {
   run: Effect.Effect<void, unknown, R>
 }
 
-const log = Log.create({ service: "code-migration" })
+const log = Log.create({ service: "data-migration" })
 
 export interface Interface {}
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/CodeMigration") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/DataMigration") {}
 
 export const layer = Layer.effect(
   Service,
@@ -28,25 +28,25 @@ export const layer = Layer.effect(
       for (const migration of migrations) {
         const completed = Database.use((db) =>
           db
-            .select({ name: CodeMigrationTable.name })
-            .from(CodeMigrationTable)
-            .where(eq(CodeMigrationTable.name, migration.name))
+            .select({ name: DataMigrationTable.name })
+            .from(DataMigrationTable)
+            .where(eq(DataMigrationTable.name, migration.name))
             .get(),
         )
         if (completed) continue
 
-        log.info("running code migration", { name: migration.name })
+        log.info("running data migration", { name: migration.name })
         yield* migration.run
         Database.use((db) =>
           db
-            .insert(CodeMigrationTable)
+            .insert(DataMigrationTable)
             .values({ name: migration.name, time_completed: Date.now() })
             .onConflictDoNothing()
             .run(),
         )
       }
     }).pipe(
-      Effect.tapCause((cause) => Effect.logError("failed to run code migrations", { cause })),
+      Effect.tapCause((cause) => Effect.logError("failed to run data migrations", { cause })),
       Effect.ignore,
       Effect.forkScoped,
     )
@@ -56,4 +56,4 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer
 
-export * as CodeMigration from "./code-migration"
+export * as DataMigration from "./data-migration"
