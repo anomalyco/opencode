@@ -276,15 +276,23 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
 // =============================================================================
 // Stream Parsing
 // =============================================================================
+// OpenAI Responses reports `input_tokens` (inclusive total) with a
+// `cached_tokens` subset, and `output_tokens` (inclusive total) with a
+// `reasoning_tokens` subset. Pass the totals through and derive the
+// non-cached breakdown.
 const mapUsage = (usage: OpenAIResponsesUsage | null | undefined) => {
   if (!usage) return undefined
+  const cached = usage.input_tokens_details?.cached_tokens
+  const reasoning = usage.output_tokens_details?.reasoning_tokens
+  const nonCached = ProviderShared.subtractTokens(usage.input_tokens, cached)
   return new Usage({
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,
-    reasoningTokens: usage.output_tokens_details?.reasoning_tokens,
-    cacheReadInputTokens: usage.input_tokens_details?.cached_tokens,
+    nonCachedInputTokens: nonCached,
+    cacheReadInputTokens: cached,
+    reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
-    native: usage,
+    providerMetadata: { openai: usage },
   })
 }
 
