@@ -684,7 +684,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         slashAliases: ["settings"],
         run: () => {
           const arg = command.slashArg()
-          dialog.replace(() => <DialogConfig gotoKey={arg} />)
+          // Defer to next tick to avoid synchronous re-render cascades
+          // during key event handling that can stress the reconciler
+          setTimeout(() => {
+            dialog.replace(() => <DialogConfig gotoKey={arg} />)
+          }, 0)
         },
         category: "System",
       },
@@ -695,7 +699,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         slashAliases: ["tuisettings"],
         run: () => {
           const arg = command.slashArg()
-          dialog.replace(() => <DialogTuiConfig gotoKey={arg} />)
+          setTimeout(() => {
+            dialog.replace(() => <DialogTuiConfig gotoKey={arg} />)
+          }, 0)
         },
         category: "System",
       },
