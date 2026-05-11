@@ -641,37 +641,7 @@ export default function Page() {
 
   const debug = (src: string, el = scroller, extra?: Record<string, unknown>) => {
     if (!probe(params.id)) return
-    if (!el) {
-      console.debug("[session-scroll]", { src, id: params.id, missing: true, ...extra })
-      return
-    }
-
-    const max = Math.max(0, el.scrollHeight - el.clientHeight)
-    const list = content?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
-    const head = document.querySelector<HTMLElement>("[data-session-title]")
-    console.debug("[session-scroll]", {
-      src,
-      id: params.id,
-      mode: ui.mode,
-      live: live(),
-      bottom: ui.scroll.bottom,
-      overflow: ui.scroll.overflow,
-      scrolled: autoScroll.userScrolled(),
-      gesture: hasScrollGesture(),
-      seeking: ui.seekingMessageId || "none",
-      current: store.messageId || "none",
-      top: Math.round(el.scrollTop),
-      max: Math.round(max),
-      gap: Math.round(max - el.scrollTop),
-      height: Math.round(el.scrollHeight),
-      client: Math.round(el.clientHeight),
-      content: content ? Math.round(content.getBoundingClientRect().height) : "none",
-      list: list ? Math.round(list.getBoundingClientRect().height) : "none",
-      margin: list ? getComputedStyle(list).marginTop : "none",
-      head: head ? Math.round(head.getBoundingClientRect().height) : "none",
-      dock: dockHeight,
-      ...extra,
-    })
+    return
   }
 
   createEffect(

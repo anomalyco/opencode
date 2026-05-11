@@ -71,6 +71,69 @@ const windowThreshold = 10
 const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
+
+const heightCacheKey = (sessionId: string, msgId: string, stage: string) =>
+  `opencode.h.${sessionId}.${msgId}.${stage}`
+
+const rankByStage = {
+  lite: 0,
+  structure: 1,
+  full: 2,
+} as const
+
+const stageCacheKey = (sessionId: string, msgId: string) => `opencode.s.${sessionId}.${msgId}`
+
+const parseStage = (value: string | null | undefined): MarkdownStage | undefined => {
+  if (value === "lite") return "lite"
+  if (value === "structure") return "structure"
+  if (value === "full") return "full"
+  return undefined
+}
+
+const readStageCache = (sessionId: string, msgId: string): MarkdownStage | undefined => {
+  try {
+    return parseStage(sessionStorage.getItem(stageCacheKey(sessionId, msgId)))
+  } catch {
+    return undefined
+  }
+}
+
+const writeStageCache = (sessionId: string, msgId: string, stage: MarkdownStage) => {
+  try {
+    sessionStorage.setItem(stageCacheKey(sessionId, msgId), stage)
+  } catch {
+    // QuotaExceededError — silently drop
+  }
+}
+
+const deleteStageCache = (sessionId: string, msgId: string) => {
+  try {
+    sessionStorage.removeItem(stageCacheKey(sessionId, msgId))
+  } catch {
+    // Ignore storage access failures
+  }
+}
+
+const maxStage = (a: MarkdownStage, b: MarkdownStage) => (rankByStage[a] >= rankByStage[b] ? a : b)
+
+const readHeightCache = (sessionId: string, msgId: string, stage: string): number | undefined => {
+  try {
+    const v = sessionStorage.getItem(heightCacheKey(sessionId, msgId, stage))
+    if (v === null) return undefined
+    const n = Number(v)
+    return Number.isFinite(n) && n > 0 ? n : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const writeHeightCache = (sessionId: string, msgId: string, stage: string, height: number) => {
+  try {
+    sessionStorage.setItem(heightCacheKey(sessionId, msgId, stage), String(height))
+  } catch {
+    // QuotaExceededError — silently drop
+  }
+}
 const IDLE_QUEUE_MS = 1_200
 const scrollDebugKey = "opencode.session.scroll.debug"
 const mdKey = "opencode.markdown.debug"
@@ -312,6 +375,8 @@ export function MessageTimeline(props: {
   const [stageMark, setStageMark] = createSignal(0)
   const stageByTurn = new Map<string, Map<string, MarkdownStage>>()
   const upgraded = new Set<string>()
+  const stageById = new Map<string, MarkdownStage>()
+  let seq = 0
   let skipped = 0
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
@@ -383,7 +448,38 @@ export function MessageTimeline(props: {
     debug("follow:write", { source: src, dist: Math.round(dist) })
     props.onScheduleScrollState(root)
   }
-  const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? estimates()?.get(id) ?? estimatedTurnHeight
+  const estimateTurnHeight = (id: string) => {
+    if (turnHeights.has(id)) return turnHeights.get(id)!
+    const sid = sessionID()
+    if (sid) {
+      const cached = readHeightCache(sid, id, "full") ?? readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite")
+      if (cached !== undefined) return cached
+    }
+    return estimates()?.get(id) ?? estimatedTurnHeight
+  }
+  const stageOf = (id: string) => {
+    stageMark()
+    const sid = sessionID()
+    const cached = sid ? readStageCache(sid, id) : undefined
+    const local = stageById.get(id)
+    const next = cached && local ? maxStage(cached, local) : (cached ?? local)
+    if (next === "full") return "full"
+    if (next === "structure") return "structure"
+    return "lite"
+  }
+  const saveStage = (id: string, stage: MarkdownStage, src: string) => {
+    const prev = stageById.get(id)
+    const next = prev ? maxStage(prev, stage) : stage
+    if (prev === next) return false
+    stageById.set(id, next)
+    if (next === "full") upgraded.add(id)
+    const sid = sessionID()
+    if (sid) writeStageCache(sid, id, next)
+    seq += 1
+    console.debug(`[timeline] stage cache: src=${src} id=${id} prev=${prev ?? "none"} next=${next} sid=${sid ?? "none"} seq=${seq}`)
+    setStageMark((value) => value + 1)
+    return true
+  }
   const slot = (id: string, index: number, size: number) => estimateTurnHeight(id) + (index < size - 1 ? gap : 0)
   const offset = (ids: string[], end: number) => {
     let sum = 0
@@ -412,9 +508,9 @@ export function MessageTimeline(props: {
     const box = root?.getBoundingClientRect()
     const a = first?.getBoundingClientRect()
     const b = last?.getBoundingClientRect()
-    console.debug("[timeline-scroll]", {
+    const fields = {
       src,
-      id: sessionID(),
+      id: sessionID() ?? "none",
       live: props.live,
       bottom: props.scroll.bottom,
       overflow: props.scroll.overflow,
@@ -440,8 +536,13 @@ export function MessageTimeline(props: {
       total: Math.round(totalHeight()),
       measured: turnHeights.size,
       visible: visibleRendered().length,
+      seq,
       ...extra,
-    })
+    }
+    const line = Object.entries(fields)
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(" ")
+    console.debug(`[timeline-scroll] ${line}`)
   }
   const trace = (stage: string, id?: string, extra = "") => {
     const root = viewport
@@ -691,12 +792,25 @@ export function MessageTimeline(props: {
       )
     }
 
-    return {
+    const next = {
       start: clampedStart,
       end: clampedEnd,
       top: offset,
       bottom: Math.max(0, totalHeight() - tail),
     }
+    debug("window:compute", {
+      reason: props.seekingMessageId ? "seek" : props.currentMessageId ? "current" : props.live ? "live" : "scroll",
+      nextStart: next.start,
+      nextEnd: next.end,
+      nextTop: Math.round(next.top),
+      nextBottom: Math.round(next.bottom),
+      min: Math.round(min),
+      max: Math.round(max),
+      scrollTop: Math.round(scrollTop),
+      scrollHeight: Math.round(scrollHeight),
+      clientHeight: Math.round(clientHeight),
+    })
+    return next
   }
 
   const buildTargetWindow = (id: string) => {
@@ -802,6 +916,16 @@ export function MessageTimeline(props: {
         : props.currentMessageId
           ? targetAnchor
           : viewportAnchor
+    debug("window:anchor", {
+      pinned,
+      target: targetId || "none",
+      viewportAnchor: viewportAnchor?.id || "none",
+      viewportTop: viewportAnchor ? Math.round(viewportAnchor.top) : "none",
+      targetAnchor: targetAnchor?.id || "none",
+      targetTop: targetAnchor ? Math.round(targetAnchor.top) : "none",
+      scrollAnchor: scrollAnchor?.id || "none",
+      scrollTop: scrollAnchor ? Math.round(scrollAnchor.top) : "none",
+    })
 
     const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
     const next = syncWindow(base, pinned ? undefined : targetId)
@@ -827,56 +951,93 @@ export function MessageTimeline(props: {
       const top = Math.round(next.top - prev.top)
       const bottom = Math.round(next.bottom - prev.bottom)
       const shift = Math.max(Math.abs(top), Math.abs(bottom))
+      seq += 1
+      debug("window:commit", {
+        prevStart: prev.start,
+        prevEnd: prev.end,
+        prevTop: Math.round(prev.top),
+        prevBottom: Math.round(prev.bottom),
+        nextStart: next.start,
+        nextEnd: next.end,
+        nextTop: Math.round(next.top),
+        nextBottom: Math.round(next.bottom),
+        deltaTop: top,
+        deltaBottom: bottom,
+        pinned,
+        target: targetId || "none",
+        anchor: scrollAnchor?.id || "none",
+      })
       if (seek && shift > SPACER_SHIFT_WARN) trace("spacer-shift", seek, `deltaTop=${top} deltaBottom=${bottom}`)
       setWindowed(next)
     }
 
     audit(props.seekingMessageId ? "seek-window" : "apply-window")
     const adjustVersion = ++windowAdjustVersion
+    const preserve = !seek && !pinned && props.hasScrollGesture() && !props.scroll.bottom
     if (!seek && (pinned || (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId))) {
       requestAnimationFrame(() => {
         if (adjustVersion !== windowAdjustVersion) return
         const root = viewport
         if (!root) return
         if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
+        const before = snap(root)
         root.scrollTop = root.scrollHeight
+        const after = snap(root)
+        seq += 1
         props.onScheduleScrollState(root)
-        debug("window:bottom-write")
+        debug("window:bottom-write", {
+          beforeTop: before.top,
+          beforeGap: before.gap,
+          targetTop: before.height,
+          afterTop: after.top,
+          afterGap: after.gap,
+        })
       })
       return
     }
     if (!scrollAnchor) {
       return
     }
+    if (preserve) {
+      debug("window:anchor-skip", {
+        reason: "gesture",
+        target: targetId || "none",
+        anchor: scrollAnchor.id,
+      })
+      return
+    }
 
-    requestAnimationFrame(() => {
-      if (adjustVersion !== windowAdjustVersion) return
+    // Synchronous correction within the same rAF: setWindowed already flushed DOM,
+    // so we can read the anchor's new position immediately without a second rAF.
+    {
       const root = viewport
-      if (!root) return
-      const key = typeof CSS === "undefined" ? scrollAnchor.id : CSS.escape(scrollAnchor.id)
-      const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
-      if (!node) {
-        if (seek) trace("anchor-missing", seek, `anchor=${scrollAnchor.id}`)
-        return
+      if (root) {
+        const key = typeof CSS === "undefined" ? scrollAnchor.id : CSS.escape(scrollAnchor.id)
+        const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
+        if (node) {
+          const box = root.getBoundingClientRect()
+          const top = node.getBoundingClientRect().top - box.top
+          const delta = top - scrollAnchor.top
+
+          if (Math.abs(delta) > 1) {
+            const prevTop = root.scrollTop
+            root.scrollTop += delta
+            const after = snap(root)
+            debug("window:anchor-write", { delta: Math.round(delta), prevTop: Math.round(prevTop), afterTop: after.top })
+
+            if (seek)
+              trace(
+                "anchor-write",
+                seek,
+                `delta=${Math.round(delta)} prevTop=${Math.round(prevTop)} afterTop=${after.top} anchor=${scrollAnchor.id} target=${targetId || "none"}`,
+              )
+            props.onScheduleScrollState(root)
+          }
+        } else {
+          if (seek) trace("anchor-missing", seek, `anchor=${scrollAnchor.id}`)
+        }
       }
-      const box = root.getBoundingClientRect()
-      const top = node.getBoundingClientRect().top - box.top
-      const delta = top - scrollAnchor.top
-
-      if (Math.abs(delta) <= 1) return
-      const prevTop = root.scrollTop
-      root.scrollTop += delta
-      const after = snap(root)
-      debug("window:anchor-write", { delta: Math.round(delta), prevTop: Math.round(prevTop), afterTop: after.top })
-
-      if (seek)
-        trace(
-          "anchor-write",
-          seek,
-          `delta=${Math.round(delta)} prevTop=${Math.round(prevTop)} afterTop=${after.top} anchor=${scrollAnchor.id} target=${targetId || "none"}`,
-        )
-      props.onScheduleScrollState(root)
-    })
+    }
   }
 
   const scheduleWindow = () => {
@@ -906,10 +1067,10 @@ export function MessageTimeline(props: {
   })
 
   const turnStage = (id: string): MarkdownStage => {
-    stageMark()
-    if (upgraded.has(id)) return "full"
+    const saved = stageOf(id)
+    if (saved === "full") return "full"
     const map = stageByTurn.get(id)
-    if (!map || map.size === 0) return "lite"
+    if (!map || map.size === 0) return saved
     let rank = 0
     for (const value of map.values()) {
       if (value === "full") rank = Math.max(rank, 2)
@@ -917,7 +1078,7 @@ export function MessageTimeline(props: {
     }
     if (rank === 2) return "full"
     if (rank === 1) return "structure"
-    return "lite"
+    return saved
   }
 
   const idleTargets = createMemo(() => {
@@ -1030,6 +1191,9 @@ export function MessageTimeline(props: {
         if (!ids.has(id)) {
           stageByTurn.delete(id)
           upgraded.delete(id)
+          stageById.delete(id)
+          const sid = sessionID()
+          if (sid) deleteStageCache(sid, id)
           changed = true
         }
       }
@@ -1047,10 +1211,9 @@ export function MessageTimeline(props: {
     idleTimer = setTimeout(() => {
       idleTimer = undefined
       const id = idleTargets()[0]
-      if (!id || upgraded.has(id)) return
+      if (!id || stageOf(id) === "full") return
       console.debug(`[markdown] idle upgrade: id=${id} queue=${idleTargets().join(",")}`)
-      upgraded.add(id)
-      setStageMark((value) => value + 1)
+      saveStage(id, "full", "idle")
       scheduleWindow()
     }, IDLE_QUEUE_MS)
   })
@@ -2486,7 +2649,9 @@ export function MessageTimeline(props: {
     const stage = createMemo<MarkdownStage>(() => {
       stageMark()
       if (seek() || active()) return "full"
-      if (upgraded.has(item.messageID)) return "full"
+      const saved = stageOf(item.messageID)
+      if (saved === "full") return "full"
+      if (saved === "structure" && !near()) return "structure"
       if (near()) return "structure"
       return "lite"
     })
@@ -2532,8 +2697,12 @@ export function MessageTimeline(props: {
       }
       if (prev !== undefined && Math.abs(prev - next) <= 1) return
       turnHeights.set(item.messageID, next)
+      const sid = sessionID()
+      const bucket = stageOf(item.messageID)
+      if (sid) writeHeightCache(sid, item.messageID, bucket, next)
       setRevision((value) => value + 1)
       const delta = prev === undefined ? 0 : Math.round(next - prev)
+      seq += 1
       if (prev !== undefined && Math.abs(delta) > HEIGHT_SHIFT_WARN) {
         if (seek()) {
           trace("measure-target", item.messageID, `prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta}`)
@@ -2542,9 +2711,14 @@ export function MessageTimeline(props: {
       scheduleWindow()
       debug("measure", {
         message: item.messageID,
+        stage: bucket,
         prev: prev === undefined ? "none" : Math.round(prev),
         next: Math.round(next),
         delta,
+        visible: visible(node),
+        near: near(),
+        active: active(),
+        seek: seek(),
       })
       schedulePin("turn-measure")
       const took = performance.now() - time
@@ -2669,7 +2843,7 @@ export function MessageTimeline(props: {
             const prev = stageByTurn.get(item.messageID)
             if (!prev && next) {
               stageByTurn.set(item.messageID, new Map([[key, next]]))
-              setStageMark((value) => value + 1)
+              saveStage(item.messageID, next, "part")
               return
             }
             if (!prev) return
@@ -2681,7 +2855,7 @@ export function MessageTimeline(props: {
             }
             if (prev.get(key) === next) return
             prev.set(key, next)
-            setStageMark((value) => value + 1)
+            saveStage(item.messageID, next, "part")
           }}
           classes={{
             root: "min-w-0 w-full relative",

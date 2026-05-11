@@ -38,6 +38,14 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let autoTimer: ReturnType<typeof setTimeout> | undefined
   let auto: { top: number; time: number } | undefined
   let away = 0
+  let seq = 0
+
+  const log = (name: string, fields: Record<string, string | number | boolean>) => {
+    const line = Object.entries(fields)
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(" ")
+    console.debug(`[auto-scroll] ${name} ${line}`)
+  }
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -93,14 +101,40 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const scrollToBottomNow = (behavior: ScrollBehavior) => {
     const el = store.scrollRef
     if (!el) return
+    const before = {
+      top: Math.round(el.scrollTop),
+      height: Math.round(el.scrollHeight),
+      client: Math.round(el.clientHeight),
+      gap: Math.round(distanceFromBottom(el)),
+    }
     markAuto(el)
     if (behavior === "smooth") {
+      seq += 1
+      log("write", {
+        seq,
+        mode: "smooth",
+        beforeTop: before.top,
+        beforeGap: before.gap,
+        scrollHeight: before.height,
+        clientHeight: before.client,
+      })
       el.scrollTo({ top: el.scrollHeight, behavior })
       return
     }
 
     // `scrollTop` assignment bypasses any CSS `scroll-behavior: smooth`.
     el.scrollTop = el.scrollHeight
+    seq += 1
+    log("write", {
+      seq,
+      mode: "auto",
+      beforeTop: before.top,
+      beforeGap: before.gap,
+      afterTop: Math.round(el.scrollTop),
+      afterGap: Math.round(distanceFromBottom(el)),
+      scrollHeight: Math.round(el.scrollHeight),
+      clientHeight: Math.round(el.clientHeight),
+    })
   }
 
   const scrollToBottom = (force: boolean) => {
@@ -137,7 +171,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (store.userScrolled) return
 
     setStore("userScrolled", true)
-    console.debug("[auto-scroll] paused", {
+    log("paused", {
       gap: Math.round(distanceFromBottom(el)),
       hold,
     })
@@ -163,6 +197,18 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const handleScroll = () => {
     const el = store.scrollRef
     if (!el) return
+    seq += 1
+    log("scroll", {
+      seq,
+      top: Math.round(el.scrollTop),
+      gap: Math.round(distanceFromBottom(el)),
+      height: Math.round(el.scrollHeight),
+      client: Math.round(el.clientHeight),
+      userScrolled: store.userScrolled,
+      auto: isAuto(el),
+      active: active(),
+      away: away ? Date.now() - away : 0,
+    })
 
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
