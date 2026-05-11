@@ -777,6 +777,7 @@ export function reduceSubagentData(input: {
     event.type === "question.replied" ||
     event.type === "question.rejected" ||
     event.type === "session.error" ||
+    event.type === "session.warning" ||
     event.type === "session.status"
       ? event.properties.sessionID
       : event.type === "message.part.updated"
@@ -812,6 +813,18 @@ export function reduceSubagentData(input: {
         phase: "start",
         source: "system",
         messageID: `session.error:${event.properties.sessionID}:${formatError(event.properties.error)}`,
+      },
+    ])
+  }
+
+  if (event.type === "session.warning") {
+    return appendCommits(detail, [
+      {
+        kind: "error",
+        text: event.properties.message,
+        phase: "start",
+        source: "system",
+        messageID: `session.warning:${event.properties.sessionID}:${event.properties.message}`,
       },
     ])
   }

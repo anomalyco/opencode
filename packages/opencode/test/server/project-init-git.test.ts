@@ -58,6 +58,7 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.path,
       })
 
+      await Filesystem.write(path.join(tmp.path, "tracked.txt"), "tracked\n")
       expect(
         await Effect.runPromise(
           Snapshot.Service.use((svc) => svc.track()).pipe(

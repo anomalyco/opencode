@@ -36,6 +36,7 @@ export type FileDiff = typeof FileDiff.Type
 const log = Log.create({ service: "snapshot" })
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+const emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904" // git's canonical hash for an empty tree.
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -43,6 +44,17 @@ interface GitResult {
   readonly code: ChildProcessSpawner.ExitCode
   readonly text: string
   readonly stderr: string
+}
+
+class SnapshotGitError extends Error {
+  constructor(input: { cmd: string[]; cwd?: string; code?: number; stdout?: string; stderr?: string; cause?: unknown }) {
+    const output = (input.stderr || input.stdout || "").trim()
+    const status = input.code === undefined ? "failed to run" : `exited with code ${input.code}`
+    const worktree = input.cmd.lastIndexOf("--work-tree")
+    const command = input.cmd.slice(worktree >= 0 ? worktree + 2 : 0).join(" ")
+    super([`git ${command} ${status}`, output].filter(Boolean).join("\n"), { cause: input.cause })
+    this.name = "SnapshotGitError"
+  }
 }
 
 type State = Omit<Interface, "init">
@@ -98,7 +110,12 @@ export const layer: Layer.Layer<
         const git = Effect.fnUntraced(
           function* (
             cmd: string[],
-            opts?: { cwd?: string; env?: Record<string, string>; stdin?: ChildProcess.CommandInput },
+            opts?: {
+              cwd?: string
+              env?: Record<string, string>
+              stdin?: ChildProcess.CommandInput
+              allowedExitCodes?: readonly number[]
+            },
           ) {
             const proc = ChildProcess.make("git", cmd, {
               cwd: opts?.cwd,
@@ -106,22 +123,22 @@ export const layer: Layer.Layer<
               extendEnv: true,
               stdin: opts?.stdin,
             })
-            const handle = yield* spawner.spawn(proc)
+            const handle = yield* spawner
+              .spawn(proc)
+              .pipe(Effect.catchCause((cause) => Effect.die(new SnapshotGitError({ cmd, cwd: opts?.cwd, cause }))))
             const [text, stderr] = yield* Effect.all(
               [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
               { concurrency: 2 },
+            ).pipe(Effect.catchCause((cause) => Effect.die(new SnapshotGitError({ cmd, cwd: opts?.cwd, cause }))))
+            const code = yield* handle.exitCode.pipe(
+              Effect.catchCause((cause) => Effect.die(new SnapshotGitError({ cmd, cwd: opts?.cwd, cause }))),
             )
-            const code = yield* handle.exitCode
-            return { code, text, stderr } satisfies GitResult
+            if (code === 0 || opts?.allowedExitCodes?.includes(Number(code))) {
+              return { code, text, stderr } satisfies GitResult
+            }
+            return yield* Effect.die(new SnapshotGitError({ cmd, cwd: opts?.cwd, code: Number(code), stdout: text, stderr }))
           },
           Effect.scoped,
-          Effect.catch((err) =>
-            Effect.succeed({
-              code: ChildProcessSpawner.ExitCode(1),
-              text: "",
-              stderr: err instanceof Error ? err.message : String(err),
-            }),
-          ),
         )
 
         const ignore = Effect.fnUntraced(function* (files: string[]) {
@@ -141,9 +158,9 @@ export const layer: Layer.Layer<
             {
               cwd: state.directory,
               stdin: feed(files),
+              allowedExitCodes: [1],
             },
           )
-          if (check.code !== 0 && check.code !== 1) return new Set<string>()
           return new Set(check.text.split("\0").filter(Boolean))
         })
 
@@ -163,23 +180,21 @@ export const layer: Layer.Layer<
 
         const stage = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return
-          const result = yield* git(
+          yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
               cwd: state.directory,
               stdin: feed(files),
             },
           )
-          if (result.code === 0) return
-          log.warn("failed to add snapshot files", {
-            exitCode: result.code,
-            stderr: result.stderr,
-          })
         })
 
         const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
         const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
-        const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
+        const remove = Effect.fnUntraced(function* (file: string) {
+          if (!(yield* exists(file))) return
+          yield* fs.remove(file).pipe(Effect.orDie)
+        })
         const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
 
         const enabled = Effect.fnUntraced(function* () {
@@ -223,15 +238,6 @@ export const layer: Layer.Layer<
             ],
             { concurrency: 2 },
           )
-          if (diff.code !== 0 || other.code !== 0) {
-            log.warn("failed to list snapshot files", {
-              diffCode: diff.code,
-              diffStderr: diff.stderr,
-              otherCode: other.code,
-              otherStderr: other.stderr,
-            })
-            return
-          }
 
           const tracked = diff.text.split("\0").filter(Boolean)
           const untracked = other.text.split("\0").filter(Boolean)
@@ -260,7 +266,7 @@ export const layer: Layer.Layer<
                   .pipe(Effect.catch(() => Effect.void))
                   .pipe(
                     Effect.map((stat) => {
-                      if (!stat || stat.type !== "File") return
+                      if (!stat || stat.type !== "File") return undefined
                       const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
                       return size > limit ? item : undefined
                     }),
@@ -280,15 +286,16 @@ export const layer: Layer.Layer<
             Effect.gen(function* () {
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
-              const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
-              if (result.code !== 0) {
-                log.warn("cleanup failed", {
-                  exitCode: result.code,
-                  stderr: result.stderr,
-                })
-                return
-              }
-              log.info("cleanup", { prune })
+              yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory }).pipe(
+                Effect.matchCause({
+                  onFailure: (cause) => {
+                    log.warn("cleanup failed", { cause: Cause.pretty(cause) })
+                  },
+                  onSuccess: () => {
+                    log.info("cleanup", { prune })
+                  },
+                }),
+              )
             }),
           )
         })
@@ -312,6 +319,8 @@ export const layer: Layer.Layer<
               yield* add()
               const result = yield* git(args(["write-tree"]), { cwd: state.directory })
               const hash = result.text.trim()
+              if (!hash) throw new Error("Snapshot tracking failed: git write-tree produced no hash")
+              if (hash === emptyTreeHash) return
               log.info("tracking", { hash, cwd: state.directory, git: state.gitdir })
               return hash
             }),
@@ -327,11 +336,13 @@ export const layer: Layer.Layer<
                 {
                   cwd: state.directory,
                 },
+              ).pipe(
+                Effect.catchCause((cause) => {
+                  log.warn("failed to get patch", { hash, cause: Cause.pretty(cause) })
+                  return Effect.succeed(undefined)
+                }),
               )
-              if (result.code !== 0) {
-                log.warn("failed to get diff", { hash, exitCode: result.code })
-                return { hash, files: [] }
-              }
+              if (!result) return { hash, files: [] }
               const files = result.text
                 .trim()
                 .split("\n")
@@ -355,23 +366,9 @@ export const layer: Layer.Layer<
           return yield* locked(
             Effect.gen(function* () {
               log.info("restore", { commit: snapshot })
-              const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
-              if (result.code === 0) {
-                const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
-                  cwd: state.worktree,
-                })
-                if (checkout.code === 0) return
-                log.error("failed to restore snapshot", {
-                  snapshot,
-                  exitCode: checkout.code,
-                  stderr: checkout.stderr,
-                })
-                return
-              }
-              log.error("failed to restore snapshot", {
-                snapshot,
-                exitCode: result.code,
-                stderr: result.stderr,
+              yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
+              yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
+                cwd: state.worktree,
               })
             }),
           )
@@ -395,16 +392,14 @@ export const layer: Layer.Layer<
               }
 
               const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
-                log.info("reverting", { file: op.file, hash: op.hash })
-                const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
-                  cwd: state.worktree,
-                })
-                if (result.code === 0) return
                 const tree = yield* git([...core, ...args(["ls-tree", op.hash, "--", op.rel])], {
                   cwd: state.worktree,
                 })
-                if (tree.code === 0 && tree.text.trim()) {
-                  log.info("file existed in snapshot but checkout failed, keeping", { file: op.file, hash: op.hash })
+                if (tree.text.trim()) {
+                  log.info("reverting", { file: op.file, hash: op.hash })
+                  yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
+                    cwd: state.worktree,
+                  })
                   return
                 }
                 log.info("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
@@ -414,12 +409,14 @@ export const layer: Layer.Layer<
               const clash = (a: string, b: string) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)
 
               for (let i = 0; i < ops.length; ) {
-                const first = ops[i]!
+                const first = ops[i]
+                if (!first) break
                 const run = [first]
                 let j = i + 1
                 // Only batch adjacent files when their paths cannot affect each other.
                 while (j < ops.length && run.length < 100) {
-                  const next = ops[j]!
+                  const next = ops[j]
+                  if (!next) break
                   if (next.hash !== first.hash) break
                   if (run.some((item) => clash(item.rel, next.rel))) break
                   run.push(next)
@@ -439,18 +436,6 @@ export const layer: Layer.Layer<
                   },
                 )
 
-                if (tree.code !== 0) {
-                  log.info("batched ls-tree failed, falling back to single-file revert", {
-                    hash: first.hash,
-                    files: run.length,
-                  })
-                  for (const op of run) {
-                    yield* single(op)
-                  }
-                  i = j
-                  continue
-                }
-
                 const have = new Set(
                   tree.text
                     .trim()
@@ -461,23 +446,9 @@ export const layer: Layer.Layer<
                 const list = run.filter((item) => have.has(item.rel))
                 if (list.length) {
                   log.info("reverting", { hash: first.hash, files: list.length })
-                  const result = yield* git(
-                    [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
-                    {
-                      cwd: state.worktree,
-                    },
-                  )
-                  if (result.code !== 0) {
-                    log.info("batched checkout failed, falling back to single-file revert", {
-                      hash: first.hash,
-                      files: list.length,
-                    })
-                    for (const op of run) {
-                      yield* single(op)
-                    }
-                    i = j
-                    continue
-                  }
+                  yield* git([...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])], {
+                    cwd: state.worktree,
+                  })
                 }
 
                 for (const op of run) {
@@ -496,17 +467,18 @@ export const layer: Layer.Layer<
           return yield* locked(
             Effect.gen(function* () {
               yield* add()
-              const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
-                cwd: state.worktree,
-              })
-              if (result.code !== 0) {
-                log.warn("failed to get diff", {
-                  hash,
-                  exitCode: result.code,
-                  stderr: result.stderr,
-                })
-                return ""
-              }
+              const result = yield* git(
+                [...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])],
+                {
+                  cwd: state.worktree,
+                },
+              ).pipe(
+                Effect.catchCause((cause) => {
+                  log.warn("failed to get diff", { hash, cause: Cause.pretty(cause) })
+                  return Effect.succeed(undefined)
+                }),
+              )
+              if (!result) return ""
               return result.text.trim()
             }),
           )
@@ -529,27 +501,25 @@ export const layer: Layer.Layer<
                 ref: string
               }
 
+              const showText = (ref: string) =>
+                git([...cfg, ...args(["show", ref])]).pipe(
+                  Effect.map((item) => item.text),
+                  Effect.catchCause((cause) => {
+                    log.warn("failed to read snapshot file while computing diff", { ref, cause: Cause.pretty(cause) })
+                    return Effect.succeed("")
+                  }),
+                )
+
               const show = Effect.fnUntraced(function* (row: Row) {
                 if (row.binary) return ["", ""]
                 if (row.status === "added") {
-                  return [
-                    "",
-                    yield* git([...cfg, ...args(["show", `${to}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
-                  ]
+                  return ["", yield* showText(`${to}:${row.file}`)]
                 }
                 if (row.status === "deleted") {
-                  return [
-                    yield* git([...cfg, ...args(["show", `${from}:${row.file}`])]).pipe(
-                      Effect.map((item) => item.text),
-                    ),
-                    "",
-                  ]
+                  return [yield* showText(`${from}:${row.file}`), ""]
                 }
                 return yield* Effect.all(
-                  [
-                    git([...cfg, ...args(["show", `${from}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
-                    git([...cfg, ...args(["show", `${to}:${row.file}`])]).pipe(Effect.map((item) => item.text)),
-                  ],
+                  [showText(`${from}:${row.file}`), showText(`${to}:${row.file}`)],
                   { concurrency: 2 },
                 )
               })
@@ -657,7 +627,13 @@ export const layer: Layer.Layer<
               const statuses = yield* git(
                 [...quote, ...args(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."])],
                 { cwd: state.directory },
+              ).pipe(
+                Effect.catchCause((cause) => {
+                  log.warn("failed to get full diff status", { from, to, cause: Cause.pretty(cause) })
+                  return Effect.succeed(undefined)
+                }),
               )
+              if (!statuses) return []
 
               for (const line of statuses.text.trim().split("\n")) {
                 if (!line) continue
@@ -671,7 +647,13 @@ export const layer: Layer.Layer<
                 {
                   cwd: state.directory,
                 },
+              ).pipe(
+                Effect.catchCause((cause) => {
+                  log.warn("failed to get full diff numstat", { from, to, cause: Cause.pretty(cause) })
+                  return Effect.succeed(undefined)
+                }),
               )
+              if (!numstat) return []
 
               const rows = numstat.text
                 .trim()

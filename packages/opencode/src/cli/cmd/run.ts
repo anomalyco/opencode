@@ -689,6 +689,13 @@ export const RunCommand = effectCmd({
               UI.error(err)
             }
 
+            if (event.type === "session.warning") {
+              const props = event.properties
+              if (props.sessionID !== sessionID) continue
+              if (emit("warning", { message: props.message })) continue
+              UI.println(UI.Style.TEXT_WARNING_BOLD + "Warning: " + UI.Style.TEXT_NORMAL + props.message)
+            }
+
             if (
               event.type === "session.status" &&
               event.properties.sessionID === sessionID &&

@@ -15,6 +15,7 @@ export type Event =
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
+  | EventSessionWarning
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventQuestionAsked
@@ -789,6 +790,7 @@ export type GlobalEvent = {
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
+    | EventSessionWarning
     | EventInstallationUpdated
     | EventInstallationUpdateAvailable
     | EventQuestionAsked
@@ -2423,6 +2425,15 @@ export type EventSessionError = {
       | StructuredOutputError
       | ContextOverflowError
       | ApiError
+  }
+}
+
+export type EventSessionWarning = {
+  id: string
+  type: "session.warning"
+  properties: {
+    sessionID?: string
+    message: string
   }
 }
 

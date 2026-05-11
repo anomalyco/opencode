@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Exit, Layer } from "effect"
+import { Bus } from "@/bus"
 import { Session } from "@/session/session"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionRevert } from "../../src/session/revert"
@@ -10,16 +11,24 @@ import { Snapshot } from "../../src/snapshot"
 import * as Log from "@opencode-ai/core/util/log"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { SessionRunState } from "@/session/run-state"
+import { SessionSummary } from "@/session/summary"
+import { Storage } from "@/storage/storage"
+import { SyncEvent } from "@/sync"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const env = Layer.mergeAll(
-  Session.defaultLayer,
-  SessionRevert.defaultLayer,
-  Snapshot.defaultLayer,
-  CrossSpawnSpawner.defaultLayer,
+const env = SessionRevert.layer.pipe(
+  Layer.provideMerge(Bus.layer),
+  Layer.provideMerge(Session.defaultLayer),
+  Layer.provideMerge(Snapshot.defaultLayer),
+  Layer.provideMerge(Storage.defaultLayer),
+  Layer.provideMerge(SessionRunState.defaultLayer),
+  Layer.provideMerge(SessionSummary.defaultLayer),
+  Layer.provideMerge(SyncEvent.defaultLayer),
+  Layer.provideMerge(CrossSpawnSpawner.defaultLayer),
 )
 
 const it = testEffect(env)
@@ -97,6 +106,45 @@ const tokens = {
 }
 
 describe("revert + compact workflow", () => {
+  it.live(
+    "surfaces hard snapshot failures during revert",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const bus = yield* Bus.Service
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+
+          const info = yield* session.create({})
+          const warning = yield* Deferred.make<string>()
+          const off = yield* bus.subscribeCallback(Session.Event.Warning, (evt) => {
+            if (evt.properties.sessionID !== info.id) return
+            Deferred.doneUnsafe(warning, Effect.succeed(evt.properties.message))
+          })
+          const userMsg = yield* user(info.id)
+          yield* text(info.id, userMsg.id, "hi")
+          const assistantMsg = yield* assistant(info.id, userMsg.id, dir)
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: assistantMsg.id,
+            sessionID: info.id,
+            type: "patch",
+            hash: "invalid-hash-12345",
+            files: [path.join(dir, "missing.txt")],
+          })
+
+          const exit = yield* revert.revert({ sessionID: info.id, messageID: userMsg.id }).pipe(Effect.exit)
+          const message = yield* Deferred.await(warning).pipe(Effect.timeout("1 second"))
+          off()
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          expect(message).toContain("Undo/redo failed while reverting file changes")
+          expect(message).toContain("invalid-hash-12345")
+        }),
+      { git: true },
+    ),
+  )
+
   it.live(
     "should properly handle compact command after revert",
     provideTmpdirInstance(

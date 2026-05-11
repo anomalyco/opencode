@@ -1,4 +1,4 @@
-import { Effect, Layer, Context, Schema } from "effect"
+import { Cause, Effect, Layer, Context, Schema } from "effect"
 import { Bus } from "../bus"
 import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
@@ -11,6 +11,7 @@ import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
 import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
+import { errorMessage } from "@/util/error"
 
 const log = Log.create({ service: "session.revert" })
 
@@ -39,6 +40,20 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const state = yield* SessionRunState.Service
     const sync = yield* SyncEvent.Service
+
+    const withSnapshotWarning = <A, E, R>(sessionID: SessionID, operation: string, fx: Effect.Effect<A, E, R>) =>
+      fx.pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            const message = errorMessage(Cause.squash(cause))
+            yield* bus.publish(Session.Event.Warning, {
+              sessionID,
+              message: `Undo/redo failed while ${operation}.${message ? `\n${message}` : ""}`,
+            })
+            return yield* Effect.failCause(cause)
+          }),
+        ),
+      )
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
@@ -72,10 +87,16 @@ export const layer = Layer.effect(
 
       if (!rev) return session
 
-      rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
-      if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
-      yield* snap.revert(patches)
-      if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
+      rev.snapshot =
+        session.revert?.snapshot ??
+        (yield* withSnapshotWarning(input.sessionID, "saving the current file state", snap.track()))
+      if (session.revert?.snapshot) {
+        yield* withSnapshotWarning(input.sessionID, "restoring the previous file state", snap.restore(session.revert.snapshot))
+      }
+      yield* withSnapshotWarning(input.sessionID, "reverting file changes", snap.revert(patches))
+      if (rev.snapshot) {
+        rev.diff = yield* withSnapshotWarning(input.sessionID, "computing the revert diff", snap.diff(rev.snapshot))
+      }
       const range = all.filter((msg) => msg.info.id >= rev.messageID)
       const diffs = yield* summary.computeDiff({ messages: range })
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
@@ -97,7 +118,9 @@ export const layer = Layer.effect(
       yield* state.assertNotBusy(input.sessionID)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (!session.revert) return session
-      if (session.revert.snapshot) yield* snap.restore(session.revert.snapshot)
+      if (session.revert.snapshot) {
+        yield* withSnapshotWarning(input.sessionID, "restoring the previous file state", snap.restore(session.revert.snapshot))
+      }
       yield* sessions.clearRevert(input.sessionID)
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
     })
