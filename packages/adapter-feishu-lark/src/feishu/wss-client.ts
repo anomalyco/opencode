@@ -67,7 +67,12 @@ export class FeishuWSSClient {
   private readonly wsClient: WSClient
   private readonly dispatcher: EventDispatcher
   private readonly chatQueue = new ChatQueue()
+  /** 第一层:同 messageId+ts 12h dedup(防 WSS 重连重放,飞书 message_id 同 = 真正重复)*/
   private readonly dedup = new DedupCache()
+  /** 第二层:同 chatId+text 10s 短期 dedup(防飞书 IM 客户端连击/retry 发出**不同 message_id 但内容一致**
+   *  的 2 条消息 — 飞书后台分配新 id 第一层拦不住,但 user 实际是想发一次)
+   *  [feat: permission-card-ux-fixes] 2026-05-12 */
+  private readonly textDedup = new DedupCache({ ttlMs: 10_000, maxEntries: 200 })
   private readonly opts: WssClientOptions
   private started = false
 
@@ -104,10 +109,21 @@ export class FeishuWSSClient {
           })),
         }
 
-        // dedup:同 messageId + ts 重放过滤
+        // dedup 第一层:同 messageId + ts(12h)— 防 WSS 重连重放
         const dedupKey = makeDedupKey(event.messageId, event.ts)
         if (this.dedup.hasAndMark(dedupKey)) {
           console.log(`[wss ${opts.accountId}] dedup skip ${event.messageId}`)
+          return
+        }
+
+        // dedup 第二层:同 chatId + text(10s)— 防飞书 IM 客户端连击/retry 发出**不同 message_id 但内容一致**的多条 message
+        // 只对 text 消息有效(其它 messageType 如 image / file 不走 text dedup,messageId 已第一层覆盖)
+        const textKey = makeTextDedupKey(event.messageType, event.chatId, event.content)
+        if (textKey && this.textDedup.hasAndMark(textKey)) {
+          const txt = textKey.split("::").slice(1).join("::") // 取 :: 之后(还原 text)
+          console.log(
+            `[wss ${opts.accountId}] text-dedup skip ${event.messageId} (同 chat 10s 内重复发"${txt.slice(0, 40)}")`,
+          )
           return
         }
 
@@ -222,4 +238,32 @@ export class WSSClientManager {
   has(accountId: string): boolean {
     return this.clients.has(accountId)
   }
+}
+
+/**
+ * 给 wss-client 第二层 text dedup 算 dedup key。
+ *
+ * - 仅 messageType === "text" 才返 key,其它(image/file/sticker)返 null(不走 text dedup)
+ * - content 是 JSON 字符串 `{"text": "..."}`,失败 → null
+ * - trim 后空 string → null
+ * - key 格式:`<chatId>::<trimmedText>`(:: 是分隔符,chatId 跟 text 不应含 ::)
+ *
+ * export 给单测;wss-client handler 直接调。
+ * [feat: wss-text-dedup] 2026-05-12
+ */
+export function makeTextDedupKey(
+  messageType: string,
+  chatId: string,
+  content: string,
+): string | null {
+  if (messageType !== "text") return null
+  let txt = ""
+  try {
+    const parsed = JSON.parse(content) as { text?: string }
+    txt = (parsed.text ?? "").trim()
+  } catch {
+    return null
+  }
+  if (!txt) return null
+  return `${chatId}::${txt}`
 }
