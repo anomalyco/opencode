@@ -264,6 +264,7 @@ function getDirectory(path: string | undefined) {
 }
 
 import type { IconProps } from "./icon"
+import { normalize } from "./session-diff"
 
 export type ToolInfo = {
   icon: IconProps["name"]
@@ -1461,7 +1462,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => (part().text ?? "").trim()
+  const text = () => (data.store.part_text_accum_delta?.[part().id] ?? part().text ?? "").trim()
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1521,11 +1522,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const data = useData()
   const part = () => props.part as ReasoningPart
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => part().text.trim()
+  const text = () => (data.store.part_text_accum_delta?.[part().id] ?? part().text).trim()
 
   return (
     <Show when={text()}>
@@ -1877,6 +1879,31 @@ ToolRegistry.register({
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
+
+    const fileCompProps = createMemo(() => {
+      try {
+        if (props.metadata?.filediff) {
+          const diff = normalize({
+            ...props.metadata?.filediff,
+            status: "modified",
+          })
+          const fileDiff = diff.fileDiff
+          if (fileDiff) return { fileDiff, hunkSeparators: fileDiff.isPartial ? "simple" : "line-info-basic" }
+        }
+      } catch {}
+
+      return {
+        before: {
+          name: props.metadata?.filediff?.file || props.input.filePath,
+          contents: props.metadata?.filediff?.before || props.input.oldString || "",
+        },
+        after: {
+          name: props.metadata?.filediff?.file || props.input.filePath,
+          contents: props.metadata?.filediff?.after || props.input.newString || "",
+        },
+      }
+    })
+
     return (
       <div data-component="edit-tool">
         <BasicTool
@@ -1918,18 +1945,7 @@ ToolRegistry.register({
               }
             >
               <div data-component="edit-content">
-                <Dynamic
-                  component={fileComponent}
-                  mode="diff"
-                  before={{
-                    name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.before || props.input.oldString || "",
-                  }}
-                  after={{
-                    name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.after || props.input.newString || "",
-                  }}
-                />
+                <Dynamic component={fileComponent} mode="diff" {...fileCompProps()} />
               </div>
             </ToolFileAccordion>
           </Show>
@@ -2110,7 +2126,12 @@ ToolRegistry.register({
                           <Accordion.Content>
                             <Show when={visible()}>
                               <div data-component="apply-patch-file-diff">
-                                <Dynamic component={fileComponent} mode="diff" fileDiff={file.view.fileDiff} />
+                                <Dynamic
+                                  component={fileComponent}
+                                  mode="diff"
+                                  fileDiff={file.view.fileDiff}
+                                  hunkSeparators={file.view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                                />
                               </div>
                             </Show>
                           </Accordion.Content>

@@ -23,7 +23,7 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Schema, Types } from "effect"
-import { zod, ZodOverride } from "@opencode-ai/core/effect-zod"
+import { zod } from "@opencode-ai/core/effect-zod"
 import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
@@ -402,7 +402,7 @@ export const User = Schema.Struct({
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
 
-const _Part = Schema.Union([
+export const Part = Schema.Union([
   TextPart,
   SubtaskPart,
   ReasoningPart,
@@ -416,22 +416,6 @@ const _Part = Schema.Union([
   RetryPart,
   CompactionPart,
 ]).annotate({ discriminator: "type", identifier: "Part" })
-export const Part = Object.assign(_Part, {
-  zod: zod(_Part) as unknown as z.ZodType<
-    | TextPart
-    | SubtaskPart
-    | ReasoningPart
-    | FilePart
-    | ToolPart
-    | StepStartPart
-    | StepFinishPart
-    | SnapshotPart
-    | PatchPart
-    | AgentPart
-    | RetryPart
-    | CompactionPart
-  >,
-})
 export type Part =
   | TextPart
   | SubtaskPart
@@ -573,15 +557,12 @@ export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assista
   error?: AssistantError
 }
 
-const _Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
-export const Info = Object.assign(_Info, {
-  zod: zod(_Info) as unknown as z.ZodType<User | Assistant>,
-})
+export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
 export type Info = User | Assistant
 
 const UpdatedEventSchema = Schema.Struct({
   sessionID: SessionID,
-  info: _Info,
+  info: Info,
 })
 
 const RemovedEventSchema = Schema.Struct({
@@ -591,7 +572,7 @@ const RemovedEventSchema = Schema.Struct({
 
 const PartUpdatedEventSchema = Schema.Struct({
   sessionID: SessionID,
-  part: _Part,
+  part: Part,
   time: NonNegativeInt,
 })
 
@@ -639,8 +620,8 @@ export const Event = {
 }
 
 export const WithParts = Schema.Struct({
-  info: _Info,
-  parts: Schema.Array(_Part),
+  info: Info,
+  parts: Schema.Array(Part),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type WithParts = {
   info: Info
@@ -859,12 +840,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         return part.metadata?.anthropic?.signature != null
       })
       for (const part of msg.parts) {
+        if (msg.info.summary && part.type !== "text") continue
         if (part.type === "text") {
           const text = part.text === "" && hasSignedReasoning ? " " : part.text
           assistantMessage.parts.push({
             type: "text",
             text,
-            ...(differentModel ? {} : { providerMetadata: part.metadata }),
+            ...(differentModel || msg.info.summary ? {} : { providerMetadata: part.metadata }),
           })
         }
         if (part.type === "step-start")
@@ -1090,53 +1072,16 @@ export function get(input: { sessionID: SessionID; messageID: MessageID }): With
 export function filterCompacted(msgs: Iterable<WithParts>) {
   const result = [] as WithParts[]
   const completed = new Set<string>()
-  let retain: MessageID | undefined
   for (const msg of msgs) {
     result.push(msg)
-    if (retain) {
-      if (msg.info.id === retain) break
-      continue
-    }
     if (msg.info.role === "user" && completed.has(msg.info.id)) {
-      const part = msg.parts.find((item): item is CompactionPart => item.type === "compaction")
-      if (!part) continue
-      if (!part.tail_start_id) break
-      retain = part.tail_start_id
-      if (msg.info.id === retain) break
+      if (msg.parts.some((item): item is CompactionPart => item.type === "compaction")) break
       continue
     }
-    if (msg.info.role === "user" && completed.has(msg.info.id) && msg.parts.some((part) => part.type === "compaction"))
-      break
     if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
       completed.add(msg.info.parentID)
   }
   result.reverse()
-  const compactionIndex = result.findLastIndex(
-    (msg) =>
-      msg.info.role === "user" &&
-      msg.parts.some((item): item is CompactionPart => item.type === "compaction" && item.tail_start_id !== undefined),
-  )
-  const compaction = result[compactionIndex]
-  const part = compaction?.parts.find(
-    (item): item is CompactionPart => item.type === "compaction" && item.tail_start_id !== undefined,
-  )
-  const summaryIndex = compaction
-    ? result.findIndex(
-        (msg, index) =>
-          index > compactionIndex &&
-          msg.info.role === "assistant" &&
-          msg.info.summary &&
-          msg.info.parentID === compaction.info.id,
-      )
-    : -1
-  const tailIndex = part?.tail_start_id ? result.findIndex((msg) => msg.info.id === part.tail_start_id) : -1
-  if (tailIndex >= 0 && tailIndex < compactionIndex && summaryIndex > compactionIndex) {
-    return [
-      ...result.slice(compactionIndex, summaryIndex + 1),
-      ...result.slice(tailIndex, compactionIndex),
-      ...result.slice(summaryIndex + 1),
-    ]
-  }
   return result
 }
 

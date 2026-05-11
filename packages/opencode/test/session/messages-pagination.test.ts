@@ -785,7 +785,7 @@ describe("MessageV2.filterCompacted", () => {
     })
   })
 
-  test("retains original tail when compaction stores tail_start_id", async () => {
+  test("ignores original tail when compaction stores tail_start_id", async () => {
     await WithInstance.provide({
       directory: root,
       fn: async () => {
@@ -834,14 +834,14 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
 
-        expect(result.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
+        expect(result.map((item) => item.info.id)).toEqual([c1, s1, u3, a3])
 
         await svc.remove(session.id)
       },
     })
   })
 
-  test("fork remaps compaction tail_start_id for filterCompacted", async () => {
+  test("fork keeps legacy tail_start_id without replaying the tail", async () => {
     await WithInstance.provide({
       directory: root,
       fn: async () => {
@@ -889,7 +889,7 @@ describe("MessageV2.filterCompacted", () => {
         })
 
         const parentFiltered = MessageV2.filterCompacted(MessageV2.stream(session.id))
-        expect(parentFiltered.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
+        expect(parentFiltered.map((item) => item.info.id)).toEqual([c1, s1, u3, a3])
 
         const forked = await svc.fork({ sessionID: session.id })
         const childFiltered = MessageV2.filterCompacted(MessageV2.stream(forked.id))
@@ -899,7 +899,7 @@ describe("MessageV2.filterCompacted", () => {
         expect(tailPart?.type).toBe("compaction")
         if (!tailPart || tailPart.type !== "compaction") throw new Error("Expected forked compaction part")
         expect(tailPart.tail_start_id).toBeDefined()
-        expect(childFiltered.some((m) => m.info.id === tailPart.tail_start_id)).toBe(true)
+        expect(childFiltered.some((m) => m.info.id === tailPart.tail_start_id)).toBe(false)
 
         await svc.remove(forked.id)
         await svc.remove(session.id)
@@ -907,7 +907,7 @@ describe("MessageV2.filterCompacted", () => {
     })
   })
 
-  test("retains an assistant tail when compaction starts inside a turn", async () => {
+  test("does not replay an assistant tail when compaction starts inside a turn", async () => {
     await WithInstance.provide({
       directory: root,
       fn: async () => {
@@ -964,7 +964,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
 
-        expect(result.map((item) => item.info.id)).toEqual([c1, s1, a3, u3, a4])
+        expect(result.map((item) => item.info.id)).toEqual([c1, s1, u3, a4])
 
         await svc.remove(session.id)
       },
@@ -1041,7 +1041,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
 
-        expect(result.map((item) => item.info.id)).toEqual([c2, s2, u3, a3, u4, a4])
+        expect(result.map((item) => item.info.id)).toEqual([c2, s2, u4, a4])
 
         await svc.remove(session.id)
       },
