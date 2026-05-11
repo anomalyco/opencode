@@ -251,7 +251,7 @@ test("updates global config and omits empty shell key in jsonc", async () => {
 
     const file = path.join(tmp.path, "opencode.jsonc")
     const writtenConfig = await Filesystem.readText(file)
-    const parsed = ConfigParse.schema(Config.Info.zod, ConfigParse.jsonc(writtenConfig, file), file)
+    const parsed = ConfigParse.effectSchema(Config.Info, ConfigParse.jsonc(writtenConfig, file), file)
     expect(writtenConfig).not.toContain('"shell"')
     expect(parsed.shell).toBeUndefined()
     expect(parsed.model).toBe("test/model")
