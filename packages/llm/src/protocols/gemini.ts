@@ -294,9 +294,7 @@ const mapUsage = (usage: GeminiUsage | undefined) => {
   // when the visible component is reported — otherwise we'd fabricate an
   // inclusive number from a partial breakdown.
   const outputTokens =
-    usage.candidatesTokenCount !== undefined
-      ? usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0)
-      : undefined
+    usage.candidatesTokenCount !== undefined ? usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0) : undefined
   return new Usage({
     inputTokens: usage.promptTokenCount,
     outputTokens,
