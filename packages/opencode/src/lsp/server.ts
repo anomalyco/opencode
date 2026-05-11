@@ -353,7 +353,9 @@ export const Gopls: Info = {
   async spawn(root, _ctx, flags) {
     let bin = which("gopls")
     if (!bin) {
-      if (!which("go")) return
+      if (!which("go")) {
+        throw new Error("Go runtime not found. Please install Go first; gopls will then be installed automatically.")
+      }
       if (flags.disableLspDownload) return
 
       log.info("installing gopls")
@@ -365,8 +367,7 @@ export const Gopls: Info = {
       })
       const exit = await proc.exited
       if (exit !== 0) {
-        log.error("Failed to install gopls")
-        return
+        throw new Error("Failed to install gopls via 'go install'. Please install gopls manually.")
       }
       bin = path.join(Global.Path.bin, "gopls" + (process.platform === "win32" ? ".exe" : ""))
       log.info(`installed gopls`, {

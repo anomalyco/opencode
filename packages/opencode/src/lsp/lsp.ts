@@ -116,7 +116,7 @@ type LocInput = { file: string; line: number; character: number }
 interface State {
   clients: LSPClient.Info[]
   servers: Record<string, LSPServer.Info>
-  broken: Set<string>
+  broken: Map<string, string>
   spawning: Map<string, Promise<LSPClient.Info | undefined>>
 }
 
@@ -124,6 +124,7 @@ export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly status: () => Effect.Effect<Status[]>
   readonly hasClients: (file: string) => Effect.Effect<boolean>
+  readonly failureReason: (file: string) => Effect.Effect<string | undefined>
   readonly touchFile: (input: string, diagnostics?: "document" | "full") => Effect.Effect<void>
   readonly diagnostics: () => Effect.Effect<Record<string, LSPClient.Diagnostic[]>>
   readonly hover: (input: LocInput) => Effect.Effect<any>
@@ -195,7 +196,7 @@ export const layer = Layer.effect(
         const s: State = {
           clients: [],
           servers,
-          broken: new Set(),
+          broken: new Map(),
           spawning: new Map(),
         }
 
@@ -222,11 +223,11 @@ export const layer = Layer.effect(
           const handle = await server
             .spawn(root, ctx, flags)
             .then((value) => {
-              if (!value) s.broken.add(key)
+              if (!value) s.broken.set(key, `LSP server '${server.id}' is not available`)
               return value
             })
             .catch((err) => {
-              s.broken.add(key)
+              s.broken.set(key, err instanceof Error ? err.message : `Failed to spawn LSP server ${server.id}`)
               log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
               return undefined
             })
@@ -241,7 +242,7 @@ export const layer = Layer.effect(
             directory: ctx.directory,
             instance: ctx,
           }).catch(async (err) => {
-            s.broken.add(key)
+            s.broken.set(key, `Failed to initialize LSP client ${server.id}`)
             await Process.stop(handle.process)
             log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
             return undefined
@@ -346,6 +347,22 @@ export const layer = Layer.effect(
           return true
         }
         return false
+      })
+    })
+
+    const failureReason = Effect.fn("LSP.failureReason")(function* (file: string) {
+      const ctx = yield* InstanceState.context
+      const s = yield* InstanceState.get(state)
+      return yield* Effect.promise(async () => {
+        const extension = path.parse(file).ext || file
+        for (const server of Object.values(s.servers)) {
+          if (server.extensions.length && !server.extensions.includes(extension)) continue
+          const root = await server.root(file, ctx)
+          if (!root) continue
+          const reason = s.broken.get(root + server.id)
+          if (reason) return reason
+        }
+        return undefined
       })
     })
 
@@ -491,6 +508,7 @@ export const layer = Layer.effect(
       init,
       status,
       hasClients,
+      failureReason,
       touchFile,
       diagnostics,
       hover,
