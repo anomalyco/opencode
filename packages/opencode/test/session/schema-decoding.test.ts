@@ -221,14 +221,11 @@ describe("SessionRevert.RevertInput", () => {
   test("messageID is required, partID is optional", () => {
     const withPart = { sessionID, messageID, partID }
     expect(decode(withPart)).toEqual(withPart)
-    expect(SessionRevert.RevertInput.zod.parse(withPart)).toEqual(withPart)
 
     const noPart = { sessionID, messageID }
     expect(decode(noPart)).toEqual(noPart)
-    expect(SessionRevert.RevertInput.zod.parse(noPart)).toEqual(noPart)
 
     expect(() => decode({ sessionID })).toThrow()
-    expect(() => SessionRevert.RevertInput.zod.parse({ sessionID })).toThrow()
   })
 })
 
@@ -247,7 +244,6 @@ describe("SessionStatus.Info", () => {
   test("idle / busy discriminators", () => {
     expect(decode({ type: "idle" })).toEqual({ type: "idle" })
     expect(decode({ type: "busy" })).toEqual({ type: "busy" })
-    expect(SessionStatus.Info.zod.parse({ type: "idle" })).toEqual({ type: "idle" })
   })
 
   test("retry carries attempt/message/action/next", () => {
@@ -266,12 +262,10 @@ describe("SessionStatus.Info", () => {
       next: 500,
     }
     expect(decode(input)).toEqual(input)
-    expect(SessionStatus.Info.zod.parse(input)).toEqual(input)
   })
 
   test("rejects unknown type", () => {
     expect(() => decode({ type: "bogus" })).toThrow()
-    expect(() => SessionStatus.Info.zod.parse({ type: "bogus" })).toThrow()
   })
 })
 
@@ -281,7 +275,6 @@ describe("Todo.Info", () => {
   test("three-field round-trip", () => {
     const input = { content: "do a thing", status: "pending", priority: "high" }
     expect(decode(input)).toEqual(input)
-    expect(Todo.Info.zod.parse(input)).toEqual(input)
   })
 })
 
