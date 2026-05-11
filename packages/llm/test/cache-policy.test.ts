@@ -33,7 +33,7 @@ const geminiModel = Gemini.model({
 })
 
 describe("applyCachePolicy", () => {
-  it.effect("undefined cache leaves the request untouched (opt-in default)", () =>
+  it.effect("undefined cache resolves to 'auto' (the recommended default)", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
@@ -43,8 +43,11 @@ describe("applyCachePolicy", () => {
         }),
       )
 
+      // No explicit cache field → auto policy fires → last system part + latest
+      // user message both get cache_control markers.
       expect(prepared.body).toMatchObject({
-        system: [{ type: "text", text: "You are concise.", cache_control: undefined }],
+        system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
       })
     }),
   )
@@ -252,6 +255,7 @@ describe("applyCachePolicy", () => {
     const request = LLM.request({
       model: anthropicModel,
       prompt: "hi",
+      cache: "none",
     })
     expect(applyCachePolicy(request)).toBe(request)
   })
