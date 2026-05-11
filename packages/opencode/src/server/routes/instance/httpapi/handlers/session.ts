@@ -187,11 +187,28 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
       params: { sessionID: SessionID }
-      payload: typeof ForkPayload.Type
+      payload?: typeof ForkPayload.Type
     }) {
       return yield* SessionError.mapStorageNotFound(
-        session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload.messageID }),
+        session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload?.messageID }),
       )
+    })
+
+    const forkRaw = Effect.fn("SessionHttpApi.forkRaw")(function* (ctx: {
+      params: { sessionID: SessionID }
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      if (body.trim().length === 0) return yield* fork({ params: ctx.params })
+
+      const json = yield* Effect.try({
+        try: () => JSON.parse(body) as unknown,
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+      const payload = yield* Schema.decodeUnknownEffect(ForkPayload)(json).pipe(
+        Effect.mapError(() => new HttpApiError.BadRequest({})),
+      )
+      return yield* fork({ params: ctx.params, payload })
     })
 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -373,7 +390,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handleRaw("create", createRaw)
       .handle("remove", remove)
       .handle("update", update)
-      .handle("fork", fork)
+      .handleRaw("fork", forkRaw)
       .handle("abort", abort)
       .handle("init", init)
       .handle("share", share)

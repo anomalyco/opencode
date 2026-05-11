@@ -3472,12 +3472,10 @@ export class Session2 extends HeyApiClient {
         },
       ],
     )
-    const body = params.body ?? {}
     return (options?.client ?? this.client).post<SessionForkResponses, SessionForkErrors, ThrowOnError>({
       url: "/session/{sessionID}/fork",
       ...options,
       ...params,
-      body,
       headers: {
         "Content-Type": "application/json",
         ...options?.headers,
