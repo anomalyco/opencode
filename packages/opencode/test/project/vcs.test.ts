@@ -1,5 +1,6 @@
 import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
+import { parsePatch } from "diff"
 import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
@@ -287,6 +288,28 @@ describe("Vcs diff", () => {
       expect(b?.patch).toContain("+new")
     })
   })
+
+  test("diff('git') keeps carriage returns inside patch hunks", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, "file.txt"), "keep\nsame\rdiff --git inside\ndelete\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
+    await fs.writeFile(path.join(tmp.path, "file.txt"), "keep\nadd\nsame\rdiff --git inside\n", "utf-8")
+
+    await withVcsOnly(tmp.path, async () => {
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
+      const file = diff.find((item) => item.file === "file.txt")
+
+      expect(file?.patch).toContain(" same\rdiff --git inside")
+      expect(file?.patch).toContain("-delete")
+      expect(() => parsePatch(file?.patch ?? "")).not.toThrow()
+    })
+  }, 20_000)
 
   test("diff('branch') returns changes against default branch", async () => {
     await using tmp = await tmpdir({ git: true })

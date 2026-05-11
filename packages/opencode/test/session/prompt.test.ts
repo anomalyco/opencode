@@ -15,6 +15,8 @@ import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
+import { Git } from "../../src/git"
+import { Image } from "../../src/image/image"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
@@ -44,6 +46,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Database from "../../src/storage/db"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
+import { Reference } from "../../src/reference/reference"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
@@ -178,6 +181,8 @@ function makeHttp() {
     Layer.provide(Skill.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provideMerge(todo),
@@ -185,12 +190,17 @@ function makeHttp() {
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps))
+  const proc = SessionProcessor.layer.pipe(
+    Layer.provide(summary),
+    Layer.provide(Image.defaultLayer),
+    Layer.provideMerge(deps),
+  )
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
       Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(Image.defaultLayer),
       Layer.provide(summary),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),
@@ -856,6 +866,43 @@ it.live(
       { git: true, config: cfg },
     ),
   30_000,
+)
+
+it.live(
+  "cancel propagates from slash command subtask to child session",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const status = yield* SessionStatus.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+        yield* llm.hang
+        const msg = yield* user(chat.id, "hello")
+        yield* addSubtask(chat.id, msg.id)
+
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+        yield* llm.wait(1)
+
+        const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+        const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+        const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+        const sessionID = tool?.state.status === "running" ? tool.state.metadata?.sessionId : undefined
+        expect(typeof sessionID).toBe("string")
+        if (typeof sessionID !== "string") throw new Error("missing child session id")
+        const childID = SessionID.make(sessionID)
+        expect((yield* status.get(childID)).type).toBe("busy")
+
+        yield* prompt.cancel(chat.id)
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
+
+        expect((yield* status.get(chat.id)).type).toBe("idle")
+        expect((yield* status.get(childID)).type).toBe("idle")
+      }),
+      { git: true, config: providerCfg },
+    ),
+  10_000,
 )
 
 it.live(

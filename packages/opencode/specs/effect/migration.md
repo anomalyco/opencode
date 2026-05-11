@@ -59,10 +59,10 @@ Rules:
 
 ## Schema → Zod interop
 
-When a service uses Effect Schema internally but needs Zod schemas for the HTTP layer, derive Zod from Schema using the `zod()` helper from `@/util/effect-zod`:
+When a service uses Effect Schema internally but needs Zod schemas for the HTTP layer, derive Zod from Schema using the `zod()` helper from `@opencode-ai/core/effect-zod`:
 
 ```ts
-import { zod } from "@/util/effect-zod"
+import { zod } from "@opencode-ai/core/effect-zod"
 
 export const ZodInfo = zod(Info) // derives z.ZodType from Schema.Union
 ```
