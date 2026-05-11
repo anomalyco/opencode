@@ -1,7 +1,6 @@
 import { Identifier } from "@/id/id"
 import { SyncEvent } from "@/sync"
 import { withStatics } from "@opencode-ai/core/schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Schema from "effect/Schema"
 
 export const ID = Schema.String.pipe(
@@ -39,16 +38,6 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
     version: input.version,
     aggregate: input.aggregate,
   })
-}
-
-export function run<Def extends SyncEvent.Definition>(
-  def: Def,
-  data: SyncEvent.Event<Def>["data"],
-  // Temporary escape hatch while the full v2 event system remains experimental.
-  options?: { publish?: boolean; bypassExperimentalEventSystem?: boolean },
-) {
-  if (!options?.bypassExperimentalEventSystem && !Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) return
-  SyncEvent.run(def, data, options)
 }
 
 export * as EventV2 from "./event"
