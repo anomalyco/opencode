@@ -15,7 +15,7 @@ imbot v1 严苛 → v2 务实档,修复"寸步难行"。webfetch + 敏感 read �
 | commit | 简述 |
 |---|---|
 | `a4e7653cc` | feat(feishu-bridge): imbot v2 务实档 — bash/edit/write 默认 allow,只对删除/敏感目录/webfetch ask |
-| `(本笔)` | docs(imbot-permission-pragmatic): 三文档落盘 + INDEX + 改动日志 |
+| `8377f37b7` | docs(imbot-permission-pragmatic): 三文档落盘 + INDEX + 改动日志 |
 
 ## 改动文件
 
