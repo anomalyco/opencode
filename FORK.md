@@ -30,6 +30,17 @@ Recovered fixes:
 - Re-registered `rename` in `packages/opencode/src/tool/registry.ts` (init + built-in tool list).
 - Restored concise session naming guidance in `packages/opencode/src/session/system.ts` so agents rename early once task scope is clear.
 
+## ✅ Recovered memory-leak hardening (2026-05-11)
+
+Source refs:
+- `dev-backup-20260509-031153`
+- `54386d715` (backup memory leak hardening baseline)
+
+Recovered fixes:
+- Restored `AsyncQueue` lifecycle hardening in `packages/opencode/src/util/queue.ts` (`close()`, `drain()`, `isClosed`, and closed-state consumer release).
+- Switched OAuth browser-open subprocess listeners to one-shot handlers in `packages/opencode/src/mcp/index.ts` (`once("error")`, `once("exit")`) to prevent listener accumulation.
+- Added explicit typed pubsub map cleanup in `packages/opencode/src/bus/index.ts` finalizer (`typed.clear()` after shutdown).
+
 ## ⚠️ Rebase Survival Checklist
 
 After rebasing on `upstream/dev`, verify each feature still works:
@@ -141,6 +152,19 @@ After rebasing on `upstream/dev`, verify each feature still works:
 
 **How to verify:** Env var `OPENCODE_INSTANCE_MAX=16` is respected in systemd service config.
 
+### 12. Memory Leak Hardening (Queue + MCP + Bus)
+
+**Files:**
+- `packages/opencode/src/util/queue.ts` — `AsyncQueue.close()`, `drain()`, `isClosed`, and safe closed-state async iteration behavior
+- `packages/opencode/src/mcp/index.ts` — one-shot subprocess listeners for OAuth browser open flow
+- `packages/opencode/src/bus/index.ts` — finalizer clears typed pubsub map after shutdown
+
+**How to verify:**
+1. `cd packages/opencode && bun typecheck`
+2. `bun test test/util/queue.test.ts`
+3. `bun test test/server/httpapi-mcp-oauth.test.ts`
+4. `bun test test/bus/bus.test.ts`
+
 ---
 
 ## 🧪 Post-Rebase Browser Smoke Test
@@ -190,7 +214,6 @@ These files are frequently modified by both upstream and this fork. Pay extra at
 
 These commits still differ from current `dev` and should be periodically re-evaluated:
 
-- `54386d715` — memory leak hardening (`util/queue.ts` close/drain/isClosed, MCP/bus cleanup). Current `util/queue.ts` is still minimal and does not include close/drain APIs.
 - `33956770e` — long-running quiet command heartbeat in legacy `tool/bash.ts`; current code uses `tool/shell.ts`, so this was not ported directly.
 - `7b51f4526` — `bin/opencode.cjs` packaging path migration; current upstream/fork packaging still targets `bin/opencode`.
 
@@ -218,7 +241,7 @@ git rebase upstream/dev
 # 3. After resolving conflicts, diff against backup to check for lost features
 git diff HEAD..backup/dev-YYYYMMDDHHMMSS -- packages/app/src/pages/layout/
 
-# 4. Walk through features 1–11 above and verify each one in the code
+# 4. Walk through features 1–12 above and verify each one in the code
 # 5. Run typecheck
 cd packages/opencode && bun typecheck
 
