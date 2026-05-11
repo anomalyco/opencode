@@ -156,11 +156,10 @@ export const ResourceSource = Schema.Struct({
   uri: Schema.String,
 }).annotate({ identifier: "ResourceSource" })
 
-const _FilePartSource = Schema.Union([FileSource, SymbolSource, ResourceSource]).annotate({
+export const FilePartSource = Schema.Union([FileSource, SymbolSource, ResourceSource]).annotate({
   discriminator: "type",
   identifier: "FilePartSource",
 })
-export const FilePartSource = _FilePartSource
 
 export const FilePart = Schema.Struct({
   ...partBase,
@@ -168,7 +167,7 @@ export const FilePart = Schema.Struct({
   mime: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
-  source: Schema.optional(_FilePartSource),
+  source: Schema.optional(FilePartSource),
 }).annotate({ identifier: "FilePart" })
 export type FilePart = Types.DeepMutable<Schema.Schema.Type<typeof FilePart>>
 
@@ -301,11 +300,15 @@ export const ToolStateError = Schema.Struct({
 }).annotate({ identifier: "ToolStateError" })
 export type ToolStateError = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateError>>
 
-const _ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).annotate({
+export const ToolState = Schema.Union([
+  ToolStatePending,
+  ToolStateRunning,
+  ToolStateCompleted,
+  ToolStateError,
+]).annotate({
   discriminator: "status",
   identifier: "ToolState",
 })
-export const ToolState = _ToolState
 export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
 
 export const ToolPart = Schema.Struct({
@@ -313,7 +316,7 @@ export const ToolPart = Schema.Struct({
   type: Schema.Literal("tool"),
   callID: Schema.String,
   tool: Schema.String,
-  state: _ToolState,
+  state: ToolState,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
 }).annotate({ identifier: "ToolPart" })
 export type ToolPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof ToolPart>>, "state"> & {
@@ -420,7 +423,7 @@ export const FilePartInput = Schema.Struct({
   mime: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
-  source: Schema.optional(_FilePartSource),
+  source: Schema.optional(FilePartSource),
 }).annotate({ identifier: "FilePartInput" })
 export type FilePartInput = Types.DeepMutable<Schema.Schema.Type<typeof FilePartInput>>
 
