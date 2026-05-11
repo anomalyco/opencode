@@ -18,6 +18,9 @@ const request = LLM.request({
   model,
   system: { type: "text", text: "You are concise.", cache: new CacheHint({ type: "ephemeral" }) },
   prompt: "Say hello.",
+  // This fixture predates the `cache: "auto"` default; pin the policy off so
+  // existing wire-shape assertions only see the manual hint on the system part.
+  cache: "none",
   generation: { maxTokens: 20, temperature: 0 },
 })
 
@@ -48,6 +51,7 @@ describe("Anthropic Messages route", () => {
             LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
             LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
+          cache: "none",
         }),
       )
 
