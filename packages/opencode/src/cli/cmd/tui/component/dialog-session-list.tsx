@@ -7,6 +7,7 @@ import { Locale } from "@/util/locale"
 import { useProject } from "@tui/context/project"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
+import { useLocal } from "../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { createDebouncedSignal } from "../util/signal"
@@ -25,6 +26,7 @@ export function DialogSessionList() {
   const project = useProject()
   const { theme } = useTheme()
   const sdk = useSDK()
+  const local = useLocal()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
@@ -128,6 +130,8 @@ export function DialogSessionList() {
 
   const [browseOrder] = createSignal<string[]>(orderByRecency(sync.data.session))
 
+  const RECENT_LIMIT = 5
+
   const options = createMemo(() => {
     const today = new Date().toDateString()
     const sessionMap = new Map(
@@ -139,46 +143,72 @@ export function DialogSessionList() {
     const searchResult = searchResults()
     const displayOrder = searchResult ? orderByRecency(searchResult) : browseOrder()
 
-    return displayOrder
-      .map((id) => sessionMap.get(id))
-      .filter((x) => x !== undefined)
-      .map((x) => {
-        const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
+    const dismissed = new Set(local.session.dismissedRecent())
+    const pinned = local.session.pinned().filter((id) => sessionMap.has(id))
+    const pinnedSet = new Set(pinned)
+    const slotByID = new Map(local.session.slots().map((id, i) => [id, i + 1]))
 
-        let footer: JSX.Element | string = ""
-        if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-          if (x.workspaceID) {
-            footer = workspace ? (
-              <WorkspaceLabel
-                type={workspace.type}
-                name={workspace.name}
-                status={project.workspace.status(x.workspaceID) ?? "error"}
-              />
-            ) : (
-              <WorkspaceLabel type="unknown" name={x.workspaceID} status="error" />
-            )
-          }
-        } else {
-          footer = Locale.time(x.time.updated)
-        }
+    const recent = displayOrder
+      .filter((id) => !pinnedSet.has(id) && !dismissed.has(id))
+      .slice(0, RECENT_LIMIT)
+    const recentSet = new Set(recent)
 
-        const date = new Date(x.time.updated)
-        let category = date.toDateString()
-        if (category === today) {
-          category = "Today"
+    function buildOption(id: string, category: string) {
+      const x = sessionMap.get(id)
+      if (!x) return undefined
+      const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
+
+      let footer: JSX.Element | string = ""
+      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+        if (x.workspaceID) {
+          footer = workspace ? (
+            <WorkspaceLabel
+              type={workspace.type}
+              name={workspace.name}
+              status={project.workspace.status(x.workspaceID) ?? "error"}
+            />
+          ) : (
+            <WorkspaceLabel type="unknown" name={x.workspaceID} status="error" />
+          )
         }
-        const isDeleting = toDelete() === x.id
-        const status = sync.data.session_status?.[x.id]
-        const isWorking = status?.type === "busy" || status?.type === "retry"
-        return {
-          title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
-          bg: isDeleting ? theme.error : undefined,
-          value: x.id,
-          category,
-          footer,
-          gutter: isWorking ? () => <Spinner /> : undefined,
-        }
+      } else {
+        footer = Locale.time(x.time.updated)
+      }
+
+      const isDeleting = toDelete() === x.id
+      const status = sync.data.session_status?.[x.id]
+      const isWorking = status?.type === "busy" || status?.type === "retry"
+      const slot = slotByID.get(x.id)
+      const gutter = isWorking
+        ? () => <Spinner />
+        : slot !== undefined
+          ? () => <text fg={theme.accent}>{slot}</text>
+          : undefined
+      return {
+        title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
+        bg: isDeleting ? theme.error : undefined,
+        value: x.id,
+        category,
+        footer,
+        gutter,
+      }
+    }
+
+    const remaining = displayOrder
+      .filter((id) => !pinnedSet.has(id) && !recentSet.has(id))
+      .map((id) => {
+        const x = sessionMap.get(id)
+        if (!x) return undefined
+        const label = new Date(x.time.updated).toDateString()
+        return buildOption(id, label === today ? "Today" : label)
       })
+      .filter((x) => x !== undefined)
+
+    return [
+      ...pinned.map((id) => buildOption(id, "Pinned")).filter((x) => x !== undefined),
+      ...recent.map((id) => buildOption(id, "Recent")).filter((x) => x !== undefined),
+      ...remaining,
+    ]
   })
 
   onMount(() => {
@@ -203,6 +233,28 @@ export function DialogSessionList() {
         dialog.clear()
       }}
       actions={[
+        {
+          command: "session.pin.toggle",
+          title: "pin/unpin",
+          onTrigger: (option) => {
+            local.session.togglePin(option.value)
+          },
+        },
+        {
+          command: "session.toggle.recent",
+          title: "toggle recent",
+          onTrigger: (option) => {
+            if (local.session.isPinned(option.value)) {
+              toast.show({
+                variant: "info",
+                message: "Unpin the session first to toggle it in Recent",
+                duration: 3000,
+              })
+              return
+            }
+            local.session.toggleRecent(option.value)
+          },
+        },
         {
           command: "session.delete",
           title: "delete",
