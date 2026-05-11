@@ -251,7 +251,7 @@ test("updates global config and omits empty shell key in jsonc", async () => {
 
     const file = path.join(tmp.path, "opencode.jsonc")
     const writtenConfig = await Filesystem.readText(file)
-    const parsed = ConfigParse.effectSchema(Config.Info, ConfigParse.jsonc(writtenConfig, file), file)
+    const parsed = ConfigParse.schema(Config.Info, ConfigParse.jsonc(writtenConfig, file), file)
     expect(writtenConfig).not.toContain('"shell"')
     expect(parsed.shell).toBeUndefined()
     expect(parsed.model).toBe("test/model")
@@ -1681,8 +1681,8 @@ test("permission config preserves user key order", async () => {
   })
 })
 
-test("Effect config parser preserves permission order while rejecting unknown top-level keys", () => {
-  const config = ConfigParse.effectSchema(
+test("config parser preserves permission order while rejecting unknown top-level keys", () => {
+  const config = ConfigParse.schema(
     Config.Info,
     {
       permission: {
@@ -1696,7 +1696,7 @@ test("Effect config parser preserves permission order while rejecting unknown to
 
   expect(Object.keys(config.permission!)).toEqual(["bash", "*", "edit"])
   try {
-    ConfigParse.effectSchema(Config.Info, { invalid_field: true }, "test")
+    ConfigParse.schema(Config.Info, { invalid_field: true }, "test")
     throw new Error("expected config parse to fail")
   } catch (err) {
     const error = err as { data?: { issues?: Array<{ code?: string; keys?: string[]; path?: string[] }> } }
@@ -2463,7 +2463,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 // parseManagedPlist unit tests — pure function, no OS interaction
 
 test("parseManagedPlist strips MDM metadata keys", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
@@ -2491,7 +2491,7 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
 })
 
 test("parseManagedPlist parses server settings", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
@@ -2511,7 +2511,7 @@ test("parseManagedPlist parses server settings", async () => {
 })
 
 test("parseManagedPlist parses permission rules", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
@@ -2541,7 +2541,7 @@ test("parseManagedPlist parses permission rules", async () => {
 })
 
 test("parseManagedPlist parses enabled_providers", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
@@ -2558,7 +2558,7 @@ test("parseManagedPlist parses enabled_providers", async () => {
 })
 
 test("parseManagedPlist handles empty config", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(JSON.stringify({ $schema: "https://opencode.ai/config.json" })),

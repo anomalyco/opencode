@@ -1,9 +1,8 @@
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
-import { zod } from "@opencode-ai/core/effect-zod"
 import { namedSchemaError } from "@/util/named-schema-error"
-import { optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
+import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
 import { Array as Arr, Effect, Layer, Record, Result, Context, Schema } from "effect"
@@ -42,31 +41,27 @@ export class Method extends Schema.Class<Method>("ProviderAuthMethod")({
   type: Schema.Literals(["oauth", "api"]),
   label: Schema.String,
   prompts: optionalOmitUndefined(Schema.Array(Prompt)),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
-export const Methods = Schema.Record(Schema.String, Schema.Array(Method)).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Methods = Schema.Record(Schema.String, Schema.Array(Method))
 export type Methods = typeof Methods.Type
 
 export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuthorization")({
   url: Schema.String,
   method: Schema.Literals(["auto", "code"]),
   instructions: Schema.String,
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 export const AuthorizeInput = Schema.Struct({
   method: Schema.Finite.annotate({ description: "Auth method index" }),
   inputs: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({ description: "Prompt inputs" }),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
 
 export const CallbackInput = Schema.Struct({
   method: Schema.Finite.annotate({ description: "Auth method index" }),
   code: Schema.optional(Schema.String).annotate({ description: "OAuth authorization code" }),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
 
 export const OauthMissing = namedSchemaError("ProviderAuthOauthMissing", { providerID: ProviderID })

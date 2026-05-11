@@ -6,7 +6,7 @@ import { zod } from "@opencode-ai/core/effect-zod"
 import { withStatics } from "@opencode-ai/core/schema"
 import path from "path"
 
-export const Options = Schema.Record(Schema.String, Schema.Unknown).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Options = Schema.Record(Schema.String, Schema.Unknown)
 export type Options = Schema.Schema.Type<typeof Options>
 
 // Spec is the user-config value: either just a plugin identifier, or the identifier plus inline options.

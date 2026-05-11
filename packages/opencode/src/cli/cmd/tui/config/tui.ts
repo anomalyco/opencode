@@ -5,6 +5,7 @@ import { createBindingLookup } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
+import { InvalidError } from "@/config/error"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
 import { KeymapLeaderTimeoutDefault, TuiInfo, TuiJsonSchemaInfo } from "./tui-schema"
@@ -91,10 +92,12 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       if (!isRecord(data)) return {} as Info
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      const validated = ConfigParse.schema(Info, normalize(data), configFilepath)
+      const parsed = Info.safeParse(normalize(data))
+      if (!parsed.success) throw new InvalidError({ path: configFilepath, issues: parsed.error.issues })
+      const validated = parsed.data
       return yield* resolvePlugins(validated, configFilepath)
     }).pipe(
-      // catchCause (not tapErrorCause + orElseSucceed) because ConfigParse.jsonc/.schema
+      // catchCause (not tapErrorCause + orElseSucceed) because JSONC parsing and validation
       // can sync-throw — those become defects, which orElseSucceed wouldn't catch.
       Effect.catchCause((cause) =>
         Effect.sync(() => {
