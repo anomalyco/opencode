@@ -34,6 +34,7 @@ import { useFileComponent } from "../context/file"
 import { useDialog } from "../context/dialog"
 import { type UiI18n, useI18n } from "../context/i18n"
 import { BasicTool, GenericTool } from "./basic-tool"
+import { countPartialStringLines, parsePartialToolInput } from "./tool-input"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Card } from "./card"
@@ -1160,6 +1161,13 @@ export interface ToolProps {
   defaultOpen?: boolean
   forceOpen?: boolean
   locked?: boolean
+  /**
+   * Partial tool-input JSON that is still streaming in. Only defined while
+   * the tool call is in the "pending" state. Tools that need a live view of
+   * a not-yet-closed string field (e.g. write-content line count) can parse
+   * this directly via helpers in `./tool-input`.
+   */
+  raw?: string
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -1235,7 +1243,22 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const emptyInput: Record<string, any> = {}
   const emptyMetadata: Record<string, any> = {}
 
-  const input = () => part().state?.input ?? emptyInput
+  const rawInput = createMemo<string | undefined>(() => {
+    const state = part().state as Record<string, any> | undefined
+    if (state?.status !== "pending") return undefined
+    return typeof state.raw === "string" ? (state.raw as string) : undefined
+  })
+  const input = createMemo<Record<string, any>>(() => {
+    const state = part().state as Record<string, any> | undefined
+    const base: Record<string, any> = state?.input ?? emptyInput
+    if (state?.status !== "pending") return base
+    const raw = rawInput()
+    if (!raw) return base
+    const partial = parsePartialToolInput(raw)
+    if (!partial) return base
+    if (!base || Object.keys(base).length === 0) return partial
+    return { ...base, ...partial }
+  })
   // @ts-expect-error
   const partMetadata = () => part().state?.metadata ?? emptyMetadata
   const taskId = createMemo(() => {
@@ -1289,6 +1312,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               input={input()}
               tool={part().tool}
               metadata={partMetadata()}
+              raw={rawInput()}
               // @ts-expect-error
               output={part().state.output}
               status={part().state.status}
@@ -1434,6 +1458,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const i18n = useI18n()
   const part = () => props.part as ReasoningPart
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
@@ -1442,9 +1467,18 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const throttledText = createPacedValue(text, streaming)
 
   return (
-    <Show when={throttledText()}>
+    <Show when={throttledText() || streaming()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part().id} streaming={streaming()} />
+        <Show
+          when={throttledText()}
+          fallback={
+            <span data-component="reasoning-pending">
+              <TextShimmer text={i18n.t("ui.messagePart.title.reasoning")} active={true} />
+            </span>
+          }
+        >
+          <Markdown text={throttledText()} cacheKey={part().id} streaming={streaming()} />
+        </Show>
       </div>
     </Show>
   )
@@ -1455,9 +1489,7 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const args: string[] = []
-    if (props.input.offset) args.push("offset=" + props.input.offset)
-    if (props.input.limit) args.push("limit=" + props.input.limit)
+    const pending = () => props.status === "pending" || props.status === "running"
     const loaded = createMemo(() => {
       if (props.status !== "completed") return []
       const value = props.metadata.loaded
@@ -1470,9 +1502,25 @@ ToolRegistry.register({
           {...props}
           icon="glasses"
           trigger={{
-            title: i18n.t("ui.tool.read"),
-            subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
-            args,
+            get title() {
+              return pending() ? i18n.t("ui.tool.readActive") : i18n.t("ui.tool.read")
+            },
+            get subtitle() {
+              const filePath = props.input.filePath
+              if (!filePath) return ""
+              return getFilename(filePath)
+            },
+            get args() {
+              if (pending()) {
+                if (!props.input.filePath) return []
+                const start = typeof props.input.offset === "number" && props.input.offset > 0 ? props.input.offset : 1
+                return [i18n.t("ui.tool.lines", { count: start })]
+              }
+              const list: string[] = []
+              if (props.input.offset) list.push("offset=" + props.input.offset)
+              if (props.input.limit) list.push("limit=" + props.input.limit)
+              return list
+            },
           }}
         />
         <For each={loaded()}>
@@ -1743,8 +1791,14 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
+                <TextShimmer
+                  text={pending() ? i18n.t("ui.tool.shellActive") : i18n.t("ui.tool.shell")}
+                  active={pending()}
+                />
               </span>
+              <Show when={pending() && props.input.command}>
+                <ShellSubmessage text={props.input.command} animate={sawPending} />
+              </Show>
               <Show when={!pending() && props.input.description}>
                 <ShellSubmessage text={props.input.description} animate={sawPending} />
               </Show>
@@ -1800,9 +1854,14 @@ ToolRegistry.register({
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
+                    <TextShimmer
+                      text={
+                        pending() ? i18n.t("ui.messagePart.title.editActive") : i18n.t("ui.messagePart.title.edit")
+                      }
+                      active={pending()}
+                    />
                   </span>
-                  <Show when={!pending()}>
+                  <Show when={props.input.filePath}>
                     <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
                 </div>
@@ -1861,6 +1920,12 @@ ToolRegistry.register({
     const path = createMemo(() => props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
+    const pendingLines = createMemo(() => {
+      if (!pending()) return 0
+      if (typeof props.input.content === "string") return props.input.content.split("\n").length
+      if (typeof props.raw === "string") return countPartialStringLines(props.raw, "content")
+      return 0
+    })
     return (
       <div data-component="write-tool">
         <BasicTool
@@ -1872,10 +1937,18 @@ ToolRegistry.register({
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
+                    <TextShimmer
+                      text={
+                        pending() ? i18n.t("ui.messagePart.title.writeActive") : i18n.t("ui.messagePart.title.write")
+                      }
+                      active={pending()}
+                    />
                   </span>
-                  <Show when={!pending()}>
+                  <Show when={props.input.filePath}>
                     <span data-slot="message-part-title-filename">{filename()}</span>
+                  </Show>
+                  <Show when={pending() && pendingLines() > 0}>
+                    <span data-slot="basic-tool-tool-arg">{i18n.t("ui.tool.lines", { count: pendingLines() })}</span>
                   </Show>
                 </div>
                 <Show when={!pending() && props.input.filePath?.includes("/")}>
