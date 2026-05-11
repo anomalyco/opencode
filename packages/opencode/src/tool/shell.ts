@@ -442,6 +442,7 @@ export const ShellTool = Tool.define(
       let cut = false
       let expired = false
       let aborted = false
+      let lastOutputTime = Date.now()
 
       yield* ctx.metadata({
         metadata: {
@@ -459,6 +460,7 @@ export const ShellTool = Tool.define(
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
               used += size
+              lastOutputTime = Date.now()
               while (used > keep && list.length > 1) {
                 const item = list.shift()
                 if (!item) break
@@ -510,12 +512,28 @@ export const ShellTool = Tool.define(
             return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
           })
 
-          const timeout = Effect.sleep(`${input.timeout + 100} millis`)
+          const STALL_TIMEOUT_MS = 60_000
+
+          const timeoutEffect = Effect.gen(function* () {
+            const baseDeadline = Date.now() + input.timeout
+            const maxDeadline = baseDeadline + 10 * 60 * 1000
+
+            while (Date.now() < maxDeadline) {
+              yield* Effect.sleep("200 millis")
+
+              // Timeout: past the base deadline AND no output for >= STALL_TIMEOUT_MS
+              if (Date.now() >= baseDeadline && Date.now() - lastOutputTime >= STALL_TIMEOUT_MS) {
+                return { kind: "timeout" as const, code: null as null }
+              }
+            }
+
+            return { kind: "timeout" as const, code: null as null }
+          })
 
           const exit = yield* Effect.raceAll([
             handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
             abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-            timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
+            timeoutEffect,
           ])
 
           if (exit.kind === "abort") {
