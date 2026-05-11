@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMError, Usage } from "../../src"
+import { CacheHint, LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
@@ -47,9 +47,9 @@ describe("Anthropic Messages route", () => {
           id: "req_tool_result",
           model,
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
           cache: "none",
         }),
@@ -77,7 +77,7 @@ describe("Anthropic Messages route", () => {
         LLM.request({
           model,
           messages: [
-            LLM.assistant([
+            Message.assistant([
               { type: "reasoning", text: "thinking", providerMetadata: { anthropic: { signature: "sig_1" } } },
             ]),
           ],
@@ -304,8 +304,8 @@ describe("Anthropic Messages route", () => {
           id: "req_round_trip",
           model,
           messages: [
-            LLM.user("Search for something."),
-            LLM.assistant([
+            Message.user("Search for something."),
+            Message.assistant([
               {
                 type: "tool-call",
                 id: "srvtoolu_abc",
@@ -322,7 +322,7 @@ describe("Anthropic Messages route", () => {
               },
               { type: "text", text: "Found it." },
             ]),
-            LLM.user("Thanks."),
+            Message.user("Thanks."),
           ],
         }),
       )
@@ -355,7 +355,7 @@ describe("Anthropic Messages route", () => {
           id: "req_unknown_server_tool",
           model,
           messages: [
-            LLM.assistant([
+            Message.assistant([
               {
                 type: "tool-result",
                 id: "srvtoolu_abc",
@@ -378,7 +378,7 @@ describe("Anthropic Messages route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 
@@ -416,9 +416,9 @@ describe("Anthropic Messages route", () => {
             },
           ],
           messages: [
-            LLM.user("What's the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: {} })]),
-            LLM.toolMessage({
+            Message.user("What's the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({
               id: "call_1",
               name: "lookup",
               result: { temp: 72 },
@@ -501,7 +501,7 @@ describe("Anthropic Messages route", () => {
             },
           ],
           system: [{ type: "text", text: "system-tail", cache: hint }],
-          messages: [LLM.user([{ type: "text", text: "message-tail", cache: hint }])],
+          messages: [Message.user([{ type: "text", text: "message-tail", cache: hint }])],
         }),
       )
 

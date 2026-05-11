@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM } from "../src"
+import { CacheHint, LLM, Message } from "../src"
 import { LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as BedrockConverse from "../src/protocols/bedrock-converse"
@@ -59,7 +59,7 @@ describe("applyCachePolicy", () => {
           model: anthropicModel,
           system: "Sys A",
           tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
-          messages: [LLM.user("first user"), LLM.assistant("assistant reply"), LLM.user("latest user message")],
+          messages: [Message.user("first user"), Message.assistant("assistant reply"), Message.user("latest user message")],
           cache: "auto",
         }),
       )
@@ -122,7 +122,7 @@ describe("applyCachePolicy", () => {
           model: bedrockModel,
           system: "Sys",
           tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
-          messages: [LLM.user("first user"), LLM.assistant("reply"), LLM.user("latest user")],
+          messages: [Message.user("first user"), Message.assistant("reply"), Message.user("latest user")],
           cache: "auto",
         }),
       )
@@ -221,7 +221,7 @@ describe("applyCachePolicy", () => {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
           model: anthropicModel,
-          messages: [LLM.user("u1"), LLM.assistant("a1"), LLM.user("u2"), LLM.assistant("a2")],
+          messages: [Message.user("u1"), Message.assistant("a1"), Message.user("u2"), Message.assistant("a2")],
           cache: { messages: { tail: 2 } },
         }),
       )
@@ -239,7 +239,7 @@ describe("applyCachePolicy", () => {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
           model: anthropicModel,
-          messages: [LLM.user("u1"), LLM.assistant("a1"), LLM.user("u2")],
+          messages: [Message.user("u1"), Message.assistant("a1"), Message.user("u2")],
           cache: { messages: "latest-assistant" },
         }),
       )
