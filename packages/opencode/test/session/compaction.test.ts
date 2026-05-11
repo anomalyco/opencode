@@ -233,16 +233,22 @@ const env = Layer.mergeAll(
 
 const it = testEffect(env)
 
-const processEnv = Layer.mergeAll(SessionNs.defaultLayer, CrossSpawnSpawner.defaultLayer)
-const itProcess = testEffect(processEnv)
+const compactionEnv = Layer.mergeAll(SessionNs.defaultLayer, CrossSpawnSpawner.defaultLayer)
+const itCompaction = testEffect(compactionEnv)
 
-function compactionProcessLayer(options?: {
+type CompactionProcessOptions = {
   result?: "continue" | "compact"
   llm?: Layer.Layer<LLM.Service>
   plugin?: Layer.Layer<Plugin.Service>
   provider?: ReturnType<typeof ProviderTest.fake>
   config?: Layer.Layer<Config.Service>
-}) {
+}
+
+function withCompaction(options?: CompactionProcessOptions) {
+  return Effect.provide(compactionProcessLayer(options))
+}
+
+function compactionProcessLayer(options?: CompactionProcessOptions) {
   const bus = Bus.layer
   const status = SessionStatus.layer.pipe(Layer.provide(bus))
   const processor = options?.llm
@@ -857,7 +863,7 @@ describe("session.compaction.process", () => {
     }),
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "marks summary message as errored on compact result",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -882,7 +888,7 @@ describe("session.compaction.process", () => {
         expect(summary.info.finish).toBe("error")
         expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
       }
-    }).pipe(Effect.provide(compactionProcessLayer({ result: "compact" }))),
+    }).pipe(withCompaction({ result: "compact" })),
   )
 
   it.instance(
@@ -916,7 +922,7 @@ describe("session.compaction.process", () => {
     }),
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "persists tail_start_id for retained recent turns",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -939,10 +945,10 @@ describe("session.compaction.process", () => {
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
       expect(part?.tail_start_id).toBe(keep.id)
-    }).pipe(Effect.provide(compactionProcessLayer({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) }))),
+    }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) })),
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "shrinks retained tail to fit preserve token budget",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -965,10 +971,10 @@ describe("session.compaction.process", () => {
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
       expect(part?.tail_start_id).toBe(keep.id)
-    }).pipe(Effect.provide(compactionProcessLayer({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 100 }) }))),
+    }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 100 }) })),
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "falls back to full summary when even one recent turn exceeds preserve token budget",
     () => {
       const stub = llm()
@@ -990,16 +996,12 @@ describe("session.compaction.process", () => {
         expect(part?.type).toBe("compaction")
         expect(part?.tail_start_id).toBeUndefined()
         expect(captured).toContain("yyyy")
-      }).pipe(
-        Effect.provide(
-          compactionProcessLayer({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 20 }) }),
-        ),
-      )
+      }).pipe(withCompaction({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 20 }) }))
     },
     { git: true },
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "falls back to full summary when retained tail media exceeds preserve token budget",
     () => {
       const stub = llm()
@@ -1031,16 +1033,12 @@ describe("session.compaction.process", () => {
         expect(part?.tail_start_id).toBeUndefined()
         expect(captured).toContain("recent image turn")
         expect(captured).toContain("Attached image/png: big.png")
-      }).pipe(
-        Effect.provide(
-          compactionProcessLayer({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 100 }) }),
-        ),
-      )
+      }).pipe(withCompaction({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 100 }) }))
     },
     { git: true },
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "retains a split turn suffix when a later message fits the preserve token budget",
     () => {
       const stub = llm()
@@ -1086,16 +1084,12 @@ describe("session.compaction.process", () => {
         expect(filtered[1]?.info.role).toBe("assistant")
         expect(filtered[1]?.info.role === "assistant" ? filtered[1].info.summary : false).toBe(true)
         expect(filtered.map((msg) => msg.info.id)).not.toContain(large.id)
-      }).pipe(
-        Effect.provide(
-          compactionProcessLayer({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 100 }) }),
-        ),
-      )
+      }).pipe(withCompaction({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 100 }) }))
     },
     { git: true },
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "allows plugins to disable synthetic continue prompt",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -1124,7 +1118,7 @@ describe("session.compaction.process", () => {
             ),
         ),
       ).toBe(false)
-    }).pipe(Effect.provide(compactionProcessLayer({ plugin: autocontinue(false) }))),
+    }).pipe(withCompaction({ plugin: autocontinue(false) })),
   )
 
   it.instance(
@@ -1192,7 +1186,7 @@ describe("session.compaction.process", () => {
     }),
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "stops quickly when aborted during retry backoff",
     () => {
       const stub = llm()
@@ -1249,12 +1243,12 @@ describe("session.compaction.process", () => {
           expect(Cause.hasInterrupts(exit.cause)).toBe(true)
           expect(Date.now() - start).toBeLessThan(250)
         }
-      }).pipe(Effect.provide(compactionProcessLayer({ llm: stub.layer })))
+      }).pipe(withCompaction({ llm: stub.layer }))
     },
     { git: true },
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "does not leave a summary assistant when aborted before processor setup",
     () =>
       Effect.gen(function* () {
@@ -1281,12 +1275,12 @@ describe("session.compaction.process", () => {
           expect(Exit.isFailure(exit)).toBe(true)
           if (Exit.isFailure(exit)) expect(Cause.hasInterrupts(exit.cause)).toBe(true)
           expect(all.some((msg) => msg.info.role === "assistant" && msg.info.summary)).toBe(false)
-        }).pipe(Effect.provide(compactionProcessLayer({ plugin: plugin(ready) })))
+        }).pipe(withCompaction({ plugin: plugin(ready) }))
       }),
     { git: true },
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "does not allow tool calls while generating the summary",
     () => {
       const stub = llm()
@@ -1350,12 +1344,12 @@ describe("session.compaction.process", () => {
 
         expect(summary?.info.role).toBe("assistant")
         expect(summary?.parts.some((part) => part.type === "tool")).toBe(false)
-      }).pipe(Effect.provide(compactionProcessLayer({ llm: stub.layer })))
+      }).pipe(withCompaction({ llm: stub.layer }))
     },
     { git: true },
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "summarizes only the head while keeping recent tail out of summary input",
     () => {
       const stub = llm()
@@ -1387,12 +1381,12 @@ describe("session.compaction.process", () => {
         expect(captured).not.toContain("keep this turn")
         expect(captured).not.toContain("and this one too")
         expect(captured).not.toContain("What did we do so far?")
-      }).pipe(Effect.provide(compactionProcessLayer({ llm: stub.layer })))
+      }).pipe(withCompaction({ llm: stub.layer }))
     },
     { git: true },
   )
 
-  itProcess.instance(
+  itCompaction.instance(
     "anchors repeated compactions with the previous summary",
     () => {
       const stub = llm()
@@ -1429,12 +1423,12 @@ describe("session.compaction.process", () => {
         expect(captured.match(/summary one/g)?.length).toBe(1)
         expect(captured).toContain("## Constraints & Preferences")
         expect(captured).toContain("## Progress")
-      }).pipe(Effect.provide(compactionProcessLayer({ llm: stub.layer })))
+      }).pipe(withCompaction({ llm: stub.layer }))
     },
     { git: true },
   )
 
-  itProcess.instance("keeps recent pre-compaction turns across repeated compactions", () => {
+  itCompaction.instance("keeps recent pre-compaction turns across repeated compactions", () => {
     const stub = llm()
     stub.push(reply("summary one"))
     stub.push(reply("summary two"))
@@ -1471,14 +1465,10 @@ describe("session.compaction.process", () => {
       expect(
         filtered.some((msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction")),
       ).toBe(true)
-    }).pipe(
-      Effect.provide(
-        compactionProcessLayer({ llm: stub.layer, config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) }),
-      ),
-    )
+    }).pipe(withCompaction({ llm: stub.layer, config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) }))
   })
 
-  itProcess.instance(
+  itCompaction.instance(
     "ignores previous summaries when sizing the retained tail",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -1519,7 +1509,7 @@ describe("session.compaction.process", () => {
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
       expect(part?.tail_start_id).toBe(keep.id)
-    }).pipe(Effect.provide(compactionProcessLayer({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 500 }) }))),
+    }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 500 }) })),
   )
 })
 
