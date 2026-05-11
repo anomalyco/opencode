@@ -153,6 +153,19 @@ function init() {
         },
       ])
     },
+    push(input: any, onClose?: () => void) {
+      if (store.stack.length === 0) {
+        focus = renderer.currentFocusedRenderable
+        focus?.blur()
+      }
+      setStore("stack", [
+        ...store.stack,
+        {
+          element: input,
+          onClose,
+        },
+      ])
+    },
     get stack() {
       return store.stack
     },

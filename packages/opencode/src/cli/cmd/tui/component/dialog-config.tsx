@@ -147,13 +147,16 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
       targetScope === "global"
         ? globalConfig()?.[field.key as keyof typeof globalConfig]
         : sync.data.config[field.key as keyof typeof sync.data.config]
-    dialog.replace(() => (
+    dialog.push(() => (
       <DialogConfigEdit
         field={field}
         currentValue={currentValue}
         onSave={async (value) => {
           const success = await saveField(field, value, targetScope)
           if (success) dialog.replace(() => <DialogConfig gotoKey={props.gotoKey} scope={targetScope} />)
+        }}
+        onCancel={() => {
+          dialog.replace(() => <DialogConfig gotoKey={props.gotoKey} scope={targetScope} />)
         }}
       />
     ))
@@ -188,6 +191,9 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
           const success = await saveField(gotoField, value, resolvedScope)
           if (success) dialog.replace(() => <DialogConfig />)
         }}
+        onCancel={() => {
+          dialog.replace(() => <DialogConfig />)
+        }}
       />
     )
   }
@@ -219,9 +225,8 @@ function DialogConfigEdit(props: {
   field: ConfigField
   currentValue: unknown
   onSave: (value: unknown) => Promise<void>
+  onCancel: () => void
 }) {
-  const dialog = useDialog()
-
   if (props.field.type.kind === "enum" || props.field.type.kind === "boolean") {
     const values = props.field.type.kind === "boolean" ? ["true", "false"] : props.field.type.values
     const currentString = props.currentValue === undefined ? undefined : String(props.currentValue)
@@ -235,6 +240,14 @@ function DialogConfigEdit(props: {
         }))}
         current={currentString}
         onSelect={(opt) => props.onSave(opt.value)}
+        actions={[
+          {
+            command: "dialog.cancel",
+            title: "Cancel",
+            side: "right",
+            onTrigger: () => props.onCancel(),
+          },
+        ]}
       />
     )
   }
@@ -252,6 +265,7 @@ function DialogConfigEdit(props: {
       value={initialValue}
       placeholder={props.field.type.example ?? `Enter ${props.field.type.kind}`}
       onConfirm={(value) => props.onSave(value)}
+      onCancel={() => props.onCancel()}
     />
   )
 }

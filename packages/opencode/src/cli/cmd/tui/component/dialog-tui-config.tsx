@@ -126,13 +126,16 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
 
   function openEdit(field: TuiConfigField) {
     const currentValue = getCurrentValue(field)
-    dialog.replace(() => (
+    dialog.push(() => (
       <DialogTuiConfigEdit
         field={field}
         currentValue={currentValue}
         onSave={async (value) => {
           const success = await saveField(field, value)
           if (success) dialog.replace(() => <DialogTuiConfig />)
+        }}
+        onCancel={() => {
+          dialog.replace(() => <DialogTuiConfig />)
         }}
       />
     ))
@@ -147,6 +150,9 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
         onSave={async (value) => {
           const success = await saveField(gotoField, value)
           if (success) dialog.replace(() => <DialogTuiConfig />)
+        }}
+        onCancel={() => {
+          dialog.replace(() => <DialogTuiConfig />)
         }}
       />
     )
@@ -179,6 +185,7 @@ function DialogTuiConfigEdit(props: {
   field: TuiConfigField
   currentValue: unknown
   onSave: (value: unknown) => Promise<void>
+  onCancel: () => void
 }) {
   if (props.field.type.kind === "enum" || props.field.type.kind === "boolean") {
     const values = props.field.type.kind === "boolean" ? ["true", "false"] : props.field.type.values
@@ -193,6 +200,14 @@ function DialogTuiConfigEdit(props: {
         }))}
         current={currentString}
         onSelect={(opt) => props.onSave(opt.value)}
+        actions={[
+          {
+            command: "dialog.cancel",
+            title: "Cancel",
+            side: "right",
+            onTrigger: () => props.onCancel(),
+          },
+        ]}
       />
     )
   }
@@ -208,6 +223,7 @@ function DialogTuiConfigEdit(props: {
       value={initialValue}
       placeholder={props.field.type.example ?? `Enter ${props.field.type.kind}`}
       onConfirm={(value) => props.onSave(value)}
+      onCancel={() => props.onCancel()}
     />
   )
 }
