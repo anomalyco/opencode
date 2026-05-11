@@ -4,7 +4,7 @@ import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
@@ -1874,6 +1874,70 @@ it.live("injects metadata for bare configured reference mentions", () =>
         expect(reference?.metadata?.reference).toMatchObject({ name: "docs", kind: "local", path: docs })
         expect(synthetic.some((part) => part.text.includes(`Reference root: ${docs}`))).toBe(true)
         expect(synthetic.some((part) => part.text.includes("subagent scout"))).toBe(true)
+
+        yield* sessions.remove(session.id)
+      }),
+    {
+      git: true,
+      config: {
+        ...cfg,
+        reference: {
+          docs: "./external-docs",
+        },
+      },
+    },
+  ),
+)
+
+it.live("injects metadata for configured reference file attachments", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const docs = path.join(dir, "external-docs")
+        const readme = path.join(docs, "README.md")
+        yield* Effect.promise(() => fs.mkdir(docs, { recursive: true }))
+        yield* Effect.promise(() => Bun.write(readme, "reference readme"))
+
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({})
+        const message = yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [
+            { type: "text", text: "Read @docs/README.md" },
+            {
+              type: "file",
+              mime: "text/plain",
+              filename: "docs/README.md",
+              url: pathToFileURL(readme).href,
+              source: {
+                type: "file",
+                path: "docs/README.md",
+                text: { value: "@docs/README.md", start: 5, end: 20 },
+              },
+            },
+          ],
+        })
+
+        const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+        const synthetic = stored.parts.filter(
+          (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+        )
+        const reference = synthetic.find((part) => part.text.startsWith("Referenced configured reference @docs/README.md."))
+
+        expect(reference?.metadata?.reference).toMatchObject({
+          name: "docs",
+          kind: "local",
+          path: docs,
+          target: "README.md",
+          targetPath: readme,
+          source: { value: "@docs/README.md", start: 5, end: 20 },
+        })
+        expect(synthetic.findIndex((part) => part === reference)).toBeLessThan(
+          synthetic.findIndex((part) => part.text.startsWith("Called the Read tool with the following input:")),
+        )
 
         yield* sessions.remove(session.id)
       }),

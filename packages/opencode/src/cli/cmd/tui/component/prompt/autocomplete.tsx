@@ -18,6 +18,8 @@ import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
 import { useBindings } from "../../keymap"
+import { Reference } from "@/reference/reference"
+import type { Config } from "@/config/config"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -260,6 +262,87 @@ export function Autocomplete(props: {
     }
   }
 
+  function createReferenceFilePart(input: {
+    alias: string
+    root: string
+    item: string
+    lineRange?: { startLine: number; endLine?: number }
+  }) {
+    const filename = `${input.alias}/${
+      input.lineRange && !input.item.endsWith("/")
+        ? `${input.item}#${input.lineRange.startLine}${input.lineRange.endLine ? `-${input.lineRange.endLine}` : ""}`
+        : input.item
+    }`
+    const urlObj = pathToFileURL(path.join(input.root, input.item))
+
+    if (input.lineRange && !input.item.endsWith("/")) {
+      urlObj.searchParams.set("start", String(input.lineRange.startLine))
+      if (input.lineRange.endLine !== undefined) {
+        urlObj.searchParams.set("end", String(input.lineRange.endLine))
+      }
+    }
+
+    return {
+      filename,
+      url: urlObj.href,
+      part: {
+        type: "file" as const,
+        mime: input.item.endsWith("/") ? "application/x-directory" : "text/plain",
+        filename,
+        url: urlObj.href,
+        source: {
+          type: "file" as const,
+          text: {
+            start: 0,
+            end: 0,
+            value: "",
+          },
+          path: filename,
+        },
+      },
+    }
+  }
+
+  function referencePromptText(reference: Reference.Resolved) {
+    const problem = reference.kind === "invalid" ? reference.message : undefined
+    return [
+      `Referenced configured reference @${reference.name}.`,
+      ...(reference.kind === "local" ? ["Kind: local directory"] : []),
+      ...(reference.kind === "git" ? ["Kind: git repository"] : []),
+      ...(reference.kind === "invalid" ? [`Repository: ${reference.repository}`] : []),
+      ...(reference.kind === "git" ? [`Repository: ${reference.repository}`] : []),
+      ...(reference.kind === "git" && reference.branch ? [`Branch/ref: ${reference.branch}`] : []),
+      ...(reference.kind === "invalid" ? [] : [`Reference root: ${reference.path}`]),
+      ...(problem
+        ? [`Problem: ${problem}`]
+        : [
+            "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
+          ]),
+    ].join("\n")
+  }
+
+  const references = createMemo(() =>
+    Reference.resolveAll({
+      references: (sync.data.config.reference ?? {}) as NonNullable<Config.Info["reference"]>,
+      directory: sync.path.directory || process.cwd(),
+      worktree: sync.path.worktree || sync.path.directory || process.cwd(),
+    }),
+  )
+
+  const referenceSearch = createMemo(() => {
+    if (!store.visible || store.visible === "/") return
+    const { lineRange, baseQuery } = extractLineRange(search())
+    const slash = baseQuery.indexOf("/")
+    if (slash === -1) return
+    const reference = references().find((item) => item.name === baseQuery.slice(0, slash))
+    if (!reference || reference.kind === "invalid") return
+    return {
+      reference,
+      query: baseQuery.slice(slash + 1),
+      lineRange,
+    }
+  })
+
   function normalizeMentionPath(filePath: string) {
     const baseDir = sync.path.directory || process.cwd()
     const absolute = path.resolve(filePath)
@@ -291,6 +374,7 @@ export function Autocomplete(props: {
     () => search(),
     async (query) => {
       if (!store.visible || store.visible === "/") return []
+      if (referenceSearch()) return []
 
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
@@ -333,6 +417,43 @@ export function Autocomplete(props: {
       }
 
       return options
+    },
+    {
+      initialValue: [],
+    },
+  )
+
+  const [referenceFiles] = createResource(
+    () => referenceSearch(),
+    async (match) => {
+      if (!match) return []
+
+      const result = await sdk.client.find.files({
+        directory: match.reference.path,
+        query: match.query,
+        limit: 50,
+      })
+
+      if (result.error || !result.data) return []
+
+      const width = props.anchor().width - 4
+      return result.data.map((item): AutocompleteOption => {
+        const { filename, part } = createReferenceFilePart({
+          alias: match.reference.name,
+          root: match.reference.path,
+          item,
+          lineRange: match.lineRange,
+        })
+        return {
+          display: Locale.truncateMiddle(filename, width),
+          value: filename,
+          isDirectory: item.endsWith("/"),
+          path: filename,
+          onSelect: () => {
+            insertPart(filename, part)
+          },
+        }
+      })
     },
     {
       initialValue: [],
@@ -397,6 +518,22 @@ export function Autocomplete(props: {
       )
   })
 
+  const referenceAliases = createMemo(() =>
+    references().map(
+      (reference): AutocompleteOption => ({
+        display: "@" + reference.name,
+        description: reference.kind === "invalid" ? reference.message : " configured reference",
+        onSelect: () => {
+          insertPart(reference.name, {
+            type: "text",
+            text: referencePromptText(reference),
+            synthetic: true,
+          })
+        },
+      }),
+    ),
+  )
+
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...command.slashes()]
 
@@ -428,11 +565,18 @@ export function Autocomplete(props: {
 
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
     const filesValue = files()
+    const referenceFilesValue = referenceFiles()
+    const referenceSearchValue = referenceSearch()
     const agentsValue = agents()
+    const referenceAliasesValue = referenceAliases()
     const commandsValue = commands()
 
     const mixed: AutocompleteOption[] =
-      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? referenceSearchValue
+          ? referenceFilesValue || []
+          : [...referenceAliasesValue, ...agentsValue, ...(filesValue || []), ...mcpResources()]
+        : [...commandsValue]
 
     const searchValue = search()
 
@@ -440,7 +584,7 @@ export function Autocomplete(props: {
       return mixed
     }
 
-    if (files.loading && prev && prev.length > 0) {
+    if ((files.loading || referenceFiles.loading) && prev && prev.length > 0) {
       return prev
     }
 
@@ -505,7 +649,7 @@ export function Autocomplete(props: {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 
-    const displayText = selected.display.trimEnd()
+    const displayText = (selected.value ?? selected.display).trimEnd()
     const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
 
     input.cursorOffset = store.index

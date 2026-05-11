@@ -121,6 +121,45 @@ function referencePromptMetadata(input: unknown): ReferencePromptMetadata | unde
   }
 }
 
+function referenceTextPart(input: {
+  reference: Reference.Resolved
+  source: ReferencePromptMetadata["source"]
+  target?: string
+  targetPath?: string
+  problem?: string
+}): MessageV2.TextPartInput {
+  const metadata: ReferencePromptMetadata = {
+    name: input.reference.name,
+    kind: input.reference.kind,
+    ...(input.reference.kind === "invalid" ? { repository: input.reference.repository } : { path: input.reference.path }),
+    ...(input.reference.kind === "git" ? { repository: input.reference.repository, branch: input.reference.branch } : {}),
+    ...(input.target === undefined ? {} : { target: input.target }),
+    ...(input.targetPath ? { targetPath: input.targetPath } : {}),
+    problem: input.problem ?? (input.reference.kind === "invalid" ? input.reference.message : undefined),
+    source: input.source,
+  }
+  const label = metadata.target === undefined ? `@${metadata.name}` : `@${metadata.name}/${metadata.target}`
+  return {
+    type: "text",
+    synthetic: true,
+    text: [
+      `Referenced configured reference ${label}.`,
+      ...(metadata.kind === "local" ? ["Kind: local directory"] : []),
+      ...(metadata.kind === "git" ? ["Kind: git repository"] : []),
+      ...(metadata.repository ? [`Repository: ${metadata.repository}`] : []),
+      ...(metadata.branch ? [`Branch/ref: ${metadata.branch}`] : []),
+      ...(metadata.path ? [`Reference root: ${metadata.path}`] : []),
+      ...(metadata.targetPath ? [`Resolved path: ${metadata.targetPath}`] : []),
+      ...(metadata.problem
+        ? [`Problem: ${metadata.problem}`]
+        : [
+            "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
+          ]),
+    ].join("\n"),
+    metadata: { reference: metadata },
+  }
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
@@ -185,48 +224,6 @@ export const layer = Layer.effect(
       const mentionSource = (match: RegExpMatchArray) => {
         const start = match.index ?? 0
         return { value: match[0], start, end: start + match[0].length }
-      }
-      const referenceTextPart = (input: {
-        reference: Reference.Resolved
-        source: ReturnType<typeof mentionSource>
-        target?: string
-        targetPath?: string
-        problem?: string
-      }): MessageV2.TextPartInput => {
-        const metadata: ReferencePromptMetadata = {
-          name: input.reference.name,
-          kind: input.reference.kind,
-          ...(input.reference.kind === "invalid"
-            ? { repository: input.reference.repository }
-            : { path: input.reference.path }),
-          ...(input.reference.kind === "git"
-            ? { repository: input.reference.repository, branch: input.reference.branch }
-            : {}),
-          ...(input.target === undefined ? {} : { target: input.target }),
-          ...(input.targetPath ? { targetPath: input.targetPath } : {}),
-          problem: input.problem ?? (input.reference.kind === "invalid" ? input.reference.message : undefined),
-          source: input.source,
-        }
-        const label = metadata.target === undefined ? `@${metadata.name}` : `@${metadata.name}/${metadata.target}`
-        return {
-          type: "text",
-          synthetic: true,
-          text: [
-            `Referenced configured reference ${label}.`,
-            ...(metadata.kind === "local" ? ["Kind: local directory"] : []),
-            ...(metadata.kind === "git" ? ["Kind: git repository"] : []),
-            ...(metadata.repository ? [`Repository: ${metadata.repository}`] : []),
-            ...(metadata.branch ? [`Branch/ref: ${metadata.branch}`] : []),
-            ...(metadata.path ? [`Reference root: ${metadata.path}`] : []),
-            ...(metadata.targetPath ? [`Resolved path: ${metadata.targetPath}`] : []),
-            ...(metadata.problem
-              ? [`Problem: ${metadata.problem}`]
-              : [
-                  "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
-                ]),
-          ].join("\n"),
-          metadata: { reference: metadata },
-        }
       }
       yield* Effect.forEach(
         files,
@@ -1156,6 +1153,30 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         id: part.id ? PartID.make(part.id) : PartID.ascending(),
       })
 
+      const referenceContextFromFilePart = Effect.fnUntraced(function* (
+        part: Extract<PromptInput["parts"][number], { type: "file" }>,
+        filepath: string,
+      ) {
+        const name = part.filename?.replace(/#\d+(?:-\d*)?$/, "")
+        if (!name) return
+        const slash = name.indexOf("/")
+        if (slash === -1) return
+
+        const reference = yield* references.get(name.slice(0, slash))
+        if (!reference || reference.kind === "invalid") return
+        if (!AppFileSystem.contains(reference.path, filepath)) return
+
+        const target = path.relative(reference.path, filepath).split(path.sep).join("/")
+        if (!target || target.startsWith("../") || target === "..") return
+
+        return referenceTextPart({
+          reference,
+          source: part.source?.text ?? { value: `@${name}`, start: 0, end: name.length + 1 },
+          target,
+          targetPath: filepath,
+        })
+      })
+
       const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<MessageV2.Part>[]> = Effect.fn(
         "SessionPrompt.resolveUserPart",
       )(function* (part) {
@@ -1238,6 +1259,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             case "file:": {
               log.info("file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
+              const referenceContext = yield* referenceContextFromFilePart(part, filepath)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
 
               const { read } = yield* registry.named()
@@ -1283,6 +1305,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 }
                 const args = { filePath: filepath, offset, limit }
                 const pieces: Draft<MessageV2.Part>[] = [
+                  ...(referenceContext
+                    ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                    : []),
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -1348,6 +1373,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     error: new NamedError.Unknown({ message }).toObject(),
                   })
                   return [
+                    ...(referenceContext
+                      ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                      : []),
                     {
                       messageID: info.id,
                       sessionID: input.sessionID,
@@ -1358,6 +1386,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   ]
                 }
                 return [
+                  ...(referenceContext
+                    ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                    : []),
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -1377,6 +1408,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
 
               return [
+                ...(referenceContext ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }] : []),
                 {
                   messageID: info.id,
                   sessionID: input.sessionID,
