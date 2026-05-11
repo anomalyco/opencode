@@ -37,8 +37,8 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "session" })
 
@@ -142,9 +142,9 @@ function sessionPath(worktree: string, cwd: string) {
 }
 
 const Summary = Schema.Struct({
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
-  files: NonNegativeInt,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  files: Schema.Finite,
   diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
 })
 
@@ -353,7 +353,7 @@ export function plan(input: { slug: string; time: { created: number } }, instanc
 export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
     if (!Number.isFinite(value)) return 0
-    return value
+    return Math.max(0, value)
   }
   const inputTokens = safe(input.usage.inputTokens ?? 0)
   const outputTokens = safe(input.usage.outputTokens ?? 0)

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { Session as SessionNs } from "@/session/session"
@@ -159,6 +158,30 @@ describe("session messages endpoint", () => {
           expect(res.status).toBe(200)
           const body = (await res.json()) as MessageV2.WithParts[]
           expect(body).toHaveLength(510)
+
+          await svc.remove(session.id)
+        },
+      }),
+    )
+  })
+
+  test("accepts directory query used by workspace routing", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await withoutWatcher(() =>
+      WithInstance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await svc.create({})
+          await fill(session.id, 1)
+          const app = Server.Default().app
+
+          const res = await app.request(
+            `/session/${session.id}/message?limit=80&directory=${encodeURIComponent(tmp.path)}`,
+          )
+          expect(res.status).toBe(200)
+          const body = await res.json()
+          expect(Array.isArray(body)).toBe(true)
+          expect(body).toHaveLength(1)
 
           await svc.remove(session.id)
         },

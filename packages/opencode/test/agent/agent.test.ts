@@ -2,11 +2,11 @@ import { afterEach, test, expect } from "bun:test"
 import { Effect } from "effect"
 import path from "path"
 import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Agent } from "../../src/agent/agent"
-import { Permission } from "../../src/permission"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { Permission } from "../../src/permission"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): Permission.Action | undefined {
@@ -18,25 +18,38 @@ function load<A>(dir: string, fn: (svc: Agent.Interface) => Effect.Effect<A>) {
   return Effect.runPromise(provideInstance(dir)(Agent.Service.use(fn)).pipe(Effect.provide(Agent.defaultLayer)))
 }
 
+async function withExperimentalScout(enabled: boolean, fn: () => Promise<void>) {
+  const original = Flag.OPENCODE_EXPERIMENTAL_SCOUT
+  Flag.OPENCODE_EXPERIMENTAL_SCOUT = enabled
+  try {
+    await fn()
+  } finally {
+    Flag.OPENCODE_EXPERIMENTAL_SCOUT = original
+  }
+}
+
 afterEach(async () => {
   await disposeAllInstances()
 })
 
 test("returns default native agents when no config", async () => {
-  await using tmp = await tmpdir()
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const agents = await load(tmp.path, (svc) => svc.list())
-      const names = agents.map((a) => a.name)
-      expect(names).toContain("build")
-      expect(names).toContain("plan")
-      expect(names).toContain("general")
-      expect(names).toContain("explore")
-      expect(names).toContain("compaction")
-      expect(names).toContain("title")
-      expect(names).toContain("summary")
-    },
+  await withExperimentalScout(false, async () => {
+    await using tmp = await tmpdir()
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const agents = await load(tmp.path, (svc) => svc.list())
+        const names = agents.map((a) => a.name)
+        expect(names).toContain("build")
+        expect(names).toContain("plan")
+        expect(names).toContain("general")
+        expect(names).toContain("explore")
+        expect(names).not.toContain("scout")
+        expect(names).toContain("compaction")
+        expect(names).toContain("title")
+        expect(names).toContain("summary")
+      },
+    })
   })
 })
 
@@ -51,6 +64,8 @@ test("build agent has correct default properties", async () => {
       expect(build?.native).toBe(true)
       expect(evalPerm(build, "edit")).toBe("allow")
       expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "repo_clone")).toBe("deny")
+      expect(evalPerm(build, "repo_overview")).toBe("deny")
     },
   })
 })
@@ -99,6 +114,62 @@ test("explore agent asks for external directories and allows whitelisted externa
         Permission.evaluate("external_directory", path.join(Global.Path.tmp, "agent-work"), explore!.permission).action,
       ).toBe("allow")
     },
+  })
+})
+
+test("scout agent allows repo cloning and repo cache reads", async () => {
+  await withExperimentalScout(true, async () => {
+    await using tmp = await tmpdir()
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const scout = await load(tmp.path, (svc) => svc.get("scout"))
+        expect(scout).toBeDefined()
+        expect(scout?.mode).toBe("subagent")
+        expect(evalPerm(scout, "repo_clone")).toBe("allow")
+        expect(evalPerm(scout, "repo_overview")).toBe("allow")
+        expect(evalPerm(scout, "edit")).toBe("deny")
+        expect(
+          Permission.evaluate(
+            "external_directory",
+            path.join(Global.Path.repos, "github.com", "owner", "repo", "README.md"),
+            scout!.permission,
+          ).action,
+        ).toBe("allow")
+      },
+    })
+  })
+})
+
+test("reference config does not create subagents", async () => {
+  await withExperimentalScout(true, async () => {
+    await using tmp = await tmpdir({
+      config: {
+        reference: {
+          effect: "github.com/effect/effect-smol",
+          effectFull: {
+            repository: "Effect-TS/effect",
+            branch: "main",
+          },
+          localdocs: "../docs",
+          localdocsFull: {
+            path: "../local-docs",
+          },
+        },
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const agents = await load(tmp.path, (svc) => svc.list())
+        const names = agents.map((agent) => agent.name)
+        expect(names).toContain("scout")
+        expect(names).not.toContain("effect")
+        expect(names).not.toContain("effectFull")
+        expect(names).not.toContain("localdocs")
+        expect(names).not.toContain("localdocsFull")
+      },
+    })
   })
 })
 
