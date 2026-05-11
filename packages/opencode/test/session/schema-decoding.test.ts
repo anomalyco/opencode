@@ -15,20 +15,20 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 // schema we assert:
 //   1. The Effect decoder (`Schema.decodeUnknownSync`) accepts valid input.
 //   2. The derived Zod (`X.zod.parse`) accepts the same input and returns the
-//      same shape.
-//   3. Clearly-invalid input is rejected by both paths.
+//      same shape for schemas that still expose Zod statics.
+//   3. Clearly-invalid input is rejected by both paths where both exist.
 //
 // The point is to lock down the Schema <-> Zod bridge so a future edit to
 // any input schema can't silently drop or widen a field on one side.
 
 // Representative valid IDs — the branded schemas require the right prefix
 // (see src/id/id.ts).
-const sessionID = SessionID.zod.parse("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2K")
-const sessionIDChild = SessionID.zod.parse("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2L")
-const messageID = MessageID.zod.parse("msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M")
-const partID = PartID.zod.parse("prt_01J5Y5H0AH4Q4NXJ6P4C3P5V2N")
+const sessionID = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2K")
+const sessionIDChild = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2L")
+const messageID = Schema.decodeUnknownSync(MessageID)("msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M")
+const partID = Schema.decodeUnknownSync(PartID)("prt_01J5Y5H0AH4Q4NXJ6P4C3P5V2N")
 const projectID = ProjectID.zod.parse("proj-alpha")
-const workspaceID = WorkspaceID.zod.parse("wrk-primary")
+const workspaceID = Schema.decodeUnknownSync(WorkspaceID)("wrk-primary")
 
 function decodeUnknown<S extends Schema.Top>(schema: S) {
   const decode = Schema.decodeUnknownSync(schema as any)
@@ -78,6 +78,26 @@ describe("Session.Info", () => {
         snapshot: "snap-1",
         diff: "diff-1",
       },
+    }
+    expect(decode(input)).toEqual(input)
+    expect(Session.Info.zod.parse(input)).toEqual(input)
+  })
+
+  test("accepts migrated summary diffs without file details", () => {
+    const input = {
+      id: sessionID,
+      slug: "legacy-diff",
+      projectID,
+      directory: "/tmp/proj",
+      title: "Legacy diff",
+      version: "0.1.0",
+      summary: {
+        additions: 1,
+        deletions: 0,
+        files: 1,
+        diffs: [{ additions: 1, deletions: 0 }],
+      },
+      time: { created: 1, updated: 2 },
     }
     expect(decode(input)).toEqual(input)
     expect(Session.Info.zod.parse(input)).toEqual(input)
@@ -230,8 +250,21 @@ describe("SessionStatus.Info", () => {
     expect(SessionStatus.Info.zod.parse({ type: "idle" })).toEqual({ type: "idle" })
   })
 
-  test("retry carries attempt/message/next", () => {
-    const input = { type: "retry" as const, attempt: 1, message: "transient", next: 500 }
+  test("retry carries attempt/message/action/next", () => {
+    const input = {
+      type: "retry" as const,
+      attempt: 1,
+      message: "transient",
+      action: {
+        reason: "free_tier_limit",
+        provider: "opencode",
+        title: "Free limit reached",
+        message: "Subscribe to OpenCode Go.",
+        label: "subscribe",
+        link: "https://opencode.ai/go",
+      },
+      next: 500,
+    }
     expect(decode(input)).toEqual(input)
     expect(SessionStatus.Info.zod.parse(input)).toEqual(input)
   })
