@@ -200,6 +200,7 @@ Here are some common issues and how to resolve them.
 1. Check the logs for error messages
 2. Try running with `--print-logs` to see output in the terminal
 3. Ensure you have the latest version with `opencode upgrade`
+4. On linux, ensure you have enough inotify budget #16610: `sudo sysctl -w fs.inotify.max_user_watches=1048576 fs.inotify.max_user_instances=2048`
 
 ---
 
