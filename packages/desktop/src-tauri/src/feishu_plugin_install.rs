@@ -253,14 +253,23 @@ fn inject_imbot_agent(config_path: &Path) -> Result<(), String> {
 /// imbot agent 配置 spec — 不设 prompt(fallback 到 provider default,跟 build agent 同 system prompt)。
 /// 收紧的工具:bash / edit / write / apply_patch / webfetch + 敏感目录 read。
 fn imbot_agent_spec() -> Value {
+    // v2 务实档(2026-05-11):v1 把 bash/edit/write/apply_patch/webfetch 全 ask 导致 user
+    // 飞书 ship 流程"寸步难行"(opencode bash always 按 arity prefix 颗粒度记忆,user 点过
+    // 5+ 次 always 仍要点)。重新评估攻击面 — prompt injection 攻击瓶颈在 "read 敏感数据" +
+    // "webfetch 出境",bash/write 本身没数据就空转。所以:
+    //   - webfetch:ask(prompt injection 入口)
+    //   - read:普通 allow / SSH/AWS/Kube/GPG/Keychain 等敏感目录 ask
+    //   - bash:默认 allow,但**删除/不可逆/破坏类**显式 ask(rm / git --force / *delete* / *uninstall* / docker rm / shutdown / dd / mkfs ...)
+    //   - edit / write / apply_patch:不设(沿用 build default allow)— 理由:bash echo >> file
+    //     已经能做相同事,单独 ask 没意义且影响 ship 流程
+    // user opencode.jsonc 升级路径:删 .agent.imbot 块,重启 DeskFox 触发 setup hook 重新注入 v2
     serde_json::json!({
-        "description": "DeskFox IM 桥接专用 agent — 同 build 能力,但 unattended 场景下危险工具默认 ask",
+        "description": "DeskFox IM 桥接 v2 — bash/edit/write 默认 allow,只对 webfetch + 删除/不可逆操作 + 敏感目录 read 做 ask",
         "permission": {
-            "bash": "ask",
-            "edit": "ask",
-            "write": "ask",
-            "apply_patch": "ask",
+            // ── webfetch:全 ask(prompt injection 入口 — LLM 拉外部内容前 user 看一眼)──
             "webfetch": "ask",
+
+            // ── read:普通 allow,敏感目录 ask(攻击链第 2 步:exfil 必先读敏感数据)──
             "read": {
                 "*": "allow",
                 "*.env": "ask",
@@ -272,7 +281,63 @@ fn imbot_agent_spec() -> Value {
                 "**/.gnupg/**": "ask",
                 "**/Library/Keychains/**": "ask",
                 "**/AppData/Roaming/Microsoft/Crypto/**": "ask"
+            },
+
+            // ── bash:默认 allow,删除/不可逆/破坏类 ask ──
+            // findLast 规则:Wildcard.match 多条命中时**最后一条胜出**,具体 pattern 写在 "*": "allow" 之后
+            "bash": {
+                "*": "allow",
+
+                // 文件删除
+                "rm *": "ask",
+                "rmdir *": "ask",
+                "trash *": "ask",
+                "unlink *": "ask",
+
+                // git 不可逆
+                "git push --force*": "ask",
+                "git push -f *": "ask",
+                "git reset --hard*": "ask",
+                "git clean -fd*": "ask",
+                "git branch -D *": "ask",
+
+                // 通用 delete / uninstall 关键字(kubectl delete / gh repo delete / aws ec2 terminate-* / brew uninstall / npm uninstall 等)
+                "*delete*": "ask",
+                "*uninstall*": "ask",
+
+                // 包管理 remove 类(uninstall 已通过 *uninstall* 拦,这里加 remove 子命令名)
+                "npm remove *": "ask",
+                "npm rm *": "ask",
+                "bun remove *": "ask",
+                "brew remove *": "ask",
+                "apt remove *": "ask",
+                "apt purge *": "ask",
+                "yum remove *": "ask",
+                "dnf remove *": "ask",
+
+                // 容器 rm
+                "docker rm *": "ask",
+                "docker rmi *": "ask",
+                "docker volume rm *": "ask",
+                "docker network rm *": "ask",
+                "docker system prune*": "ask",
+
+                // 云资源 rm
+                "aws s3 rm *": "ask",
+                "aws s3 rb *": "ask",
+                "aws ec2 terminate*": "ask",
+
+                // 系统级破坏
+                "shutdown *": "ask",
+                "reboot *": "ask",
+                "halt *": "ask",
+                "poweroff *": "ask",
+                "dd *": "ask",
+                "mkfs*": "ask",
+                "fdisk *": "ask"
             }
+
+            // edit / write / apply_patch 不设 → 走 build defaults(*: allow)
         }
     })
 }
@@ -525,17 +590,18 @@ mod tests {
         fs::write(&cfg, r#"{ "$schema": "x" }"#).unwrap();
         inject_imbot_agent(&cfg).unwrap();
         let imbot = read_imbot_agent(&cfg).expect("imbot should be injected");
-        assert_eq!(
-            imbot
-                .get("permission")
-                .and_then(|p| p.get("bash"))
-                .and_then(|x| x.as_str()),
-            Some("ask"),
-            "bash must be ask"
-        );
+        // v2 务实档:bash 是 object(默认 allow + 删除类 ask);webfetch 仍 ask
+        let bash = imbot
+            .get("permission")
+            .and_then(|p| p.get("bash"))
+            .and_then(|x| x.as_object())
+            .expect("v2 bash must be object");
+        assert_eq!(bash.get("*").and_then(|v| v.as_str()), Some("allow"), "bash 默认 allow");
+        assert_eq!(bash.get("rm *").and_then(|v| v.as_str()), Some("ask"), "rm * ask");
         assert_eq!(
             imbot.get("permission").and_then(|p| p.get("webfetch")).and_then(|x| x.as_str()),
-            Some("ask")
+            Some("ask"),
+            "webfetch 仍全 ask"
         );
     }
 
@@ -615,9 +681,13 @@ mod tests {
         .unwrap();
         inject_imbot_agent(&cfg).unwrap();
         let imbot = read_imbot_agent(&cfg).expect("imbot must be injected even with jsonc comments");
+        // v2 务实档:bash 是 object,验证默认 allow 真注入
         assert_eq!(
-            imbot.get("permission").and_then(|p| p.get("bash")).and_then(|x| x.as_str()),
-            Some("ask")
+            imbot.get("permission").and_then(|p| p.get("bash"))
+                .and_then(|b| b.as_object())
+                .and_then(|o| o.get("*"))
+                .and_then(|v| v.as_str()),
+            Some("allow")
         );
     }
 
@@ -636,5 +706,72 @@ mod tests {
         assert_eq!(read_obj.get("**/.ssh/**").and_then(|v| v.as_str()), Some("ask"));
         assert_eq!(read_obj.get("**/.aws/**").and_then(|v| v.as_str()), Some("ask"));
         assert_eq!(read_obj.get("**/Library/Keychains/**").and_then(|v| v.as_str()), Some("ask"));
+    }
+
+    #[test]
+    fn imbot_bash_pattern_covers_destructive_ops() {
+        // v2 务实档:bash 默认 allow + 删除/不可逆/破坏类 ask
+        let s = Sandbox::new("imbot-bash-v2");
+        let cfg = s.root.join("opencode.json");
+        fs::write(&cfg, r#"{}"#).unwrap();
+        inject_imbot_agent(&cfg).unwrap();
+        let imbot = read_imbot_agent(&cfg).unwrap();
+        let bash = imbot.get("permission").and_then(|p| p.get("bash"))
+            .and_then(|b| b.as_object()).expect("bash must be object");
+
+        assert_eq!(bash.get("*").and_then(|v| v.as_str()), Some("allow"), "default allow");
+
+        // 文件删除
+        for k in ["rm *", "rmdir *", "trash *", "unlink *"] {
+            assert_eq!(bash.get(k).and_then(|v| v.as_str()), Some("ask"),
+                "{} 必须 ask", k);
+        }
+
+        // git 不可逆
+        for k in ["git push --force*", "git push -f *", "git reset --hard*", "git clean -fd*", "git branch -D *"] {
+            assert_eq!(bash.get(k).and_then(|v| v.as_str()), Some("ask"),
+                "{} 必须 ask", k);
+        }
+
+        // 通用 delete/uninstall 关键字
+        assert_eq!(bash.get("*delete*").and_then(|v| v.as_str()), Some("ask"));
+        assert_eq!(bash.get("*uninstall*").and_then(|v| v.as_str()), Some("ask"));
+
+        // 容器
+        for k in ["docker rm *", "docker rmi *", "docker volume rm *", "docker network rm *", "docker system prune*"] {
+            assert_eq!(bash.get(k).and_then(|v| v.as_str()), Some("ask"),
+                "{} 必须 ask", k);
+        }
+
+        // 云资源
+        for k in ["aws s3 rm *", "aws s3 rb *", "aws ec2 terminate*"] {
+            assert_eq!(bash.get(k).and_then(|v| v.as_str()), Some("ask"),
+                "{} 必须 ask", k);
+        }
+
+        // 系统级
+        for k in ["shutdown *", "reboot *", "halt *", "poweroff *", "dd *", "mkfs*", "fdisk *"] {
+            assert_eq!(bash.get(k).and_then(|v| v.as_str()), Some("ask"),
+                "{} 必须 ask", k);
+        }
+    }
+
+    #[test]
+    fn imbot_no_longer_locks_edit_write_apply_patch() {
+        // v2 务实档:edit / write / apply_patch 不设(走 build defaults allow)
+        // 不再像 v1 那样把它们也设 ask
+        let s = Sandbox::new("imbot-no-edit-lock");
+        let cfg = s.root.join("opencode.json");
+        fs::write(&cfg, r#"{}"#).unwrap();
+        inject_imbot_agent(&cfg).unwrap();
+        let imbot = read_imbot_agent(&cfg).unwrap();
+        let perm = imbot.get("permission").and_then(|p| p.as_object()).unwrap();
+        // 这三个工具在 v2 里 **不应该** 出现(默认走 build *: allow)
+        assert!(!perm.contains_key("edit"),
+            "v2 不再 ask edit(bash echo >> 已能做同等事)");
+        assert!(!perm.contains_key("write"),
+            "v2 不再 ask write");
+        assert!(!perm.contains_key("apply_patch"),
+            "v2 不再 ask apply_patch");
     }
 }
