@@ -11,25 +11,21 @@ import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/se
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
+import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-// Flip the experimental HttpApi flag so backend selection telemetry on the
-// production routes reports the right backend, and the experimental
-// workspaces flag so SyncEvent.run actually writes to EventSequenceTable
-// (the source of truth the fence middleware reads). Reset the database
-// around the test so per-instance state does not leak between runs.
-// resetDatabase() already calls disposeAllInstances(), so we don't repeat it.
+// Flip the experimental workspaces flag so SyncEvent.run actually writes to
+// EventSequenceTable (the source of truth the fence middleware reads). Reset
+// the database around the test so per-instance state does not leak between
+// runs. resetDatabase() already calls disposeAllInstances(), so we don't
+// repeat it.
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
     const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.promise(() => resetDatabase())
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
         Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await resetDatabase()
       }),
@@ -39,8 +35,7 @@ const testStateLayer = Layer.effectDiscard(
 
 // Mount the production HttpApi route tree on a real Node HTTP server bound to
 // 127.0.0.1:0 and a fetch-based HttpClient that prepends the server URL. This
-// keeps the test wired through the same route layer production uses, without
-// going through Server.Default()/Hono.
+// keeps the test wired directly through the same route layer production uses.
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
   ExperimentalHttpApiServer.routes,
   { disableListenLog: true, disableLogger: true },

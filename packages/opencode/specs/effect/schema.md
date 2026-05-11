@@ -8,7 +8,7 @@ Zod-first definitions to Effect Schema with Zod compatibility shims.
 Use Effect Schema as the source of truth for domain models, IDs, inputs,
 outputs, and typed errors. Keep Zod available at existing HTTP, tool, and
 compatibility boundaries by exposing a `.zod` static derived from the Effect
-schema via `@/util/effect-zod`.
+schema via `@opencode-ai/core/effect-zod`.
 
 The long-term driver is `specs/effect/http-api.md` — once the HTTP server
 moves to `@effect/platform`, every Schema-first DTO can flow through
@@ -97,7 +97,7 @@ creating a parallel schema source of truth.
 
 ## Escape hatches
 
-The walker in `@/util/effect-zod` exposes two explicit escape hatches for
+The walker in `@opencode-ai/core/effect-zod` exposes two explicit escape hatches for
 cases the pure-Schema path cannot express. Each one stays in the codebase
 only as long as its upstream or local dependency requires it — inline
 comments document when each can be deleted.
@@ -305,38 +305,18 @@ emitted JSON Schema must stay byte-identical.
 
 ### HTTP route boundaries
 
-Every file in `src/server/routes/` uses hono-openapi with zod validators for
-route inputs/outputs. Migrating these individually is the last step; most
-will switch to `.zod` derived from the Schema-migrated domain types above,
-which means touching them is largely mechanical once the domain side is
-done.
+The server route tree now lives under `src/server/routes/instance/httpapi` and
+uses Effect HttpApi contracts for request and response schemas. Remaining schema
+work is no longer a Hono route migration; it is compatibility cleanup around
+derived `.zod` statics, OpenAPI translation shims, and route groups that still
+need explicit SDK-visible error contracts.
 
-- [ ] `src/server/error.ts`
-- [x] `src/server/event.ts`
-- [x] `src/server/projectors.ts`
-- [ ] `src/server/routes/control/index.ts`
-- [ ] `src/server/routes/control/workspace.ts`
-- [ ] `src/server/routes/global.ts`
-- [ ] `src/server/routes/instance/index.ts`
-- [ ] `src/server/routes/instance/config.ts`
-- [ ] `src/server/routes/instance/event.ts`
-- [ ] `src/server/routes/instance/experimental.ts`
-- [ ] `src/server/routes/instance/file.ts`
-- [ ] `src/server/routes/instance/mcp.ts`
-- [ ] `src/server/routes/instance/permission.ts`
-- [ ] `src/server/routes/instance/project.ts`
-- [ ] `src/server/routes/instance/provider.ts`
-- [ ] `src/server/routes/instance/pty.ts`
-- [ ] `src/server/routes/instance/question.ts`
-- [ ] `src/server/routes/instance/session.ts`
-- [ ] `src/server/routes/instance/sync.ts`
-- [ ] `src/server/routes/instance/tui.ts`
+Good follow-up targets:
 
-The bigger prize for this group is the `@effect/platform` HTTP migration
-described in `specs/effect/http-api.md`. Once that lands, every one of
-these files changes shape entirely (`HttpApi.endpoint(...)` and friends),
-so the Schema-first domain types become a prerequisite rather than a
-sibling task.
+- shrink `public.ts` legacy OpenAPI translation shims one SDK-compatible slice at a time
+- replace production `.zod.safeParse(...)` call sites with Effect Schema decoders
+- remove derived `.zod` statics after their production consumers are gone
+- declare route-group errors directly instead of relying on compatibility middleware
 
 ### Everything else
 
@@ -389,7 +369,7 @@ piecewise.
 
 ## Notes
 
-- Use `@/util/effect-zod` for all Schema → Zod conversion.
+- Use `@opencode-ai/core/effect-zod` for all Schema → Zod conversion.
 - Prefer one canonical schema definition. Avoid maintaining parallel Zod and
   Effect definitions for the same domain type.
 - Keep the migration incremental. Converting the domain model first is more

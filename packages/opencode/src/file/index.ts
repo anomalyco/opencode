@@ -14,8 +14,8 @@ import { containsPath } from "../project/instance-context"
 import * as Log from "@opencode-ai/core/util/log"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, type DeepMutable, withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, type DeepMutable, withStatics } from "@opencode-ai/core/schema"
 
 export const Info = Schema.Struct({
   path: Schema.String,

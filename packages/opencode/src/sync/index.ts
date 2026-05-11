@@ -1,4 +1,3 @@
-import z from "zod"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
@@ -10,9 +9,7 @@ import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
-import { zodObject } from "@/util/effect-zod"
-import type { DeepMutable } from "@/util/schema"
-import { makeRuntime } from "@/effect/run-service"
+import type { DeepMutable } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 
@@ -65,6 +62,7 @@ export interface Interface {
     options?: { publish: boolean; ownerID?: string },
   ) => Effect.Effect<string | undefined>
   readonly remove: (aggregateID: string) => Effect.Effect<void>
+  readonly claim: (aggregateID: string, ownerID: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SyncEvent") {}
@@ -177,11 +175,24 @@ export const layer = Layer.effect(Service)(
       })
     })
 
+    const claim: Interface["claim"] = Effect.fn("SyncEvent.claim")((aggregateID, ownerID) =>
+      Effect.sync(() =>
+        Database.use((db) =>
+          db
+            .update(EventSequenceTable)
+            .set({ owner_id: ownerID })
+            .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+            .run(),
+        ),
+      ),
+    )
+
     return Service.of({
       run,
       replay,
       replayAll,
       remove,
+      claim,
     })
   }),
 )
@@ -189,8 +200,6 @@ export const layer = Layer.effect(Service)(
 export const defaultLayer = layer
 
 export const use = serviceUse(Service)
-
-const runtime = makeRuntime(Service, defaultLayer)
 
 export const registry = new Map<string, Definition>()
 let projectors: Map<Definition, ProjectorFunc> | undefined
@@ -336,52 +345,6 @@ function process<Def extends Definition>(
       }
     })
   })
-}
-
-export function replay(event: SerializedEvent, options?: { publish: boolean; ownerID?: string }) {
-  return runtime.runSync((sync) => sync.replay(event, options))
-}
-
-export function replayAll(events: SerializedEvent[], options?: { publish: boolean; ownerID?: string }) {
-  return runtime.runSync((sync) => sync.replayAll(events, options))
-}
-
-export function run<Def extends Definition>(def: Def, data: Event<Def>["data"], options?: { publish?: boolean }) {
-  return runtime.runSync((sync) => sync.run(def, data, options))
-}
-
-export function remove(aggregateID: string) {
-  return runtime.runSync((sync) => sync.remove(aggregateID))
-}
-
-export function claim(aggregateID: string, ownerID: string) {
-  Database.use((db) =>
-    db
-      .update(EventSequenceTable)
-      .set({ owner_id: ownerID })
-      .where(eq(EventSequenceTable.aggregate_id, aggregateID))
-      .run(),
-  )
-}
-
-export function payloads() {
-  return registry
-    .entries()
-    .map(([type, def]) => {
-      return z
-        .object({
-          type: z.literal("sync"),
-          name: z.literal(type),
-          id: z.string(),
-          seq: z.number(),
-          aggregateID: z.literal(def.aggregate),
-          data: zodObject(def.schema),
-        })
-        .meta({
-          ref: `SyncEvent.${def.type}`,
-        })
-    })
-    .toArray()
 }
 
 export function effectPayloads() {
