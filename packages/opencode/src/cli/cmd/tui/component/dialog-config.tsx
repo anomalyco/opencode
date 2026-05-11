@@ -91,14 +91,23 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
 
   const gotoField = props.gotoKey ? configFields.find((f) => f.key === props.gotoKey) : undefined
 
+  function formatError(error: unknown): string {
+    if (error instanceof Error) return error.message
+    if (typeof error === "object" && error !== null && "message" in error) return String(error.message)
+    return String(error)
+  }
+
   async function saveField(field: ConfigField, value: unknown, targetScope: ConfigScope): Promise<boolean> {
     try {
       let parsedValue: unknown = value
       if (field.type.kind === "boolean") {
         parsedValue = value === "true" || value === true
       } else if (field.type.kind === "number") {
-        parsedValue = Number(value)
+        const raw = value === "" || value === undefined || value === null ? field.type.example : String(value)
+        parsedValue = Number(raw)
         if (Number.isNaN(parsedValue)) throw new Error("Invalid number")
+      } else if (field.type.kind === "string" && value === "") {
+        parsedValue = field.type.example ?? ""
       } else if (field.type.kind === "enum" && field.key === "autoupdate") {
         if (value === "true") parsedValue = true
         else if (value === "false") parsedValue = false
@@ -126,7 +135,7 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
       return true
     } catch (error) {
       toast.show({
-        message: `Failed to update ${field.key}: ${error instanceof Error ? error.message : String(error)}`,
+        message: `Failed to update ${field.key}: ${formatError(error)}`,
         variant: "error",
       })
       return false
@@ -230,13 +239,17 @@ function DialogConfigEdit(props: {
     )
   }
 
+  const initialValue = props.currentValue !== undefined
+    ? String(props.currentValue)
+    : (props.field.type.example ?? "")
+
   return (
     <DialogPrompt
       title={`Edit ${props.field.key}`}
       description={() => (
         <text>{props.field.description}</text>
       )}
-      value={props.currentValue !== undefined ? String(props.currentValue) : ""}
+      value={initialValue}
       placeholder={props.field.type.example ?? `Enter ${props.field.type.kind}`}
       onConfirm={(value) => props.onSave(value)}
     />

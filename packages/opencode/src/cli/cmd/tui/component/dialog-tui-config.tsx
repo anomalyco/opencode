@@ -57,14 +57,25 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
 
   const gotoField = props.gotoKey ? tuiConfigFields.find((f) => f.key === props.gotoKey) : undefined
 
+  function formatValidationError(error: unknown): string {
+    if (error && typeof error === "object" && "issues" in error && Array.isArray(error.issues)) {
+      return error.issues.map((issue: any) => issue.message).join("; ")
+    }
+    if (error instanceof Error) return error.message
+    return String(error)
+  }
+
   async function saveField(field: TuiConfigField, value: unknown): Promise<boolean> {
     try {
       let parsedValue: unknown = value
       if (field.type.kind === "boolean") {
         parsedValue = value === "true" || value === true
       } else if (field.type.kind === "number") {
-        parsedValue = Number(value)
+        const raw = value === "" || value === undefined || value === null ? field.type.example : String(value)
+        parsedValue = Number(raw)
         if (Number.isNaN(parsedValue)) throw new Error("Invalid number")
+      } else if (field.type.kind === "string" && value === "") {
+        parsedValue = field.type.example ?? ""
       }
 
       const configPath = path.join(Global.Path.config, "tui.json")
@@ -93,7 +104,7 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
       return true
     } catch (error) {
       toast.show({
-        message: `Failed to update ${field.key}: ${error instanceof Error ? error.message : String(error)}`,
+        message: `Failed to update ${field.key}: ${formatValidationError(error)}`,
         variant: "error",
       })
       return false
@@ -172,11 +183,15 @@ function DialogTuiConfigEdit(props: {
     )
   }
 
+  const initialValue = props.currentValue !== undefined
+    ? String(props.currentValue)
+    : (props.field.type.example ?? "")
+
   return (
     <DialogPrompt
       title={`Edit ${props.field.key}`}
       description={() => <text>{props.field.description}</text>}
-      value={props.currentValue !== undefined ? String(props.currentValue) : ""}
+      value={initialValue}
       placeholder={props.field.type.example ?? `Enter ${props.field.type.kind}`}
       onConfirm={(value) => props.onSave(value)}
     />
