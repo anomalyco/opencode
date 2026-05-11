@@ -65,9 +65,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   const [store, setStore] = createStore({
@@ -308,11 +305,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         })),
       ],
       bindings: [
-        ...sections.dialog_select,
-        ...tuiConfig.keymap.pick(
-          "dialog_actions",
-          enabledActions.map((item) => item.command),
-        ),
+        ...tuiConfig.keybinds.gather("dialog.select", [
+          "dialog.select.prev",
+          "dialog.select.next",
+          "dialog.select.page_up",
+          "dialog.select.page_down",
+          "dialog.select.home",
+          "dialog.select.end",
+          "dialog.select.submit",
+        ]),
+        ...enabledActions.flatMap((item) => tuiConfig.keybinds.get(item.command)),
         ...(props.bindings ?? []).filter((binding) => {
           if (typeof binding.cmd !== "string") return true
           return enabledActions.some((item) => item.command === binding.cmd)

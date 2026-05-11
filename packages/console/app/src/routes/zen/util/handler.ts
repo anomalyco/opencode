@@ -889,10 +889,6 @@ export async function handler(
 
     const inputCost = modelCost.input * inputTokens * 100
     const outputCost = modelCost.output * outputTokens * 100
-    const reasoningCost = (() => {
-      if (!reasoningTokens) return undefined
-      return modelCost.output * reasoningTokens * 100
-    })()
     const cacheReadCost = (() => {
       if (!cacheReadTokens) return undefined
       if (!modelCost.cacheRead) return undefined
@@ -909,17 +905,11 @@ export async function handler(
       return modelCost.cacheWrite1h * cacheWrite1hTokens * 100
     })()
     const totalCostInCent =
-      inputCost +
-      outputCost +
-      (reasoningCost ?? 0) +
-      (cacheReadCost ?? 0) +
-      (cacheWrite5mCost ?? 0) +
-      (cacheWrite1hCost ?? 0)
+      inputCost + outputCost + (cacheReadCost ?? 0) + (cacheWrite5mCost ?? 0) + (cacheWrite1hCost ?? 0)
     return {
       totalCostInCent,
       inputCost,
       outputCost,
-      reasoningCost,
       cacheReadCost,
       cacheWrite5mCost,
       cacheWrite1hCost,
@@ -941,8 +931,7 @@ export async function handler(
   ) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
-    const { totalCostInCent, inputCost, outputCost, reasoningCost, cacheReadCost, cacheWrite5mCost, cacheWrite1hCost } =
-      costInfo
+    const { totalCostInCent, inputCost, outputCost, cacheReadCost, cacheWrite5mCost, cacheWrite1hCost } = costInfo
 
     logger.metric({
       "tokens.input": inputTokens,
@@ -953,14 +942,12 @@ export async function handler(
       "tokens.cache_write_1h": cacheWrite1hTokens,
       "cost.input.microcents": centsToMicroCents(inputCost),
       "cost.output.microcents": centsToMicroCents(outputCost),
-      "cost.reasoning.microcents": reasoningCost ? centsToMicroCents(reasoningCost) : undefined,
       "cost.cache_read.microcents": cacheReadCost ? centsToMicroCents(cacheReadCost) : undefined,
       "cost.cache_write.microcents": cacheWrite5mCost ? centsToMicroCents(cacheWrite5mCost) : undefined,
       "cost.total.microcents": centsToMicroCents(totalCostInCent),
       // deprecated - remove after May 20, 2026
       "cost.input": Math.round(inputCost),
       "cost.output": Math.round(outputCost),
-      "cost.reasoning": reasoningCost ? Math.round(reasoningCost) : undefined,
       "cost.cache_read": cacheReadCost ? Math.round(cacheReadCost) : undefined,
       "cost.cache_write_5m": cacheWrite5mCost ? Math.round(cacheWrite5mCost) : undefined,
       "cost.cache_write_1h": cacheWrite1hCost ? Math.round(cacheWrite1hCost) : undefined,

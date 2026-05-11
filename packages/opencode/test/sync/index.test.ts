@@ -4,7 +4,7 @@ import { Effect, Layer, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
 import { SyncEvent } from "../../src/sync"
-import { Database } from "@/storage/db"
+import { Database, eq } from "@/storage/db"
 import { EventSequenceTable, EventTable } from "../../src/sync/event.sql"
 import { MessageID } from "../../src/session/schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -320,6 +320,29 @@ describe("SyncEvent", () => {
           expect(events).toHaveLength(1)
           expect(events[0].id).toBe("evt_1")
           expect(sequence).toEqual({ seq: 0, ownerID: "owner-1" })
+        }),
+      ),
+    )
+
+    it.live(
+      "claim updates the event sequence owner",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          const { Created } = setup()
+          const id = MessageID.ascending()
+
+          yield* SyncEvent.use.run(Created, { id, name: "claimed" }, { publish: false })
+          yield* SyncEvent.use.claim(id, "owner-1")
+          yield* SyncEvent.use.claim(id, "owner-2")
+
+          const row = Database.use((db) =>
+            db
+              .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+              .from(EventSequenceTable)
+              .where(eq(EventSequenceTable.aggregate_id, id))
+              .get(),
+          )
+          expect(row).toEqual({ seq: 0, ownerID: "owner-2" })
         }),
       ),
     )

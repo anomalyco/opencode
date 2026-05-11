@@ -36,21 +36,14 @@ export type WorkspaceSelection =
 type WorkspaceSelectValue = WorkspaceSelection | { type: "existing-list" }
 type ExistingWorkspaceSelectValue = { workspace: Workspace }
 
-export function recentConnectedWorkspaces<WorkspaceInfo extends { id: string }>(input: {
-  sessions: readonly { workspaceID?: string; time: { updated: number } }[]
-  get: (workspaceID: string) => WorkspaceInfo | undefined
+export function recentConnectedWorkspaces<WorkspaceInfo extends { id: string; timeUsed: number | string }>(input: {
+  workspaces: readonly WorkspaceInfo[]
   status: (workspaceID: string) => string | undefined
   limit?: number
   omitWorkspaceID?: string
 }) {
-  const workspaces = input.sessions
-    .toSorted((a, b) => b.time.updated - a.time.updated)
-    .flatMap((session) => {
-      const workspace = session.workspaceID ? input.get(session.workspaceID) : undefined
-      return workspace && input.status(workspace.id) === "connected" ? [workspace] : []
-    })
-    .filter((workspace) => workspace.id !== input.omitWorkspaceID)
-    .filter((workspace, index, list) => list.findIndex((item) => item.id === workspace.id) === index)
+  const allWorkspaces = input.workspaces.filter((workspace) => input.status(workspace.id) === "connected")
+  const workspaces = allWorkspaces.toSorted((a, b) => Number(b.timeUsed) - Number(a.timeUsed))
   const recent = workspaces.slice(0, input.limit ?? 3)
 
   return { recent, hasMore: recent.length < workspaces.length }
@@ -83,10 +76,13 @@ export async function openWorkspaceSelect(input: {
   dialog: ReturnType<typeof useDialog>
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
+  project: ReturnType<typeof useProject>
   toast: ReturnType<typeof useToast>
   onSelect: (selection: WorkspaceSelection) => Promise<void> | void
 }) {
   input.dialog.clear()
+  await input.sdk.client.experimental.workspace.syncList().catch(() => undefined)
+  await input.project.workspace.sync().catch(() => undefined)
   const adapters = await loadWorkspaceAdapters(input)
   if (!adapters) return
   input.dialog.replace(() => <DialogWorkspaceSelect adapters={adapters} onSelect={input.onSelect} />)
@@ -200,8 +196,7 @@ export function DialogWorkspaceSelect(props: {
     const list = adapters()
     if (!list) return []
     const { recent, hasMore } = recentConnectedWorkspaces({
-      sessions: sync.data.session,
-      get: project.workspace.get,
+      workspaces: project.workspace.list(),
       status: project.workspace.status,
       omitWorkspaceID: omittedWorkspaceID(),
     })

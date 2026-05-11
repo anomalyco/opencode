@@ -7,8 +7,9 @@ import type { MCP as MCPNS } from "../../src/mcp/index"
 
 // Per-client state for controlling mock behavior
 interface MockClientState {
-  tools: Array<{ name: string; description?: string; inputSchema: object }>
+  tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
+  requestCalls: number
   listToolsShouldFail: boolean
   listToolsError: string
   listPromptsShouldFail: boolean
@@ -36,6 +37,7 @@ function getOrCreateClientState(name?: string): MockClientState {
     state = {
       tools: [{ name: "test_tool", description: "A test tool", inputSchema: { type: "object", properties: {} } }],
       listToolsCalls: 0,
+      requestCalls: 0,
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
       listPromptsShouldFail: false,
@@ -139,6 +141,12 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return { tools: this._state?.tools ?? [] }
     }
 
+    async request(request: { method: string }, schema: { parse: (value: unknown) => unknown }) {
+      if (this._state) this._state.requestCalls++
+      if (request.method === "tools/list") return schema.parse({ tools: this._state?.tools ?? [] })
+      throw new Error(`unsupported request: ${request.method}`)
+    }
+
     async listPrompts() {
       if (this._state?.listPromptsShouldFail) {
         throw new Error("listPrompts failed")
@@ -203,6 +211,11 @@ function withInstance(
       },
     })
   }
+}
+
+function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server: string) {
+  if ("status" in status) return status.status
+  return status[server]?.status
 }
 
 // ========================================================================
@@ -430,6 +443,59 @@ test(
         const tools = yield* mcp.tools()
         expect(Object.keys(tools).some((k) => k.includes("good_tool"))).toBe(true)
       }),
+  ),
+)
+
+test(
+  "falls back when MCP output schema refs fail SDK tool discovery",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "stitch-like-server"
+      const serverState = getOrCreateClientState("stitch-like-server")
+      serverState.listToolsShouldFail = true
+      serverState.listToolsError = "can't resolve reference #/$defs/ScreenInstance from id #"
+      serverState.tools = [
+        {
+          name: "render_screen",
+          description: "renders a screen",
+          inputSchema: { type: "object", properties: { prompt: { type: "string" } }, required: ["prompt"] },
+          outputSchema: { type: "object", properties: { screen: { $ref: "#/$defs/ScreenInstance" } } },
+        },
+      ]
+
+      const addResult = yield* mcp.add("stitch-like-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
+
+      expect(statusName(addResult.status, "stitch-like-server")).toBe("connected")
+
+      const tools = yield* mcp.tools()
+      expect(Object.keys(tools).some((key) => key.includes("render_screen"))).toBe(true)
+      expect(serverState.listToolsCalls).toBe(1)
+      expect(serverState.requestCalls).toBe(1)
+    }),
+  ),
+)
+
+test(
+  "does not fall back for non-schema MCP tool discovery errors",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "broken-server"
+      const serverState = getOrCreateClientState("broken-server")
+      serverState.listToolsShouldFail = true
+      serverState.listToolsError = "transport closed"
+
+      const addResult = yield* mcp.add("broken-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
+
+      expect(statusName(addResult.status, "broken-server")).toBe("failed")
+      expect(serverState.listToolsCalls).toBe(1)
+      expect(serverState.requestCalls).toBe(0)
+    }),
   ),
 )
 

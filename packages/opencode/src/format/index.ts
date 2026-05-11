@@ -7,8 +7,8 @@ import { mergeDeep } from "remeda"
 import { Config } from "@/config/config"
 import * as Log from "@opencode-ai/core/util/log"
 import * as Formatter from "./formatter"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "format" })
 
