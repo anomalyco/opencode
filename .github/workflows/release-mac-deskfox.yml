@@ -22,24 +22,41 @@
 # 签名:**不签**。Gatekeeper "右键打开"惯例,详见 docs/governance/数字签名问题.md。
 # 文件名规则(强制):*-deskfox.yml,跟上游 0 重名,pre-commit hook 自动豁免
 
+# ─── 🚧 2026-05-11 起 DISABLED ────────────────────────────────────────
+# Mac ship 跟 Win 一起停掉 GitHub Actions 自动化,统一改"本地打包 + 手动上传"
+# 模式(等有 Mac 机器或后续治理时复活)。
+# 原因:user 决策 — 不再用 GitHub Actions 出安装包(Win 端 sidecar build 死锁
+# 是直接触发,Mac 端虽然历史成功,但维持一套 CI 注定要持续投精力维护,统一停)。
+# Mac 端历史 ship:2026.5.7.1 / 2026.5.5.1 / 2026.5.4.1 / 2026.4.30.x — 详见
+# docs/installer-versions.md。
+# 复活方式:取消下方 `on:` 块注释 + 删 disabled 段。
+# ──────────────────────────────────────────────────────────────────────
+
 name: release-mac-deskfox
 
+# on:  # DISABLED 2026-05-11 — 见上方注释
+#   push:
+#     tags:
+#       - 'ship-mac-prod-*'
+#       - 'ship-mac-beta-*'
+#   workflow_dispatch:
+#     inputs:
+#       env:
+#         description: 'Build env'
+#         required: true
+#         default: 'dev'
+#         type: choice
+#         options:
+#           - dev
+#           - beta
+#           - prod
 on:
-  push:
-    tags:
-      - 'ship-mac-prod-*'
-      - 'ship-mac-beta-*'
   workflow_dispatch:
     inputs:
-      env:
-        description: 'Build env'
-        required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - beta
-          - prod
+      _disabled_notice:
+        description: 'DISABLED — 本 workflow 暂停,见文件头部注释'
+        required: false
+        default: 'disabled-since-2026-05-11'
 
 permissions:
   contents: write    # 创建 GitHub Release 必需
