@@ -29,6 +29,9 @@ const recorded = recordedTests({
   provider: "openai",
   protocol: "openai-responses",
   requires: ["OPENAI_API_KEY"],
+  // Two identical requests in one cassette — match by recording order so the
+  // second call replays the cached-hit interaction, not the cold-miss one.
+  options: { dispatch: "sequential" },
 })
 
 describe("OpenAI Responses cache recorded", () => {

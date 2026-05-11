@@ -28,7 +28,12 @@ const recorded = recordedTests({
   provider: "anthropic",
   protocol: "anthropic-messages",
   requires: ["ANTHROPIC_API_KEY"],
-  options: { redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }) },
+  // Two identical requests in one cassette — match by recording order so the
+  // second call replays the cached-hit interaction.
+  options: {
+    dispatch: "sequential",
+    redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }),
+  },
 })
 
 describe("Anthropic Messages cache recorded", () => {

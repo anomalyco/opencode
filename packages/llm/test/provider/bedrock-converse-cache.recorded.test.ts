@@ -35,6 +35,9 @@ const recorded = recordedTests({
   provider: "amazon-bedrock",
   protocol: "bedrock-converse",
   requires: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+  // Two identical requests in one cassette — match by recording order so the
+  // second call replays the cached-hit interaction.
+  options: { dispatch: "sequential" },
 })
 
 describe("Bedrock Converse cache recorded", () => {
