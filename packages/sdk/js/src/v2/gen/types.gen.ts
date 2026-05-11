@@ -1132,6 +1132,17 @@ export type McpRemoteConfig = {
  */
 export type LayoutConfig = "auto" | "stretch"
 
+export type ImageAttachmentConfig = {
+  auto_resize?: boolean
+  max_width?: number
+  max_height?: number
+  max_base64_bytes?: number
+}
+
+export type AttachmentConfig = {
+  image?: ImageAttachmentConfig
+}
+
 export type Config = {
   $schema?: string
   shell?: string
@@ -1246,6 +1257,7 @@ export type Config = {
   tools?: {
     [key: string]: boolean
   }
+  attachment?: AttachmentConfig
   enterprise?: {
     url?: string
   }
@@ -3284,11 +3296,11 @@ export type EventTuiToastShow1 = {
 }
 
 export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
+  name: "BadRequest"
+  data: {
+    message: string
+    kind?: "Params" | "Headers" | "Query" | "Body" | "Payload"
+  }
 }
 
 export type AuthRemoveData = {
@@ -5578,6 +5590,10 @@ export type SessionForkData = {
 }
 
 export type SessionForkErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
   /**
    * NotFoundError
    */
