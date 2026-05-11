@@ -36,7 +36,7 @@ export function zod<S extends Schema.Top>(schema: S): z.ZodType<Schema.Schema.Ty
  * mapped `.omit()` / `.extend()` surface triggers brand-intersection
  * explosions for branded primitives (`string & Brand<"SessionID">` extends
  * `object` via the brand and gets walked into the prototype by `DeepPartial`,
- * `updateSchema`, etc.), and zod's inference through `z.ZodType<T | undefined>`
+ * mapped-schema helpers, and zod's inference through `z.ZodType<T | undefined>`
  * wrappers also can't reconstruct `T` cleanly. Consumers that care about the
  * post-`.omit()` shape should cast `c.req.valid(...)` to the expected type.
  */
