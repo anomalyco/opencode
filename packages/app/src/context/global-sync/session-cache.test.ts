@@ -39,7 +39,7 @@ describe("app session cache", () => {
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
       question: Record<string, QuestionRequest[] | undefined>
-      streamed_part_text: Record<string, string | undefined>
+      part_text_accum_delta: Record<string, string | undefined>
     } = {
       session_status: { ses_1: { type: "busy" } as SessionStatus },
       session_diff: { ses_1: [] },
@@ -48,14 +48,14 @@ describe("app session cache", () => {
       part: { msg_1: [part("prt_1", "ses_1", "msg_1")] },
       permission: { ses_1: [] as PermissionRequest[] },
       question: { ses_1: [] as QuestionRequest[] },
-      streamed_part_text: { prt_1: "streamed text" },
+      part_text_accum_delta: { prt_1: "streamed text" },
     }
 
     dropSessionCaches(store, ["ses_1"])
 
     expect(store.message.ses_1).toBeUndefined()
     expect(store.part.msg_1).toBeUndefined()
-    expect(store.streamed_part_text.prt_1).toBeUndefined()
+    expect(store.part_text_accum_delta.prt_1).toBeUndefined()
     expect(store.todo.ses_1).toBeUndefined()
     expect(store.session_diff.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
@@ -73,7 +73,7 @@ describe("app session cache", () => {
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
       question: Record<string, QuestionRequest[] | undefined>
-      streamed_part_text: Record<string, string | undefined>
+      part_text_accum_delta: Record<string, string | undefined>
     } = {
       session_status: {},
       session_diff: {},
@@ -82,7 +82,7 @@ describe("app session cache", () => {
       part: { [m.id]: [part("prt_1", "ses_1", m.id)] },
       permission: {},
       question: {},
-      streamed_part_text: {},
+      part_text_accum_delta: {},
     }
 
     dropSessionCaches(store, ["ses_1"])

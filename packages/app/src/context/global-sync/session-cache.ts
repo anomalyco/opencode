@@ -18,7 +18,7 @@ type SessionCache = {
   part: Record<string, Part[] | undefined>
   permission: Record<string, PermissionRequest[] | undefined>
   question: Record<string, QuestionRequest[] | undefined>
-  streamed_part_text: Record<string, string | undefined>
+  part_text_accum_delta: Record<string, string | undefined>
 }
 
 export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<string>) {
@@ -29,7 +29,7 @@ export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<stri
     const parts = store.part[key]
     if (!parts?.some((part) => stale.has(part?.sessionID ?? ""))) continue
     for (const part of parts) {
-      delete store.streamed_part_text[part.id]
+      delete store.part_text_accum_delta[part.id]
     }
     delete store.part[key]
   }

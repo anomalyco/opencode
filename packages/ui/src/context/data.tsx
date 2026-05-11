@@ -24,7 +24,7 @@ type Data = {
   part: {
     [messageID: string]: Part[]
   }
-  streamed_part_text?: {
+  part_text_accum_delta?: {
     [partID: string]: string
   }
 }

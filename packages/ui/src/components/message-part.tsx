@@ -1444,7 +1444,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => (data.store.streamed_part_text?.[part().id] ?? part().text ?? "").trim()
+  const text = () => (data.store.part_text_accum_delta?.[part().id] ?? part().text ?? "").trim()
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1509,7 +1509,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => (data.store.streamed_part_text?.[part().id] ?? part().text).trim()
+  const text = () => (data.store.part_text_accum_delta?.[part().id] ?? part().text).trim()
 
   return (
     <Show when={text()}>
