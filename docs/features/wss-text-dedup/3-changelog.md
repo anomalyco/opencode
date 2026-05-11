@@ -15,7 +15,7 @@ wss-client.ts 加第二层 text dedup(同 chat 同文本 10s skip),防飞书 IM 
 | commit | 简述 |
 |---|---|
 | `5d64b0a09` | feat(feishu-bridge): wss 加同 text 短期 dedup |
-| (本笔 docs) | docs(wss-text-dedup): 三文档 + INDEX + 改动日志 |
+| `adb2d56c3` | docs(wss-text-dedup): 三文档 + INDEX + 改动日志 |
 
 ## 改动文件
 
