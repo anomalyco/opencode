@@ -1,7 +1,7 @@
 export * as ConfigPermission from "./permission"
 import { Schema, SchemaGetter } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 export const Action = Schema.Literals(["ask", "allow", "deny"])
   .annotate({ identifier: "PermissionActionConfig" })
@@ -35,6 +35,9 @@ const InputObject = Schema.StructWithRest(
     question: Schema.optional(Action),
     webfetch: Schema.optional(Action),
     websearch: Schema.optional(Action),
+    codesearch: Schema.optional(Action),
+    repo_clone: Schema.optional(Rule),
+    repo_overview: Schema.optional(Rule),
     lsp: Schema.optional(Rule),
     doom_loop: Schema.optional(Action),
     skill: Schema.optional(Rule),

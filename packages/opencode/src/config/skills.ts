@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { withStatics } from "@opencode-ai/core/schema"
 
 export const Info = Schema.Struct({
   paths: Schema.optional(Schema.Array(Schema.String)).annotate({
