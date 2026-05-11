@@ -65,7 +65,7 @@ export type AutocompleteOption = {
   disabled?: boolean
   description?: string
   isDirectory?: boolean
-  onSelect?: () => void
+  onSelect?: (arg?: string) => void
   path?: string
 }
 
@@ -638,8 +638,15 @@ export function Autocomplete(props: {
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
+    let arg: string | undefined
+    if (store.visible === "/") {
+      const text = props.input().plainText
+      const afterSlash = text.slice(store.index + 1)
+      const firstSpace = afterSlash.indexOf(" ")
+      arg = firstSpace === -1 ? undefined : afterSlash.slice(firstSpace + 1).trim()
+    }
     hide()
-    selected.onSelect?.()
+    selected.onSelect?.(arg)
   }
 
   function expandDirectory() {

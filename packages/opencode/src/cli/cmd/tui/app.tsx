@@ -38,6 +38,8 @@ import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
+import { DialogConfig } from "@tui/component/dialog-config"
+import { DialogTuiConfig } from "@tui/component/dialog-tui-config"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
@@ -672,6 +674,28 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         slashName: "help",
         run: () => {
           dialog.replace(() => <DialogHelp />)
+        },
+        category: "System",
+      },
+      {
+        name: "config.global",
+        title: "Open global config",
+        slashName: "config",
+        slashAliases: ["settings"],
+        run: () => {
+          const arg = command.slashArg()
+          dialog.replace(() => <DialogConfig gotoKey={arg} />)
+        },
+        category: "System",
+      },
+      {
+        name: "config.tui",
+        title: "Open TUI settings",
+        slashName: "tui",
+        slashAliases: ["tuisettings"],
+        run: () => {
+          const arg = command.slashArg()
+          dialog.replace(() => <DialogTuiConfig gotoKey={arg} />)
         },
         category: "System",
       },

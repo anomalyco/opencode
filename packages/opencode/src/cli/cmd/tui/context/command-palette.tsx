@@ -14,13 +14,14 @@ type SlashEntry = {
   display: string
   description?: string
   aliases?: string[]
-  onSelect: () => void
+  onSelect: (arg?: string) => void
 }
 
 type CommandPaletteContext = {
   run(command: string): void
   show(): void
   slashes: Accessor<readonly SlashEntry[]>
+  slashArg: Accessor<string | undefined>
   suspend(enabled: boolean): void
   readonly suspended: boolean
   matcher: ReturnType<typeof reactiveMatcherFromSignal>
@@ -45,6 +46,7 @@ export function CommandPaletteProvider(props: ParentProps) {
   const dialog = useDialog()
   const keymap = useOpencodeKeymap()
   const [suspendCount, setSuspendCount] = createSignal(0)
+  const [slashArg, setSlashArg] = createSignal<string | undefined>(undefined)
   const entries = useKeymapSelector((keymap: OpenTuiKeymap) =>
     keymap
       .getCommandEntries({
@@ -74,7 +76,10 @@ export function CommandPaletteProvider(props: ParentProps) {
         aliases: Array.isArray(slashAliases)
           ? slashAliases.filter((alias): alias is string => typeof alias === "string").map((alias) => `/${alias}`)
           : undefined,
-        onSelect: () => run(entry.command.name),
+        onSelect: (arg) => {
+          setSlashArg(arg)
+          run(entry.command.name)
+        },
       }
     }),
   )
@@ -85,6 +90,7 @@ export function CommandPaletteProvider(props: ParentProps) {
       dialog.replace(() => <CommandPaletteDialog run={run} />)
     },
     slashes,
+    slashArg,
     suspend(enabled: boolean) {
       setSuspendCount((count) => Math.max(0, count + (enabled ? 1 : -1)))
     },
