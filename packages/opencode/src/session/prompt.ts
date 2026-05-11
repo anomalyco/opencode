@@ -54,7 +54,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
-import { EventV2 } from "@/v2/event"
+import { SyncEvent } from "@/sync"
 import { SessionEvent } from "@/v2/session-event"
 import { Modelv2 } from "@/v2/model"
 import { AgentAttachment, FileAttachment, Source } from "@/v2/session-prompt"
@@ -118,6 +118,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const sync = yield* SyncEvent.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
     })
@@ -809,12 +810,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               },
             }
             yield* sessions.updatePart(part)
-            EventV2.run(SessionEvent.Shell.Started.Sync, {
-              sessionID: input.sessionID,
-              timestamp: DateTime.makeUnsafe(started),
-              callID,
-              command: input.command,
-            })
+            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+              yield* sync.run(SessionEvent.Shell.Started.Sync, {
+                sessionID: input.sessionID,
+                timestamp: DateTime.makeUnsafe(started),
+                callID,
+                command: input.command,
+              })
+            }
             return { msg, part, cwd: ctx.directory }
           }).pipe(Effect.ensuring(markReady))
 
@@ -830,12 +833,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
               }
               const completed = Date.now()
-              EventV2.run(SessionEvent.Shell.Ended.Sync, {
-                sessionID: input.sessionID,
-                timestamp: DateTime.makeUnsafe(completed),
-                callID: part.callID,
-                output,
-              })
+              if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+                yield* sync.run(SessionEvent.Shell.Ended.Sync, {
+                  sessionID: input.sessionID,
+                  timestamp: DateTime.makeUnsafe(completed),
+                  callID: part.callID,
+                  output,
+                })
+              }
               if (!msg.time.completed) {
                 msg.time.completed = completed
                 yield* sessions.updateMessage(msg)
@@ -975,34 +980,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
 
       if (current?.agent !== info.agent) {
-        EventV2.run(
-          SessionEvent.AgentSwitched.Sync,
-          {
-            sessionID: input.sessionID,
-            timestamp: DateTime.makeUnsafe(info.time.created),
-            agent: info.agent,
-          },
-          { bypassExperimentalEventSystem: true },
-        )
+        yield* sync.run(SessionEvent.AgentSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          agent: info.agent,
+        })
       }
       if (
         current?.model?.providerID !== info.model.providerID ||
         current.model.id !== info.model.modelID ||
         (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant
       ) {
-        EventV2.run(
-          SessionEvent.ModelSwitched.Sync,
-          {
-            sessionID: input.sessionID,
-            timestamp: DateTime.makeUnsafe(info.time.created),
-            model: {
-              id: Modelv2.ID.make(info.model.modelID),
-              providerID: Modelv2.ProviderID.make(info.model.providerID),
-              variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
-            },
+        yield* sync.run(SessionEvent.ModelSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          model: {
+            id: Modelv2.ID.make(info.model.modelID),
+            providerID: Modelv2.ProviderID.make(info.model.providerID),
+            variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
           },
-          { bypassExperimentalEventSystem: true },
-        )
+        })
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
@@ -1371,22 +1368,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      EventV2.run(SessionEvent.Prompted.Sync, {
-        sessionID: input.sessionID,
-        timestamp: DateTime.makeUnsafe(info.time.created),
-        prompt: {
-          text: nextPrompt.text.join("\n"),
-          files: nextPrompt.files,
-          agents: nextPrompt.agents,
-        },
-      })
-      for (const text of nextPrompt.synthetic) {
-        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        EventV2.run(SessionEvent.Synthetic.Sync, {
+      if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+        yield* sync.run(SessionEvent.Prompted.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
-          text,
+          prompt: {
+            text: nextPrompt.text.join("\n"),
+            files: nextPrompt.files,
+            agents: nextPrompt.agents,
+          },
         })
+      }
+      for (const text of nextPrompt.synthetic) {
+        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+        if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+          yield* sync.run(SessionEvent.Synthetic.Sync, {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(info.time.created),
+            text,
+          })
+        }
       }
 
       return { info, parts }
@@ -1820,6 +1821,7 @@ export const defaultLayer = Layer.suspend(() =>
         LLM.defaultLayer,
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
+        SyncEvent.defaultLayer,
       ),
     ),
   ),

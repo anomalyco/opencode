@@ -18,8 +18,9 @@ import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { serviceUse } from "@/effect/service-use"
-import { EventV2 } from "@/v2/event"
+import { SyncEvent } from "@/sync"
 import { SessionEvent } from "@/v2/session-event"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -219,6 +220,7 @@ export const layer: Layer.Layer<
   | Plugin.Service
   | SessionProcessor.Service
   | Provider.Service
+  | SyncEvent.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -229,6 +231,7 @@ export const layer: Layer.Layer<
     const plugin = yield* Plugin.Service
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
+    const sync = yield* SyncEvent.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
@@ -567,12 +570,14 @@ export const layer: Layer.Layer<
             parts: [],
           },
         )
-        EventV2.run(SessionEvent.Compaction.Ended.Sync, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(Date.now()),
-          text: summary ?? "",
-          include: selected.tail_start_id,
-        })
+        if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+          yield* sync.run(SessionEvent.Compaction.Ended.Sync, {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+            text: summary ?? "",
+            include: selected.tail_start_id,
+          })
+        }
         yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
       }
       return result
@@ -601,11 +606,13 @@ export const layer: Layer.Layer<
         auto: input.auto,
         overflow: input.overflow,
       })
-      EventV2.run(SessionEvent.Compaction.Started.Sync, {
-        sessionID: input.sessionID,
-        timestamp: DateTime.makeUnsafe(Date.now()),
-        reason: input.auto ? "auto" : "manual",
-      })
+      if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+        yield* sync.run(SessionEvent.Compaction.Started.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+          reason: input.auto ? "auto" : "manual",
+        })
+      }
     })
 
     return Service.of({
@@ -626,6 +633,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(SyncEvent.defaultLayer),
   ),
 )
 

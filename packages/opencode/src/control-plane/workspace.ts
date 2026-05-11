@@ -676,14 +676,12 @@ export const layer = Layer.effect(
         }
 
         if (input.workspaceID === null) {
-          yield* Effect.sync(() =>
-            SyncEvent.run(Session.Event.Updated, {
-              sessionID: input.sessionID,
-              info: {
-                workspaceID: null,
-              },
-            }),
-          )
+          yield* sync.run(Session.Event.Updated, {
+            sessionID: input.sessionID,
+            info: {
+              workspaceID: null,
+            },
+          })
 
           log.info("session warp complete", {
             workspaceID: input.workspaceID,
