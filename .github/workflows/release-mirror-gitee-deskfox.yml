@@ -23,15 +23,35 @@
 
 name: release-mirror-gitee-deskfox
 
+# ─── 🚧 2026-05-11 起 DISABLED ────────────────────────────────────────
+# Gitee mirror 改为本地 API 手动建 release + 跑 mirror-asset-to-gitee.ps1 上传 .exe。
+# 原因:(1) 本 workflow 长期 silent fail — 5.5.1 / 5.9.1 GH 显示 success 但 Gitee
+#   实际没建 release(根因待查);(2) Win 端 release-deskfox.yml 已 disabled,
+#   GitHub Release 改本地手动 publish,这条 mirror 也无需自动化。
+# 本地流程:
+#   1. 本地 build .exe(packages/branding/installer/Output/)
+#   2. gh release create ship-prod-<version> ... --draft + publish
+#   3. 用 Gitee API 手动建 release(或后续给 mirror-asset 加 create-if-missing 逻辑)
+#   4. 跑 packages/branding/scripts/mirror-asset-to-gitee.ps1 -Tag ...
+# 复活方式:取消下方 `on:` 块注释 + 删 disabled 段。
+# ──────────────────────────────────────────────────────────────────────
+
+# on:  # DISABLED 2026-05-11 — 见上方注释
+#   release:
+#     types: [published]
+#   workflow_dispatch:
+#     inputs:
+#       tag:
+#         description: 'Release tag to mirror (e.g. ship-prod-2026.5.3.1). 用于补镜像 / 失败 re-run。'
+#         required: true
+#         type: string
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Release tag to mirror (e.g. ship-prod-2026.5.3.1). 用于补镜像 / 失败 re-run。'
-        required: true
-        type: string
+      _disabled_notice:
+        description: 'DISABLED — 本 workflow 暂停,见文件头部注释'
+        required: false
+        default: 'disabled-since-2026-05-11'
 
 permissions:
   contents: read
