@@ -963,5 +963,19 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     return out(data, commits)
   }
 
+  if (event.type === "session.warning") {
+    if (event.properties.sessionID !== input.sessionID) {
+      return out(data, commits)
+    }
+
+    commits.push({
+      kind: "error",
+      text: event.properties.message,
+      phase: "start",
+      source: "system",
+    })
+    return out(data, commits)
+  }
+
   return out(data, commits)
 }

@@ -73,6 +73,7 @@ interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
   shouldBreak: boolean
   snapshot: string | undefined
+  snapshotDisabled: boolean
   blocked: boolean
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
@@ -116,17 +117,14 @@ export const layer: Layer.Layer<
     const sync = yield* SyncEvent.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
-      // Pre-capture snapshot before the LLM stream starts. The AI SDK
-      // may execute tools internally before emitting start-step events,
-      // so capturing inside the event handler can be too late.
-      const initialSnapshot = yield* snapshot.track()
       const ctx: ProcessorContext = {
         assistantMessage: input.assistantMessage,
         sessionID: input.sessionID,
         model: input.model,
         toolcalls: {},
         shouldBreak: false,
-        snapshot: initialSnapshot,
+        snapshot: undefined,
+        snapshotDisabled: false,
         blocked: false,
         needsCompaction: false,
         currentText: undefined,
@@ -134,6 +132,26 @@ export const layer: Layer.Layer<
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
+
+      const trySnapshot = Effect.fnUntraced(function* <A>(operation: string, fx: Effect.Effect<A>) {
+        if (ctx.snapshotDisabled) return
+        const exit = yield* Effect.exit(fx)
+        if (Exit.isSuccess(exit)) return exit.value
+        ctx.snapshot = undefined
+        ctx.snapshotDisabled = true
+        const cause = Cause.pretty(exit.cause)
+        slog.warn("snapshot disabled", { operation, cause })
+        const message = errorMessage(Cause.squash(exit.cause))
+        yield* bus.publish(Session.Event.Warning, {
+          sessionID: ctx.sessionID,
+          message: `File change tracking failed. Undo/redo is disabled for this response.${message ? `\n${message}` : ""}`,
+        })
+      })
+
+      // Pre-capture snapshot before the LLM stream starts. The AI SDK
+      // may execute tools internally before emitting start-step events,
+      // so capturing inside the event handler can be too late.
+      ctx.snapshot = yield* trySnapshot("initial", snapshot.track())
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -470,7 +488,7 @@ export const layer: Layer.Layer<
             throw value.error
 
           case "start-step":
-            if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
+            if (!ctx.snapshot) ctx.snapshot = yield* trySnapshot("start-step", snapshot.track())
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
@@ -497,7 +515,7 @@ export const layer: Layer.Layer<
             return
 
           case "finish-step": {
-            const completedSnapshot = yield* snapshot.track()
+            const completedSnapshot = yield* trySnapshot("finish-step", snapshot.track())
             const usage = Session.getUsage({
               model: ctx.model,
               usage: value.usage,
@@ -531,8 +549,8 @@ export const layer: Layer.Layer<
             })
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
-              const patch = yield* snapshot.patch(ctx.snapshot)
-              if (patch.files.length) {
+              const patch = yield* trySnapshot("finish-step-patch", snapshot.patch(ctx.snapshot))
+              if (patch?.files.length) {
                 yield* session.updatePart({
                   id: PartID.ascending(),
                   messageID: ctx.assistantMessage.id,
@@ -636,9 +654,11 @@ export const layer: Layer.Layer<
       })
 
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
-        if (ctx.snapshot) {
-          const patch = yield* snapshot.patch(ctx.snapshot)
-          if (patch.files.length) {
+        const pendingSnapshot = ctx.snapshot
+        ctx.snapshot = undefined
+        if (pendingSnapshot && !ctx.assistantMessage.error) {
+          const patch = yield* trySnapshot("cleanup-patch", snapshot.patch(pendingSnapshot))
+          if (patch?.files.length) {
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -648,7 +668,6 @@ export const layer: Layer.Layer<
               files: patch.files,
             })
           }
-          ctx.snapshot = undefined
         }
 
         if (ctx.currentText) {

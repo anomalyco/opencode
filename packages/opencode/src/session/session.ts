@@ -341,6 +341,13 @@ export const Event = {
       error: MessageV2.Assistant.fields.error,
     }),
   ),
+  Warning: BusEvent.define(
+    "session.warning",
+    Schema.Struct({
+      sessionID: Schema.optional(SessionID),
+      message: Schema.String,
+    }),
+  ),
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {

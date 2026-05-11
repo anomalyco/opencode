@@ -4,7 +4,6 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { Snapshot } from "../../src/snapshot"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Filesystem } from "@/util/filesystem"
 import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
@@ -300,10 +299,51 @@ test("patch with invalid hash", async () => {
       // Create a change
       await Filesystem.write(`${tmp.path}/test.txt`, "TEST")
 
-      // Try to patch with invalid hash - should handle gracefully
       const patch = await run(tmp.path, (snapshot) => snapshot.patch("invalid-hash-12345"))
       expect(patch.files).toEqual([])
       expect(patch.hash).toBe("invalid-hash-12345")
+    },
+  })
+})
+
+test("restore with invalid hash fails", async () => {
+  await using tmp = await bootstrap()
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(run(tmp.path, (snapshot) => snapshot.restore("invalid-hash-12345"))).rejects.toThrow(
+        "exited with code",
+      )
+    },
+  })
+})
+
+test("track does not record empty tree snapshots", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await run(tmp.path, (snapshot) => snapshot.track())).toBeUndefined()
+    },
+  })
+})
+
+test("track fails closed when nested git repo has no checkout", async () => {
+  await using tmp = await bootstrap()
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Filesystem.write(`${tmp.path}/file.txt`, "v1\n")
+      expect(await run(tmp.path, (snapshot) => snapshot.track())).toBeTruthy()
+
+      await Filesystem.write(`${tmp.path}/file.txt`, "v2\n")
+      await $`mkdir ${tmp.path}/nested-unborn`.quiet()
+      await $`git init`.cwd(`${tmp.path}/nested-unborn`).quiet()
+      await Filesystem.write(`${tmp.path}/nested-unborn/file.txt`, "nested\n")
+
+      await expect(run(tmp.path, (snapshot) => snapshot.track())).rejects.toThrow(
+        "does not have a commit checked out",
+      )
     },
   })
 })

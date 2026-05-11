@@ -135,6 +135,7 @@ function sid(event: Event): string | undefined {
     event.type === "question.replied" ||
     event.type === "question.rejected" ||
     event.type === "session.error" ||
+    event.type === "session.warning" ||
     event.type === "session.status"
   ) {
     return event.properties.sessionID

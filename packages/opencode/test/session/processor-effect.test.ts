@@ -1,4 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { $ } from "bun"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
@@ -229,6 +230,64 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
         expect(value).toBe("continue")
         expect(calls).toBe(1)
         expect(parts.some((part) => part.type === "text" && part.text === "hello")).toBe(true)
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor disables snapshots without stopping the agent", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const nested = path.join(dir, "nested-unborn")
+        yield* Effect.promise(() => $`mkdir ${nested}`.quiet())
+        yield* Effect.promise(() => $`git init`.cwd(nested).quiet())
+        yield* Effect.promise(() => Bun.write(path.join(nested, "file.txt"), "nested\n"))
+
+        const { processors, session, provider } = yield* boot()
+        const bus = yield* Bus.Service
+        yield* llm.text("still running")
+
+        const chat = yield* session.create({})
+        const warnings: string[] = []
+        const off = yield* bus.subscribeCallback(Session.Event.Warning, (evt) => {
+          if (evt.properties.sessionID !== chat.id) return
+          warnings.push(evt.properties.message)
+        })
+        const parent = yield* user(chat.id, "hi")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "hi" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        off()
+        expect(value).toBe("continue")
+        expect(handle.message.error).toBeUndefined()
+        expect(warnings).toHaveLength(1)
+        expect(warnings[0]).toContain("does not have a commit checked out")
+        expect(parts.some((part) => part.type === "text" && part.text === "still running")).toBe(true)
+        expect(parts.some((part) => part.type === "patch")).toBe(false)
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),

@@ -832,6 +832,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     })
   })
 
+  event.on("session.warning", (evt) => {
+    toast.show({
+      variant: "warning",
+      message: evt.properties.message,
+      duration: 10000,
+    })
+  })
+
   event.on("installation.update-available", async (evt) => {
     const version = evt.properties.version
 

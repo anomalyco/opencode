@@ -1,4 +1,4 @@
-import { Effect, Layer, Context, Schema } from "effect"
+import { Cause, Effect, Layer, Context, Schema } from "effect"
 import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
@@ -7,6 +7,7 @@ import { withStatics } from "@opencode-ai/core/schema"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
+import { errorMessage } from "@/util/error"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -96,7 +97,20 @@ export const layer = Layer.effect(
           if (part.type === "step-finish" && part.snapshot) to = part.snapshot
         }
       }
-      if (from && to) return yield* snapshot.diffFull(from, to)
+      if (from && to) {
+        return yield* snapshot.diffFull(from, to).pipe(
+          Effect.catchCause((cause) =>
+            Effect.gen(function* () {
+              const message = errorMessage(Cause.squash(cause))
+              yield* bus.publish(Session.Event.Warning, {
+                sessionID: input.messages[0]?.info.sessionID,
+                message: `Failed to compute file change summary.${message ? `\n${message}` : ""}`,
+              })
+              return yield* Effect.failCause(cause)
+            }),
+          ),
+        )
+      }
       return []
     })
 

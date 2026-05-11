@@ -443,6 +443,24 @@ export default function Layout(props: ParentProps) {
           return
         }
 
+        if (e.details?.type === "session.warning") {
+          const props = e.details.properties
+          showToast({
+            icon: "warning",
+            description: props.message,
+            duration: 10000,
+            actions: props.sessionID
+              ? [
+                  {
+                    label: language.t("notification.action.goToSession"),
+                    onClick: () => navigate(`/${base64Encode(e.name)}/session/${props.sessionID}`),
+                  },
+                ]
+              : undefined,
+          })
+          return
+        }
+
         if (
           e.details?.type === "question.replied" ||
           e.details?.type === "question.rejected" ||
