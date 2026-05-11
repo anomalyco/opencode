@@ -1,5 +1,6 @@
 import { OpenApi } from "effect/unstable/httpapi"
 import { OpenCodeHttpApi } from "./api"
+import { QueryBooleanOpenApi } from "./groups/query"
 
 type OpenApiParameter = {
   name: string
@@ -54,18 +55,20 @@ type OpenApiResponse = {
 // Query schemas describe decoded Effect values, but the generated SDK needs the
 // public call shape. These keep SDK callers passing numbers/booleans while the
 // server still decodes string query params at runtime.
-const QueryBooleanParameters = new Set(["roots", "archived"])
 const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /experimental/session start": { type: "number" },
+  "GET /experimental/session roots": QueryBooleanOpenApi,
+  "GET /experimental/session archived": QueryBooleanOpenApi,
   "GET /find/file limit": { type: "integer", minimum: 1, maximum: 200 },
   "GET /experimental/session cursor": { type: "number" },
   "GET /experimental/session limit": { type: "number" },
   "GET /session start": { type: "number" },
+  "GET /session roots": QueryBooleanOpenApi,
   "GET /session limit": { type: "number" },
-  "GET /session/{sessionID}/diff messageID": { type: "string", pattern: "^msg.*" },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
   "GET /api/session limit": { type: "number" },
   "GET /api/session start": { type: "number" },
+  "GET /api/session roots": QueryBooleanOpenApi,
   "GET /api/session/{sessionID}/message limit": { type: "number" },
 }
 
@@ -175,17 +178,20 @@ function addLegacyErrorSchemas(spec: OpenApiSpec) {
   if (!spec.components?.schemas) return
   spec.components.schemas.BadRequestError = {
     type: "object",
-    required: ["data", "errors", "success"],
+    required: ["name", "data"],
     properties: {
-      data: {},
-      errors: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: {},
+      name: { type: "string", enum: ["BadRequest"] },
+      data: {
+        type: "object",
+        required: ["message"],
+        properties: {
+          message: { type: "string" },
+          kind: {
+            type: "string",
+            enum: ["Params", "Headers", "Query", "Body", "Payload"],
+          },
         },
       },
-      success: { type: "boolean", enum: [false] },
     },
   }
   spec.components.schemas.NotFoundError = {
@@ -485,12 +491,6 @@ function normalizeParameter(param: OpenApiParameter, route: string) {
     const override = QueryParameterSchemas[`${route} ${param.name}`]
     if (override) {
       param.schema = override
-      return
-    }
-    if (QueryBooleanParameters.has(param.name)) {
-      param.schema = {
-        anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
-      }
       return
     }
   }
