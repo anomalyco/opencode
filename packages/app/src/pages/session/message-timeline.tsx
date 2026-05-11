@@ -67,17 +67,29 @@ const idle = { type: "idle" as const }
 const estimatedTurnHeight = 680
 const gap = 48
 const windowOverscan = 1600
-const windowThreshold = 24
+const windowThreshold = 10
 const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
 const IDLE_QUEUE_MS = 1_200
 const scrollDebugKey = "opencode.session.scroll.debug"
+const mdKey = "opencode.markdown.debug"
+const domMs = 5_000
+const lagMs = 250
 
 function probe(id?: string) {
   if (typeof window === "undefined") return false
   const flag = window.localStorage.getItem(scrollDebugKey)
   return flag === "1" || (!!id && flag === id)
+}
+
+function mddebug() {
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem(mdKey) === "1"
+  } catch {
+    return false
+  }
 }
 
 type MathMode = "turn" | "markdown"
@@ -291,6 +303,9 @@ export function MessageTimeline(props: {
   let pinSource = "unknown"
   let blank: number | undefined
   let idleTimer: ReturnType<typeof setTimeout> | undefined
+  let lagAt = 0
+  let lagMax = 0
+  let mdWasDebug = false
   let windowAdjustVersion = 0
   const turnHeights = new Map<string, number>()
   const [revision, setRevision] = createSignal(0)
@@ -443,12 +458,55 @@ export function MessageTimeline(props: {
       `[jump] stage=${stage} id=${id || "none"} index=${index} current=${props.currentMessageId || "none"} seeking=${props.seekingMessageId || "none"} scrollTop=${data?.top ?? "none"} scrollHeight=${data?.height ?? "none"} clientHeight=${data?.client ?? "none"} max=${data?.max ?? "none"} gap=${data?.gap ?? "none"} window=[${windowed.start},${windowed.end}] spacerTop=${Math.round(windowed.top)} spacerBottom=${Math.round(windowed.bottom)} total=${Math.round(totalHeight())} measured=${turnHeights.size} visible=${visibleRendered().length} nodeTop=${top} nodeBottom=${bottom} nodeHeight=${height}${extra ? ` ${extra}` : ""}`,
     )
   }
+  const census = () => {
+    const enabled = mddebug()
+    if (enabled && !mdWasDebug) {
+      console.debug("[markdown:dom] enabled")
+    }
+    mdWasDebug = enabled
+    if (!enabled) {
+      lagMax = 0
+      return
+    }
+    const root = viewport
+    if (!root) return
+
+    const start = performance.now()
+    const list = contentRef?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
+    const full = root.querySelectorAll('[data-component="markdown"][data-markdown-stage="full"]').length
+    const structure = root.querySelectorAll('[data-component="markdown"][data-markdown-stage="structure"]').length
+    const lite = root.querySelectorAll('[data-component="markdown"][data-markdown-stage="lite"]').length
+    const markdown = root.querySelectorAll('[data-component="markdown"]').length
+    const katex = root.querySelectorAll(".katex,.katex-display,.katex-html,.katex-mathml").length
+    const turns = root.querySelectorAll("[data-message-id]").length
+    const nodes = root.querySelectorAll("*").length
+    const text = root.textContent?.length ?? 0
+    const data = snap(root)
+
+    console.debug(
+      `[markdown:dom] id=${sessionID() || "none"} turns=${turns} visible=${visibleRendered().length} rendered=${rendered().length} window=[${windowed.start},${windowed.end}] markdown=${markdown} full=${full} structure=${structure} lite=${lite} katex=${katex} nodes=${nodes} text=${text} measured=${turnHeights.size} upgraded=${upgraded.size} scrollTop=${data.top} scrollHeight=${data.height} clientHeight=${data.client} spacerTop=${Math.round(windowed.top)} spacerBottom=${Math.round(windowed.bottom)} listHeight=${list ? Math.round(list.getBoundingClientRect().height) : "none"} lagMax=${Math.round(lagMax)} took=${Math.round(performance.now() - start)}`,
+    )
+    lagMax = 0
+  }
+  const sampleLag = () => {
+    if (!mddebug()) {
+      lagAt = 0
+      return
+    }
+    const now = performance.now()
+    if (lagAt > 0) lagMax = Math.max(lagMax, Math.max(0, now - lagAt))
+    lagAt = now + lagMs
+  }
   const [windowed, setWindowed] = createStore({
     start: 0,
     end: Infinity,
     top: 0,
     bottom: 0,
   })
+
+  makeTimer(census, domMs, setInterval)
+  makeTimer(sampleLag, lagMs, setInterval)
+
   const pendingMessage = createMemo(() => active(sessionMessages()))
   const [jump, setJump] = createSignal(false)
   const sessionStatus = createMemo(() => {
