@@ -115,6 +115,33 @@ const { Instance } = await import("../../src/project/instance")
 const { WithInstance } = await import("../../src/project/with-instance")
 const { tmpdir } = await import("../fixture/fixture")
 
+test("clientMetadata includes configured OAuth scope", async () => {
+  const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
+  const { McpAuth } = await import("../../src/mcp/auth")
+
+  await using tmp = await tmpdir()
+
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const auth = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* McpAuth.Service
+        }).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
+      const provider = new McpOAuthProvider(
+        "test-scope",
+        "https://example.com/mcp",
+        { scope: "openid email profile" },
+        { onRedirect: async () => {} },
+        auth,
+      )
+
+      expect(provider.clientMetadata.scope).toBe("openid email profile")
+    },
+  })
+})
+
 test("first connect to OAuth server shows needs_auth instead of failed", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
