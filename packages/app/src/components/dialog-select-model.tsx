@@ -103,7 +103,7 @@ export function ModelSelectorPopover(props: {
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
-  onClose?: (cause: "escape" | "select") => void
+  onOpenChange?: (open: boolean) => void
 }) {
   const [store, setStore] = createStore<{
     open: boolean
@@ -141,6 +141,7 @@ export function ModelSelectorPopover(props: {
       onOpenChange={(next) => {
         if (next) setStore("dismiss", null)
         setStore("open", next)
+        props.onOpenChange?.(next)
       }}
       modal={false}
       placement="top-start"

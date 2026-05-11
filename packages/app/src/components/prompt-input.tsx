@@ -72,6 +72,7 @@ import { type SessionHistoryEntry } from "@/context/session-history"
 import { working as sessionWorking } from "@/pages/session/session-working"
 import { createInputUndoEntry, createInputUndoState, recordInputUndo, stepInputUndo } from "./prompt-input/input-undo"
 import { workspaceKey } from "@/pages/layout/helpers"
+import { uiPerfTriggerDown, uiPerfOpen } from "@/utils/ui-perf"
 
 interface PromptInputProps {
   class?: string
@@ -2001,6 +2002,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             valueClass="truncate"
                             triggerStyle={control()}
                             variant="ghost"
+                            triggerProps={{
+                              onPointerDown: (e: PointerEvent) => uiPerfTriggerDown("agent-selector", e),
+                            }}
+                            onOpenChange={(open) => uiPerfOpen("agent-selector", open)}
                           />
                         </TooltipKeybind>
                       </Show>
@@ -2048,7 +2053,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               size: "normal",
                               style: control(),
                               class: "prompt-pick min-w-0 max-w-[320px] group",
+                              onPointerDown: (e: PointerEvent) => uiPerfTriggerDown("model-selector", e),
                             }}
+                            onOpenChange={(open) => uiPerfOpen("model-selector", open)}
                           >
                             <Show when={local.model.current()?.provider?.id}>
                               <ProviderIcon
