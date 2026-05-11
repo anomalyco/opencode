@@ -1,4 +1,4 @@
-import { parseDiffFromFile, type FileDiffMetadata } from "@pierre/diffs"
+import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
 import { formatPatch, parsePatch, structuredPatch } from "diff"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 
@@ -89,24 +89,29 @@ function patch(diff: ReviewDiff) {
   }
 }
 
-function file(file: string, patch: string, before: string, after: string) {
+function file(file: string, patch: string, before: string, after: string, partial = false) {
   const hit = cache.get(patch)
   if (hit) return hit
 
-  const value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  let value: FileDiffMetadata
+  value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  if (partial) value = parsePatchFiles(patch)[0].files[0]!
+
   cache.set(patch, value)
   return value
 }
 
-export function normalize(diff: ReviewDiff): ViewDiff {
+export function normalize(diff: ReviewDiff, partial = false): ViewDiff {
   const next = patch(diff)
+  const fileDiff = file(diff.file, next.patch, next.before, next.after, partial)
+  // debugger
   return {
     file: diff.file,
     patch: next.patch,
     additions: diff.additions,
     deletions: diff.deletions,
     status: diff.status,
-    fileDiff: file(diff.file, next.patch, next.before, next.after),
+    fileDiff,
   }
 }
 
