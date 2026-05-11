@@ -5,7 +5,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import z from "zod"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
-import { NonNegativeInt } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Git } from "@/git"
 
 const log = Log.create({ service: "storage" })

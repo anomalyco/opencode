@@ -1,4 +1,3 @@
-import z from "zod"
 import { and } from "drizzle-orm"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
@@ -18,8 +17,8 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
 
 const log = Log.create({ service: "project" })
@@ -89,13 +88,13 @@ export function fromRow(row: Row): Info {
   }
 }
 
-export const UpdateInput = z.object({
-  projectID: ProjectID.zod,
-  name: z.string().optional(),
-  icon: zod(ProjectIcon).optional(),
-  commands: zod(ProjectCommands).optional(),
+export const UpdateInput = Schema.Struct({
+  projectID: ProjectID,
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
 })
-export type UpdateInput = z.infer<typeof UpdateInput>
+export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 
 export const UpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),

@@ -1,5 +1,8 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { SessionID } from "@/session/schema"
+import { Schema } from "effect"
+
+const decodeSessionID = Schema.decodeUnknownSync(SessionID)
 
 export async function validateSession(input: {
   url: string
@@ -10,9 +13,11 @@ export async function validateSession(input: {
 }) {
   if (!input.sessionID) return
 
-  const result = SessionID.zod.safeParse(input.sessionID)
-  if (!result.success) {
-    throw new Error(`Invalid session ID: ${result.error.issues.at(0)?.message ?? "unknown error"}`)
+  let sessionID: SessionID
+  try {
+    sessionID = decodeSessionID(input.sessionID)
+  } catch (error) {
+    throw new Error(`Invalid session ID: ${error instanceof Error ? error.message : "unknown error"}`, { cause: error })
   }
 
   await createOpencodeClient({
@@ -20,5 +25,5 @@ export async function validateSession(input: {
     directory: input.directory,
     fetch: input.fetch,
     headers: input.headers,
-  }).session.get({ sessionID: result.data }, { throwOnError: true })
+  }).session.get({ sessionID }, { throwOnError: true })
 }

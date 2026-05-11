@@ -1,6 +1,13 @@
 import { Context, Effect, Layer } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { FetchHttpClient, HttpClient, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpApiBuilder, OpenApi } from "effect/unstable/httpapi"
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpMiddleware,
+  HttpRouter,
+  HttpServer,
+  HttpServerResponse,
+} from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Account } from "@/account/account"
@@ -49,6 +56,7 @@ import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
+import { PublicApi } from "./public"
 import { authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
 import { EventApi, eventHandlers } from "./event"
 import { configHandlers } from "./handlers/config"
@@ -72,16 +80,18 @@ import { instanceContextLayer, instanceRouterMiddleware } from "./middleware/ins
 import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
-import * as ServerBackend from "@/server/backend"
+import { compressionLayer } from "./middleware/compression"
+import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
+import { fenceLayer } from "./middleware/fence"
+import { schemaErrorLayer } from "./middleware/schema-error"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
 const runtime = HttpRouter.middleware()(
   Effect.succeed((effect) =>
     Effect.gen(function* () {
-      const selected = ServerBackend.select()
-      yield* Effect.annotateCurrentSpan(ServerBackend.attributes(ServerBackend.force(selected, "effect-httpapi")))
+      yield* Effect.annotateCurrentSpan({ "opencode.server.backend": "effect-httpapi" })
       return yield* effect
     }),
   ),
@@ -105,6 +115,7 @@ const authOnlyRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provi
 const httpApiAuthLayer = authorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, globalHandlers]),
+  Layer.provide(schemaErrorLayer),
   Layer.provide(httpApiAuthLayer),
 )
 const instanceRouterLayer = authorizationRouterMiddleware
@@ -141,7 +152,19 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
     httpApiAuthLayer,
     workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
     instanceContextLayer,
+    schemaErrorLayer,
   ]),
+)
+
+// `OpenApi.fromApi` is non-trivial; defer until /doc is actually hit so
+// processes that never serve it (CLI, scripts) don't pay at module load.
+// `HttpServerResponse.jsonUnsafe` runs JSON.stringify eagerly, so caching
+// the response also caches the serialized body — every /doc request reuses
+// the same Uint8Array instead of re-stringifying the spec.
+const docResponse = lazy(() => HttpServerResponse.jsonUnsafe(OpenApi.fromApi(PublicApi)))
+
+const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effect.succeed(docResponse()))).pipe(
+  Layer.provide(authOnlyRouterLayer),
 )
 
 const uiRoute = HttpRouter.use((router) =>
@@ -153,9 +176,12 @@ const uiRoute = HttpRouter.use((router) =>
 ).pipe(Layer.provide(authOnlyRouterLayer))
 
 export function createRoutes(corsOptions?: CorsOptions) {
-  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
+  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
     Layer.provide([
       errorLayer,
+      compressionLayer,
+      corsVaryFix,
+      fenceLayer,
       cors(corsOptions),
       runtime,
       Account.defaultLayer,

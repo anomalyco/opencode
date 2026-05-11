@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import { zod } from "@/util/effect-zod"
-import { PositiveInt, withStatics } from "@/util/schema"
+import { zod } from "@opencode-ai/core/effect-zod"
+import { PositiveInt, withStatics } from "@opencode-ai/core/schema"
 
 export const Server = Schema.Struct({
   port: Schema.optional(PositiveInt).annotate({
