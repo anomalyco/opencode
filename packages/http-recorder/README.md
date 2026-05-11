@@ -70,19 +70,15 @@ Cassettes are normal source files — review them, diff them, commit them.
 
 ## Request matching
 
-By default, requests match on canonicalized method, URL, headers, and JSON
-body (object keys sorted). Two dispatch strategies are available:
+Replay walks the cassette in record order via an internal cursor: the Nth
+request executed at runtime is served by the Nth recorded interaction, and
+each one is validated as the cursor advances. Request equality is computed
+on canonicalized method, URL, headers, and JSON body (object keys sorted).
 
-- **`match`** (default) — find the first recorded interaction whose request
-  matches the incoming request. Same request twice returns the same response.
-- **`sequential`** — return interactions in the order they were recorded,
-  validating each one matches as the cursor advances. Use for ordered flows
-  where the same URL is hit multiple times with meaningful state changes
-  (pagination, retries, polling).
-
-```ts
-HttpRecorder.cassetteLayer("flow/poll-until-done", { dispatch: "sequential" })
-```
+This is deliberately strict — content-based dispatch was removed because
+it silently returns the first recorded response for repeated identical
+requests, masking state changes that retry/polling/cache-hit tests need to
+observe. If you reorder requests in a test, re-record the cassette.
 
 Supply your own matcher via `match: (incoming, recorded) => boolean` for
 custom equivalence (e.g. ignoring a timestamp field in the body).
@@ -194,7 +190,6 @@ type RecordReplayOptions = {
   directory?: string // default: <cwd>/test/fixtures/recordings
   metadata?: Record<string, unknown> // merged into cassette.metadata
   redactor?: Redactor // default: Redactor.defaults()
-  dispatch?: "match" | "sequential" // default: "match"
   match?: (incoming, recorded) => boolean // custom matcher
 }
 ```
@@ -211,4 +206,4 @@ type RecordReplayOptions = {
 | `redaction.ts` | Lower-level header/URL primitives + secret pattern detection.                    |
 | `schema.ts`    | Effect Schema definitions for the cassette JSON format.                          |
 | `storage.ts`   | Path resolution, JSON encode/decode, sync existence check.                       |
-| `matching.ts`  | Request matcher, canonicalization, dispatch strategies, mismatch diagnostics.    |
+| `matching.ts`  | Request matcher, canonicalization, sequential cursor, mismatch diagnostics.      |

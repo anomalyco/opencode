@@ -145,7 +145,7 @@ export const Info = Schema.Struct({
   }),
   skills: Schema.optional(ConfigSkills.Info).annotate({ description: "Additional skill folder paths" }),
   reference: Schema.optional(ConfigReference.Info).annotate({
-    description: "Named git or local directory references that can be @ mentioned as Scout-backed subagents",
+    description: "Named git or local directory references that can be mentioned as @alias or @alias/path",
   }),
   watcher: Schema.optional(
     Schema.Struct({

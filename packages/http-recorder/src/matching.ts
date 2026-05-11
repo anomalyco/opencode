@@ -92,24 +92,6 @@ export const requestDiff = (expected: RequestSnapshot, received: RequestSnapshot
   return lines
 }
 
-export const mismatchDetail = (interactions: ReadonlyArray<HttpInteraction>, incoming: RequestSnapshot): string => {
-  if (interactions.length === 0) return "cassette has no recorded HTTP interactions"
-  const ranked = interactions
-    .map((interaction, index) => ({ index, lines: requestDiff(interaction.request, incoming) }))
-    .toSorted((a, b) => a.lines.length - b.lines.length || a.index - b.index)
-  const best = ranked[0]
-  return ["no recorded interaction matched", `closest interaction: #${best.index + 1}`, ...best.lines].join("\n")
-}
-
-export const selectMatch = (
-  interactions: ReadonlyArray<HttpInteraction>,
-  incoming: RequestSnapshot,
-  match: RequestMatcher,
-): { readonly interaction: HttpInteraction | undefined; readonly detail: string } => {
-  const interaction = interactions.find((candidate) => match(incoming, candidate.request))
-  return { interaction, detail: interaction ? "" : mismatchDetail(interactions, incoming) }
-}
-
 export const selectSequential = (
   interactions: ReadonlyArray<HttpInteraction>,
   incoming: RequestSnapshot,
