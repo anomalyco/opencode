@@ -359,8 +359,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Manglende API-nøgle.",
   "zen.api.error.invalidApiKey": "Ugyldig API-nøgle.",
   "zen.api.error.subscriptionQuotaExceeded": "Abonnementskvote overskredet. Prøv igen om {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Abonnementskvote overskredet. Du kan fortsætte med at bruge gratis modeller.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "Forbrugsgrænsen for 5 timer er nået. Nulstilles om {{retryIn}}. For at fortsætte med at bruge denne model nu, aktivér forbrug fra din tilgængelige saldo: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Ugentlig forbrugsgrænse er nået. Nulstilles om {{retryIn}}. For at fortsætte med at bruge denne model nu, aktivér forbrug fra din tilgængelige saldo: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Månedlig forbrugsgrænse er nået. Nulstilles om {{retryIn}}. For at fortsætte med at bruge denne model nu, aktivér forbrug fra din tilgængelige saldo: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Ingen betalingsmetode. Tilføj en betalingsmetode her: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Utilstrækkelig saldo. Administrer din fakturering her: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":

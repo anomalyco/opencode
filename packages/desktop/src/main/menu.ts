@@ -24,6 +24,11 @@ export function createMenu(deps: Deps) {
           click: () => deps.checkForUpdates(),
         },
         {
+          label: "Settings",
+          accelerator: "Cmd+,",
+          click: () => deps.trigger("settings.open"),
+        },
+        {
           label: "Reload Webview",
           click: () => deps.reload(),
         },
