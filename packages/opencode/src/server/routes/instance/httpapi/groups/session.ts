@@ -236,7 +236,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("fork", SessionPaths.fork, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
-          payload: Schema.optional(ForkPayload),
+          payload: ForkPayload,
           success: described(Session.Info, "200"),
           error: ApiNotFoundError,
         }).annotateMerge(
