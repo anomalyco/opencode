@@ -1,4 +1,4 @@
-import { createMemo, createResource } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useSDK } from "@tui/context/sdk"
 import { useToast } from "@tui/ui/toast"
@@ -81,13 +81,20 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
 
   const resolvedScope = props.scope ?? (props.gotoKey ? "project" : undefined)
 
-  const [globalConfig] = createResource(
-    () => resolvedScope === "global",
-    async () => {
+  const [globalConfig, setGlobalConfig] = createSignal<Record<string, unknown>>({})
+
+  async function fetchGlobalConfig() {
+    try {
       const result = await sdk.client.global.config.get({ throwOnError: true })
-      return result.data ?? {}
-    },
-  )
+      setGlobalConfig(result.data ?? {})
+    } catch {
+      setGlobalConfig({})
+    }
+  }
+
+  if (resolvedScope === "global") {
+    void fetchGlobalConfig()
+  }
 
   const gotoField = props.gotoKey ? configFields.find((f) => f.key === props.gotoKey) : undefined
 
@@ -145,7 +152,7 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
   function openEdit(field: ConfigField, targetScope: ConfigScope) {
     const currentValue =
       targetScope === "global"
-        ? globalConfig()?.[field.key as keyof typeof globalConfig]
+        ? globalConfig()[field.key as keyof typeof globalConfig]
         : sync.data.config[field.key as keyof typeof sync.data.config]
     dialog.push(() => (
       <DialogConfigEdit
@@ -181,7 +188,7 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
   if (gotoField && resolvedScope) {
     const currentValue =
       resolvedScope === "global"
-        ? globalConfig()?.[gotoField.key as keyof typeof globalConfig]
+        ? globalConfig()[gotoField.key as keyof typeof globalConfig]
         : sync.data.config[gotoField.key as keyof typeof sync.data.config]
     return (
       <DialogConfigEdit
@@ -199,7 +206,7 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
   }
 
   const options = createMemo(() => {
-    const configSource = resolvedScope === "global" ? (globalConfig() ?? {}) : sync.data.config
+    const configSource = resolvedScope === "global" ? globalConfig() : sync.data.config
     return configFields.map((field) => {
       const currentValue = configSource[field.key as keyof typeof configSource]
       const currentText = currentValue !== undefined ? ` = ${JSON.stringify(currentValue)}` : " (not set)"
