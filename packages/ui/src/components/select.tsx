@@ -20,7 +20,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   triggerStyle?: JSX.CSSProperties
   contentStyle?: JSX.CSSProperties
   triggerVariant?: "settings"
-  triggerProps?: Record<string, string | number | boolean | undefined>
+  triggerProps?: Record<string, unknown>
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
