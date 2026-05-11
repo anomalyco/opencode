@@ -374,4 +374,134 @@ describe("Anthropic Messages route", () => {
       expect(error.message).toContain("Anthropic Messages user messages only support text content for now")
     }),
   )
+
+  it.effect("maps ttlSeconds >= 3600 to cache_control ttl: '1h'", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          system: { type: "text", text: "system", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        system: [{ type: "text", text: "system", cache_control: { type: "ephemeral", ttl: "1h" } }],
+      })
+    }),
+  )
+
+  it.effect("emits cache_control on tool definitions and tool-result blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "lookup",
+              description: "lookup tool",
+              inputSchema: { type: "object", properties: {} },
+              cache: new CacheHint({ type: "ephemeral" }),
+            },
+          ],
+          messages: [
+            LLM.user("What's the weather?"),
+            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: {} })]),
+            LLM.toolMessage({
+              id: "call_1",
+              name: "lookup",
+              result: { temp: 72 },
+              cache: new CacheHint({ type: "ephemeral" }),
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ name: "lookup", cache_control: { type: "ephemeral" } }],
+        messages: [
+          { role: "user", content: [{ type: "text", text: "What's the weather?" }] },
+          { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup" }] },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "call_1", cache_control: { type: "ephemeral" } }],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("drops cache_control breakpoints past the 4-per-request cap", () =>
+    Effect.gen(function* () {
+      const hint = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          system: [
+            { type: "text", text: "a", cache: hint },
+            { type: "text", text: "b", cache: hint },
+            { type: "text", text: "c", cache: hint },
+            { type: "text", text: "d", cache: hint },
+            { type: "text", text: "e", cache: hint },
+            { type: "text", text: "f", cache: hint },
+          ],
+          prompt: "hi",
+        }),
+      )
+
+      const system = (prepared.body as { system: Array<{ cache_control?: unknown }> }).system
+      const marked = system.filter((part) => part.cache_control !== undefined)
+      expect(marked).toHaveLength(4)
+      expect(system[4]?.cache_control).toBeUndefined()
+      expect(system[5]?.cache_control).toBeUndefined()
+    }),
+  )
+
+  it.effect("spends breakpoint budget on tools before system before messages", () =>
+    Effect.gen(function* () {
+      const hint = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "t1",
+              description: "t1",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t2",
+              description: "t2",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t3",
+              description: "t3",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t4",
+              description: "t4",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+          ],
+          system: [{ type: "text", text: "system-tail", cache: hint }],
+          messages: [LLM.user([{ type: "text", text: "message-tail", cache: hint }])],
+        }),
+      )
+
+      const body = prepared.body as {
+        tools: Array<{ cache_control?: unknown }>
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      expect(body.tools.every((t) => t.cache_control !== undefined)).toBe(true)
+      expect(body.system[0]?.cache_control).toBeUndefined()
+      expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
+    }),
+  )
 })

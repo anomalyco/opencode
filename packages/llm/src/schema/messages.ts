@@ -79,6 +79,7 @@ export const ToolResultPart = Object.assign(
     name: Schema.String,
     result: ToolResultValue,
     providerExecuted: Schema.optional(Schema.Boolean),
+    cache: Schema.optional(CacheHint),
     metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolResult" }),
@@ -94,6 +95,7 @@ export const ToolResultPart = Object.assign(
       name: input.name,
       result: ToolResultValue.make(input.result, input.resultType),
       providerExecuted: input.providerExecuted,
+      cache: input.cache,
       metadata: input.metadata,
       providerMetadata: input.providerMetadata,
     }),
@@ -151,6 +153,7 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
+  cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}

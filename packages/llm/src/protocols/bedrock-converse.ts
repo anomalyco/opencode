@@ -108,7 +108,7 @@ type BedrockMessage = Schema.Schema.Type<typeof BedrockMessage>
 const BedrockSystemBlock = Schema.Union([BedrockTextBlock, BedrockCache.CachePointBlock])
 type BedrockSystemBlock = Schema.Schema.Type<typeof BedrockSystemBlock>
 
-const BedrockTool = Schema.Struct({
+const BedrockToolSpec = Schema.Struct({
   toolSpec: Schema.Struct({
     name: Schema.String,
     description: Schema.String,
@@ -117,6 +117,9 @@ const BedrockTool = Schema.Struct({
     }),
   }),
 })
+type BedrockToolSpec = Schema.Schema.Type<typeof BedrockToolSpec>
+
+const BedrockTool = Schema.Union([BedrockToolSpec, BedrockCache.CachePointBlock])
 type BedrockTool = Schema.Schema.Type<typeof BedrockTool>
 
 const BedrockToolChoice = Schema.Union([
@@ -214,7 +217,7 @@ type BedrockEvent = Schema.Schema.Type<typeof BedrockEvent>
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition): BedrockTool => ({
+const lowerToolSpec = (tool: ToolDefinition): BedrockToolSpec => ({
   toolSpec: {
     name: tool.name,
     description: tool.description,
@@ -222,11 +225,25 @@ const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   },
 })
 
+const lowerTools = (
+  breakpoints: BedrockCache.Breakpoints,
+  tools: ReadonlyArray<ToolDefinition>,
+): BedrockTool[] => {
+  const result: BedrockTool[] = []
+  for (const tool of tools) {
+    result.push(lowerToolSpec(tool))
+    const cachePoint = BedrockCache.block(breakpoints, tool.cache)
+    if (cachePoint) result.push(cachePoint)
+  }
+  return result
+}
+
 const textWithCache = (
+  breakpoints: BedrockCache.Breakpoints,
   text: string,
   cache: CacheHint | undefined,
 ): Array<BedrockTextBlock | BedrockCache.CachePointBlock> => {
-  const cachePoint = BedrockCache.block(cache)
+  const cachePoint = BedrockCache.block(breakpoints, cache)
   return cachePoint ? [{ text }, cachePoint] : [{ text }]
 }
 
@@ -257,7 +274,10 @@ const lowerToolResult = (part: ToolResultPart): BedrockToolResultBlock => ({
   },
 })
 
-const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (request: LLMRequest) {
+const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
+  request: LLMRequest,
+  breakpoints: BedrockCache.Breakpoints,
+) {
   const messages: BedrockMessage[] = []
 
   for (const message of request.messages) {
@@ -267,7 +287,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
         if (!ProviderShared.supportsContent(part, ["text", "media"]))
           return yield* ProviderShared.unsupportedContent("Bedrock Converse", "user", ["text", "media"])
         if (part.type === "text") {
-          content.push(...textWithCache(part.text, part.cache))
+          content.push(...textWithCache(breakpoints, part.text, part.cache))
           continue
         }
         if (part.type === "media") {
@@ -289,7 +309,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
             "tool-call",
           ])
         if (part.type === "text") {
-          content.push(...textWithCache(part.text, part.cache))
+          content.push(...textWithCache(breakpoints, part.text, part.cache))
           continue
         }
         if (part.type === "reasoning") {
@@ -309,11 +329,13 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
       continue
     }
 
-    const content: BedrockToolResultBlock[] = []
+    const content: BedrockUserBlock[] = []
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
       content.push(lowerToolResult(part))
+      const cachePoint = BedrockCache.block(breakpoints, part.cache)
+      if (cachePoint) content.push(cachePoint)
     }
     messages.push({ role: "user", content })
   }
@@ -323,16 +345,32 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
 
 // System prompts share the cache-point convention: emit the text block, then
 // optionally a positional `cachePoint` marker.
-const lowerSystem = (system: ReadonlyArray<LLMRequest["system"][number]>): BedrockSystemBlock[] =>
-  system.flatMap((part) => textWithCache(part.text, part.cache))
+const lowerSystem = (
+  breakpoints: BedrockCache.Breakpoints,
+  system: ReadonlyArray<LLMRequest["system"][number]>,
+): BedrockSystemBlock[] => system.flatMap((part) => textWithCache(breakpoints, part.text, part.cache))
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const generation = request.generation
+  // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
+  // tools → system → messages order to favour the highest-impact prefixes.
+  const breakpoints = BedrockCache.breakpoints()
+  const toolConfig =
+    request.tools.length > 0 && request.toolChoice?.type !== "none"
+      ? { tools: lowerTools(breakpoints, request.tools), toolChoice }
+      : undefined
+  const system = request.system.length === 0 ? undefined : lowerSystem(breakpoints, request.system)
+  const messages = yield* lowerMessages(request, breakpoints)
+  if (breakpoints.dropped > 0) {
+    yield* Effect.logWarning(
+      `Bedrock Converse: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${BedrockCache.BEDROCK_BREAKPOINT_CAP} per request.`,
+    )
+  }
   return {
     modelId: request.model.id,
-    messages: yield* lowerMessages(request),
-    system: request.system.length === 0 ? undefined : lowerSystem(request.system),
+    messages,
+    system,
     inferenceConfig:
       generation?.maxTokens === undefined &&
       generation?.temperature === undefined &&
@@ -345,10 +383,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
             topP: generation?.topP,
             stopSequences: generation?.stop,
           },
-    toolConfig:
-      request.tools.length > 0 && request.toolChoice?.type !== "none"
-        ? { tools: request.tools.map(lowerTool), toolChoice }
-        : undefined,
+    toolConfig,
   }
 })
 
