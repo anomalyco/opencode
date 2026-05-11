@@ -1156,6 +1156,14 @@ export function fromError(
           cause: e,
         },
       ).toObject()
+    case e instanceof DOMException && e.name === "TimeoutError":
+      return new APIError(
+        {
+          message: e.message || "Operation timed out",
+          isRetryable: true,
+        },
+        { cause: e },
+      ).toObject()
     case OutputLengthError.isInstance(e):
       return e
     case LoadAPIKeyError.isInstance(e):
