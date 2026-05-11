@@ -1049,7 +1049,8 @@ export function options(input: {
 
   if (
     input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
-    (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic")
+    (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic") ||
+    input.providerOptions?.["toolStreaming"] === false
   ) {
     result["toolStreaming"] = false
   }
