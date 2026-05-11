@@ -73,13 +73,13 @@ const configFields: ConfigField[] = [
 
 type ConfigScope = "project" | "global"
 
-export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
+export function DialogConfig(props: { scope?: ConfigScope }) {
   const dialog = useDialog()
   const sync = useSync()
   const sdk = useSDK()
   const toast = useToast()
 
-  const resolvedScope = props.scope ?? (props.gotoKey ? "project" : undefined)
+  const resolvedScope = props.scope
 
   const [globalConfig, setGlobalConfig] = createSignal<Record<string, unknown>>({})
 
@@ -95,8 +95,6 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
   if (resolvedScope === "global") {
     void fetchGlobalConfig()
   }
-
-  const gotoField = props.gotoKey ? configFields.find((f) => f.key === props.gotoKey) : undefined
 
   function formatError(error: unknown): string {
     if (error instanceof Error) return error.message
@@ -160,16 +158,16 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
         currentValue={currentValue}
         onSave={async (value) => {
           const success = await saveField(field, value, targetScope)
-          if (success) dialog.replace(() => <DialogConfig gotoKey={props.gotoKey} scope={targetScope} />)
+          if (success) dialog.replace(() => <DialogConfig scope={targetScope} />)
         }}
         onCancel={() => {
-          dialog.replace(() => <DialogConfig gotoKey={props.gotoKey} scope={targetScope} />)
+          dialog.replace(() => <DialogConfig scope={targetScope} />)
         }}
       />
     ))
   }
 
-  if (!resolvedScope && !gotoField) {
+  if (!resolvedScope) {
     return (
       <DialogSelect
         title="Config Scope"
@@ -179,27 +177,7 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
           { title: "Global config", value: "global", description: "Edit ~/.config/opencode/opencode.json" },
         ]}
         onSelect={(option) => {
-          dialog.replace(() => <DialogConfig gotoKey={props.gotoKey} scope={option.value as ConfigScope} />)
-        }}
-      />
-    )
-  }
-
-  if (gotoField && resolvedScope) {
-    const currentValue =
-      resolvedScope === "global"
-        ? globalConfig()[gotoField.key as keyof typeof globalConfig]
-        : sync.data.config[gotoField.key as keyof typeof sync.data.config]
-    return (
-      <DialogConfigEdit
-        field={gotoField}
-        currentValue={currentValue}
-        onSave={async (value) => {
-          const success = await saveField(gotoField, value, resolvedScope)
-          if (success) dialog.replace(() => <DialogConfig />)
-        }}
-        onCancel={() => {
-          dialog.replace(() => <DialogConfig />)
+          dialog.replace(() => <DialogConfig scope={option.value as ConfigScope} />)
         }}
       />
     )
@@ -223,7 +201,7 @@ export function DialogConfig(props: { gotoKey?: string; scope?: ConfigScope }) {
       title={`Config (${resolvedScope})`}
       placeholder="Search config..."
       options={options()}
-      onSelect={(option) => openEdit(option.value, resolvedScope!)}
+      onSelect={(option) => openEdit(option.value, resolvedScope)}
     />
   )
 }

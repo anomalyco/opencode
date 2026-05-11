@@ -51,7 +51,7 @@ const tuiConfigFields: TuiConfigField[] = [
 
 const tuiConfigPath = path.join(Global.Path.config, "tui.json")
 
-export function DialogTuiConfig(props: { gotoKey?: string }) {
+export function DialogTuiConfig() {
   const dialog = useDialog()
   const toast = useToast()
 
@@ -63,8 +63,6 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
       return Filesystem.readJson<Record<string, unknown>>(tuiConfigPath).catch(() => ({}))
     },
   )
-
-  const gotoField = props.gotoKey ? tuiConfigFields.find((f) => f.key === props.gotoKey) : undefined
 
   function formatValidationError(error: unknown): string {
     if (error && typeof error === "object" && "issues" in error && Array.isArray(error.issues)) {
@@ -139,23 +137,6 @@ export function DialogTuiConfig(props: { gotoKey?: string }) {
         }}
       />
     ))
-  }
-
-  if (gotoField) {
-    const currentValue = getCurrentValue(gotoField)
-    return (
-      <DialogTuiConfigEdit
-        field={gotoField}
-        currentValue={currentValue}
-        onSave={async (value) => {
-          const success = await saveField(gotoField, value)
-          if (success) dialog.replace(() => <DialogTuiConfig />)
-        }}
-        onCancel={() => {
-          dialog.replace(() => <DialogTuiConfig />)
-        }}
-      />
-    )
   }
 
   const options = createMemo(() => {
