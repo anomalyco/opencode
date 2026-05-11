@@ -5591,6 +5591,10 @@ export type SessionForkData = {
 
 export type SessionForkErrors = {
   /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
    * NotFoundError
    */
   404: NotFoundError
