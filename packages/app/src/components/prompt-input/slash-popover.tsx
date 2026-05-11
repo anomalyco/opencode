@@ -110,7 +110,8 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                     onMouseEnter={() => props.setSlashActive(cmd.id)}
                   >
                     <div class="flex items-center gap-2 min-w-0">
-                      <span class="text-14-regular text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
+                      <span class="text-14-regular text-text-strong whitespace-nowrap">{cmd.title}</span>
+                      <span class="text-12-regular text-text-subtle whitespace-nowrap">/{cmd.trigger}</span>
                       <Show when={cmd.description}>
                         <span class="text-14-regular text-text-weak truncate">{cmd.description}</span>
                       </Show>
