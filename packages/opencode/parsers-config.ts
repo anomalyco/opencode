@@ -288,6 +288,7 @@ export default {
     },
     {
       filetype: "diff",
+      aliases: ["udiff", "patch"],
       wasm: "https://github.com/tree-sitter-grammars/tree-sitter-diff/releases/download/v0.1.0/tree-sitter-diff.wasm",
       queries: {
         highlights: ["https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-diff/master/queries/highlights.scm"],
