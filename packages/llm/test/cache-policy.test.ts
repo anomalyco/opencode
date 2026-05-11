@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM } from "../src"
 import { LLMClient } from "../src/route"
@@ -252,12 +252,11 @@ describe("applyCachePolicy", () => {
     }),
   )
 
-  it.effect("returns the same request reference when policy is a no-op (pure function)", () => {
+  test("returns the same request reference when policy is a no-op (pure function)", () => {
     const request = LLM.request({
       model: anthropicModel,
       prompt: "hi",
     })
     expect(applyCachePolicy(request)).toBe(request)
-    return Effect.void
   })
 })

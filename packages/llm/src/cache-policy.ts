@@ -61,10 +61,8 @@ const markLastSystem = (system: LLMRequest["system"], hint: CacheHint): LLMReque
   return system.map((part, i) => (i === last ? { ...part, cache: hint } : part))
 }
 
-const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number => {
-  for (let i = messages.length - 1; i >= 0; i--) if (messages[i]!.role === role) return i
-  return -1
-}
+const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number =>
+  messages.findLastIndex((m) => m.role === role)
 
 // Mark the last text part of `messages[index]`. If no text part exists, mark
 // the last content part regardless of type — that's the breakpoint position
@@ -85,7 +83,12 @@ const markMessageAt = (
     i === markAt ? ({ ...part, cache: hint } as ContentPart) : part,
   )
   const next = new Message({ ...target, content: nextContent })
-  return messages.map((m, i) => (i === index ? next : m))
+  // Single pass over `messages`, substituting the one updated entry. Long
+  // conversations call this on every request, so avoid `.map()` here — its
+  // closure dispatch and identity copies show up in profiling.
+  const result = messages.slice()
+  result[index] = next
+  return result
 }
 
 const markMessages = (
