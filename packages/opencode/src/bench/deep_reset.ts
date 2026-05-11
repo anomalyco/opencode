@@ -19,50 +19,65 @@ import { spawn } from "node:child_process"
 
 function carefulPass(baseCommit: string): string {
   return (
+    `echo "[deep_reset:careful] start" && ` +
     `BASE=$(git rev-parse --verify ${baseCommit}^{commit}) && ` +
     `ORIG_BRANCH=$(git symbolic-ref --short -q HEAD || echo main) && ` +
+    `echo "[deep_reset:careful] base=$BASE orig_branch=$ORIG_BRANCH" && ` +
     `git checkout --detach "$BASE" && ` +
+    `echo "[deep_reset:careful] resetting local branches descending from base..." && ` +
     `git for-each-ref --format="%(refname)" refs/heads | while read -r ref; do ` +
     `  tip=$(git rev-parse -q --verify "$ref^{commit}" 2>/dev/null || true); ` +
     `  [ -z "$tip" ] && continue; ` +
     `  if [ "$tip" != "$BASE" ] && git merge-base --is-ancestor "$BASE" "$tip"; then ` +
+    `    echo "[deep_reset:careful]   reset $ref -> $BASE"; ` +
     `    git update-ref "$ref" "$BASE"; ` +
     `  fi; ` +
     `done && ` +
+    `echo "[deep_reset:careful] deleting tags/remotes/stash/notes past base..." && ` +
     `git for-each-ref --format="%(refname)" refs | while read -r ref; do ` +
     `  case "$ref" in refs/heads/*) continue ;; esac; ` +
     `  if git symbolic-ref -q "$ref" >/dev/null 2>&1; then continue; fi; ` +
     `  tip=$(git rev-parse -q --verify "$ref^{commit}" 2>/dev/null || true); ` +
     `  [ -z "$tip" ] && continue; ` +
     `  if [ "$tip" != "$BASE" ] && git merge-base --is-ancestor "$BASE" "$tip"; then ` +
+    `    echo "[deep_reset:careful]   delete $ref"; ` +
     `    git update-ref -d "$ref"; ` +
     `  fi; ` +
     `done && ` +
-    `for r in $(git remote); do git remote remove "$r"; done; ` +
+    `echo "[deep_reset:careful] removing remotes + transient refs..." && ` +
+    `for r in $(git remote); do echo "[deep_reset:careful]   rm remote $r"; git remote remove "$r"; done; ` +
     `gd=$(git rev-parse --git-dir) && ` +
     `rm -f "$gd"/FETCH_HEAD "$gd"/ORIG_HEAD "$gd"/MERGE_HEAD "$gd"/CHERRY_PICK_HEAD ` +
     `"$gd"/REVERT_HEAD "$gd"/BISECT_HEAD "$gd"/AUTO_MERGE && ` +
+    `echo "[deep_reset:careful] expiring reflog + gc..." && ` +
     `git reflog expire --expire=now --expire-unreachable=now --all && ` +
     `git repack -ad && git prune --expire=now && git gc --prune=now && ` +
-    `git checkout -B "$ORIG_BRANCH" "$BASE"`
+    `git checkout -B "$ORIG_BRANCH" "$BASE" && ` +
+    `echo "[deep_reset:careful] done; HEAD=$ORIG_BRANCH at $BASE"`
   )
 }
 
 function nuclearPass(baseCommit: string): string {
   return (
+    `echo "[deep_reset:nuclear] careful pass failed; running batch-delete fallback" && ` +
     `BASE=$(git rev-parse --verify ${baseCommit}^{commit}) && ` +
     `ORIG_BRANCH=$(git symbolic-ref --short -q HEAD || echo main) && ` +
+    `echo "[deep_reset:nuclear] base=$BASE orig_branch=$ORIG_BRANCH" && ` +
     `git checkout --detach "$BASE" && ` +
-    `for r in $(git remote); do git remote remove "$r"; done; ` +
+    `for r in $(git remote); do echo "[deep_reset:nuclear]   rm remote $r"; git remote remove "$r"; done; ` +
+    `echo "[deep_reset:nuclear] batch-delete tags/remotes/stash/notes..." && ` +
     `git for-each-ref --format="delete %(refname)" refs/tags refs/remotes refs/stash refs/notes 2>/dev/null ` +
     `| git update-ref --stdin; ` +
+    `echo "[deep_reset:nuclear] batch-delete local branches..." && ` +
     `git for-each-ref --format="delete %(refname)" refs/heads | git update-ref --stdin; ` +
     `gd=$(git rev-parse --git-dir) && ` +
     `rm -f "$gd"/FETCH_HEAD "$gd"/ORIG_HEAD "$gd"/MERGE_HEAD "$gd"/CHERRY_PICK_HEAD ` +
     `"$gd"/REVERT_HEAD "$gd"/BISECT_HEAD "$gd"/AUTO_MERGE && ` +
+    `echo "[deep_reset:nuclear] expiring reflog + gc..." && ` +
     `git reflog expire --expire=now --expire-unreachable=now --all && ` +
     `git repack -ad && git prune --expire=now && git gc --prune=now && ` +
-    `git checkout -B "$ORIG_BRANCH" "$BASE"`
+    `git checkout -B "$ORIG_BRANCH" "$BASE" && ` +
+    `echo "[deep_reset:nuclear] done; HEAD=$ORIG_BRANCH at $BASE"`
   )
 }
 
