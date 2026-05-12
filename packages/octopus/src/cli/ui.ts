@@ -4,10 +4,10 @@ import { NamedError } from "@octopus-ai/core/util/error"
 import { logo as glyphs } from "./logo"
 
 const wordmark = [
-  `⠀                                ▄     `,
-  `█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
-  `█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀`,
-  `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
+  `                                  `,
+  `█▀▀█ █▀▀▀ ▀██▀ █▀▀█ █▀▀█ █__█ █▀▀▀`,
+  `█  █ █     ██  █  █ █  █ █  █ █▀▀▀`,
+  `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀█`,
 ]
 
 export const CancelledError = NamedError.create("UICancelledError", z.void())
