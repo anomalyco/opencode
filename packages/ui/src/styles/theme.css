@@ -120,8 +120,8 @@
   --surface-strong: #ffffff;
   --surface-stronger-non-alpha: var(--surface-raised-stronger-non-alpha);
   --surface-raised-stronger-non-alpha: #ffffff;
-  --surface-brand-base: #dcde8d;
-  --surface-brand-hover: #d0d283;
+  --surface-brand-base: #6366f1;
+  --surface-brand-hover: #5558e6;
   --surface-interactive-base: #ecf3ff;
   --surface-interactive-hover: #e0eaff;
   --surface-interactive-weak: #f7faff;
@@ -170,7 +170,7 @@
   --text-invert-weaker: #ededed;
   --text-invert-strong: #fcfcfc;
   --text-interactive-base: #034cff;
-  --text-on-brand-base: rgba(0, 0, 0, 0.574);
+  --text-on-brand-base: rgba(255, 255, 255, 0.9);
   --text-on-interactive-base: #fcfcfc;
   --text-on-interactive-weak: rgba(0, 0, 0, 0.574);
   --text-on-success-base: #2dba26;
@@ -189,9 +189,9 @@
   --text-on-warning-strong: rgba(0, 0, 0, 0.915);
   --text-on-success-weak: #96ec8e;
   --text-on-success-strong: #044202;
-  --text-on-brand-weak: rgba(0, 0, 0, 0.453);
-  --text-on-brand-weaker: rgba(0, 0, 0, 0.232);
-  --text-on-brand-strong: rgba(0, 0, 0, 0.915);
+  --text-on-brand-weak: rgba(255, 255, 255, 0.7);
+  --text-on-brand-weaker: rgba(255, 255, 255, 0.5);
+  --text-on-brand-strong: rgba(255, 255, 255, 0.95);
   --button-primary-base: #171717;
   --button-secondary-base: #fcfcfc;
   --button-secondary-hover: #f8f8f8;
@@ -259,7 +259,7 @@
   --icon-strong-selected: #020202;
   --icon-strong-disabled: #c7c7c7;
   --icon-strong-focus: #020202;
-  --icon-brand-base: #171717;
+  --icon-brand-base: #6366f1;
   --icon-interactive-base: #034cff;
   --icon-success-base: #7add71;
   --icon-success-hover: #4cc944;
@@ -273,9 +273,9 @@
   --icon-info-base: #e6a8ea;
   --icon-info-hover: #d58cda;
   --icon-info-active: #9b4da1;
-  --icon-on-brand-base: rgba(0, 0, 0, 0.574);
-  --icon-on-brand-hover: rgba(0, 0, 0, 0.915);
-  --icon-on-brand-selected: rgba(0, 0, 0, 0.915);
+  --icon-on-brand-base: rgba(255, 255, 255, 0.9);
+  --icon-on-brand-hover: rgba(255, 255, 255, 0.95);
+  --icon-on-brand-selected: rgba(255, 255, 255, 0.95);
   --icon-on-interactive-base: #fcfcfc;
   --icon-agent-plan-base: #a753ae;
   --icon-agent-docs-base: #fcb239;
@@ -380,8 +380,8 @@
     --surface-strong: rgba(255, 255, 255, 0.169);
     --surface-stronger-non-alpha: var(--surface-raised-stronger-non-alpha);
     --surface-raised-stronger-non-alpha: #1c1c1c;
-    --surface-brand-base: #fab283;
-    --surface-brand-hover: #eda779;
+    --surface-brand-base: #a78bfa;
+    --surface-brand-hover: #9a7cf0;
     --surface-interactive-base: #091f52;
     --surface-interactive-hover: #091f52;
     --surface-interactive-weak: #0b1730;
@@ -519,7 +519,7 @@
     --icon-strong-selected: #fdfcfc;
     --icon-strong-disabled: #3e3e3e;
     --icon-strong-focus: #fdfcfc;
-    --icon-brand-base: #ffffff;
+    --icon-brand-base: #a78bfa;
     --icon-interactive-base: #034cff;
     --icon-success-base: #12c905;
     --icon-success-hover: #35c02d;

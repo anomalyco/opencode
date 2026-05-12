@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "@octopus-ai/docs",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#6366F1",
+    "light": "#8B5CF6",
+    "dark": "#4F46E5"
   },
   "favicon": "/favicon-v3.svg",
   "navigation": {
