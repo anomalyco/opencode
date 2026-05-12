@@ -441,11 +441,23 @@ describe("session HttpApi", () => {
     "uses project-scoped path and directory precedence",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
-        const currentDir = path.join(tmp.path, "packages", "opencode", "src")
+        const currentDir = path.join(tmp.path, "packages", "octopus", "src")
         yield* Effect.promise(() => mkdir(currentDir, { recursive: true }))
 
-        const pathSession = yield* createSession(currentDir)
-        const pathlessSession = yield* createSession(currentDir)
+        // Create sessions via the HTTP API so both creation and listing go
+        // through the same middleware chain (InstanceContextMiddleware,
+        // WorkspaceRoutingMiddleware) and share the same InstanceStore cache,
+        // avoiding the nested-runtime path divergence of createSession().
+        const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+        const createHeaders = { "x-opencode-directory": currentDir, "content-type": "application/json" }
+        const pathSession = yield* requestJson<Session.Info>(SessionPaths.create, {
+          method: "POST",
+          headers: createHeaders,
+        })
+        const pathlessSession = yield* requestJson<Session.Info>(SessionPaths.create, {
+          method: "POST",
+          headers: createHeaders,
+        })
         yield* Effect.sync(() =>
           Database.use((db) =>
             db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, pathlessSession.id)).run(),
@@ -457,7 +469,6 @@ describe("session HttpApi", () => {
           path: "packages/octopus/src",
           directory: currentDir,
         })
-        const headers = { "x-opencode-directory": tmp.path }
         const sessions = (yield* json<Session.Info[]>(
           yield* request(`${SessionPaths.list}?${query}`, { headers }),
         )).map((item) => item.id)

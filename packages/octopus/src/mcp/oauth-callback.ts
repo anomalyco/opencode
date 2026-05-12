@@ -200,11 +200,20 @@ export function cancelPending(mcpName: string): void {
 export async function isPortInUse(port: number = OAUTH_CALLBACK_PORT): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection(port, "127.0.0.1")
+    // Bun's TCP stack can hang on certain localhost ports instead of getting
+    // ECONNREFUSED immediately. Guard with a timeout so isPortInUse always
+    // resolves within a reasonable window.
+    const timer = setTimeout(() => {
+      socket.destroy()
+      resolve(false)
+    }, 1500)
     socket.on("connect", () => {
+      clearTimeout(timer)
       socket.destroy()
       resolve(true)
     })
     socket.on("error", () => {
+      clearTimeout(timer)
       resolve(false)
     })
   })

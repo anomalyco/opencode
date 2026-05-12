@@ -1,4 +1,4 @@
-import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
+import { describe, expect, beforeAll, beforeEach, afterAll, afterEach } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppFileSystem } from "@octopus-ai/core/filesystem"
@@ -108,6 +108,10 @@ beforeEach(async () => {
   await rm(cacheFile, { force: true })
 })
 
+afterEach(() => {
+  Flag.OCTOPUS_MODELS_PATH = undefined
+})
+
 afterAll(async () => {
   await rm(cacheFile, { force: true })
 })
@@ -135,6 +139,16 @@ describe("ModelsDev Service", () => {
 
   it.live("get() returns {} when disk empty and fetch disabled", () =>
     Effect.gen(function* () {
+      // Write an empty JSON file and point OCTOPUS_MODELS_PATH to it so
+      // loadFromDisk returns {} before loadSnapshot can run. models-snapshot.js
+      // is bundled at build time and provides live provider data, so without
+      // this redirect the test would see snapshot data instead of {}.
+      yield* Effect.promise(async () => {
+        const emptyFile = path.join(Global.Path.cache, "models-empty-test.json")
+        await mkdir(Global.Path.cache, { recursive: true })
+        await writeFile(emptyFile, "{}")
+        Flag.OCTOPUS_MODELS_PATH = emptyFile
+      })
       const state = yield* Ref.make(initialState)
       const result = yield* provided(
         state,

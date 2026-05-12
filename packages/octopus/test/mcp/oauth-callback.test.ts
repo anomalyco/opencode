@@ -1,6 +1,19 @@
 import { test, expect, describe, afterEach } from "bun:test"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 import { parseRedirectUri } from "../../src/mcp/oauth-provider"
+import { createServer } from "net"
+
+/** Find a dynamically-allocated available port to avoid port conflicts. */
+async function getAvailablePort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const s = createServer()
+    s.listen(0, () => {
+      const { port } = s.address() as import("net").AddressInfo
+      s.close(() => resolve(port))
+    })
+    s.on("error", reject)
+  })
+}
 
 describe("parseRedirectUri", () => {
   test("returns defaults when no URI provided", () => {
@@ -28,7 +41,8 @@ describe("McpOAuthCallback.ensureRunning", () => {
   })
 
   test("starts server with custom redirectUri port and path", async () => {
-    await McpOAuthCallback.ensureRunning("http://127.0.0.1:18000/custom/callback")
+    const port = await getAvailablePort()
+    await McpOAuthCallback.ensureRunning(`http://127.0.0.1:${port}/custom/callback`)
     expect(McpOAuthCallback.isRunning()).toBe(true)
   })
 })

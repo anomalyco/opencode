@@ -4,7 +4,8 @@ import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@octopus-ai/core/util/log"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { tmpdir } from "../fixture/fixture"
+import { resetDatabase } from "../fixture/db"
 import { Flag } from "@octopus-ai/core/flag/flag"
 import { mkdir } from "fs/promises"
 import path from "path"
@@ -31,7 +32,7 @@ const svc = {
 
 afterEach(async () => {
   Flag.OCTOPUS_EXPERIMENTAL_WORKSPACES = originalWorkspaces
-  await disposeAllInstances()
+  await resetDatabase()
 })
 
 describe("session.list", () => {
@@ -130,7 +131,7 @@ describe("session.list", () => {
         const pathIDs = (
           await svc.list({
             directory: path.join(tmp.path, "packages", "app"),
-            path: "packages/octopus/src",
+            path: "packages/opencode/src",
           })
         ).map((s) => s.id)
         expect(pathIDs).not.toContain(parent.id)

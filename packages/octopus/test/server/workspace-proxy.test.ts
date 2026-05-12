@@ -2,7 +2,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import Http from "node:http"
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer, Queue } from "effect"
-import { FetchHttpClient, HttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientError, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { HttpApiProxy } from "../../src/server/routes/instance/httpapi/middleware/proxy"
 import { testEffect } from "../lib/effect"
@@ -105,8 +105,15 @@ describe("HttpApi workspace proxy", () => {
   it.live("returns 500 when remote is unreachable", () =>
     Effect.gen(function* () {
       const request = HttpServerRequest.fromWeb(new Request("http://localhost/anything"))
-      const httpClient = yield* HttpClient.HttpClient
-      const response = yield* HttpApiProxy.http(httpClient, "http://127.0.0.1:1/unreachable", undefined, request)
+      // Use a mock client that fails immediately instead of relying on a real
+      // TCP connection to an unreachable port. Bun's TCP stack can hang on
+      // certain localhost ports instead of getting ECONNREFUSED, making the
+      // test flaky and slow when it relies on Effect.timeout to eventually
+      // give up. A mock TransportError is instant and deterministic.
+      const mockClient = HttpClient.make((_req, _url, _signal, _fiber) =>
+        Effect.fail(new HttpClientError.TransportError({ request: _req, description: "Simulated connection refused" })),
+      )
+      const response = yield* HttpApiProxy.http(mockClient, "http://127.0.0.1:1/unreachable", undefined, request)
 
       expect(response.status).toBe(500)
     }),
