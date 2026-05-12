@@ -741,6 +741,16 @@ export type Session = {
     files: number
     diffs?: Array<SnapshotFileDiff>
   }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
   share?: {
     url: string
   }
@@ -945,7 +955,6 @@ export type PermissionConfig =
       question?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
-      codesearch?: PermissionActionConfig
       repo_clone?: PermissionRuleConfig
       repo_overview?: PermissionRuleConfig
       lsp?: PermissionRuleConfig
@@ -1430,6 +1439,16 @@ export type GlobalSession = {
     files: number
     diffs?: Array<SnapshotFileDiff>
   }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
   share?: {
     url: string
   }
@@ -1892,6 +1911,16 @@ export type SyncEventSessionUpdated = {
         deletions: number
         files: number
         diffs?: Array<SnapshotFileDiff>
+      } | null
+      cost?: number | null
+      tokens?: {
+        input: number
+        output: number
+        reasoning: number
+        cache: {
+          read: number
+          write: number
+        }
       } | null
       share?: {
         url?: string | null
@@ -3084,6 +3113,16 @@ export type SessionInfo = {
     id: string
     providerID: string
     variant: string
+  }
+  cost: number
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
   }
   time: {
     created: number

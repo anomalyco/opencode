@@ -1,6 +1,8 @@
 import { NotFoundError } from "@/storage/storage"
 import { eq } from "drizzle-orm"
 import { and } from "drizzle-orm"
+import { sql } from "drizzle-orm"
+import type { TxOrDb } from "@/storage/db"
 import { SyncEvent } from "@/sync"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
@@ -18,6 +20,28 @@ function foreign(err: unknown) {
 }
 
 export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> | null } : T
+
+type Usage = Pick<MessageV2.StepFinishPart, "cost" | "tokens">
+
+function usage(part: MessageV2.Part | (typeof PartTable.$inferSelect)["data"]): Usage | undefined {
+  if (part.type !== "step-finish") return undefined
+  if (!("cost" in part) || !("tokens" in part)) return undefined
+  return { cost: part.cost, tokens: part.tokens }
+}
+
+function applyUsage(db: TxOrDb, sessionID: Session.Info["id"], value: Usage, sign = 1) {
+  db.update(SessionTable)
+    .set({
+      cost: sql`${SessionTable.cost} + ${value.cost * sign}`,
+      tokens_input: sql`${SessionTable.tokens_input} + ${value.tokens.input * sign}`,
+      tokens_output: sql`${SessionTable.tokens_output} + ${value.tokens.output * sign}`,
+      tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning * sign}`,
+      tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read * sign}`,
+      tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write * sign}`,
+    })
+    .where(eq(SessionTable.id, sessionID))
+    .run()
+}
 
 function grab<T extends object, K1 extends keyof T, X>(
   obj: T,
@@ -54,6 +78,12 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     summary_deletions: grab(info, "summary", (v) => grab(v, "deletions")),
     summary_files: grab(info, "summary", (v) => grab(v, "files")),
     summary_diffs: grab(info, "summary", (v) => grab(v, "diffs")),
+    cost: grab(info, "cost"),
+    tokens_input: grab(info, "tokens", (v) => grab(v, "input")),
+    tokens_output: grab(info, "tokens", (v) => grab(v, "output")),
+    tokens_reasoning: grab(info, "tokens", (v) => grab(v, "reasoning")),
+    tokens_cache_read: grab(info, "tokens", (v) => grab(v, "cache", (cache) => grab(cache, "read"))),
+    tokens_cache_write: grab(info, "tokens", (v) => grab(v, "cache", (cache) => grab(cache, "write"))),
     revert: grab(info, "revert"),
     permission: grab(info, "permission"),
     time_created: grab(info, "time", (v) => grab(v, "created")),
@@ -112,12 +142,28 @@ export default [
   }),
 
   SyncEvent.project(MessageV2.Event.Removed, (db, data) => {
+    for (const row of db
+      .select()
+      .from(PartTable)
+      .where(and(eq(PartTable.message_id, data.messageID), eq(PartTable.session_id, data.sessionID)))
+      .all()) {
+      const previous = usage(row.data)
+      if (previous) applyUsage(db, data.sessionID, previous, -1)
+    }
     db.delete(MessageTable)
       .where(and(eq(MessageTable.id, data.messageID), eq(MessageTable.session_id, data.sessionID)))
       .run()
   }),
 
   SyncEvent.project(MessageV2.Event.PartRemoved, (db, data) => {
+    const row = db
+      .select()
+      .from(PartTable)
+      .where(and(eq(PartTable.id, data.partID), eq(PartTable.session_id, data.sessionID)))
+      .get()
+    const previous = row && usage(row.data)
+    if (previous) applyUsage(db, data.sessionID, previous, -1)
+
     db.delete(PartTable)
       .where(and(eq(PartTable.id, data.partID), eq(PartTable.session_id, data.sessionID)))
       .run()
@@ -125,6 +171,7 @@ export default [
 
   SyncEvent.project(MessageV2.Event.PartUpdated, (db, data) => {
     const { id, messageID, sessionID, ...rest } = data.part
+    const row = db.select().from(PartTable).where(eq(PartTable.id, id)).get()
 
     try {
       db.insert(PartTable)
@@ -137,6 +184,10 @@ export default [
         })
         .onConflictDoUpdate({ target: PartTable.id, set: { data: rest } })
         .run()
+      const previous = row && usage(row.data)
+      const next = usage(data.part)
+      if (previous) applyUsage(db, row.session_id, previous, -1)
+      if (next) applyUsage(db, sessionID, next)
     } catch (err) {
       if (!foreign(err)) throw err
       log.warn("ignored late part update", { partID: id, messageID, sessionID })
