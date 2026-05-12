@@ -66,6 +66,17 @@ const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Layer.provide(RuntimeFlags.layer(flags)),
   )
 
+const originalFetch = globalThis.fetch
+afterEach(() => {
+  globalThis.fetch = originalFetch
+})
+function mockFetch(handler: (url: string) => Response) {
+  globalThis.fetch = async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+    return handler(url)
+  }
+}
+
 async function run<A, E>(ctx: InstanceContext, fn: (provider: Provider.Interface) => Effect.Effect<A, E, never>) {
   return AppRuntime.runPromise(
     Effect.gen(function* () {
@@ -2675,4 +2686,29 @@ test("opencode loader keeps paid models when auth exists", async () => {
       } catch {}
     }
   }
+})
+
+test("discovery loop merges dynamically discovered models into provider", async () => {
+  mockFetch((url) => {
+    if (url.includes("/v1/models"))
+      return Response.json({
+        data: [{ id: "discovered-model", name: "Discovered", metadata: { provider: { id: "anthropic" } } }],
+      })
+    return new Response("not found", { status: 404 })
+  })
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
+    },
+  })
+  await withTestInstance({
+    directory: tmp.path,
+    fn: async (ctx) => {
+      await set(ctx, "APERTURE_BASE_URL", "http://test.local")
+      const providers = await list(ctx)
+      expect(providers[ProviderID.aperture]).toBeDefined()
+      expect(providers[ProviderID.aperture].models["discovered-model"]).toBeDefined()
+      expect(providers[ProviderID.aperture].models["discovered-model"].name).toBe("Discovered")
+    },
+  })
 })

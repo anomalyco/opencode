@@ -121,6 +121,8 @@ type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
 type CustomDiscoverModels = () => Promise<Record<string, Model>>
 type CustomLoader = (provider: Info) => Effect.Effect<{
   autoload: boolean
+  name?: string
+  env?: string[]
   getModel?: CustomModelLoader
   vars?: CustomVarsLoader
   options?: Record<string, any>
@@ -838,6 +840,138 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    aperture: Effect.fnUntraced(function* (_input: Info) {
+      const env = yield* dep.env()
+      const baseUrl = env["APERTURE_BASE_URL"]
+      if (!baseUrl) return { autoload: false }
+
+      return {
+        autoload: true,
+        name: "Aperture",
+        env: ["APERTURE_BASE_URL"],
+        options: {
+          apiKey: "not-required",
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          try {
+            const res = await fetch(`${baseUrl}/v1/models`)
+            if (!res.ok) {
+              log.warn("aperture model discovery failed", { status: res.status })
+              return {}
+            }
+            const json = (await res.json()) as {
+              data: Array<{
+                id: string
+                name?: string
+                metadata?: { provider?: { id?: string } }
+                pricing?: {
+                  input?: string
+                  output?: string
+                  input_cache_read?: string
+                  input_cache_write?: string
+                }
+              }>
+            }
+
+            const models: Record<string, Model> = {}
+            for (const m of json.data) {
+              const providerId = m.metadata?.provider?.id ?? ""
+              const modelId = m.id
+              const isClaude = modelId.includes("claude") || modelId.includes("anthropic")
+              const isGPT = providerId === "openai"
+              const isGemini = modelId.includes("gemini")
+
+              const npm = iife(() => {
+                switch (providerId) {
+                  case "anthropic":
+                  case "mantle-anthropic":
+                  case "mantle":
+                  case "bedrock":
+                    return "@ai-sdk/anthropic"
+                  case "vertex":
+                    return isClaude ? "@ai-sdk/anthropic" : "@ai-sdk/openai-compatible"
+                  case "openai":
+                    return "@ai-sdk/openai"
+                  case "openrouter":
+                    return "@ai-sdk/openai-compatible"
+                  default:
+                    return "@ai-sdk/openai-compatible"
+                }
+              })
+
+              const limit = iife(() => {
+                if (isClaude) return { context: 200000, output: 16384 }
+                if (isGPT) return { context: 128000, output: 16384 }
+                if (isGemini) return { context: 1000000, output: 8192 }
+                return { context: 128000, output: 4096 }
+              })
+
+              const pricing = m.pricing
+              const parsePrice = (v?: string) => {
+                const n = v ? parseFloat(v) : 0
+                return Number.isFinite(n) ? n : 0
+              }
+
+              models[modelId] = {
+                id: ModelID.make(modelId),
+                providerID: ProviderID.make("aperture"),
+                name: m.name ?? modelId,
+                family: "",
+                api: {
+                  id: modelId,
+                  url: baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "") + "/v1",
+                  npm,
+                },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: {
+                  input: parsePrice(pricing?.input),
+                  output: parsePrice(pricing?.output),
+                  cache: {
+                    read: parsePrice(pricing?.input_cache_read),
+                    write: parsePrice(pricing?.input_cache_write),
+                  },
+                },
+                limit,
+                capabilities: {
+                  toolcall: true,
+                  temperature: true,
+                  reasoning: false,
+                  attachment: isClaude,
+                  input: {
+                    text: true,
+                    image: isClaude || isGPT,
+                    audio: false,
+                    video: false,
+                    pdf: false,
+                  },
+                  output: {
+                    text: true,
+                    audio: false,
+                    image: false,
+                    video: false,
+                    pdf: false,
+                  },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+            }
+
+            log.info("aperture model discovery complete", {
+              count: Object.keys(models).length,
+              models: Object.keys(models),
+            })
+            return models
+          } catch (e) {
+            log.warn("aperture model discovery failed", { error: e })
+            return {}
+          }
+        },
+      }
+    }),
   }
 }
 
@@ -1399,19 +1533,37 @@ export const layer = Layer.effect(
         for (const [id, fn] of Object.entries(custom(dep))) {
           const providerID = ProviderID.make(id)
           if (disabled.has(providerID)) continue
-          const data = database[providerID]
-          if (!data) {
-            log.error("Provider does not exist in model list " + providerID)
-            continue
-          }
+
+          const existing = database[providerID]
+          const data =
+            existing ??
+            ({
+              id: providerID,
+              name: id,
+              env: [] as string[],
+              options: {},
+              source: "custom" as const,
+              models: {},
+            } as Info)
+
           const result = yield* fn(data)
-          if (result && (result.autoload || providers[providerID])) {
-            if (result.getModel) modelLoaders[providerID] = result.getModel
-            if (result.vars) varsLoaders[providerID] = result.vars
-            if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
-            const opts = result.options ?? {}
-            const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
-            mergeProvider(providerID, patch)
+          if (!result || (!result.autoload && !providers[providerID])) continue
+
+          if (!existing) {
+            if (result.name) data.name = result.name
+            if (result.env) data.env = result.env
+            database[providerID] = data
+          }
+
+          if (result.getModel) modelLoaders[providerID] = result.getModel
+          if (result.vars) varsLoaders[providerID] = result.vars
+          if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
+          const opts = result.options ?? {}
+          if (providers[providerID]) {
+            mergeProvider(providerID, { options: opts })
+          } else {
+            const source = !existing && data.env.some((e) => envs[e]) ? "env" : "custom"
+            mergeProvider(providerID, { source, options: opts } as Partial<Info>)
           }
         }
 

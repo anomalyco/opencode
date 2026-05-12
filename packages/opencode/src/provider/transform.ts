@@ -366,7 +366,8 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
     const useMessageLevelOptions =
       model.providerID === "anthropic" ||
       model.providerID.includes("bedrock") ||
-      model.api.npm === "@ai-sdk/amazon-bedrock"
+      model.api.npm === "@ai-sdk/amazon-bedrock" ||
+      model.api.npm === "@ai-sdk/anthropic"
     const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
     if (shouldUseContentOptions) {
@@ -1084,7 +1085,7 @@ export function options(input: {
     }
   }
 
-  if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+  if (input.model.providerID === "openai" || input.model.api.npm === "@ai-sdk/openai" || input.providerOptions?.setCacheKey) {
     result["promptCacheKey"] = input.sessionID
   }
 
