@@ -101,6 +101,7 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 // Mock UnauthorizedError in the auth module so instanceof checks work
 void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
+  auth: async () => "AUTHORIZED" as const,
 }))
 
 beforeEach(() => {
@@ -132,29 +133,72 @@ test("first connect to OAuth server shows needs_auth instead of failed", async (
       )
     },
   })
+})
+
+test("discoveryState() returns metadata from config when explicit endpoints are provided", async () => {
+  const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
+  const { McpAuth } = await import("../../src/mcp/auth")
+
+  await using tmp = await tmpdir()
 
   await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
-      const result = await Effect.runPromise(
-        MCP.Service.use((mcp) =>
-          mcp.add("test-oauth", {
-            type: "remote",
-            url: "https://example.com/mcp",
-          }),
-        ).pipe(Effect.provide(MCP.defaultLayer)),
+      const auth = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* McpAuth.Service
+        }).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
+      const provider = new McpOAuthProvider(
+        "test-discovery",
+        "https://example.com/mcp",
+        {
+          clientId: "test-client",
+          authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+          tokenEndpoint: "https://oauth2.googleapis.com/token",
+        },
+        { onRedirect: async () => {} },
+        auth,
       )
 
-      const serverStatus = result.status as Record<string, { status: string; error?: string }>
-
-      // The server should be detected as needing auth, NOT as failed.
-      // Before the fix, provider.state() would throw a plain Error
-      // ("No OAuth state saved for MCP server: test-oauth") which was
-      // not caught as UnauthorizedError, causing status to be "failed".
-      expect(serverStatus["test-oauth"]).toBeDefined()
-      expect(serverStatus["test-oauth"].status).toBe("needs_auth")
+      const state = await provider.discoveryState()
+      expect(state).toBeDefined()
+      expect(state!.authorizationServerUrl).toBe("https://accounts.google.com")
+      expect(state!.authorizationServerMetadata?.authorization_endpoint).toBe(
+        "https://accounts.google.com/o/oauth2/v2/auth",
+      )
+      expect(state!.authorizationServerMetadata?.token_endpoint).toBe("https://oauth2.googleapis.com/token")
     },
   })
+})
+
+test("discoveryState() returns undefined when no explicit endpoints configured", async () => {
+  const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
+  const { McpAuth } = await import("../../src/mcp/auth")
+
+  await using tmp = await tmpdir()
+
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const auth = await Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* McpAuth.Service
+        }).pipe(Effect.provide(McpAuth.defaultLayer)),
+      )
+      const provider = new McpOAuthProvider(
+        "test-no-discovery",
+        "https://example.com/mcp",
+        { clientId: "test-client" },
+        { onRedirect: async () => {} },
+        auth,
+      )
+
+      const state = await provider.discoveryState()
+      expect(state).toBeUndefined()
+    },
+  })
+})
 })
 
 test("state() generates a new state when none is saved", async () => {

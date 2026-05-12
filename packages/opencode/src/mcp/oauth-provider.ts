@@ -1,4 +1,4 @@
-import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import type { OAuthClientProvider, OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
   OAuthClientMetadata,
   OAuthTokens,
@@ -19,6 +19,8 @@ export interface McpOAuthConfig {
   clientSecret?: string
   scope?: string
   redirectUri?: string
+  authorizationEndpoint?: string
+  tokenEndpoint?: string
 }
 
 export interface McpOAuthCallbacks {
@@ -26,6 +28,8 @@ export interface McpOAuthCallbacks {
 }
 
 export class McpOAuthProvider implements OAuthClientProvider {
+  private cachedDiscoveryState?: OAuthDiscoveryState
+
   constructor(
     private mcpName: string,
     private serverUrl: string,
@@ -189,6 +193,31 @@ export class McpOAuthProvider implements OAuthClientProvider {
         await Effect.runPromise(this.auth.set(this.mcpName, entry))
         break
     }
+  }
+
+  async discoveryState(): Promise<OAuthDiscoveryState | undefined> {
+    if (this.cachedDiscoveryState) return this.cachedDiscoveryState
+
+    // When the server does not support RFC 8414 metadata discovery (e.g.
+    // Google Workspace MCP servers), the SDK's automatic discovery will fail.
+    // If the config provides explicit authorization/token endpoints, build a
+    // synthetic discovery state so the SDK skips its failing discovery and
+    // uses the configured endpoints directly.
+    if (!this.config.authorizationEndpoint || !this.config.tokenEndpoint) return undefined
+
+    return {
+      authorizationServerUrl: new URL(this.config.authorizationEndpoint).origin,
+      authorizationServerMetadata: {
+        issuer: new URL(this.config.authorizationEndpoint).origin,
+        authorization_endpoint: this.config.authorizationEndpoint,
+        token_endpoint: this.config.tokenEndpoint,
+        response_types_supported: ["code"],
+      },
+    }
+  }
+
+  async saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
+    this.cachedDiscoveryState = state
   }
 }
 
