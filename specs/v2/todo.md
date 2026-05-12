@@ -2,9 +2,11 @@
 
 ok we need to work towards a launch of v2 so we can get out of this rebuild phase
 
-## Kill Hono - Kit
+## Post-Hono cleanup - Kit
 
-Hono needs to go away so zod can go away. this is almost done
+The opencode server has moved to the Effect HttpApi backend. Remaining work is
+mostly cleanup: delete compatibility shims, shrink Zod surfaces, and simplify
+test harnesses that used to compare Hono and HttpApi behavior.
 
 ## New Data Mode - Dax
 

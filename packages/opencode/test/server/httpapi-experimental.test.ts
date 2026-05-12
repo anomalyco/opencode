@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
@@ -41,7 +40,7 @@ afterEach(async () => {
 })
 
 describe("experimental HttpApi", () => {
-  test("serves read-only experimental endpoints through Hono bridge", async () => {
+  test("serves read-only experimental endpoints through the default server app", async () => {
     await using tmp = await tmpdir({
       config: {
         formatter: false,
@@ -94,7 +93,7 @@ describe("experimental HttpApi", () => {
     expect(await resources.json()).toEqual({})
   })
 
-  test("serves Console org switch through Hono bridge", async () => {
+  test("serves Console org switch through the default server app", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     Database.Client()
       .$client.prepare(
@@ -120,7 +119,7 @@ describe("experimental HttpApi", () => {
     expect(await switched.json()).toBe(true)
   })
 
-  test("serves global session list through Hono bridge", async () => {
+  test("serves global session list through the default server app", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
 
     const first = await WithInstance.provide({
@@ -157,7 +156,7 @@ describe("experimental HttpApi", () => {
     expect(((await next.json()) as Session.GlobalInfo[]).map((session) => session.id)).toContain(first.id)
   })
 
-  testWorktreeMutations("serves worktree mutations through Hono bridge", async () => {
+  testWorktreeMutations("serves worktree mutations through the default server app", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
 
     const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }

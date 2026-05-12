@@ -1,6 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID, PartID } from "./schema"
-import z from "zod"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { LSP } from "@/lsp/lsp"
@@ -23,8 +22,7 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Schema, Types } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 
@@ -56,7 +54,7 @@ export const APIError = namedSchemaError("APIError", {
   responseBody: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 })
-export type APIError = z.infer<typeof APIError.Schema>
+export type APIError = Schema.Schema.Type<typeof APIError.Schema>
 export const ContextOverflowError = namedSchemaError("ContextOverflowError", {
   message: Schema.String,
   responseBody: Schema.optional(Schema.String),
@@ -64,24 +62,19 @@ export const ContextOverflowError = namedSchemaError("ContextOverflowError", {
 
 export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
   type: Schema.Literal("text"),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
   type: Schema.Literal("json_schema"),
   schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
   retryCount: NonNegativeInt.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
-const _Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
+export const Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
   discriminator: "type",
   identifier: "OutputFormat",
 })
-export const Format = Object.assign(_Format, { zod: zod(_Format) })
-export type OutputFormat = Schema.Schema.Type<typeof _Format>
+export type OutputFormat = Schema.Schema.Type<typeof Format>
 
 const partBase = {
   id: PartID,
@@ -93,9 +86,7 @@ export const SnapshotPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("snapshot"),
   snapshot: Schema.String,
-})
-  .annotate({ identifier: "SnapshotPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SnapshotPart" })
 export type SnapshotPart = Types.DeepMutable<Schema.Schema.Type<typeof SnapshotPart>>
 
 export const PatchPart = Schema.Struct({
@@ -103,9 +94,7 @@ export const PatchPart = Schema.Struct({
   type: Schema.Literal("patch"),
   hash: Schema.String,
   files: Schema.Array(Schema.String),
-})
-  .annotate({ identifier: "PatchPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "PatchPart" })
 export type PatchPart = Types.DeepMutable<Schema.Schema.Type<typeof PatchPart>>
 
 export const TextPart = Schema.Struct({
@@ -121,9 +110,7 @@ export const TextPart = Schema.Struct({
     }),
   ),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-})
-  .annotate({ identifier: "TextPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "TextPart" })
 export type TextPart = Types.DeepMutable<Schema.Schema.Type<typeof TextPart>>
 
 export const ReasoningPart = Schema.Struct({
@@ -135,9 +122,7 @@ export const ReasoningPart = Schema.Struct({
     start: NonNegativeInt,
     end: Schema.optional(NonNegativeInt),
   }),
-})
-  .annotate({ identifier: "ReasoningPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ReasoningPart" })
 export type ReasoningPart = Types.DeepMutable<Schema.Schema.Type<typeof ReasoningPart>>
 
 const filePartSourceBase = {
@@ -152,9 +137,7 @@ export const FileSource = Schema.Struct({
   ...filePartSourceBase,
   type: Schema.Literal("file"),
   path: Schema.String,
-})
-  .annotate({ identifier: "FileSource" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "FileSource" })
 
 export const SymbolSource = Schema.Struct({
   ...filePartSourceBase,
@@ -163,24 +146,19 @@ export const SymbolSource = Schema.Struct({
   range: LSP.Range,
   name: Schema.String,
   kind: NonNegativeInt,
-})
-  .annotate({ identifier: "SymbolSource" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SymbolSource" })
 
 export const ResourceSource = Schema.Struct({
   ...filePartSourceBase,
   type: Schema.Literal("resource"),
   clientName: Schema.String,
   uri: Schema.String,
-})
-  .annotate({ identifier: "ResourceSource" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ResourceSource" })
 
-const _FilePartSource = Schema.Union([FileSource, SymbolSource, ResourceSource]).annotate({
+export const FilePartSource = Schema.Union([FileSource, SymbolSource, ResourceSource]).annotate({
   discriminator: "type",
   identifier: "FilePartSource",
 })
-export const FilePartSource = Object.assign(_FilePartSource, { zod: zod(_FilePartSource) })
 
 export const FilePart = Schema.Struct({
   ...partBase,
@@ -188,10 +166,8 @@ export const FilePart = Schema.Struct({
   mime: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
-  source: Schema.optional(_FilePartSource),
-})
-  .annotate({ identifier: "FilePart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+  source: Schema.optional(FilePartSource),
+}).annotate({ identifier: "FilePart" })
 export type FilePart = Types.DeepMutable<Schema.Schema.Type<typeof FilePart>>
 
 export const AgentPart = Schema.Struct({
@@ -205,9 +181,7 @@ export const AgentPart = Schema.Struct({
       end: NonNegativeInt,
     }),
   ),
-})
-  .annotate({ identifier: "AgentPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "AgentPart" })
 export type AgentPart = Types.DeepMutable<Schema.Schema.Type<typeof AgentPart>>
 
 export const CompactionPart = Schema.Struct({
@@ -216,9 +190,7 @@ export const CompactionPart = Schema.Struct({
   auto: Schema.Boolean,
   overflow: Schema.optional(Schema.Boolean),
   tail_start_id: Schema.optional(MessageID),
-})
-  .annotate({ identifier: "CompactionPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "CompactionPart" })
 export type CompactionPart = Types.DeepMutable<Schema.Schema.Type<typeof CompactionPart>>
 
 export const SubtaskPart = Schema.Struct({
@@ -234,9 +206,7 @@ export const SubtaskPart = Schema.Struct({
     }),
   ),
   command: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "SubtaskPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SubtaskPart" })
 export type SubtaskPart = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPart>>
 
 export const RetryPart = Schema.Struct({
@@ -247,9 +217,7 @@ export const RetryPart = Schema.Struct({
   time: Schema.Struct({
     created: NonNegativeInt,
   }),
-})
-  .annotate({ identifier: "RetryPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "RetryPart" })
 export type RetryPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof RetryPart>>, "error"> & {
   error: APIError
 }
@@ -258,9 +226,7 @@ export const StepStartPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("step-start"),
   snapshot: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "StepStartPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "StepStartPart" })
 export type StepStartPart = Types.DeepMutable<Schema.Schema.Type<typeof StepStartPart>>
 
 export const StepFinishPart = Schema.Struct({
@@ -279,18 +245,14 @@ export const StepFinishPart = Schema.Struct({
       write: Schema.Finite,
     }),
   }),
-})
-  .annotate({ identifier: "StepFinishPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "StepFinishPart" })
 export type StepFinishPart = Types.DeepMutable<Schema.Schema.Type<typeof StepFinishPart>>
 
 export const ToolStatePending = Schema.Struct({
   status: Schema.Literal("pending"),
   input: Schema.Record(Schema.String, Schema.Any),
   raw: Schema.String,
-})
-  .annotate({ identifier: "ToolStatePending" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolStatePending" })
 export type ToolStatePending = Types.DeepMutable<Schema.Schema.Type<typeof ToolStatePending>>
 
 export const ToolStateRunning = Schema.Struct({
@@ -301,9 +263,7 @@ export const ToolStateRunning = Schema.Struct({
   time: Schema.Struct({
     start: NonNegativeInt,
   }),
-})
-  .annotate({ identifier: "ToolStateRunning" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolStateRunning" })
 export type ToolStateRunning = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateRunning>>
 
 export const ToolStateCompleted = Schema.Struct({
@@ -318,9 +278,7 @@ export const ToolStateCompleted = Schema.Struct({
     compacted: Schema.optional(NonNegativeInt),
   }),
   attachments: Schema.optional(Schema.Array(FilePart)),
-})
-  .annotate({ identifier: "ToolStateCompleted" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolStateCompleted" })
 export type ToolStateCompleted = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateCompleted>>
 
 function truncateToolOutput(text: string, maxChars?: number) {
@@ -338,21 +296,17 @@ export const ToolStateError = Schema.Struct({
     start: NonNegativeInt,
     end: NonNegativeInt,
   }),
-})
-  .annotate({ identifier: "ToolStateError" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolStateError" })
 export type ToolStateError = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateError>>
 
-const _ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).annotate({
+export const ToolState = Schema.Union([
+  ToolStatePending,
+  ToolStateRunning,
+  ToolStateCompleted,
+  ToolStateError,
+]).annotate({
   discriminator: "status",
   identifier: "ToolState",
-})
-// Cast the derived zod so downstream z.infer sees the same mutable shape that
-// our exported TS types expose (the pre-migration Zod inferences were mutable).
-export const ToolState = Object.assign(_ToolState, {
-  zod: zod(_ToolState) as unknown as z.ZodType<
-    ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
-  >,
 })
 export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
 
@@ -361,11 +315,9 @@ export const ToolPart = Schema.Struct({
   type: Schema.Literal("tool"),
   callID: Schema.String,
   tool: Schema.String,
-  state: _ToolState,
+  state: ToolState,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-})
-  .annotate({ identifier: "ToolPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolPart" })
 export type ToolPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof ToolPart>>, "state"> & {
   state: ToolState
 }
@@ -381,7 +333,7 @@ export const User = Schema.Struct({
   time: Schema.Struct({
     created: NonNegativeInt,
   }),
-  format: Schema.optional(_Format),
+  format: Schema.optional(Format),
   summary: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.String),
@@ -397,9 +349,7 @@ export const User = Schema.Struct({
   }),
   system: Schema.optional(Schema.String),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
-})
-  .annotate({ identifier: "UserMessage" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "UserMessage" })
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
 
 export const Part = Schema.Union([
@@ -432,9 +382,7 @@ export type Part =
 
 const AssistantErrorSchema = Schema.Union([
   AuthError.EffectSchema,
-  Schema.Struct({ name: Schema.Literal("UnknownError"), data: Schema.Struct({ message: Schema.String }) }).annotate({
-    identifier: "UnknownError",
-  }),
+  NamedError.Unknown.EffectSchema,
   OutputLengthError.EffectSchema,
   AbortedError.EffectSchema,
   StructuredOutputError.EffectSchema,
@@ -448,8 +396,7 @@ type AssistantError = Schema.Schema.Type<typeof AssistantErrorSchema>
 // Consumers of `SessionPrompt.PromptInput.parts` send part drafts without the
 // ambient IDs (`messageID`, `sessionID`) that live on stored parts, and may
 // omit `id` to let the server allocate one.  These Schema-Struct variants
-// carry that shape, and `SessionPrompt.PromptInput` just references the
-// derived `.zod` (no omit/partial gymnastics needed at the call site).
+// carry that shape so prompt decoding can accept drafts without stored IDs.
 
 export const TextPartInput = Schema.Struct({
   id: Schema.optional(PartID),
@@ -464,9 +411,7 @@ export const TextPartInput = Schema.Struct({
     }),
   ),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-})
-  .annotate({ identifier: "TextPartInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "TextPartInput" })
 export type TextPartInput = Types.DeepMutable<Schema.Schema.Type<typeof TextPartInput>>
 
 export const FilePartInput = Schema.Struct({
@@ -475,10 +420,8 @@ export const FilePartInput = Schema.Struct({
   mime: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
-  source: Schema.optional(_FilePartSource),
-})
-  .annotate({ identifier: "FilePartInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+  source: Schema.optional(FilePartSource),
+}).annotate({ identifier: "FilePartInput" })
 export type FilePartInput = Types.DeepMutable<Schema.Schema.Type<typeof FilePartInput>>
 
 export const AgentPartInput = Schema.Struct({
@@ -492,9 +435,7 @@ export const AgentPartInput = Schema.Struct({
       end: NonNegativeInt,
     }),
   ),
-})
-  .annotate({ identifier: "AgentPartInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "AgentPartInput" })
 export type AgentPartInput = Types.DeepMutable<Schema.Schema.Type<typeof AgentPartInput>>
 
 export const SubtaskPartInput = Schema.Struct({
@@ -510,9 +451,7 @@ export const SubtaskPartInput = Schema.Struct({
     }),
   ),
   command: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "SubtaskPartInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SubtaskPartInput" })
 export type SubtaskPartInput = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPartInput>>
 
 export const Assistant = Schema.Struct({
@@ -550,9 +489,7 @@ export const Assistant = Schema.Struct({
   structured: Schema.optional(Schema.Any),
   variant: Schema.optional(Schema.String),
   finish: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "AssistantMessage" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "AssistantMessage" })
 export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {
   error?: AssistantError
 }
@@ -622,7 +559,7 @@ export const Event = {
 export const WithParts = Schema.Struct({
   info: Info,
   parts: Schema.Array(Part),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type WithParts = {
   info: Info
   parts: Part[]

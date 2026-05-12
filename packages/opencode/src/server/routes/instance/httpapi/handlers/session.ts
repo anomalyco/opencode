@@ -234,7 +234,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     // share/unshare errors aren't all client-induced — storage and network
     // failures from SessionShare are real possibilities. Map to a typed 500
-    // (matches the legacy Hono path which routed any failure through
+    // (matches the legacy route behavior which routed any failure through
     // ErrorMiddleware → NamedError.Unknown 500) instead of blanket-mapping
     // every failure to a 400 BadRequest.
     const share = Effect.fn("SessionHttpApi.share")(function* (ctx: { params: { sessionID: SessionID } }) {

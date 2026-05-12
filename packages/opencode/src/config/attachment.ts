@@ -1,8 +1,7 @@
 export * as ConfigAttachment from "./attachment"
 
 import { Schema } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { PositiveInt, withStatics } from "@opencode-ai/core/schema"
+import { PositiveInt } from "@opencode-ai/core/schema"
 
 export const Image = Schema.Struct({
   auto_resize: Schema.optional(Schema.Boolean).annotate({
@@ -17,14 +16,10 @@ export const Image = Schema.Struct({
   max_base64_bytes: Schema.optional(PositiveInt).annotate({
     description: "Maximum base64 payload bytes for an image attachment (default: 4718592)",
   }),
-})
-  .annotate({ identifier: "ImageAttachmentConfig" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ImageAttachmentConfig" })
 export type Image = Schema.Schema.Type<typeof Image>
 
 export const Info = Schema.Struct({
   image: Schema.optional(Image).annotate({ description: "Image attachment configuration" }),
-})
-  .annotate({ identifier: "AttachmentConfig" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "AttachmentConfig" })
 export type Info = Schema.Schema.Type<typeof Info>

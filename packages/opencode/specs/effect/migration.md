@@ -57,17 +57,9 @@ Rules:
 - Avoid service-local `makeRuntime(...)` facades unless a file is still intentionally in the older migration phase
 - No `Layer.fresh` for normal per-directory isolation; use `InstanceState`
 
-## Schema → Zod interop
+## Schema boundaries
 
-When a service uses Effect Schema internally but needs Zod schemas for the HTTP layer, derive Zod from Schema using the `zod()` helper from `@opencode-ai/core/effect-zod`:
-
-```ts
-import { zod } from "@opencode-ai/core/effect-zod"
-
-export const ZodInfo = zod(Info) // derives z.ZodType from Schema.Union
-```
-
-See `Auth.ZodInfo` for the canonical example.
+Use Effect Schema directly at HTTP, tool, and AI SDK boundaries. For provider-facing JSON Schema, use a boundary-specific helper such as `ToolJsonSchema.fromSchema(...)`; do not reintroduce generic Effect Schema → Zod conversion.
 
 ## InstanceState init patterns
 
