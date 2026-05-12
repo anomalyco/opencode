@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="body-grad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="40%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="tentacle-grad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#5B21B6"/>
+    </linearGradient>
+    <linearGradient id="eye-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1E1B4B"/>
+      <stop offset="100%" stop-color="#312E81"/>
+    </linearGradient>
+    <radialGradient id="head-shine" cx="0.4" cy="0.3" r="0.6">
+      <stop offset="0%" stop-color="#A78BFA" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#7C3AED" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Head shape (slightly larger for square format) -->
+  <path d="
+    M 256 85
+    C 318 85, 364 102, 384 156
+    C 404 210, 390 248, 368 272
+    C 354 288, 322 296, 256 296
+    C 190 296, 158 288, 144 272
+    C 122 248, 108 210, 128 156
+    C 148 102, 194 85, 256 85
+    Z
+  " fill="url(#body-grad)"/>
+
+  <!-- Head shine overlay -->
+  <path d="
+    M 256 85
+    C 318 85, 364 102, 384 156
+    C 404 210, 390 248, 368 272
+    C 354 288, 322 296, 256 296
+    C 190 296, 158 288, 144 272
+    C 122 248, 108 210, 128 156
+    C 148 102, 194 85, 256 85
+    Z
+  " fill="url(#head-shine)"/>
+
+  <!-- Left ear/head bump -->
+  <path d="
+    M 140 150
+    C 108 160, 82 176, 72 198
+    C 64 216, 72 234, 92 238
+    C 108 242, 126 244, 142 242
+    C 134 218, 130 192, 140 150
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Right ear/head bump -->
+  <path d="
+    M 372 150
+    C 404 160, 430 176, 440 198
+    C 448 216, 440 234, 420 238
+    C 404 242, 386 244, 370 242
+    C 378 218, 382 192, 372 150
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Left eye -->
+  <ellipse cx="214" cy="178" rx="30" ry="34" fill="#FFFFFF"/>
+  <ellipse cx="214" cy="176" rx="28" ry="32" fill="#F8FAFC"/>
+  <ellipse cx="216" cy="178" rx="16" ry="19" fill="url(#eye-grad)"/>
+  <ellipse cx="209" cy="170" rx="6" ry="7" fill="#FFFFFF"/>
+  <ellipse cx="222" cy="186" rx="3" ry="3" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- Right eye -->
+  <ellipse cx="298" cy="178" rx="30" ry="34" fill="#FFFFFF"/>
+  <ellipse cx="298" cy="176" rx="28" ry="32" fill="#F8FAFC"/>
+  <ellipse cx="300" cy="178" rx="16" ry="19" fill="url(#eye-grad)"/>
+  <ellipse cx="293" cy="170" rx="6" ry="7" fill="#FFFFFF"/>
+  <ellipse cx="306" cy="186" rx="3" ry="3" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- Cheeks -->
+  <ellipse cx="186" cy="210" rx="14" ry="9" fill="#C084FC" opacity="0.25"/>
+  <ellipse cx="326" cy="210" rx="14" ry="9" fill="#C084FC" opacity="0.25"/>
+
+  <!-- Tentacles -->
+  <path d="M 160 260 C 136 290, 92 336, 58 390 C 48 408, 52 424, 68 424 C 82 424, 94 414, 102 400 C 124 362, 150 316, 168 276 Z" fill="url(#tentacle-grad)"/>
+  <path d="M 182 274 C 156 308, 120 370, 96 430 C 88 450, 98 466, 116 462 C 132 458, 140 442, 148 424 C 164 380, 180 326, 194 288 Z" fill="url(#tentacle-grad)"/>
+  <path d="M 208 288 C 194 324, 178 386, 168 450 C 166 470, 178 484, 196 478 C 212 472, 218 456, 220 436 C 226 394, 224 330, 222 294 Z" fill="url(#tentacle-grad)"/>
+  <path d="M 236 294 C 228 330, 220 388, 218 446 C 218 466, 230 480, 248 474 C 264 468, 268 452, 266 432 C 262 392, 254 336, 250 298 Z" fill="url(#tentacle-grad)"/>
+  <path d="M 276 294 C 268 330, 260 388, 258 446 C 258 466, 270 480, 288 474 C 304 468, 308 452, 306 432 C 302 392, 294 336, 290 298 Z" fill="url(#tentacle-grad)"/>
+  <path d="M 304 288 C 290 324, 274 386, 264 450 C 262 470, 274 484, 292 478 C 308 472, 314 456, 316 436 C 322 394, 320 330, 318 294 Z" fill="url(#tentacle-grad)"/>
+  <path d="M 330 274 C 304 308, 268 370, 244 430 C 236 450, 246 466, 264 462 C 280 458, 288 442, 296 424 C 312 380, 328 326, 342 288 Z" fill="url(#tentacle-grad)"/>
+  <path d="M 352 260 C 328 290, 284 336, 250 390 C 240 408, 244 424, 260 424 C 274 424, 286 414, 294 400 C 316 362, 342 316, 360 276 Z" fill="url(#tentacle-grad)"/>
+
+  <!-- Suckers -->
+  <circle cx="68" cy="412" r="4" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="82" cy="418" r="3" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="106" cy="448" r="4" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="120" cy="454" r="3" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="178" cy="468" r="4" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="192" cy="472" r="3" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="236" cy="466" r="4" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="276" cy="466" r="4" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="320" cy="472" r="3" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="334" cy="468" r="4" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="390" cy="454" r="3" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="404" cy="448" r="4" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="428" cy="420" r="3" fill="#8B5CF6" opacity="0.5"/>
+  <circle cx="442" cy="412" r="4" fill="#8B5CF6" opacity="0.5"/>
+
+  <!-- Mouth -->
+  <path d="M 244 220 Q 256 230, 268 220" fill="none" stroke="#4C1D95" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+</svg>

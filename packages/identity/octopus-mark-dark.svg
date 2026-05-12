@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="body-grad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#F1F5F9"/>
+      <stop offset="100%" stop-color="#CBD5E1"/>
+    </linearGradient>
+    <linearGradient id="tentacle-grad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#E2E8F0"/>
+      <stop offset="100%" stop-color="#94A3B8"/>
+    </linearGradient>
+    <linearGradient id="eye-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Dark background -->
+  <rect width="512" height="512" rx="64" fill="#0F172A"/>
+
+  <!-- Head shape -->
+  <path d="
+    M 256 105
+    C 308 105, 348 120, 366 168
+    C 384 216, 370 252, 350 274
+    C 338 288, 312 295, 256 295
+    C 200 295, 174 288, 162 274
+    C 142 252, 128 216, 146 168
+    C 164 120, 204 105, 256 105
+    Z
+  " fill="url(#body-grad)"/>
+
+  <!-- Left ear/head bump -->
+  <path d="
+    M 158 160
+    C 130 168, 108 182, 100 200
+    C 94 214, 100 228, 116 232
+    C 128 235, 142 238, 156 238
+    C 150 218, 148 196, 158 160
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Right ear/head bump -->
+  <path d="
+    M 354 160
+    C 382 168, 404 182, 412 200
+    C 418 214, 412 228, 396 232
+    C 384 235, 370 238, 356 238
+    C 362 218, 364 196, 354 160
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Left eye white -->
+  <ellipse cx="214" cy="180" rx="30" ry="34" fill="#F8FAFC"/>
+  <ellipse cx="214" cy="178" rx="28" ry="32" fill="#E2E8F0"/>
+
+  <!-- Right eye white -->
+  <ellipse cx="298" cy="180" rx="30" ry="34" fill="#F8FAFC"/>
+  <ellipse cx="298" cy="178" rx="28" ry="32" fill="#E2E8F0"/>
+
+  <!-- Left pupil -->
+  <ellipse cx="216" cy="180" rx="16" ry="19" fill="url(#eye-grad)"/>
+
+  <!-- Right pupil -->
+  <ellipse cx="300" cy="180" rx="16" ry="19" fill="url(#eye-grad)"/>
+
+  <!-- Left eye highlight -->
+  <ellipse cx="209" cy="172" rx="6" ry="7" fill="#FFFFFF"/>
+  <ellipse cx="222" cy="188" rx="3" ry="3" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- Right eye highlight -->
+  <ellipse cx="293" cy="172" rx="6" ry="7" fill="#FFFFFF"/>
+  <ellipse cx="306" cy="188" rx="3" ry="3" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- Cheeks -->
+  <ellipse cx="188" cy="212" rx="12" ry="8" fill="#FFFFFF" opacity="0.15"/>
+  <ellipse cx="324" cy="212" rx="12" ry="8" fill="#FFFFFF" opacity="0.15"/>
+
+  <!-- Tentacle 1: Far left -->
+  <path d="
+    M 172 262
+    C 152 288, 112 332, 82 384
+    C 74 398, 76 410, 90 412
+    C 102 414, 112 406, 118 394
+    C 138 358, 162 316, 178 278
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Tentacle 2: Mid-left -->
+  <path d="
+    M 190 274
+    C 168 304, 138 360, 118 416
+    C 112 434, 120 448, 136 446
+    C 150 444, 156 430, 162 414
+    C 176 374, 190 324, 202 288
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Tentacle 3: Near-left -->
+  <path d="
+    M 212 286
+    C 200 320, 186 378, 178 438
+    C 176 456, 188 468, 204 464
+    C 218 460, 222 446, 224 428
+    C 228 388, 226 328, 224 294
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Tentacle 4: Center-left -->
+  <path d="
+    M 236 292
+    C 230 326, 222 380, 222 436
+    C 222 454, 232 466, 248 462
+    C 262 458, 264 442, 262 424
+    C 258 386, 252 332, 248 296
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Tentacle 5: Center-right -->
+  <path d="
+    M 264 292
+    C 258 326, 250 380, 250 436
+    C 250 454, 260 466, 276 462
+    C 290 458, 292 442, 290 424
+    C 286 386, 280 332, 276 296
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Tentacle 6: Near-right -->
+  <path d="
+    M 290 286
+    C 278 320, 264 378, 256 438
+    C 254 456, 266 468, 282 464
+    C 296 460, 300 446, 302 428
+    C 306 388, 304 328, 302 294
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Tentacle 7: Mid-right -->
+  <path d="
+    M 314 274
+    C 292 304, 262 360, 242 416
+    C 236 434, 244 448, 260 446
+    C 274 444, 280 430, 286 414
+    C 300 374, 314 324, 326 288
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Tentacle 8: Far right -->
+  <path d="
+    M 340 262
+    C 320 288, 280 332, 250 384
+    C 242 398, 244 410, 258 412
+    C 270 414, 280 406, 286 394
+    C 306 358, 330 316, 346 278
+    Z
+  " fill="url(#tentacle-grad)"/>
+
+  <!-- Tentacle tip suckers -->
+  <circle cx="90" cy="400" r="4" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="102" cy="408" r="3" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="128" cy="430" r="4" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="140" cy="438" r="3" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="190" cy="452" r="4" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="202" cy="456" r="3" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="236" cy="454" r="4" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="276" cy="454" r="4" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="310" cy="456" r="3" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="322" cy="452" r="4" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="370" cy="440" r="3" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="382" cy="432" r="4" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="408" cy="410" r="3" fill="#94A3B8" opacity="0.5"/>
+  <circle cx="420" cy="402" r="4" fill="#94A3B8" opacity="0.5"/>
+
+  <!-- Mouth (subtle smile) -->
+  <path d="M 244 222 Q 256 232, 268 222" fill="none" stroke="#475569" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+</svg>
