@@ -159,7 +159,7 @@ const cli = yargs(args)
     "generate shell completion script",
     // Use FallbackCompletionFunction (4 args) to access default completions when not completing session IDs
     function completionHandler(
-      current: string,
+      _current: string,
       _argv: Record<string, unknown>,
       defaultCompletions: (onCompleted?: (defaultCompletions: string[]) => void) => void,
       done: (completions: string[]) => void,
@@ -177,23 +177,31 @@ const cli = yargs(args)
         (prev === "delete" && pprev === "session")
 
       if (wantsSessionID) {
-        const rows = Database.use((db) =>
-          db
-            .select({ id: SessionTable.id, title: SessionTable.title })
-            .from(SessionTable)
-            .orderBy(desc(SessionTable.time_updated))
-            .limit(50)
-            .all(),
-        )
-        done(rows.map((r) => `${r.id}:${r.title}`))
+        try {
+          const rows = Database.use((db) =>
+            db
+              .select({ id: SessionTable.id, title: SessionTable.title })
+              .from(SessionTable)
+              .orderBy(desc(SessionTable.time_updated))
+              .limit(50)
+              .all(),
+          )
+          // Escape colons in titles: yargs uses "id:description" format for zsh completions
+          done(rows.map((r) => `${r.id}:${r.title.replace(/:/g, "\\:")}`))
+        } catch {
+          // Fall back to default completions if DB is unavailable
+          defaultCompletions(((_err: unknown, completions: string[]) => {
+            done(completions)
+          }) as any)
+        }
         return
       }
 
       // yargs internally calls onCompleted(err, completions) but the type expects (completions) => void
+      // yargs FallbackCompletionFunction overload does not resolve correctly; cast is required
       defaultCompletions(((_err: unknown, completions: string[]) => {
         done(completions)
       }) as any)
-      // yargs FallbackCompletionFunction overload does not resolve correctly; cast is required
     } as any,
   )
   .command(AcpCommand)
