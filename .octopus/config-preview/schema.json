@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "P10 Metrics Baseline",
+  "description": "Per-release metrics automatically collected at P9 completion",
+  "type": "object",
+  "required": ["version", "timestamp", "signals", "baseline"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Release version tag e.g. v0.4.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of collection"
+    },
+    "signals": {
+      "type": "object",
+      "required": [
+        "review_rounds",
+        "hotfix_or_rollback",
+        "scope_deviation_pct",
+        "agent_queue_max_m_plus"
+      ],
+      "properties": {
+        "review_rounds": {
+          "type": "object",
+          "properties": {
+            "p2": { "type": "integer", "minimum": 1 },
+            "p4": { "type": "integer", "minimum": 0 },
+            "p5": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "hotfix_or_rollback": { "type": "boolean" },
+        "scope_deviation_pct": { "type": "number", "description": "Actual vs estimated file count deviation" },
+        "token_delta_pct": { "type": ["number", "null"], "description": "LLM token consumption change vs previous release (null on first release)" },
+        "ci_time_delta_pct": { "type": ["number", "null"], "description": "CI pipeline time change vs previous release (null on first release)" },
+        "agent_queue_max_m_plus": { "type": "integer", "minimum": 0, "description": "Max concurrent M+ issues waiting" },
+        "layer6_review_uptick": { "type": "boolean", "description": "Consecutive 2 releases with increased review rejection rate" },
+        "layer7_tool_zero_usage": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tools with zero usage for 2+ consecutive releases"
+        },
+        "layer7_skill_stale_versions": { "type": "integer", "minimum": 0, "description": "Skills not updated for >3 releases" }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": [
+        "wall_clock_p0_to_p9",
+        "total_files_changed",
+        "total_issues",
+        "llm_panel_calls"
+      ],
+      "properties": {
+        "wall_clock_p0_to_p9": { "type": "integer", "description": "Minutes from P0 start to P9 completion" },
+        "total_files_changed": { "type": "integer" },
+        "total_issues": { "type": "integer" },
+        "llm_panel_calls": { "type": "integer", "description": "Total LLM Panel invocations across all phases" },
+        "agent_context_switches": { "type": "integer", "minimum": 0, "description": "Total agent context save/restore events" }
+      }
+    }
+  }
+}

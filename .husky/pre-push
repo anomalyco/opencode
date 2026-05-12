@@ -18,3 +18,4 @@ if (process.versions.bun !== expectedBunVersion) {
 }
 '
 bun typecheck
+bun run script/check-config-sync.ts

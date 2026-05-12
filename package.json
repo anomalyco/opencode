@@ -16,6 +16,8 @@
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/octopus fix-node-pty",
     "prepare": "husky",
+    "check-config-sync": "bun run script/check-config-sync.ts",
+    "sync-config": "bun run script/sync-config.ts",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"

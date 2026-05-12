@@ -747,6 +747,8 @@ P9 发布后自动采集以下信号，决定本次复盘深度：
 ## 上一版闭环追踪（上一版改进 Issue 是否完成）
 ```
 
+> **已落地的改进**：`.opencode/` ↔ `.octopus/config-preview/` 同步已自动化。`script/check-config-sync.ts` 在 `pre-push` hook 中运行，禁止推送未同步的 config。手动同步运行 `bun run sync-config`。
+
 ---
 
 ## 四、Git 约定
