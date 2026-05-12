@@ -43,6 +43,7 @@ target
 .trellis/scripts/**/__init__.py
 .trellis/scripts/multi_agent/
 .trellis/spec/backend/
+.trellis/spec/frontend/
 .trellis/scripts/**/__pycache__/
 .trellis/scripts/**/*.pyc
 
@@ -73,3 +74,7 @@ logs/
 .trellis/workspace/
 .trellis/.developer
 .trellis/.current-task
+.trellis/tasks/
+
+# Sisyphus run continuation
+.sisyphus/
