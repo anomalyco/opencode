@@ -111,6 +111,34 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
   }).json
 }
 
+const modelLowTpsQuery = (product: "go" | "zen") => {
+  const filters = [
+    { column: "model", op: "exists" },
+    { column: "event_type", op: "=", value: "completions" },
+    { column: "user_agent", op: "contains", value: "opencode" },
+    { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
+    { column: "status", op: ">=", value: "200" },
+    { column: "status", op: "<", value: "400" },
+    { column: "tps.output", op: "exists" },
+  ]
+
+  return honeycomb.getQuerySpecificationOutput({
+    breakdowns: ["model"],
+    calculations: [
+      { op: "COUNT", name: "TOTAL", filterCombination: "AND", filters },
+      {
+        op: "P50",
+        name: "TPS",
+        column: "tps.output",
+        filterCombination: "AND",
+        filters,
+      },
+    ],
+    formulas: [{ name: "LOW_TPS", expression: "IF(GTE($TOTAL, 100), $TPS, 999)" }],
+    timeRange: 900,
+  }).json
+}
+
 new honeycomb.Trigger("IncreasedModelHttpErrorsGo", {
   name: "Increased Model HTTP Errors [Go]",
   description,
@@ -143,6 +171,46 @@ new honeycomb.Trigger("IncreasedModelHttpErrorsZen", {
       notificationDetails: [
         {
           variables: [{ name: "type", value: "model_http_errors" }],
+        },
+      ],
+    },
+  ],
+})
+
+new honeycomb.Trigger("LowModelTpsGo", {
+  disabled: true,
+  name: "Low Model TPS [Go]",
+  description,
+  queryJson: modelLowTpsQuery("go"),
+  alertType: "on_change",
+  frequency: 300,
+  thresholds: [{ op: "<", value: 20, exceededLimit: 1 }],
+  recipients: [
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "model_low_tps" }],
+        },
+      ],
+    },
+  ],
+})
+
+new honeycomb.Trigger("LowModelTpsZen", {
+  disabled: true,
+  name: "Low Model TPS [Zen]",
+  description,
+  queryJson: modelLowTpsQuery("zen"),
+  alertType: "on_change",
+  frequency: 300,
+  thresholds: [{ op: "<", value: 20, exceededLimit: 1 }],
+  recipients: [
+    {
+      id: webhookRecipient.id,
+      notificationDetails: [
+        {
+          variables: [{ name: "type", value: "model_low_tps" }],
         },
       ],
     },
