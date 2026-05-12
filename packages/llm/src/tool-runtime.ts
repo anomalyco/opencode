@@ -154,8 +154,8 @@ const accumulate = (state: StepState, event: LLMEvent) => {
     )
     return
   }
-  if (event.type === "request-finish") {
-    state.finishReason = event.reason
+  if (event.type === "step-finish" || event.type === "request-finish") {
+    state.finishReason = event.reason === "stop" && state.toolCalls.length > 0 ? "tool-calls" : event.reason
   }
 }
 

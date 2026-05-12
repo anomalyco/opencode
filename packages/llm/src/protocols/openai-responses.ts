@@ -17,6 +17,7 @@ import {
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
+import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-responses"
@@ -165,6 +166,7 @@ type OpenAIResponsesEvent = Schema.Schema.Type<typeof OpenAIResponsesEvent>
 interface ParserState {
   readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
+  readonly lifecycle: Lifecycle.State
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -385,23 +387,32 @@ const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "re
 
 const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   if (!event.delta) return [state, NO_EVENTS]
-  return [state, [LLMEvent.textDelta({ id: event.item_id ?? "text-0", text: event.delta })]]
+  const events: LLMEvent[] = []
+  return [
+    { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, event.item_id ?? "text-0", event.delta) },
+    events,
+  ]
 }
 
 const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   const item = event.item
   if (item?.type !== "function_call" || !item.id) return [state, NO_EVENTS]
+  const providerMetadata = openaiMetadata({ itemId: item.id })
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   return [
     {
+      ...state,
+      lifecycle,
       hasFunctionCall: state.hasFunctionCall,
       tools: ToolStream.start(state.tools, item.id, {
         id: item.call_id ?? item.id,
         name: item.name ?? "",
         input: item.arguments ?? "",
-        providerMetadata: openaiMetadata({ itemId: item.id }),
+        providerMetadata,
       }),
     },
-    NO_EVENTS,
+    [...events, LLMEvent.toolInputStart({ id: item.call_id ?? item.id, name: item.name ?? "", providerMetadata })],
   ]
 }
 
@@ -418,10 +429,10 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenAIResponses.onFunctionCallAr
     "OpenAI Responses tool argument delta is missing its tool call",
   )
   if (ToolStream.isError(result)) return yield* result
-  return [
-    { hasFunctionCall: state.hasFunctionCall, tools: result.tools },
-    result.event ? [result.event] : NO_EVENTS,
-  ] satisfies StepResult
+  const events: LLMEvent[] = []
+  const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  events.push(...result.events)
+  return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
 const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function* (
@@ -440,33 +451,46 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
       item.arguments === undefined
         ? yield* ToolStream.finish(ADAPTER, tools, item.id)
         : yield* ToolStream.finishWithInput(ADAPTER, tools, item.id, item.arguments)
+    const events: LLMEvent[] = []
+    const resultEvents = result.events ?? []
+    const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+    events.push(...resultEvents)
     return [
-      { hasFunctionCall: result.event ? true : state.hasFunctionCall, tools: result.tools },
-      result.event ? [result.event] : NO_EVENTS,
+      {
+        ...state,
+        lifecycle,
+        hasFunctionCall: resultEvents.some(LLMEvent.is.toolCall) ? true : state.hasFunctionCall,
+        tools: result.tools,
+      },
+      events,
     ] satisfies StepResult
   }
 
-  if (isHostedToolItem(item)) return [state, hostedToolEvents(item)] satisfies StepResult
+  if (isHostedToolItem(item)) {
+    const events: LLMEvent[] = []
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(...hostedToolEvents(item))
+    return [{ ...state, lifecycle }, events] satisfies StepResult
+  }
 
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
-  state,
-  [
-    LLMEvent.requestFinish({
-      reason: mapFinishReason(event, state.hasFunctionCall),
-      usage: mapUsage(event.response?.usage),
-      providerMetadata:
-        event.response?.id || event.response?.service_tier
-          ? openaiMetadata({
-              responseId: event.response.id,
-              serviceTier: event.response.service_tier,
-            })
-          : undefined,
-    }),
-  ],
-]
+const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+    reason: mapFinishReason(event, state.hasFunctionCall),
+    usage: mapUsage(event.response?.usage),
+    providerMetadata:
+      event.response?.id || event.response?.service_tier
+        ? openaiMetadata({
+            responseId: event.response.id,
+            serviceTier: event.response.service_tier,
+          })
+        : undefined,
+  })
+  return [{ ...state, lifecycle }, events]
+}
 
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
@@ -506,7 +530,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(OpenAIResponsesEvent),
-    initial: () => ({ hasFunctionCall: false, tools: ToolStream.empty<string>() }),
+    initial: () => ({ hasFunctionCall: false, tools: ToolStream.empty<string>(), lifecycle: Lifecycle.initial() }),
     step,
     terminal: (event) => TERMINAL_TYPES.has(event.type),
   },

@@ -1,8 +1,7 @@
 import { Schema } from "effect"
 import { SessionID } from "./schema"
 import { ModelID, ProviderID } from "../provider/schema"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 
 export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
@@ -37,9 +36,7 @@ export const ToolCall = Schema.Struct({
   toolCallId: Schema.String,
   toolName: Schema.String,
   args: Schema.Unknown,
-})
-  .annotate({ identifier: "ToolCall" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolCall" })
 export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 
 export const ToolPartialCall = Schema.Struct({
@@ -48,9 +45,7 @@ export const ToolPartialCall = Schema.Struct({
   toolCallId: Schema.String,
   toolName: Schema.String,
   args: Schema.Unknown,
-})
-  .annotate({ identifier: "ToolPartialCall" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolPartialCall" })
 export type ToolPartialCall = Schema.Schema.Type<typeof ToolPartialCall>
 
 export const ToolResult = Schema.Struct({
@@ -60,39 +55,32 @@ export const ToolResult = Schema.Struct({
   toolName: Schema.String,
   args: Schema.Unknown,
   result: Schema.String,
-})
-  .annotate({ identifier: "ToolResult" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolResult" })
 export type ToolResult = Schema.Schema.Type<typeof ToolResult>
 
-export const ToolInvocation = Schema.Union([ToolCall, ToolPartialCall, ToolResult])
-  .annotate({ identifier: "ToolInvocation", discriminator: "state" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export const ToolInvocation = Schema.Union([ToolCall, ToolPartialCall, ToolResult]).annotate({
+  identifier: "ToolInvocation",
+  discriminator: "state",
+})
 export type ToolInvocation = Schema.Schema.Type<typeof ToolInvocation>
 
 export const TextPart = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
-})
-  .annotate({ identifier: "TextPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "TextPart" })
 export type TextPart = Schema.Schema.Type<typeof TextPart>
 
 export const ReasoningPart = Schema.Struct({
   type: Schema.Literal("reasoning"),
   text: Schema.String,
   providerMetadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-})
-  .annotate({ identifier: "ReasoningPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ReasoningPart" })
 export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
 
 export const ToolInvocationPart = Schema.Struct({
   type: Schema.Literal("tool-invocation"),
   toolInvocation: ToolInvocation,
-})
-  .annotate({ identifier: "ToolInvocationPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolInvocationPart" })
 export type ToolInvocationPart = Schema.Schema.Type<typeof ToolInvocationPart>
 
 export const SourceUrlPart = Schema.Struct({
@@ -101,9 +89,7 @@ export const SourceUrlPart = Schema.Struct({
   url: Schema.String,
   title: Schema.optional(Schema.String),
   providerMetadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-})
-  .annotate({ identifier: "SourceUrlPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SourceUrlPart" })
 export type SourceUrlPart = Schema.Schema.Type<typeof SourceUrlPart>
 
 export const FilePart = Schema.Struct({
@@ -111,16 +97,12 @@ export const FilePart = Schema.Struct({
   mediaType: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
-})
-  .annotate({ identifier: "FilePart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "FilePart" })
 export type FilePart = Schema.Schema.Type<typeof FilePart>
 
 export const StepStartPart = Schema.Struct({
   type: Schema.Literal("step-start"),
-})
-  .annotate({ identifier: "StepStartPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "StepStartPart" })
 export type StepStartPart = Schema.Schema.Type<typeof StepStartPart>
 
 export const MessagePart = Schema.Union([
@@ -130,9 +112,7 @@ export const MessagePart = Schema.Union([
   SourceUrlPart,
   FilePart,
   StepStartPart,
-])
-  .annotate({ identifier: "MessagePart", discriminator: "type" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+]).annotate({ identifier: "MessagePart", discriminator: "type" })
 export type MessagePart = Schema.Schema.Type<typeof MessagePart>
 
 export const Info = Schema.Struct({
@@ -184,9 +164,7 @@ export const Info = Schema.Struct({
     ),
     snapshot: Schema.optional(Schema.String),
   }).annotate({ identifier: "MessageMetadata" }),
-})
-  .annotate({ identifier: "Message" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Message" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export * as Message from "./message"
