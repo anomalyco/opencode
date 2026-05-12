@@ -268,7 +268,7 @@ fn inject_imbot_agent(config_path: &Path) -> Result<(), String> {
 fn imbot_agent_spec() -> Value {
     // v3 极简档(2026-05-12):v2 仍太严(~30 条 ask pattern)被 user 退回,改极简档。
     // user 安全偏好:"把隐私保护住,不能随意删除电脑信息就是相对可控的" → 数据出境 / 可逆操作不拦,
-    // 只拦真不可逆的破坏 + 高价值凭证 read。8 条规则,user 日常飞书 ship/dev/装包流程 0 打扰。
+    // 只拦真不可逆的破坏 + 高价值凭证 read。
     //
     // 攻击模型重审:exfil 必经"read 敏感凭证 → 出境"两步,在 read 端拦 .env(build default)+ .ssh
     // 就够;webfetch 出境通道 user 觉得日常用太多,allow 不算大漏(read 端已断攻击链)。
@@ -276,16 +276,21 @@ fn imbot_agent_spec() -> Value {
     //   - webfetch:**不设**(沿用 build default allow) ← v3 改动:v2 全 ask 撤回
     //   - read:沿用 build default(*: allow, .env ask)+ 加 **/.ssh/** ask
     //          砍 v2 的 .aws/.kube/.gnupg/Keychain/Crypto(user 不通过飞书处理这些)
-    //   - bash:默认 allow + 7 条真不可逆 pattern ask
-    //          保留:rm -rf * / git push --force* / aws ec2 terminate* / aws s3 rb * / dd * / mkfs* / fdisk * / shutdown *
-    //          砍:rmdir/trash/unlink(可逆)/ git reset --hard*(本地 reflog 可救)/ git clean -fd*
+    //   - bash:默认 allow + 真不可逆 pattern ask(含 Windows PowerShell/cmd 风格删除)
+    //          保留:rm -rf * / Remove-Item * / rmdir * / del * / rd * / git push --force* /
+    //                aws ec2 terminate* / aws s3 rb * / dd * / mkfs* / fdisk * / shutdown *
+    //          砍:trash/unlink(可逆)/ git reset --hard*(本地 reflog 可救)/ git clean -fd*
     //               / git branch -D * / *delete*(误伤面大)/ *uninstall* / npm-bun-brew-apt remove
     //               / docker rm-rmi-volume-network rm-system prune / aws s3 rm(单文件)/ reboot/halt/poweroff
     //   - edit / write / apply_patch:不设(沿用 build default allow)
     //
+    // v3.1 增量(2026-05-12 实测):Windows 默认 shell 是 PowerShell,LLM 调 bash 工具时实际跑
+    // `Remove-Item -LiteralPath ...` 等 PowerShell 原生命令绕过 `rm -rf *` pattern。补 4 条
+    // Win 风格 pattern(Remove-Item / rmdir / del / rd)覆盖跨 shell 调用。
+    //
     // user opencode.jsonc 升级路径:删 .agent.imbot 块,重启 DeskFox 触发 setup hook 重新注入 v3
     serde_json::json!({
-        "description": "DeskFox IM 桥接 v3 极简档 — 只对 SSH 凭证 read + 真不可逆破坏 bash(rm -rf / git --force / 云资源销毁 / 磁盘级)做 ask",
+        "description": "DeskFox IM 桥接 v3 极简档 — 只对 SSH 凭证 read + 真不可逆破坏 bash(rm -rf / Remove-Item / git --force / 云资源销毁 / 磁盘级)做 ask",
         "permission": {
             // ── read:加 .ssh ask(高价值凭证,泄露 = GitHub/服务器全失守)──
             //   build default 自带 *.env ask,这里继承并显式重申 + 加 .ssh
@@ -304,6 +309,13 @@ fn imbot_agent_spec() -> Value {
 
                 // 磁盘级删除(rm -rf 一刀切,接受偶尔误伤如 rm -rf node_modules)
                 "rm -rf *": "ask",
+
+                // Windows 删除命令(2026-05-12 实测:LLM 在 Win 默认 PowerShell shell 跑删除时
+                // 用的不是 unix `rm` 而是原生 `Remove-Item`,绕过 `rm -rf *` pattern)
+                "Remove-Item *": "ask",   // PowerShell 主路径,LLM 实测用 `Remove-Item -LiteralPath ...`
+                "rmdir *": "ask",         // PowerShell function 自动 -Recurse 删非空目录
+                "del *": "ask",           // cmd 经典删除
+                "rd *": "ask",            // cmd alias for rmdir
 
                 // git 不可逆远端覆盖(本地 reset --hard 是 reflog 可救,不拦)
                 "git push --force*": "ask",
@@ -718,13 +730,21 @@ mod tests {
 
         assert_eq!(bash.get("*").and_then(|v| v.as_str()), Some("allow"), "default allow");
 
-        // v3 保留的 ask pattern(精确列出所有 8 条)
+        // v3.1 保留的 ask pattern(精确列出所有 13 条)
         let must_ask = [
+            // 磁盘级删除(跨平台覆盖 unix + Windows PowerShell + cmd)
             "rm -rf *",
+            "Remove-Item *",
+            "rmdir *",
+            "del *",
+            "rd *",
+            // git 不可逆远端
             "git push --force*",
             "git push -f *",
+            // 云资源销毁
             "aws s3 rb *",
             "aws ec2 terminate*",
+            // 磁盘 / 系统级
             "dd *",
             "mkfs*",
             "fdisk *",
@@ -732,12 +752,12 @@ mod tests {
         ];
         for k in must_ask {
             assert_eq!(bash.get(k).and_then(|v| v.as_str()), Some("ask"),
-                "v3 {} 必须 ask", k);
+                "v3.1 {} 必须 ask", k);
         }
 
-        // v3 bash 规则总数 = 1(*) + 9(must_ask)
+        // v3.1 bash 规则总数 = 1(*) + 13(must_ask)
         assert_eq!(bash.len(), 1 + must_ask.len(),
-            "v3 bash 规则数 = 1 默认 + 9 ask,实际 {}", bash.len());
+            "v3.1 bash 规则数 = 1 默认 + 13 ask,实际 {}", bash.len());
     }
 
     #[test]
@@ -751,8 +771,10 @@ mod tests {
         let bash = imbot.get("permission").and_then(|p| p.get("bash"))
             .and_then(|b| b.as_object()).unwrap();
 
+        // 注:v3.1 加回 `rmdir *`(Windows PowerShell function 自动 -Recurse 删非空目录,
+        // 是真删除路径,跟 unix `rmdir` 只能删空目录不同),所以不再在 must_not_ask 里
         let must_not_ask = [
-            "rm *", "rmdir *", "trash *", "unlink *",
+            "rm *", "trash *", "unlink *",
             "git reset --hard*", "git clean -fd*", "git branch -D *",
             "*delete*", "*uninstall*",
             "npm remove *", "npm rm *", "bun remove *",
@@ -765,6 +787,31 @@ mod tests {
             assert!(!bash.contains_key(k),
                 "v3 砍掉 {} ask(可逆 / 误伤面大 / 频率高)", k);
         }
+    }
+
+    #[test]
+    fn imbot_v3_1_blocks_windows_delete_commands() {
+        // v3.1 增量:Windows PowerShell / cmd 风格删除命令必须 ask
+        // [bug-repro: 2026-05-12 user 实测 Hebing—one 发 "rm -rf <dir>",LLM 在 Windows
+        //  默认 PowerShell 跑的实际命令是 `Remove-Item -LiteralPath ...`,绕过 v3 `rm -rf *`
+        //  pattern,目录被删。补 4 条 Win 风格 pattern 覆盖跨 shell 调用]
+        let s = Sandbox::new("imbot-win-delete");
+        let cfg = s.root.join("opencode.json");
+        fs::write(&cfg, r#"{}"#).unwrap();
+        inject_imbot_agent(&cfg).unwrap();
+        let imbot = read_imbot_agent(&cfg).unwrap();
+        let bash = imbot.get("permission").and_then(|p| p.get("bash"))
+            .and_then(|b| b.as_object()).expect("bash must be object");
+
+        // 4 条 Windows 风格 ask pattern 全在
+        for k in ["Remove-Item *", "rmdir *", "del *", "rd *"] {
+            assert_eq!(bash.get(k).and_then(|v| v.as_str()), Some("ask"),
+                "v3.1 Win 删除 {} 必须 ask", k);
+        }
+
+        // unix `rm -rf *` 也仍在(跨平台 v3 极简档 已有)
+        assert_eq!(bash.get("rm -rf *").and_then(|v| v.as_str()), Some("ask"),
+            "v3 unix rm -rf * 仍 ask");
     }
 
     #[test]
