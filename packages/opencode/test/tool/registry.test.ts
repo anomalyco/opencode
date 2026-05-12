@@ -72,7 +72,6 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 
-      expect(ids).not.toContain("codesearch")
       expect(ids).not.toContain("repo_clone")
       expect(ids).not.toContain("repo_overview")
     }),
@@ -84,7 +83,6 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 
-      expect(ids).toContain("codesearch")
       expect(ids).toContain("repo_clone")
       expect(ids).toContain("repo_overview")
     }),

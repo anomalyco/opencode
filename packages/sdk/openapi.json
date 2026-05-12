@@ -11631,9 +11631,6 @@
               "websearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
-              "codesearch": {
-                "$ref": "#/components/schemas/PermissionActionConfig"
-              },
               "repo_clone": {
                 "$ref": "#/components/schemas/PermissionRuleConfig"
               },
