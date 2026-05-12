@@ -1,161 +1,139 @@
-import { $ } from "bun"
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { parsePatch } from "diff"
-import { Effect } from "effect"
+import { Deferred, Effect, Layer, Stream } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import fs from "fs/promises"
 import path from "path"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-import { AppRuntime } from "../../src/effect/app-runtime"
+import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { Bus } from "../../src/bus"
 import { FileWatcher } from "../../src/file/watcher"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
-import { GlobalBus } from "../../src/bus/global"
+import { Git } from "../../src/git"
 import { Vcs } from "@/project/vcs"
-
-// Skip in CI — native @parcel/watcher binding needed
-const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
+import { testEffect } from "../lib/effect"
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function withVcs(directory: string, body: () => Promise<void>) {
-  return WithInstance.provide({
-    directory,
-    fn: async () => {
-      await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const watcher = yield* FileWatcher.Service
-          const vcs = yield* Vcs.Service
-          yield* watcher.init()
-          yield* vcs.init()
-        }),
-      )
-      await Bun.sleep(500)
-      await body()
-    },
-  })
-}
-
-function withVcsOnly(directory: string, body: () => Promise<void>) {
-  return WithInstance.provide({
-    directory,
-    fn: async () => {
-      await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          yield* vcs.init()
-        }),
-      )
-      await body()
-    },
-  })
-}
-
-type BranchEvent = { directory?: string; payload: { type: string; properties: { branch?: string } } }
 const weird = process.platform === "win32" ? "space file.txt" : "tab\tfile.txt"
 
-/** Wait for a Vcs.Event.BranchUpdated event on GlobalBus, with retry polling as fallback */
-function nextBranchUpdate(directory: string, timeout = 10_000) {
-  return new Promise<string | undefined>((resolve, reject) => {
-    let settled = false
+const layer = Layer.mergeAll(
+  Vcs.layer.pipe(Layer.provideMerge(Git.defaultLayer), Layer.provideMerge(Bus.layer)),
+  CrossSpawnSpawner.defaultLayer,
+  AppFileSystem.defaultLayer,
+)
+const it = testEffect(layer)
 
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      GlobalBus.off("event", on)
-      reject(new Error("timed out waiting for BranchUpdated event"))
-    }, timeout)
+const git = Effect.fn("VcsTest.git")(function* (cwd: string, args: string[]) {
+  const result = yield* Git.Service.use((git) => git.run(args, { cwd }))
+  if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr.toString("utf8")}`)
+})
 
-    function on(evt: BranchEvent) {
-      if (evt.directory !== directory) return
-      if (evt.payload.type !== Vcs.Event.BranchUpdated.type) return
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      GlobalBus.off("event", on)
-      resolve(evt.payload.properties.branch)
-    }
+const write = Effect.fn("VcsTest.write")(function* (file: string, content: string) {
+  yield* AppFileSystem.Service.use((fs) => fs.writeWithDirs(file, content))
+})
 
-    GlobalBus.on("event", on)
-  })
-}
+const remove = Effect.fn("VcsTest.remove")(function* (file: string) {
+  yield* AppFileSystem.Service.use((fs) => fs.remove(file))
+})
+
+const symlink = (target: string, file: string) => Effect.promise(() => fs.symlink(target, file))
+
+const init = Effect.fn("VcsTest.init")(function* () {
+  const vcs = yield* Vcs.Service
+  yield* vcs.init()
+  return vcs
+})
+
+const nextBranchUpdate = Effect.fn("VcsTest.nextBranchUpdate")(function* () {
+  const bus = yield* Bus.Service
+  const updated = yield* Deferred.make<string | undefined>()
+
+  yield* Stream.runForEach(bus.subscribe(Vcs.Event.BranchUpdated), (evt) =>
+    Deferred.succeed(updated, evt.properties.branch),
+  ).pipe(Effect.forkScoped)
+
+  return updated
+})
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describeVcs("Vcs", () => {
+describe("Vcs", () => {
   afterEach(async () => {
     await disposeAllInstances()
   })
 
-  test("branch() returns current branch name", async () => {
-    await using tmp = await tmpdir({ git: true })
+  it.instance(
+    "branch() returns current branch name",
+    () =>
+      Effect.gen(function* () {
+        const vcs = yield* init()
+        const branch = yield* vcs.branch()
 
-    await withVcs(tmp.path, async () => {
-      const branch = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.branch()
-        }),
-      )
-      expect(branch).toBeDefined()
-      expect(typeof branch).toBe("string")
-    })
-  })
+        expect(branch).toBeDefined()
+        expect(typeof branch).toBe("string")
+      }),
+    { git: true },
+  )
 
-  test("branch() returns undefined for non-git directories", async () => {
-    await using tmp = await tmpdir()
+  it.instance("branch() returns undefined for non-git directories", () =>
+    Effect.gen(function* () {
+      const vcs = yield* init()
+      const branch = yield* vcs.branch()
 
-    await withVcs(tmp.path, async () => {
-      const branch = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.branch()
-        }),
-      )
       expect(branch).toBeUndefined()
-    })
-  })
+    }),
+  )
 
-  test("publishes BranchUpdated when .git/HEAD changes", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const branch = `test-${Math.random().toString(36).slice(2)}`
-    await $`git branch ${branch}`.cwd(tmp.path).quiet()
+  it.instance(
+    "publishes BranchUpdated when .git/HEAD changes",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const branch = `test-${Math.random().toString(36).slice(2)}`
+        yield* git(test.directory, ["branch", branch])
 
-    await withVcs(tmp.path, async () => {
-      const pending = nextBranchUpdate(tmp.path)
+        const vcs = yield* init()
+        yield* vcs.branch()
+        const pending = yield* nextBranchUpdate()
+        const bus = yield* Bus.Service
 
-      const head = path.join(tmp.path, ".git", "HEAD")
-      await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
+        const head = path.join(test.directory, ".git", "HEAD")
+        yield* write(head, `ref: refs/heads/${branch}\n`)
+        yield* bus.publish(FileWatcher.Event.Updated, { file: head, event: "change" })
 
-      const updated = await pending
-      expect(updated).toBe(branch)
-    })
-  })
+        const updated = yield* Deferred.await(pending).pipe(Effect.timeout("2 seconds"))
+        expect(updated).toBe(branch)
+      }),
+    { git: true },
+  )
 
-  test("branch() reflects the new branch after HEAD change", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const branch = `test-${Math.random().toString(36).slice(2)}`
-    await $`git branch ${branch}`.cwd(tmp.path).quiet()
+  it.instance(
+    "branch() reflects the new branch after HEAD change",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const branch = `test-${Math.random().toString(36).slice(2)}`
+        yield* git(test.directory, ["branch", branch])
 
-    await withVcs(tmp.path, async () => {
-      const pending = nextBranchUpdate(tmp.path)
+        const vcs = yield* init()
+        yield* vcs.branch()
+        const pending = yield* nextBranchUpdate()
+        const bus = yield* Bus.Service
 
-      const head = path.join(tmp.path, ".git", "HEAD")
-      await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
+        const head = path.join(test.directory, ".git", "HEAD")
+        yield* write(head, `ref: refs/heads/${branch}\n`)
+        yield* bus.publish(FileWatcher.Event.Updated, { file: head, event: "change" })
+        yield* Deferred.await(pending).pipe(Effect.timeout("2 seconds"))
 
-      await pending
-      const current = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.branch()
-        }),
-      )
-      expect(current).toBe(branch)
-    })
-  })
+        const current = yield* vcs.branch()
+        expect(current).toBe(branch)
+      }),
+    { git: true },
+  )
 })
 
 describe("Vcs diff", () => {
@@ -163,177 +141,176 @@ describe("Vcs diff", () => {
     await disposeAllInstances()
   })
 
-  test("defaultBranch() falls back to main", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await $`git branch -M main`.cwd(tmp.path).quiet()
+  it.instance(
+    "defaultBranch() falls back to main",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* git(test.directory, ["branch", "-M", "main"])
 
-    await withVcsOnly(tmp.path, async () => {
-      const branch = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.defaultBranch()
-        }),
-      )
-      expect(branch).toBe("main")
-    })
-  })
+        const vcs = yield* init()
+        const branch = yield* vcs.defaultBranch()
 
-  test("defaultBranch() uses init.defaultBranch when available", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await $`git branch -M trunk`.cwd(tmp.path).quiet()
-    await $`git config init.defaultBranch trunk`.cwd(tmp.path).quiet()
+        expect(branch).toBe("main")
+      }),
+    { git: true },
+  )
 
-    await withVcsOnly(tmp.path, async () => {
-      const branch = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.defaultBranch()
-        }),
-      )
-      expect(branch).toBe("trunk")
-    })
-  })
+  it.instance(
+    "defaultBranch() uses init.defaultBranch when available",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* git(test.directory, ["branch", "-M", "trunk"])
+        yield* git(test.directory, ["config", "init.defaultBranch", "trunk"])
 
-  test("detects current branch from the active worktree", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await using wt = await tmpdir()
-    await $`git branch -M main`.cwd(tmp.path).quiet()
-    const dir = path.join(wt.path, "feature")
-    await $`git worktree add -b feature/test ${dir} HEAD`.cwd(tmp.path).quiet()
+        const vcs = yield* init()
+        const branch = yield* vcs.defaultBranch()
 
-    await withVcsOnly(dir, async () => {
-      const [branch, base] = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* Effect.all([vcs.branch(), vcs.defaultBranch()], { concurrency: 2 })
-        }),
-      )
+        expect(branch).toBe("trunk")
+      }),
+    { git: true },
+  )
+
+  it.live("detects current branch from the active worktree", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const wt = yield* tmpdirScoped()
+      yield* git(tmp, ["branch", "-M", "main"])
+      const dir = path.join(wt, "feature")
+      yield* git(tmp, ["worktree", "add", "-b", "feature/test", dir, "HEAD"])
+
+      const [branch, base] = yield* Effect.gen(function* () {
+        const vcs = yield* init()
+        return yield* Effect.all([vcs.branch(), vcs.defaultBranch()], { concurrency: 2 })
+      }).pipe(provideInstance(dir))
+
+      expect(branch).toBeDefined()
       expect(branch).toBe("feature/test")
       expect(base).toBe("main")
-    })
-  })
+    }),
+  )
 
-  test("diff('git') returns uncommitted changes", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await fs.writeFile(path.join(tmp.path, "file.txt"), "original\n", "utf-8")
-    await $`git add .`.cwd(tmp.path).quiet()
-    await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
-    await fs.writeFile(path.join(tmp.path, "file.txt"), "changed\n", "utf-8")
+  it.instance(
+    "diff('git') returns uncommitted changes",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "file.txt"), "original\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add file"])
+        yield* write(path.join(test.directory, "file.txt"), "changed\n")
 
-    await withVcsOnly(tmp.path, async () => {
-      const diff = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.diff("git")
-        }),
-      )
-      expect(diff).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            file: "file.txt",
-            status: "modified",
-          }),
-        ]),
-      )
-      expect(diff.find((item) => item.file === "file.txt")?.patch).toContain("diff --git")
-    })
-  })
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git")
 
-  test("diff('git') handles special filenames", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await fs.writeFile(path.join(tmp.path, weird), "hello\n", "utf-8")
+        expect(diff).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              file: "file.txt",
+              status: "modified",
+            }),
+          ]),
+        )
+        expect(diff.find((item) => item.file === "file.txt")?.patch).toContain("diff --git")
+      }),
+    { git: true },
+  )
 
-    await withVcsOnly(tmp.path, async () => {
-      const diff = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.diff("git")
-        }),
-      )
-      expect(diff).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            file: weird,
-            status: "added",
-          }),
-        ]),
-      )
-    })
-  })
+  it.instance(
+    "diff('git') handles special filenames",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, weird), "hello\n")
 
-  test("diff('git') keeps batched patches aligned for type changes", async () => {
-    if (process.platform === "win32") return
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git")
 
-    await using tmp = await tmpdir({ git: true })
-    await fs.writeFile(path.join(tmp.path, "a.txt"), "old\n", "utf-8")
-    await fs.writeFile(path.join(tmp.path, "b.txt"), "old\n", "utf-8")
-    await $`git add .`.cwd(tmp.path).quiet()
-    await $`git commit --no-gpg-sign -m "add files"`.cwd(tmp.path).quiet()
-    await fs.unlink(path.join(tmp.path, "a.txt"))
-    await fs.symlink("target", path.join(tmp.path, "a.txt"))
-    await fs.writeFile(path.join(tmp.path, "b.txt"), "new\n", "utf-8")
+        expect(diff).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              file: weird,
+              status: "added",
+            }),
+          ]),
+        )
+      }),
+    { git: true },
+  )
 
-    await withVcsOnly(tmp.path, async () => {
-      const diff = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.diff("git")
-        }),
-      )
-      const a = diff.find((item) => item.file === "a.txt")
-      const b = diff.find((item) => item.file === "b.txt")
+  it.instance(
+    "diff('git') keeps batched patches aligned for type changes",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
 
-      expect(a?.patch).toContain("deleted file mode")
-      expect(a?.patch).toContain("new file mode")
-      expect(b?.patch).toContain("+new")
-    })
-  })
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "a.txt"), "old\n")
+        yield* write(path.join(test.directory, "b.txt"), "old\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add files"])
+        yield* remove(path.join(test.directory, "a.txt"))
+        yield* symlink("target", path.join(test.directory, "a.txt"))
+        yield* write(path.join(test.directory, "b.txt"), "new\n")
 
-  test("diff('git') keeps carriage returns inside patch hunks", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await fs.writeFile(path.join(tmp.path, "file.txt"), "keep\nsame\rdiff --git inside\ndelete\n", "utf-8")
-    await $`git add .`.cwd(tmp.path).quiet()
-    await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()
-    await fs.writeFile(path.join(tmp.path, "file.txt"), "keep\nadd\nsame\rdiff --git inside\n", "utf-8")
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git")
+        const a = diff.find((item) => item.file === "a.txt")
+        const b = diff.find((item) => item.file === "b.txt")
 
-    await withVcsOnly(tmp.path, async () => {
-      const diff = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.diff("git")
-        }),
-      )
-      const file = diff.find((item) => item.file === "file.txt")
+        expect(a?.patch).toContain("deleted file mode")
+        expect(a?.patch).toContain("new file mode")
+        expect(b?.patch).toContain("+new")
+      }),
+    { git: true },
+  )
 
-      expect(file?.patch).toContain(" same\rdiff --git inside")
-      expect(file?.patch).toContain("-delete")
-      expect(() => parsePatch(file?.patch ?? "")).not.toThrow()
-    })
-  }, 20_000)
+  it.instance(
+    "diff('git') keeps carriage returns inside patch hunks",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "file.txt"), "keep\nsame\rdiff --git inside\ndelete\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add file"])
+        yield* write(path.join(test.directory, "file.txt"), "keep\nadd\nsame\rdiff --git inside\n")
 
-  test("diff('branch') returns changes against default branch", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await $`git branch -M main`.cwd(tmp.path).quiet()
-    await $`git checkout -b feature/test`.cwd(tmp.path).quiet()
-    await fs.writeFile(path.join(tmp.path, "branch.txt"), "hello\n", "utf-8")
-    await $`git add .`.cwd(tmp.path).quiet()
-    await $`git commit --no-gpg-sign -m "branch file"`.cwd(tmp.path).quiet()
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git")
+        const file = diff.find((item) => item.file === "file.txt")
 
-    await withVcsOnly(tmp.path, async () => {
-      const diff = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const vcs = yield* Vcs.Service
-          return yield* vcs.diff("branch")
-        }),
-      )
-      expect(diff).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            file: "branch.txt",
-            status: "added",
-          }),
-        ]),
-      )
-    })
-  })
+        expect(file?.patch).toContain(" same\rdiff --git inside")
+        expect(file?.patch).toContain("-delete")
+        expect(() => parsePatch(file?.patch ?? "")).not.toThrow()
+      }),
+    { git: true },
+    20_000,
+  )
+
+  it.instance(
+    "diff('branch') returns changes against default branch",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* git(test.directory, ["branch", "-M", "main"])
+        yield* git(test.directory, ["checkout", "-b", "feature/test"])
+        yield* write(path.join(test.directory, "branch.txt"), "hello\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "branch file"])
+
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("branch")
+
+        expect(diff).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              file: "branch.txt",
+              status: "added",
+            }),
+          ]),
+        )
+      }),
+    { git: true },
+  )
 })
