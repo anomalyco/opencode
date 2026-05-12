@@ -322,10 +322,8 @@ export const layer: Layer.Layer<
          Effect.fnUntraced(function* (tool: Tool.Def) {
            using _ = log.time(tool.id)
            const toolConfig = toolsConfig[tool.id]
-           const hasDescriptionOverride = toolConfig !== true && toolConfig !== false && toolConfig !== undefined
-           const overrideDescription = hasDescriptionOverride && "description" in toolConfig
-             ? (toolConfig as { description: string }).description
-             : undefined
+           const hasDescriptionOverride = typeof toolConfig === "object" && toolConfig !== null && "description" in toolConfig
+           const overrideDescription = hasDescriptionOverride ? toolConfig.description : undefined
            const output = {
              description: overrideDescription ?? tool.description,
              parameters: tool.parameters,
