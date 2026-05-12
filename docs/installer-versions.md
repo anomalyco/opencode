@@ -15,6 +15,37 @@
 
 
 
+## [macOS] 2026.5.12.1 - 2026-05-12 12:22
+
+**主题**:跟 Win 5.12.1 同步 — imbot v3 极简档(13 ask:9 unix + 4 win)+ dedup-cache-persist + feishu-plugin-dedup-decision + build-script-json-fallback + bug-repro grep 兜底 fix,Mac 端本地 build 出 prod .dmg。
+
+跟 Win 5.12.1 内容完全一致(全部 feat 都在 dev 上,5.11.4 之后第一次 Mac ship),包内容:
+
+- **imbot-permission-minimal**(v3 极简档,跟 Win 5.12.1 相同)
+- **imbot-windows-delete-cmds**(v3.1 micro-patch,Mac 端 dead weight 但保留对齐 — bash 13 条 ask 含 4 条 Win 风格 pattern;Mac LLM 不会用 PowerShell 命令,0 行为影响)
+- **dedup-cache-persist**(DedupCache 加 persistPath,Mac 端实测 sidecar 重启后 reload + skip 老 message_id)
+- **feishu-plugin-dedup-decision**(开发机三档累积根因诊断 + 决策不做产品层防御 + build-deskfox.{sh,ps1} post-build 清理 hook)
+- **build-script-json-fallback**(双 jsonc/.json fallback)+ **follow-up `33c7dd948`** Mac 端 bug-repro fix(`grep -c` 0 match 时 `|| echo 0` 多输出 `0\n0` 撞 bash arithmetic syntax error)
+- **sdk-falsy-error-fallback-fix**(5.11.x 翻车真因 fix,在 dev 已合)
+
+Mac 端实测验证(本机 2026-05-12 11:55 + 11:59 + 12:22 三次 build/launch):
+- typecheck 16/16 ✅
+- cargo test feishu_plugin_install 19/19 ✅
+- bash -n build-deskfox.sh ✅,**stderr 干净**(grep fix 生效)
+- prod build 1:22(总时间)/ cargo 35s
+- setup hook 自动 inject prod 路径 + imbot v3.1 skip + 1 plugin instance + dedup persist load 6 entries + wss connected ✅
+- **观察**:fresh prod 首次启动 sidecar idle 2 分钟+,user 反馈"晚了一会儿才点系统授权对话框",高度可能 TCC 阻塞 → backlog `prod-首次启动-sidecar-idle.md`
+
+**installer**:`packages/desktop/src-tauri/target/release/bundle/dmg/DeskFox-2026.5.12.1_aarch64.dmg`(64,645,764 bytes)
+
+**已知** pack-installer.sh `--no-bump` 时跳过 rename(NEW_VERSION 为空)— 本次手动 rename,加进需求池后续修。
+
+**双平台分发**(2026-05-12 起新规则反转 — Mac 端 ship 也推 Gitee,之前 memory 立的"Mac 不跑 Gitee"分工撤回):
+- GitHub Release `ship-mac-prod-2026.5.12.1`(主仓 `zoulukuang/deskfox`)
+- Gitee Release(镜像 `zoulukuang/deskfox`)
+
+---
+
 ## [Windows] 2026.5.12.1 - 2026-05-12 11:38
 
 **主题**:imbot v3 极简档 + Windows PowerShell 删除命令补丁(v3.1)+ dedup-cache-persist + 多 feat 打包发车
