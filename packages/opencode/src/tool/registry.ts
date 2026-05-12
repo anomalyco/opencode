@@ -404,10 +404,31 @@ function legacyJsonSchema(entries: [string, unknown][]): JSONSchema7 {
 }
 
 function zodJsonSchema(schema: z.ZodType): JSONSchema7 {
-  const result = z.toJSONSchema(schema, { io: "input" })
+  const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input" }))
   if (typeof result === "boolean") return result
+  if (!isJsonSchemaObject(result)) throw new Error("plugin tool Zod schema produced a non-object JSON Schema")
   const { $defs, ...rest } = result
-  return $defs ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
+  return (
+    $defs && isJsonSchemaObject($defs) ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
+  ) as JSONSchema7
+}
+
+function normalizeZodJsonSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => normalizeZodJsonSchema(item))
+  if (typeof value !== "object" || value === null) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter((entry) =>
+        (entry[0] === "exclusiveMaximum" || entry[0] === "exclusiveMinimum") && typeof entry[1] === "boolean"
+          ? false
+          : true,
+      )
+      .map(([key, item]) => [key, normalizeZodJsonSchema(item)]),
+  )
+}
+
+function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 export * as ToolRegistry from "./registry"
