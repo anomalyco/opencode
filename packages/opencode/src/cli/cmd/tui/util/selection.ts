@@ -17,6 +17,8 @@ type Renderer = {
 
 type SelectionKeyEvent = {
   ctrl?: boolean
+  meta?: boolean
+  super?: boolean
   name: string
   preventDefault: () => void
   stopPropagation: () => void
@@ -38,7 +40,7 @@ export function handleSelectionKey(renderer: Renderer, toast: Toast, event: Sele
   const selection = renderer.getSelection()
   if (!selection) return
 
-  if (event.ctrl && event.name === "c") {
+  if ((event.ctrl || event.meta || event.super) && event.name === "c") {
     if (!copy(renderer, toast)) {
       renderer.clearSelection()
       return
