@@ -1,9 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Effect, Layer } from "effect"
+import { pathToFileURL } from "url"
+import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
@@ -15,6 +17,7 @@ import { Skill } from "@/skill"
 import { Agent } from "@/agent/agent"
 import { Session } from "@/session/session"
 import { Provider } from "@/provider/provider"
+import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "@/session/instruction"
 import { Bus } from "@/bus"
@@ -23,39 +26,90 @@ import { Format } from "@/format"
 import { Ripgrep } from "@/file/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
+import { Reference } from "@/reference/reference"
+import { ProviderID, ModelID } from "@/provider/schema"
+import { SessionID } from "@/session/schema"
+import { ToolJsonSchema } from "@/tool/json-schema"
 
 const node = CrossSpawnSpawner.defaultLayer
+const originalExperimentalScout = Flag.OPENCODE_EXPERIMENTAL_SCOUT
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
 })
 
-const registryLayer = ToolRegistry.layer.pipe(
-  Layer.provide(configLayer),
-  Layer.provide(Plugin.defaultLayer),
-  Layer.provide(Question.defaultLayer),
-  Layer.provide(Todo.defaultLayer),
-  Layer.provide(Skill.defaultLayer),
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Session.defaultLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(LSP.defaultLayer),
-  Layer.provide(Instruction.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(Bus.layer),
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(Format.defaultLayer),
-  Layer.provide(node),
-  Layer.provide(Ripgrep.defaultLayer),
-  Layer.provide(Truncate.defaultLayer),
-)
+type ToolDefinitionInput = {
+  toolID: string
+  sessionID?: string
+  model?: { providerID: string; modelID: string }
+  agent?: { name: string; mode: "primary" | "subagent" | "all" }
+}
 
-const it = testEffect(Layer.mergeAll(registryLayer, node))
+const toolDefinitionInputs: ToolDefinitionInput[] = []
 
+const capturePluginLayer = Layer.mock(Plugin.Service)({
+  trigger: <Name extends string, Input, Output>(name: Name, input: Input, output: Output) =>
+    Effect.sync(() => {
+      if (name === "tool.definition") toolDefinitionInputs.push(input as ToolDefinitionInput)
+      return output
+    }),
+  list: () => Effect.succeed([]),
+  init: () => Effect.void,
+})
+
+function makeRegistryLayer(pluginLayer = Plugin.defaultLayer) {
+  return ToolRegistry.layer.pipe(
+    Layer.provide(configLayer),
+    Layer.provide(pluginLayer),
+    Layer.provide(Question.defaultLayer),
+    Layer.provide(Todo.defaultLayer),
+    Layer.provide(Skill.defaultLayer),
+    Layer.provide(Agent.defaultLayer),
+    Layer.provide(Session.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
+    Layer.provide(LSP.defaultLayer),
+    Layer.provide(Instruction.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Bus.layer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(Format.defaultLayer),
+    Layer.provide(node),
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Truncate.defaultLayer),
+  )
+}
+
+const it = testEffect(Layer.mergeAll(makeRegistryLayer(), node, Agent.defaultLayer))
+const withCapturePlugin = testEffect(Layer.mergeAll(makeRegistryLayer(capturePluginLayer), node, Agent.defaultLayer))
 afterEach(async () => {
+  Flag.OPENCODE_EXPERIMENTAL_SCOUT = originalExperimentalScout
   await disposeAllInstances()
 })
 
 describe("tool.registry", () => {
+  it.instance("hides repo research tools unless experimental", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_SCOUT = false
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).not.toContain("repo_clone")
+      expect(ids).not.toContain("repo_overview")
+    }),
+  )
+
+  it.instance("shows repo research tools when experimental scout is enabled", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_SCOUT = true
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("repo_clone")
+      expect(ids).toContain("repo_overview")
+    }),
+  )
+
   it.instance("loads tools from .opencode/tool (singular)", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
@@ -107,6 +161,114 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("hello")
+    }),
+  )
+
+  withCapturePlugin.instance("passes session, model, and agent to tool.definition hooks", () =>
+    Effect.gen(function* () {
+      toolDefinitionInputs.length = 0
+
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const agent = yield* agents.get(yield* agents.defaultAgent())
+      const sessionID = SessionID.make("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2K")
+      yield* registry.tools({
+        providerID: ProviderID.anthropic,
+        modelID: ModelID.make("claude-sonnet-4-6"),
+        agent,
+        sessionID,
+      })
+
+      const input = toolDefinitionInputs.find((item) => item.toolID === "read")
+      expect(input).toMatchObject({
+        toolID: "read",
+        sessionID,
+        model: { providerID: ProviderID.anthropic, modelID: "claude-sonnet-4-6" },
+        agent: { name: agent.name, mode: agent.mode },
+      })
+    }),
+  )
+
+  it.instance("loads Zod-schema custom tools with JSON Schema and validation", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "sql.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'query database',",
+            "  args: { query: tool.schema.string().describe('SQL query to execute') },",
+            "  execute: async ({ query }) => query,",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "sql")
+      if (!loaded) throw new Error("custom sql tool was not loaded")
+      expect(loaded?.jsonSchema).toMatchObject({
+        type: "object",
+        properties: {
+          query: { type: "string", description: "SQL query to execute" },
+        },
+        required: ["query"],
+      })
+      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters)({ query: "select 1" }))).toBe(true)
+      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters)({}))).toBe(false)
+
+      const agents = yield* Agent.Service
+      const promptTools = yield* registry.tools({
+        providerID: ProviderID.opencode,
+        modelID: ModelID.make("test"),
+        agent: yield* agents.get(yield* agents.defaultAgent()),
+      })
+      const promptTool = promptTools.find((tool) => tool.id === "sql")
+      if (!promptTool) throw new Error("custom sql tool was not returned for prompts")
+      expect(ToolJsonSchema.fromTool(promptTool)).toMatchObject({
+        properties: {
+          query: { type: "string", description: "SQL query to execute" },
+        },
+        required: ["query"],
+      })
+    }),
+  )
+
+  it.instance("loads legacy JSON-schema-shaped custom tools with wire schema", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "legacy.ts"),
+          [
+            "export default {",
+            "  description: 'legacy schema tool',",
+            "  args: { text: { type: 'string', description: 'Text to render' } },",
+            "  execute: async ({ text }) => text,",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "legacy")
+      if (!loaded) throw new Error("legacy custom tool was not loaded")
+      expect(ToolJsonSchema.fromTool(loaded)).toMatchObject({
+        type: "object",
+        properties: {
+          text: { type: "string", description: "Text to render" },
+        },
+        required: ["text"],
+      })
     }),
   )
 

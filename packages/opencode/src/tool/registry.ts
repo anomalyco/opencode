@@ -16,13 +16,15 @@ import { SkillTool } from "./skill"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
+import type { JSONSchema7, JSONSchema7Definition } from "@ai-sdk/provider"
 import { Schema } from "effect"
 import z from "zod"
-import { ZodOverride } from "@/util/effect-zod"
 import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
+import { RepoCloneTool } from "./repo_clone"
+import { RepoOverviewTool } from "./repo_overview"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
@@ -45,10 +47,19 @@ import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
+import { Git } from "@/git"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
+import { Reference } from "@/reference/reference"
 
 const log = Log.create({ service: "tool.registry" })
+
+export function webSearchEnabled(
+  providerID: ProviderID,
+  flags = { exa: Flag.OPENCODE_ENABLE_EXA, parallel: Flag.OPENCODE_ENABLE_PARALLEL },
+) {
+  return providerID === ProviderID.opencode || flags.exa || flags.parallel
+}
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
@@ -85,6 +96,8 @@ export const layer: Layer.Layer<
   | Skill.Service
   | Session.Service
   | Provider.Service
+  | Git.Service
+  | Reference.Service
   | LSP.Service
   | Instruction.Service
   | AppFileSystem.Service
@@ -112,6 +125,8 @@ export const layer: Layer.Layer<
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
+    const repoClone = yield* RepoCloneTool
+    const repoOverview = yield* RepoOverviewTool
     const shell = yield* ShellTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
@@ -126,17 +141,19 @@ export const layer: Layer.Layer<
         const custom: Tool.Def[] = []
 
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
-          // Plugin tools define their args as a raw Zod shape. Wrap the
-          // derived Zod object in a `Schema.declare` so it slots into the
-          // Schema-typed framework, and annotate with `ZodOverride` so the
-          // walker emits the original Zod object for LLM JSON Schema.
-          const zodParams = z.object(def.args)
-          const parameters = Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success).annotate({
-            [ZodOverride]: zodParams,
-          })
+          // Plugin tools still expose Zod args publicly; keep that compatibility
+          // boxed at the registry boundary and give the LLM the original JSON Schema.
+          const entries = Object.entries(def.args)
+          const allZod = entries.every((entry) => isZodType(entry[1]))
+          const zodParams = allZod ? z.object(def.args) : undefined
+          const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
+          const parameters = zodParams
+            ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
+            : Schema.Unknown
           return {
             id,
             parameters,
+            jsonSchema,
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
@@ -211,6 +228,8 @@ export const layer: Layer.Layer<
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
+          repo_clone: Tool.init(repoClone),
+          repo_overview: Tool.init(repoOverview),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
@@ -233,6 +252,7 @@ export const layer: Layer.Layer<
             tool.fetch,
             tool.todo,
             tool.search,
+            ...(Flag.OPENCODE_EXPERIMENTAL_SCOUT ? [tool.repo_clone, tool.repo_overview] : []),
             tool.skill,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
@@ -290,7 +310,7 @@ export const layer: Layer.Layer<
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
-          return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+          return webSearchEnabled(input.providerID)
         }
 
         const usePatch =
@@ -308,6 +328,7 @@ export const layer: Layer.Layer<
           const output = {
             description: tool.description,
             parameters: tool.parameters,
+            jsonSchema: tool.jsonSchema,
           }
           yield* plugin.trigger(
             "tool.definition",
@@ -319,6 +340,10 @@ export const layer: Layer.Layer<
             },
             output,
           )
+          const jsonSchema =
+            output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
+              ? output.jsonSchema
+              : undefined
           return {
             id: tool.id,
             description: [
@@ -329,6 +354,7 @@ export const layer: Layer.Layer<
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
+            jsonSchema,
             execute: tool.execute,
             formatValidationError: tool.formatValidationError,
           }
@@ -356,6 +382,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Session.defaultLayer),
     Layer.provide(Provider.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
     Layer.provide(LSP.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
@@ -367,5 +395,51 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Truncate.defaultLayer),
   ),
 )
+
+function isZodType(value: unknown): value is z.ZodType {
+  return typeof value === "object" && value !== null && "_zod" in value
+}
+
+function isJsonSchemaDefinition(value: unknown): value is JSONSchema7Definition {
+  return typeof value === "boolean" || (typeof value === "object" && value !== null && !Array.isArray(value))
+}
+
+function legacyJsonSchema(entries: [string, unknown][]): JSONSchema7 {
+  const properties = Object.fromEntries(
+    entries.filter((entry): entry is [string, JSONSchema7Definition] => isJsonSchemaDefinition(entry[1])),
+  )
+  return {
+    type: "object",
+    properties,
+    required: Object.keys(properties),
+  }
+}
+
+function zodJsonSchema(schema: z.ZodType): JSONSchema7 {
+  const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input" }))
+  if (!isJsonSchemaObject(result)) throw new Error("plugin tool Zod schema produced a non-object JSON Schema")
+  const { $defs, ...rest } = result
+  return (
+    $defs && isJsonSchemaObject($defs) ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
+  ) as JSONSchema7
+}
+
+function normalizeZodJsonSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => normalizeZodJsonSchema(item))
+  if (typeof value !== "object" || value === null) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter((entry) =>
+        (entry[0] === "exclusiveMaximum" || entry[0] === "exclusiveMinimum") && typeof entry[1] === "boolean"
+          ? false
+          : true,
+      )
+      .map(([key, item]) => [key, normalizeZodJsonSchema(item)]),
+  )
+}
+
+function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
 
 export * as ToolRegistry from "./registry"

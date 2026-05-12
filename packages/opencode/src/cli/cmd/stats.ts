@@ -164,8 +164,8 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
       Effect.gen(function* () {
         const messages = yield* svc.messages({ sessionID: session.id })
 
-        let sessionCost = 0
-        let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        const sessionCost = session.cost ?? 0
+        const sessionTokens = session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
         let sessionToolUsage: Record<string, number> = {}
         let sessionModelUsage: Record<
           string,
@@ -178,8 +178,6 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
 
         for (const message of messages) {
           if (message.info.role === "assistant") {
-            sessionCost += message.info.cost || 0
-
             const modelKey = `${message.info.providerID}/${message.info.modelID}`
             if (!sessionModelUsage[modelKey]) {
               sessionModelUsage[modelKey] = {
@@ -192,12 +190,6 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
             sessionModelUsage[modelKey].cost += message.info.cost || 0
 
             if (message.info.tokens) {
-              sessionTokens.input += message.info.tokens.input || 0
-              sessionTokens.output += message.info.tokens.output || 0
-              sessionTokens.reasoning += message.info.tokens.reasoning || 0
-              sessionTokens.cache.read += message.info.tokens.cache?.read || 0
-              sessionTokens.cache.write += message.info.tokens.cache?.write || 0
-
               sessionModelUsage[modelKey].tokens.input += message.info.tokens.input || 0
               sessionModelUsage[modelKey].tokens.output +=
                 (message.info.tokens.output || 0) + (message.info.tokens.reasoning || 0)
