@@ -45,6 +45,7 @@ Output: Creates directory 'foo'"
       "description": "Optional timeout in milliseconds",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
       "type": "integer",
     },
     "workdir": {
@@ -240,7 +241,6 @@ exports[`tool parameters JSON Schema (wire shape) question 1`] = `
                   "type": "string",
                 },
               },
-              "ref": "QuestionOption",
               "required": [
                 "label",
                 "description",
@@ -254,7 +254,6 @@ exports[`tool parameters JSON Schema (wire shape) question 1`] = `
             "type": "string",
           },
         },
-        "ref": "QuestionPrompt",
         "required": [
           "question",
           "header",
@@ -393,14 +392,21 @@ exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "format": {
-      "default": "markdown",
-      "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
-      "enum": [
-        "text",
-        "markdown",
-        "html",
+      "anyOf": [
+        {
+          "default": "markdown",
+          "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
+          "enum": [
+            "text",
+            "markdown",
+            "html",
+          ],
+          "type": "string",
+        },
+        {
+          "type": "null",
+        },
       ],
-      "type": "string",
     },
     "timeout": {
       "description": "Optional timeout in seconds (max 120)",

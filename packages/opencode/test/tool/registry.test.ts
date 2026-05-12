@@ -1,7 +1,8 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Effect, Layer } from "effect"
+import { pathToFileURL } from "url"
+import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -26,6 +27,8 @@ import { Ripgrep } from "@/file/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 import { Reference } from "@/reference/reference"
+import { ProviderID, ModelID } from "@/provider/schema"
+import { ToolJsonSchema } from "@/tool/json-schema"
 
 const node = CrossSpawnSpawner.defaultLayer
 const originalExperimentalScout = Flag.OPENCODE_EXPERIMENTAL_SCOUT
@@ -55,7 +58,7 @@ const registryLayer = ToolRegistry.layer.pipe(
   Layer.provide(Truncate.defaultLayer),
 )
 
-const it = testEffect(Layer.mergeAll(registryLayer, node))
+const it = testEffect(Layer.mergeAll(registryLayer, node, Agent.defaultLayer))
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_SCOUT = originalExperimentalScout
@@ -138,6 +141,89 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("hello")
+    }),
+  )
+
+  it.instance("loads Zod-schema custom tools with JSON Schema and validation", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "sql.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'query database',",
+            "  args: { query: tool.schema.string().describe('SQL query to execute') },",
+            "  execute: async ({ query }) => query,",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "sql")
+      if (!loaded) throw new Error("custom sql tool was not loaded")
+      expect(loaded?.jsonSchema).toMatchObject({
+        type: "object",
+        properties: {
+          query: { type: "string", description: "SQL query to execute" },
+        },
+        required: ["query"],
+      })
+      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters)({ query: "select 1" }))).toBe(true)
+      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters)({}))).toBe(false)
+
+      const agents = yield* Agent.Service
+      const promptTools = yield* registry.tools({
+        providerID: ProviderID.opencode,
+        modelID: ModelID.make("test"),
+        agent: yield* agents.get(yield* agents.defaultAgent()),
+      })
+      const promptTool = promptTools.find((tool) => tool.id === "sql")
+      if (!promptTool) throw new Error("custom sql tool was not returned for prompts")
+      expect(ToolJsonSchema.fromTool(promptTool)).toMatchObject({
+        properties: {
+          query: { type: "string", description: "SQL query to execute" },
+        },
+        required: ["query"],
+      })
+    }),
+  )
+
+  it.instance("loads legacy JSON-schema-shaped custom tools with wire schema", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "legacy.ts"),
+          [
+            "export default {",
+            "  description: 'legacy schema tool',",
+            "  args: { text: { type: 'string', description: 'Text to render' } },",
+            "  execute: async ({ text }) => text,",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "legacy")
+      if (!loaded) throw new Error("legacy custom tool was not loaded")
+      expect(ToolJsonSchema.fromTool(loaded)).toMatchObject({
+        type: "object",
+        properties: {
+          text: { type: "string", description: "Text to render" },
+        },
+        required: ["text"],
+      })
     }),
   )
 

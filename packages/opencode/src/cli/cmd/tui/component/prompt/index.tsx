@@ -989,7 +989,24 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  let submitting = false
   async function submit() {
+    // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
+    // input's native onSubmit racing another dispatch). Without this guard,
+    // a second call slips past the empty-input check before the first call
+    // clears `store.prompt.input`, then awaits its own `session.create` and
+    // ultimately reads the now-empty store — sending a phantom empty prompt
+    // to a freshly created session.
+    if (submitting) return false
+    submitting = true
+    try {
+      return await submitInner()
+    } finally {
+      submitting = false
+    }
+  }
+
+  async function submitInner() {
     setWarpNotice(undefined)
 
     // IME: double-defer may fire before onContentChange flushes the last

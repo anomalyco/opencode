@@ -3,33 +3,39 @@ export * as TuiKeybind from "./keybind"
 import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
 import type { BindingCommandMap, BindingConfig, BindingDefaults } from "@opentui/keymap/extras"
-import z from "zod"
+import type { DeepMutable } from "@opencode-ai/core/schema"
+import { Schema } from "effect"
 
-const KeyStroke = z
-  .object({
-    name: z.string(),
-    ctrl: z.boolean().optional(),
-    shift: z.boolean().optional(),
-    meta: z.boolean().optional(),
-    super: z.boolean().optional(),
-    hyper: z.boolean().optional(),
-  })
-  .strict()
+const KeyStroke = Schema.Struct({
+  name: Schema.String,
+  ctrl: Schema.optional(Schema.Boolean),
+  shift: Schema.optional(Schema.Boolean),
+  meta: Schema.optional(Schema.Boolean),
+  super: Schema.optional(Schema.Boolean),
+  hyper: Schema.optional(Schema.Boolean),
+})
 
-const BindingObject = z
-  .object({
-    key: z.union([z.string(), KeyStroke]),
-    event: z.enum(["press", "release"]).optional(),
-    preventDefault: z.boolean().optional(),
-    fallthrough: z.boolean().optional(),
-  })
-  .passthrough()
+const BindingObject = Schema.StructWithRest(
+  Schema.Struct({
+    key: Schema.Union([Schema.String, KeyStroke]),
+    event: Schema.optional(Schema.Literals(["press", "release"])),
+    preventDefault: Schema.optional(Schema.Boolean),
+    fallthrough: Schema.optional(Schema.Boolean),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 
-const BindingItem = z.union([z.string(), KeyStroke, BindingObject])
-export const BindingValueSchema = z.union([z.literal(false), z.literal("none"), BindingItem, z.array(BindingItem)])
+const BindingItem = Schema.Union([Schema.String, KeyStroke, BindingObject])
+export const BindingValueSchema = Schema.Union([
+  Schema.Literal(false),
+  Schema.Literal("none"),
+  BindingItem,
+  Schema.Array(BindingItem),
+])
+export type BindingValueSchema = DeepMutable<Schema.Schema.Type<typeof BindingValueSchema>>
 
 type Definition = {
-  default: z.input<typeof BindingValueSchema>
+  default: BindingValueSchema
   description: string
 }
 
@@ -214,21 +220,17 @@ export const Definitions = {
   which_key_end: keybind("ctrl+alt+end", "Jump to last which-key binding"),
 } satisfies Record<string, Definition>
 
-type KeybindName = keyof typeof Definitions & string
+type KeybindName = keyof typeof Definitions
+const KeybindNames = new Set<string>(Object.keys(Definitions))
 
-const KeybindShape = Object.fromEntries(
-  Object.entries(Definitions).map(([name, item]) => [
-    name,
-    BindingValueSchema.optional().default(item.default).describe(item.description),
-  ]),
-) as Record<KeybindName, z.ZodDefault<z.ZodOptional<typeof BindingValueSchema>>>
-
-const KeybindOverrideShape = Object.fromEntries(
-  Object.entries(Definitions).map(([name, item]) => [name, BindingValueSchema.optional().describe(item.description)]),
-) as Record<KeybindName, z.ZodOptional<typeof BindingValueSchema>>
-
-export const Keybinds = z.strictObject(KeybindShape).describe("TUI keybinding configuration")
-export const KeybindOverrides = z.strictObject(KeybindOverrideShape).describe("TUI keybinding overrides")
+export const KeybindOverrides = Schema.Struct(
+  Object.fromEntries(
+    Object.entries(Definitions).map(([name, item]) => [
+      name,
+      Schema.optional(BindingValueSchema).annotate({ description: item.description }),
+    ]),
+  ),
+).annotate({ description: "TUI keybinding overrides" })
 export const Descriptions = Object.fromEntries(
   Object.entries(Definitions).map(([name, item]) => [name, item.description]),
 ) as Record<KeybindName, string>
@@ -387,8 +389,8 @@ const CommandDescriptions = Object.fromEntries(
   ]),
 ) as Record<string, string>
 
-export type Keybinds = z.output<typeof Keybinds>
-export type KeybindOverrides = z.output<typeof KeybindOverrides>
+export type Keybinds = { [K in KeybindName]: BindingValueSchema }
+export type KeybindOverrides = Partial<Keybinds>
 export type BindingLookupView = {
   readonly bindings: readonly Binding<Renderable, KeyEvent>[]
   get(command: string): readonly Binding<Renderable, KeyEvent>[]
@@ -400,6 +402,29 @@ export type BindingLookupView = {
 
 export function toBindingConfig(keybinds: Keybinds): BindingConfig<Renderable, KeyEvent> {
   return Object.fromEntries(Object.entries(keybinds)) as BindingConfig<Renderable, KeyEvent>
+}
+
+const decodeBindingValue = Schema.decodeUnknownSync(BindingValueSchema)
+
+export function defaultValue(name: KeybindName) {
+  return Definitions[name].default
+}
+
+export function parse(keybinds: KeybindOverrides): Keybinds {
+  const invalid = unknownKeys(keybinds)
+  if (invalid.length) throw new Error(`Unrecognized keybind${invalid.length === 1 ? "" : "s"}: ${invalid.join(", ")}`)
+  return Object.fromEntries(
+    Object.entries(Definitions).map(([name, item]) => [
+      name,
+      decodeBindingValue(keybinds[name as KeybindName] ?? item.default),
+    ]),
+  ) as Keybinds
+}
+
+export const Keybinds = { parse }
+
+export function unknownKeys(input: object) {
+  return Object.keys(input).filter((key) => !KeybindNames.has(key))
 }
 
 export function bindingDefaults(): BindingDefaults<Renderable, KeyEvent> {

@@ -313,7 +313,14 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
+      expect(events.map((event) => event.type)).toEqual([
+        "step-start",
+        "text-start",
+        "text-delta",
+        "text-end",
+        "step-finish",
+        "request-finish",
+      ])
       expect(LLMResponse.text({ events })).toBe("Done.")
     }),
   )

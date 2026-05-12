@@ -222,31 +222,36 @@ describe("OpenAI Chat route", () => {
         }),
       )
       const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 2,
+        nonCachedInputTokens: 4,
+        cacheReadInputTokens: 1,
+        reasoningTokens: 0,
+        totalTokens: 7,
+        providerMetadata: {
+          openai: {
+            prompt_tokens: 5,
+            completion_tokens: 2,
+            total_tokens: 7,
+            prompt_tokens_details: { cached_tokens: 1 },
+            completion_tokens_details: { reasoning_tokens: 0 },
+          },
+        },
+      })
 
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "text-start", id: "text-0" },
         { type: "text-delta", id: "text-0", text: "Hello" },
         { type: "text-delta", id: "text-0", text: "!" },
+        { type: "text-end", id: "text-0" },
+        { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
         {
           type: "request-finish",
           reason: "stop",
-          usage: new Usage({
-            inputTokens: 5,
-            outputTokens: 2,
-            nonCachedInputTokens: 4,
-            cacheReadInputTokens: 1,
-            reasoningTokens: 0,
-            totalTokens: 7,
-            providerMetadata: {
-              openai: {
-                prompt_tokens: 5,
-                completion_tokens: 2,
-                total_tokens: 7,
-                prompt_tokens_details: { cached_tokens: 1 },
-                completion_tokens_details: { reasoning_tokens: 0 },
-              },
-            },
-          }),
+          usage,
         },
       ])
     }),
@@ -269,9 +274,20 @@ describe("OpenAI Chat route", () => {
       ).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: undefined },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage: undefined, providerMetadata: undefined },
         { type: "request-finish", reason: "tool-calls", usage: undefined },
       ])
     }),
@@ -293,6 +309,8 @@ describe("OpenAI Chat route", () => {
       ).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: undefined },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
       ])
@@ -352,7 +370,7 @@ describe("OpenAI Chat route", () => {
       const events = Array.from(
         yield* LLMClient.stream(request).pipe(Stream.take(1), Stream.runCollect, Effect.provide(fixedResponse(body))),
       )
-      expect(events.map((event) => event.type)).toEqual(["text-delta"])
+      expect(events.map((event) => event.type)).toEqual(["step-start"])
     }),
   )
 })
