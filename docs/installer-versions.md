@@ -15,6 +15,37 @@
 
 
 
+## [Windows] 2026.5.12.1 - 2026-05-12 11:38
+
+**主题**:imbot v3 极简档 + Windows PowerShell 删除命令补丁(v3.1)+ dedup-cache-persist + 多 feat 打包发车
+
+继 5.11.4 之后第一次干净 build。这一版打包内容:
+
+- **imbot-permission-minimal** ([changelog](features/imbot-permission-minimal/3-changelog.md))— v2 务实档(~30 条 ask)→ v3 极简档(8 条 ask):read 只拦 `.env` + `.ssh`,bash 只拦 8 条真不可逆破坏(`rm -rf` / `git push --force` / `aws s3 rb` / `aws ec2 terminate` / `dd` / `mkfs` / `fdisk` / `shutdown`),webfetch 撤回 allow。user 安全偏好"把隐私保护住,不能随意删除电脑信息就是相对可控的" — 信任飞书 IM 消息流可见(看得到 LLM 在做什么),把可逆操作信任度调高,正常 ship/dev/装包接近 0 打扰
+
+- **imbot-windows-delete-cmds** ([changelog](features/imbot-windows-delete-cmds/3-changelog.md))— v3.1 micro-patch:实测发现 LLM 在 Win 默认 PowerShell shell 跑 `rm -rf` 时,opencode session sqlite 拿到铁证 `{"tool":"bash","input":{"command":"Remove-Item -LiteralPath ..."}}` — LLM 用 PowerShell 原生 `Remove-Item` 而非 unix `rm`,绕过 `bash["rm -rf *"]: ask`,**目录被真删**。补 4 条 Win 风格 pattern(`Remove-Item *` / `rmdir *` / `del *` / `rd *`)覆盖跨 shell 调用。bash 规则数 8 → 13
+
+- **dedup-cache-persist** ([changelog](features/dedup-cache-persist/3-changelog.md))— Mac 端推的 DedupCache 持久化(JSON 落盘 + 原子 rename + corrupt 不 crash),Win 端 smoke test + 真飞书实测 dedup skip 日志铁证全过。sidecar 重启后 load 老 message_id 防 WSS 重连服务器重推老 message 时失忆
+
+- **feishu-plugin-dedup-decision** ([changelog](features/feishu-plugin-dedup-decision/3-changelog.md))— "opencode.jsonc 累积多 feishu-bridge plugin entry → multi-instance → 双推" 根因诊断 + 不做产品层防御决策显式写下;`build-deskfox.{ps1,sh}` 加 post-build 清开发机 jsonc 多余 entry hook
+
+- **build-script-json-fallback** ([changelog](features/build-script-json-fallback/3-changelog.md))— 修 build-deskfox 脚本 jsonc 清理只查 `.jsonc` 漏掉 `.json` 用户的开发者便利 bug。**只影响开发机**,普通用户 0 感知
+
+- **sdk-falsy-error-fallback-fix** ([changelog](features/sdk-falsy-error-fallback-fix/3-changelog.md))— 5.11.x 翻车真因 fix。SDK `client.gen.ts` 的 `finalError || ({} as unknown)` falsy fallback 抛空 `{}` → SolidJS castError → "出了点问题 原因: {}" 错误页。在 `createSdkForServer` fetch 边界兜底转有效 Error,SDK 看到的 error 永远 truthy → fallback 不触发
+
+实测验证(user Win 端 2026-05-12 上午):
+- typecheck 16/16 ✅
+- adapter bun test 286/289 ✅(3 fail 是 `defaultFilePath` / TTL / hasAndMark LRU touch,**pre-existing flake** 跟 imbot 无关)
+- cargo test ⚠️ STATUS_ENTRYPOINT_NOT_FOUND env 老问题持续(dev 基线就有,跟改动无关,留 backlog)
+- 飞书实测 imbot v3.1 + dedup-cache-persist 在 Win 真生效(sidecar log 铁证 `[wss] dedup skip om_xxx` + `[permission-card] sent card (bash) → Hebing—one + xiaobei_win`,user 主动点 once 删除测试目录)
+- prod installer 装机预检全过(WSS 2/2 connected,1 plugin entry 不会双推,imbot v3.1 配置加载)
+
+ship 流程: bump 2026.5.11.4 → 2026.5.12.1 → tauri build prod → ISCC pack 62MB(2026-05-12 11:38)→ 静默装 prod + 飞书实测 3 条全过
+
+installer:`D:\project\opencode-fork\packages\branding\installer\Output\DeskFox-2026.5.12.1-setup.exe`
+
+---
+
 ## [Windows] 2026.5.11.4 - 2026-05-11 23:02
 
 **主题**:5.11.x 系列 ship 修复(vite chunking 非确定性 workaround) + imbot 安全 agent 终于推给 Win 用户
