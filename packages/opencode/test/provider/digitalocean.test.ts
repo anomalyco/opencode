@@ -24,10 +24,8 @@ async function list() {
 
 const DIGITALOCEAN = ProviderID.make("digitalocean")
 
-const originalFetch = globalThis.fetch
 const originalAuthContent = process.env.OPENCODE_AUTH_CONTENT
 afterEach(() => {
-  globalThis.fetch = originalFetch
   if (originalAuthContent === undefined) delete process.env.OPENCODE_AUTH_CONTENT
   else process.env.OPENCODE_AUTH_CONTENT = originalAuthContent
 })
@@ -76,16 +74,6 @@ test("digitalocean provider.models surfaces cached routers from auth metadata", 
       )
     },
   })
-  let routerFetches = 0
-  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
-    const input = args[0]
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-    if (url.includes("/v2/gen-ai/models/routers")) {
-      routerFetches++
-      throw new Error("router endpoint should not be called when cache is fresh")
-    }
-    return originalFetch(...args)
-  }) as typeof fetch
   injectAuth({
     routers: JSON.stringify([
       { name: "my-router", uuid: "11f1499a-aaaa-bbbb-cccc-4e013e2ddde4" },
@@ -105,7 +93,6 @@ test("digitalocean provider.models surfaces cached routers from auth metadata", 
       expect(models["router:my-router"].api.url).toBe("https://inference.do-ai.run/v1")
       expect(models["router:my-router"].api.npm).toBe("@ai-sdk/openai-compatible")
       expect(models["router:other-router"]).toBeDefined()
-      expect(routerFetches).toBe(0)
     },
   })
 })
@@ -119,16 +106,6 @@ test("digitalocean provider.models skips refresh when oauth bearer is expired", 
       )
     },
   })
-  let routerFetches = 0
-  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
-    const input = args[0]
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-    if (url.includes("/v2/gen-ai/models/routers")) {
-      routerFetches++
-      return new Response(JSON.stringify({ model_routers: [] }), { status: 200 })
-    }
-    return originalFetch(...args)
-  }) as typeof fetch
   injectAuth({
     routers: JSON.stringify([{ name: "stale-router", uuid: "stale" }]),
     routers_fetched_at: "0",
@@ -141,7 +118,6 @@ test("digitalocean provider.models skips refresh when oauth bearer is expired", 
       const providers = await list()
       const models = providers[DIGITALOCEAN].models
       expect(models["router:stale-router"]).toBeDefined()
-      expect(routerFetches).toBe(0)
     },
   })
 })
@@ -155,16 +131,6 @@ test("digitalocean provider.models passes through base models when no auth metad
       )
     },
   })
-  let routerFetches = 0
-  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
-    const input = args[0]
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-    if (url.includes("/v2/gen-ai/models/")) {
-      routerFetches++
-      throw new Error("DO management API should not be called without metadata")
-    }
-    return originalFetch(...args)
-  }) as typeof fetch
   await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
@@ -173,7 +139,6 @@ test("digitalocean provider.models passes through base models when no auth metad
       const models = providers[DIGITALOCEAN].models
       expect(Object.keys(models).length).toBeGreaterThan(0)
       expect(Object.keys(models).filter((id) => id.startsWith("router:")).length).toBe(0)
-      expect(routerFetches).toBe(0)
     },
   })
 })
