@@ -17,7 +17,7 @@ description: 发布管理 — 版本发布、回滚、Hotfix、RCA 复盘
 
 **P9: Hotfix 发布 / 紧急回滚**
 
-**P10: RCA 复盘报告编写**
+**P10: 汇总各层 owner 报告 + 创建改进 Issue/PR** — 复盘报告
 
 ## 技能
 

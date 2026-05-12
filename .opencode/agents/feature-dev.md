@@ -17,6 +17,8 @@ description: 功能开发 — UI/App、编辑器扩展、文档、i18n、品牌�
 
 **P7: Code Review** — 展示层部分
 
+**P10: 复盘层4(对外影响) owner** — 领域复盘分析
+
 ## 技能
 
 - `skill:typescript` — no any、no try-catch、no destructure

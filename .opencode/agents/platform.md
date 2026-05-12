@@ -19,6 +19,8 @@ description: 平台基础设施 — Monorepo、CI/CD、构建管线、Docker、N
 
 **P7: Turborepo 任务图验证**
 
+**P10: 复盘层5(经济性) owner** — 领域复盘分析
+
 ## 技能
 
 - `skill:monorepo` — turbo 任务图、catalog、workspace:\*

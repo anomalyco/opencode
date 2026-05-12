@@ -15,7 +15,7 @@
 | **orchestrator** | primary          | DeepSeek V4 Flash | `#FF4444` | 流程编排 — 分派、汇总、门控、发布审批（P1-P10）    |
 | architect        | subagent         | DeepSeek V4 Pro   | `#DD3333` | 架构审定 — 设计评审、PR 审批、技术 RCA             |
 | core-dev         | subagent         | DeepSeek V4 Pro   | `#4488FF` | 核心开发 — Effect 服务、Drizzle schema、包依赖拓扑 |
-| release          | subagent         | DeepSeek V4 Pro   | `#AA44FF` | 发布管理 — 版本发布、回滚、Hotfix、RCA 复盘        |
+| release          | subagent         | DeepSeek V4 Pro   | `#AA44FF` | 发布管理 — 版本发布、回滚、Hotfix、复盘汇总        |
 | platform         | subagent         | DeepSeek V4 Flash | `#3366FF` | 平台基础设施 — CI/CD、构建管线、Docker、Nix        |
 | feature-dev      | subagent         | DeepSeek V4 Flash | `#44CC88` | 功能开发 — UI/App、扩展、文档、i18n                |
 | qa               | subagent         | DeepSeek V4 Flash | `#FFAA00` | 质量保障 — 测试、质量门、Canary 监控、质量否决     |
@@ -62,15 +62,15 @@
 | Phase | 职责                                                              | 工作产品             |
 | ----- | ----------------------------------------------------------------- | -------------------- |
 | P1    | 变更分级 + 决定进当前版本/下一版本/Fast-track                     | 标签 + 分派          |
-| P2    | 收集候选 Issue → 去重 → 冲突检测 → 排序 → 制定版本计划 + 并发控制 | 版本计划             |
+| P2    | 收集候选 Issue → 去重 → 冲突检测 → 排序 → 制定迭代计划 + 并发控制 | 迭代计划             |
 | P3    | **分派 Agent 做领域分析，汇总形成需求文档**（不做分析）           | 需求分析报告         |
 | P4    | 发起 LLM Panel 评审需求报告，Go/No-Go 决策                        | 评审记录 + Milestone |
 | P5    | 协调 subagent 完成设计，分派 LLM Panel 评审，最终批准             | 批准/退回意见        |
 | P6    | **监控不执行** — 由 subagent 执行编码                             | —                    |
 | P7    | 按变更类型分级审批 Merge，调用 QA subagent 执行质量门             | Merge 批准           |
 | P8    | Canary Go/No-Go 最终审批                                          | 发布绿灯             |
-| P9    | CHANGELOG 审核，调用 Release subagent 执行发布                    | 审核意见             |
-| P10   | RCA 指导，改进措施→Issue                                          | 改进 Issue           |
+| P9    | 发布决策（审视范围+定版号+自问）；CHANGELOG审核；调用Release执行  | 审核意见             |
+| P10   | 信号采集 + 复盘范围决策 + 发布前自问结果录入                      | 指标基线             |
 
 > **编排模式**：orchestrator 是 orchestrator 阶段的用户入口。用户与 orchestrator 对话，orchestrator 通过 `@agent-name` 调用 subagent 执行具体任务，收集结果，做出决策。用户从 analyst mode 切换到此。
 
@@ -84,10 +84,10 @@
 
 | Phase | 职责                                                  | 工作产品      |
 | ----- | ----------------------------------------------------- | ------------- |
-| P2    | 审查版本计划的依赖排序、架构一致性                    | 审查意见      |
+| P2    | 审查迭代计划的依赖排序、架构一致性                    | 审查意见      |
 | P5    | 技术设计审定（架构合理性、接口契约、Effect 服务设计） | 批准/退回意见 |
 | P7    | 技术 PR 审批（`feat:`/`refactor:`/`feat!:`）          | Merge 批准    |
-| P10   | 技术根因分析（系统层面，非个人失误）                  | RCA 技术章节  |
+| P10   | P10 复盘层2(Agent体系) + 层6(Agent行为健康) owner  | 领域复盘分析  |
 
 **审批规则**
 
@@ -209,7 +209,7 @@
 | P8    | Canary → 正式 Promote                           | 发布命令    |
 | P9    | 版本号/Tag/构建/npm/AUR/Homebrew/Docker 发布    | 发布产物    |
 | P9    | Hotfix 发布 / 紧急回滚                          | Hotfix 版本 |
-| P10   | RCA 复盘报告编写                                | RCA 报告    |
+| P10   | 汇总各层 owner 报告 + 创建改进 Issue/PR            | 复盘报告    |
 
 ---
 
@@ -297,21 +297,21 @@ orchestrator 在分级时查询当前所有 `In Progress` 状态 Issue 的影响
 
 ---
 
-### P2: 版本计划制定
+### P2: 迭代计划制定
 
-> orchestrator 周期性执行（通常在上一版本 P7 期间启动）。P2 从已通过 P1 分级的 Issue 池中收集候选 Issue，经过去重、冲突检测、排序后制定版本计划。P2 输出的版本计划是本版本执行的蓝图——策略层面决定执行顺序，并发控制作为运行时的执行保障。
+> orchestrator 周期性执行（通常在上一迭代 P7 期间启动）。P2 从已通过 P1 分级的 Issue 池中收集候选 Issue，经过去重、冲突检测、排序后制定迭代计划。P2 输出的是本次迭代的执行蓝图——策略层面决定执行顺序，并发控制作为运行时的执行保障。**P2 不定版本号、不承诺发布范围**——版本号在 P9 发布时根据实际交付内容决定。
 
 | 角色             | 职责                                                   | 工作产品     |
 | ---------------- | ------------------------------------------------------ | ------------ |
-| **orchestrator** | 收集候选 Issue → 去重 → 冲突检测 → 排序 → 制定版本计划 | 版本计划草案 |
+| **orchestrator** | 收集候选 Issue → 去重 → 冲突检测 → 排序 → 制定迭代计划 | 迭代计划草案 |
 | **architect**    | 审查技术可行性、依赖排序、架构一致性                   | 审查意见     |
-| **qa**           | 审查版本范围与测试容量匹配度                           | 审查意见     |
+| **qa**           | 审查迭代范围与测试容量匹配度                           | 审查意见     |
 
 **工作产品**
 
-| 产出物   | 存储                               | 模板                                 |
-| -------- | ---------------------------------- | ------------------------------------ |
-| 版本计划 | `.octopus/version-plans/vX.Y.Z.md` | `templates/version-plan-template.md` |
+| 产出物   | 存储                                            | 模板                                   |
+| -------- | ----------------------------------------------- | -------------------------------------- |
+| 迭代计划 | `.octopus/iteration-plans/<date>-<slug>.md`     | `templates/iteration-plan-template.md` |
 
 **去重规则**
 
@@ -319,9 +319,9 @@ orchestrator 在入池时必须执行：
 
 1. 交叉比对所有候选 Issue 的影响范围（包/文件清单）
 2. 语义级去重——不同 Issue 描述同一目标 → 合并为单个 Issue
-3. 排除已在过往版本发布的 Issue（CHANGELOG 已包含）
+3. 排除已在过往发布中包含的 Issue（CHANGELOG 已包含）
 4. 排除已有关联 PR 已 merge 的 Issue
-5. 去重记录写入版本计划 "去重说明" 章节
+5. 去重记录写入迭代计划 "去重说明" 章节
 
 **冲突检测与排序**
 
@@ -333,7 +333,7 @@ orchestrator 执行：
 4. 标识 Fast-track 候选（XS/S + 无同包冲突）
 5. 生成 P6 执行序列
 
-**入队规则**: 版本计划通过后，范围内 Issue 锁定——仅 Hotfix 和批准的版本修订可破门。
+**入队规则**: 迭代计划通过后，范围内 Issue 锁定——仅 Hotfix 和批准的迭代修订可破门。
 
 **Checklist**
 
@@ -342,14 +342,14 @@ orchestrator 执行：
 - [ ] 同包冲突已检测并排序（同包串行、异包并行）
 - [ ] 跨包依赖已识别并正确排序
 - [ ] Fast-track 候选已标识
-- [ ] 版本范围与 Agent 容量匹配（每个 Agent ≤ 3 个 M+ Issue）
-- [ ] **LLM Panel 评审通过**（≥5/7，评审记录→`.octopus/review/vX.Y-version-plan.md`）
+- [ ] 迭代范围与 Agent 容量匹配（每个 Agent ≤ 3 个 M+ Issue）
+- [ ] **LLM Panel 评审通过**（≥5/7，评审记录→`.octopus/review/<date>-<slug>-iteration-plan.md`）
 
-**LLM Panel 评审维度**: 版本范围合理性、Issue 排序正确性、冲突检测完整性、风险识别
+**LLM Panel 评审维度**: 迭代范围合理性、Issue 排序正确性、冲突检测完整性、风险识别
 
 #### P2 执行保障：多 Issue 并发控制
 
-> 版本计划定义了蓝图，并发控制确保蓝图执行不冲突。
+> 迭代计划定义了蓝图，并发控制确保蓝图执行不冲突。
 
 **Issue 优先级**
 
@@ -609,13 +609,33 @@ P0/Hotfix 抢占当前 Agent 时：
 
 ---
 
-### P9: 版本发布
+### P9: 发布
+
+> P9 分为两步：先做发布决策（定版本范围 + 版本号），再执行发布。**版本号在此时根据实际交付内容按语义化版本规范决定**，不由 P2 提前锁定。
+
+#### P9-决策
+
+| 角色             | 职责                                                                                       | 工作产品     |
+| ---------------- | ------------------------------------------------------------------------------------------ | ------------ |
+| **orchestrator** | 审视 dev 自上个 tag 以来 merge 的 PR → 决定打包范围 → 按语义化版本定版本号 → 发布前自问    | 发布范围文档 |
+| **architect**    | 确认 Breaking Change 判定                                                                  | 审查意见     |
+| **release**      | 确认发布就绪（所有 P7 质量门已通过）                                                       | 就绪确认     |
+
+**发布前自问**（Pre-release Reflection — 决策后、执行前，3 题 30 秒）：
+
+1. 本次发布哪 3 个地方最容易出问题？
+2. 上次复盘的改进措施闭环了吗？
+3. 有没有"上次没修、这次又踩"的重复问题？
+
+→ 输出 3-5 行笔记，附到后续 P10 复盘报告开头。
+
+#### P9-执行
 
 | 角色             | 职责                                         | 工作产品     |
 | ---------------- | -------------------------------------------- | ------------ |
 | **orchestrator** | CHANGELOG 审核                               | 审核意见     |
 | **compat**       | MIGRATION.md 编写（Breaking Change）         | MIGRATION.md |
-| **release**      | 版本号/Tag/构建/npm/AUR/Homebrew/Docker 发布 | 发布产物     |
+| **release**      | Tag/构建/npm/AUR/Homebrew/Docker 发布        | 发布产物     |
 | **platform**     | CI 发布管线支持                              | 发布流水线   |
 | **qa**           | 发布后 24h 监控                              | 监控报告     |
 
@@ -631,6 +651,9 @@ P0/Hotfix 抢占当前 Agent 时：
 
 **Checklist**
 
+- [ ] 发布范围已审视（dev 自上个 tag 以来的 merge PR）
+- [ ] 版本号按语义化版本规范决定（Breaking→major, feat→minor, fix→patch）
+- [ ] 发布前自问 3 题已完成（3-5 行笔记）
 - [ ] 全量 `bun turbo typecheck` 通过
 - [ ] 全量 `bun turbo test:ci` 通过
 - [ ] HttpApi 测试全绿
@@ -638,7 +661,6 @@ P0/Hotfix 抢占当前 Agent 时：
 - [ ] 如有 Breaking Change：MIGRATION.md 已编写
 - [ ] npm 发布成功
 - [ ] 构建产物可执行（至少验证 Linux）
-- [ ] 版本号符合语义化版本规范
 
 ---
 
@@ -659,28 +681,70 @@ P0/Hotfix 抢占当前 Agent 时：
 
 ---
 
-### P10: 复盘（P0/P1 问题触发）
+### P10: 复盘
 
-| 角色             | 职责                        | 工作产品   |
-| ---------------- | --------------------------- | ---------- |
-| **release**      | RCA 编写（5 Whys + 时间线） | RCA 报告   |
-| **orchestrator** | 改进措施审定 → 转化 Issue   | 改进 Issue |
+> P10 不是纯事故复盘——它是信号驱动的、多 Agent 共担的持续改进引擎。每次 P9 发布后自动触发，信号决定复盘深度。**不自动改系统，所有改进通过 Issue/PR 人工审批后合入。**
+
+#### P10 信号触发规则
+
+P9 发布后自动采集以下信号，决定本次复盘深度：
+
+| 信号 | 阈值 | 触发深挖层 |
+|------|------|-----------|
+| 🔴 评审轮次 ≥ 2 | P2/P4/P5 任一 ≥ 2 轮 | 层1(Checklist/模板) + 层2(LLM Panel) |
+| 🔴 Hotfix 或回滚 | 发生 | 层1(门控/Canary) + 层4(用户影响) |
+| 🔴 范围偏差 ≥ 50% | 实际 vs 估算 | 层1(P0估算) + 层3(信息损失) |
+| 🟡 Token 环比 ≥ 30% | vs 上个版本 | 层5(成本) + 层2(Panel配置) |
+| 🟡 CI 时间环比 ≥ 20% | vs 上个版本 | 层5(CI) + 层2(Platform) |
+| 🟡 Agent 排队 ≥ 3 M+ | 同步排队 Issue | 层2(分派/WIP) + 层1(并发) |
+| 🟡 协作摩擦连续 2 版 | 复核率 ↑ | 层6(Agent行为健康) |
+| 🟡 工具连续 2 版零调用 | 某 Tool 未被使用 | 层7(知识熵) |
+| 🟡 Skill 超过 3 版未更新 | 未修改版本数 | 层7(文档腐烂) |
+| 🟢 无信号 | — | 仅记录指标基线，不写全文复盘 |
+
+#### P10 7 层复盘维度
+
+| 层 | 维度 | Owner | 审计要点 |
+|:--:|------|:-----:|---------|
+| 1 | 开发流程 | orchestrator | Phase边界/门控/Checklist盲区/模板质量/触发时机/并发控制 |
+| 2 | Agent 体系 | architect | 模型选型/上下文文件/Skill内容/Tool配置/分派规则/Agent容量 |
+| 3 | 信息与知识 | analyst | P0→P3信息损失/P5→P6设计跑偏/重复踩坑/决策记录完整性/指标趋势 |
+| 4 | 对外影响 | feature-dev | 用户反馈/社区抱怨/MIGRATION可读性/Release Notes质量 |
+| 5 | 经济性 | platform | Token消耗(分Phase)/CI耗时(分workflow)/墙钟时间(P0→P9)/范围偏差 |
+| 6 | Agent 行为健康 | architect | 审查者注意力衰减/调用链复核率/协作摩擦点/上下文丢失率 |
+| 7 | 知识/系统熵 | analyst | 文档腐烂/工具遗忘/静默指标(跳过的checklist)/单点知识风险 |
+
+**复盘流程**：
+
+1. P9 发布后，orchestrator 根据信号清单确定本次需深挖的层
+2. 各层 owner Agent 在所属领域出具复盘片段（分析 + 改进建议）
+3. release 汇总各片 → 统一复盘报告
+4. 改进项：表格格式 → Issue（流程变更）或 PR（模板/Skill/配置修改）
+
+| 角色             | 职责                                        | 工作产品     |
+| ---------------- | ------------------------------------------- | ------------ |
+| **orchestrator** | 信号采集 + 复盘范围决策 + 发布前自问结果录入 | 指标基线     |
+| 各层 owner       | 领域复盘片段                                | 领域分析     |
+| **release**      | 汇总成报告 + 改进 Issue/PR 创建              | 复盘报告     |
 
 **工作产品**
 
-| 产出物   | 格式     | 存储                                   |
-| -------- | -------- | -------------------------------------- |
-| 复盘报告 | Markdown | `.octopus/postmortem/<date>-<slug>.md` |
+| 产出物     | 格式     | 存储                                     |
+| ---------- | -------- | ---------------------------------------- |
+| 指标基线   | JSON     | `.octopus/metrics/vX.Y.Z.json`           |
+| 复盘报告   | Markdown | `.octopus/postmortem/<date>-vX.Y.Z.md`   |
+| 改进 Issue | GitHub   | GitHub Issue                             |
+| 改进 PR    | GitHub   | GitHub PR（模板/Skill/配置修改）          |
 
-**RCA 模板**
+**复盘模板**
 
 ```
-# 复盘: <简述>
-## 时间线（发现/定位/修复时间）
-## 根因（5 Whys）
-## 影响范围
-## 改进措施
-## 责任人
+# P10 复盘: vX.Y.Z
+## 发布前自问结果（P9 决策时记录）
+## 信号清单（触发项 + 阈值对比）
+## 层 N 复盘（仅深挖的层，每层含分析 + 改进建议）
+## 改进措施（表格：措施/类型/优先级/责任人/Issue）
+## 上一版闭环追踪（上一版改进 Issue 是否完成）
 ```
 
 ---
@@ -693,7 +757,7 @@ P0/Hotfix 抢占当前 Agent 时：
 
 | 分类     | 产物                                             | 提交？ | 存储路径            |
 | -------- | ------------------------------------------------ | :----: | ------------------- |
-| 持久归档 | Discovery / 版本计划 / 研究 / 设计 / 评审 / 复盘 |   ✓    | `.octopus/*.md`     |
+| 持久归档 | Discovery / 迭代计划 / 研究 / 设计 / 评审 / 复盘 |   ✓    | `.octopus/*.md`     |
 | 临时快照 | Agent 上下文暂存                                 |   ✗    | `.octopus/context/` |
 | CI 产物  | 测试报告 / Canary 监控 / bundle size             |   ✗    | `.artifacts/`       |
 
@@ -727,7 +791,7 @@ dev  ──●──●──●──●─────────────
 | ----- | ------------------------- | ----------------- | --------------------------------- | :------: | ----------------------------------------- |
 | P0    | `dev`                     | Discovery 文档    | `docs(discovery): <slug>`         |  **零**  | 编辑/覆盖文档                             |
 | P1    | — (GitHub)                | Issue 标签 + 分派 | —                                 |  **零**  | 重新标记                                  |
-| P2    | `dev`                     | 版本计划          | `docs(plan): vX.Y.Z`              |  **零**  | 编辑文档                                  |
+| P2    | `dev`                     | 迭代计划          | `docs(plan): <date>-<slug>`      |  **零**  | 编辑文档                                  |
 | P3    | `dev`                     | 研究/分析报告     | `docs(research): <issue-id>`      |  **零**  | 编辑文档                                  |
 | P4    | `dev`                     | 评审记录          | `docs(review): <issue-id>-p4`     |  **零**  | 编辑文档                                  |
 | P5    | `dev`                     | 设计文档          | `docs(design): <issue-id>`        |  **零**  | 编辑文档                                  |
@@ -776,7 +840,7 @@ dev  ──●──●──●──●─────────────
 | 产物类型       | Prefix                    | 示例                                         |
 | -------------- | ------------------------- | -------------------------------------------- |
 | Discovery 文档 | `docs(discovery):`        | `docs(discovery): add dark mode exploration` |
-| 版本计划       | `docs(plan):`             | `docs(plan): v1.5.0 scope and ordering`      |
+| 迭代计划       | `docs(plan):`             | `docs(plan): 2026-05-12-cleanup-iteration`  |
 | 研究/分析      | `docs(research):`         | `docs(research): #42 core impact analysis`   |
 | 评审记录       | `docs(review):`           | `docs(review): #42-p4 LLM panel verdict`     |
 | 设计文档       | `docs(design):`           | `docs(design): #42 dark mode architecture`   |
@@ -789,7 +853,7 @@ dev  ──●──●──●──●─────────────
 | Phase | 何时 Commit                                | 谁 Commit                      |
 | ----- | ------------------------------------------ | ------------------------------ |
 | P0    | Discovery 文档完成后立即提交               | **analyst**                    |
-| P2    | 版本计划通过 LLM Panel 后提交              | **orchestrator**               |
+| P2    | 迭代计划通过 LLM Panel 后提交              | **orchestrator**               |
 | P3    | 各 Agent 分析完成、需求报告汇总后          | **orchestrator**               |
 | P4    | 评审结束后，记录归档                       | **orchestrator**               |
 | P5    | 设计文档 + 任务拆解通过 LLM Panel 后       | **orchestrator**               |
@@ -827,7 +891,7 @@ opencode run -m <model> --format json "$review_prompt" 2>/dev/null
 
 | Phase | 评审对象            | 评审维度                                                                      | 通过阈值 | 归档路径                               |
 | ----- | ------------------- | ----------------------------------------------------------------------------- | -------- | -------------------------------------- |
-| P2    | 版本计划            | 范围合理性、排序正确性、冲突检测完整性、Fast-track 判定准确性、风险识别完整度 | ≥5/7     | `.octopus/review/vX.Y-version-plan.md` |
+| P2    | 迭代计划            | 迭代范围合理性、Issue 排序正确性、冲突检测完整性、风险识别 | ≥5/7     | `.octopus/review/<date>-<slug>.md` |
 | P4    | 需求分析报告        | 需求完整性、技术可行性准确度、验收标准可测试性、工作量合理性                  | ≥4/7     | `.octopus/review/<issue-id>-p4.md`     |
 | P5    | 技术设计 + 任务拆解 | 架构合理性、接口契约完整、测试覆盖、发布风险                                  | ≥5/7     | `.octopus/review/<issue-id>-p5.md`     |
 
@@ -914,7 +978,7 @@ opencode run -m <model> --format json "$review_prompt" 2>/dev/null
 | ------ | ------------------------- | ------------------------------ | -------------------------------------------- | ----------------- |
 | P0     | `dev`                     | 用户提出原始 idea              | Discovery 文档 + Issue 草稿完成              | —                 |
 | P1     | — (GitHub)                | P0 Issue 草稿                  | 变更级别已判定 + Agent 已分派 + 无同文件冲突 | Bots 自动         |
-| P2     | `dev`                     | P1 分级完成 / 上一版本 P7 期间 | 版本计划通过（≥5/7）                         | LLM Panel         |
+| P2     | `dev`                     | P1 分级完成 / 上一迭代 P7 期间 | 迭代计划通过（≥5/7）                         | LLM Panel         |
 | P3     | `dev`                     | P2 通过                        | 需求分析报告完成（M+: ≥2 Agent 分析）        | —                 |
 | P4     | `dev`                     | P3 完成                        | M+: LLM Panel ≥4/7 Go                        | LLM Panel         |
 | P5     | `dev`                     | P4 Go（仅 M+）                 | 技术设计+任务拆解通过（≥5/7）                | LLM Panel         |
@@ -922,7 +986,7 @@ opencode run -m <model> --format json "$review_prompt" 2>/dev/null
 | P7     | PR → `dev`                | P6 PR ready                    | 质量门通过 + squash merge                    | CI + QA           |
 | P8     | `release/vX.Y.Z`          | L/XL 质量门通过                | Canary 1h 无异常                             | QA 否决           |
 | P9     | `release/vX.Y.Z` → `main` | Canary 通过 / P7 通过 (XS/S/M) | 发布成功 + 24h OK                            | Release           |
-| P10    | `dev`                     | P0/P1 问题触发                 | RCA + 改进 Issue                             | Release→architect |
+| P10    | `dev`                     | P9 发布完成                     | 指标基线 + 复盘报告(按需) + 改进 Issue       | Release→architect |
 | Hotfix | `hotfix/vX.Y.Z`           | 紧急修复                       | merge to main + backmerge to dev             | Release           |
 
 ---
