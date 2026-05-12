@@ -189,6 +189,20 @@ After rebasing on `upstream/dev`, verify each feature still works:
 2. `codesign --verify --verbose=4 ~/.local/bin/opencode` (macOS)
 3. `~/.local/bin/opencode --version`
 
+### 14. Auto-Review (Supervisor + Cross-Review)
+
+**Files:**
+- `packages/opencode/src/config/config.ts` — `auto_review` config field (optional `model` in `provider/model` format)
+- `packages/app/src/context/settings.tsx` — `models` section: `autoReview` toggle, `defaultModel`, `reviewModel`
+- `packages/app/src/pages/session.tsx` — orchestration loop: supervisor → summarize → cross-review with retry cap
+- `packages/app/src/pages/session/auto-review.ts` — prompt generation, model picking, done-token detection
+
+**How to verify:**
+1. Enable "Auto Review" in Settings → Models
+2. Send a coding task; after the assistant completes, a supervisor review followup auto-queues
+3. After supervisor review completes and summarization, a cross-review followup queues with a different model
+4. Review stops after "Task completed." token or after 3 retries per phase
+
 ---
 
 ## 🧪 Post-Rebase Browser Smoke Test
@@ -211,6 +225,7 @@ After every rebase + deploy, run through this checklist in the browser:
 | 12 | Verify back/forward navigation | Browser back/forward buttons work between sessions |
 | 13 | Toggle speaker control in prompt | Auto-speak setting toggles and current playback stops when disabled |
 | 14 | Trigger voice playback and STT | Mic capture inserts text; `/tts/edge` returns playable audio for assistant speech |
+| 15 | Enable auto-review in Settings → Models | Toggle persists; after assistant completes, supervisor review auto-queues |
 
 ---
 
@@ -229,7 +244,8 @@ These files are frequently modified by both upstream and this fork. Pay extra at
 | `dialog-select-model.tsx` | LOW | Recently used models grouping logic |
 | `prompt-input.tsx` | **HIGH** | STT controls, mic permission flow, transcript insertion |
 | `message-timeline.tsx` | **HIGH** | TTS playback, stale-request cancellation, mute behavior |
-| `settings.tsx` | MEDIUM | `voice.autoSpeak` defaulting and persistence |
+| `settings.tsx` | MEDIUM | `voice.autoSpeak` defaulting and persistence; `models` section for auto-review |
+| `session.tsx` | **HIGH** | Auto-review `createEffect`, `ReviewState`, followup store fields (`autoReview`, `review`, `pending`) |
 | `package.json` | **HIGH** | root `install:local` script should delegate to `packages/opencode` |
 | `packages/opencode/package.json` | **HIGH** | keep `build:local` / `sign:local` / `copy:local` / `install:local` scripts |
 | `packages/opencode/script/install-local.ts` | **HIGH** | local binary copy target (`~/.local/bin/opencode`) + macOS codesign verification |
