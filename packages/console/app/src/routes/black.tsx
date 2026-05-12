@@ -76,6 +76,7 @@ export default function BlackLayout(props: RouteSectionProps) {
       <Meta property="og:url" content={`${config.baseUrl}${language.route("/black")}`} />
       <Meta property="og:title" content={i18n.t("black.meta.title")} />
       <Meta property="og:description" content={i18n.t("black.meta.description")} />
+      {/* TODO(future): Replace social-share-black.png with Octopus-branded OG image once design assets are ready */}
       <Meta property="og:image" content="/social-share-black.png" />
       <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={i18n.t("black.meta.title")} />

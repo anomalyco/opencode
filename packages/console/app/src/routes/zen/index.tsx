@@ -36,6 +36,7 @@ export default function Home() {
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("zen.title")}</Title>
       <LocaleLinks path="/zen" />
+      {/* TODO(future): Replace social-share-zen.png with Octopus-branded OG image once design assets are ready */}
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
       <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />

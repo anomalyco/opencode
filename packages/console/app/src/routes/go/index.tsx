@@ -238,6 +238,7 @@ export default function Home() {
       <Meta property="og:url" content={`${config.baseUrl}${language.route("/go")}`} />
       <Meta property="og:title" content={i18n.t("go.title")} />
       <Meta property="og:description" content={i18n.t("go.meta.description")} />
+      {/* TODO(future): Replace social-share-black.png with Octopus-branded OG image once design assets are ready */}
       <Meta property="og:image" content="/social-share-black.png" />
       <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={i18n.t("go.title")} />

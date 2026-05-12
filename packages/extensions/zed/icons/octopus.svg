@@ -1,3 +1,5 @@
 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path fill-rule="evenodd" clip-rule="evenodd" d="M13 14H3V2H13V14ZM10.5 4.4H5.5V11.6H10.5V4.4Z" fill="#C4CAD4"/>
+<circle cx="8" cy="6" r="4" fill="#C4CAD4"/>
+<path d="M4.5 9C3 11 3 13 5 14" stroke="#C4CAD4" stroke-width="2" stroke-linecap="round"/>
+<path d="M11.5 9C13 11 13 13 11 14" stroke="#C4CAD4" stroke-width="2" stroke-linecap="round"/>
 </svg>

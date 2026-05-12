@@ -17,6 +17,7 @@ export default createHandler(
             <head>
               <meta charset="utf-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1" />
+              {/* TODO(future): Replace social-share.png with Octopus-branded OG image once design assets are ready */}
               <meta property="og:image" content="/social-share.png" />
               <meta property="twitter:image" content="/social-share.png" />
               <style>{criticalCSS}</style>

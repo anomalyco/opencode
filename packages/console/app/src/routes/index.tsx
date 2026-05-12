@@ -47,6 +47,7 @@ export default function Home() {
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("home.title")}</Title>
       <LocaleLinks path="/" />
+      {/* TODO(future): Replace social-share.png with Octopus-branded OG image once design assets are ready */}
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
       <div data-component="container">
