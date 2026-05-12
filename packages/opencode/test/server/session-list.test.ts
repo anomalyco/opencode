@@ -1,33 +1,25 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { mkdir } from "fs/promises"
 import path from "path"
 import { Database } from "@/storage/db"
 import { SessionTable } from "@/session/session.sql"
 import { eq } from "drizzle-orm"
+import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const it = testEffect(SessionNs.defaultLayer)
 
-function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
-  return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))
-}
-
-const svc = {
-  ...SessionNs,
-  create(input?: SessionNs.CreateInput) {
-    return run(SessionNs.Service.use((svc) => svc.create(input)))
-  },
-  list(input?: SessionNs.ListInput) {
-    return run(SessionNs.Service.use((svc) => svc.list(input)))
-  },
-}
+const withSession = (input?: Parameters<SessionNs.Interface["create"]>[0]) =>
+  Effect.acquireRelease(
+    SessionNs.Service.use((session) => session.create(input)),
+    (created) => SessionNs.Service.use((session) => session.remove(created.id).pipe(Effect.ignore)),
+  )
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
@@ -35,205 +27,195 @@ afterEach(async () => {
 })
 
 describe("session.list", () => {
-  test("does not filter by directory when directory is omitted", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
-    await using tmp = await tmpdir({ git: true })
-    await mkdir(path.join(tmp.path, "packages", "opencode"), { recursive: true })
-    await mkdir(path.join(tmp.path, "packages", "app"), { recursive: true })
+  it.instance(
+    "does not filter by directory when directory is omitted",
+    () =>
+      Effect.gen(function* () {
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
+        const test = yield* TestInstance
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode"), { recursive: true }))
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "app"), { recursive: true }))
 
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const root = await svc.create({ title: "root" })
+        const root = yield* withSession({ title: "root" })
+        const parent = yield* withSession({ title: "parent" }).pipe(provideInstance(path.join(test.directory, "packages")))
+        const current = yield* withSession({ title: "current" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "opencode")),
+        )
+        const sibling = yield* withSession({ title: "sibling" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "app")),
+        )
 
-        const parent = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages"),
-          fn: async () => svc.create({ title: "parent" }),
-        })
-        const current = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "opencode"),
-          fn: async () => svc.create({ title: "current" }),
-        })
-        const sibling = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "app"),
-          fn: async () => svc.create({ title: "sibling" }),
-        })
-
-        const ids = (await svc.list()).map((s) => s.id)
+        const ids = (yield* SessionNs.Service.use((session) => session.list())).map((session) => session.id)
         expect(ids).toContain(root.id)
         expect(ids).toContain(parent.id)
         expect(ids).toContain(current.id)
         expect(ids).toContain(sibling.id)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 
-  test("filters by directory when directory is provided", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
-    await using tmp = await tmpdir({ git: true })
-    await mkdir(path.join(tmp.path, "packages", "opencode"), { recursive: true })
-    await mkdir(path.join(tmp.path, "packages", "app"), { recursive: true })
+  it.instance(
+    "filters by directory when directory is provided",
+    () =>
+      Effect.gen(function* () {
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
+        const test = yield* TestInstance
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode"), { recursive: true }))
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "app"), { recursive: true }))
 
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const root = await svc.create({ title: "root" })
+        const root = yield* withSession({ title: "root" })
+        const parent = yield* withSession({ title: "parent" }).pipe(provideInstance(path.join(test.directory, "packages")))
+        const current = yield* withSession({ title: "current" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "opencode")),
+        )
+        const sibling = yield* withSession({ title: "sibling" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "app")),
+        )
 
-        const parent = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages"),
-          fn: async () => svc.create({ title: "parent" }),
-        })
-        const current = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "opencode"),
-          fn: async () => svc.create({ title: "current" }),
-        })
-        const sibling = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "app"),
-          fn: async () => svc.create({ title: "sibling" }),
-        })
-
-        const ids = (await svc.list({ directory: path.join(tmp.path, "packages", "opencode") })).map((s) => s.id)
+        const ids = (
+          yield* SessionNs.Service.use((session) =>
+            session.list({ directory: path.join(test.directory, "packages", "opencode") }),
+          )
+        ).map((session) => session.id)
         expect(ids).not.toContain(root.id)
         expect(ids).not.toContain(parent.id)
         expect(ids).toContain(current.id)
         expect(ids).not.toContain(sibling.id)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 
-  test("filters by path and ignores directory when path is provided", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
-    await using tmp = await tmpdir({ git: true })
-    await mkdir(path.join(tmp.path, "packages", "opencode", "src", "deep"), { recursive: true })
-    await mkdir(path.join(tmp.path, "packages", "app"), { recursive: true })
+  it.instance(
+    "filters by path and ignores directory when path is provided",
+    () =>
+      Effect.gen(function* () {
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
+        const test = yield* TestInstance
+        yield* Effect.promise(() =>
+          mkdir(path.join(test.directory, "packages", "opencode", "src", "deep"), { recursive: true }),
+        )
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "app"), { recursive: true }))
 
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const parent = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "opencode"),
-          fn: async () => svc.create({ title: "parent" }),
-        })
-        const current = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "opencode", "src"),
-          fn: async () => svc.create({ title: "current" }),
-        })
-        const deeper = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "opencode", "src", "deep"),
-          fn: async () => svc.create({ title: "deeper" }),
-        })
-        const sibling = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "app"),
-          fn: async () => svc.create({ title: "sibling" }),
-        })
+        const parent = yield* withSession({ title: "parent" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "opencode")),
+        )
+        const current = yield* withSession({ title: "current" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "opencode", "src")),
+        )
+        const deeper = yield* withSession({ title: "deeper" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "opencode", "src", "deep")),
+        )
+        const sibling = yield* withSession({ title: "sibling" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "app")),
+        )
 
         const pathIDs = (
-          await svc.list({
-            directory: path.join(tmp.path, "packages", "app"),
-            path: "packages/opencode/src",
-          })
-        ).map((s) => s.id)
+          yield* SessionNs.Service.use((session) =>
+            session.list({
+              directory: path.join(test.directory, "packages", "app"),
+              path: "packages/opencode/src",
+            }),
+          )
+        ).map((session) => session.id)
         expect(pathIDs).not.toContain(parent.id)
         expect(pathIDs).toContain(current.id)
         expect(pathIDs).toContain(deeper.id)
         expect(pathIDs).not.toContain(sibling.id)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 
-  test("falls back to directory when filtering legacy sessions without path", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
-    await using tmp = await tmpdir({ git: true })
-    await mkdir(path.join(tmp.path, "packages", "opencode", "src"), { recursive: true })
-    await mkdir(path.join(tmp.path, "packages", "app"), { recursive: true })
+  it.instance(
+    "falls back to directory when filtering legacy sessions without path",
+    () =>
+      Effect.gen(function* () {
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
+        const test = yield* TestInstance
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode", "src"), { recursive: true }))
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "app"), { recursive: true }))
 
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const current = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "opencode", "src"),
-          fn: async () => svc.create({ title: "legacy-current" }),
-        })
-        const sibling = await WithInstance.provide({
-          directory: path.join(tmp.path, "packages", "app"),
-          fn: async () => svc.create({ title: "legacy-sibling" }),
-        })
+        const current = yield* withSession({ title: "legacy-current" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "opencode", "src")),
+        )
+        const sibling = yield* withSession({ title: "legacy-sibling" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "app")),
+        )
 
-        Database.use((db) => db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, current.id)).run())
-        Database.use((db) => db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sibling.id)).run())
+        yield* Effect.sync(() =>
+          Database.use((db) => db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, current.id)).run()),
+        )
+        yield* Effect.sync(() =>
+          Database.use((db) => db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sibling.id)).run()),
+        )
 
         const pathIDs = (
-          await svc.list({
-            directory: path.join(tmp.path, "packages", "opencode", "src"),
-            path: "packages/opencode/src",
-          })
-        ).map((s) => s.id)
+          yield* SessionNs.Service.use((session) =>
+            session.list({
+              directory: path.join(test.directory, "packages", "opencode", "src"),
+              path: "packages/opencode/src",
+            }),
+          )
+        ).map((session) => session.id)
         expect(pathIDs).toContain(current.id)
         expect(pathIDs).not.toContain(sibling.id)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 
-  test("filters root sessions", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const root = await svc.create({ title: "root-session" })
-        const child = await svc.create({ title: "child-session", parentID: root.id })
+  it.instance(
+    "filters root sessions",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* withSession({ title: "root-session" })
+        const child = yield* withSession({ title: "child-session", parentID: root.id })
 
-        const sessions = await svc.list({ roots: true })
-        const ids = sessions.map((s) => s.id)
+        const sessions = yield* SessionNs.Service.use((session) => session.list({ roots: true }))
+        const ids = sessions.map((session) => session.id)
 
         expect(ids).toContain(root.id)
         expect(ids).not.toContain(child.id)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 
-  test("filters by start time", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await svc.create({ title: "new-session" })
-        const futureStart = Date.now() + 86400000
-
-        const sessions = await svc.list({ start: futureStart })
+  it.instance(
+    "filters by start time",
+    () =>
+      Effect.gen(function* () {
+        yield* withSession({ title: "new-session" })
+        const sessions = yield* SessionNs.Service.use((session) => session.list({ start: Date.now() + 86400000 }))
         expect(sessions.length).toBe(0)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 
-  test("filters by search term", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await svc.create({ title: "unique-search-term-abc" })
-        await svc.create({ title: "other-session-xyz" })
+  it.instance(
+    "filters by search term",
+    () =>
+      Effect.gen(function* () {
+        yield* withSession({ title: "unique-search-term-abc" })
+        yield* withSession({ title: "other-session-xyz" })
 
-        const sessions = await svc.list({ search: "unique-search" })
-        const titles = sessions.map((s) => s.title)
+        const sessions = yield* SessionNs.Service.use((session) => session.list({ search: "unique-search" }))
+        const titles = sessions.map((session) => session.title)
 
         expect(titles).toContain("unique-search-term-abc")
         expect(titles).not.toContain("other-session-xyz")
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 
-  test("respects limit parameter", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await svc.create({ title: "session-1" })
-        await svc.create({ title: "session-2" })
-        await svc.create({ title: "session-3" })
+  it.instance(
+    "respects limit parameter",
+    () =>
+      Effect.gen(function* () {
+        yield* withSession({ title: "session-1" })
+        yield* withSession({ title: "session-2" })
+        yield* withSession({ title: "session-3" })
 
-        const sessions = await svc.list({ limit: 2 })
+        const sessions = yield* SessionNs.Service.use((session) => session.list({ limit: 2 }))
         expect(sessions.length).toBe(2)
-      },
-    })
-  })
+      }),
+    { git: true },
+  )
 })
