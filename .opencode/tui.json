@@ -15,5 +15,8 @@
         }
       }
     ]
-  ]
+  ],
+  "plugin_enabled": {
+    "internal:home-tips": false
+  }
 }
