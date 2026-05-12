@@ -9,11 +9,11 @@ export function fromSchema(schema: Schema.Top): JSONSchema7 {
   const cached = cache.get(schema)
   if (cached) return cached
 
-  const document = JsonSchema.toDocumentDraft07(Schema.toJsonSchemaDocument(schema, { additionalProperties: true }))
+  const document = Schema.toJsonSchemaDocument(schema, { additionalProperties: true })
   const result = normalize({
-    $schema: JsonSchema.META_SCHEMA_URI_DRAFT_07,
+    $schema: JsonSchema.META_SCHEMA_URI_DRAFT_2020_12,
     ...document.schema,
-    ...(Object.keys(document.definitions).length > 0 ? { definitions: document.definitions } : {}),
+    ...(Object.keys(document.definitions).length > 0 ? { $defs: document.definitions } : {}),
   })
   if (!isJsonSchema(result)) throw new Error("tool JSON Schema helper produced a non-schema value")
   cache.set(schema, result)

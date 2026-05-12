@@ -1,7 +1,8 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Effect, Layer } from "effect"
+import { pathToFileURL } from "url"
+import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -138,6 +139,42 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("hello")
+    }),
+  )
+
+  it.instance("loads Zod-schema custom tools with JSON Schema and validation", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "sql.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'query database',",
+            "  args: { query: tool.schema.string().describe('SQL query to execute') },",
+            "  execute: async ({ query }) => query,",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "sql")
+      if (!loaded) throw new Error("custom sql tool was not loaded")
+      expect(loaded?.jsonSchema).toMatchObject({
+        type: "object",
+        properties: {
+          query: { type: "string", description: "SQL query to execute" },
+        },
+        required: ["query"],
+      })
+      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters)({ query: "select 1" }))).toBe(true)
+      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters)({}))).toBe(false)
     }),
   )
 
