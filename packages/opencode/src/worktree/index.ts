@@ -1,4 +1,3 @@
-import z from "zod"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Global } from "@opencode-ai/core/global"
 import { InstanceLayer } from "@/project/instance-layer"
@@ -65,54 +64,33 @@ export const ResetInput = Schema.Struct({
 }).annotate({ identifier: "WorktreeResetInput" })
 export type ResetInput = Schema.Schema.Type<typeof ResetInput>
 
-export const NotGitError = NamedError.create(
-  "WorktreeNotGitError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const NotGitError = NamedError.create("WorktreeNotGitError", {
+  message: Schema.String,
+})
 
-export const NameGenerationFailedError = NamedError.create(
-  "WorktreeNameGenerationFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const NameGenerationFailedError = NamedError.create("WorktreeNameGenerationFailedError", {
+  message: Schema.String,
+})
 
-export const CreateFailedError = NamedError.create(
-  "WorktreeCreateFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const CreateFailedError = NamedError.create("WorktreeCreateFailedError", {
+  message: Schema.String,
+})
 
-export const StartCommandFailedError = NamedError.create(
-  "WorktreeStartCommandFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const StartCommandFailedError = NamedError.create("WorktreeStartCommandFailedError", {
+  message: Schema.String,
+})
 
-export const RemoveFailedError = NamedError.create(
-  "WorktreeRemoveFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const RemoveFailedError = NamedError.create("WorktreeRemoveFailedError", {
+  message: Schema.String,
+})
 
-export const ResetFailedError = NamedError.create(
-  "WorktreeResetFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const ResetFailedError = NamedError.create("WorktreeResetFailedError", {
+  message: Schema.String,
+})
 
-export const ListFailedError = NamedError.create(
-  "WorktreeListFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const ListFailedError = NamedError.create("WorktreeListFailedError", {
+  message: Schema.String,
+})
 
 function slugify(input: string) {
   return input

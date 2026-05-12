@@ -79,7 +79,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       const list = yield* registry.tools({
         providerID: ctx.query.provider,
         modelID: ctx.query.model,
-        agent: yield* agents.get(yield* agents.defaultAgent()),
+        agent: yield* agents.defaultInfo(),
       })
       return list.map((item) => ({
         id: item.id,

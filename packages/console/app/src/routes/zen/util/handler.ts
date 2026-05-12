@@ -299,7 +299,6 @@ export async function handler(
         let buffer = ""
         let responseLength = 0
         let timestampFirstByte = 0
-        let timestampLastByte = 0
 
         function pump(): Promise<void> {
           return (
