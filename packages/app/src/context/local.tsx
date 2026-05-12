@@ -52,6 +52,18 @@ const clone = (value: State | undefined) => {
   } satisfies State
 }
 
+// Prod 모델/티어 락. VITE_MODEL_PIN="<provider>/<model>", VITE_MODEL_PIN_TIER="<variant>".
+// 둘 다 세팅 시 IndexedDB sticky·agent fallback·사용자 variant 선택 모두 무시.
+const pin: ModelKey | undefined = (() => {
+  const raw = import.meta.env.VITE_MODEL_PIN
+  if (typeof raw !== "string") return undefined
+  const [providerID, modelID] = raw.split("/")
+  if (!providerID || !modelID) return undefined
+  return { providerID, modelID }
+})()
+const tier: string | undefined =
+  typeof import.meta.env.VITE_MODEL_PIN_TIER === "string" ? import.meta.env.VITE_MODEL_PIN_TIER : undefined
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -223,10 +235,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const current = () => {
-      // ENT-69 prod 환경에서는 IndexedDB sticky·agent fallback 모두 무시하고 sonnet-4-6으로 강제 (로컬 dev 제외)
-      if (!import.meta.env.DEV) {
-        const locked = models.find({ providerID: "anthropic", modelID: "claude-sonnet-4-6" })
-        // 레지스트리 로드 race 등으로 sonnet-4-6이 일시 부재할 때만 일반 흐름으로 폴백
+      // ENT-69 prod: IndexedDB sticky·agent fallback 무시하고 VITE_MODEL_PIN 모델로 강제 (env 미설정 시 일반 흐름).
+      if (pin) {
+        const locked = models.find(pin)
+        // 레지스트리 로드 race 등으로 잠금 모델이 없을 때만 일반 흐름으로 폴백
         if (locked) return locked
       }
       const item = firstModel(
@@ -248,7 +260,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
     }
 
-    const selected = () => scope()?.variant
+    const selected = () => {
+      if (pin && tier) {
+        const m = current()
+        if (m?.variants && tier in m.variants) return tier
+      }
+      return scope()?.variant
+    }
 
     const snapshot = () => {
       const model = current()
