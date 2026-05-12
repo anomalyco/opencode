@@ -7,12 +7,10 @@ import * as Global from "../global"
 import { Schema } from "effect"
 import { Glob } from "./glob"
 
-export const Level = Schema.Union([
-  Schema.Literal("DEBUG"),
-  Schema.Literal("INFO"),
-  Schema.Literal("WARN"),
-  Schema.Literal("ERROR"),
-]).annotate({ identifier: "LogLevel", description: "Log level" })
+export const Level = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
+  identifier: "LogLevel",
+  description: "Log level",
+})
 export type Level = Schema.Schema.Type<typeof Level>
 
 const levelPriority: Record<Level, number> = {
