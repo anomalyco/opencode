@@ -1,6 +1,6 @@
 import { NamedError } from "@opencode-ai/core/util/error"
 import matter from "gray-matter"
-import { z } from "zod"
+import { Schema } from "effect"
 import { Filesystem } from "@/util/filesystem"
 
 export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
@@ -88,12 +88,9 @@ export async function parse(filePath: string) {
   }
 }
 
-export const FrontmatterError = NamedError.create(
-  "ConfigFrontmatterError",
-  z.object({
-    path: z.string(),
-    message: z.string(),
-  }),
-)
+export const FrontmatterError = NamedError.create("ConfigFrontmatterError", {
+  path: Schema.String,
+  message: Schema.String,
+})
 
 export * as ConfigMarkdown from "./markdown"
