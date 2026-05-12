@@ -303,6 +303,7 @@ export const layer: Layer.Layer<
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      const toolsConfig = (yield* config.get()).tools ?? {}
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID)
@@ -320,20 +321,25 @@ export const layer: Layer.Layer<
         filtered,
         Effect.fnUntraced(function* (tool: Tool.Def) {
           using _ = log.time(tool.id)
-          const output = {
-            description: tool.description,
-            parameters: tool.parameters,
-          }
-          yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
-          return {
-            id: tool.id,
-            description: [
-              output.description,
-              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
-              tool.id === SkillTool.id ? yield* describeSkill(input.agent) : undefined,
-            ]
-              .filter(Boolean)
-              .join("\n"),
+          const toolConfig = toolsConfig[tool.id]
+        const hasDescriptionOverride = toolConfig !== true && toolConfig !== false && toolConfig !== undefined
+        const overrideDescription = hasDescriptionOverride && "description" in toolConfig ? (toolConfig as { description: string }).description : undefined
+        const output = {
+          description: overrideDescription ?? tool.description,
+          parameters: tool.parameters,
+        }
+        yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+        return {
+          id: tool.id,
+          description: hasDescriptionOverride
+            ? output.description
+            : [
+                output.description,
+                tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+                tool.id === SkillTool.id ? yield* describeSkill(input.agent) : undefined,
+              ]
+                .filter(Boolean)
+                .join("\n"),
             parameters: output.parameters,
             execute: tool.execute,
             formatValidationError: tool.formatValidationError,

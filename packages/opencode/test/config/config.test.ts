@@ -2568,3 +2568,48 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+// Config tool overrides tests
+
+test("tools config accepts boolean values (existing behavior)", () => {
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    ConfigParse.jsonc(JSON.stringify({ tools: { bash: true, read: false } }), "test"),
+    "test",
+  )
+  expect(config.tools).toEqual({ bash: true, read: false })
+})
+
+test("tools config accepts object with description", () => {
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    ConfigParse.jsonc(
+      JSON.stringify({ tools: { glob: { description: "Find files" } } }),
+      "test",
+    ),
+    "test",
+  )
+  expect(config.tools).toEqual({ glob: { description: "Find files" } })
+})
+
+test("tools config accepts mixed boolean and object values", () => {
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    ConfigParse.jsonc(
+      JSON.stringify({
+        tools: {
+          bash: true,
+          read: { description: "Read file" },
+          websearch: false,
+        },
+      }),
+      "test",
+    ),
+    "test",
+  )
+  expect(config.tools).toEqual({
+    bash: true,
+    read: { description: "Read file" },
+    websearch: false,
+  })
+})

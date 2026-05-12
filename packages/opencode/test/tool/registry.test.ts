@@ -16,6 +16,7 @@ import { Skill } from "@/skill"
 import { Agent } from "@/agent/agent"
 import { Session } from "@/session/session"
 import { Provider } from "@/provider/provider"
+import { ProviderID, ModelID } from "@/provider/schema"
 import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "@/session/instruction"
@@ -55,7 +56,41 @@ const registryLayer = ToolRegistry.layer.pipe(
   Layer.provide(Truncate.defaultLayer),
 )
 
+const registryLayerWithToolOverrides = ToolRegistry.layer.pipe(
+  Layer.provide(
+    TestConfig.layer({
+      get: () =>
+        Effect.succeed({
+          tools: {
+            read: { description: "Read file" },
+            bash: { description: "" },
+          },
+        }),
+      directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
+    }),
+  ),
+  Layer.provide(Plugin.defaultLayer),
+  Layer.provide(Question.defaultLayer),
+  Layer.provide(Todo.defaultLayer),
+  Layer.provide(Skill.defaultLayer),
+  Layer.provide(Agent.defaultLayer),
+  Layer.provide(Session.defaultLayer),
+  Layer.provide(Provider.defaultLayer),
+  Layer.provide(Git.defaultLayer),
+  Layer.provide(Reference.defaultLayer),
+  Layer.provide(LSP.defaultLayer),
+  Layer.provide(Instruction.defaultLayer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Bus.layer),
+  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(Format.defaultLayer),
+  Layer.provide(node),
+  Layer.provide(Ripgrep.defaultLayer),
+  Layer.provide(Truncate.defaultLayer),
+)
+
 const it = testEffect(Layer.mergeAll(registryLayer, node))
+const itWithOverrides = testEffect(Layer.mergeAll(registryLayerWithToolOverrides, node))
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_SCOUT = originalExperimentalScout
@@ -214,6 +249,48 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("cowsay")
+    }),
+  )
+
+  itWithOverrides.instance("object tool override replaces description", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const tools = yield* registry.tools({
+        modelID: ModelID.make("test/model"),
+        providerID: ProviderID.make("test"),
+        agent: { name: "test", mode: "subagent", options: {}, permission: [{ permission: "*", pattern: "*", action: "allow" }] },
+      })
+      const readTool = tools.find((t) => t.id === "read")
+      expect(readTool).toBeDefined()
+      expect(readTool!.description).toBe("Read file")
+    }),
+  )
+
+  itWithOverrides.instance("empty string description override removes description", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const tools = yield* registry.tools({
+        modelID: ModelID.make("test/model"),
+        providerID: ProviderID.make("test"),
+        agent: { name: "test", mode: "subagent", options: {}, permission: [{ permission: "*", pattern: "*", action: "allow" }] },
+      })
+      const bashTool = tools.find((t) => t.id === "bash")
+      expect(bashTool).toBeDefined()
+      expect(bashTool!.description).toBe("")
+    }),
+  )
+
+  it.instance("tool not in config uses original description", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const tools = yield* registry.tools({
+        modelID: ModelID.make("test/model"),
+        providerID: ProviderID.make("test"),
+        agent: { name: "test", mode: "subagent", options: {}, permission: [{ permission: "*", pattern: "*", action: "allow" }] },
+      })
+      const invalidTool = tools.find((t) => t.id === "invalid")
+      expect(invalidTool).toBeDefined()
+      expect(invalidTool!.description.length).toBeGreaterThanOrEqual(10)
     }),
   )
 })
