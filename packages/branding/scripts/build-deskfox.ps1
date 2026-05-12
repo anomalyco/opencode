@@ -125,14 +125,18 @@ if ($buildExit -ne 0) {
 # 决策同 Mac 端 build-deskfox.sh — 产品 inject 逻辑不做"同 plugin 多物理路径"清理,开发机 build 后顺手清,
 # 下次 DeskFox 启动 setup hook 自动 inject 当前 .exe 路径(单 entry 正常状态)。
 # [feat: feishu-plugin-dedup-decision] 2026-05-12
+# [feat: build-script-json-fallback] 2026-05-12 — 同时检测 .jsonc + .json(对齐 setup hook
+#   resolve_user_config_path,user 实际用哪个就清哪个;之前只查 .jsonc 漏掉 .json 用户)
 if ($buildExit -eq 0) {
-    $jsonc = Join-Path $env:USERPROFILE ".config\opencode\opencode.jsonc"
-    if (Test-Path $jsonc) {
+    $configDir = Join-Path $env:USERPROFILE ".config\opencode"
+    foreach ($fileName in @("opencode.jsonc", "opencode.json")) {
+        $jsonc = Join-Path $configDir $fileName
+        if (-not (Test-Path $jsonc)) { continue }
         $raw = Get-Content $jsonc -Raw
         $feishuMatches = [regex]::Matches($raw, "plugin/feishu-bridge")
         if ($feishuMatches.Count -gt 1) {
             Write-Output ""
-            Write-Output "[deskfox] jsonc 发现 $($feishuMatches.Count) 个 feishu-bridge plugin entry,清理(下次 DeskFox 启动 setup hook 自动 inject 当前 .exe)..."
+            Write-Output "[deskfox] $fileName 发现 $($feishuMatches.Count) 个 feishu-bridge plugin entry,清理(下次 DeskFox 启动 setup hook 自动 inject 当前 .exe)..."
             Copy-Item $jsonc "$jsonc.bak.build-cleanup" -Force
             # 删除所有含 plugin/feishu-bridge 的行
             $cleaned = ($raw -split "`n" | Where-Object { $_ -notmatch "plugin/feishu-bridge" }) -join "`n"
