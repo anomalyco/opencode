@@ -10,7 +10,13 @@ export const Mark = (props: { class?: string }) => {
       xmlns="http://www.w3.org/2000/svg"
     >
       <path data-slot="logo-mark-shadow" d="M10 7V11H6V7H10Z" fill="var(--icon-weak-base)" />
-      <path data-slot="logo-mark-frame" fill-rule="evenodd" clip-rule="evenodd" d="M12 13H4V3H12V13ZM10 5H6V11H10V5Z" fill="var(--icon-strong-base)" />
+      <path
+        data-slot="logo-mark-frame"
+        fill-rule="evenodd"
+        clip-rule="evenodd"
+        d="M12 13H4V3H12V13ZM10 5H6V11H10V5Z"
+        fill="var(--icon-strong-base)"
+      />
     </svg>
   )
 }
@@ -41,9 +47,24 @@ export const Logo = (props: { class?: string }) => {
     >
       <g>
         <path d="M20 14V22H12V14H20Z" fill="var(--icon-weak-base)" />
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M24 26H8V6H24V26ZM20 10H12V22H20V10Z" fill="var(--icon-strong-base)" />
+        <path
+          fill-rule="evenodd"
+          clip-rule="evenodd"
+          d="M24 26H8V6H24V26ZM20 10H12V22H20V10Z"
+          fill="var(--icon-strong-base)"
+        />
       </g>
-      <text x="38" y="24" fill="var(--icon-strong-base)" font-family="system-ui, sans-serif" font-size="20" font-weight="600" letter-spacing="0.02em">Octopus</text>
+      <text
+        x="38"
+        y="24"
+        fill="var(--icon-strong-base)"
+        font-family="system-ui, sans-serif"
+        font-size="20"
+        font-weight="600"
+        letter-spacing="0.02em"
+      >
+        Octopus
+      </text>
     </svg>
   )
 }
