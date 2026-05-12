@@ -10,6 +10,19 @@
 // idempotent:已存在指向本 plugin 的有效项就跳过;失效项(路径已不存在)清理后重新注入。
 // 失效场景实例 — user 在 .dmg 挂载点双击 .app,inject 写入 /Volumes/... 路径,卸载挂载点后路径失效;
 // user 拖 .app 到 Applications 后下次启动需自愈,不能因子串匹配就跳过保留废 entry [feat: feishu-bridge-newuser-onboarding] 2026-05-10。
+//
+// **不做的事**(2026-05-12 决策,[feat: feishu-plugin-dedup-decision]):
+//   不做"同 plugin 多物理路径"清理 — 即当前 url 之外的 feishu-bridge entry,即使物理路径还在也保留。
+//   理由:普通用户单装单跑场景永不撞(opencode.jsonc 永远 1 entry → 1 instance → 1 WSSClient → 飞书 server 单连接,
+//   不会发"同 user message 分配不同 message_id 给不同 connection"的双推)。
+//   触发"多 entry → multi-instance → 双推"的场景仅限:
+//     ① 开发机三档来回切换(已由 build-deskfox.sh post-build 清理兜底)
+//     ② 未来 auto-update 路径变化 / beta+prod 同跑
+//   场景 ② 等真触发再评估,不预先实施防御代码(参 R1 三级跳 + 元原则"避免业务无限扩大")。
+//   若未来需要,候选三层方案见 docs/features/feishu-plugin-dedup-decision/1-spec.md
+//     L1 plugin process-level singleton(globalThis)
+//     L2 inject 强制单 entry(改本文件 retain 逻辑成"当前 url 之外的 feishu-bridge entry 全清")
+//     L3 file lock 跨进程 singleton
 
 use serde_json::Value;
 use std::fs;
