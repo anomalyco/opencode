@@ -41,6 +41,17 @@ Recovered fixes:
 - Switched OAuth browser-open subprocess listeners to one-shot handlers in `packages/opencode/src/mcp/index.ts` (`once("error")`, `once("exit")`) to prevent listener accumulation.
 - Added explicit typed pubsub map cleanup in `packages/opencode/src/bus/index.ts` finalizer (`typed.clear()` after shutdown).
 
+## ✅ Recovered local install flow regression (2026-05-11)
+
+Source refs:
+- `dev-backup-20260509-031153`
+- `28c748879` (`fix: restore local install flow (#46)`)
+
+Recovered fixes:
+- Restored root `install:local` script in `package.json` delegating to `packages/opencode`.
+- Restored local install pipeline scripts in `packages/opencode/package.json` (`build:local`, `sign:local`, `copy:local`, `install:local`).
+- Restored `packages/opencode/script/sign-local.ts` and `packages/opencode/script/install-local.ts` to keep local binary copy + ad-hoc codesigning reproducible.
+
 ## ⚠️ Rebase Survival Checklist
 
 After rebasing on `upstream/dev`, verify each feature still works:
@@ -165,6 +176,19 @@ After rebasing on `upstream/dev`, verify each feature still works:
 3. `bun test test/server/httpapi-mcp-oauth.test.ts`
 4. `bun test test/bus/bus.test.ts`
 
+### 13. Local install script + macOS signing
+
+**Files:**
+- `package.json` — root `install:local` script delegates to `packages/opencode`
+- `packages/opencode/package.json` — local pipeline scripts (`build:local`, `sign:local`, `copy:local`, `install:local`)
+- `packages/opencode/script/sign-local.ts` — ad-hoc signs the local dist binary on macOS
+- `packages/opencode/script/install-local.ts` — copies binary to `~/.local/bin/opencode`, signs again on macOS, and verifies signature
+
+**How to verify:**
+1. `npm run install:local`
+2. `codesign --verify --verbose=4 ~/.local/bin/opencode` (macOS)
+3. `~/.local/bin/opencode --version`
+
 ---
 
 ## 🧪 Post-Rebase Browser Smoke Test
@@ -206,6 +230,10 @@ These files are frequently modified by both upstream and this fork. Pay extra at
 | `prompt-input.tsx` | **HIGH** | STT controls, mic permission flow, transcript insertion |
 | `message-timeline.tsx` | **HIGH** | TTS playback, stale-request cancellation, mute behavior |
 | `settings.tsx` | MEDIUM | `voice.autoSpeak` defaulting and persistence |
+| `package.json` | **HIGH** | root `install:local` script should delegate to `packages/opencode` |
+| `packages/opencode/package.json` | **HIGH** | keep `build:local` / `sign:local` / `copy:local` / `install:local` scripts |
+| `packages/opencode/script/install-local.ts` | **HIGH** | local binary copy target (`~/.local/bin/opencode`) + macOS codesign verification |
+| `packages/opencode/script/sign-local.ts` | MEDIUM | dist binary ad-hoc signing on macOS before copy |
 | `tool/registry.ts` | **HIGH** | `rename` tool registration in built-in list |
 | `tool/rename.ts` | **HIGH** | `rename` tool id/parameters/Session title update behavior |
 | `session/system.ts` | MEDIUM | session naming guidance so agent actually calls `rename` |
@@ -241,7 +269,7 @@ git rebase upstream/dev
 # 3. After resolving conflicts, diff against backup to check for lost features
 git diff HEAD..backup/dev-YYYYMMDDHHMMSS -- packages/app/src/pages/layout/
 
-# 4. Walk through features 1–12 above and verify each one in the code
+# 4. Walk through features 1–13 above and verify each one in the code
 # 5. Run typecheck
 cd packages/opencode && bun typecheck
 
