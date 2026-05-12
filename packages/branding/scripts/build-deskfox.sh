@@ -177,7 +177,11 @@ if [[ "$BUILD_EXIT" -eq 0 ]]; then
     for FILE_NAME in opencode.jsonc opencode.json; do
         JSONC="$CONFIG_DIR/$FILE_NAME"
         if [[ ! -f "$JSONC" ]]; then continue; fi
-        FEISHU_COUNT=$(grep -c "plugin/feishu-bridge" "$JSONC" 2>/dev/null || echo 0)
+        # grep -c 找到 0 个 match 时 stdout 仍输出 "0" + exit 1,旧 `|| echo 0` 兜底会再追加一个 "0"
+        # → COUNT = "0\n0",[[ -gt 1 ]] arithmetic context 撞 "syntax error in expression (error token is '0')"
+        # 改 `|| true`:grep 已经输出单行 "0",我们只需 substitution exit 0(防 set -e)即可
+        # [bug-repro: build-deskfox.sh 跑出 stderr "0: syntax error in expression (error token is '0')",build 仍成功但 log 不干净]
+        FEISHU_COUNT=$(grep -c "plugin/feishu-bridge" "$JSONC" 2>/dev/null || true)
         if [[ "$FEISHU_COUNT" -gt 1 ]]; then
             echo ""
             echo "[deskfox] $FILE_NAME 发现 $FEISHU_COUNT 个 feishu-bridge plugin entry,清理(下次 DeskFox 启动 setup hook 自动 inject 当前 .app)..."
