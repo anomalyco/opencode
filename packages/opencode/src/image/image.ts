@@ -67,7 +67,8 @@ export const layer = Layer.effect(
           ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
             photonWasm
           return await import("@silvia-odwyer/photon-node")
-        } catch {
+        } catch (err) {
+          log.error("failed to load photon", { error: err })
           return null
         }
       }),

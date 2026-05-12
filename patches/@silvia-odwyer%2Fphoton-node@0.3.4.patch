@@ -2,6 +2,14 @@ diff --git a/photon_rs.js b/photon_rs.js
 index 8f4144d..b83e9a9 100644
 --- a/photon_rs.js
 +++ b/photon_rs.js
+@@ -1,6 +1,6 @@
+ 
+ let imports = {};
+-imports['__wbindgen_placeholder__'] = module.exports;
++imports['__wbindgen_placeholder__'] = exports;
+ let wasm;
+ const { TextEncoder, TextDecoder } = require(`util`);
+ 
 @@ -4509,7 +4509,8 @@ module.exports.__wbindgen_init_externref_table = function() {
      ;
  };

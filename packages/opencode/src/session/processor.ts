@@ -407,6 +407,9 @@ export const layer: Layer.Layer<
                 ? image.normalize(attachment).pipe(Effect.exit)
                 : Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
             )
+            for (const result of normalized) {
+              if (Exit.isFailure(result)) slog.error("image normalize failed", { error: Cause.squash(result.cause) })
+            }
             const omitted = normalized.filter(Exit.isFailure).length
             const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
             const output = {
