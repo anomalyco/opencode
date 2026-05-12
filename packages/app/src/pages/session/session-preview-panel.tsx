@@ -15,6 +15,9 @@ function createSessionPreview() {
   })
 
   const [previewReady, setPreviewReady] = createSignal(false)
+  const [dirty, setDirty] = createSignal(false)
+  const [reloadCount, setReloadCount] = createSignal(0)
+
   createEffect(() => {
     const url = previewUrl()
     if (!url) return setPreviewReady(false)
@@ -27,29 +30,48 @@ function createSessionPreview() {
 
     void check()
     const timer = setInterval(check, 10_000)
-    const unsub = sdk.event.on("session.idle", () => void check())
+    const unsubIdle = sdk.event.on("session.idle", () => {
+      void check()
+      if (dirty()) {
+        setReloadCount((n) => n + 1)
+        setDirty(false)
+      }
+    })
+    const unsubFile = sdk.event.on("file.watcher.updated", (event) => {
+      const file = event.properties.file
+      if (file.startsWith(".git/") || file.includes("/.git/")) return
+      setDirty(true)
+    })
 
     onCleanup(() => {
       ctrl.abort()
       clearInterval(timer)
-      unsub()
+      unsubIdle()
+      unsubFile()
     })
   })
 
-  const previewSrc = createMemo(() => (previewReady() ? previewUrl() : undefined))
+  const previewState = createMemo(() => {
+    if (!previewReady()) return undefined
+    const url = previewUrl()
+    if (!url) return undefined
+    // Track reloadCount so session.idle bump invalidates this memo and <Show keyed> remounts the iframe.
+    void reloadCount()
+    return { url }
+  })
 
-  return { previewSrc }
+  return { previewState }
 }
 
 export function SessionPreviewPanel() {
-  const { previewSrc } = createSessionPreview()
+  const { previewState } = createSessionPreview()
 
   return (
-    <Show when={previewSrc()}>
-      {(src) => (
+    <Show when={previewState()} keyed>
+      {(state) => (
         <div class="flex-1 min-w-0 h-full bg-background-base border-l border-border-weaker-base">
           <iframe
-            src={src()}
+            src={state.url}
             class="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           />
