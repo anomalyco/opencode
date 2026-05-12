@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { parsePatch } from "diff"
-import { Deferred, Effect, Layer, Stream } from "effect"
+import { Deferred, Effect, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import fs from "fs/promises"
 import path from "path"
@@ -50,11 +50,24 @@ const nextBranchUpdate = Effect.fn("VcsTest.nextBranchUpdate")(function* () {
   const bus = yield* Bus.Service
   const updated = yield* Deferred.make<string | undefined>()
 
-  yield* Stream.runForEach(bus.subscribe(Vcs.Event.BranchUpdated), (evt) =>
-    Deferred.succeed(updated, evt.properties.branch),
-  ).pipe(Effect.forkScoped)
+  const off = yield* bus.subscribeCallback(Vcs.Event.BranchUpdated, (evt) => {
+    Effect.runSync(Deferred.succeed(updated, evt.properties.branch))
+  })
+  yield* Effect.addFinalizer(() => Effect.sync(off))
 
   return updated
+})
+
+const publishHeadChangeUntil = Effect.fn("VcsTest.publishHeadChangeUntil")(function* (
+  pending: Deferred.Deferred<string | undefined>,
+  head: string,
+) {
+  const bus = yield* Bus.Service
+  for (let i = 0; i < 50; i++) {
+    yield* bus.publish(FileWatcher.Event.Updated, { file: head, event: "change" })
+    if (yield* Deferred.isDone(pending)) return
+    yield* Effect.sleep("10 millis")
+  }
 })
 
 // ---------------------------------------------------------------------------
@@ -99,11 +112,10 @@ describe("Vcs", () => {
         const vcs = yield* init()
         yield* vcs.branch()
         const pending = yield* nextBranchUpdate()
-        const bus = yield* Bus.Service
 
         const head = path.join(test.directory, ".git", "HEAD")
         yield* write(head, `ref: refs/heads/${branch}\n`)
-        yield* bus.publish(FileWatcher.Event.Updated, { file: head, event: "change" })
+        yield* publishHeadChangeUntil(pending, head)
 
         const updated = yield* Deferred.await(pending).pipe(Effect.timeout("2 seconds"))
         expect(updated).toBe(branch)
@@ -122,11 +134,10 @@ describe("Vcs", () => {
         const vcs = yield* init()
         yield* vcs.branch()
         const pending = yield* nextBranchUpdate()
-        const bus = yield* Bus.Service
 
         const head = path.join(test.directory, ".git", "HEAD")
         yield* write(head, `ref: refs/heads/${branch}\n`)
-        yield* bus.publish(FileWatcher.Event.Updated, { file: head, event: "change" })
+        yield* publishHeadChangeUntil(pending, head)
         yield* Deferred.await(pending).pipe(Effect.timeout("2 seconds"))
 
         const current = yield* vcs.branch()
