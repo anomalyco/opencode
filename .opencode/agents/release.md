@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-pro
+model: deepseek/deepseek-v4-pro
 color: "#AA44FF"
 description: 发布管理 — 版本发布、回滚、Hotfix、RCA 复盘
 ---

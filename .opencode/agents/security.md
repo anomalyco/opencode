@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: deepseek/deepseek-v4-flash
 color: "#CC4444"
 description: 安全合规 — 安全审计、合规检查、Secrets 管理、bundle size
 ---

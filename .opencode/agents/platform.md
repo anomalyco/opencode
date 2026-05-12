@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: deepseek/deepseek-v4-flash
 color: "#3366FF"
 description: 平台基础设施 — Monorepo、CI/CD、构建管线、Docker、Nix
 ---

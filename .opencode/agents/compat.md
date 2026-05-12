@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: deepseek/deepseek-v4-flash
 color: "#8866FF"
 description: 兼容性 — 迁移、deprecation、环境变量 fallback、MIGRATION.md
 ---

@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-pro
+model: deepseek/deepseek-v4-pro
 color: "#4488FF"
 description: 核心开发 — Effect 服务、Drizzle schema、包依赖拓扑、自动化脚本
 ---

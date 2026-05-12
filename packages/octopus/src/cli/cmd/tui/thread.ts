@@ -19,7 +19,7 @@ import {
   OCTOPUS_RUN_ID,
   ensureRunID,
   sanitizedProcessEnv,
-} from "@octopus-ai/core/util/opencode-process"
+} from "@octopus-ai/core/util/octopus-process"
 import { validateSession } from "./validate-session"
 
 declare global {

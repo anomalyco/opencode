@@ -1,6 +1,6 @@
 ---
 mode: primary
-model: opencode-go/deepseek-v4-pro
+model: deepseek/deepseek-v4-pro
 color: "#FF8800"
 description: 需求发现 — 澄清模糊 idea、探索代码库、查重、拆解为结构化 Issue（P0 Discovery）
 ---

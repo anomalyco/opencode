@@ -9,7 +9,7 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { CrossSpawnSpawner } from "@octopus-ai/core/cross-spawn-spawner"
 import { Global } from "@octopus-ai/core/global"
 import * as Log from "@octopus-ai/core/util/log"
-import { sanitizedProcessEnv } from "@octopus-ai/core/util/opencode-process"
+import { sanitizedProcessEnv } from "@octopus-ai/core/util/octopus-process"
 import { which } from "@/util/which"
 import { zod } from "@octopus-ai/core/effect-zod"
 import { NonNegativeInt, withStatics } from "@octopus-ai/core/schema"
