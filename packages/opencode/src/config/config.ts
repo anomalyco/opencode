@@ -2,7 +2,6 @@ import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
-import z from "zod"
 import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
 import fsNode from "fs/promises"
@@ -357,14 +356,11 @@ function writableGlobal(info: Info) {
   return next
 }
 
-export const ConfigDirectoryTypoError = NamedError.create(
-  "ConfigDirectoryTypoError",
-  z.object({
-    path: z.string(),
-    dir: z.string(),
-    suggestion: z.string(),
-  }),
-)
+export const ConfigDirectoryTypoError = NamedError.create("ConfigDirectoryTypoError", {
+  path: Schema.String,
+  dir: Schema.String,
+  suggestion: Schema.String,
+})
 
 export const layer = Layer.effect(
   Service,
