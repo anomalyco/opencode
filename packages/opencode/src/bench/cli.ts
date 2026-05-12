@@ -230,6 +230,16 @@ async function buildConfigDir(args: {
   return { tmpRoot, configFile }
 }
 
+// Some SIFs ship with bare PATH lookups that ENOENT on bare program names
+// through Bun's posix_spawn. Resolve to an absolute path up front for any
+// binary we shell out to.
+function detectBin(candidates: string[]): string | null {
+  for (const p of candidates) {
+    if (existsSync(p)) return p
+  }
+  return null
+}
+
 function runOpencode(args: {
   workspaceRoot: string
   modelName: string
@@ -238,9 +248,12 @@ function runOpencode(args: {
   opencodeBin: string
   agent: string
 }): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  // Use the same bun binary that's currently running — guaranteed to exist
+  // and avoids PATH lookup quirks under Bun's posix_spawn.
+  const bunPath = process.execPath
   return new Promise((resolve) => {
     const child = spawn(
-      "bun",
+      bunPath,
       [
         args.opencodeBin,
         "run",
@@ -283,8 +296,9 @@ function runOpencode(args: {
 }
 
 async function captureGitDiff(workspaceRoot: string): Promise<string> {
+  const gitPath = detectBin(["/usr/bin/git", "/bin/git", "/usr/local/bin/git"]) ?? "git"
   return new Promise((resolve) => {
-    const child = spawn("git", ["-C", workspaceRoot, "diff"], {
+    const child = spawn(gitPath, ["-C", workspaceRoot, "diff"], {
       env: { ...process.env, GIT_PAGER: "cat" },
     })
     let stdout = ""

@@ -16,6 +16,19 @@
  */
 
 import { spawn } from "node:child_process"
+import { existsSync } from "node:fs"
+
+// Some SIFs are minimal and ship without `bash` on PATH, or Bun's posix_spawn
+// doesn't fall back to PATH lookup the way `execvp` does — either way,
+// spawn("bash", ...) ENOENTs. Probe absolute paths up front; the deep-reset
+// script uses only POSIX features, so /bin/sh is a safe fallback if bash is
+// absent.
+function detectShell(): string | null {
+  for (const p of ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh"]) {
+    if (existsSync(p)) return p
+  }
+  return null
+}
 
 function carefulPass(baseCommit: string): string {
   return (
@@ -87,10 +100,15 @@ export function buildDeepResetCmd(baseCommit: string): string {
 
 export async function runDeepReset(workspaceRoot: string, baseCommit: string): Promise<void> {
   if (!baseCommit) return
+  const shell = detectShell()
+  if (!shell) {
+    console.warn(`[bench] deep_reset skipped: no shell found at /bin/{bash,sh} or /usr/bin/{bash,sh}`)
+    return
+  }
   const cmd = buildDeepResetCmd(baseCommit)
-  console.log(`[bench] deep_reset workspace=${workspaceRoot} base=${baseCommit}`)
+  console.log(`[bench] deep_reset workspace=${workspaceRoot} base=${baseCommit} shell=${shell}`)
   await new Promise<void>((resolve) => {
-    const child = spawn("bash", ["-c", cmd], {
+    const child = spawn(shell, ["-c", cmd], {
       cwd: workspaceRoot,
       stdio: ["ignore", "inherit", "inherit"],
     })
