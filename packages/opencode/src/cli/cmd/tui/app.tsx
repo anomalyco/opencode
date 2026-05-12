@@ -61,6 +61,7 @@ import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import { Notify } from "@/cli/notify"
 import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
 import { FormatError, FormatUnknownError } from "@/cli/error"
@@ -869,10 +870,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
   })
 
+  event.on("session.idle", (evt) => {
+    const session = sync.session.get(evt.properties.sessionID)
+    Notify.notify("OpenCode", session?.title ?? "Task complete")
+  })
+
   event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = errorMessage(error)
+
+    Notify.notifyError("OpenCode Error", message)
 
     toast.show({
       variant: "error",

@@ -21,6 +21,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { ServerAuth } from "@/server/auth"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
+import { Notify } from "@/cli/notify"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -601,6 +602,9 @@ export const RunCommand = effectCmd({
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
           let error: string | undefined
+          let lastOutput = ""
+          let agent = ""
+          let model = ""
 
           for await (const event of events.stream) {
             if (
@@ -610,8 +614,10 @@ export const RunCommand = effectCmd({
               args.format !== "json" &&
               toggles.get("start") !== true
             ) {
+              agent = event.properties.info.agent ?? ""
+              model = event.properties.info.modelID ?? ""
               UI.empty()
-              UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
+              UI.println(`> ${agent} · ${model}`)
               UI.empty()
               toggles.set("start", true)
             }
@@ -653,6 +659,7 @@ export const RunCommand = effectCmd({
                 if (emit("text", { part })) continue
                 const text = part.text.trim()
                 if (!text) continue
+                lastOutput = text
                 if (!process.stdout.isTTY) {
                   process.stdout.write(text + EOL)
                   continue
@@ -694,6 +701,18 @@ export const RunCommand = effectCmd({
               event.properties.sessionID === sessionID &&
               event.properties.status.type === "idle"
             ) {
+              const prompt = message.slice(0, 100)
+              if (error) {
+                Notify.notify(prompt, `✗ ${error.slice(0, 200)}`)
+              } else if (lastOutput) {
+                const lines = lastOutput.split("\n").filter(Boolean).slice(0, 3)
+                const via = agent || model ? `${agent}${model ? ` (${model})` : ""}\n` : ""
+                const snippet = lines.join("\n").slice(0, 200)
+                Notify.notify(prompt, `${via}${snippet}`)
+              } else {
+                const via = agent || model ? `${agent}${model ? ` (${model})` : ""}` : ""
+                Notify.notify(prompt, via || "✓ done")
+              }
               break
             }
 
