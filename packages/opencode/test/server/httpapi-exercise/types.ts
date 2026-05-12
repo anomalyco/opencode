@@ -11,7 +11,6 @@ export const Methods = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const
 export type Method = (typeof Methods)[number]
 export type OpenApiMethod = (typeof OpenApiMethods)[number]
 export type Mode = "effect" | "coverage" | "auth"
-export type Backend = "effect"
 export type Comparison = "none" | "status" | "json"
 export type CaptureMode = "full" | "stream"
 export type AuthPolicy = "protected" | "public" | "public-bypass" | "ticket-bypass"

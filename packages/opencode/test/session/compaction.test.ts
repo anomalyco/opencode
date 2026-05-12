@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { APICallError } from "ai"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
@@ -211,7 +211,7 @@ function layer(result: "continue" | "compact") {
 }
 
 function cfg(compaction?: Config.Info["compaction"]) {
-  const base = Config.Info.zod.parse({})
+  const base = Schema.decodeUnknownSync(Config.Info)({}) as Config.Info
   return TestConfig.layer({
     get: () => Effect.succeed({ ...base, compaction }),
   })

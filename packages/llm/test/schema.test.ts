@@ -44,6 +44,11 @@ describe("llm schema", () => {
     expect(() => Schema.decodeUnknownSync(LLMEvent)({ type: "bogus" })).toThrow()
   })
 
+  test("finish constructors accept usage input", () => {
+    expect(LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 1 } }).usage).toBeInstanceOf(Usage)
+    expect(LLMEvent.finish({ reason: "stop", usage: { outputTokens: 2 } }).usage).toBeInstanceOf(Usage)
+  })
+
   test("content part tagged union exposes guards", () => {
     expect(ContentPart.guards.text({ type: "text", text: "hi" })).toBe(true)
     expect(ContentPart.guards.media({ type: "text", text: "hi" })).toBe(false)
