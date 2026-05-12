@@ -80,7 +80,7 @@ const defaultSettings: Settings = {
     followup: "steer",
     showReasoningSummaries: true,
     showCustomHookParts: true,
-    shellToolPartsExpanded: true,
+    shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
   },
   updates: {
