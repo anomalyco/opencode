@@ -399,6 +399,8 @@ exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
   "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "format": {
+      "default": "markdown",
+      "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
       "enum": [
         "text",
         "markdown",
