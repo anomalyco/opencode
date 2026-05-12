@@ -2,7 +2,7 @@
 
 exports[`tool parameters JSON Schema (wire shape) apply_patch 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "patchText": {
       "description": "The full patch text that describes all changes to be made",
@@ -18,7 +18,7 @@ exports[`tool parameters JSON Schema (wire shape) apply_patch 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "command": {
       "description": "The command to execute",
@@ -62,7 +62,7 @@ Output: Creates directory 'foo'"
 
 exports[`tool parameters JSON Schema (wire shape) edit 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "filePath": {
       "description": "The absolute path to the file to modify",
@@ -92,7 +92,7 @@ exports[`tool parameters JSON Schema (wire shape) edit 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) glob 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "path": {
       "description": "The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.",
@@ -112,7 +112,7 @@ exports[`tool parameters JSON Schema (wire shape) glob 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) grep 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "include": {
       "description": "File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")",
@@ -136,7 +136,7 @@ exports[`tool parameters JSON Schema (wire shape) grep 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) invalid 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "error": {
       "type": "string",
@@ -155,7 +155,7 @@ exports[`tool parameters JSON Schema (wire shape) invalid 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) lsp 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "character": {
       "description": "The character offset (1-based, as shown in editors)",
@@ -205,7 +205,7 @@ exports[`tool parameters JSON Schema (wire shape) lsp 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) plan 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {},
   "type": "object",
 }
@@ -213,7 +213,8 @@ exports[`tool parameters JSON Schema (wire shape) plan 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) question 1`] = `
 {
-  "$defs": {
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "definitions": {
     "QuestionOption": {
       "properties": {
         "description": {
@@ -244,7 +245,7 @@ exports[`tool parameters JSON Schema (wire shape) question 1`] = `
         "options": {
           "description": "Available choices",
           "items": {
-            "$ref": "#/$defs/QuestionOption",
+            "$ref": "#/definitions/QuestionOption",
           },
           "type": "array",
         },
@@ -261,12 +262,11 @@ exports[`tool parameters JSON Schema (wire shape) question 1`] = `
       "type": "object",
     },
   },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "questions": {
       "description": "Questions to ask",
       "items": {
-        "$ref": "#/$defs/QuestionPrompt",
+        "$ref": "#/definitions/QuestionPrompt",
       },
       "type": "array",
     },
@@ -280,7 +280,7 @@ exports[`tool parameters JSON Schema (wire shape) question 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) read 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "filePath": {
       "description": "The absolute path to the file or directory to read",
@@ -308,7 +308,7 @@ exports[`tool parameters JSON Schema (wire shape) read 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) skill 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "name": {
       "description": "The name of the skill from available_skills",
@@ -324,7 +324,7 @@ exports[`tool parameters JSON Schema (wire shape) skill 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) task 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "command": {
       "description": "The command that triggered this task",
@@ -358,7 +358,7 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) todo 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "todos": {
       "description": "The updated todo list",
@@ -396,7 +396,7 @@ exports[`tool parameters JSON Schema (wire shape) todo 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "format": {
       "enum": [
@@ -424,7 +424,7 @@ exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) websearch 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "contextMaxCharacters": {
       "description": "Maximum characters for context string optimized for LLMs (default: 10000)",
@@ -465,7 +465,7 @@ exports[`tool parameters JSON Schema (wire shape) websearch 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) write 1`] = `
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema",
   "properties": {
     "content": {
       "description": "The content to write to the file",

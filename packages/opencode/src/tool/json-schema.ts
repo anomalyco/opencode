@@ -1,17 +1,22 @@
 import type { JSONSchema7 } from "@ai-sdk/provider"
-import { Schema } from "effect"
+import { JsonSchema, Schema } from "effect"
 import type * as Tool from "./tool"
 
-type JsonSchema = Record<string, unknown>
+type JsonObject = Record<string, unknown>
+const cache = new WeakMap<Schema.Top, JSONSchema7>()
 
 export function fromSchema(schema: Schema.Top): JSONSchema7 {
-  const document = Schema.toJsonSchemaDocument(schema)
+  const cached = cache.get(schema)
+  if (cached) return cached
+
+  const document = JsonSchema.toDocumentDraft07(Schema.toJsonSchemaDocument(schema, { additionalProperties: true }))
   const result = normalize({
-    $schema: "https://json-schema.org/draft/2020-12/schema",
+    $schema: JsonSchema.META_SCHEMA_URI_DRAFT_07,
     ...document.schema,
-    ...(Object.keys(document.definitions).length > 0 ? { $defs: document.definitions } : {}),
+    ...(Object.keys(document.definitions).length > 0 ? { definitions: document.definitions } : {}),
   })
   if (!isJsonSchema(result)) throw new Error("tool JSON Schema helper produced a non-schema value")
+  cache.set(schema, result)
   return result
 }
 
@@ -25,7 +30,7 @@ function normalize(value: unknown): unknown {
 
   const schema = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalize(item)]))
 
-  if (schema.additionalProperties === false) delete schema.additionalProperties
+  if (schema.additionalProperties === true) delete schema.additionalProperties
 
   if (Array.isArray(schema.anyOf)) {
     const withoutNull = schema.anyOf.filter((item) => !isRecord(item) || item.type !== "null")
@@ -63,7 +68,7 @@ function normalize(value: unknown): unknown {
   return schema
 }
 
-function isRecord(value: unknown): value is JsonSchema {
+function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 

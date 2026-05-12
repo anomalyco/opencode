@@ -327,6 +327,10 @@ export const layer: Layer.Layer<
             jsonSchema: tool.jsonSchema,
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          const jsonSchema =
+            output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
+              ? output.jsonSchema
+              : undefined
           return {
             id: tool.id,
             description: [
@@ -337,7 +341,7 @@ export const layer: Layer.Layer<
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
-            jsonSchema: output.jsonSchema,
+            jsonSchema,
             execute: tool.execute,
             formatValidationError: tool.formatValidationError,
           }
