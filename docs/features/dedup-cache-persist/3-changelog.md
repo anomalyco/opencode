@@ -15,7 +15,7 @@ DedupCache 加 persistPath option(JSON 落盘 + 100ms debounce flush + 原子 re
 | commit | 简述 |
 |---|---|
 | `e38d655b7` | feat:DedupCache 加 persistPath 持久化 |
-| `(本笔)` | docs:三文档 + INDEX + 改动日志 |
+| ``0abfd035c`` | docs:三文档 + INDEX + 改动日志 |
 
 ## 改动文件
 
