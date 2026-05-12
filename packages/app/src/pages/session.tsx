@@ -74,14 +74,8 @@ import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 
 const emptyUserMessages: UserMessage[] = []
 const scrollBottomThreshold = 16
+const settleMs = 1_500
 const emptyFollowups: (FollowupDraft & { id: string })[] = []
-const scrollDebugKey = "opencode.session.scroll.debug"
-
-function probe(id?: string) {
-  if (typeof window === "undefined") return false
-  const flag = window.localStorage.getItem(scrollDebugKey)
-  return flag === "1" || (!!id && flag === id)
-}
 
 type ChangeMode = "git" | "branch" | "session" | "turn"
 type VcsMode = "git" | "branch"
@@ -677,7 +671,6 @@ export default function Page() {
   const watchLag = (kind: string, target: EventTarget | null) => {
     if (!lagging()) return
     const now = performance.now()
-    const dom = sampleDom()
     const el = target instanceof HTMLElement ? target : undefined
     const tag = el?.tagName.toLowerCase() || "unknown"
     const cls = el?.className && typeof el.className === "string" ? el.className.slice(0, 80) : "none"
@@ -687,6 +680,7 @@ export default function Page() {
         const second = performance.now()
         const total = Math.round(second - now)
         if (total < 50) return
+        const dom = sampleDom()
         lag(kind, {
           sid: params.id || "none",
           total,
@@ -700,46 +694,7 @@ export default function Page() {
     })
   }
 
-  const debug = (src: string, el = scroller, extra?: Record<string, unknown>) => {
-    if (!probe(params.id)) return
-    if (!el) {
-      const line = Object.entries({ src, id: params.id, missing: true, ...extra })
-        .map(([key, value]) => `${key}=${String(value)}`)
-        .join(" ")
-      console.debug(`[session-scroll] ${line}`)
-      return
-    }
-
-    const max = Math.max(0, el.scrollHeight - el.clientHeight)
-    const list = content?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
-    const head = document.querySelector<HTMLElement>("[data-session-title]")
-    const fields = {
-      src,
-      id: params.id,
-      mode: ui.mode,
-      live: live(),
-      bottom: ui.scroll.bottom,
-      overflow: ui.scroll.overflow,
-      scrolled: autoScroll.userScrolled(),
-      gesture: hasScrollGesture(),
-      seeking: ui.seekingMessageId || "none",
-      current: store.messageId || "none",
-      top: Math.round(el.scrollTop),
-      max: Math.round(max),
-      gap: Math.round(max - el.scrollTop),
-      height: Math.round(el.scrollHeight),
-      client: Math.round(el.clientHeight),
-      content: content ? Math.round(content.getBoundingClientRect().height) : "none",
-      list: list ? Math.round(list.getBoundingClientRect().height) : "none",
-      margin: list ? getComputedStyle(list).marginTop : "none",
-      head: head ? Math.round(head.getBoundingClientRect().height) : "none",
-      dock: dockHeight,
-      ...extra,
-    }
-    const line = Object.entries(fields)
-      .map(([key, value]) => `${key}=${String(value)}`)
-      .join(" ")
-    console.debug(`[session-scroll] ${line}`)
+  const debug = (_src: string, _el = scroller, _extra?: Record<string, unknown>) => {
   }
 
   createEffect(
@@ -1680,13 +1635,18 @@ export default function Page() {
     ),
   )
 
+  const running = () => {
+    const id = params.id
+    if (!id) return false
+    return working(sync.data.session_status[id], sync.data.message[id])
+  }
   const autoScroll = createAutoScroll({
-    working: () => true,
+    working: running,
     overflowAnchor: "none",
     bottomThreshold: scrollBottomThreshold,
     resize: "off",
   })
-  const live = () => ui.mode === "live" && !autoScroll.userScrolled()
+  const live = () => running() && ui.mode === "live" && !autoScroll.userScrolled()
   const enterLive = () => {
     if (ui.mode === "live") return
     setUi("mode", "live")
@@ -1697,9 +1657,11 @@ export default function Page() {
   }
 
   const handleTimelineAutoScroll = () => {
-    debug("timeline-scroll:before")
+    if (!running()) {
+      console.debug("[session] idle auto-scroll ignored")
+      return
+    }
     autoScroll.handleScroll()
-    debug("timeline-scroll:after")
   }
 
   // Streaming stability depends on locking the outer timeline directly to the
@@ -1721,8 +1683,40 @@ export default function Page() {
   let fillFrame: number | undefined
   let initialScrollKey: string | undefined
   let initialScrollFrame: number | undefined
+  let until = 0
 
   const hasScrollTarget = () => !!location.hash || !!ui.pendingMessage || !!ui.seekingMessageId || !!store.messageId
+  const settling = () => !!initialScrollKey && performance.now() < until && !hasScrollGesture()
+
+  const settle = (key: string) => {
+    initialScrollFrame = undefined
+    if (sessionKey() !== key) {
+      initialScrollKey = undefined
+      return
+    }
+    if (hasScrollTarget() || hasScrollGesture()) {
+      initialScrollKey = undefined
+      return
+    }
+
+    const root = scroller
+    if (!root) {
+      initialScrollKey = undefined
+      return
+    }
+
+    const gap = Math.round(root.scrollHeight - root.clientHeight - root.scrollTop)
+    if (Math.abs(gap) > 1) console.debug("[session] initial bottom settle", { gap })
+    lockBottom(root, "initial-scroll:settle")
+    scheduleScrollState(root)
+
+    if (performance.now() >= until) {
+      initialScrollKey = undefined
+      return
+    }
+
+    initialScrollFrame = requestAnimationFrame(() => settle(key))
+  }
 
   const clamp = (el: HTMLDivElement, reason = "clamp") => {
     const max = Math.max(0, el.scrollHeight - el.clientHeight)
@@ -1742,7 +1736,7 @@ export default function Page() {
       // Deferred markdown/math expansion can increase content height after the
       // stream is already idle. If the viewport was still at the bottom before
       // that resize, keep it pinned instead of letting the tail drift upward.
-      if (live() && !hasScrollGesture()) {
+      if ((live() || settling()) && !hasScrollTarget() && !hasScrollGesture()) {
         lockBottom(root, "content:resize:lock-bottom")
       }
       debug("content-resize:after", root)
@@ -1755,7 +1749,7 @@ export default function Page() {
   const updateScrollState = (el: HTMLDivElement) => {
     if (!el.isConnected || el.clientHeight <= 0 || el.scrollHeight <= 0) return
     debug("state:before", el)
-    if (live() && !hasScrollGesture() && !ui.seekingMessageId && !store.messageId) {
+    if ((live() || settling()) && !hasScrollGesture() && !hasScrollTarget()) {
       lockBottom(el, "state:live-lock")
     }
     const top = clamp(el)
@@ -1830,7 +1824,10 @@ export default function Page() {
         initialScrollFrame = requestAnimationFrame(() => {
           initialScrollFrame = requestAnimationFrame(() => {
             initialScrollFrame = undefined
-            if (sessionKey() !== key) return
+            if (sessionKey() !== key) {
+              initialScrollKey = undefined
+              return
+            }
             if (hasScrollTarget()) {
               console.debug(
                 `[session] initial bottom skipped: key=${key} hash=${location.hash || "none"} pending=${ui.pendingMessage || "none"} seeking=${ui.seekingMessageId || "none"} current=${store.messageId || "none"}`,
@@ -1839,15 +1836,19 @@ export default function Page() {
               return
             }
             const el = scroller
-            if (!el) return
+            if (!el) {
+              initialScrollKey = undefined
+              return
+            }
             debug("initial:before", el, { key })
             setStore("messageId", undefined)
             enterLive()
             clearMessageHash()
+            until = performance.now() + settleMs
             lockBottom(el, "initial-scroll:bottom")
             scheduleScrollState(el)
             debug("initial:after", el, { key })
-            initialScrollKey = undefined
+            initialScrollFrame = requestAnimationFrame(() => settle(key))
           })
         })
       },
@@ -1860,6 +1861,7 @@ export default function Page() {
       autoScroll.userScrolled,
       (scrolled) => {
         debug("user-scrolled:change", scroller, { scrolled })
+        if (!running()) return
         if (scrolled) {
           enterAnchored()
           return
@@ -1874,12 +1876,30 @@ export default function Page() {
 
   createEffect(
     on(
+      running,
+      (run) => {
+        if (!run) return
+        if (!ui.scroll.bottom) return
+        if (ui.seekingMessageId || store.messageId) return
+        console.debug("[session] streaming bottom follow enabled")
+        autoScroll.resume()
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
       () => ui.scroll.bottom,
       (bottom, prev) => {
         debug("bottom:change", scroller, { prev, bottom })
         if (!bottom) return
         if (prev === undefined || prev === bottom) return
         if (ui.seekingMessageId) return
+        if (!running()) {
+          console.debug("[session] skip idle bottom resume")
+          return
+        }
         if (ui.mode !== "live") {
           enterLive()
           setStore("messageId", undefined)
@@ -2219,7 +2239,10 @@ export default function Page() {
       const el = scroller
       const delta = next - dockHeight
       const gap = el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0
-      const stick = el && !ui.seekingMessageId ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta) : false
+      const stick =
+        el && !ui.seekingMessageId && running()
+          ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta)
+          : false
 
       dockHeight = next
 
@@ -2284,6 +2307,7 @@ export default function Page() {
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+    if (initialScrollFrame !== undefined) cancelAnimationFrame(initialScrollFrame)
   })
 
   useUsageExceededDialogs()

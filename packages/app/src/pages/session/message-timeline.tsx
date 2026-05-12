@@ -68,6 +68,14 @@ const estimatedTurnHeight = 680
 const gap = 48
 const windowOverscan = 1600
 const windowThreshold = 3
+const totalViewports = 2
+const turnViewports = 1.5
+const scoreLimit = 1_200
+const textLimit = 8_000
+const mathLimit = 24
+const codeLimit = 12
+const partLimit = 24
+const toolLimit = 8
 const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
@@ -135,16 +143,10 @@ const writeHeightCache = (sessionId: string, msgId: string, stage: string, heigh
   }
 }
 const IDLE_QUEUE_MS = 1_200
-const scrollDebugKey = "opencode.session.scroll.debug"
 const mdKey = "opencode.markdown.debug"
+const virtKey = "opencode.session.virtual.debug"
 const domMs = 5_000
 const lagMs = 250
-
-function probe(id?: string) {
-  if (typeof window === "undefined") return false
-  const flag = window.localStorage.getItem(scrollDebugKey)
-  return flag === "1" || (!!id && flag === id)
-}
 
 function mddebug() {
   if (typeof window === "undefined") return false
@@ -155,7 +157,27 @@ function mddebug() {
   }
 }
 
+function vdebug(id?: string) {
+  if (typeof window === "undefined") return false
+  try {
+    const flag = window.localStorage.getItem(virtKey)
+    return flag === "1" || (!!id && flag === id)
+  } catch {
+    return false
+  }
+}
+
 type MathMode = "turn" | "markdown"
+
+type Estimate = {
+  height: number
+  complexity: number
+  text: number
+  code: number
+  math: number
+  part: number
+  tool: number
+}
 
 function mathMode(): MathMode {
   if (typeof window === "undefined") return "markdown"
@@ -389,7 +411,7 @@ export function MessageTimeline(props: {
   const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
   const estimates = createMemo(() => {
     const ids = new Set(rendered())
-    const map = new Map<string, number>()
+    const map = new Map<string, Estimate>()
     let id: string | undefined
     let text = 0
     let code = 0
@@ -399,8 +421,17 @@ export function MessageTimeline(props: {
 
     const save = () => {
       if (!id || !ids.has(id)) return
-      const next = Math.max(280, Math.min(1800, 220 + text / 6 + code * 160 + math * 120 + part * 18 + tool * 90))
-      map.set(id, next)
+      const height = Math.max(280, Math.min(1800, 220 + text / 6 + code * 160 + math * 120 + part * 18 + tool * 90))
+      const complexity = text / 8 + code * 180 + math * 160 + part * 24 + tool * 120
+      map.set(id, {
+        height,
+        complexity,
+        text,
+        code,
+        math,
+        part,
+        tool,
+      })
     }
 
     for (const msg of sessionMessages()) {
@@ -435,17 +466,13 @@ export function MessageTimeline(props: {
     if (props.hasScrollGesture()) {
       const now = Date.now()
       if (now - skipped > 300) {
-        debug("follow:held", { source: src })
         console.debug("[timeline] follow held", { src })
         skipped = now
       }
       return
     }
 
-    const max = Math.max(0, root.scrollHeight - root.clientHeight)
-    const dist = max - root.scrollTop
     root.scrollTop = root.scrollHeight
-    debug("follow:write", { source: src, dist: Math.round(dist) })
     props.onScheduleScrollState(root)
   }
   const estimateTurnHeight = (id: string) => {
@@ -455,7 +482,7 @@ export function MessageTimeline(props: {
       const cached = readHeightCache(sid, id, "full") ?? readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite")
       if (cached !== undefined) return cached
     }
-    return estimates()?.get(id) ?? estimatedTurnHeight
+    return estimates()?.get(id)?.height ?? estimatedTurnHeight
   }
   const stageOf = (id: string) => {
     stageMark()
@@ -496,53 +523,6 @@ export function MessageTimeline(props: {
     const box = root.getBoundingClientRect()
     const rect = node.getBoundingClientRect()
     return rect.bottom > box.top && rect.top < box.bottom
-  }
-  const debug = (src: string, extra?: Record<string, unknown>) => {
-    if (!probe(sessionID())) return
-    const root = viewport
-    const data = root ? snap(root) : undefined
-    const body = contentRef
-    const list = body?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
-    const first = root?.querySelector<HTMLElement>("[data-message-id]")
-    const last = root ? [...root.querySelectorAll<HTMLElement>("[data-message-id]")].at(-1) : undefined
-    const box = root?.getBoundingClientRect()
-    const a = first?.getBoundingClientRect()
-    const b = last?.getBoundingClientRect()
-    const fields = {
-      src,
-      id: sessionID() ?? "none",
-      live: props.live,
-      bottom: props.scroll.bottom,
-      overflow: props.scroll.overflow,
-      gesture: props.hasScrollGesture(),
-      seeking: props.seekingMessageId || "none",
-      current: props.currentMessageId || "none",
-      active: activeMessageID() || "none",
-      top: data?.top ?? "none",
-      max: data?.max ?? "none",
-      gap: data?.gap ?? "none",
-      height: data?.height ?? "none",
-      client: data?.client ?? "none",
-      body: body ? Math.round(body.getBoundingClientRect().height) : "none",
-      list: list ? Math.round(list.getBoundingClientRect().height) : "none",
-      margin: list ? getComputedStyle(list).marginTop : "none",
-      first: first?.dataset.messageId || "none",
-      firstTop: a && box ? Math.round(a.top - box.top) : "none",
-      last: last?.dataset.messageId || "none",
-      lastBottom: b && box ? Math.round(b.bottom - box.top) : "none",
-      window: `[${windowed.start},${windowed.end}]`,
-      spacerTop: Math.round(windowed.top),
-      spacerBottom: Math.round(windowed.bottom),
-      total: Math.round(totalHeight()),
-      measured: turnHeights.size,
-      visible: visibleRendered().length,
-      seq,
-      ...extra,
-    }
-    const line = Object.entries(fields)
-      .map(([key, value]) => `${key}=${String(value)}`)
-      .join(" ")
-    console.debug(`[timeline-scroll] ${line}`)
   }
   const trace = (stage: string, id?: string, extra = "") => {
     const root = viewport
@@ -644,7 +624,68 @@ export function MessageTimeline(props: {
     }),
   )
 
-  const canWindow = createMemo(() => !isWorking() && !sessionSwitching())
+  const eligible = createMemo(() => {
+    revision()
+    const ids = rendered()
+    const root = viewport
+    const view = root?.clientHeight && root.clientHeight > 0 ? root.clientHeight : 800
+    let sum = 0
+    let peak = 0
+    let score = 0
+    let text = false
+    let math = false
+    let code = false
+    let parts = false
+    let tools = false
+
+    for (const id of ids) {
+      const estimate = estimates().get(id)
+      const height = turnHeights.get(id) ?? estimate?.height ?? estimatedTurnHeight
+      sum += height
+      peak = Math.max(peak, height)
+      if (!estimate) continue
+      score = Math.max(score, estimate.complexity)
+      text ||= estimate.text >= textLimit
+      math ||= estimate.math >= mathLimit
+      code ||= estimate.code >= codeLimit
+      parts ||= estimate.part >= partLimit
+      tools ||= estimate.tool >= toolLimit
+    }
+
+    const count = ids.length > windowThreshold
+    const total = sum > view * totalViewports
+    const tall = peak > view * turnViewports
+    const complex = score >= scoreLimit || text || math || code || parts || tools
+
+    return {
+      enabled: count || total || tall || complex,
+      count,
+      total,
+      tall,
+      complex,
+      sum,
+      peak,
+      score,
+      text,
+      math,
+      code,
+      parts,
+      tools,
+    }
+  })
+
+  const canWindow = createMemo(() => !isWorking() && !sessionSwitching() && eligible().enabled)
+
+  createEffect(() => {
+    const id = sessionID()
+    if (!vdebug(id) && !mddebug()) return
+    const state = eligible()
+    const visible = visibleRendered().length
+    const ids = rendered().length
+    console.debug(
+      `[virtual] id=${id || "none"} active=${canWindow()} eligible=${state.enabled} working=${isWorking()} switching=${sessionSwitching()} turns=${ids} visible=${visible} window=[${windowed.start},${windowed.end}] count=${state.count} total=${state.total} tall=${state.tall} complex=${state.complex} sum=${Math.round(state.sum)} peak=${Math.round(state.peak)} score=${Math.round(state.score)} text=${state.text} math=${state.math} code=${state.code} parts=${state.parts} tools=${state.tools}`,
+    )
+  })
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
 
@@ -732,7 +773,7 @@ export function MessageTimeline(props: {
   const buildWindow = () => {
     const root = viewport
     const ids = rendered()
-    if (!canWindow() || !root || ids.length <= windowThreshold) {
+    if (!canWindow() || !root) {
       return {
         start: 0,
         end: ids.length,
@@ -798,18 +839,6 @@ export function MessageTimeline(props: {
       top: offset,
       bottom: Math.max(0, totalHeight() - tail),
     }
-    debug("window:compute", {
-      reason: props.seekingMessageId ? "seek" : props.currentMessageId ? "current" : props.live ? "live" : "scroll",
-      nextStart: next.start,
-      nextEnd: next.end,
-      nextTop: Math.round(next.top),
-      nextBottom: Math.round(next.bottom),
-      min: Math.round(min),
-      max: Math.round(max),
-      scrollTop: Math.round(scrollTop),
-      scrollHeight: Math.round(scrollHeight),
-      clientHeight: Math.round(clientHeight),
-    })
     return next
   }
 
@@ -818,7 +847,7 @@ export function MessageTimeline(props: {
     const ids = rendered()
     const index = renderedIndex().get(id)
 
-    if (!root || index === undefined || ids.length <= windowThreshold) {
+    if (!root || index === undefined) {
       return {
         start: 0,
         end: ids.length,
@@ -904,9 +933,9 @@ export function MessageTimeline(props: {
     const root = viewport
     const before = root ? snap(root) : undefined
     const seek = props.seekingMessageId
-    debug("window:before", { seek: seek || "none" })
     if (seek) trace("apply-before", seek)
-    const pinned = !props.seekingMessageId && !!before && before.gap <= 16
+    const streaming = isWorking() && props.live && !props.currentMessageId
+    const pinned = streaming && !props.seekingMessageId && !!before && before.gap <= 16
     const viewportAnchor = pinned ? undefined : captureWindowAnchor()
     const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
     const targetAnchor = captureMessageAnchor(targetId)
@@ -916,17 +945,6 @@ export function MessageTimeline(props: {
         : props.currentMessageId
           ? targetAnchor
           : viewportAnchor
-    debug("window:anchor", {
-      pinned,
-      target: targetId || "none",
-      viewportAnchor: viewportAnchor?.id || "none",
-      viewportTop: viewportAnchor ? Math.round(viewportAnchor.top) : "none",
-      targetAnchor: targetAnchor?.id || "none",
-      targetTop: targetAnchor ? Math.round(targetAnchor.top) : "none",
-      scrollAnchor: scrollAnchor?.id || "none",
-      scrollTop: scrollAnchor ? Math.round(scrollAnchor.top) : "none",
-    })
-
     const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
     const next = syncWindow(base, pinned ? undefined : targetId)
     const same = sameWindow(next)
@@ -941,7 +959,6 @@ export function MessageTimeline(props: {
       if (pinned && root) {
         root.scrollTop = root.scrollHeight
         props.onScheduleScrollState(root)
-        debug("window:pinned-same")
       }
       return
     }
@@ -952,21 +969,6 @@ export function MessageTimeline(props: {
       const bottom = Math.round(next.bottom - prev.bottom)
       const shift = Math.max(Math.abs(top), Math.abs(bottom))
       seq += 1
-      debug("window:commit", {
-        prevStart: prev.start,
-        prevEnd: prev.end,
-        prevTop: Math.round(prev.top),
-        prevBottom: Math.round(prev.bottom),
-        nextStart: next.start,
-        nextEnd: next.end,
-        nextTop: Math.round(next.top),
-        nextBottom: Math.round(next.bottom),
-        deltaTop: top,
-        deltaBottom: bottom,
-        pinned,
-        target: targetId || "none",
-        anchor: scrollAnchor?.id || "none",
-      })
       if (seek && shift > SPACER_SHIFT_WARN) trace("spacer-shift", seek, `deltaTop=${top} deltaBottom=${bottom}`)
       setWindowed(next)
     }
@@ -974,7 +976,7 @@ export function MessageTimeline(props: {
     audit(props.seekingMessageId ? "seek-window" : "apply-window")
     const adjustVersion = ++windowAdjustVersion
     const preserve = !seek && !pinned && props.hasScrollGesture() && !props.scroll.bottom
-    if (!seek && (pinned || (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId))) {
+    if (!seek && (pinned || streaming)) {
       requestAnimationFrame(() => {
         if (adjustVersion !== windowAdjustVersion) return
         const root = viewport
@@ -984,14 +986,12 @@ export function MessageTimeline(props: {
         root.scrollTop = root.scrollHeight
         const after = snap(root)
         seq += 1
-        props.onScheduleScrollState(root)
-        debug("window:bottom-write", {
-          beforeTop: before.top,
-          beforeGap: before.gap,
-          targetTop: before.height,
-          afterTop: after.top,
-          afterGap: after.gap,
+        console.debug("[timeline] streaming window bottom follow", {
+          before: before.gap,
+          after: after.gap,
+          pinned,
         })
+        props.onScheduleScrollState(root)
       })
       return
     }
@@ -999,11 +999,6 @@ export function MessageTimeline(props: {
       return
     }
     if (preserve) {
-      debug("window:anchor-skip", {
-        reason: "gesture",
-        target: targetId || "none",
-        anchor: scrollAnchor.id,
-      })
       return
     }
 
@@ -1023,7 +1018,6 @@ export function MessageTimeline(props: {
             const prevTop = root.scrollTop
             root.scrollTop += delta
             const after = snap(root)
-            debug("window:anchor-write", { delta: Math.round(delta), prevTop: Math.round(prevTop), afterTop: after.top })
 
             if (seek)
               trace(
@@ -1051,7 +1045,7 @@ export function MessageTimeline(props: {
   const shouldWindow = () => {
     const root = viewport
     const ids = rendered()
-    if (!canWindow() || !root || ids.length <= windowThreshold) return false
+    if (!canWindow() || !root) return false
     if (windowed.end === Infinity) return true
     const top = root.scrollTop
     const bottom = top + root.clientHeight
@@ -1062,7 +1056,7 @@ export function MessageTimeline(props: {
 
   const visibleRendered = createMemo(() => {
     const ids = rendered()
-    if (!canWindow() || ids.length <= windowThreshold) return ids
+    if (!canWindow()) return ids
     return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
   })
 
@@ -1100,7 +1094,7 @@ export function MessageTimeline(props: {
       blank = undefined
       const root = viewport
       const ids = rendered()
-      if (!root || !canWindow() || ids.length <= windowThreshold) return
+      if (!root || !canWindow()) return
 
       const box = root.getBoundingClientRect()
       const nodes = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
@@ -1133,35 +1127,28 @@ export function MessageTimeline(props: {
   const pin = (source: string) => {
     const root = viewport
     if (!root) {
-      debug("pin:skip", { source, reason: "root" })
       return
     }
     if (props.seekingMessageId || props.currentMessageId) {
-      debug("pin:skip", { source, reason: "target" })
       return
     }
     if (!props.live) {
-      debug("pin:skip", { source, reason: "live" })
       return
     }
     if (props.hasScrollGesture()) {
-      debug("pin:skip", { source, reason: "gesture" })
       return
     }
     if (root.clientHeight <= 0 || root.scrollHeight <= 0) {
-      debug("pin:skip", { source, reason: "size" })
       return
     }
 
     const top = Math.max(0, root.scrollHeight - root.clientHeight)
     const dist = top - root.scrollTop
     if (Math.abs(dist) <= 1) {
-      debug("pin:skip", { source, reason: "close", dist: Math.round(dist) })
       return
     }
 
     root.scrollTop = top
-    debug("pin:write", { source, dist: Math.round(dist) })
     console.debug(
       `[timeline] bottom pin: source=${source} dist=${Math.round(dist)} top=${Math.round(root.scrollTop)} scrollHeight=${Math.round(root.scrollHeight)} clientHeight=${Math.round(root.clientHeight)}`,
     )
@@ -1273,7 +1260,6 @@ export function MessageTimeline(props: {
     if (!body) return
 
     const sync = () => {
-      debug("content-resize")
       schedulePin("content-resize")
     }
 
@@ -2709,17 +2695,6 @@ export function MessageTimeline(props: {
         }
       }
       scheduleWindow()
-      debug("measure", {
-        message: item.messageID,
-        stage: bucket,
-        prev: prev === undefined ? "none" : Math.round(prev),
-        next: Math.round(next),
-        delta,
-        visible: visible(node),
-        near: near(),
-        active: active(),
-        seek: seek(),
-      })
       schedulePin("turn-measure")
       const took = performance.now() - time
       if (seek() && took > MEASURE_WARN_MS) {
