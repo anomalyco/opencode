@@ -345,7 +345,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         case "message.part.removed": {
           const parts = store.part[event.properties.messageID]
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (result.found)
+          if (result.found) {
             setStore(
               "part",
               event.properties.messageID,
@@ -353,6 +353,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.splice(result.index, 1)
               }),
             )
+          }
           break
         }
 
