@@ -397,7 +397,8 @@ it.live("pending question rejects on instance dispose", () =>
     }).pipe(provideInstance(dir), Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
-    yield* Effect.promise(() => InstanceRuntime.disposeInstance(Instance.current)).pipe(provideInstance(dir))
+    const ctx = yield* Effect.sync(() => Instance.current).pipe(provideInstance(dir))
+    yield* Effect.promise(() => InstanceRuntime.disposeInstance(ctx))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)
