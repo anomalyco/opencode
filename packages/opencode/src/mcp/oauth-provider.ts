@@ -26,6 +26,11 @@ export interface McpOAuthCallbacks {
 }
 
 export class McpOAuthProvider implements OAuthClientProvider {
+  // Deduplicates concurrent in-process token refresh attempts. All callers
+  // that race to refresh share this single promise; when it settles the
+  // promise is cleared so the next expiry triggers a fresh refresh.
+  private _refreshPromise: Promise<void> | undefined
+
   constructor(
     private mcpName: string,
     private serverUrl: string,
@@ -116,7 +121,14 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
-    await Effect.runPromise(
+    // If a refresh is already in progress (same process, concurrent callers),
+    // wait for it rather than firing a second write that could race.
+    if (this._refreshPromise) {
+      await this._refreshPromise
+      return
+    }
+
+    const save = Effect.runPromise(
       this.auth.updateTokens(
         this.mcpName,
         {
@@ -128,6 +140,12 @@ export class McpOAuthProvider implements OAuthClientProvider {
         this.serverUrl,
       ),
     )
+
+    this._refreshPromise = save.finally(() => {
+      this._refreshPromise = undefined
+    })
+
+    await this._refreshPromise
     log.info("saved oauth tokens", { mcpName: this.mcpName })
   }
 
@@ -171,22 +189,19 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
   async invalidateCredentials(type: "all" | "client" | "tokens"): Promise<void> {
     log.info("invalidating credentials", { mcpName: this.mcpName, type })
-    const entry = await Effect.runPromise(this.auth.get(this.mcpName))
-    if (!entry) {
-      return
-    }
 
+    // Use the service's own atomic operations rather than a manual
+    // read-modify-write, which would race with concurrent saveTokens /
+    // saveClientInformation calls.
     switch (type) {
       case "all":
         await Effect.runPromise(this.auth.remove(this.mcpName))
         break
       case "client":
-        delete entry.clientInfo
-        await Effect.runPromise(this.auth.set(this.mcpName, entry))
+        await Effect.runPromise(this.auth.clearClientInfo(this.mcpName))
         break
       case "tokens":
-        delete entry.tokens
-        await Effect.runPromise(this.auth.set(this.mcpName, entry))
+        await Effect.runPromise(this.auth.clearTokens(this.mcpName))
         break
     }
   }
