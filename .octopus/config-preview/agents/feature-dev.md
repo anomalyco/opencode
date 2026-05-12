@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: deepseek/deepseek-v4-flash
 color: "#44CC88"
 description: 功能开发 — UI/App、编辑器扩展、文档、i18n、品牌资产
 ---

@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="85" assertions="129" failures="2" skipped="0" time="28.174622784">
+  <testsuite name="test/npm.test.ts" file="test/npm.test.ts" tests="4" assertions="7" failures="0" skipped="0" time="0" hostname="localhost">
+    <testsuite name="Npm.sanitize" file="test/npm.test.ts" line="31" tests="2" assertions="4" failures="0" skipped="0" time="0.008" hostname="localhost">
+      <testcase name="keeps normal scoped package specs unchanged" classname="Npm.sanitize" time="0.008718" file="test/npm.test.ts" line="32" assertions="3" />
+      <testcase name="handles git https specs" classname="Npm.sanitize" time="0.000157" file="test/npm.test.ts" line="38" assertions="1" />
+    </testsuite>
+    <testsuite name="Npm.add" file="test/npm.test.ts" line="45" tests="1" assertions="1" failures="0" skipped="0" time="2.032" hostname="localhost">
+      <testcase name="reifies when package cache directory exists without the package installed" classname="Npm.add" time="2.032202" file="test/npm.test.ts" line="46" assertions="1" />
+    </testsuite>
+    <testsuite name="Npm.install" file="test/npm.test.ts" line="67" tests="1" assertions="2" failures="0" skipped="0" time="0.246" hostname="localhost">
+      <testcase name="respects omit from project .npmrc" classname="Npm.install" time="0.246896" file="test/npm.test.ts" line="68" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/global.test.ts" file="test/global.test.ts" tests="2" assertions="3" failures="0" skipped="0" time="0" hostname="localhost">
+    <testsuite name="global paths" file="test/global.test.ts" line="7" tests="2" assertions="3" failures="0" skipped="0" time="0" hostname="localhost">
+      <testcase name="tmp path is under the system temp directory" classname="global paths" time="0.000051" file="test/global.test.ts" line="8" assertions="2" />
+      <testcase name="tmp path is created on module load" classname="global paths" time="0.000135" file="test/global.test.ts" line="13" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/npm-config.test.ts" file="test/npm-config.test.ts" tests="5" assertions="6" failures="0" skipped="0" time="0" hostname="localhost">
+    <testsuite name="NpmConfig.load" file="test/npm-config.test.ts" line="7" tests="3" assertions="4" failures="0" skipped="0" time="0.013" hostname="localhost">
+      <testcase name="reads registry from project .npmrc" classname="NpmConfig.load" time="0.00345" file="test/npm-config.test.ts" line="8" assertions="1" />
+      <testcase name="reads scoped registries from project .npmrc" classname="NpmConfig.load" time="0.003616" file="test/npm-config.test.ts" line="17" assertions="1" />
+      <testcase name="flattens boolean and list options" classname="NpmConfig.load" time="0.007518" file="test/npm-config.test.ts" line="26" assertions="2" />
+    </testsuite>
+    <testsuite name="NpmConfig.registry" file="test/npm-config.test.ts" line="37" tests="2" assertions="2" failures="0" skipped="0" time="0.006" hostname="localhost">
+      <testcase name="normalizes configured registry without trailing slash" classname="NpmConfig.registry" time="0.003443" file="test/npm-config.test.ts" line="38" assertions="1" />
+      <testcase name="leaves configured registry without trailing slash unchanged" classname="NpmConfig.registry" time="0.003043" file="test/npm-config.test.ts" line="45" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/filesystem/filesystem.test.ts" file="test/filesystem/filesystem.test.ts" tests="26" assertions="37" failures="0" skipped="0" time="0" hostname="localhost">
+    <testsuite name="AppFileSystem" file="test/filesystem/filesystem.test.ts" line="11" tests="26" assertions="37" failures="0" skipped="0" time="0" hostname="localhost">
+      <testsuite name="isDir" file="test/filesystem/filesystem.test.ts" line="12" tests="3" assertions="3" failures="0" skipped="0" time="0.009" hostname="localhost">
+        <testcase name="returns true for directories" classname="isDir &amp;gt; AppFileSystem" time="0.006415" file="test/filesystem/filesystem.test.ts" line="14" assertions="1" />
+        <testcase name="returns false for files" classname="isDir &amp;gt; AppFileSystem" time="0.002101" file="test/filesystem/filesystem.test.ts" line="24" assertions="1" />
+        <testcase name="returns false for non-existent paths" classname="isDir &amp;gt; AppFileSystem" time="0.00126" file="test/filesystem/filesystem.test.ts" line="36" assertions="1" />
+      </testsuite>
+      <testsuite name="isFile" file="test/filesystem/filesystem.test.ts" line="44" tests="2" assertions="2" failures="0" skipped="0" time="0.003" hostname="localhost">
+        <testcase name="returns true for files" classname="isFile &amp;gt; AppFileSystem" time="0.002204" file="test/filesystem/filesystem.test.ts" line="46" assertions="1" />
+        <testcase name="returns false for directories" classname="isFile &amp;gt; AppFileSystem" time="0.001429" file="test/filesystem/filesystem.test.ts" line="58" assertions="1" />
+      </testsuite>
+      <testsuite name="readFileStringSafe" file="test/filesystem/filesystem.test.ts" line="68" tests="2" assertions="2" failures="0" skipped="0" time="0.003" hostname="localhost">
+        <testcase name="returns file contents when file exists" classname="readFileStringSafe &amp;gt; AppFileSystem" time="0.001933" file="test/filesystem/filesystem.test.ts" line="70" assertions="1" />
+        <testcase name="returns undefined for missing file (NotFound)" classname="readFileStringSafe &amp;gt; AppFileSystem" time="0.002765" file="test/filesystem/filesystem.test.ts" line="84" assertions="1" />
+      </testsuite>
+      <testsuite name="readJson / writeJson" file="test/filesystem/filesystem.test.ts" line="96" tests="1" assertions="1" failures="0" skipped="0" time="0.006" hostname="localhost">
+        <testcase name="round-trips JSON data" classname="readJson / writeJson &amp;gt; AppFileSystem" time="0.006474" file="test/filesystem/filesystem.test.ts" line="98" assertions="1" />
+      </testsuite>
+      <testsuite name="ensureDir" file="test/filesystem/filesystem.test.ts" line="114" tests="2" assertions="2" failures="0" skipped="0" time="0.003" hostname="localhost">
+        <testcase name="creates nested directories" classname="ensureDir &amp;gt; AppFileSystem" time="0.002288" file="test/filesystem/filesystem.test.ts" line="116" assertions="1" />
+        <testcase name="is idempotent" classname="ensureDir &amp;gt; AppFileSystem" time="0.001748" file="test/filesystem/filesystem.test.ts" line="131" assertions="1" />
+      </testsuite>
+      <testsuite name="writeWithDirs" file="test/filesystem/filesystem.test.ts" line="147" tests="3" assertions="3" failures="0" skipped="0" time="0.004" hostname="localhost">
+        <testcase name="creates parent directories if missing" classname="writeWithDirs &amp;gt; AppFileSystem" time="0.002208" file="test/filesystem/filesystem.test.ts" line="149" assertions="1" />
+        <testcase name="writes directly when parent exists" classname="writeWithDirs &amp;gt; AppFileSystem" time="0.001256" file="test/filesystem/filesystem.test.ts" line="163" assertions="1" />
+        <testcase name="writes Uint8Array content" classname="writeWithDirs &amp;gt; AppFileSystem" time="0.001312" file="test/filesystem/filesystem.test.ts" line="177" assertions="1" />
+      </testsuite>
+      <testsuite name="findUp" file="test/filesystem/filesystem.test.ts" line="193" tests="3" assertions="3" failures="0" skipped="0" time="0.006" hostname="localhost">
+        <testcase name="finds target in start directory" classname="findUp &amp;gt; AppFileSystem" time="0.001607" file="test/filesystem/filesystem.test.ts" line="195" assertions="1" />
+        <testcase name="finds target in parent directories" classname="findUp &amp;gt; AppFileSystem" time="0.001701" file="test/filesystem/filesystem.test.ts" line="208" assertions="1" />
+        <testcase name="returns empty array when not found" classname="findUp &amp;gt; AppFileSystem" time="0.004114" file="test/filesystem/filesystem.test.ts" line="223" assertions="1" />
+      </testsuite>
+      <testsuite name="up" file="test/filesystem/filesystem.test.ts" line="234" tests="1" assertions="3" failures="0" skipped="0" time="0.003" hostname="localhost">
+        <testcase name="finds multiple targets walking up" classname="up &amp;gt; AppFileSystem" time="0.003406" file="test/filesystem/filesystem.test.ts" line="236" assertions="3" />
+      </testsuite>
+      <testsuite name="glob" file="test/filesystem/filesystem.test.ts" line="256" tests="2" assertions="2" failures="0" skipped="0" time="0.013" hostname="localhost">
+        <testcase name="finds files matching pattern" classname="glob &amp;gt; AppFileSystem" time="0.008261" file="test/filesystem/filesystem.test.ts" line="258" assertions="1" />
+        <testcase name="supports absolute paths" classname="glob &amp;gt; AppFileSystem" time="0.005885" file="test/filesystem/filesystem.test.ts" line="273" assertions="1" />
+      </testsuite>
+      <testsuite name="globMatch" file="test/filesystem/filesystem.test.ts" line="286" tests="1" assertions="3" failures="0" skipped="0" time="0.002" hostname="localhost">
+        <testcase name="matches patterns" classname="globMatch &amp;gt; AppFileSystem" time="0.002485" file="test/filesystem/filesystem.test.ts" line="288" assertions="3" />
+      </testsuite>
+      <testsuite name="globUp" file="test/filesystem/filesystem.test.ts" line="298" tests="1" assertions="2" failures="0" skipped="0" time="0.007" hostname="localhost">
+        <testcase name="finds files walking up directories" classname="globUp &amp;gt; AppFileSystem" time="0.007192" file="test/filesystem/filesystem.test.ts" line="300" assertions="2" />
+      </testsuite>
+      <testsuite name="built-in passthrough" file="test/filesystem/filesystem.test.ts" line="317" tests="2" assertions="3" failures="0" skipped="0" time="0.007" hostname="localhost">
+        <testcase name="exists works" classname="built-in passthrough &amp;gt; AppFileSystem" time="0.002613" file="test/filesystem/filesystem.test.ts" line="319" assertions="2" />
+        <testcase name="remove works" classname="built-in passthrough &amp;gt; AppFileSystem" time="0.005822" file="test/filesystem/filesystem.test.ts" line="333" assertions="1" />
+      </testsuite>
+      <testsuite name="pure helpers" file="test/filesystem/filesystem.test.ts" line="348" tests="3" assertions="8" failures="0" skipped="0" time="0" hostname="localhost">
+        <testcase name="mimeType returns correct types" classname="pure helpers &amp;gt; AppFileSystem" time="0.000141" file="test/filesystem/filesystem.test.ts" line="349" assertions="3" />
+        <testcase name="contains checks path containment" classname="pure helpers &amp;gt; AppFileSystem" time="0.000051" file="test/filesystem/filesystem.test.ts" line="355" assertions="2" />
+        <testcase name="overlaps detects overlapping paths" classname="pure helpers &amp;gt; AppFileSystem" time="0.000054" file="test/filesystem/filesystem.test.ts" line="360" assertions="3" />
+      </testsuite>
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/effect/cross-spawn-spawner.test.ts" file="test/effect/cross-spawn-spawner.test.ts" tests="24" assertions="25" failures="0" skipped="0" time="0" hostname="localhost">
+    <testsuite name="cross-spawn spawner" file="test/effect/cross-spawn-spawner.test.ts" line="61" tests="24" assertions="25" failures="0" skipped="0" time="0" hostname="localhost">
+      <testsuite name="basic spawning" file="test/effect/cross-spawn-spawner.test.ts" line="62" tests="4" assertions="4" failures="0" skipped="0" time="0.1" hostname="localhost">
+        <testcase name="captures stdout" classname="basic spawning &amp;gt; cross-spawn spawner" time="0.027906" file="test/effect/cross-spawn-spawner.test.ts" line="64" assertions="1" />
+        <testcase name="captures multiple lines" classname="basic spawning &amp;gt; cross-spawn spawner" time="0.031315" file="test/effect/cross-spawn-spawner.test.ts" line="74" assertions="1" />
+        <testcase name="returns exit code" classname="basic spawning &amp;gt; cross-spawn spawner" time="0.020792" file="test/effect/cross-spawn-spawner.test.ts" line="83" assertions="1" />
+        <testcase name="returns non-zero exit code" classname="basic spawning &amp;gt; cross-spawn spawner" time="0.022574" file="test/effect/cross-spawn-spawner.test.ts" line="92" assertions="1" />
+      </testsuite>
+      <testsuite name="cwd option" file="test/effect/cross-spawn-spawner.test.ts" line="101" tests="2" assertions="2" failures="0" skipped="0" time="0.025" hostname="localhost">
+        <testcase name="uses cwd when spawning commands" classname="cwd option &amp;gt; cross-spawn spawner" time="0.025783" file="test/effect/cross-spawn-spawner.test.ts" line="103" assertions="1" />
+        <testcase name="fails for invalid cwd" classname="cwd option &amp;gt; cross-spawn spawner" time="0.000669" file="test/effect/cross-spawn-spawner.test.ts" line="119" assertions="1" />
+      </testsuite>
+      <testsuite name="env option" file="test/effect/cross-spawn-spawner.test.ts" line="129" tests="2" assertions="2" failures="0" skipped="0" time="0.046" hostname="localhost">
+        <testcase name="passes environment variables with extendEnv" classname="env option &amp;gt; cross-spawn spawner" time="0.021865" file="test/effect/cross-spawn-spawner.test.ts" line="131" assertions="1" />
+        <testcase name="passes multiple environment variables" classname="env option &amp;gt; cross-spawn spawner" time="0.025126" file="test/effect/cross-spawn-spawner.test.ts" line="143" assertions="1" />
+      </testsuite>
+      <testsuite name="stderr" file="test/effect/cross-spawn-spawner.test.ts" line="158" tests="2" assertions="3" failures="0" skipped="0" time="0.045" hostname="localhost">
+        <testcase name="captures stderr output" classname="stderr &amp;gt; cross-spawn spawner" time="0.023499" file="test/effect/cross-spawn-spawner.test.ts" line="160" assertions="1" />
+        <testcase name="captures both stdout and stderr" classname="stderr &amp;gt; cross-spawn spawner" time="0.022672" file="test/effect/cross-spawn-spawner.test.ts" line="169" assertions="2" />
+      </testsuite>
+      <testsuite name="combined output (all)" file="test/effect/cross-spawn-spawner.test.ts" line="191" tests="2" assertions="2" failures="0" skipped="0" time="0.036" hostname="localhost">
+        <testcase name="captures stdout via .all when no stderr" classname="combined output (all) &amp;gt; cross-spawn spawner" time="0.01177" file="test/effect/cross-spawn-spawner.test.ts" line="193" assertions="1" />
+        <testcase name="captures stderr via .all when no stdout" classname="combined output (all) &amp;gt; cross-spawn spawner" time="0.025625" file="test/effect/cross-spawn-spawner.test.ts" line="202" assertions="1" />
+      </testsuite>
+      <testsuite name="stdin" file="test/effect/cross-spawn-spawner.test.ts" line="211" tests="1" assertions="1" failures="0" skipped="0" time="0.024" hostname="localhost">
+        <testcase name="allows providing standard input to a command" classname="stdin &amp;gt; cross-spawn spawner" time="0.024914" file="test/effect/cross-spawn-spawner.test.ts" line="213" assertions="1" />
+      </testsuite>
+      <testsuite name="process control" file="test/effect/cross-spawn-spawner.test.ts" line="228" tests="4" assertions="5" failures="0" skipped="0" time="0.033" hostname="localhost">
+        <testcase name="kills a running process" classname="process control &amp;gt; cross-spawn spawner" time="0.005428" file="test/effect/cross-spawn-spawner.test.ts" line="230" assertions="1" />
+        <testcase name="kills a child when scope exits" classname="process control &amp;gt; cross-spawn spawner" time="0.002516" file="test/effect/cross-spawn-spawner.test.ts" line="244" assertions="1" />
+        <testcase name="forceKillAfter escalates for stubborn processes" classname="process control &amp;gt; cross-spawn spawner" time="0.003893" file="test/effect/cross-spawn-spawner.test.ts" line="258" assertions="2" />
+        <testcase name="isRunning reflects process state" classname="process control &amp;gt; cross-spawn spawner" time="0.023793" file="test/effect/cross-spawn-spawner.test.ts" line="277" assertions="1" />
+      </testsuite>
+      <testsuite name="error handling" file="test/effect/cross-spawn-spawner.test.ts" line="287" tests="1" assertions="1" failures="0" skipped="0" time="0.034" hostname="localhost">
+        <testcase name="fails for invalid command" classname="error handling &amp;gt; cross-spawn spawner" time="0.034982" file="test/effect/cross-spawn-spawner.test.ts" line="289" assertions="1" />
+      </testsuite>
+      <testsuite name="pipeline" file="test/effect/cross-spawn-spawner.test.ts" line="302" tests="4" assertions="5" failures="0" skipped="0" time="0.256" hostname="localhost">
+        <testcase name="pipes stdout of one command to stdin of another" classname="pipeline &amp;gt; cross-spawn spawner" time="0.02833" file="test/effect/cross-spawn-spawner.test.ts" line="304" assertions="1" />
+        <testcase name="three-stage pipeline" classname="pipeline &amp;gt; cross-spawn spawner" time="0.06804" file="test/effect/cross-spawn-spawner.test.ts" line="320" assertions="1" />
+        <testcase name="pipes stderr with { from: &apos;stderr&apos; }" classname="pipeline &amp;gt; cross-spawn spawner" time="0.123774" file="test/effect/cross-spawn-spawner.test.ts" line="341" assertions="1" />
+        <testcase name="pipes combined output with { from: &apos;all&apos; }" classname="pipeline &amp;gt; cross-spawn spawner" time="0.037869" file="test/effect/cross-spawn-spawner.test.ts" line="358" assertions="2" />
+      </testsuite>
+      <testsuite name="Windows-specific" file="test/effect/cross-spawn-spawner.test.ts" line="376" tests="2" assertions="0" failures="0" skipped="0" time="0" hostname="localhost">
+        <testcase name="uses shell routing on Windows" classname="Windows-specific &amp;gt; cross-spawn spawner" time="0.000605" file="test/effect/cross-spawn-spawner.test.ts" line="378" assertions="0" />
+        <testcase name="runs cmd scripts with spaces on Windows without shell" classname="Windows-specific &amp;gt; cross-spawn spawner" time="0.000484" file="test/effect/cross-spawn-spawner.test.ts" line="396" assertions="0" />
+      </testsuite>
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/effect/observability.test.ts" file="test/effect/observability.test.ts" tests="3" assertions="4" failures="2" skipped="0" time="0" hostname="localhost">
+    <testsuite name="resource" file="test/effect/observability.test.ts" line="15" tests="3" assertions="4" failures="2" skipped="0" time="0.017" hostname="localhost">
+      <testcase name="parses and decodes OTEL resource attributes" classname="resource" time="0.016211" file="test/effect/observability.test.ts" line="16" assertions="1" />
+      <testcase name="drops OTEL resource attributes when any entry is invalid" classname="resource" time="0.000672" file="test/effect/observability.test.ts" line="28" assertions="2">
+        <failure type="AssertionError" />
+      </testcase>
+      <testcase name="keeps built-in attributes when env values conflict" classname="resource" time="0.00129" file="test/effect/observability.test.ts" line="35" assertions="1">
+        <failure type="AssertionError" />
+      </testcase>
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/util/effect-flock.test.ts" file="test/util/effect-flock.test.ts" tests="11" assertions="21" failures="0" skipped="0" time="0" hostname="localhost">
+    <testsuite name="util.effect-flock" file="test/util/effect-flock.test.ts" line="112" tests="11" assertions="21" failures="0" skipped="0" time="4.642" hostname="localhost">
+      <testcase name="acquire and release via scoped Effect" classname="util.effect-flock" time="0.003332" file="test/util/effect-flock.test.ts" line="116" assertions="1" />
+      <testcase name="withLock data-first" classname="util.effect-flock" time="0.002904" file="test/util/effect-flock.test.ts" line="131" assertions="1" />
+      <testcase name="withLock pipeable" classname="util.effect-flock" time="0.002492" file="test/util/effect-flock.test.ts" line="151" assertions="1" />
+      <testcase name="writes owner metadata" classname="util.effect-flock" time="0.002951" file="test/util/effect-flock.test.ts" line="167" assertions="4" />
+      <testcase name="breaks stale lock dirs" classname="util.effect-flock" time="0.009989" file="test/util/effect-flock.test.ts" line="192" assertions="1" />
+      <testcase name="recovers from stale breaker" classname="util.effect-flock" time="0.104432" file="test/util/effect-flock.test.ts" line="220" assertions="2" />
+      <testcase name="detects compromise when lock dir removed" classname="util.effect-flock" time="0.005047" file="test/util/effect-flock.test.ts" line="252" assertions="2" />
+      <testcase name="detects token mismatch" classname="util.effect-flock" time="0.003634" file="test/util/effect-flock.test.ts" line="275" assertions="3" />
+      <testcase name="fails on unwritable lock roots" classname="util.effect-flock" time="0.002463" file="test/util/effect-flock.test.ts" line="304" assertions="1" />
+      <testcase name="enforces mutual exclusion under process contention" classname="util.effect-flock" time="3.88967" file="test/util/effect-flock.test.ts" line="324" assertions="3" />
+      <testcase name="recovers after a crashed lock owner" classname="util.effect-flock" time="0.621623" file="test/util/effect-flock.test.ts" line="354" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/util/flock.test.ts" file="test/util/flock.test.ts" tests="10" assertions="26" failures="0" skipped="0" time="0" hostname="localhost">
+    <testsuite name="util.flock" file="test/util/flock.test.ts" line="112" tests="10" assertions="26" failures="0" skipped="0" time="18.577" hostname="localhost">
+      <testcase name="enforces mutual exclusion under process contention" classname="util.flock" time="2.446332" file="test/util/flock.test.ts" line="113" assertions="3" />
+      <testcase name="times out while waiting when lock is still healthy" classname="util.flock" time="1.359825" file="test/util/flock.test.ts" line="145" assertions="4" />
+      <testcase name="recovers after a crashed lock owner" classname="util.flock" time="4.153053" file="test/util/flock.test.ts" line="182" assertions="1" />
+      <testcase name="breaks stale lock dirs when heartbeat is missing" classname="util.flock" time="1.287714" file="test/util/flock.test.ts" line="216" assertions="1" />
+      <testcase name="recovers when a stale breaker claim was left behind" classname="util.flock" time="3.263354" file="test/util/flock.test.ts" line="242" assertions="2" />
+      <testcase name="fails clearly if lock dir is removed while held" classname="util.flock" time="0.002256" file="test/util/flock.test.ts" line="273" assertions="3" />
+      <testcase name="writes owner metadata while lock is held" classname="util.flock" time="0.001369" file="test/util/flock.test.ts" line="313" assertions="4" />
+      <testcase name="supports acquire with await using" classname="util.flock" time="0.001392" file="test/util/flock.test.ts" line="342" assertions="2" />
+      <testcase name="refuses token mismatch release and recovers from stale" classname="util.flock" time="6.06497" file="test/util/flock.test.ts" line="360" assertions="4" />
+      <testcase name="fails clearly on unwritable lock roots" classname="util.flock" time="0.001208" file="test/util/flock.test.ts" line="401" assertions="2" />
+    </testsuite>
+  </testsuite>
+</testsuites>

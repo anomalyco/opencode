@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-pro
+model: deepseek/deepseek-v4-pro
 color: "#DD3333"
 description: 架构师 — 技术设计审定、PR 技术审批、架构 RCA
 ---

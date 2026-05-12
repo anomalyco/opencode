@@ -1,6 +1,6 @@
 ---
 mode: primary
-model: opencode-go/deepseek-v4-flash
+model: deepseek/deepseek-v4-flash
 color: "#FF4444"
 description: 流程编排 — 分派 Agent、汇总分析、门控决策、发布审批（P1-P10）
 ---

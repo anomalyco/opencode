@@ -1,6 +1,6 @@
 ---
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: deepseek/deepseek-v4-flash
 color: "#FFAA00"
 description: 质量保障 — 测试、质量门、Canary 监控、冒烟、质量否决权
 ---
