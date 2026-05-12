@@ -57,7 +57,7 @@ const rawOverlayExample = LLM.request({
   prompt: "Show the final HTTP overlay shape.",
   http: {
     body: { metadata: { example: "tutorial" } },
-    headers: { "x-opencode-tutorial": "1" },
+    headers: { "x-octopus-tutorial": "1" },
     query: { debug: "1" },
   },
 })

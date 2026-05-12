@@ -55,7 +55,7 @@ export const Info = z
   })
 export type Info = z.infer<typeof Info>
 
-export const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OCTOPUS_CLIENT}`
+export const USER_AGENT = `octopus/${InstallationChannel}/${InstallationVersion}/${Flag.OCTOPUS_CLIENT}`
 
 export function isPreview() {
   return InstallationChannel !== "latest"
@@ -88,7 +88,7 @@ export interface Interface {
   readonly upgrade: (method: Method, target: string) => Effect.Effect<void, UpgradeFailedError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Installation") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Installation") {}
 
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildProcessSpawner.ChildProcessSpawner> =
   Layer.effect(

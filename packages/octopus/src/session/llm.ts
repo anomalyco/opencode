@@ -58,7 +58,7 @@ export interface Interface {
   readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/LLM") {}
 
 const live: Layer.Layer<
   Service,
@@ -373,10 +373,10 @@ const live: Layer.Layer<
         headers: {
           ...(input.model.providerID.startsWith("opencode")
             ? {
-                "x-opencode-project": opencodeProjectID,
-                "x-opencode-session": input.sessionID,
-                "x-opencode-request": input.user.id,
-                "x-opencode-client": Flag.OCTOPUS_CLIENT,
+                "x-octopus-project": opencodeProjectID,
+                "x-octopus-session": input.sessionID,
+                "x-octopus-request": input.user.id,
+                "x-octopus-client": Flag.OCTOPUS_CLIENT,
                 "User-Agent": `opencode/${InstallationVersion}`,
               }
             : {

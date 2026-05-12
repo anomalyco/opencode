@@ -120,7 +120,7 @@ function withContext<A, E>(
         const base: ScenarioContext = {
           directory: context.dir?.path,
           headers: (extra) => ({
-            ...(context.dir?.path ? { "x-opencode-directory": context.dir.path } : {}),
+            ...(context.dir?.path ? { "x-octopus-directory": context.dir.path } : {}),
             ...extra,
           }),
           file: (name, content) =>

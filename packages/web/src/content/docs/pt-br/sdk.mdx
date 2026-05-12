@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: Cliente JS seguro em tipos para o servidor opencode.
+description: Cliente JS seguro em tipos para o servidor octopus.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-O SDK JS/TS do opencode fornece um cliente seguro em tipos para interagir com o servidor.
-Use-o para construir integrações e controlar o opencode programaticamente.
+O SDK JS/TS do octopus fornece um cliente seguro em tipos para interagir com o servidor.
+Use-o para construir integrações e controlar o octopus programaticamente.
 
 [Saiba mais](/docs/server) sobre como o servidor funciona. Para exemplos, confira os [projetos](/docs/ecosystem#projects) construídos pela comunidade.
 
@@ -25,12 +25,12 @@ npm install @octopus-ai/sdk
 
 ## Criar cliente
 
-Crie uma instância do opencode:
+Crie uma instância do octopus:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOctopus()
 ```
 
 Isso inicia tanto um servidor quanto um cliente.
@@ -52,9 +52,9 @@ Isso inicia tanto um servidor quanto um cliente.
 Você pode passar um objeto de configuração para personalizar o comportamento. A instância ainda pega seu `octopus.json`, mas você pode substituir ou adicionar configuração inline:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const opencode = await createOpencode({
+const octopus = await createOctopus({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${octopus.server.url}`)
 
-opencode.server.close()
+octopus.server.close()
 ```
 
 ## Apenas cliente
 
-Se você já tem uma instância do opencode em execução, pode criar uma instância de cliente para se conectar a ela:
+Se você já tem uma instância do octopus em execução, pode criar uma instância de cliente para se conectar a ela:
 
 ```javascript
-import { createOpencodeClient } from "@octopus-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createOctopusClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*octopus" },
 })
 
 const files = await client.find.files({

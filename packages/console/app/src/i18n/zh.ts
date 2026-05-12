@@ -44,8 +44,8 @@ export const dict = {
   "notFound.docs": "文档",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode logo 亮色",
-  "notFound.logoDarkAlt": "opencode logo 暗色",
+  "notFound.logoLightAlt": "octopus logo 亮色",
+  "notFound.logoDarkAlt": "octopus logo 暗色",
 
   "user.logout": "退出登录",
 
@@ -99,8 +99,8 @@ export const dict = {
   "temp.feature.models.afterLink": "，包括本地模型",
   "temp.screenshot.caption": "使用 Tokyonight 主题的 OpenCode TUI",
   "temp.screenshot.alt": "使用 Tokyonight 主题的 OpenCode TUI",
-  "temp.logoLightAlt": "opencode logo 亮色",
-  "temp.logoDarkAlt": "opencode logo 暗色",
+  "temp.logoLightAlt": "octopus logo 亮色",
+  "temp.logoDarkAlt": "octopus logo 暗色",
 
   "home.banner.badge": "新",
   "home.banner.text": "桌面应用 Beta 版现已推出",

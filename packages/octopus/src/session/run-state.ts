@@ -22,7 +22,7 @@ export interface Interface {
   ) => Effect.Effect<MessageV2.WithParts>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/SessionRunState") {}
 
 export const layer = Layer.effect(
   Service,

@@ -17,7 +17,7 @@ function pick(value: string | null, fallback?: string) {
 function rewrite(request: Request, directory?: string) {
   if (request.method !== "GET" && request.method !== "HEAD") return request
 
-  const value = pick(request.headers.get("x-opencode-directory"), directory)
+  const value = pick(request.headers.get("x-octopus-directory"), directory)
   if (!value) return request
 
   const url = new URL(request.url)
@@ -26,7 +26,7 @@ function rewrite(request: Request, directory?: string) {
   }
 
   const next = new Request(url, request)
-  next.headers.delete("x-opencode-directory")
+  next.headers.delete("x-octopus-directory")
   return next
 }
 
@@ -46,7 +46,7 @@ export function createOctopusClient(config?: Config & { directory?: string }) {
   if (config?.directory) {
     config.headers = {
       ...config.headers,
-      "x-opencode-directory": encodeURIComponent(config.directory),
+      "x-octopus-directory": encodeURIComponent(config.directory),
     }
   }
 

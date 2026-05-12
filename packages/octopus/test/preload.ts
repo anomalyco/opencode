@@ -7,7 +7,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll } from "bun:test"
 
 // Set XDG env vars FIRST, before any src/ imports
-const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
+const dir = path.join(os.tmpdir(), "octopus-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(async () => {
   const { Database } = await import("../src/storage/db")
@@ -36,7 +36,7 @@ process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 process.env["OCTOPUS_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
 process.env["OCTOPUS_EXPERIMENTAL_EVENT_SYSTEM"] = "true"
 // Tests assert exact skill counts from disk discovery; the built-in
-// customize-opencode skill is opt-in for stable channels and on by default
+// customize-octopus skill is opt-in for stable channels and on by default
 // for unstable channels (including "local" where CI runs). Disable it here
 // so disk-discovery tests aren't off-by-one.
 process.env["OCTOPUS_EXPERIMENTAL_CUSTOMIZE_SKILL"] = "false"

@@ -1,6 +1,6 @@
 ---
 title: SDK
-description: Типобезопасный JS-клиент для сервера opencode.
+description: Типобезопасный JS-клиент для сервера octopus.
 ---
 
 import config from "../../../../config.mjs"
@@ -25,12 +25,12 @@ npm install @octopus-ai/sdk
 
 ## Создать клиента
 
-Создайте экземпляр opencode:
+Создайте экземпляр octopus:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOctopus()
 ```
 
 Это запускает и сервер, и клиент.
@@ -52,9 +52,9 @@ const { client } = await createOpencode()
 Вы можете передать объект конфигурации для настройки поведения. Экземпляр по-прежнему получает ваш `octopus.json`, но вы можете переопределить или добавить встроенную конфигурацию:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const opencode = await createOpencode({
+const octopus = await createOctopus({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${octopus.server.url}`)
 
-opencode.server.close()
+octopus.server.close()
 ```
 
 ## Только клиент
 
-Если у вас уже есть работающий экземпляр opencode, вы можете создать экземпляр клиента для подключения к нему:
+Если у вас уже есть работающий экземпляр octopus, вы можете создать экземпляр клиента для подключения к нему:
 
 ```javascript
-import { createOpencodeClient } from "@octopus-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createOctopusClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*octopus" },
 })
 
 const files = await client.find.files({

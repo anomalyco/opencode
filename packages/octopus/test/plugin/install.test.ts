@@ -179,7 +179,7 @@ describe("plugin.install.task", () => {
     "seed@1.0.0"
   ],
   // tui tail
-  "theme": "opencode"
+  "theme": "octopus"
 }
 `,
     )

@@ -39,7 +39,7 @@ export default function Home() {
       {/* TODO(future): Replace social-share-zen.png with Octopus-branded OG image once design assets are ready */}
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
-      <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
+      <Meta name="octopus:auth" content={loggedin() ? "true" : "false"} />
 
       <div data-component="container">
         <Header zen hideGetStarted />

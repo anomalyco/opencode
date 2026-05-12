@@ -131,7 +131,7 @@ describe("session.list", () => {
         const pathIDs = (
           await svc.list({
             directory: path.join(tmp.path, "packages", "app"),
-            path: "packages/opencode/src",
+            path: "packages/octopus/src",
           })
         ).map((s) => s.id)
         expect(pathIDs).not.toContain(parent.id)

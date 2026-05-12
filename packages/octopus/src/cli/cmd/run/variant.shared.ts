@@ -29,7 +29,7 @@ type VariantRuntime = {
   saveVariant(model: RunInput["model"], variant: string | undefined): Promise<void>
 }
 
-class Service extends Context.Service<Service, VariantService>()("@opencode/RunVariant") {}
+class Service extends Context.Service<Service, VariantService>()("@octopus/RunVariant") {}
 
 function modelKey(provider: string, model: string): string {
   return `${provider}/${model}`

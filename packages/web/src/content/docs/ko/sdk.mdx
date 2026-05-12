@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: opencode 서버를 위한 타입 안전한 JS 클라이언트.
+description: octopus 서버를 위한 타입 안전한 JS 클라이언트.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK는 서버와 상호 작용을 위한 유형 안전한 클라이언트를 제공합니다.
-통합 및 제어 opencode programmatically를 구축하는 데 사용됩니다.
+octopus JS/TS SDK는 서버와 상호 작용을 위한 유형 안전한 클라이언트를 제공합니다.
+통합 및 제어 octopus programmatically를 구축하는 데 사용됩니다.
 
 [Learn more](/docs/server) 서버가 어떻게 작동하나요? 예를 들어, 커뮤니티에 의해 구축 된 [projects](/docs/ecosystem#projects)를 확인하십시오.
 
@@ -25,12 +25,12 @@ npm install @octopus-ai/sdk
 
 ## 클라이언트 만들기
 
-opencode의 인스턴스 만들기:
+octopus의 인스턴스 만들기:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOctopus()
 ```
 
 서버와 클라이언트 모두 시작
@@ -52,9 +52,9 @@ const { client } = await createOpencode()
 구성 객체를 전달할 수 있습니다. 인스턴스는 여전히 `octopus.json`를 선택하지만 구성 인라인을 추가 할 수 있습니다.
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const opencode = await createOpencode({
+const octopus = await createOctopus({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${octopus.server.url}`)
 
-opencode.server.close()
+octopus.server.close()
 ```
 
 ## 클라이언트만
 
-opencode의 실행 인스턴스가 이미 있다면 클라이언트 인스턴스를 만들 수 있습니다.
+octopus의 실행 인스턴스가 이미 있다면 클라이언트 인스턴스를 만들 수 있습니다.
 
 ```javascript
-import { createOpencodeClient } from "@octopus-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createOctopusClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*octopus" },
 })
 
 const files = await client.find.files({

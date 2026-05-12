@@ -191,16 +191,16 @@ export async function resolvePathPluginTarget(spec: string) {
   throw new Error(`Plugin directory ${file} is missing package.json or index file`)
 }
 
-export async function checkPluginCompatibility(target: string, opencodeVersion: string, pkg?: PluginPackage) {
-  if (!semver.valid(opencodeVersion) || semver.major(opencodeVersion) === 0) return
+export async function checkPluginCompatibility(target: string, octopusVersion: string, pkg?: PluginPackage) {
+  if (!semver.valid(octopusVersion) || semver.major(octopusVersion) === 0) return
   const hit = pkg ?? (await readPluginPackage(target).catch(() => undefined))
   if (!hit) return
   const engines = hit.json.engines
   if (!isRecord(engines)) return
-  const range = engines.opencode
+  const range = engines.octopus
   if (typeof range !== "string") return
-  if (!semver.satisfies(opencodeVersion, range)) {
-    throw new Error(`Plugin requires opencode ${range} but running ${opencodeVersion}`)
+  if (!semver.satisfies(octopusVersion, range)) {
+    throw new Error(`Plugin requires octopus ${range} but running ${octopusVersion}`)
   }
 }
 

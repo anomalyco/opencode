@@ -153,7 +153,7 @@ describe("session HttpApi", () => {
     "returns declared not found errors for read routes",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": tmp.path }
+        const headers = { "x-octopus-directory": tmp.path }
         const missingSession = SessionID.descending()
         const missingSessionBody = {
           name: "NotFoundError",
@@ -194,7 +194,7 @@ describe("session HttpApi", () => {
     "serves read routes",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": tmp.path }
+        const headers = { "x-octopus-directory": tmp.path }
         const parent = yield* createSession(tmp.path, { title: "parent" })
         const child = yield* createSession(tmp.path, { title: "child", parentID: parent.id })
         const message = yield* createTextMessage(tmp.path, parent.id, "hello")
@@ -318,7 +318,7 @@ describe("session HttpApi", () => {
         )
 
         const response = yield* request(pathFor(SessionPaths.get, { sessionID: session.id }), {
-          headers: { "x-opencode-directory": tmp.path },
+          headers: { "x-octopus-directory": tmp.path },
         })
 
         expect(response.status).toBe(200)
@@ -331,7 +331,7 @@ describe("session HttpApi", () => {
     "serves lifecycle mutation routes",
     withTmp({ git: true, config: { formatter: false, lsp: false, share: "disabled" } }, (tmp) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+        const headers = { "x-octopus-directory": tmp.path, "content-type": "application/json" }
 
         const createdEmpty = yield* requestJson<Session.Info>(SessionPaths.create, {
           method: "POST",
@@ -391,13 +391,13 @@ describe("session HttpApi", () => {
 
         const created = yield* requestJson<Session.Info>(`${SessionPaths.create}?workspace=${workspace.id}`, {
           method: "POST",
-          headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
+          headers: { "x-octopus-directory": tmp.path, "content-type": "application/json" },
           body: JSON.stringify({ title: "workspace session" }),
         })
         const messages = yield* request(
           `${pathFor(SessionPaths.messages, { sessionID: created.id })}?workspace=${workspace.id}`,
           {
-            headers: { "x-opencode-directory": tmp.path },
+            headers: { "x-octopus-directory": tmp.path },
           },
         )
 
@@ -422,7 +422,7 @@ describe("session HttpApi", () => {
     "validates archived timestamp values",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+        const headers = { "x-octopus-directory": tmp.path, "content-type": "application/json" }
         const session = yield* createSession(tmp.path, { title: "archived" })
         const body = JSON.stringify({ time: { archived: -1 } })
 
@@ -448,8 +448,8 @@ describe("session HttpApi", () => {
         // through the same middleware chain (InstanceContextMiddleware,
         // WorkspaceRoutingMiddleware) and share the same InstanceStore cache,
         // avoiding the nested-runtime path divergence of createSession().
-        const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
-        const createHeaders = { "x-opencode-directory": currentDir, "content-type": "application/json" }
+        const headers = { "x-octopus-directory": tmp.path, "content-type": "application/json" }
+        const createHeaders = { "x-octopus-directory": currentDir, "content-type": "application/json" }
         const pathSession = yield* requestJson<Session.Info>(SessionPaths.create, {
           method: "POST",
           headers: createHeaders,
@@ -483,7 +483,7 @@ describe("session HttpApi", () => {
     "serves paginated message link headers",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": tmp.path }
+        const headers = { "x-octopus-directory": tmp.path }
         const session = yield* createSession(tmp.path, { title: "messages" })
         yield* createTextMessage(tmp.path, session.id, "first")
         yield* createTextMessage(tmp.path, session.id, "second")
@@ -502,7 +502,7 @@ describe("session HttpApi", () => {
     "serves message mutation routes",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+        const headers = { "x-octopus-directory": tmp.path, "content-type": "application/json" }
         const session = yield* createSession(tmp.path, { title: "messages" })
         const first = yield* createTextMessage(tmp.path, session.id, "first")
         const second = yield* createTextMessage(tmp.path, session.id, "second")
@@ -546,7 +546,7 @@ describe("session HttpApi", () => {
     "serves remaining non-LLM session mutation routes",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+        const headers = { "x-octopus-directory": tmp.path, "content-type": "application/json" }
         const session = yield* createSession(tmp.path, { title: "remaining" })
 
         expect(

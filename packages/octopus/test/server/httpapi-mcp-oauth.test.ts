@@ -13,7 +13,7 @@ import {
 } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { testEffect } from "../lib/effect"
 
-const TestHttpApi = HttpApi.make("opencode-instance").addHttpApi(McpApi)
+const TestHttpApi = HttpApi.make("octopus-instance").addHttpApi(McpApi)
 const fakeSession = Layer.mock(Session.Service)({})
 const testMcpHandlers = HttpApiBuilder.group(TestHttpApi, "mcp", (handlers) =>
   Effect.succeed(

@@ -222,7 +222,7 @@ const loadSkills = Effect.fnUntraced(function* (state: State, discovered: Discov
   log.info("init", { count: Object.keys(state.skills).length })
 })
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Skill") {}
 
 export const layer = Layer.effect(
   Service,

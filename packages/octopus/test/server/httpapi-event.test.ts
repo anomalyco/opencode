@@ -39,7 +39,7 @@ afterEach(async () => {
 describe("event HttpApi", () => {
   test("serves event stream", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const response = await app().request(EventPaths.event, { headers: { "x-opencode-directory": tmp.path } })
+    const response = await app().request(EventPaths.event, { headers: { "x-octopus-directory": tmp.path } })
 
     expect(response.status).toBe(200)
     expect(response.headers.get("content-type")).toContain("text/event-stream")
@@ -51,7 +51,7 @@ describe("event HttpApi", () => {
 
   test("serves the initial server connected event", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const headers = { "x-opencode-directory": tmp.path }
+    const headers = { "x-octopus-directory": tmp.path }
     const response = await app().request(EventPaths.event, { headers })
 
     expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })

@@ -24,7 +24,7 @@ type TestApp = ReturnType<typeof app>
 
 function request(route: string, directory: string, init?: RequestInit) {
   const headers = new Headers(init?.headers)
-  headers.set("x-opencode-directory", directory)
+  headers.set("x-octopus-directory", directory)
   return ExperimentalHttpApiServer.webHandler().handler(
     new Request(`http://localhost${route}`, {
       ...init,
@@ -38,7 +38,7 @@ function withMcpProject<A, E, R>(self: (dir: string) => Effect.Effect<A, E, R>) 
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-test-" })
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "octopus-test-" })
 
     yield* fs.writeFileString(
       path.join(dir, "opencode.json"),
@@ -164,7 +164,7 @@ describe("mcp HttpApi", () => {
     "returns unsupported OAuth error responses",
     withMcpProject((dir) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": dir }
+        const headers = { "x-octopus-directory": dir }
 
         yield* Effect.forEach(["/mcp/demo/auth", "/mcp/demo/auth/authenticate"], (path) =>
           Effect.gen(function* () {

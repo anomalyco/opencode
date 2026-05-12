@@ -2386,7 +2386,7 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
           provider: {
             "cloudflare-ai-gateway": {
               options: {
-                metadata: { invoked_by: "test", project: "opencode" },
+                metadata: { invoked_by: "test", project: "octopus" },
               },
             },
           },
@@ -2404,7 +2404,7 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
       expect(providers[ProviderID.make("cloudflare-ai-gateway")]).toBeDefined()
       expect(providers[ProviderID.make("cloudflare-ai-gateway")].options.metadata).toEqual({
         invoked_by: "test",
-        project: "opencode",
+        project: "octopus",
       })
     },
   })
@@ -2507,7 +2507,7 @@ test("plugin config enabled and disabled providers are honored", async () => {
   })
 })
 
-test("opencode loader keeps paid models when config apiKey is present", async () => {
+test("octopus loader keeps paid models when config apiKey is present", async () => {
   await using base = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -2551,7 +2551,7 @@ test("opencode loader keeps paid models when config apiKey is present", async ()
   expect(keyedCount).toBeGreaterThan(0)
 })
 
-test("opencode loader keeps paid models when auth exists", async () => {
+test("octopus loader keeps paid models when auth exists", async () => {
   await using base = await tmpdir({
     init: async (dir) => {
       await Bun.write(

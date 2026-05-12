@@ -5,31 +5,31 @@ import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { useI18n } from "~/context/i18n"
 import { LocaleLinks } from "~/component/locale-links"
-import previewLogoLight from "../../asset/brand/preview-opencode-logo-light.png"
-import previewLogoDark from "../../asset/brand/preview-opencode-logo-dark.png"
-import previewLogoLightSquare from "../../asset/brand/preview-opencode-logo-light-square.png"
-import previewLogoDarkSquare from "../../asset/brand/preview-opencode-logo-dark-square.png"
-import previewWordmarkLight from "../../asset/brand/preview-opencode-wordmark-light.png"
-import previewWordmarkDark from "../../asset/brand/preview-opencode-wordmark-dark.png"
-import previewWordmarkSimpleLight from "../../asset/brand/preview-opencode-wordmark-simple-light.png"
-import previewWordmarkSimpleDark from "../../asset/brand/preview-opencode-wordmark-simple-dark.png"
-import logoLightPng from "../../asset/brand/opencode-logo-light.png"
-import logoDarkPng from "../../asset/brand/opencode-logo-dark.png"
-import logoLightSquarePng from "../../asset/brand/opencode-logo-light-square.png"
-import logoDarkSquarePng from "../../asset/brand/opencode-logo-dark-square.png"
-import wordmarkLightPng from "../../asset/brand/opencode-wordmark-light.png"
-import wordmarkDarkPng from "../../asset/brand/opencode-wordmark-dark.png"
-import wordmarkSimpleLightPng from "../../asset/brand/opencode-wordmark-simple-light.png"
-import wordmarkSimpleDarkPng from "../../asset/brand/opencode-wordmark-simple-dark.png"
-import logoLightSvg from "../../asset/brand/opencode-logo-light.svg"
-import logoDarkSvg from "../../asset/brand/opencode-logo-dark.svg"
-import logoLightSquareSvg from "../../asset/brand/opencode-logo-light-square.svg"
-import logoDarkSquareSvg from "../../asset/brand/opencode-logo-dark-square.svg"
-import wordmarkLightSvg from "../../asset/brand/opencode-wordmark-light.svg"
-import wordmarkDarkSvg from "../../asset/brand/opencode-wordmark-dark.svg"
-import wordmarkSimpleLightSvg from "../../asset/brand/opencode-wordmark-simple-light.svg"
-import wordmarkSimpleDarkSvg from "../../asset/brand/opencode-wordmark-simple-dark.svg"
-const brandAssets = "/opencode-brand-assets.zip"
+import previewLogoLight from "../../asset/brand/preview-octopus-logo-light.png"
+import previewLogoDark from "../../asset/brand/preview-octopus-logo-dark.png"
+import previewLogoLightSquare from "../../asset/brand/preview-octopus-logo-light-square.png"
+import previewLogoDarkSquare from "../../asset/brand/preview-octopus-logo-dark-square.png"
+import previewWordmarkLight from "../../asset/brand/preview-octopus-wordmark-light.png"
+import previewWordmarkDark from "../../asset/brand/preview-octopus-wordmark-dark.png"
+import previewWordmarkSimpleLight from "../../asset/brand/preview-octopus-wordmark-simple-light.png"
+import previewWordmarkSimpleDark from "../../asset/brand/preview-octopus-wordmark-simple-dark.png"
+import logoLightPng from "../../asset/brand/octopus-logo-light.png"
+import logoDarkPng from "../../asset/brand/octopus-logo-dark.png"
+import logoLightSquarePng from "../../asset/brand/octopus-logo-light-square.png"
+import logoDarkSquarePng from "../../asset/brand/octopus-logo-dark-square.png"
+import wordmarkLightPng from "../../asset/brand/octopus-wordmark-light.png"
+import wordmarkDarkPng from "../../asset/brand/octopus-wordmark-dark.png"
+import wordmarkSimpleLightPng from "../../asset/brand/octopus-wordmark-simple-light.png"
+import wordmarkSimpleDarkPng from "../../asset/brand/octopus-wordmark-simple-dark.png"
+import logoLightSvg from "../../asset/brand/octopus-logo-light.svg"
+import logoDarkSvg from "../../asset/brand/octopus-logo-dark.svg"
+import logoLightSquareSvg from "../../asset/brand/octopus-logo-light-square.svg"
+import logoDarkSquareSvg from "../../asset/brand/octopus-logo-dark-square.svg"
+import wordmarkLightSvg from "../../asset/brand/octopus-wordmark-light.svg"
+import wordmarkDarkSvg from "../../asset/brand/octopus-wordmark-dark.svg"
+import wordmarkSimpleLightSvg from "../../asset/brand/octopus-wordmark-simple-light.svg"
+import wordmarkSimpleDarkSvg from "../../asset/brand/octopus-wordmark-simple-dark.svg"
+const brandAssets = "/octopus-brand-assets.zip"
 
 export default function Brand() {
   const i18n = useI18n()
@@ -74,7 +74,7 @@ export default function Brand() {
             <p>{i18n.t("brand.subtitle")}</p>
             <button
               data-component="download-button"
-              onClick={() => downloadFile(brandAssets, "opencode-brand-assets.zip")}
+              onClick={() => downloadFile(brandAssets, "octopus-brand-assets.zip")}
             >
               {i18n.t("brand.downloadAll")}
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -91,7 +91,7 @@ export default function Brand() {
               <div>
                 <img src={previewLogoLight} alt={alt} />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(logoLightPng, "opencode-logo-light.png")}>
+                  <button onClick={() => downloadFile(logoLightPng, "octopus-logo-light.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -102,7 +102,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(logoLightSvg, "opencode-logo-light.svg")}>
+                  <button onClick={() => downloadFile(logoLightSvg, "octopus-logo-light.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -118,7 +118,7 @@ export default function Brand() {
               <div>
                 <img src={previewLogoDark} alt={alt} />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(logoDarkPng, "opencode-logo-dark.png")}>
+                  <button onClick={() => downloadFile(logoDarkPng, "octopus-logo-dark.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -129,7 +129,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(logoDarkSvg, "opencode-logo-dark.svg")}>
+                  <button onClick={() => downloadFile(logoDarkSvg, "octopus-logo-dark.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -145,7 +145,7 @@ export default function Brand() {
               <div>
                 <img src={previewLogoLightSquare} alt={alt} />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(logoLightSquarePng, "opencode-logo-light-square.png")}>
+                  <button onClick={() => downloadFile(logoLightSquarePng, "octopus-logo-light-square.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -156,7 +156,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(logoLightSquareSvg, "opencode-logo-light-square.svg")}>
+                  <button onClick={() => downloadFile(logoLightSquareSvg, "octopus-logo-light-square.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -172,7 +172,7 @@ export default function Brand() {
               <div>
                 <img src={previewLogoDarkSquare} alt={alt} />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(logoDarkSquarePng, "opencode-logo-dark-square.png")}>
+                  <button onClick={() => downloadFile(logoDarkSquarePng, "octopus-logo-dark-square.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -183,7 +183,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(logoDarkSquareSvg, "opencode-logo-dark-square.svg")}>
+                  <button onClick={() => downloadFile(logoDarkSquareSvg, "octopus-logo-dark-square.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -199,7 +199,7 @@ export default function Brand() {
               <div>
                 <img src={previewWordmarkLight} alt={alt} />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(wordmarkLightPng, "opencode-wordmark-light.png")}>
+                  <button onClick={() => downloadFile(wordmarkLightPng, "octopus-wordmark-light.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -210,7 +210,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(wordmarkLightSvg, "opencode-wordmark-light.svg")}>
+                  <button onClick={() => downloadFile(wordmarkLightSvg, "octopus-wordmark-light.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -226,7 +226,7 @@ export default function Brand() {
               <div>
                 <img src={previewWordmarkDark} alt={alt} />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(wordmarkDarkPng, "opencode-wordmark-dark.png")}>
+                  <button onClick={() => downloadFile(wordmarkDarkPng, "octopus-wordmark-dark.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -237,7 +237,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(wordmarkDarkSvg, "opencode-wordmark-dark.svg")}>
+                  <button onClick={() => downloadFile(wordmarkDarkSvg, "octopus-wordmark-dark.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -253,7 +253,7 @@ export default function Brand() {
               <div>
                 <img src={previewWordmarkSimpleLight} alt={alt} />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(wordmarkSimpleLightPng, "opencode-wordmark-simple-light.png")}>
+                  <button onClick={() => downloadFile(wordmarkSimpleLightPng, "octopus-wordmark-simple-light.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -264,7 +264,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(wordmarkSimpleLightSvg, "opencode-wordmark-simple-light.svg")}>
+                  <button onClick={() => downloadFile(wordmarkSimpleLightSvg, "octopus-wordmark-simple-light.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -280,7 +280,7 @@ export default function Brand() {
               <div>
                 <img src={previewWordmarkSimpleDark} alt={alt} />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(wordmarkSimpleDarkPng, "opencode-wordmark-simple-dark.png")}>
+                  <button onClick={() => downloadFile(wordmarkSimpleDarkPng, "octopus-wordmark-simple-dark.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -291,7 +291,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(wordmarkSimpleDarkSvg, "opencode-wordmark-simple-dark.svg")}>
+                  <button onClick={() => downloadFile(wordmarkSimpleDarkSvg, "octopus-wordmark-simple-dark.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path

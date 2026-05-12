@@ -95,7 +95,7 @@ export interface Interface {
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/ModelsDev") {}
 
 export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClient.HttpClient> = Layer.effect(
   Service,

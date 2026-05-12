@@ -102,8 +102,8 @@ const scenarios: Scenario[] = [
     ),
   http.protected.get("/path", "path.get").json(200, (body, ctx) => {
     object(body)
-    check(body.directory === ctx.directory, "directory should resolve from x-opencode-directory")
-    check(body.worktree === ctx.directory, "worktree should resolve from x-opencode-directory")
+    check(body.directory === ctx.directory, "directory should resolve from x-octopus-directory")
+    check(body.worktree === ctx.directory, "worktree should resolve from x-octopus-directory")
   }),
   http.protected.get("/vcs", "vcs.get").json(),
   http.protected.get("/vcs/status", "vcs.status").json(200, array),

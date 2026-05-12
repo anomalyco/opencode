@@ -40,7 +40,7 @@ function same(a: string | null, b: string) {
 
 describe("util.which", () => {
   test("returns null when command is missing", () => {
-    expect(which("opencode-missing-command-for-test")).toBeNull()
+    expect(which("octopus-missing-command-for-test")).toBeNull()
   })
 
   test("finds a command from PATH override", async () => {

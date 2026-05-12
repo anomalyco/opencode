@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: opencode 伺服器的型別安全 JS 用戶端。
+description: octopus 伺服器的型別安全 JS 用戶端。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK 提供了一個型別安全的用戶端，用於與伺服器進行互動。
-您可以用它來建構整合方案，並以程式化方式控制 opencode。
+octopus JS/TS SDK 提供了一個型別安全的用戶端，用於與伺服器進行互動。
+您可以用它來建構整合方案，並以程式化方式控制 octopus。
 
 [了解更多](/docs/server)關於伺服器的運作原理。如需範例，請查看社群建構的[專案](/docs/ecosystem#projects)。
 
@@ -25,12 +25,12 @@ npm install @octopus-ai/sdk
 
 ## 建立用戶端
 
-建立一個 opencode 實例：
+建立一個 octopus 實例：
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOctopus()
 ```
 
 這會同時啟動伺服器和用戶端。
@@ -52,9 +52,9 @@ const { client } = await createOpencode()
 您可以傳入一個設定物件來自訂行為。實例仍然會讀取您的 `octopus.json`，但您可以透過內嵌方式覆寫或新增設定：
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const opencode = await createOpencode({
+const octopus = await createOctopus({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${octopus.server.url}`)
 
-opencode.server.close()
+octopus.server.close()
 ```
 
 ## 僅用戶端模式
 
-如果您已經有一個正在執行的 opencode 實例，可以建立一個用戶端實例來連線：
+如果您已經有一個正在執行的 octopus 實例，可以建立一個用戶端實例來連線：
 
 ```javascript
-import { createOpencodeClient } from "@octopus-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createOctopusClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // 搜尋和讀取檔案
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*octopus" },
 })
 
 const files = await client.find.files({

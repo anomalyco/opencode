@@ -28,9 +28,9 @@ npm install @octopus-ai/sdk
 Octopus のインスタンスを作成します。
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOctopus()
 ```
 
 これにより、サーバーとクライアントの両方が起動します
@@ -52,9 +52,9 @@ const { client } = await createOpencode()
 設定オブジェクトを渡して動作をカスタマイズできます。インスタンスは引き続き `octopus.json` を取得しますが、設定をインラインでオーバーライドまたは追加することができます。
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const opencode = await createOpencode({
+const octopus = await createOctopus({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,9 +62,9 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${octopus.server.url}`)
 
-opencode.server.close()
+octopus.server.close()
 ```
 
 ## クライアントのみ
@@ -72,9 +72,9 @@ opencode.server.close()
 すでに実行中の Octopus のインスタンスがある場合は、それに接続するためのクライアントインスタンスを作成できます。
 
 ```javascript
-import { createOpencodeClient } from "@octopus-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createOctopusClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*octopus" },
 })
 
 const files = await client.find.files({

@@ -44,8 +44,8 @@ export const dict = {
   "notFound.docs": "文件",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode 淺色標誌",
-  "notFound.logoDarkAlt": "opencode 深色標誌",
+  "notFound.logoLightAlt": "octopus 淺色標誌",
+  "notFound.logoDarkAlt": "octopus 深色標誌",
 
   "user.logout": "登出",
 
@@ -99,8 +99,8 @@ export const dict = {
   "temp.feature.models.afterLink": "支援 75+ 家 LLM 供應商，包括本地模型",
   "temp.screenshot.caption": "使用 tokyonight 主題的 OpenCode TUI",
   "temp.screenshot.alt": "使用 tokyonight 主題的 OpenCode TUI",
-  "temp.logoLightAlt": "opencode 淺色標誌",
-  "temp.logoDarkAlt": "opencode 深色標誌",
+  "temp.logoLightAlt": "octopus 淺色標誌",
+  "temp.logoDarkAlt": "octopus 深色標誌",
 
   "home.banner.badge": "新",
   "home.banner.text": "桌面應用已推出 Beta",

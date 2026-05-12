@@ -108,7 +108,7 @@ const cli = yargs(args)
     process.env.OPENCODE = "1"
     process.env.OCTOPUS_PID = String(process.pid)
 
-    Log.Default.info("opencode", {
+    Log.Default.info("octopus", {
       version: InstallationVersion,
       args: process.argv.slice(2),
       process_role: processMetadata.processRole,

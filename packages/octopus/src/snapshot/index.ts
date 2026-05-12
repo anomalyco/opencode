@@ -58,7 +58,7 @@ export interface Interface {
   readonly diffFull: (from: string, to: string) => Effect.Effect<FileDiff[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Snapshot") {}
 
 export const layer: Layer.Layer<
   Service,

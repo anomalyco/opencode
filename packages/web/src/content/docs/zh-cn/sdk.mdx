@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: opencode 服务器的类型安全 JS 客户端。
+description: octopus 服务器的类型安全 JS 客户端。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK 提供了一个类型安全的客户端，用于与服务器进行交互。
-你可以用它来构建集成方案，并以编程方式控制 opencode。
+octopus JS/TS SDK 提供了一个类型安全的客户端，用于与服务器进行交互。
+你可以用它来构建集成方案，并以编程方式控制 octopus。
 
 [了解更多](/docs/server)关于服务器的工作原理。如需示例，请查看社区构建的[项目](/docs/ecosystem#projects)。
 
@@ -25,12 +25,12 @@ npm install @octopus-ai/sdk
 
 ## 创建客户端
 
-创建一个 opencode 实例：
+创建一个 octopus 实例：
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOctopus()
 ```
 
 这会同时启动服务器和客户端。
@@ -52,9 +52,9 @@ const { client } = await createOpencode()
 你可以传入一个配置对象来自定义行为。实例仍然会读取你的 `octopus.json`，但你可以通过内联方式覆盖或添加配置：
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const opencode = await createOpencode({
+const octopus = await createOctopus({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${octopus.server.url}`)
 
-opencode.server.close()
+octopus.server.close()
 ```
 
 ## 仅客户端模式
 
-如果你已经有一个正在运行的 opencode 实例，可以创建一个客户端实例来连接它：
+如果你已经有一个正在运行的 octopus 实例，可以创建一个客户端实例来连接它：
 
 ```javascript
-import { createOpencodeClient } from "@octopus-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createOctopusClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*octopus" },
 })
 
 const files = await client.find.files({

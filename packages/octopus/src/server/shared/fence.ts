@@ -7,7 +7,7 @@ import * as Log from "@octopus-ai/core/util/log"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 
-export const HEADER = "x-opencode-sync"
+export const HEADER = "x-octopus-sync"
 export type State = Record<string, number>
 const log = Log.create({ service: "fence" })
 

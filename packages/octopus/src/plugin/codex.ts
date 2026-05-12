@@ -106,7 +106,7 @@ function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string):
     id_token_add_organizations: "true",
     codex_cli_simplified_flow: "true",
     state,
-    originator: "opencode",
+    originator: "octopus",
   })
   return `${ISSUER}/oauth/authorize?${params.toString()}`
 }
@@ -609,7 +609,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
     },
     "chat.headers": async (input, output) => {
       if (input.model.providerID !== "openai") return
-      output.headers.originator = "opencode"
+      output.headers.originator = "octopus"
       output.headers["User-Agent"] = `opencode/${InstallationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers.session_id = input.sessionID
     },

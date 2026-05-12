@@ -43,8 +43,8 @@ export const dict = {
   "notFound.docs": "Dokumentasjon",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode logo lys",
-  "notFound.logoDarkAlt": "opencode logo mørk",
+  "notFound.logoLightAlt": "octopus logo lys",
+  "notFound.logoDarkAlt": "octopus logo mørk",
 
   "user.logout": "Logg ut",
 
@@ -85,9 +85,9 @@ export const dict = {
 
   "home.title": "OpenCode | Den åpne kildekode AI-kodingsagenten",
 
-  "temp.title": "opencode | AI-kodingsagent bygget for terminalen",
+  "temp.title": "octopus | AI-kodingsagent bygget for terminalen",
   "temp.hero.title": "AI-kodingsagenten bygget for terminalen",
-  "temp.zen": "opencode zen",
+  "temp.zen": "octopus zen",
   "temp.getStarted": "Kom i gang",
   "temp.feature.native.title": "Native TUI",
   "temp.feature.native.body": "Et responsivt, native terminal-brukergrensesnitt som kan temes",
@@ -96,10 +96,10 @@ export const dict = {
   "temp.feature.zen.afterLink": "levert av opencode",
   "temp.feature.models.beforeLink": "Støtter 75+ LLM-leverandører gjennom",
   "temp.feature.models.afterLink": ", inkludert lokale modeller",
-  "temp.screenshot.caption": "opencode TUI med tokyonight-tema",
-  "temp.screenshot.alt": "opencode TUI med tokyonight-tema",
-  "temp.logoLightAlt": "opencode logo lys",
-  "temp.logoDarkAlt": "opencode logo mørk",
+  "temp.screenshot.caption": "octopus TUI med tokyonight-tema",
+  "temp.screenshot.alt": "octopus TUI med tokyonight-tema",
+  "temp.logoLightAlt": "octopus logo lys",
+  "temp.logoDarkAlt": "octopus logo mørk",
 
   "home.banner.badge": "Ny",
   "home.banner.text": "Desktop-app tilgjengelig i beta",

@@ -149,7 +149,7 @@ export interface Interface {
   readonly outgoingCalls: (input: LocInput) => Effect.Effect<any[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LSP") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/LSP") {}
 
 export const layer = Layer.effect(
   Service,

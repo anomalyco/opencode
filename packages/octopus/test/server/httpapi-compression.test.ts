@@ -36,7 +36,7 @@ describe("HttpApi compression", () => {
     test("gzips JSON when Accept-Encoding includes gzip and body exceeds threshold", async () => {
       await using tmp = await tmpdir({ config: fatConfig() })
       const response = await app().request("/config", {
-        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "gzip" },
+        headers: { "x-octopus-directory": tmp.path, "accept-encoding": "gzip" },
       })
       expect(response.status).toBe(200)
       expect(response.headers.get("content-encoding")).toBe("gzip")
@@ -50,7 +50,7 @@ describe("HttpApi compression", () => {
     test("uses deflate when only deflate is acceptable", async () => {
       await using tmp = await tmpdir({ config: fatConfig() })
       const response = await app().request("/config", {
-        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "deflate" },
+        headers: { "x-octopus-directory": tmp.path, "accept-encoding": "deflate" },
       })
       expect(response.status).toBe(200)
       expect(response.headers.get("content-encoding")).toBe("deflate")
@@ -63,7 +63,7 @@ describe("HttpApi compression", () => {
     test("prefers gzip when both gzip and deflate are acceptable", async () => {
       await using tmp = await tmpdir({ config: fatConfig() })
       const response = await app().request("/config", {
-        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "gzip, deflate" },
+        headers: { "x-octopus-directory": tmp.path, "accept-encoding": "gzip, deflate" },
       })
       expect(response.headers.get("content-encoding")).toBe("gzip")
     })
@@ -71,7 +71,7 @@ describe("HttpApi compression", () => {
     test("does not include the original Content-Length when compressed", async () => {
       await using tmp = await tmpdir({ config: fatConfig() })
       const response = await app().request("/config", {
-        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "gzip" },
+        headers: { "x-octopus-directory": tmp.path, "accept-encoding": "gzip" },
       })
       const compressed = new Uint8Array(await response.arrayBuffer())
       const declared = response.headers.get("content-length")
@@ -84,7 +84,7 @@ describe("HttpApi compression", () => {
     test("when no Accept-Encoding header is present", async () => {
       await using tmp = await tmpdir({ config: fatConfig() })
       const response = await app().request("/config", {
-        headers: { "x-opencode-directory": tmp.path },
+        headers: { "x-octopus-directory": tmp.path },
       })
       expect(response.headers.get("content-encoding")).toBeNull()
     })
@@ -92,7 +92,7 @@ describe("HttpApi compression", () => {
     test("when Accept-Encoding only allows unsupported encodings", async () => {
       await using tmp = await tmpdir({ config: fatConfig() })
       const response = await app().request("/config", {
-        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "br" },
+        headers: { "x-octopus-directory": tmp.path, "accept-encoding": "br" },
       })
       expect(response.headers.get("content-encoding")).toBeNull()
     })
@@ -101,7 +101,7 @@ describe("HttpApi compression", () => {
       // A bare config produces a tiny response (~few hundred bytes).
       await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
       const response = await app().request("/config", {
-        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "gzip" },
+        headers: { "x-octopus-directory": tmp.path, "accept-encoding": "gzip" },
       })
       expect(response.status).toBe(200)
       const body = new Uint8Array(await response.arrayBuffer())
@@ -113,7 +113,7 @@ describe("HttpApi compression", () => {
       await using tmp = await tmpdir({ config: fatConfig() })
       const response = await app().request("/config", {
         method: "HEAD",
-        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "gzip" },
+        headers: { "x-octopus-directory": tmp.path, "accept-encoding": "gzip" },
       })
       expect(response.headers.get("content-encoding")).toBeNull()
     })
@@ -124,7 +124,7 @@ describe("HttpApi compression", () => {
       await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
       const controller = new AbortController()
       const response = await app().request("/event", {
-        headers: { "x-opencode-directory": tmp.path, "accept-encoding": "gzip" },
+        headers: { "x-octopus-directory": tmp.path, "accept-encoding": "gzip" },
         signal: controller.signal,
       })
       try {

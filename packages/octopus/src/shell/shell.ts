@@ -169,7 +169,7 @@ export function args(file: string, command: string, cwd: string) {
         cd -- "$1"
         eval ${JSON.stringify(command)}
       `,
-      "opencode",
+      "octopus",
       cwd,
     ]
   }
@@ -183,7 +183,7 @@ export function args(file: string, command: string, cwd: string) {
         cd -- "$1"
         eval ${JSON.stringify(command)}
       `,
-      "opencode",
+      "octopus",
       cwd,
     ]
   }

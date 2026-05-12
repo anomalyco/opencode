@@ -84,9 +84,9 @@ export const dict = {
 
   "home.title": "OpenCode | Open source'owy agent AI do kodowania",
 
-  "temp.title": "opencode | Agent AI do kodowania zbudowany dla terminala",
+  "temp.title": "octopus | Agent AI do kodowania zbudowany dla terminala",
   "temp.hero.title": "Agent AI do kodowania zbudowany dla terminala",
-  "temp.zen": "opencode zen",
+  "temp.zen": "octopus zen",
   "temp.getStarted": "Rozpocznij",
   "temp.feature.native.title": "Natywny TUI",
   "temp.feature.native.body": "Responsywny, natywny, tematyczny interfejs terminala",

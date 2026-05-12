@@ -393,7 +393,7 @@ description: A skill in the .agents/skills directory.
               Bun.write(
                 path.join(dir, ".opencode", "skill", "agent-skill", "SKILL.md"),
                 `---
-name: opencode-skill
+name: octopus-skill
 description: A skill in the .opencode/skill directory.
 ---
 
@@ -403,7 +403,7 @@ description: A skill in the .opencode/skill directory.
               Bun.write(
                 path.join(dir, ".opencode", "skills", "agent-skill", "SKILL.md"),
                 `---
-name: opencode-skill
+name: octopus-skill
 description: A skill in the .opencode/skills directory.
 ---
 

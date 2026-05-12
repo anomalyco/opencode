@@ -83,7 +83,7 @@ export const WebFetchTool = Tool.define(
               () =>
                 httpOk.execute(
                   HttpClientRequest.get(params.url).pipe(
-                    HttpClientRequest.setHeaders({ ...headers, "User-Agent": "opencode" }),
+                    HttpClientRequest.setHeaders({ ...headers, "User-Agent": "octopus" }),
                   ),
                 ),
             ),

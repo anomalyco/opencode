@@ -43,8 +43,8 @@ export const dict = {
   "notFound.docs": "Dokümantasyon",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode açık logo",
-  "notFound.logoDarkAlt": "opencode koyu logo",
+  "notFound.logoLightAlt": "octopus açık logo",
+  "notFound.logoDarkAlt": "octopus koyu logo",
 
   "user.logout": "Çıkış",
 
@@ -85,21 +85,21 @@ export const dict = {
 
   "home.title": "OpenCode | Açık kaynaklı yapay zeka kodlama ajanı",
 
-  "temp.title": "opencode | Terminal için geliştirilmiş yapay zeka kodlama ajanı",
+  "temp.title": "octopus | Terminal için geliştirilmiş yapay zeka kodlama ajanı",
   "temp.hero.title": "Terminal için geliştirilmiş yapay zeka kodlama ajanı",
-  "temp.zen": "opencode zen",
+  "temp.zen": "octopus zen",
   "temp.getStarted": "Başlayın",
   "temp.feature.native.title": "Yerel (Native) TUI",
   "temp.feature.native.body": "Duyarlı, yerel, temalandırılabilir bir terminal arayüzü",
-  "temp.feature.zen.beforeLink": "opencode tarafından sağlanan ",
+  "temp.feature.zen.beforeLink": "octopus tarafından sağlanan ",
   "temp.feature.zen.link": "seçkin modeller listesi",
   "temp.feature.zen.afterLink": "",
   "temp.feature.models.beforeLink": "Yerel modeller dahil 75+ LLM sağlayıcısını ",
   "temp.feature.models.afterLink": " üzerinden destekler",
-  "temp.screenshot.caption": "opencode TUI ve tokyonight teması",
+  "temp.screenshot.caption": "octopus TUI ve tokyonight teması",
   "temp.screenshot.alt": "tokyonight temalı opencode TUI",
-  "temp.logoLightAlt": "opencode açık logo",
-  "temp.logoDarkAlt": "opencode koyu logo",
+  "temp.logoLightAlt": "octopus açık logo",
+  "temp.logoDarkAlt": "octopus koyu logo",
 
   "home.banner.badge": "Yeni",
   "home.banner.text": "Masaüstü uygulaması beta olarak mevcut",
@@ -456,7 +456,7 @@ export const dict = {
   "workspace.newUser.step.login.before": "Çalıştır",
   "workspace.newUser.step.login.after": "ve opencode seçeneğini seçin",
   "workspace.newUser.step.pasteKey": "API anahtarınızı yapıştırın",
-  "workspace.newUser.step.models.before": "opencode'u başlatın ve çalıştırın",
+  "workspace.newUser.step.models.before": "octopus'u başlatın ve çalıştırın",
   "workspace.newUser.step.models.after": "bir model seçmek için",
 
   "workspace.models.title": "Modeller",
@@ -502,7 +502,7 @@ export const dict = {
   "workspace.cost.subscriptionShort": "abonelik",
 
   "workspace.keys.title": "API Anahtarları",
-  "workspace.keys.subtitle": "opencode hizmetlerine erişim için API anahtarlarınızı yönetin.",
+  "workspace.keys.subtitle": "octopus hizmetlerine erişim için API anahtarlarınızı yönetin.",
   "workspace.keys.create": "API Anahtarı Oluştur",
   "workspace.keys.placeholder": "Anahtar adını girin",
   "workspace.keys.empty": "Bir opencode Gateway API anahtarı oluşturun",

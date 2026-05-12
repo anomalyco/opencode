@@ -74,7 +74,7 @@ export interface Interface {
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, unknown>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ShareNext") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/ShareNext") {}
 
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
   Effect.sync(() => Database.use(fn))

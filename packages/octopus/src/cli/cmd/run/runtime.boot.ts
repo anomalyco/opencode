@@ -58,7 +58,7 @@ type BootService = {
 
 const configTask: { current?: Promise<Config> } = {}
 
-class Service extends Context.Service<Service, BootService>()("@opencode/RunBoot") {}
+class Service extends Context.Service<Service, BootService>()("@octopus/RunBoot") {}
 
 function loadConfig() {
   return reusePendingTask(configTask, () => TuiConfig.get())

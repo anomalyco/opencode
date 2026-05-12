@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: ไคลเอนต์ JS ประเภทที่ปลอดภัยสำหรับเซิร์ฟเวอร์ opencode
+description: ไคลเอนต์ JS ประเภทที่ปลอดภัยสำหรับเซิร์ฟเวอร์ octopus
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK จัดเตรียมไคลเอ็นต์ประเภทที่ปลอดภัยสำหรับการโต้ตอบกับเซิร์ฟเวอร์
-ใช้เพื่อสร้างการบูรณาการและควบคุม opencode โดยทางโปรแกรม
+octopus JS/TS SDK จัดเตรียมไคลเอ็นต์ประเภทที่ปลอดภัยสำหรับการโต้ตอบกับเซิร์ฟเวอร์
+ใช้เพื่อสร้างการบูรณาการและควบคุม octopus โดยทางโปรแกรม
 
 [เรียนรู้เพิ่มเติม](/docs/server) เกี่ยวกับวิธีการทำงานของเซิร์ฟเวอร์ ตัวอย่างเช่น ลองดู [โครงการ](/docs/ecosystem#โครงการ) ที่สร้างโดยชุมชน
 
@@ -25,12 +25,12 @@ npm install @octopus-ai/sdk
 
 ## สร้างไคลเอนต์
 
-สร้างอินสแตนซ์ของ opencode:
+สร้างอินสแตนซ์ของ octopus:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOctopus()
 ```
 
 สิ่งนี้จะเริ่มต้นทั้งเซิร์ฟเวอร์และไคลเอนต์
@@ -52,9 +52,9 @@ const { client } = await createOpencode()
 คุณสามารถส่งผ่านออบเจ็กต์การกำหนดค่าเพื่อปรับแต่งลักษณะการทำงานได้ อินสแตนซ์ยังคงรับ `octopus.json` ของคุณ แต่คุณสามารถแทนที่หรือเพิ่มการกำหนดค่าแบบอินไลน์ได้:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const opencode = await createOpencode({
+const octopus = await createOctopus({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,19 +62,19 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${octopus.server.url}`)
 
-opencode.server.close()
+octopus.server.close()
 ```
 
 ## ลูกค้าเท่านั้น
 
-หากคุณมีอินสแตนซ์ opencode ที่ทำงานอยู่แล้ว คุณสามารถสร้างอินสแตนซ์ไคลเอ็นต์เพื่อเชื่อมต่อได้:
+หากคุณมีอินสแตนซ์ octopus ที่ทำงานอยู่แล้ว คุณสามารถสร้างอินสแตนซ์ไคลเอ็นต์เพื่อเชื่อมต่อได้:
 
 ```javascript
-import { createOpencodeClient } from "@octopus-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createOctopusClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*octopus" },
 })
 
 const files = await client.find.files({

@@ -82,8 +82,8 @@ describe("Project.fromDirectory", () => {
     expect(project.vcs).toBe("git")
     expect(project.worktree).toBe(tmp.path)
 
-    const opencodeFile = path.join(tmp.path, ".git", "opencode")
-    expect(await Bun.file(opencodeFile).exists()).toBe(false)
+    const octopusFile = path.join(tmp.path, ".git", "opencode")
+    expect(await Bun.file(octopusFile).exists()).toBe(false)
   })
 
   test("should handle git repository with commits", async () => {
@@ -96,8 +96,8 @@ describe("Project.fromDirectory", () => {
     expect(project.vcs).toBe("git")
     expect(project.worktree).toBe(tmp.path)
 
-    const opencodeFile = path.join(tmp.path, ".git", "opencode")
-    expect(await Bun.file(opencodeFile).exists()).toBe(true)
+    const octopusFile = path.join(tmp.path, ".git", "opencode")
+    expect(await Bun.file(octopusFile).exists()).toBe(true)
   })
 
   test("returns global for non-git directory", async () => {

@@ -46,7 +46,7 @@ export interface Interface {
   readonly contains: (target?: string) => Effect.Effect<boolean>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Reference") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Reference") {}
 
 export function referencePath(input: { directory: string; worktree: string; value: string }) {
   if (input.value.startsWith("~/")) return path.join(Global.Path.home, input.value.slice(2))

@@ -28,9 +28,9 @@ npm install @octopus-ai/sdk
 Opprett en forekomst av Octopus:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOctopus()
 ```
 
 Dette starter både en server og en klient
@@ -52,9 +52,9 @@ Dette starter både en server og en klient
 Du kan sende et konfigurasjonsobjekt for å tilpasse virkemåten. Forekomsten henter fortsatt din `octopus.json`, men du kan overstyre eller legge til konfigurasjon inline:
 
 ```javascript
-import { createOpencode } from "@octopus-ai/sdk"
+import { createOctopus } from "@octopus-ai/sdk"
 
-const opencode = await createOpencode({
+const octopus = await createOctopus({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,9 +62,9 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${octopus.server.url}`)
 
-opencode.server.close()
+octopus.server.close()
 ```
 
 ## Kun klient
@@ -72,9 +72,9 @@ opencode.server.close()
 Hvis du allerede har en kjørende forekomst av Octopus, kan du opprette en klientforekomst for å koble til den:
 
 ```javascript
-import { createOpencodeClient } from "@octopus-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createOctopusClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*octopus" },
 })
 
 const files = await client.find.files({

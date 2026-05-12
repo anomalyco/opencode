@@ -58,7 +58,7 @@ export interface Interface {
   readonly set: (sessionID: SessionID, status: Info) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStatus") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/SessionStatus") {}
 
 export const layer = Layer.effect(
   Service,

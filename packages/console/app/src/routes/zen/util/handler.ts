@@ -100,10 +100,10 @@ export async function handler(
     const ip = rawIp.includes(":") ? rawIp.split(":").slice(0, 4).join(":") : rawIp
     const rawZenApiKey = opts.parseApiKey(input.request.headers)
     const zenApiKey = rawZenApiKey === "public" ? undefined : rawZenApiKey
-    const sessionId = input.request.headers.get("x-opencode-session") ?? ""
-    const requestId = input.request.headers.get("x-opencode-request") ?? ""
-    const projectId = input.request.headers.get("x-opencode-project") ?? ""
-    const ocClient = input.request.headers.get("x-opencode-client") ?? ""
+    const sessionId = input.request.headers.get("x-octopus-session") ?? ""
+    const requestId = input.request.headers.get("x-octopus-request") ?? ""
+    const projectId = input.request.headers.get("x-octopus-project") ?? ""
+    const ocClient = input.request.headers.get("x-octopus-client") ?? ""
     const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
       is_stream: isStream,
@@ -190,10 +190,10 @@ export async function handler(
           })
           headers.delete("host")
           headers.delete("content-length")
-          headers.delete("x-opencode-request")
-          headers.delete("x-opencode-session")
-          headers.delete("x-opencode-project")
-          headers.delete("x-opencode-client")
+          headers.delete("x-octopus-request")
+          headers.delete("x-octopus-session")
+          headers.delete("x-octopus-project")
+          headers.delete("x-octopus-client")
           return headers
         })(),
         body: reqBody,

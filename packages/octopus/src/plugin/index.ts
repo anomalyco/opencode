@@ -53,7 +53,7 @@ export interface Interface {
   readonly init: () => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Plugin") {}
 
 // Built-in plugins that are directly imported (not installed from npm)
 const INTERNAL_PLUGINS: PluginInstance[] = [

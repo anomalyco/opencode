@@ -26,7 +26,7 @@ of the file:
 ```ts
 // src/foo/foo.ts
 export interface Interface { ... }
-export class Service extends Context.Service<Service, Interface>()("@opencode/Foo") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Foo") {}
 export const layer = Layer.effect(Service, ...)
 export const defaultLayer = layer.pipe(...)
 

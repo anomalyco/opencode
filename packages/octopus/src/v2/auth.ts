@@ -98,7 +98,7 @@ export interface Interface {
   readonly forService: (serviceID: ServiceID) => Effect.Effect<Account[], AuthError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Auth") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/v2/Auth") {}
 
 export const layer = Layer.effect(
   Service,

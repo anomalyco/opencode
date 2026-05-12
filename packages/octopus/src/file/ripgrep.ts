@@ -140,7 +140,7 @@ export interface Interface {
   readonly search: (input: SearchInput) => Effect.Effect<SearchResult, PlatformError | Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Ripgrep") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Ripgrep") {}
 
 function env() {
   const env = sanitizedProcessEnv()

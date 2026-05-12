@@ -43,8 +43,8 @@ export const dict = {
   "notFound.docs": "ドキュメント",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencodeのロゴ（ライト）",
-  "notFound.logoDarkAlt": "opencodeのロゴ（ダーク）",
+  "notFound.logoLightAlt": "octopusのロゴ（ライト）",
+  "notFound.logoDarkAlt": "octopusのロゴ（ダーク）",
 
   "user.logout": "ログアウト",
 
@@ -98,8 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "を通じて75以上のLLMプロバイダーをサポート",
   "temp.screenshot.caption": "tokyonight テーマを使用した OpenCode TUI",
   "temp.screenshot.alt": "tokyonight テーマの OpenCode TUI",
-  "temp.logoLightAlt": "opencodeのロゴ（ライト）",
-  "temp.logoDarkAlt": "opencodeのロゴ（ダーク）",
+  "temp.logoLightAlt": "octopusのロゴ（ライト）",
+  "temp.logoDarkAlt": "octopusのロゴ（ダーク）",
 
   "home.banner.badge": "新着",
   "home.banner.text": "デスクトップアプリのベータ版が利用可能",

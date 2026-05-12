@@ -222,7 +222,7 @@ describe("provider HttpApi", () => {
     "serves OAuth authorize response shapes",
     withProviderProject((dir) =>
       Effect.gen(function* () {
-        const headers = { "x-opencode-directory": dir, "content-type": "application/json" }
+        const headers = { "x-octopus-directory": dir, "content-type": "application/json" }
         const server = app()
 
         const api = yield* requestAuthorize({
@@ -275,7 +275,7 @@ describe("provider HttpApi", () => {
           if (previous !== undefined) process.env.OCTOPUS_AUTH_CONTENT = previous
         }),
       )
-      const headers = { "x-opencode-directory": dir }
+      const headers = { "x-octopus-directory": dir }
       const providerResponse = yield* Effect.promise(() => Promise.resolve(app().request("/provider", { headers })))
       const configResponse = yield* Effect.promise(() =>
         Promise.resolve(app().request("/config/providers", { headers })),
@@ -305,7 +305,7 @@ describe("provider HttpApi", () => {
       )
       yield* writeProviderModelsMutationPlugin(dir)
 
-      const headers = { "x-opencode-directory": dir }
+      const headers = { "x-octopus-directory": dir }
       const providerResponse = yield* Effect.promise(() => Promise.resolve(app().request("/provider", { headers })))
       const configResponse = yield* Effect.promise(() =>
         Promise.resolve(app().request("/config/providers", { headers })),

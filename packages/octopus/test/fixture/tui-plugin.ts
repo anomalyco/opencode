@@ -134,7 +134,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
   let depth = 0
   let size: "medium" | "large" | "xlarge" = "medium"
   const has = opts.theme?.has ?? (() => false)
-  let selected = opts.theme?.selected ?? "opencode"
+  let selected = opts.theme?.selected ?? "octopus"
   const set =
     opts.theme?.set ??
     ((name: string) => {

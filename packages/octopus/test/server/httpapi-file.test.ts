@@ -20,7 +20,7 @@ function request(route: string, directory: string, query?: Record<string, string
   return ExperimentalHttpApiServer.webHandler().handler(
     new Request(url, {
       headers: {
-        "x-opencode-directory": directory,
+        "x-octopus-directory": directory,
       },
     }),
     context,

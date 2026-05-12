@@ -239,7 +239,7 @@ export interface GenerateMethod {
   <T extends Tools>(options: ToolRuntime.RunOptions<T>): Effect.Effect<LLMResponse, LLMError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/LLMClient") {}
 
 const noRoute = (model: ModelRef) =>
   new LLMErrorClass({

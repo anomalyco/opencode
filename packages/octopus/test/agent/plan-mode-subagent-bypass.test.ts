@@ -1,5 +1,5 @@
 /**
- * Reproducer for opencode issue #26514:
+ * Reproducer for octopus issue #26514:
  *
  * In Plan Mode (the `plan` agent), the main agent's edit/write tools are
  * blocked by the plan agent's permission ruleset (`edit: { "*": "deny" }`).

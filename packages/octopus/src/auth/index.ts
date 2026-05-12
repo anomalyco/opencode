@@ -48,7 +48,7 @@ export interface Interface {
   readonly remove: (key: string) => Effect.Effect<void, AuthError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Auth") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Auth") {}
 
 export const layer = Layer.effect(
   Service,

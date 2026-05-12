@@ -22,7 +22,7 @@ describe("ServerAuth", () => {
     expect(ServerAuth.headers()).toBeUndefined()
   })
 
-  test("defaults to the opencode username", () => {
+  test("defaults to the octopus username", () => {
     Flag.OCTOPUS_SERVER_PASSWORD = "secret"
     Flag.OCTOPUS_SERVER_USERNAME = undefined
 

@@ -43,8 +43,8 @@ export const dict = {
   "notFound.docs": "Documentación",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode logo claro",
-  "notFound.logoDarkAlt": "opencode logo oscuro",
+  "notFound.logoLightAlt": "octopus logo claro",
+  "notFound.logoDarkAlt": "octopus logo oscuro",
 
   "user.logout": "Cerrar sesión",
 
@@ -85,9 +85,9 @@ export const dict = {
 
   "home.title": "OpenCode | El agente de codificación IA de código abierto",
 
-  "temp.title": "opencode | Agente de codificación IA creado para la terminal",
+  "temp.title": "octopus | Agente de codificación IA creado para la terminal",
   "temp.hero.title": "El agente de codificación IA creado para la terminal",
-  "temp.zen": "opencode zen",
+  "temp.zen": "octopus zen",
   "temp.getStarted": "Empezar",
   "temp.feature.native.title": "TUI Nativa",
   "temp.feature.native.body": "Una interfaz de terminal responsiva, nativa y personalizable",
@@ -96,8 +96,8 @@ export const dict = {
   "temp.feature.zen.afterLink": "proporcionada por opencode",
   "temp.feature.models.beforeLink": "Soporta más de 75 proveedores de LLM a través de",
   "temp.feature.models.afterLink": ", incluyendo modelos locales",
-  "temp.screenshot.caption": "opencode TUI con el tema tokyonight",
-  "temp.screenshot.alt": "opencode TUI con tema tokyonight",
+  "temp.screenshot.caption": "octopus TUI con el tema tokyonight",
+  "temp.screenshot.alt": "octopus TUI con tema tokyonight",
   "temp.logoLightAlt": "logo de opencode claro",
   "temp.logoDarkAlt": "logo de opencode oscuro",
 

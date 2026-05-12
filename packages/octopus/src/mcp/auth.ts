@@ -47,7 +47,7 @@ export interface Interface {
   readonly isTokenExpired: (mcpName: string) => Effect.Effect<boolean | null>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/McpAuth") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/McpAuth") {}
 
 export const layer = Layer.effect(
   Service,

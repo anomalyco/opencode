@@ -75,13 +75,13 @@ type TmpDirOptions<T> = {
   dispose?: (dir: string) => Promise<T>
 }
 export async function tmpdir<T>(options?: TmpDirOptions<T>) {
-  const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
+  const dirpath = sanitizePath(path.join(os.tmpdir(), "octopus-test-" + Math.random().toString(36).slice(2)))
   await fs.mkdir(dirpath, { recursive: true })
   if (options?.git) {
     await $`git init`.cwd(dirpath).quiet()
     await $`git config core.fsmonitor false`.cwd(dirpath).quiet()
     await $`git config commit.gpgsign false`.cwd(dirpath).quiet()
-    await $`git config user.email "test@opencode.test"`.cwd(dirpath).quiet()
+    await $`git config user.email "test@octopus.test"`.cwd(dirpath).quiet()
     await $`git config user.name "Test"`.cwd(dirpath).quiet()
     await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
   }
@@ -115,7 +115,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
 export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.Info> }) {
   return Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-    const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
+  const dirpath = sanitizePath(path.join(os.tmpdir(), "octopus-test-" + Math.random().toString(36).slice(2)))
     yield* Effect.promise(() => fs.mkdir(dirpath, { recursive: true }))
     const dir = sanitizePath(yield* Effect.promise(() => fs.realpath(dirpath)))
 
@@ -133,7 +133,7 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
       yield* git("init")
       yield* git("config", "core.fsmonitor", "false")
       yield* git("config", "commit.gpgsign", "false")
-      yield* git("config", "user.email", "test@opencode.test")
+      yield* git("config", "user.email", "test@octopus.test")
       yield* git("config", "user.name", "Test")
       yield* git("commit", "--allow-empty", "-m", "root commit")
     }

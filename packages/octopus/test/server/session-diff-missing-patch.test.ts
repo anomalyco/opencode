@@ -63,7 +63,7 @@ describe("session diff with missing patch (#26574)", () => {
               ),
             )
 
-            const headers = { "x-opencode-directory": tmp.path }
+            const headers = { "x-octopus-directory": tmp.path }
             const response = await Server.Default().app.request(pathFor(SessionPaths.diff, { sessionID: session.id }), {
               headers,
             })

@@ -41,8 +41,8 @@ export const dict = {
   "notFound.docs": "Docs",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode logo light",
-  "notFound.logoDarkAlt": "opencode logo dark",
+  "notFound.logoLightAlt": "octopus logo light",
+  "notFound.logoDarkAlt": "octopus logo dark",
 
   "user.logout": "Logout",
 
@@ -84,9 +84,9 @@ export const dict = {
 
   "home.title": "OpenCode | The open source AI coding agent",
 
-  "temp.title": "opencode | AI coding agent built for the terminal",
+  "temp.title": "octopus | AI coding agent built for the terminal",
   "temp.hero.title": "The AI coding agent built for the terminal",
-  "temp.zen": "opencode zen",
+  "temp.zen": "octopus zen",
   "temp.getStarted": "Get Started",
   "temp.feature.native.title": "Native TUI",
   "temp.feature.native.body": "A responsive, native, themeable terminal UI",
@@ -95,10 +95,10 @@ export const dict = {
   "temp.feature.zen.afterLink": "provided by opencode",
   "temp.feature.models.beforeLink": "Supports 75+ LLM providers through",
   "temp.feature.models.afterLink": ", including local models",
-  "temp.screenshot.caption": "opencode TUI with the tokyonight theme",
-  "temp.screenshot.alt": "opencode TUI with tokyonight theme",
-  "temp.logoLightAlt": "opencode logo light",
-  "temp.logoDarkAlt": "opencode logo dark",
+  "temp.screenshot.caption": "octopus TUI with the tokyonight theme",
+  "temp.screenshot.alt": "octopus TUI with tokyonight theme",
+  "temp.logoLightAlt": "octopus logo light",
+  "temp.logoDarkAlt": "octopus logo dark",
 
   "home.banner.badge": "New",
   "home.banner.text": "Desktop app available in beta",

@@ -19,7 +19,7 @@ export async function buildModelsResponse(models: string[]) {
           id,
           object: "model",
           created: Math.floor(Date.now() / 1000),
-          owned_by: "opencode",
+          owned_by: "octopus",
         })),
     }),
     {

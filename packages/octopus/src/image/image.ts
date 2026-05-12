@@ -52,7 +52,7 @@ export interface Interface {
   readonly normalize: (input: MessageV2.FilePart) => Effect.Effect<MessageV2.FilePart, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Image") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Image") {}
 
 export const layer = Layer.effect(
   Service,

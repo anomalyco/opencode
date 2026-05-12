@@ -901,7 +901,7 @@ describe("tool.shell permissions", () => {
                 Effect.runPromise(
                   bash.execute(
                     {
-                      command: "cat /tmp/opencode-does-not-exist",
+                      command: "cat /tmp/octopus-does-not-exist",
                       description: "Read Git Bash tmp file",
                     },
                     capture(requests, err),

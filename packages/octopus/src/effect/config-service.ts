@@ -28,7 +28,7 @@ export type ServiceClass<Self, Id extends string, Service> = Context.ServiceClas
  *
  * ```ts
  * class ServerAuthConfig extends ConfigService.Service<ServerAuthConfig>()(
- *   "@opencode/ServerAuthConfig",
+ *   "@octopus/ServerAuthConfig",
  *   {
  *     password: Config.string("OCTOPUS_SERVER_PASSWORD").pipe(Config.option),
  *     username: Config.string("OCTOPUS_SERVER_USERNAME").pipe(Config.withDefault("opencode")),

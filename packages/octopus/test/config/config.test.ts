@@ -314,7 +314,7 @@ test("loads project config from Cygwin paths on Windows", async () => {
   })
 })
 
-test("ignores legacy tui keys in opencode config", async () => {
+test("ignores legacy tui keys in octopus config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await writeConfig(dir, {
@@ -736,9 +736,9 @@ test("migrates mode field to agent field", async () => {
 test("loads config from .opencode directory", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      const agentDir = path.join(opencodeDir, "agent")
+      const octopusDir = path.join(dir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
+      const agentDir = path.join(octopusDir, "agent")
       await fs.mkdir(agentDir, { recursive: true })
 
       await Filesystem.write(
@@ -795,10 +795,10 @@ Ordered permissions`,
 test("loads agents from .opencode/agents (plural)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+      const octopusDir = path.join(dir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
 
-      const agentsDir = path.join(opencodeDir, "agents")
+      const agentsDir = path.join(octopusDir, "agents")
       await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
 
       await Filesystem.write(
@@ -846,10 +846,10 @@ Nested agent prompt`,
 test("loads commands from .opencode/command (singular)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+      const octopusDir = path.join(dir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
 
-      const commandDir = path.join(opencodeDir, "command")
+      const commandDir = path.join(octopusDir, "command")
       await fs.mkdir(path.join(commandDir, "nested"), { recursive: true })
 
       await Filesystem.write(
@@ -891,10 +891,10 @@ Nested command template`,
 test("loads commands from .opencode/commands (plural)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+      const octopusDir = path.join(dir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
 
-      const commandsDir = path.join(opencodeDir, "commands")
+      const commandsDir = path.join(octopusDir, "commands")
       await fs.mkdir(path.join(commandsDir, "nested"), { recursive: true })
 
       await Filesystem.write(
@@ -1088,8 +1088,8 @@ test("merges plugin arrays from global and local configs", async () => {
     init: async (dir) => {
       // Create a nested project structure with local .opencode config
       const projectDir = path.join(dir, "project")
-      const opencodeDir = path.join(projectDir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+      const octopusDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
 
       // Global config with plugins
       await Filesystem.write(
@@ -1102,7 +1102,7 @@ test("merges plugin arrays from global and local configs", async () => {
 
       // Local .opencode config with different plugins
       await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
+        path.join(octopusDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           plugin: ["local-plugin-1"],
@@ -1132,9 +1132,9 @@ test("merges plugin arrays from global and local configs", async () => {
 test("does not error when only custom agent is a subagent", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      const agentDir = path.join(opencodeDir, "agent")
+      const octopusDir = path.join(dir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
+      const agentDir = path.join(octopusDir, "agent")
       await fs.mkdir(agentDir, { recursive: true })
 
       await Filesystem.write(
@@ -1165,8 +1165,8 @@ test("merges instructions arrays from global and local configs", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const projectDir = path.join(dir, "project")
-      const opencodeDir = path.join(projectDir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+      const octopusDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
 
       await Filesystem.write(
         path.join(dir, "opencode.json"),
@@ -1177,7 +1177,7 @@ test("merges instructions arrays from global and local configs", async () => {
       )
 
       await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
+        path.join(octopusDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           instructions: ["local-instructions.md"],
@@ -1204,8 +1204,8 @@ test("deduplicates duplicate instructions from global and local configs", async 
   await using tmp = await tmpdir({
     init: async (dir) => {
       const projectDir = path.join(dir, "project")
-      const opencodeDir = path.join(projectDir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+      const octopusDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
 
       await Filesystem.write(
         path.join(dir, "opencode.json"),
@@ -1216,7 +1216,7 @@ test("deduplicates duplicate instructions from global and local configs", async 
       )
 
       await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
+        path.join(octopusDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           instructions: ["duplicate.md", "local-only.md"],
@@ -1247,8 +1247,8 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     init: async (dir) => {
       // Create a nested project structure with local .opencode config
       const projectDir = path.join(dir, "project")
-      const opencodeDir = path.join(projectDir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+      const octopusDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
 
       // Global config with plugins
       await Filesystem.write(
@@ -1261,7 +1261,7 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
 
       // Local .opencode config with some overlapping plugins
       await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
+        path.join(octopusDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           plugin: ["duplicate-plugin", "local-plugin-1"],
@@ -1834,10 +1834,10 @@ test("local .opencode config can override MCP from project config", async () => 
         }),
       )
       // Local .opencode directory config enables it
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+      const octopusDir = path.join(dir, ".opencode")
+      await fs.mkdir(octopusDir, { recursive: true })
       await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
+        path.join(octopusDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -2053,7 +2053,7 @@ describe("resolvePluginSpec", () => {
   test("keeps package specs unchanged", async () => {
     await using tmp = await tmpdir()
     const file = path.join(tmp.path, "opencode.json")
-    expect(await ConfigPlugin.resolvePluginSpec("oh-my-opencode@2.4.3", file)).toBe("oh-my-opencode@2.4.3")
+    expect(await ConfigPlugin.resolvePluginSpec("oh-my-octopus@2.4.3", file)).toBe("oh-my-octopus@2.4.3")
     expect(await ConfigPlugin.resolvePluginSpec("@scope/pkg", file)).toBe("@scope/pkg")
   })
 
@@ -2142,7 +2142,7 @@ describe("deduplicatePluginOrigins", () => {
   })
 
   test("keeps path plugins separate from package plugins", () => {
-    const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
+    const plugins = ["oh-my-octopus@2.4.3", "file:///project/.opencode/plugin/oh-my-octopus.js"]
 
     const result = dedupe(plugins)
 
@@ -2169,8 +2169,8 @@ describe("deduplicatePluginOrigins", () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const projectDir = path.join(dir, "project")
-        const opencodeDir = path.join(projectDir, ".opencode")
-        const pluginDir = path.join(opencodeDir, "plugin")
+        const octopusDir = path.join(projectDir, ".opencode")
+        const pluginDir = path.join(octopusDir, "plugin")
         await fs.mkdir(pluginDir, { recursive: true })
 
         await Filesystem.write(
@@ -2243,9 +2243,9 @@ describe("OCTOPUS_DISABLE_PROJECT_CONFIG", () => {
       await using tmp = await tmpdir({
         init: async (dir) => {
           // Create a .opencode directory with a command
-          const opencodeDir = path.join(dir, ".opencode", "command")
-          await fs.mkdir(opencodeDir, { recursive: true })
-          await Filesystem.write(path.join(opencodeDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
+          const octopusDir = path.join(dir, ".opencode", "command")
+          await fs.mkdir(octopusDir, { recursive: true })
+          await Filesystem.write(path.join(octopusDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
         },
       })
       await WithInstance.provide({
@@ -2469,8 +2469,8 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
           PayloadDisplayName: "OpenCode Managed",
-          PayloadIdentifier: "ai.opencode.managed.test",
-          PayloadType: "ai.opencode.managed",
+          PayloadIdentifier: "ai.octopus.managed.test",
+          PayloadType: "ai.octopus.managed",
           PayloadUUID: "AAAA-BBBB-CCCC",
           PayloadVersion: 1,
           _manualProfile: true,

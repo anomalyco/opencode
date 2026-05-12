@@ -12,7 +12,7 @@ export interface Interface {
   readonly unshare: (sessionID: SessionID) => Effect.Effect<void, unknown>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionShare") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/SessionShare") {}
 
 export const layer = Layer.effect(
   Service,

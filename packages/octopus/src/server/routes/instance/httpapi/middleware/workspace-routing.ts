@@ -46,7 +46,7 @@ export class WorkspaceRouteContext extends Context.Service<
     readonly directory: string
     readonly workspaceID?: WorkspaceID
   }
->()("@opencode/ExperimentalHttpApiWorkspaceRouteContext") {}
+>()("@octopus/ExperimentalHttpApiWorkspaceRouteContext") {}
 
 export class WorkspaceRoutingMiddleware extends HttpApiMiddleware.Service<
   WorkspaceRoutingMiddleware,
@@ -54,7 +54,7 @@ export class WorkspaceRoutingMiddleware extends HttpApiMiddleware.Service<
     provides: WorkspaceRouteContext
     requires: Session.Service
   }
->()("@opencode/ExperimentalHttpApiWorkspaceRouting") {}
+>()("@octopus/ExperimentalHttpApiWorkspaceRouting") {}
 
 function requestURL(request: HttpServerRequest.HttpServerRequest): URL {
   return new URL(request.url, "http://localhost")
@@ -70,7 +70,7 @@ function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceID): Worksp
 }
 
 function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
-  return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || process.cwd()
+  return url.searchParams.get("directory") || request.headers["x-octopus-directory"] || process.cwd()
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {

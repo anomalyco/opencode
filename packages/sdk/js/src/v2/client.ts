@@ -21,8 +21,8 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
   let changed = false
 
   for (const [name, key] of [
-    ["x-opencode-directory", "directory"],
-    ["x-opencode-workspace", "workspace"],
+    ["x-octopus-directory", "directory"],
+    ["x-octopus-workspace", "workspace"],
   ] as const) {
     const value = pick(
       request.headers.get(name),
@@ -39,8 +39,8 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
   if (!changed) return request
 
   const next = new Request(url, request)
-  next.headers.delete("x-opencode-directory")
-  next.headers.delete("x-opencode-workspace")
+  next.headers.delete("x-octopus-directory")
+  next.headers.delete("x-octopus-workspace")
   return next
 }
 
@@ -60,14 +60,14 @@ export function createOctopusClient(config?: Config & { directory?: string; expe
   if (config?.directory) {
     config.headers = {
       ...config.headers,
-      "x-opencode-directory": encodeURIComponent(config.directory),
+      "x-octopus-directory": encodeURIComponent(config.directory),
     }
   }
 
   if (config?.experimental_workspaceID) {
     config.headers = {
       ...config.headers,
-      "x-opencode-workspace": config.experimental_workspaceID,
+      "x-octopus-workspace": config.experimental_workspaceID,
     }
   }
 

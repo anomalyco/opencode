@@ -35,7 +35,7 @@ describe("sync HttpApi", () => {
   test("serves sync routes", async () => {
     Flag.OCTOPUS_EXPERIMENTAL_WORKSPACES = true
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const headers = { "x-octopus-directory": tmp.path, "content-type": "application/json" }
     const info = spyOn(Log.create({ service: "server.sync" }), "info")
 
     const session = await WithInstance.provide({
@@ -86,7 +86,7 @@ describe("sync HttpApi", () => {
 
   test("validates seq values", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const headers = { "x-octopus-directory": tmp.path, "content-type": "application/json" }
     const cases = [
       {
         path: SyncPaths.history,
@@ -127,7 +127,7 @@ describe("sync HttpApi", () => {
     const response = await ExperimentalHttpApiServer.webHandler().handler(
       new Request(`http://localhost${SyncPaths.history}`, {
         method: "POST",
-        headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
+        headers: { "x-octopus-directory": tmp.path, "content-type": "application/json" },
         body: JSON.stringify({ aggregate: -1 }),
       }),
       context,

@@ -85,9 +85,9 @@ export const dict = {
 
   "home.title": "OpenCode | وكيل برمجة بالذكاء الاصطناعي مفتوح المصدر",
 
-  "temp.title": "opencode | وكيل برمجة بالذكاء الاصطناعي مبني للطرفية",
+  "temp.title": "octopus | وكيل برمجة بالذكاء الاصطناعي مبني للطرفية",
   "temp.hero.title": "وكيل البرمجة بالذكاء الاصطناعي المبني للطرفية",
-  "temp.zen": "opencode zen",
+  "temp.zen": "octopus zen",
   "temp.getStarted": "ابدأ",
   "temp.feature.native.title": "واجهة طرفية أصلية",
   "temp.feature.native.body": "واجهة مستخدم طرفية سريعة الاستجابة، أصلية، وقابلة للتخصيص",

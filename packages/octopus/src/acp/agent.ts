@@ -509,18 +509,18 @@ export class Agent implements ACPAgent {
     log.info("initialize", { protocolVersion: params.protocolVersion })
 
     const authMethod: AuthMethod = {
-      description: "Run `opencode auth login` in the terminal",
-      name: "Login with opencode",
-      id: "opencode-login",
+      description: "Run `octopus auth login` in the terminal",
+      name: "Login with octopus",
+      id: "octopus-login",
     }
 
     // If client supports terminal-auth capability, use that instead.
     if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
       authMethod._meta = {
         "terminal-auth": {
-          command: "opencode",
+          command: "octopus",
           args: ["auth", "login"],
-          label: "OpenCode Login",
+          label: "Octopus Login",
         },
       }
     }
@@ -1698,9 +1698,9 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
   const lastUsed = await lastUsedModel(sdk, directory, providers)
   if (lastUsed) return lastUsed
 
-  const opencodeProvider = providers.find((p) => p.id === "opencode")
-  if (opencodeProvider) {
-    const [best] = Provider.sort(Object.values(opencodeProvider.models))
+  const octopusProvider = providers.find((p) => p.id === "octopus")
+  if (octopusProvider) {
+    const [best] = Provider.sort(Object.values(octopusProvider.models))
     if (best) {
       return {
         providerID: ProviderID.make(best.providerID),
@@ -1869,7 +1869,7 @@ function buildVariantMeta(input: {
   availableVariants: string[]
 }) {
   return {
-    opencode: {
+    octopus: {
       modelId: `${input.model.providerID}/${input.model.modelID}`,
       variant: input.variant ?? null,
       availableVariants: input.availableVariants,

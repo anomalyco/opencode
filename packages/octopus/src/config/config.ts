@@ -68,7 +68,7 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   delete copy.theme
   delete copy.keybinds
   delete copy.tui
-  log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
+  log.warn("tui keys in octopus config are deprecated; move them to tui.json", { path: source })
   return copy
 }
 
@@ -138,7 +138,7 @@ export const Info = Schema.Struct({
   }),
   logLevel: Schema.optional(LogLevelRef).annotate({ description: "Log level" }),
   server: Schema.optional(ConfigServer.Server).annotate({
-    description: "Server configuration for opencode serve and web commands",
+    description: "Server configuration for octopus serve and web commands",
   }),
   command: Schema.optional(Schema.Record(Schema.String, ConfigCommand.Info)).annotate({
     description: "Command configuration, see https://opencode.ai/docs/commands",
@@ -338,7 +338,7 @@ export interface Interface {
   readonly waitForDependencies: () => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
+export class Service extends Context.Service<Service, Interface>()("@octopus/Config") {}
 
 function globalConfigFile() {
   const candidates = ["octopus.jsonc", "octopus.json", "opencode.jsonc", "opencode.json", "config.json"].map((file) =>

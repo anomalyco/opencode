@@ -33,7 +33,7 @@ describe("config HttpApi", () => {
       method: "PATCH",
       headers: {
         "content-type": "application/json",
-        "x-opencode-directory": tmp.path,
+        "x-octopus-directory": tmp.path,
       },
       body: JSON.stringify({ username: "patched-user", formatter: false, lsp: false }),
     })
@@ -67,7 +67,7 @@ describe("config HttpApi", () => {
 
     const response = await app().request("/config", {
       headers: {
-        "x-opencode-directory": tmp.path,
+        "x-octopus-directory": tmp.path,
       },
     })
 

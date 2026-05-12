@@ -43,8 +43,8 @@ export const dict = {
   "notFound.docs": "문서",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode 밝은 로고",
-  "notFound.logoDarkAlt": "opencode 어두운 로고",
+  "notFound.logoLightAlt": "octopus 밝은 로고",
+  "notFound.logoDarkAlt": "octopus 어두운 로고",
 
   "user.logout": "로그아웃",
 
@@ -98,8 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "를 통해 75개 이상의 LLM 제공자 지원",
   "temp.screenshot.caption": "tokyonight 테마가 적용된 OpenCode TUI",
   "temp.screenshot.alt": "tokyonight 테마가 적용된 OpenCode TUI",
-  "temp.logoLightAlt": "opencode 밝은 로고",
-  "temp.logoDarkAlt": "opencode 어두운 로고",
+  "temp.logoLightAlt": "octopus 밝은 로고",
+  "temp.logoDarkAlt": "octopus 어두운 로고",
 
   "home.banner.badge": "신규",
   "home.banner.text": "데스크톱 앱 베타 버전 출시",
