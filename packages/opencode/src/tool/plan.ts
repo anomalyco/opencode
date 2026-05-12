@@ -4,6 +4,7 @@ import * as Tool from "./tool"
 import { Question } from "../question"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../session/message-v2"
+import { Agent } from "@/agent/agent"
 import { Provider } from "@/provider/provider"
 import { InstanceState } from "@/effect/instance-state"
 import { type SessionID, MessageID, PartID } from "../session/schema"
@@ -21,6 +22,7 @@ export const Parameters = Schema.Struct({})
 export const PlanExitTool = Tool.define(
   "plan_exit",
   Effect.gen(function* () {
+    const agents = yield* Agent.Service
     const session = yield* Session.Service
     const question = yield* Question.Service
     const provider = yield* Provider.Service
@@ -51,7 +53,8 @@ export const PlanExitTool = Tool.define(
 
           if (answers[0]?.[0] === "No") yield* new Question.RejectedError()
 
-          const model = getLastModel(ctx.sessionID) ?? (yield* provider.defaultModel())
+          const buildAgent = yield* agents.get("build")
+          const model = buildAgent.model ?? getLastModel(ctx.sessionID) ?? (yield* provider.defaultModel())
 
           const msg: MessageV2.User = {
             id: MessageID.ascending(),
