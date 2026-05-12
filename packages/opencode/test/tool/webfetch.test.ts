@@ -1,15 +1,14 @@
-import { describe, expect, test } from "bun:test"
-import path from "path"
+import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Tool } from "@/tool/tool"
+import { testEffect } from "../lib/effect"
 
-const projectRoot = path.join(import.meta.dir, "../..")
+const it = testEffect(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer))
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -22,30 +21,31 @@ const ctx = {
   ask: () => Effect.void,
 }
 
-async function withFetch(fetch: (req: Request) => Response | Promise<Response>, fn: (url: URL) => Promise<void>) {
-  using server = Bun.serve({ port: 0, fetch })
-  await fn(server.url)
-}
-
-function exec(args: { url: string; format: "text" | "markdown" | "html" }) {
-  return WebFetchTool.pipe(
-    Effect.flatMap((info) => info.init()),
-    Effect.flatMap((tool) => tool.execute(args, ctx)),
-    Effect.provide(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer)),
-    Effect.runPromise,
+const withFetch = <A, E, R>(
+  fetch: (req: Request) => Response | Promise<Response>,
+  fn: (url: URL) => Effect.Effect<A, E, R>,
+) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => Bun.serve({ port: 0, fetch })),
+    (server) => fn(server.url),
+    (server) => Effect.sync(() => server.stop(true)),
   )
-}
+
+const exec = Effect.fn("WebFetchToolTest.exec")(function* (args: Tool.InferParameters<typeof WebFetchTool>) {
+  const info = yield* WebFetchTool
+  const tool = yield* info.init()
+  return yield* tool.execute(args, ctx)
+})
 
 describe("tool.webfetch", () => {
-  test("returns image responses as file attachments", async () => {
-    const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
-    await withFetch(
-      () => new Response(bytes, { status: 200, headers: { "content-type": "IMAGE/PNG; charset=binary" } }),
-      async (url) => {
-        await WithInstance.provide({
-          directory: projectRoot,
-          fn: async () => {
-            const result = await exec({ url: new URL("/image.png", url).toString(), format: "markdown" })
+  it.instance("returns image responses as file attachments", () =>
+    Effect.gen(function* () {
+      const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+      yield* withFetch(
+        () => new Response(bytes, { status: 200, headers: { "content-type": "IMAGE/PNG; charset=binary" } }),
+        (url) =>
+          Effect.gen(function* () {
+            const result = yield* exec({ url: new URL("/image.png", url).toString(), format: "markdown" })
             expect(result.output).toBe("Image fetched successfully")
             expect(result.attachments).toBeDefined()
             expect(result.attachments?.length).toBe(1)
@@ -55,50 +55,40 @@ describe("tool.webfetch", () => {
             expect(result.attachments?.[0]).not.toHaveProperty("id")
             expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
             expect(result.attachments?.[0]).not.toHaveProperty("messageID")
-          },
-        })
-      },
-    )
-  })
+          }),
+      )
+    }),
+  )
 
-  test("keeps svg as text output", async () => {
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><text>hello</text></svg>'
-    await withFetch(
+  it.instance("keeps svg as text output", () =>
+    withFetch(
       () =>
-        new Response(svg, {
+        new Response('<svg xmlns="http://www.w3.org/2000/svg"><text>hello</text></svg>', {
           status: 200,
           headers: { "content-type": "image/svg+xml; charset=UTF-8" },
         }),
-      async (url) => {
-        await WithInstance.provide({
-          directory: projectRoot,
-          fn: async () => {
-            const result = await exec({ url: new URL("/image.svg", url).toString(), format: "html" })
-            expect(result.output).toContain("<svg")
-            expect(result.attachments).toBeUndefined()
-          },
-        })
-      },
-    )
-  })
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/image.svg", url).toString(), format: "html" })
+          expect(result.output).toContain("<svg")
+          expect(result.attachments).toBeUndefined()
+        }),
+    ),
+  )
 
-  test("keeps text responses as text output", async () => {
-    await withFetch(
+  it.instance("keeps text responses as text output", () =>
+    withFetch(
       () =>
         new Response("hello from webfetch", {
           status: 200,
           headers: { "content-type": "text/plain; charset=utf-8" },
         }),
-      async (url) => {
-        await WithInstance.provide({
-          directory: projectRoot,
-          fn: async () => {
-            const result = await exec({ url: new URL("/file.txt", url).toString(), format: "text" })
-            expect(result.output).toBe("hello from webfetch")
-            expect(result.attachments).toBeUndefined()
-          },
-        })
-      },
-    )
-  })
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/file.txt", url).toString(), format: "text" })
+          expect(result.output).toBe("hello from webfetch")
+          expect(result.attachments).toBeUndefined()
+        }),
+    ),
+  )
 })
