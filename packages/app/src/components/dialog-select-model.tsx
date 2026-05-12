@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createMemo, JSX, Show, ValidComponent } from "solid-js"
+import { Component, ComponentProps, createMemo, getOwner, JSX, runWithOwner, Show, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -16,6 +16,35 @@ import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 
+function logModelOpen(kind: string, fields: Record<string, string | number | boolean | undefined>) {
+  const line = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ")
+  console.debug(`[model:open] ${kind} ${line}`)
+}
+
+function logStage(stage: string, fields: Record<string, string | number | boolean | undefined>) {
+  const line = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ")
+  console.debug(`[open:stage] name=model-selector stage=${stage} ${line}`)
+}
+
+function since(at: number) {
+  return at ? Math.round(performance.now() - at) : "none"
+}
+
+function rect(el: HTMLElement | undefined) {
+  if (!el) return
+  const box = el.getBoundingClientRect()
+  return {
+    width: Math.round(box.width),
+    height: Math.round(box.height),
+    top: Math.round(box.top),
+    left: Math.round(box.left),
+  }
+}
+
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
@@ -29,6 +58,7 @@ const ModelList: Component<{
   model?: ModelState
   tooltip?: boolean
 }> = (props) => {
+  const owner = getOwner()
   const model = props.model ?? useLocal().model
   const language = useLanguage()
 
@@ -42,6 +72,7 @@ const ModelList: Component<{
   return (
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-viewport]]:flex-1 [&_[data-slot=list-viewport]]:min-h-0 ${props.class ?? ""}`}
+      virtual={false}
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
@@ -60,16 +91,17 @@ const ModelList: Component<{
       itemWrapper={
         props.tooltip === false
           ? undefined
-          : (item, node) => (
-              <Tooltip
-                class="w-full"
-                placement="right-start"
-                gutter={12}
-                value={<ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} />}
-              >
-                {node}
-              </Tooltip>
-            )
+          : (item, node) =>
+              runWithOwner(owner, () => (
+                <Tooltip
+                  class="w-full"
+                  placement="right-start"
+                  gutter={12}
+                  value={<ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} />}
+                >
+                  {node}
+                </Tooltip>
+              ))
       }
       onSelect={(x) => {
         model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
@@ -105,6 +137,7 @@ export function ModelSelectorPopover(props: {
   triggerProps?: ModelSelectorTriggerProps
   onOpenChange?: (open: boolean) => void
 }) {
+  const model = props.model ?? useLocal().model
   const [store, setStore] = createStore<{
     open: boolean
     dismiss: Dismiss | null
@@ -114,6 +147,14 @@ export function ModelSelectorPopover(props: {
   })
   const dialog = useDialog()
   const platform = usePlatform()
+  let content: HTMLDivElement | undefined
+  let seq = 0
+  let measureAt = 0
+  let measureCount = 0
+  let resizeAt = 0
+  let resizeCount = 0
+  let resizeObserver: ResizeObserver | undefined
+  let stageAt = 0
 
   const close = (dismiss: Dismiss) => {
     setStore("dismiss", dismiss)
@@ -139,9 +180,174 @@ export function ModelSelectorPopover(props: {
     <Kobalte
       open={store.open}
       onOpenChange={(next) => {
+        const id = ++seq
+        if (next && stageAt === 0) stageAt = performance.now()
+        if (!next) stageAt = 0
         if (next) setStore("dismiss", null)
         setStore("open", next)
+        if (next) {
+          logStage("after-set-open", {
+            seq: id,
+            ms: since(stageAt),
+            content: !!content,
+          })
+        }
+        logModelOpen("open-change", {
+          seq: id,
+          open: next,
+          dismiss: store.dismiss ?? "none",
+          content: !!content,
+        })
+        logStage("open-change", {
+          seq: id,
+          ms: stageAt ? Math.round(performance.now() - stageAt) : 0,
+          open: next,
+          content: !!content,
+        })
+        if (!next && resizeObserver) {
+          resizeObserver.disconnect()
+          resizeObserver = undefined
+        }
+        if (next) {
+          const list = model.list().filter((item) => (props.provider ? item.provider.id === props.provider : true))
+          const visible = list.filter((item) =>
+            model.visible({ modelID: item.id, providerID: item.provider.id }),
+          )
+          logModelOpen("toggle", {
+            open: next,
+            total: list.length,
+            visible: visible.length,
+            provider: props.provider ?? "all",
+            current: model.current()?.id ?? "none",
+          })
+          logStage("after-list", {
+            seq: id,
+            ms: since(stageAt),
+            total: list.length,
+            visible: visible.length,
+          })
+          measureAt = performance.now()
+          measureCount = 0
+          logStage("raf-request", {
+            seq: id,
+            ms: since(stageAt),
+          })
+          queueMicrotask(() => {
+            if (id !== seq) return
+            logStage("microtask", {
+              seq: id,
+              ms: since(stageAt),
+              content: !!content,
+            })
+          })
+          setTimeout(() => {
+            if (id !== seq) return
+            logStage("timeout-0", {
+              seq: id,
+              ms: since(stageAt),
+              content: !!content,
+            })
+          }, 0)
+          requestAnimationFrame(() => {
+            if (id !== seq) return
+            const el = content
+            const box = rect(el)
+            measureCount += 1
+            logModelOpen("frame-1", {
+              seq: id,
+              stageMs: stageAt ? Math.round(performance.now() - stageAt) : "none",
+              measures: measureCount,
+              ms: Math.round(performance.now() - measureAt),
+              nodes: el ? el.querySelectorAll("*").length : "none",
+              items: el ? el.querySelectorAll('[data-slot="list-item"], [data-slot="select-select-item"]').length : "none",
+              groups: el ? el.querySelectorAll('[data-slot="list-group"], [data-slot="select-section"]').length : "none",
+              width: box?.width ?? "none",
+              height: box?.height ?? "none",
+              top: box?.top ?? "none",
+              left: box?.left ?? "none",
+            })
+            logStage("frame-1", {
+              seq: id,
+              ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+              nodes: el ? el.querySelectorAll("*").length : "none",
+              items: el ? el.querySelectorAll('[data-slot="list-item"], [data-slot="select-select-item"]').length : "none",
+              width: box?.width ?? "none",
+              height: box?.height ?? "none",
+              top: box?.top ?? "none",
+              left: box?.left ?? "none",
+            })
+            requestAnimationFrame(() => {
+              if (id !== seq) return
+              const nextEl = content
+              const nextBox = rect(nextEl)
+              measureCount += 1
+              logModelOpen("frame-2", {
+                seq: id,
+                stageMs: stageAt ? Math.round(performance.now() - stageAt) : "none",
+                measures: measureCount,
+                ms: Math.round(performance.now() - measureAt),
+                nodes: nextEl ? nextEl.querySelectorAll("*").length : "none",
+                items: nextEl ? nextEl.querySelectorAll('[data-slot="list-item"], [data-slot="select-select-item"]').length : "none",
+                groups: nextEl ? nextEl.querySelectorAll('[data-slot="list-group"], [data-slot="select-section"]').length : "none",
+                width: nextBox?.width ?? "none",
+                height: nextBox?.height ?? "none",
+                top: nextBox?.top ?? "none",
+                left: nextBox?.left ?? "none",
+              })
+              logStage("frame-2", {
+                seq: id,
+                ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+                nodes: nextEl ? nextEl.querySelectorAll("*").length : "none",
+                items: nextEl ? nextEl.querySelectorAll('[data-slot="list-item"], [data-slot="select-select-item"]').length : "none",
+                width: nextBox?.width ?? "none",
+                height: nextBox?.height ?? "none",
+                top: nextBox?.top ?? "none",
+                left: nextBox?.left ?? "none",
+              })
+              if (box && nextBox) {
+                logModelOpen("jump", {
+                  seq: id,
+                  stageMs: stageAt ? Math.round(performance.now() - stageAt) : "none",
+                  dWidth: nextBox.width - box.width,
+                  dHeight: nextBox.height - box.height,
+                  dTop: nextBox.top - box.top,
+                  dLeft: nextBox.left - box.left,
+                })
+                logStage("jump", {
+                  seq: id,
+                  ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+                  dWidth: nextBox.width - box.width,
+                  dHeight: nextBox.height - box.height,
+                  dTop: nextBox.top - box.top,
+                  dLeft: nextBox.left - box.left,
+                })
+              }
+            })
+          })
+          requestAnimationFrame(() => {
+            if (id !== seq) return
+            const el = content
+            if (!el) return
+            measureCount += 1
+            logModelOpen("content", {
+              seq: id,
+              measures: measureCount,
+              ms: Math.round(performance.now() - measureAt),
+              nodes: el.querySelectorAll("*").length,
+              items: el.querySelectorAll('[data-slot="list-item"], [data-slot="select-select-item"]').length,
+              groups: el.querySelectorAll('[data-slot="list-group"], [data-slot="select-section"]').length,
+              height: Math.round(el.getBoundingClientRect().height),
+            })
+          })
+        }
         props.onOpenChange?.(next)
+        if (next) {
+          logStage("after-parent", {
+            seq: id,
+            ms: since(stageAt),
+            content: !!content,
+          })
+        }
       }}
       modal={false}
       placement="top-start"
@@ -152,24 +358,109 @@ export function ModelSelectorPopover(props: {
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
+          ref={(el) => {
+            resizeObserver?.disconnect()
+            resizeObserver = undefined
+            content = el
+            if (el) stageAt = performance.now()
+            const box = rect(el)
+            logModelOpen("mount", {
+              seq,
+              width: box?.width ?? "none",
+              height: box?.height ?? "none",
+              top: box?.top ?? "none",
+              left: box?.left ?? "none",
+            })
+            logStage("content-mount", {
+              seq,
+              ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+              mounted: !!el,
+              width: box?.width ?? "none",
+              height: box?.height ?? "none",
+              top: box?.top ?? "none",
+              left: box?.left ?? "none",
+            })
+            if (!el) return
+            resizeAt = performance.now()
+            resizeCount = 0
+            resizeObserver = new ResizeObserver(() => {
+              resizeCount += 1
+              const now = performance.now()
+              const ms = Math.round(now - resizeAt)
+              if (ms > 1200 || resizeCount > 8) {
+                resizeObserver?.disconnect()
+                resizeObserver = undefined
+                return
+              }
+              const next = rect(el)
+              logModelOpen("resize", {
+                seq,
+                count: resizeCount,
+                ms,
+                width: next?.width ?? "none",
+                height: next?.height ?? "none",
+                top: next?.top ?? "none",
+                left: next?.left ?? "none",
+                nodes: el.querySelectorAll("*").length,
+                items: el.querySelectorAll('[data-slot="list-item"], [data-slot="select-select-item"]').length,
+              })
+            })
+            resizeObserver.observe(el)
+          }}
           data-component="popover-content"
           class="w-72 h-80 flex flex-col p-2 overflow-hidden"
           style={props.style}
           onEscapeKeyDown={(event) => {
-            close("escape")
+            logModelOpen("close", {
+              seq,
+              reason: "escape",
+            })
+            setStore("dismiss", "escape")
+            setStore("open", false)
             event.preventDefault()
             event.stopPropagation()
           }}
-          onPointerDownOutside={() => close("outside")}
-          onFocusOutside={() => close("outside")}
+          onPointerDownOutside={() => {
+            logModelOpen("close", {
+              seq,
+              reason: "outside-pointer",
+            })
+            setStore("dismiss", "outside")
+            setStore("open", false)
+          }}
+          onFocusOutside={() => {
+            logModelOpen("close", {
+              seq,
+              reason: "outside-focus",
+            })
+            setStore("dismiss", "outside")
+            setStore("open", false)
+          }}
           onCloseAutoFocus={(event) => {
-            const dismiss = store.dismiss
-            if (dismiss === "outside") event.preventDefault()
-            if (dismiss === "escape" || dismiss === "select") {
-              event.preventDefault()
-              props.onClose?.(dismiss)
-            }
+            logModelOpen("close-autofocus", {
+              seq,
+              dismiss: store.dismiss ?? "none",
+            })
+            if (store.dismiss === "outside") event.preventDefault()
             setStore("dismiss", null)
+          }}
+          onOpenAutoFocus={(event) => {
+            const box = rect(content)
+            logModelOpen("open-autofocus", {
+              seq,
+              width: box?.width ?? "none",
+              height: box?.height ?? "none",
+              top: box?.top ?? "none",
+              left: box?.left ?? "none",
+            })
+            logStage("open-autofocus", {
+              seq,
+              ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+              width: box?.width ?? "none",
+              height: box?.height ?? "none",
+              top: box?.top ?? "none",
+              left: box?.left ?? "none",
+            })
           }}
         >
           <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>

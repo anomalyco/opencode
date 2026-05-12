@@ -10,6 +10,7 @@ export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
   contentStyle?: JSX.CSSProperties
   inactive?: boolean
   forceOpen?: boolean
+  lazyExpand?: boolean
 }
 
 export interface TooltipKeybindProps extends Omit<TooltipProps, "value"> {
@@ -47,6 +48,8 @@ export function Tooltip(props: TooltipProps) {
     "inactive",
     "forceOpen",
     "ignoreSafeArea",
+    "openDelay",
+    "lazyExpand",
     "value",
   ])
 
@@ -88,6 +91,10 @@ export function Tooltip(props: TooltipProps) {
 
   createEffect(() => {
     if (!ref) return
+    if (local.lazyExpand && !state.open) {
+      setState("expand", false)
+      return
+    }
     sync()
     const obs = new MutationObserver(sync)
     obs.observe(ref, {
@@ -108,6 +115,7 @@ export function Tooltip(props: TooltipProps) {
         <KobalteTooltip
           gutter={4}
           {...others}
+          openDelay={local.openDelay}
           closeDelay={0}
           ignoreSafeArea={local.ignoreSafeArea ?? true}
           open={local.forceOpen || state.open}

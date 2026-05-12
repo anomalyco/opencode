@@ -5,6 +5,23 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 
+function debug() {
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem("opencode.ui.debug") === "1"
+  } catch {
+    return false
+  }
+}
+
+function log(kind: string, fields: Record<string, string | number | boolean | undefined>) {
+  if (!debug()) return
+  const line = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ")
+  console.debug(`[popover:perf] ${kind} ${line}`)
+}
+
 export interface PopoverProps<T extends ValidComponent = "div">
   extends ParentProps,
     Omit<ComponentProps<typeof Kobalte>, "children"> {
@@ -52,6 +69,13 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
   }
 
   const onOpenChange = (next: boolean) => {
+    log("toggle", {
+      open: next,
+      modal: local.modal ?? false,
+      controlled: controlled(),
+      trigger: !!state.triggerRef,
+      content: !!state.contentRef,
+    })
     if (next) setState("dismiss", null)
     if (local.onOpenChange) local.onOpenChange(next)
     if (controlled()) return
@@ -60,6 +84,11 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
 
   createEffect(() => {
     if (!opened()) return
+    log("effect-open", {
+      modal: local.modal ?? false,
+      trigger: !!state.triggerRef,
+      content: !!state.contentRef,
+    })
 
     const inside = (node: Node | null | undefined) => {
       if (!node) return false
@@ -86,6 +115,9 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
       const target = event.target
       if (!(target instanceof Node)) return
       if (inside(target)) return
+      log("pointerdown-outside", {
+        dismiss: state.dismiss ?? "none",
+      })
       close("outside")
     }
 
@@ -93,6 +125,9 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
       const target = event.target
       if (!(target instanceof Node)) return
       if (inside(target)) return
+      log("focus-outside", {
+        dismiss: state.dismiss ?? "none",
+      })
       close("outside")
     }
 
@@ -115,6 +150,12 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
         }}
         style={local.style}
         onOpenAutoFocus={(event: Event) => {
+          log("open-autofocus", {
+            dismiss: state.dismiss ?? "none",
+            width: state.contentRef ? Math.round(state.contentRef.getBoundingClientRect().width) : "none",
+            height: state.contentRef ? Math.round(state.contentRef.getBoundingClientRect().height) : "none",
+            nodes: state.contentRef ? state.contentRef.querySelectorAll("*").length : "none",
+          })
           event.preventDefault()
         }}
         onCloseAutoFocus={(event: Event) => {

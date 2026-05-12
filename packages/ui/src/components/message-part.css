@@ -550,9 +550,13 @@
     pointer-events: none;
   }
 
-  [data-component="markdown"] {
+  [data-slot="reasoning-preview"] {
+    margin-top: 5px;
+    white-space: pre-wrap;
+    word-break: break-word;
     font-style: normal;
     font-size: var(--font-size-base);
+    line-height: var(--line-height-large);
     color: var(--text-weak);
   }
 }

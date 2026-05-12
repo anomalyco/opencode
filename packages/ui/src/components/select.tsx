@@ -4,6 +4,32 @@ import { pipe, groupBy, entries, map } from "remeda"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
 
+function debug() {
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem("opencode.ui.debug") === "1"
+  } catch {
+    return false
+  }
+}
+
+function log(kind: string, fields: Record<string, string | number | boolean | undefined>) {
+  if (!debug()) return
+  const line = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ")
+  console.debug(`[select:perf] ${kind} ${line}`)
+}
+
+function stage(name: string | undefined, stage: string, fields: Record<string, string | number | boolean | undefined>) {
+  if (!debug()) return
+  if (!name) return
+  const line = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ")
+  console.debug(`[open:stage] name=${name} stage=${stage} ${line}`)
+}
+
 export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "onSelect" | "children"> & {
   placeholder?: string
   options: T[]
@@ -21,6 +47,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   contentStyle?: JSX.CSSProperties
   triggerVariant?: "settings"
   triggerProps?: Record<string, unknown>
+  debugName?: string
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
@@ -42,12 +69,16 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "contentStyle",
     "triggerVariant",
     "triggerProps",
+    "debugName",
   ])
 
   const state = {
     key: undefined as string | undefined,
     cleanup: undefined as (() => void) | void,
   }
+  let triggerRef: HTMLElement | undefined
+  let contentRef: HTMLElement | undefined
+  let stageAt = 0
 
   const stop = () => {
     state.cleanup?.()
@@ -130,11 +161,95 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         stop()
       }}
       onOpenChange={(open) => {
+        if (open && stageAt === 0) stageAt = performance.now()
+        if (!open) stageAt = 0
+        log("toggle", {
+          open,
+          options: local.options.length,
+          groups: grouped().length,
+          trigger: !!triggerRef,
+          content: !!contentRef,
+        })
+        stage(local.debugName, "open-change", {
+          ms: stageAt ? Math.round(performance.now() - stageAt) : 0,
+          open,
+          trigger: !!triggerRef,
+          content: !!contentRef,
+          options: local.options.length,
+          groups: grouped().length,
+        })
         local.onOpenChange?.(open)
         if (!open) stop()
+        if (!open) return
+        requestAnimationFrame(() => {
+          const trigger = triggerRef
+          const content = contentRef
+          const first = content
+            ? {
+                width: Math.round(content.getBoundingClientRect().width),
+                height: Math.round(content.getBoundingClientRect().height),
+                top: Math.round(content.getBoundingClientRect().top),
+                left: Math.round(content.getBoundingClientRect().left),
+              }
+            : undefined
+          log("frame", {
+            options: local.options.length,
+            groups: grouped().length,
+            triggerWidth: trigger ? Math.round(trigger.getBoundingClientRect().width) : "none",
+            triggerHeight: trigger ? Math.round(trigger.getBoundingClientRect().height) : "none",
+            contentWidth: content ? Math.round(content.getBoundingClientRect().width) : "none",
+            contentHeight: content ? Math.round(content.getBoundingClientRect().height) : "none",
+            contentNodes: content ? content.querySelectorAll("*").length : "none",
+            items: content ? content.querySelectorAll('[data-slot="select-select-item"]').length : "none",
+          })
+          stage(local.debugName, "frame-1", {
+            ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+            options: local.options.length,
+            groups: grouped().length,
+            width: first?.width ?? "none",
+            height: first?.height ?? "none",
+            top: first?.top ?? "none",
+            left: first?.left ?? "none",
+            nodes: content ? content.querySelectorAll("*").length : "none",
+            items: content ? content.querySelectorAll('[data-slot="select-select-item"]').length : "none",
+          })
+          requestAnimationFrame(() => {
+            const next = contentRef
+              ? {
+                  width: Math.round(contentRef.getBoundingClientRect().width),
+                  height: Math.round(contentRef.getBoundingClientRect().height),
+                  top: Math.round(contentRef.getBoundingClientRect().top),
+                  left: Math.round(contentRef.getBoundingClientRect().left),
+                }
+              : undefined
+            stage(local.debugName, "frame-2", {
+              ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+              options: local.options.length,
+              groups: grouped().length,
+              width: next?.width ?? "none",
+              height: next?.height ?? "none",
+              top: next?.top ?? "none",
+              left: next?.left ?? "none",
+              nodes: contentRef ? contentRef.querySelectorAll("*").length : "none",
+              items: contentRef ? contentRef.querySelectorAll('[data-slot="select-select-item"]').length : "none",
+            })
+            if (first && next) {
+              stage(local.debugName, "jump", {
+                ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+                dWidth: next.width - first.width,
+                dHeight: next.height - first.height,
+                dTop: next.top - first.top,
+                dLeft: next.left - first.left,
+              })
+            }
+          })
+        })
       }}
     >
       <Kobalte.Trigger
+        ref={(el: HTMLElement | undefined) => {
+          triggerRef = el
+        }}
         {...local.triggerProps}
         disabled={props.disabled}
         data-slot="select-select-trigger"
@@ -161,6 +276,18 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
+          ref={(el: HTMLElement | undefined) => {
+            contentRef = el
+            if (el) stageAt = performance.now()
+            stage(local.debugName, "content-mount", {
+              ms: stageAt ? Math.round(performance.now() - stageAt) : "none",
+              mounted: !!el,
+              width: el ? Math.round(el.getBoundingClientRect().width) : "none",
+              height: el ? Math.round(el.getBoundingClientRect().height) : "none",
+              top: el ? Math.round(el.getBoundingClientRect().top) : "none",
+              left: el ? Math.round(el.getBoundingClientRect().left) : "none",
+            })
+          }}
           classList={{
             ...local.classList,
             [local.class ?? ""]: !!local.class,

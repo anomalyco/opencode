@@ -1233,16 +1233,16 @@ export function UserMessageDisplay(props: {
         <div data-slot="user-message-hooks">
           <For each={hooks()}>
             {(part) => (
-                <Part
-                  part={part}
-                  message={props.message}
-                  markdownEager={props.markdownEager}
-                  markdownViewport={props.markdownViewport}
-                  markdownHighlight={props.markdownHighlight}
-                  markdownMath={props.markdownMath}
-                  markdownStage={props.markdownStage}
-                  onMarkdownStage={props.onMarkdownStage}
-                />
+              <Part
+                part={part}
+                message={props.message}
+                markdownEager={props.markdownEager}
+                markdownViewport={props.markdownViewport}
+                markdownHighlight={props.markdownHighlight}
+                markdownMath={props.markdownMath}
+                markdownStage={props.markdownStage}
+                onMarkdownStage={props.onMarkdownStage}
+              />
             )}
           </For>
         </div>
@@ -1686,13 +1686,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
         </Collapsible.Trigger>
         <Show when={streaming() && !open()}>
           <div data-component="reasoning-part" data-mode="preview">
-            <Markdown
-              text={previewText()}
-              cacheKey={`${part.id}:preview`}
-              stage={props.markdownStage}
-              onStage={props.onMarkdownStage}
-              plain={true}
-            />
+            <div data-slot="reasoning-preview">{previewText()}</div>
           </div>
         </Show>
         <Collapsible.Content>

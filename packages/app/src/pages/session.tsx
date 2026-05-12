@@ -361,6 +361,7 @@ export default function Page() {
     }),
   )
 
+  let root: HTMLDivElement | undefined
   let reviewFrame: number | undefined
   let refreshFrame: number | undefined
   let refreshTimer: number | undefined
@@ -639,9 +640,106 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
+  const lagKey = "opencode.session.lag.debug"
+
+  const lagging = () => {
+    if (typeof window === "undefined") return false
+    return window.localStorage.getItem(lagKey) === "1"
+  }
+
+  const lag = (kind: string, fields: Record<string, string | number | boolean>) => {
+    if (!lagging()) return
+    const line = Object.entries(fields)
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(" ")
+    console.debug(`[lag] ${kind} ${line}`)
+  }
+
+  const sampleDom = () => {
+    const root = scroller
+    if (!root) return
+    const list = content?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
+    return {
+      nodes: root.querySelectorAll("*").length,
+      markdown: root.querySelectorAll('[data-component="markdown"]').length,
+      full: root.querySelectorAll('[data-component="markdown"][data-markdown-stage="full"]').length,
+      structure: root.querySelectorAll('[data-component="markdown"][data-markdown-stage="structure"]').length,
+      lite: root.querySelectorAll('[data-component="markdown"][data-markdown-stage="lite"]').length,
+      katex: root.querySelectorAll(".katex,.katex-display,.katex-html,.katex-mathml").length,
+      buttons: root.querySelectorAll("button,[role='button']").length,
+      listHeight: list ? Math.round(list.getBoundingClientRect().height) : "none",
+      scrollTop: Math.round(root.scrollTop),
+      scrollHeight: Math.round(root.scrollHeight),
+      clientHeight: Math.round(root.clientHeight),
+    }
+  }
+
+  const watchLag = (kind: string, target: EventTarget | null) => {
+    if (!lagging()) return
+    const now = performance.now()
+    const dom = sampleDom()
+    const el = target instanceof HTMLElement ? target : undefined
+    const tag = el?.tagName.toLowerCase() || "unknown"
+    const cls = el?.className && typeof el.className === "string" ? el.className.slice(0, 80) : "none"
+    requestAnimationFrame(() => {
+      const first = performance.now()
+      requestAnimationFrame(() => {
+        const second = performance.now()
+        const total = Math.round(second - now)
+        if (total < 50) return
+        lag(kind, {
+          sid: params.id || "none",
+          total,
+          first: Math.round(first - now),
+          second: Math.round(second - now),
+          tag,
+          cls,
+          ...dom,
+        })
+      })
+    })
+  }
+
   const debug = (src: string, el = scroller, extra?: Record<string, unknown>) => {
     if (!probe(params.id)) return
-    return
+    if (!el) {
+      const line = Object.entries({ src, id: params.id, missing: true, ...extra })
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join(" ")
+      console.debug(`[session-scroll] ${line}`)
+      return
+    }
+
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    const list = content?.querySelector<HTMLElement>('[data-slot="session-turn-list"]')
+    const head = document.querySelector<HTMLElement>("[data-session-title]")
+    const fields = {
+      src,
+      id: params.id,
+      mode: ui.mode,
+      live: live(),
+      bottom: ui.scroll.bottom,
+      overflow: ui.scroll.overflow,
+      scrolled: autoScroll.userScrolled(),
+      gesture: hasScrollGesture(),
+      seeking: ui.seekingMessageId || "none",
+      current: store.messageId || "none",
+      top: Math.round(el.scrollTop),
+      max: Math.round(max),
+      gap: Math.round(max - el.scrollTop),
+      height: Math.round(el.scrollHeight),
+      client: Math.round(el.clientHeight),
+      content: content ? Math.round(content.getBoundingClientRect().height) : "none",
+      list: list ? Math.round(list.getBoundingClientRect().height) : "none",
+      margin: list ? getComputedStyle(list).marginTop : "none",
+      head: head ? Math.round(head.getBoundingClientRect().height) : "none",
+      dock: dockHeight,
+      ...extra,
+    }
+    const line = Object.entries(fields)
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(" ")
+    console.debug(`[session-scroll] ${line}`)
   }
 
   createEffect(
@@ -710,6 +808,22 @@ export default function Page() {
       { defer: true },
     ),
   )
+
+  createEffect(() => {
+    const el = root
+    if (!el) return
+    const over = (e: PointerEvent) => watchLag("hover", e.target)
+    const down = (e: PointerEvent) => watchLag("down", e.target)
+    const click = (e: MouseEvent) => watchLag("click", e.target)
+    el.addEventListener("pointerover", over, true)
+    el.addEventListener("pointerdown", down, true)
+    el.addEventListener("click", click, true)
+    onCleanup(() => {
+      el.removeEventListener("pointerover", over, true)
+      el.removeEventListener("pointerdown", down, true)
+      el.removeEventListener("click", click, true)
+    })
+  })
 
   createEffect(
     on(
@@ -2229,8 +2343,12 @@ export default function Page() {
   )
 
   return (
-    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-      {sessionSync() ?? ""}
+    <div
+      ref={(el) => {
+        root = el
+      }}
+      class="relative bg-background-base size-full overflow-hidden flex flex-col"
+    >
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>

@@ -48,6 +48,7 @@ type MarkedApi = ReturnType<typeof useMarked>
 const max = 200
 const cache = new Map<string, Entry>()
 const debugKey = "opencode.markdown.debug"
+const impactKey = "opencode.prompt.impact"
 const sumMs = 5_000
 const sum: Sum = {
   count: 0,
@@ -86,6 +87,39 @@ function line(data: Mark) {
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => `${key}=${value}`)
     .join(" ")
+}
+
+function impact() {
+  if (isServer) return
+  try {
+    const raw = window.localStorage.getItem(impactKey)
+    if (!raw) return
+    const [name, at, until] = raw.split(":")
+    const end = Number(until)
+    if (!Number.isFinite(end)) return
+    const now = Math.round(performance.now())
+    if (now > end) return
+    return {
+      name: name || "unknown",
+      age: Math.max(0, now - (Number(at) || 0)),
+      left: Math.max(0, end - now),
+    }
+  } catch {
+    return
+  }
+}
+
+function markImpact(kind: string, data: Mark = {}) {
+  const tag = impact()
+  if (!tag) return
+  console.debug(
+    `[markdown:update] ${kind} ${line({
+      impact: tag.name,
+      impactAge: tag.age,
+      impactLeft: tag.left,
+      ...data,
+    })}`,
+  )
 }
 
 function collect(name: string, data: Mark) {
@@ -132,6 +166,7 @@ function scheduleSummary() {
   sumTimer = setTimeout(() => {
     sumTimer = undefined
     if (sum.count === 0) return
+    const tag = impact()
     console.debug(
       `[markdown:perf] summary ${line({
         window: sumMs,
@@ -150,6 +185,9 @@ function scheduleSummary() {
         morph: sum.morph,
         replace: sum.replace,
         other: sum.other,
+        impact: tag?.name,
+        impactAge: tag?.age,
+        impactLeft: tag?.left,
       })}`,
     )
     resetSummary()
@@ -795,6 +833,18 @@ export function Markdown(
     }
   })
 
+  createEffect(() => {
+    const input = src()
+    if (!input) return
+    markImpact("src", {
+      key: input.cacheKey ?? input.key,
+      mode: input.mode,
+      math: input.math,
+      text: input.markdown.length,
+      streaming: input.streaming,
+    })
+  })
+
   const [html, { mutate: setHtml }] = createResource(
     src,
     async (input) => {
@@ -954,6 +1004,10 @@ export function Markdown(
   createEffect(() => {
     const next = stage()
     const id = key()
+    markImpact("stage", {
+      key: id,
+      stage: next,
+    })
     local.onStage?.(id, next)
   })
 
@@ -966,6 +1020,13 @@ export function Markdown(
     const content = html()
     if (!container) return
     if (isServer) return
+
+    markImpact("dom-effect", {
+      key: local.cacheKey ?? "",
+      text: local.text.length,
+      html: content?.length ?? 0,
+      stage: stage(),
+    })
 
     if (!content) {
       container.innerHTML = ""
@@ -1015,6 +1076,17 @@ export function Markdown(
       }
 
       mark("dom", {
+        key: local.cacheKey ?? "",
+        mode,
+        streaming: isStreaming,
+        upgrading,
+        text: local.text.length,
+        prev: prevHtml.length,
+        next: content.length,
+        nodes: container.childNodes.length,
+        took: Math.round(took),
+      })
+      markImpact("dom-apply", {
         key: local.cacheKey ?? "",
         mode,
         streaming: isStreaming,

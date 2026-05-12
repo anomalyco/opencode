@@ -71,6 +71,5 @@ logs/
 
 # Trellis workflow (developer-specific)
 .trellis/workspace/
-.trellis/tasks/
 .trellis/.developer
 .trellis/.current-task
