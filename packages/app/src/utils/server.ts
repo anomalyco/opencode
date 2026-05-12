@@ -1,5 +1,21 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { ServerConnection } from "@/context/server"
+import { decode64 } from "@/utils/base64"
+
+export function authTokenFromCredentials(input: { username?: string; password: string }) {
+  return btoa(`${input.username ?? "opencode"}:${input.password}`)
+}
+
+export function authFromToken(token: string | null) {
+  const decoded = decode64(token ?? undefined)
+  if (!decoded) return
+  const separator = decoded.indexOf(":")
+  if (separator === -1) return
+  return {
+    username: decoded.slice(0, separator) || "opencode",
+    password: decoded.slice(separator + 1),
+  }
+}
 
 export function createSdkForServer({
   server,
@@ -10,7 +26,7 @@ export function createSdkForServer({
   const auth = (() => {
     if (!server.password) return
     return {
-      Authorization: `Basic ${btoa(`${server.username ?? "opencode"}:${server.password}`)}`,
+      Authorization: `Basic ${authTokenFromCredentials({ username: server.username, password: server.password })}`,
     }
   })()
 

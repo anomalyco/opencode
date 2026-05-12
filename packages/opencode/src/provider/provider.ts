@@ -13,7 +13,6 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { zod } from "@/util/effect-zod"
 import { namedSchemaError } from "@/util/named-schema-error"
 import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
@@ -24,10 +23,11 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
-import { optionalOmitUndefined, withStatics } from "@/util/schema"
+import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
+import { ModelStatus } from "./model-status"
 
 const log = Log.create({ service: "provider" })
 
@@ -138,6 +138,14 @@ function useLanguageModel(sdk: any) {
   return sdk.responses === undefined && sdk.chat === undefined
 }
 
+function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
+  if (useChat && sdk.chat) return sdk.chat(modelID)
+  if (sdk.responses) return sdk.responses(modelID)
+  if (sdk.messages) return sdk.messages(modelID)
+  if (sdk.chat) return sdk.chat(modelID)
+  return sdk.languageModel(modelID)
+}
+
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
     anthropic: () =>
@@ -222,12 +230,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
+          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
           resourceName: resource,
@@ -247,12 +250,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
+          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
           baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
@@ -899,14 +897,12 @@ export const Model = Schema.Struct({
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
-  status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
+  status: ModelStatus,
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
   variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
-})
-  .annotate({ identifier: "Model" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
 export const Info = Schema.Struct({
@@ -917,9 +913,7 @@ export const Info = Schema.Struct({
   key: optionalOmitUndefined(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
   models: Schema.Record(Schema.String, Model),
-})
-  .annotate({ identifier: "Provider" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Provider" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 const DefaultModelIDs = Schema.Record(Schema.String, Schema.String)
@@ -928,14 +922,24 @@ export const ListResult = Schema.Struct({
   all: Schema.Array(Info),
   default: DefaultModelIDs,
   connected: Schema.Array(Schema.String),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ListResult = Types.DeepMutable<Schema.Schema.Type<typeof ListResult>>
 
 export const ConfigProvidersResult = Schema.Struct({
   providers: Schema.Array(Info),
   default: DefaultModelIDs,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
+
+export function toPublicInfo(provider: Info): Info {
+  return JSON.parse(
+    JSON.stringify(provider, (_, value) => {
+      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
+      if (typeof value === "bigint") return value.toString()
+      return value
+    }),
+  )
+}
 
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
   return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
@@ -1154,7 +1158,7 @@ const layer: Layer.Layer<
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
-            const next = await models(provider, { auth: pluginAuth })
+            const next = await models(toPublicInfo(provider), { auth: pluginAuth })
             return Object.fromEntries(
               Object.entries(next).map(([id, model]) => [
                 id,
@@ -1301,7 +1305,7 @@ const layer: Layer.Layer<
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
               () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
-              database[plugin.auth!.provider],
+              toPublicInfo(database[plugin.auth!.provider]),
             ),
           )
           const opts = options ?? {}

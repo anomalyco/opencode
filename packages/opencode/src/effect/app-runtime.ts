@@ -43,15 +43,19 @@ import { Format } from "@/format"
 import { InstanceLayer } from "@/project/instance-layer"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
+import { Reference } from "@/reference/reference"
 import { Workspace } from "@/control-plane/workspace"
 import { Worktree } from "@/worktree"
 import { Pty } from "@/pty"
+import { PtyTicket } from "@/pty/ticket"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
 import { SyncEvent } from "@/sync"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { DataMigration } from "@/data-migration"
+import { BackgroundJob } from "@/background/job"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -78,6 +82,7 @@ export const AppLayer = Layer.mergeAll(
   Todo.defaultLayer,
   Session.defaultLayer,
   SessionStatus.defaultLayer,
+  BackgroundJob.defaultLayer,
   SessionRunState.defaultLayer,
   SessionProcessor.defaultLayer,
   SessionCompaction.defaultLayer,
@@ -95,13 +100,16 @@ export const AppLayer = Layer.mergeAll(
   Format.defaultLayer,
   Project.defaultLayer,
   Vcs.defaultLayer,
+  Reference.defaultLayer,
   Workspace.defaultLayer,
   Worktree.appLayer,
   Pty.defaultLayer,
+  PtyTicket.defaultLayer,
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
   SyncEvent.defaultLayer,
+  DataMigration.defaultLayer,
 ).pipe(Layer.provideMerge(InstanceLayer.layer), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

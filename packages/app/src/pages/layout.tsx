@@ -35,7 +35,7 @@ import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { clearWorkspaceTerminals } from "@/context/terminal"
+import { clearWorkspaceTerminals, getTerminalServerScope } from "@/context/terminal"
 import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
 import {
   clearSessionPrefetchInflight,
@@ -960,6 +960,15 @@ export default function Layout(props: ParentProps) {
     void openProject(target.worktree)
   }
 
+  function navigateToProjectIndex(index: number) {
+    const projects = layout.projects.list()
+    const target = projects[index]
+    if (!target) return
+
+    globalSync.child(target.worktree)
+    void openProject(target.worktree)
+  }
+
   function navigateSessionByUnseen(offset: number) {
     const sessions = currentSessions()
     if (sessions.length === 0) return
@@ -1040,6 +1049,19 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+alt+arrowdown",
         onSelect: () => navigateProjectByOffset(1),
       },
+      ...Array.from({ length: 9 }, (_, i) => {
+        const index = i
+        const number = index + 1
+        return {
+          id: `project.${number}`,
+          category: language.t("command.category.project"),
+          title: `Open Project {number}`,
+          keybind: `mod+${number}`,
+          disabled: layout.projects.list().length <= index,
+          hidden: true,
+          onSelect: () => navigateToProjectIndex(index),
+        }
+      }),
       {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
@@ -1409,18 +1431,19 @@ export default function Layout(props: ParentProps) {
     const index = list.findIndex((x) => pathKey(x.worktree) === key)
     const active = pathKey(currentProject()?.worktree ?? "") === key
     if (index === -1) return
-    const next = list[index + 1]
 
     if (!active) {
       layout.projects.close(directory)
       return
     }
 
-    if (!next) {
+    if (list.length === 1) {
       layout.projects.close(directory)
       navigate("/")
       return
     }
+
+    const next = list[index + 1] ?? list[index - 1]
 
     navigateWithSidebarReset(`/${base64Encode(next.worktree)}/session`)
     layout.projects.close(directory)
@@ -1557,6 +1580,7 @@ export default function Layout(props: ParentProps) {
       directory,
       sessions.map((s) => s.id),
       platform,
+      getTerminalServerScope(server.current, server.key),
     )
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
@@ -1933,7 +1957,7 @@ export default function Layout(props: ParentProps) {
 
     if (!created?.directory) return
 
-    setWorkspaceName(created.directory, created.branch, project.id, created.branch)
+    setWorkspaceName(created.directory, created.branch ?? getFilename(created.directory), project.id, created.branch)
 
     const local = project.worktree
     const key = pathKey(created.directory)
@@ -2095,6 +2119,7 @@ export default function Layout(props: ParentProps) {
               </div>
             </Show>
           }
+          keyed
         >
           {(project) => (
             <>
@@ -2105,9 +2130,7 @@ export default function Layout(props: ParentProps) {
                       id={`project:${projectId()}`}
                       value={projectName}
                       onSave={(next) => {
-                        const item = project()
-                        if (!item) return
-                        void renameProject(item, next)
+                        void renameProject(project, next)
                       }}
                       class="text-14-medium text-text-strong truncate"
                       displayClass="text-14-medium text-text-strong truncate"
@@ -2149,9 +2172,7 @@ export default function Layout(props: ParentProps) {
                       <DropdownMenu.Content class="mt-1">
                         <DropdownMenu.Item
                           onSelect={() => {
-                            const item = project()
-                            if (!item) return
-                            showEditProjectDialog(item)
+                            showEditProjectDialog(project)
                           }}
                         >
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
@@ -2161,9 +2182,7 @@ export default function Layout(props: ParentProps) {
                           data-project={slug()}
                           disabled={!canToggle()}
                           onSelect={() => {
-                            const item = project()
-                            if (!item) return
-                            toggleProjectWorkspaces(item)
+                            toggleProjectWorkspaces(project)
                           }}
                         >
                           <DropdownMenu.ItemLabel>
@@ -2222,7 +2241,7 @@ export default function Layout(props: ParentProps) {
                       <div class="flex-1 min-h-0">
                         <LocalWorkspace
                           ctx={workspaceSidebarCtx}
-                          project={project()}
+                          project={project}
                           sortNow={sortNow}
                           mobile={panelProps.mobile}
                         />
@@ -2237,9 +2256,7 @@ export default function Layout(props: ParentProps) {
                         icon="plus-small"
                         class="w-full"
                         onClick={() => {
-                          const item = project()
-                          if (!item) return
-                          void createWorkspace(item)
+                          void createWorkspace(project)
                         }}
                       >
                         {language.t("workspace.new")}
@@ -2266,7 +2283,7 @@ export default function Layout(props: ParentProps) {
                                 <SortableWorkspace
                                   ctx={workspaceSidebarCtx}
                                   directory={directory}
-                                  project={project()}
+                                  project={project}
                                   sortNow={sortNow}
                                   mobile={panelProps.mobile}
                                 />

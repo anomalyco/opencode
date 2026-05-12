@@ -132,11 +132,7 @@ export default [
   SyncEvent.project(SessionEvent.ModelSwitched.Sync, (db, data, event) => {
     db.update(SessionTable)
       .set({
-        model: {
-          id: data.id,
-          providerID: data.providerID,
-          variant: data.variant,
-        },
+        model: data.model,
         time_updated: DateTime.toEpochMillis(data.timestamp),
       })
       .where(eq(SessionTable.id, data.sessionID))

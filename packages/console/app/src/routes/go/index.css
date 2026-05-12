@@ -326,37 +326,6 @@ body {
     }
   }
 
-  [data-component="desktop-app-banner"] {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 32px;
-
-    [data-slot="badge"] {
-      background: var(--color-background-strong);
-      color: var(--color-text-inverted);
-      font-weight: 500;
-      padding: 4px 8px;
-      line-height: 1;
-      flex-shrink: 0;
-    }
-
-    [data-slot="content"] {
-      display: flex;
-      align-items: center;
-      gap: 1ch;
-    }
-
-    [data-slot="text"] {
-      color: var(--color-text-strong);
-      line-height: 1.4;
-
-      @media (max-width: 30.625rem) {
-        display: none;
-      }
-    }
-  }
-
   [data-slot="hero-copy"] {
     img {
       margin-bottom: 24px;
@@ -660,10 +629,6 @@ body {
 
       [data-bar][data-kind="free"] {
         fill: var(--color-text-strong);
-      }
-
-      [data-bar][data-kind="promo"] {
-        fill: color-mix(in srgb, var(--bar-go) 50%, transparent);
       }
 
       [data-val] {
