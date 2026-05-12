@@ -58,6 +58,18 @@
           border-radius: 0 2px 2px 0;
         }
       }
+
+      &[data-nav-child] {
+        margin-top: calc(-1 * var(--space-2));
+        margin-left: var(--space-5);
+        padding-top: var(--space-2);
+        padding-bottom: var(--space-2);
+        font-size: var(--font-size-xs);
+
+        &.active::before {
+          display: none;
+        }
+      }
     }
   }
 }
@@ -120,6 +132,12 @@
           background-color: var(--color-text);
           border-radius: 2px 2px 0 0;
         }
+      }
+
+      &[data-nav-child] {
+        padding-left: var(--space-2);
+        padding-right: var(--space-2);
+        font-size: var(--font-size-xs);
       }
     }
   }

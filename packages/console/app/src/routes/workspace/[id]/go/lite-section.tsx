@@ -1,4 +1,4 @@
-import { action, useParams, useAction, useSubmission, json, query, createAsync } from "@solidjs/router"
+import { action, useParams, useAction, useSubmission, json, query, createAsync, useLocation } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { createMemo, For, Show } from "solid-js"
 import { Modal } from "~/component/modal"
@@ -14,6 +14,7 @@ import styles from "./lite-section.module.css"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
+import { GoCreditApplyCard, GoReferralBanner, queryGoReferral } from "~/component/go-referral"
 
 import { IconAlipay, IconUpi } from "~/component/icon"
 
@@ -82,8 +83,9 @@ function formatResetTime(seconds: number, i18n: ReturnType<typeof useI18n>) {
 }
 
 const createLiteCheckoutUrl = action(
-  async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi") => {
+  async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi", inviteCode?: string) => {
     "use server"
+    void inviteCode
     return json(
       await withActor(
         () =>
@@ -142,11 +144,14 @@ const setLiteUseBalance = action(async (form: FormData) => {
 
 export function LiteSection() {
   const params = useParams()
+  const location = useLocation()
   const i18n = useI18n()
   const language = useLanguage()
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const isBlack = createMemo(() => billingInfo()?.subscriptionID || billingInfo()?.timeSubscriptionBooked)
   const lite = createAsync(() => queryLiteSubscription(params.id!))
+  const referral = createAsync(() => queryGoReferral(params.id!))
+  const inviteCode = createMemo(() => new URLSearchParams(location.search).get("invite") ?? undefined)
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
   const checkoutAction = useAction(createLiteCheckoutUrl)
@@ -171,7 +176,7 @@ export function LiteSection() {
 
   async function onClickSubscribe(method?: "alipay" | "upi") {
     setStore("loading", method ?? "checkout")
-    const result = await checkoutAction(params.id!, window.location.href, window.location.href, method)
+    const result = await checkoutAction(params.id!, window.location.href, window.location.href, method, inviteCode())
     if (result.data) {
       window.location.href = result.data
       return
@@ -206,6 +211,7 @@ export function LiteSection() {
               </a>
               .
             </div>
+            <GoReferralBanner href={`/workspace/${params.id}/go/invite`} />
             <div data-slot="usage">
               <div data-slot="usage-item">
                 <div data-slot="usage-header">
@@ -246,6 +252,7 @@ export function LiteSection() {
                 </span>
               </div>
             </div>
+            <GoCreditApplyCard workspaceID={params.id!} summary={referral()} />
             <form action={setLiteUseBalance} method="post" data-slot="setting-row">
               <p>{i18n.t("workspace.lite.subscription.useBalance")}</p>
               <input type="hidden" name="workspaceID" value={params.id} />
@@ -299,6 +306,9 @@ export function LiteSection() {
             <li>DeepSeek V4 Flash</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
+          <Show when={inviteCode()}>
+            <p data-slot="invite-applied">{i18n.t("workspace.referral.inviteApplied")}</p>
+          </Show>
           <div data-slot="subscribe-actions">
             <button
               data-slot="subscribe-button"

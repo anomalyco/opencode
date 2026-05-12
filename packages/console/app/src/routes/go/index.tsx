@@ -1,5 +1,5 @@
 import "./index.css"
-import { createAsync, query } from "@solidjs/router"
+import { createAsync, query, useLocation } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
 import { For, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
@@ -224,8 +224,15 @@ function LimitsGraph(props: { href: string }) {
 }
 
 export default function Home() {
+  const location = useLocation()
   const workspaceID = createAsync(() => checkLoggedIn())
-  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go` : "/auth"))
+  const inviteCode = createMemo(() => new URLSearchParams(location.search).get("invite") ?? undefined)
+  const subscribeUrl = createMemo(() => {
+    const invite = inviteCode() ? `?invite=${encodeURIComponent(inviteCode()!)}` : ""
+    if (workspaceID()) return `/workspace/${workspaceID()}/go${invite}`
+    return "/auth"
+  })
+  const referralUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go/invite` : "/auth"))
   const i18n = useI18n()
   const language = useLanguage()
   return (
@@ -378,6 +385,15 @@ export default function Home() {
 
           <section data-component="comparison">
             <LimitsGraph href={language.route("/docs/go/#usage-limits")} />
+          </section>
+
+          <section data-component="referral">
+            <div data-slot="section-title">
+              <h3>{i18n.t("go.referral.title")}</h3>
+              <p>
+                {i18n.t("go.referral.note")} <a href={referralUrl()}>{i18n.t("go.referral.link")}</a>
+              </p>
+            </div>
           </section>
 
           <section data-component="problem">
