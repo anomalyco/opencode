@@ -1,557 +1,489 @@
-import { afterEach, describe, test, expect } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { $ } from "bun"
-import { Effect } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import fs from "fs/promises"
 import { File } from "../../src/file"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
 import { Filesystem } from "@/util/filesystem"
-import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance, withTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 afterEach(async () => {
   await disposeAllInstances()
 })
 
-const init = () => run(File.Service.use((svc) => svc.init()))
-const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
-  Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
-const status = () => run(File.Service.use((svc) => svc.status()))
-const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
-const list = (dir?: string) => run(File.Service.use((svc) => svc.list(dir)))
-const search = (input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) =>
-  run(File.Service.use((svc) => svc.search(input)))
+const it = testEffect(Layer.mergeAll(File.defaultLayer, AppFileSystem.defaultLayer))
+
+const init = Effect.fn("FileTest.init")(function* () {
+  const file = yield* File.Service
+  return yield* file.init()
+})
+
+const status = Effect.fn("FileTest.status")(function* () {
+  const file = yield* File.Service
+  return yield* file.status()
+})
+
+const read = Effect.fn("FileTest.read")(function* (input: string) {
+  const file = yield* File.Service
+  return yield* file.read(input)
+})
+
+const list = Effect.fn("FileTest.list")(function* (dir?: string) {
+  const file = yield* File.Service
+  return yield* file.list(dir)
+})
+
+const search = Effect.fn("FileTest.search")(function* (input: {
+  query: string
+  limit?: number
+  dirs?: boolean
+  type?: "file" | "directory"
+}) {
+  const file = yield* File.Service
+  return yield* file.search(input)
+})
+
+const gitAddAll = (directory: string) => Effect.promise(() => $`git add .`.cwd(directory).quiet())
+const gitCommit = (directory: string, message: string) =>
+  Effect.promise(() => $`git commit -m ${message}`.cwd(directory).quiet())
+
+const failureMessage = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const exit = yield* self.pipe(Effect.exit)
+    if (Exit.isFailure(exit)) {
+      const error = Cause.squash(exit.cause)
+      return error instanceof Error ? error.message : String(error)
+    }
+    throw new Error("expected effect to fail")
+  })
+
+const setupSearchableRepo = Effect.fn("FileTest.setupSearchableRepo")(function* (directory: string) {
+  const fsys = yield* AppFileSystem.Service
+  yield* fsys.writeWithDirs(path.join(directory, "index.ts"), "code")
+  yield* fsys.writeWithDirs(path.join(directory, "utils.ts"), "utils")
+  yield* fsys.writeWithDirs(path.join(directory, "readme.md"), "readme")
+  yield* fsys.writeWithDirs(path.join(directory, "src", "main.ts"), "main")
+  yield* fsys.writeWithDirs(path.join(directory, ".hidden", "secret.ts"), "secret")
+})
 
 describe("file/index Filesystem patterns", () => {
   describe("read() - text content", () => {
-    test("reads text file via Filesystem.readText()", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "test.txt")
-      await fs.writeFile(filepath, "Hello World", "utf-8")
+    it.instance("reads text file via Filesystem.readText()", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "test.txt"), "Hello World", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("test.txt")
-          expect(result.type).toBe("text")
-          expect(result.content).toBe("Hello World")
-        },
-      })
-    })
+        const result = yield* read("test.txt")
+        expect(result.type).toBe("text")
+        expect(result.content).toBe("Hello World")
+      }),
+    )
 
-    test("reads with Filesystem.exists() check", async () => {
-      await using tmp = await tmpdir()
+    it.instance("reads with Filesystem.exists() check", () =>
+      Effect.gen(function* () {
+        const result = yield* read("nonexistent.txt")
+        expect(result.type).toBe("text")
+        expect(result.content).toBe("")
+      }),
+    )
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          // Non-existent file should return empty content
-          const result = await read("nonexistent.txt")
-          expect(result.type).toBe("text")
-          expect(result.content).toBe("")
-        },
-      })
-    })
+    it.instance("trims whitespace from text content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() =>
+          fs.writeFile(path.join(test.directory, "test.txt"), "  content with spaces  \n\n", "utf-8"),
+        )
 
-    test("trims whitespace from text content", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "test.txt")
-      await fs.writeFile(filepath, "  content with spaces  \n\n", "utf-8")
+        const result = yield* read("test.txt")
+        expect(result.content).toBe("content with spaces")
+      }),
+    )
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("test.txt")
-          expect(result.content).toBe("content with spaces")
-        },
-      })
-    })
+    it.instance("handles empty text file", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "empty.txt"), "", "utf-8"))
 
-    test("handles empty text file", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "empty.txt")
-      await fs.writeFile(filepath, "", "utf-8")
+        const result = yield* read("empty.txt")
+        expect(result.type).toBe("text")
+        expect(result.content).toBe("")
+      }),
+    )
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("empty.txt")
-          expect(result.type).toBe("text")
-          expect(result.content).toBe("")
-        },
-      })
-    })
+    it.instance("handles multi-line text files", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "multiline.txt"), "line1\nline2\nline3", "utf-8"))
 
-    test("handles multi-line text files", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "multiline.txt")
-      await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("multiline.txt")
-          expect(result.content).toBe("line1\nline2\nline3")
-        },
-      })
-    })
+        const result = yield* read("multiline.txt")
+        expect(result.content).toBe("line1\nline2\nline3")
+      }),
+    )
   })
 
   describe("read() - binary content", () => {
-    test("reads binary file via Filesystem.readArrayBuffer()", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "image.png")
-      const binaryContent = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-      await fs.writeFile(filepath, binaryContent)
+    it.instance("reads binary file via Filesystem.readArrayBuffer()", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const binaryContent = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "image.png"), binaryContent))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("image.png")
-          expect(result.type).toBe("text") // Images return as text with base64 encoding
-          expect(result.encoding).toBe("base64")
-          expect(result.mimeType).toBe("image/png")
-          expect(result.content).toBe(binaryContent.toString("base64"))
-        },
-      })
-    })
+        const result = yield* read("image.png")
+        expect(result.type).toBe("text")
+        expect(result.encoding).toBe("base64")
+        expect(result.mimeType).toBe("image/png")
+        expect(result.content).toBe(binaryContent.toString("base64"))
+      }),
+    )
 
-    test("returns empty for binary non-image files", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "binary.so")
-      await fs.writeFile(filepath, Buffer.from([0x7f, 0x45, 0x4c, 0x46]), "binary")
+    it.instance("returns empty for binary non-image files", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "binary.so"), Buffer.from([0x7f, 0x45, 0x4c, 0x46])))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("binary.so")
-          expect(result.type).toBe("binary")
-          expect(result.content).toBe("")
-        },
-      })
-    })
+        const result = yield* read("binary.so")
+        expect(result.type).toBe("binary")
+        expect(result.content).toBe("")
+      }),
+    )
   })
 
   describe("read() - Filesystem.mimeType()", () => {
-    test("detects MIME type via Filesystem.mimeType()", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "test.json")
-      await fs.writeFile(filepath, '{"key": "value"}', "utf-8")
+    it.instance("detects MIME type via Filesystem.mimeType()", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "test.json")
+        yield* Effect.promise(() => fs.writeFile(filepath, '{"key": "value"}', "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          expect(await Filesystem.mimeType(filepath)).toContain("application/json")
+        expect(yield* Effect.promise(() => Filesystem.mimeType(filepath))).toContain("application/json")
 
-          const result = await read("test.json")
-          expect(result.type).toBe("text")
-        },
-      })
-    })
+        const result = yield* read("test.json")
+        expect(result.type).toBe("text")
+      }),
+    )
 
-    test("handles various image MIME types", async () => {
-      await using tmp = await tmpdir()
-      const testCases = [
-        { ext: "jpg", mime: "image/jpeg" },
-        { ext: "png", mime: "image/png" },
-        { ext: "gif", mime: "image/gif" },
-        { ext: "webp", mime: "image/webp" },
-      ]
+    it.instance("handles various image MIME types", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const testCases = [
+          { ext: "jpg", mime: "image/jpeg" },
+          { ext: "png", mime: "image/png" },
+          { ext: "gif", mime: "image/gif" },
+          { ext: "webp", mime: "image/webp" },
+        ]
 
-      for (const { ext, mime } of testCases) {
-        const filepath = path.join(tmp.path, `test.${ext}`)
-        await fs.writeFile(filepath, Buffer.from([0x00, 0x00, 0x00, 0x00]), "binary")
-
-        await WithInstance.provide({
-          directory: tmp.path,
-          fn: async () => {
-            expect(await Filesystem.mimeType(filepath)).toContain(mime)
-          },
-        })
-      }
-    })
+        for (const testCase of testCases) {
+          const filepath = path.join(test.directory, `test.${testCase.ext}`)
+          yield* Effect.promise(() => fs.writeFile(filepath, Buffer.from([0x00, 0x00, 0x00, 0x00])))
+          expect(yield* Effect.promise(() => Filesystem.mimeType(filepath))).toContain(testCase.mime)
+        }
+      }),
+    )
   })
 
   describe("list() - Filesystem.exists() and readText()", () => {
-    test("reads .gitignore via Filesystem.exists() and readText()", async () => {
-      await using tmp = await tmpdir({ git: true })
+    it.instance(
+      "reads .gitignore via Filesystem.exists() and readText()",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const gitignorePath = path.join(test.directory, ".gitignore")
+          yield* Effect.promise(() => fs.writeFile(gitignorePath, "node_modules\ndist\n", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const gitignorePath = path.join(tmp.path, ".gitignore")
-          await fs.writeFile(gitignorePath, "node_modules\ndist\n", "utf-8")
+          expect(yield* Effect.promise(() => Filesystem.exists(gitignorePath))).toBe(true)
+          expect(yield* Effect.promise(() => Filesystem.readText(gitignorePath))).toContain("node_modules")
+        }),
+      { git: true },
+    )
 
-          // This is used internally in list()
-          expect(await Filesystem.exists(gitignorePath)).toBe(true)
+    it.instance(
+      "reads .ignore file similarly",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const ignorePath = path.join(test.directory, ".ignore")
+          yield* Effect.promise(() => fs.writeFile(ignorePath, "*.log\n.env\n", "utf-8"))
 
-          const content = await Filesystem.readText(gitignorePath)
-          expect(content).toContain("node_modules")
-        },
-      })
-    })
+          expect(yield* Effect.promise(() => Filesystem.exists(ignorePath))).toBe(true)
+          expect(yield* Effect.promise(() => Filesystem.readText(ignorePath))).toContain("*.log")
+        }),
+      { git: true },
+    )
 
-    test("reads .ignore file similarly", async () => {
-      await using tmp = await tmpdir({ git: true })
+    it.instance(
+      "handles missing .gitignore gracefully",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const gitignorePath = path.join(test.directory, ".gitignore")
+          expect(yield* Effect.promise(() => Filesystem.exists(gitignorePath))).toBe(false)
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const ignorePath = path.join(tmp.path, ".ignore")
-          await fs.writeFile(ignorePath, "*.log\n.env\n", "utf-8")
-
-          expect(await Filesystem.exists(ignorePath)).toBe(true)
-          expect(await Filesystem.readText(ignorePath)).toContain("*.log")
-        },
-      })
-    })
-
-    test("handles missing .gitignore gracefully", async () => {
-      await using tmp = await tmpdir({ git: true })
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const gitignorePath = path.join(tmp.path, ".gitignore")
-          expect(await Filesystem.exists(gitignorePath)).toBe(false)
-
-          // list() should still work
-          const nodes = await list()
+          const nodes = yield* list()
           expect(Array.isArray(nodes)).toBe(true)
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
   })
 
   describe("File.changed() - Filesystem.readText() for untracked files", () => {
-    test("reads untracked files via Filesystem.readText()", async () => {
-      await using tmp = await tmpdir({ git: true })
+    it.instance(
+      "reads untracked files via Filesystem.readText()",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const untrackedPath = path.join(test.directory, "untracked.txt")
+          yield* Effect.promise(() => fs.writeFile(untrackedPath, "new content\nwith multiple lines", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const untrackedPath = path.join(tmp.path, "untracked.txt")
-          await fs.writeFile(untrackedPath, "new content\nwith multiple lines", "utf-8")
-
-          // This is how File.changed() reads untracked files
-          const content = await Filesystem.readText(untrackedPath)
-          const lines = content.split("\n").length
-          expect(lines).toBe(2)
-        },
-      })
-    })
+          const content = yield* Effect.promise(() => Filesystem.readText(untrackedPath))
+          expect(content.split("\n").length).toBe(2)
+        }),
+      { git: true },
+    )
   })
 
   describe("Error handling", () => {
-    test("handles errors gracefully in Filesystem.readText()", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "readonly.txt")
-      await fs.writeFile(filepath, "content", "utf-8")
+    it.instance("handles errors gracefully in Filesystem.readText()", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "readonly.txt"), "content", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const nonExistentPath = path.join(tmp.path, "does-not-exist.txt")
-          // Filesystem.readText() on non-existent file throws
-          await expect(Filesystem.readText(nonExistentPath)).rejects.toThrow()
+        const nonExistentPath = path.join(test.directory, "does-not-exist.txt")
+        expect(Exit.isFailure(yield* Effect.promise(() => Filesystem.readText(nonExistentPath)).pipe(Effect.exit))).toBe(true)
 
-          // But read() handles this gracefully
-          const result = await read("does-not-exist.txt")
-          expect(result.content).toBe("")
-        },
-      })
-    })
+        const result = yield* read("does-not-exist.txt")
+        expect(result.content).toBe("")
+      }),
+    )
 
-    test("handles errors in Filesystem.readArrayBuffer()", async () => {
-      await using tmp = await tmpdir()
+    it.instance("handles errors in Filesystem.readArrayBuffer()", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const nonExistentPath = path.join(test.directory, "does-not-exist.bin")
+        const buffer = yield* Effect.promise(() => Filesystem.readArrayBuffer(nonExistentPath).catch(() => new ArrayBuffer(0)))
+        expect(buffer.byteLength).toBe(0)
+      }),
+    )
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const nonExistentPath = path.join(tmp.path, "does-not-exist.bin")
-          const buffer = await Filesystem.readArrayBuffer(nonExistentPath).catch(() => new ArrayBuffer(0))
-          expect(buffer.byteLength).toBe(0)
-        },
-      })
-    })
-
-    test("returns empty array buffer on error for images", async () => {
-      await using tmp = await tmpdir()
-      const _filepath = path.join(tmp.path, "broken.png")
-      // Don't create the file
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          // read() handles missing images gracefully
-          const result = await read("broken.png")
-          expect(result.type).toBe("text")
-          expect(result.content).toBe("")
-        },
-      })
-    })
+    it.instance("returns empty array buffer on error for images", () =>
+      Effect.gen(function* () {
+        const result = yield* read("broken.png")
+        expect(result.type).toBe("text")
+        expect(result.content).toBe("")
+      }),
+    )
   })
 
   describe("shouldEncode() logic", () => {
-    test("treats .ts files as text", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "test.ts")
-      await fs.writeFile(filepath, "export const value = 1", "utf-8")
+    it.instance("treats .ts files as text", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "test.ts"), "export const value = 1", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("test.ts")
-          expect(result.type).toBe("text")
-          expect(result.content).toBe("export const value = 1")
-        },
-      })
-    })
+        const result = yield* read("test.ts")
+        expect(result.type).toBe("text")
+        expect(result.content).toBe("export const value = 1")
+      }),
+    )
 
-    test("treats .mts files as text", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "test.mts")
-      await fs.writeFile(filepath, "export const value = 1", "utf-8")
+    it.instance("treats .mts files as text", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "test.mts"), "export const value = 1", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("test.mts")
-          expect(result.type).toBe("text")
-          expect(result.content).toBe("export const value = 1")
-        },
-      })
-    })
+        const result = yield* read("test.mts")
+        expect(result.type).toBe("text")
+        expect(result.content).toBe("export const value = 1")
+      }),
+    )
 
-    test("treats .sh files as text", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "test.sh")
-      await fs.writeFile(filepath, "#!/usr/bin/env bash\necho hello", "utf-8")
+    it.instance("treats .sh files as text", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "test.sh"), "#!/usr/bin/env bash\necho hello", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("test.sh")
-          expect(result.type).toBe("text")
-          expect(result.content).toBe("#!/usr/bin/env bash\necho hello")
-        },
-      })
-    })
+        const result = yield* read("test.sh")
+        expect(result.type).toBe("text")
+        expect(result.content).toBe("#!/usr/bin/env bash\necho hello")
+      }),
+    )
 
-    test("treats Dockerfile as text", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "Dockerfile")
-      await fs.writeFile(filepath, "FROM alpine:3.20", "utf-8")
+    it.instance("treats Dockerfile as text", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "Dockerfile"), "FROM alpine:3.20", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("Dockerfile")
-          expect(result.type).toBe("text")
-          expect(result.content).toBe("FROM alpine:3.20")
-        },
-      })
-    })
+        const result = yield* read("Dockerfile")
+        expect(result.type).toBe("text")
+        expect(result.content).toBe("FROM alpine:3.20")
+      }),
+    )
 
-    test("returns encoding info for text files", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "test.txt")
-      await fs.writeFile(filepath, "simple text", "utf-8")
+    it.instance("returns encoding info for text files", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "test.txt"), "simple text", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("test.txt")
-          expect(result.encoding).toBeUndefined()
-          expect(result.type).toBe("text")
-        },
-      })
-    })
+        const result = yield* read("test.txt")
+        expect(result.encoding).toBeUndefined()
+        expect(result.type).toBe("text")
+      }),
+    )
 
-    test("returns base64 encoding for images", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "test.jpg")
-      await fs.writeFile(filepath, Buffer.from([0xff, 0xd8, 0xff, 0xe0]), "binary")
+    it.instance("returns base64 encoding for images", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "test.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xe0])))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("test.jpg")
-          expect(result.encoding).toBe("base64")
-          expect(result.mimeType).toBe("image/jpeg")
-        },
-      })
-    })
+        const result = yield* read("test.jpg")
+        expect(result.encoding).toBe("base64")
+        expect(result.mimeType).toBe("image/jpeg")
+      }),
+    )
   })
 
   describe("Path security", () => {
-    test("throws for paths outside project directory", async () => {
-      await using tmp = await tmpdir()
+    it.instance("throws for paths outside project directory", () =>
+      Effect.gen(function* () {
+        expect(yield* failureMessage(read("../outside.txt"))).toContain("Access denied")
+      }),
+    )
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await expect(read("../outside.txt")).rejects.toThrow("Access denied")
-        },
-      })
-    })
-
-    test("throws for paths outside project directory", async () => {
-      await using tmp = await tmpdir()
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await expect(read("../outside.txt")).rejects.toThrow("Access denied")
-        },
-      })
-    })
+    it.instance("throws for paths outside project directory", () =>
+      Effect.gen(function* () {
+        expect(yield* failureMessage(read("../outside.txt"))).toContain("Access denied")
+      }),
+    )
   })
 
   describe("status()", () => {
-    test("detects modified file", async () => {
-      await using tmp = await tmpdir({ git: true })
-      const filepath = path.join(tmp.path, "file.txt")
-      await fs.writeFile(filepath, "original\n", "utf-8")
-      await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
-      await fs.writeFile(filepath, "modified\nextra line\n", "utf-8")
+    it.instance(
+      "detects modified file",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "file.txt")
+          yield* Effect.promise(() => fs.writeFile(filepath, "original\n", "utf-8"))
+          yield* gitAddAll(test.directory)
+          yield* gitCommit(test.directory, "add file")
+          yield* Effect.promise(() => fs.writeFile(filepath, "modified\nextra line\n", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await status()
-          const entry = result.find((f) => f.path === "file.txt")
+          const result = yield* status()
+          const entry = result.find((file) => file.path === "file.txt")
           expect(entry).toBeDefined()
           expect(entry!.status).toBe("modified")
           expect(entry!.added).toBeGreaterThan(0)
           expect(entry!.removed).toBeGreaterThan(0)
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("detects untracked file as added", async () => {
-      await using tmp = await tmpdir({ git: true })
-      await fs.writeFile(path.join(tmp.path, "new.txt"), "line1\nline2\nline3\n", "utf-8")
+    it.instance(
+      "detects untracked file as added",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "new.txt"), "line1\nline2\nline3\n", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await status()
-          const entry = result.find((f) => f.path === "new.txt")
+          const result = yield* status()
+          const entry = result.find((file) => file.path === "new.txt")
           expect(entry).toBeDefined()
           expect(entry!.status).toBe("added")
-          expect(entry!.added).toBe(4) // 3 lines + trailing newline splits to 4
+          expect(entry!.added).toBe(4)
           expect(entry!.removed).toBe(0)
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("detects deleted file", async () => {
-      await using tmp = await tmpdir({ git: true })
-      const filepath = path.join(tmp.path, "gone.txt")
-      await fs.writeFile(filepath, "content\n", "utf-8")
-      await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
-      await fs.rm(filepath)
+    it.instance(
+      "detects deleted file",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "gone.txt")
+          yield* Effect.promise(() => fs.writeFile(filepath, "content\n", "utf-8"))
+          yield* gitAddAll(test.directory)
+          yield* gitCommit(test.directory, "add file")
+          yield* Effect.promise(() => fs.rm(filepath))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await status()
-          // Deleted files appear in both numstat (as "modified") and diff-filter=D (as "deleted")
-          const entries = result.filter((f) => f.path === "gone.txt")
-          expect(entries.some((e) => e.status === "deleted")).toBe(true)
-        },
-      })
-    })
+          const result = yield* status()
+          const entries = result.filter((file) => file.path === "gone.txt")
+          expect(entries.some((entry) => entry.status === "deleted")).toBe(true)
+        }),
+      { git: true },
+    )
 
-    test("detects mixed changes", async () => {
-      await using tmp = await tmpdir({ git: true })
-      await fs.writeFile(path.join(tmp.path, "keep.txt"), "keep\n", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "remove.txt"), "remove\n", "utf-8")
-      await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit -m "initial"`.cwd(tmp.path).quiet()
+    it.instance(
+      "detects mixed changes",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "keep.txt"), "keep\n", "utf-8"))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "remove.txt"), "remove\n", "utf-8"))
+          yield* gitAddAll(test.directory)
+          yield* gitCommit(test.directory, "initial")
 
-      // Modify one, delete one, add one
-      await fs.writeFile(path.join(tmp.path, "keep.txt"), "changed\n", "utf-8")
-      await fs.rm(path.join(tmp.path, "remove.txt"))
-      await fs.writeFile(path.join(tmp.path, "brand-new.txt"), "hello\n", "utf-8")
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "keep.txt"), "changed\n", "utf-8"))
+          yield* Effect.promise(() => fs.rm(path.join(test.directory, "remove.txt")))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "brand-new.txt"), "hello\n", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await status()
-          expect(result.some((f) => f.path === "keep.txt" && f.status === "modified")).toBe(true)
-          expect(result.some((f) => f.path === "remove.txt" && f.status === "deleted")).toBe(true)
-          expect(result.some((f) => f.path === "brand-new.txt" && f.status === "added")).toBe(true)
-        },
-      })
-    })
+          const result = yield* status()
+          expect(result.some((file) => file.path === "keep.txt" && file.status === "modified")).toBe(true)
+          expect(result.some((file) => file.path === "remove.txt" && file.status === "deleted")).toBe(true)
+          expect(result.some((file) => file.path === "brand-new.txt" && file.status === "added")).toBe(true)
+        }),
+      { git: true },
+    )
 
-    test("returns empty for non-git project", async () => {
-      await using tmp = await tmpdir()
+    it.instance("returns empty for non-git project", () =>
+      Effect.gen(function* () {
+        expect(yield* status()).toEqual([])
+      }),
+    )
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await status()
-          expect(result).toEqual([])
-        },
-      })
-    })
+    it.instance(
+      "returns empty for clean repo",
+      () =>
+        Effect.gen(function* () {
+          expect(yield* status()).toEqual([])
+        }),
+      { git: true },
+    )
 
-    test("returns empty for clean repo", async () => {
-      await using tmp = await tmpdir({ git: true })
+    it.instance(
+      "parses binary numstat as 0",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "data.bin")
+          yield* Effect.promise(() => fs.writeFile(filepath, Buffer.from(Array.from({ length: 256 }, (_, index) => index))))
+          yield* gitAddAll(test.directory)
+          yield* gitCommit(test.directory, "add binary")
+          yield* Effect.promise(() => fs.writeFile(filepath, Buffer.from(Array.from({ length: 512 }, (_, index) => index % 256))))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await status()
-          expect(result).toEqual([])
-        },
-      })
-    })
-
-    test("parses binary numstat as 0", async () => {
-      await using tmp = await tmpdir({ git: true })
-      const filepath = path.join(tmp.path, "data.bin")
-      // Write content with null bytes so git treats it as binary
-      const binaryData = Buffer.alloc(256)
-      for (let i = 0; i < 256; i++) binaryData[i] = i
-      await fs.writeFile(filepath, binaryData)
-      await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit -m "add binary"`.cwd(tmp.path).quiet()
-      // Modify the binary
-      const modified = Buffer.alloc(512)
-      for (let i = 0; i < 512; i++) modified[i] = i % 256
-      await fs.writeFile(filepath, modified)
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await status()
-          const entry = result.find((f) => f.path === "data.bin")
+          const result = yield* status()
+          const entry = result.find((file) => file.path === "data.bin")
           expect(entry).toBeDefined()
           expect(entry!.status).toBe("modified")
           expect(entry!.added).toBe(0)
           expect(entry!.removed).toBe(0)
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
   })
 
   describe("list()", () => {
-    test("returns files and directories with correct shape", async () => {
-      await using tmp = await tmpdir({ git: true })
-      await fs.mkdir(path.join(tmp.path, "subdir"))
-      await fs.writeFile(path.join(tmp.path, "file.txt"), "content", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "subdir", "nested.txt"), "nested", "utf-8")
+    it.instance(
+      "returns files and directories with correct shape",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "subdir")))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "file.txt"), "content", "utf-8"))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "subdir", "nested.txt"), "nested", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const nodes = await list()
+          const nodes = yield* list()
           expect(nodes.length).toBeGreaterThanOrEqual(2)
           for (const node of nodes) {
             expect(node).toHaveProperty("name")
@@ -561,289 +493,260 @@ describe("file/index Filesystem patterns", () => {
             expect(node).toHaveProperty("ignored")
             expect(["file", "directory"]).toContain(node.type)
           }
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("sorts directories before files, alphabetical within each", async () => {
-      await using tmp = await tmpdir({ git: true })
-      await fs.mkdir(path.join(tmp.path, "beta"))
-      await fs.mkdir(path.join(tmp.path, "alpha"))
-      await fs.writeFile(path.join(tmp.path, "zz.txt"), "", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "aa.txt"), "", "utf-8")
+    it.instance(
+      "sorts directories before files, alphabetical within each",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "beta")))
+          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "alpha")))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "zz.txt"), "", "utf-8"))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "aa.txt"), "", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const nodes = await list()
-          const dirs = nodes.filter((n) => n.type === "directory")
-          const files = nodes.filter((n) => n.type === "file")
-          // Dirs come first
-          const firstFile = nodes.findIndex((n) => n.type === "file")
-          const lastDir = nodes.findLastIndex((n) => n.type === "directory")
+          const nodes = yield* list()
+          const dirs = nodes.filter((node) => node.type === "directory")
+          const files = nodes.filter((node) => node.type === "file")
+          const firstFile = nodes.findIndex((node) => node.type === "file")
+          const lastDir = nodes.findLastIndex((node) => node.type === "directory")
           if (lastDir >= 0 && firstFile >= 0) {
             expect(lastDir).toBeLessThan(firstFile)
           }
-          // Alphabetical within dirs
-          expect(dirs.map((d) => d.name)).toEqual(dirs.map((d) => d.name).toSorted())
-          // Alphabetical within files
-          expect(files.map((f) => f.name)).toEqual(files.map((f) => f.name).toSorted())
-        },
-      })
-    })
+          expect(dirs.map((dir) => dir.name)).toEqual(dirs.map((dir) => dir.name).toSorted())
+          expect(files.map((file) => file.name)).toEqual(files.map((file) => file.name).toSorted())
+        }),
+      { git: true },
+    )
 
-    test("excludes .git and .DS_Store", async () => {
-      await using tmp = await tmpdir({ git: true })
-      await fs.writeFile(path.join(tmp.path, ".DS_Store"), "", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "visible.txt"), "", "utf-8")
+    it.instance(
+      "excludes .git and .DS_Store",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, ".DS_Store"), "", "utf-8"))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "visible.txt"), "", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const nodes = await list()
-          const names = nodes.map((n) => n.name)
+          const names = (yield* list()).map((node) => node.name)
           expect(names).not.toContain(".git")
           expect(names).not.toContain(".DS_Store")
           expect(names).toContain("visible.txt")
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("marks gitignored files as ignored", async () => {
-      await using tmp = await tmpdir({ git: true })
-      await fs.writeFile(path.join(tmp.path, ".gitignore"), "*.log\nbuild/\n", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "app.log"), "log data", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "main.ts"), "code", "utf-8")
-      await fs.mkdir(path.join(tmp.path, "build"))
+    it.instance(
+      "marks gitignored files as ignored",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, ".gitignore"), "*.log\nbuild/\n", "utf-8"))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "app.log"), "log data", "utf-8"))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "main.ts"), "code", "utf-8"))
+          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "build")))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const nodes = await list()
-          const logNode = nodes.find((n) => n.name === "app.log")
-          const tsNode = nodes.find((n) => n.name === "main.ts")
-          const buildNode = nodes.find((n) => n.name === "build")
-          expect(logNode?.ignored).toBe(true)
-          expect(tsNode?.ignored).toBe(false)
-          expect(buildNode?.ignored).toBe(true)
-        },
-      })
-    })
+          const nodes = yield* list()
+          expect(nodes.find((node) => node.name === "app.log")?.ignored).toBe(true)
+          expect(nodes.find((node) => node.name === "main.ts")?.ignored).toBe(false)
+          expect(nodes.find((node) => node.name === "build")?.ignored).toBe(true)
+        }),
+      { git: true },
+    )
 
-    test("lists subdirectory contents", async () => {
-      await using tmp = await tmpdir({ git: true })
-      await fs.mkdir(path.join(tmp.path, "sub"))
-      await fs.writeFile(path.join(tmp.path, "sub", "a.txt"), "", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "sub", "b.txt"), "", "utf-8")
+    it.instance(
+      "lists subdirectory contents",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "sub")))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "sub", "a.txt"), "", "utf-8"))
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "sub", "b.txt"), "", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const nodes = await list("sub")
+          const nodes = yield* list("sub")
           expect(nodes.length).toBe(2)
-          expect(nodes.map((n) => n.name).sort()).toEqual(["a.txt", "b.txt"])
-          // Paths should be relative to project root (normalize for Windows)
+          expect(nodes.map((node) => node.name).sort()).toEqual(["a.txt", "b.txt"])
           expect(nodes[0].path.replaceAll("\\", "/").startsWith("sub/")).toBe(true)
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("throws for paths outside project directory", async () => {
-      await using tmp = await tmpdir({ git: true })
+    it.instance(
+      "throws for paths outside project directory",
+      () =>
+        Effect.gen(function* () {
+          expect(yield* failureMessage(list("../outside"))).toContain("Access denied")
+        }),
+      { git: true },
+    )
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await expect(list("../outside")).rejects.toThrow("Access denied")
-        },
-      })
-    })
+    it.instance("works without git", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "file.txt"), "hi", "utf-8"))
 
-    test("works without git", async () => {
-      await using tmp = await tmpdir()
-      await fs.writeFile(path.join(tmp.path, "file.txt"), "hi", "utf-8")
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const nodes = await list()
-          expect(nodes.length).toBeGreaterThanOrEqual(1)
-          // Without git, ignored should be false for all
-          for (const node of nodes) {
-            expect(node.ignored).toBe(false)
-          }
-        },
-      })
-    })
+        const nodes = yield* list()
+        expect(nodes.length).toBeGreaterThanOrEqual(1)
+        for (const node of nodes) {
+          expect(node.ignored).toBe(false)
+        }
+      }),
+    )
   })
 
   describe("search()", () => {
-    async function setupSearchableRepo() {
-      const tmp = await tmpdir({ git: true })
-      await fs.writeFile(path.join(tmp.path, "index.ts"), "code", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "utils.ts"), "utils", "utf-8")
-      await fs.writeFile(path.join(tmp.path, "readme.md"), "readme", "utf-8")
-      await fs.mkdir(path.join(tmp.path, "src"))
-      await fs.mkdir(path.join(tmp.path, ".hidden"))
-      await fs.writeFile(path.join(tmp.path, "src", "main.ts"), "main", "utf-8")
-      await fs.writeFile(path.join(tmp.path, ".hidden", "secret.ts"), "secret", "utf-8")
-      return tmp
-    }
+    it.instance(
+      "empty query returns files",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
+          yield* init()
 
-    test("empty query returns files", async () => {
-      await using tmp = await setupSearchableRepo()
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-
-          const result = await search({ query: "", type: "file" })
+          const result = yield* search({ query: "", type: "file" })
           expect(result.length).toBeGreaterThan(0)
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("search works before explicit init", async () => {
-      await using tmp = await setupSearchableRepo()
+    it.instance(
+      "search works before explicit init",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await search({ query: "main", type: "file" })
-          expect(result.some((f) => f.includes("main"))).toBe(true)
-        },
-      })
-    })
+          const result = yield* search({ query: "main", type: "file" })
+          expect(result.some((file) => file.includes("main"))).toBe(true)
+        }),
+      { git: true },
+    )
 
-    test("empty query returns dirs sorted with hidden last", async () => {
-      await using tmp = await setupSearchableRepo()
+    it.instance(
+      "empty query returns dirs sorted with hidden last",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
+          yield* init()
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-
-          const result = await search({ query: "", type: "directory" })
+          const result = yield* search({ query: "", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
-          // Find first hidden dir index
-          const firstHidden = result.findIndex((d) => d.split("/").some((p) => p.startsWith(".") && p.length > 1))
-          const lastVisible = result.findLastIndex((d) => !d.split("/").some((p) => p.startsWith(".") && p.length > 1))
+          const firstHidden = result.findIndex((dir) => dir.split("/").some((part) => part.startsWith(".") && part.length > 1))
+          const lastVisible = result.findLastIndex((dir) => !dir.split("/").some((part) => part.startsWith(".") && part.length > 1))
           if (firstHidden >= 0 && lastVisible >= 0) {
             expect(firstHidden).toBeGreaterThan(lastVisible)
           }
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("fuzzy matches file names", async () => {
-      await using tmp = await setupSearchableRepo()
+    it.instance(
+      "fuzzy matches file names",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
+          yield* init()
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
+          const result = yield* search({ query: "main", type: "file" })
+          expect(result.some((file) => file.includes("main"))).toBe(true)
+        }),
+      { git: true },
+    )
 
-          const result = await search({ query: "main", type: "file" })
-          expect(result.some((f) => f.includes("main"))).toBe(true)
-        },
-      })
-    })
+    it.instance(
+      "type filter returns only files",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
+          yield* init()
 
-    test("type filter returns only files", async () => {
-      await using tmp = await setupSearchableRepo()
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-
-          const result = await search({ query: "", type: "file" })
-          // Files don't end with /
-          for (const f of result) {
-            expect(f.endsWith("/")).toBe(false)
+          const result = yield* search({ query: "", type: "file" })
+          for (const file of result) {
+            expect(file.endsWith("/")).toBe(false)
           }
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("type filter returns only directories", async () => {
-      await using tmp = await setupSearchableRepo()
+    it.instance(
+      "type filter returns only directories",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
+          yield* init()
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-
-          const result = await search({ query: "", type: "directory" })
-          // Directories end with /
-          for (const d of result) {
-            expect(d.endsWith("/")).toBe(true)
+          const result = yield* search({ query: "", type: "directory" })
+          for (const dir of result) {
+            expect(dir.endsWith("/")).toBe(true)
           }
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("respects limit", async () => {
-      await using tmp = await setupSearchableRepo()
+    it.instance(
+      "respects limit",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
+          yield* init()
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-
-          const result = await search({ query: "", type: "file", limit: 2 })
+          const result = yield* search({ query: "", type: "file", limit: 2 })
           expect(result.length).toBeLessThanOrEqual(2)
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("query starting with dot prefers hidden files", async () => {
-      await using tmp = await setupSearchableRepo()
+    it.instance(
+      "query starting with dot prefers hidden files",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
+          yield* init()
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-
-          const result = await search({ query: ".hidden", type: "directory" })
+          const result = yield* search({ query: ".hidden", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
           expect(result[0]).toContain(".hidden")
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("search refreshes after init when files change", async () => {
-      await using tmp = await setupSearchableRepo()
+    it.instance(
+      "search refreshes after init when files change",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* setupSearchableRepo(test.directory)
+          yield* init()
+          expect(yield* search({ query: "fresh", type: "file" })).toEqual([])
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-          expect(await search({ query: "fresh", type: "file" })).toEqual([])
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "fresh.ts"), "fresh", "utf-8"))
 
-          await fs.writeFile(path.join(tmp.path, "fresh.ts"), "fresh", "utf-8")
-
-          const result = await search({ query: "fresh", type: "file" })
-          expect(result).toContain("fresh.ts")
-        },
-      })
-    })
+          expect(yield* search({ query: "fresh", type: "file" })).toContain("fresh.ts")
+        }),
+      { git: true },
+    )
   })
 
   describe("read() - diff/patch", () => {
-    test("returns diff and patch for modified tracked file", async () => {
-      await using tmp = await tmpdir({ git: true })
-      const filepath = path.join(tmp.path, "file.txt")
-      await fs.writeFile(filepath, "original content\n", "utf-8")
-      await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
-      await fs.writeFile(filepath, "modified content\n", "utf-8")
+    it.instance(
+      "returns diff and patch for modified tracked file",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "file.txt")
+          yield* Effect.promise(() => fs.writeFile(filepath, "original content\n", "utf-8"))
+          yield* gitAddAll(test.directory)
+          yield* gitCommit(test.directory, "add file")
+          yield* Effect.promise(() => fs.writeFile(filepath, "modified content\n", "utf-8"))
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("file.txt")
+          const result = yield* read("file.txt")
           expect(result.type).toBe("text")
           expect(result.content).toBe("modified content")
           expect(result.diff).toBeDefined()
@@ -851,107 +754,90 @@ describe("file/index Filesystem patterns", () => {
           expect(result.diff).toContain("modified content")
           expect(result.patch).toBeDefined()
           expect(result.patch!.hunks.length).toBeGreaterThan(0)
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("returns diff for staged changes", async () => {
-      await using tmp = await tmpdir({ git: true })
-      const filepath = path.join(tmp.path, "staged.txt")
-      await fs.writeFile(filepath, "before\n", "utf-8")
-      await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
-      await fs.writeFile(filepath, "after\n", "utf-8")
-      await $`git add .`.cwd(tmp.path).quiet()
+    it.instance(
+      "returns diff for staged changes",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "staged.txt")
+          yield* Effect.promise(() => fs.writeFile(filepath, "before\n", "utf-8"))
+          yield* gitAddAll(test.directory)
+          yield* gitCommit(test.directory, "add file")
+          yield* Effect.promise(() => fs.writeFile(filepath, "after\n", "utf-8"))
+          yield* gitAddAll(test.directory)
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("staged.txt")
+          const result = yield* read("staged.txt")
           expect(result.diff).toBeDefined()
           expect(result.patch).toBeDefined()
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
 
-    test("returns no diff for unmodified file", async () => {
-      await using tmp = await tmpdir({ git: true })
-      const filepath = path.join(tmp.path, "clean.txt")
-      await fs.writeFile(filepath, "unchanged\n", "utf-8")
-      await $`git add .`.cwd(tmp.path).quiet()
-      await $`git commit -m "add file"`.cwd(tmp.path).quiet()
+    it.instance(
+      "returns no diff for unmodified file",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "clean.txt")
+          yield* Effect.promise(() => fs.writeFile(filepath, "unchanged\n", "utf-8"))
+          yield* gitAddAll(test.directory)
+          yield* gitCommit(test.directory, "add file")
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const result = await read("clean.txt")
+          const result = yield* read("clean.txt")
           expect(result.type).toBe("text")
           expect(result.content).toBe("unchanged")
           expect(result.diff).toBeUndefined()
           expect(result.patch).toBeUndefined()
-        },
-      })
-    })
+        }),
+      { git: true },
+    )
   })
 
   describe("InstanceState isolation", () => {
-    test("two directories get independent file caches", async () => {
-      await using one = await tmpdir({ git: true })
-      await using two = await tmpdir({ git: true })
-      await fs.writeFile(path.join(one.path, "a.ts"), "one", "utf-8")
-      await fs.writeFile(path.join(two.path, "b.ts"), "two", "utf-8")
+    it.instance(
+      "two directories get independent file caches",
+      () =>
+        Effect.gen(function* () {
+          const one = yield* TestInstance
+          yield* Effect.promise(() => fs.writeFile(path.join(one.directory, "a.ts"), "one", "utf-8"))
+          yield* init()
+          expect(yield* search({ query: "a.ts", type: "file" })).toContain("a.ts")
+          expect(yield* search({ query: "b.ts", type: "file" })).not.toContain("b.ts")
 
-      await WithInstance.provide({
-        directory: one.path,
-        fn: async () => {
-          await init()
-          const results = await search({ query: "a.ts", type: "file" })
-          expect(results).toContain("a.ts")
-          const results2 = await search({ query: "b.ts", type: "file" })
-          expect(results2).not.toContain("b.ts")
-        },
-      })
+          yield* Effect.gen(function* () {
+            const two = yield* TestInstance
+            yield* Effect.promise(() => fs.writeFile(path.join(two.directory, "b.ts"), "two", "utf-8"))
+            yield* init()
+            expect(yield* search({ query: "b.ts", type: "file" })).toContain("b.ts")
+            expect(yield* search({ query: "a.ts", type: "file" })).not.toContain("a.ts")
+          }).pipe(withTmpdirInstance({ git: true }))
+        }),
+      { git: true },
+    )
 
-      await WithInstance.provide({
-        directory: two.path,
-        fn: async () => {
-          await init()
-          const results = await search({ query: "b.ts", type: "file" })
-          expect(results).toContain("b.ts")
-          const results2 = await search({ query: "a.ts", type: "file" })
-          expect(results2).not.toContain("a.ts")
-        },
-      })
-    })
+    it.instance(
+      "disposal gives fresh state on next access",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "before.ts"), "before", "utf-8"))
+          yield* init()
+          expect(yield* search({ query: "before", type: "file" })).toContain("before.ts")
 
-    test("disposal gives fresh state on next access", async () => {
-      await using tmp = await tmpdir({ git: true })
-      await fs.writeFile(path.join(tmp.path, "before.ts"), "before", "utf-8")
+          yield* Effect.promise(() => disposeAllInstances())
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-          const results = await search({ query: "before", type: "file" })
-          expect(results).toContain("before.ts")
-        },
-      })
+          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "after.ts"), "after", "utf-8"))
+          yield* Effect.promise(() => fs.rm(path.join(test.directory, "before.ts")))
 
-      await disposeAllInstances()
-
-      await fs.writeFile(path.join(tmp.path, "after.ts"), "after", "utf-8")
-      await fs.rm(path.join(tmp.path, "before.ts"))
-
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await init()
-          const results = await search({ query: "after", type: "file" })
-          expect(results).toContain("after.ts")
-          const stale = await search({ query: "before", type: "file" })
-          expect(stale).not.toContain("before.ts")
-        },
-      })
-    })
+          yield* init()
+          expect(yield* search({ query: "after", type: "file" })).toContain("after.ts")
+          expect(yield* search({ query: "before", type: "file" })).not.toContain("before.ts")
+        }),
+      { git: true },
+    )
   })
 })
