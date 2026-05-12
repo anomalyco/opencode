@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
+import { Tool } from "@/tool/tool"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -29,6 +30,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Reference } from "@/reference/reference"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolJsonSchema } from "@/tool/json-schema"
+import { MessageID, SessionID } from "@/session/schema"
 
 const node = CrossSpawnSpawner.defaultLayer
 const originalExperimentalScout = Flag.OPENCODE_EXPERIMENTAL_SCOUT
@@ -190,6 +192,54 @@ describe("tool.registry", () => {
         },
         required: ["query"],
       })
+    }),
+  )
+
+  it.instance("preserves attachments from structured custom tool results", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "image.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'image tool',",
+            "  args: {},",
+            "  execute: async () => ({",
+            "    output: 'here is an image',",
+            "    attachments: [{ type: 'file', mime: 'image/png', filename: 'picture.png', url: 'data:image/png;base64,AAAA' }],",
+            "  }),",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "image")
+      if (!loaded) throw new Error("custom image tool was not loaded")
+      const agents = yield* Agent.Service
+      const result = yield* loaded.execute(
+        {},
+        {
+          sessionID: SessionID.make("ses_test"),
+          messageID: MessageID.make("msg_test"),
+          agent: (yield* agents.defaultInfo()).name,
+          abort: new AbortController().signal,
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        } satisfies Tool.Context,
+      )
+
+      expect(result.output).toBe("here is an image")
+      expect(result.attachments).toEqual([
+        { type: "file", mime: "image/png", filename: "picture.png", url: "data:image/png;base64,AAAA" },
+      ])
     }),
   )
 
