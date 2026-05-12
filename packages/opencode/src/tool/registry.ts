@@ -29,6 +29,8 @@ import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import { TeamTool } from "./team"
+import { SendMessageTool } from "./send_message"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -128,6 +130,8 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const teamtool = yield* TeamTool
+    const sendmessagetool = yield* SendMessageTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -228,6 +232,8 @@ export const layer: Layer.Layer<
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
+          team: Tool.init(teamtool),
+          send_message: Tool.init(sendmessagetool),
           plan: Tool.init(plan),
         })
 
@@ -251,6 +257,7 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
+            ...(Flag.OPENCODE_EXPERIMENTAL_TEAMS ? [tool.team, tool.send_message] : []),
           ],
           task: tool.task,
           read: tool.read,

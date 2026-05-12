@@ -1,0 +1,24 @@
+Manage a team of agents that work in parallel on complex tasks.
+
+Unlike the Task tool (which creates isolated subagents that can only report back to you), the Team tool creates a coordinated group of agents that can:
+1. Share a task list on disk — teammates self-claim tasks and mark them done
+2. Message each other directly — without routing through you (the lead)
+
+Use this tool when:
+- A task can be decomposed into independent subtasks that benefit from parallel execution
+- Multiple areas of the codebase need changes simultaneously
+- Context window pressure is high and splitting work reduces per-agent file reading
+
+Do NOT use this tool when:
+- Tasks are sequential and each depends on the previous result
+- Multiple agents would need to edit the same files (creates conflicts)
+- The task is simple enough for a single agent
+
+Actions:
+- "create": Create a new team and shared task list. Returns a team_id.
+- "add_tasks": Add tasks to the shared list for teammates to claim.
+- "spawn": Spawn a new teammate agent that joins the team.
+- "status": Check the current state of the team: which tasks are pending, claimed, or done, and what results teammates have produced.
+- "claim_task": Claim a task from the shared list to work on it.
+- "complete_task": Mark a claimed task as done and provide the result.
+

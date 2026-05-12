@@ -112,6 +112,53 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 
+### Agent Teams (Experimental)
+
+OpenCode includes an experimental **Agent Teams** feature for collaborative, peer-to-peer agent coordination. Multiple agents — even across separate terminal sessions using different models — can form a team, share a task list, and communicate directly.
+
+#### Enabling
+
+```bash
+export OPENCODE_EXPERIMENTAL_TEAMS=true
+```
+
+#### Multi-Terminal, Multi-Model Workflow
+
+Agent Teams are coordinated through files on disk (`.opencode/teams/{team-id}/`), which means any OpenCode session in the same project can participate — regardless of which model it uses.
+
+**Terminal 1 — Lead (e.g. Claude Sonnet)**
+```
+> Create a team and add tasks for building the API routes and the database schema.
+# Agent creates team_1234..., adds tasks, and reports the team_id
+```
+
+**Terminal 2 — Teammate (e.g. Gemini)**
+```
+> You are a teammate in team team_1234... Check status, claim a task, and start working.
+# Agent uses "status" to see pending tasks, "claim_task" to lock one, works on it,
+# then "complete_task" to report the result
+```
+
+**Terminal 3 — Teammate (e.g. GPT-4o)**
+```
+> Join team team_1234... and pick up the remaining tasks.
+```
+
+Each terminal has its own chat and its own model, but they all coordinate through the shared task list.
+
+#### Available Tool Actions
+
+| Tool | Action | Description |
+|------|--------|-------------|
+| `team` | `create` | Create a new team. Returns a `team_id`. |
+| `team` | `add_tasks` | Add tasks to the shared list. |
+| `team` | `spawn` | Spawn a teammate agent in the background. |
+| `team` | `status` | View all tasks and their states. |
+| `team` | `claim_task` | Claim a pending task to work on. |
+| `team` | `complete_task` | Mark a task as done with a result. |
+| `send_message` | — | Send a direct message to a teammate or broadcast to all. |
+
+
 ### Documentation
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).

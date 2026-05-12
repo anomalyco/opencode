@@ -1,0 +1,8 @@
+Send a direct message to another agent in your team, or broadcast to all teammates.
+
+This tool allows teammates in an Agent Team to communicate directly with each other, bypassing the lead agent. This is useful when:
+- One teammate finishes defining an interface/type that another teammate needs
+- You need to coordinate which files to avoid editing simultaneously
+- You want to share intermediate results or discoveries with a specific teammate
+
+You must specify the team_id and the target session_id (or "*" for broadcast).
