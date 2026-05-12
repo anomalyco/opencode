@@ -77,4 +77,32 @@ Continued cleanup after the v0.1.0 brand migration — fixed remaining OpenCode 
 
 ---
 
-[Unreleased]: https://github.com/anomalyco/opencode/compare/v0.2.0...HEAD
+## v0.3.0 (2026-05-12)
+
+### Octopus Visual Brand Identity
+
+Systematic replacement of all brand assets with the new octopus visual identity. The project now actually looks like an octopus instead of abstract geometric logos.
+
+#### Changes (7 Issues, ~356 files)
+
+1. **Master SVG & Identity Suite** — Vectorized `octopus.png` into SVG master source with 6 variants (mark, dark, light, square, mono, wordmark); cleaned up old O-ring assets
+2. **Web, UI & Favicon Integration** — Replaced abstract block logos with octopus mark and wordmark across 13 components (logo.tsx, docs, favicon, console assets)
+3. **Console Brand Kit** — Replaced all 28 opencode brand download files with octopus brand kit (SVG, PNG, ZIP, preview images)
+4. **Desktop App Icons** — Automated icon generation pipeline (sharp + png2icons 2.0.1 + icon-gen) supporting 6 platforms × 3 channels = 159+ icons; atomic batch writes with rollback; Linux hicolor theme support
+5. **Marketing Assets** — Updated Zed extension icon, email templates (OpenCode → Octopus), added TODO markers for social share card replacement
+6. **CLI ASCII Art** — Redesigned TUI startup logo from "OPCODE" → "OCTOPUS" block characters
+7. **CSS Brand Palette** — Refreshed brand color tokens from yellow-green to indigo-violet palette; light/dark theme consistency
+
+#### Quality
+
+| Gate | Result |
+|------|:---:|
+| typecheck | Passed |
+| prettier (source) | Passed |
+| P4 LLM Panel (#4) | 5 Go / 2 NoGo ✅ |
+| P5 LLM Panel (#4) | 5 Go / 2 NoGo ✅ (R2) |
+| P7 quality gates (7/7) | All passed |
+
+---
+
+[Unreleased]: https://github.com/anomalyco/opencode/compare/v0.3.0...HEAD
