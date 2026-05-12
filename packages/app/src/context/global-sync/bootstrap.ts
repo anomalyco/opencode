@@ -145,12 +145,18 @@ function projectID(directory: string, projects: Project[]) {
   return projectOwner(directory, projects)?.project.id
 }
 
+export function upsertProject(projects: Project[], project: Project) {
+  const next = projects.filter((item) => item.id !== project.id)
+  return [...next, project].sort((a, b) => cmp(a.id, b.id))
+}
+
 export async function bootstrapDirectory(input: {
   directory: string
   sdk: OpencodeClient
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
+  setProject?: (projects: Project[]) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
     config: Config
@@ -159,7 +165,8 @@ export async function bootstrapDirectory(input: {
   }
 }) {
   const loading = input.store.status !== "complete"
-  const seededProject = projectID(input.directory, input.global.project)
+  let projects = input.global.project
+  const seededProject = projectID(input.directory, projects)
   if (seededProject) input.setStore("project", seededProject)
   if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
     input.setStore("provider", input.global.provider)
@@ -171,15 +178,25 @@ export async function bootstrapDirectory(input: {
 
   const fast = [
     () =>
-      seededProject
-        ? Promise.resolve()
-        : retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id)),
+      retry(() => input.sdk.project.current()).then((x) => {
+        const project = x.data!
+        projects = upsertProject(projects, project)
+        input.setProject?.(projects)
+        const id = projectID(input.directory, projects) ?? project.id
+        console.debug("[global-sync] project current seeded", {
+          directory: input.directory,
+          project: project.id,
+          vcs: project.vcs ?? null,
+          worktree: project.worktree,
+        })
+        input.setStore("project", id)
+      }),
     () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
     () =>
       retry(() =>
         input.sdk.path.get().then((x) => {
           input.setStore("path", x.data!)
-          const next = projectID(x.data?.directory ?? input.directory, input.global.project)
+          const next = projectID(x.data?.directory ?? input.directory, projects)
           if (next) input.setStore("project", next)
         }),
       ),
