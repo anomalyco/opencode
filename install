@@ -457,4 +457,11 @@ echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""
 echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
 echo -e ""
+echo -e "${MUTED}Run the following to use opencode in this session:${NC}"
+if [[ -n "$config_file" ]]; then
+    echo -e "  ${ORANGE}source $config_file${NC}"
+else
+    echo -e "  ${ORANGE}source ${config_files%% *}${NC}"
+fi
+echo -e "${MUTED}or open a new terminal tab/window.${NC}"
 echo -e ""
