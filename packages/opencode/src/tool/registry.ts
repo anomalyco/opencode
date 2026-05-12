@@ -142,13 +142,14 @@ export const layer: Layer.Layer<
           const entries = Object.entries(def.args)
           const allZod = entries.every((entry) => isZodType(entry[1]))
           const zodParams = allZod ? z.object(def.args) : undefined
+          const jsonSchema = zodParams ? z.toJSONSchema(zodParams, { io: "input" }) : legacyJsonSchema(entries)
           const parameters = zodParams
             ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
             : Schema.Unknown
           return {
             id,
             parameters,
-            jsonSchema: zodParams ? z.toJSONSchema(zodParams, { io: "input" }) : legacyJsonSchema(entries),
+            jsonSchema,
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {

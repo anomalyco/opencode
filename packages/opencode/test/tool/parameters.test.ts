@@ -52,6 +52,36 @@ describe("tool parameters", () => {
     test("webfetch", () => expect(toJsonSchema(WebFetch)).toMatchSnapshot())
     test("websearch", () => expect(toJsonSchema(WebSearch)).toMatchSnapshot())
     test("write", () => expect(toJsonSchema(Write)).toMatchSnapshot())
+
+    test("inlines named child schemas for provider compatibility", () => {
+      const schema = toJsonSchema(Question)
+      expect(schema).not.toHaveProperty("$defs")
+      expect(schema).toMatchObject({
+        properties: {
+          questions: { items: { properties: { options: { items: { properties: { label: { type: "string" } } } } } } },
+        },
+      })
+    })
+
+    test("preserves required nullable fields", () => {
+      expect(toJsonSchema(Schema.Struct({ value: Schema.NullOr(Schema.String) }))).toMatchObject({
+        properties: { value: { anyOf: expect.arrayContaining([{ type: "null" }]) } },
+      })
+    })
+
+    test("keeps repeated allOf constraints instead of dropping duplicates", () => {
+      expect(
+        toJsonSchema(
+          Schema.Struct({ value: Schema.String.check(Schema.isPattern(/^a/)).check(Schema.isPattern(/z$/)) }),
+        ),
+      ).toMatchObject({ properties: { value: { allOf: [{ pattern: "^a" }, { pattern: "z$" }] } } })
+    })
+
+    test("bounds bare integer fields to safe integer range", () => {
+      expect(toJsonSchema(Schema.Struct({ value: Schema.Int }))).toMatchObject({
+        properties: { value: { minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER } },
+      })
+    })
   })
 
   describe("apply_patch", () => {
