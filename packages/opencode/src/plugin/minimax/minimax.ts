@@ -121,7 +121,7 @@ function createMinimaxAuthPlugin(config: MinimaxRegionConfig) {
         methods: [
           {
             type: "oauth",
-            label: "Login with MiniMax",
+            label: "Log in with MiniMax (OAuth)",
 
             async authorize() {
               const codeVerifier = generateCodeVerifier()
@@ -213,7 +213,7 @@ function createMinimaxAuthPlugin(config: MinimaxRegionConfig) {
           },
           {
             type: "api",
-            label: "Enter API key",
+            label: "Manually enter Token Plan key",
           },
         ],
       },
