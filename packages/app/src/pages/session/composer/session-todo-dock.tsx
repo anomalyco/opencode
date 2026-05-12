@@ -42,17 +42,16 @@ function dot(status: Todo["status"]) {
 export function SessionTodoDock(props: {
   sessionID?: string
   todos: Todo[]
+  collapsed: boolean
+  onToggle: () => void
   collapseLabel: string
   expandLabel: string
   dockProgress: number
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({
-    collapsed: false,
     height: 320,
   })
-
-  const toggle = () => setStore("collapsed", (value) => !value)
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
@@ -72,7 +71,7 @@ export function SessionTodoDock(props: {
   )
 
   const preview = createMemo(() => active()?.content ?? "")
-  const collapse = useSpring(() => (store.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
+  const collapse = useSpring(() => (props.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
   const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress)))
   const shut = createMemo(() => 1 - dock())
   const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
@@ -107,11 +106,11 @@ export function SessionTodoDock(props: {
           class="pl-3 pr-2 py-2 flex items-center gap-2 overflow-visible"
           role="button"
           tabIndex={0}
-          onClick={toggle}
+          onClick={props.onToggle}
           onKeyDown={(event) => {
             if (event.key !== "Enter" && event.key !== " ") return
             event.preventDefault()
-            toggle()
+            props.onToggle()
           }}
         >
           <span
@@ -148,7 +147,7 @@ export function SessionTodoDock(props: {
           >
             <TextReveal
               class="text-14-regular text-text-base cursor-default"
-              text={store.collapsed ? preview() : undefined}
+              text={props.collapsed ? preview() : undefined}
               duration={600}
               travel={25}
               edge={17}
@@ -161,7 +160,7 @@ export function SessionTodoDock(props: {
           <div class="ml-auto">
             <IconButton
               data-action="session-todo-toggle-button"
-              data-collapsed={store.collapsed ? "true" : "false"}
+              data-collapsed={props.collapsed ? "true" : "false"}
               icon="chevron-down"
               size="normal"
               variant="ghost"
@@ -172,16 +171,16 @@ export function SessionTodoDock(props: {
               }}
               onClick={(event) => {
                 event.stopPropagation()
-                toggle()
+                props.onToggle()
               }}
-              aria-label={store.collapsed ? props.expandLabel : props.collapseLabel}
+              aria-label={props.collapsed ? props.expandLabel : props.collapseLabel}
             />
           </div>
         </div>
 
         <div
           data-slot="session-todo-list"
-          aria-hidden={store.collapsed || off()}
+          aria-hidden={props.collapsed || off()}
           classList={{
             "pointer-events-none": hide() > 0.1,
           }}

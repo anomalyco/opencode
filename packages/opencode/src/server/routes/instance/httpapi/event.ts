@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
+import { WorkspaceRoutingQuery } from "./middleware/workspace-routing"
 
 const log = Log.create({ service: "server" })
 
@@ -16,6 +17,7 @@ export const EventApi = HttpApi.make("event").add(
   HttpApiGroup.make("event")
     .add(
       HttpApiEndpoint.get("subscribe", EventPaths.event, {
+        query: WorkspaceRoutingQuery,
         success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/event-stream" })),
       }).annotateMerge(
         OpenApi.annotations({

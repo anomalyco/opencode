@@ -1,12 +1,13 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
 import { createServer } from "node:http"
-import type { Opts } from "./adapter"
 import { Service } from "./httpapi-server"
 
 export { Service }
 
 export const name = "node-http-server"
+
+export type Opts = { port: number; hostname: string }
 
 export const layer = (opts: Opts) => {
   const server = createServer()

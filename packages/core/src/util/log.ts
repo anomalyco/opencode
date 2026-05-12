@@ -4,11 +4,14 @@ import path from "path"
 import fs from "fs/promises"
 import { createWriteStream } from "fs"
 import * as Global from "../global"
-import z from "zod"
+import { Schema } from "effect"
 import { Glob } from "./glob"
 
-export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
-export type Level = z.infer<typeof Level>
+export const Level = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
+  identifier: "LogLevel",
+  description: "Log level",
+})
+export type Level = Schema.Schema.Type<typeof Level>
 
 const levelPriority: Record<Level, number> = {
   DEBUG: 0,

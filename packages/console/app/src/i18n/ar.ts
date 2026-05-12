@@ -355,8 +355,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "مفتاح API مفقود.",
   "zen.api.error.invalidApiKey": "مفتاح API غير صالح.",
   "zen.api.error.subscriptionQuotaExceeded": "تم تجاوز حصة الاشتراك. أعد المحاولة خلال {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "تم تجاوز حصة الاشتراك. يمكنك الاستمرار في استخدام النماذج المجانية.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "تم الوصول إلى حد الاستخدام لمدة 5 ساعات. تتم إعادة التعيين خلال {{retryIn}}. لمواصلة استخدام هذا النموذج الآن، فعّل الاستخدام من رصيدك المتاح: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "تم الوصول إلى حد الاستخدام الأسبوعي. تتم إعادة التعيين خلال {{retryIn}}. لمواصلة استخدام هذا النموذج الآن، فعّل الاستخدام من رصيدك المتاح: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "تم الوصول إلى حد الاستخدام الشهري. تتم إعادة التعيين خلال {{retryIn}}. لمواصلة استخدام هذا النموذج الآن، فعّل الاستخدام من رصيدك المتاح: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "لا توجد طريقة دفع. أضف طريقة دفع هنا: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "رصيد غير كاف. إدارة فواتيرك هنا: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
