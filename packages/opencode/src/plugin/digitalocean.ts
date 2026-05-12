@@ -85,26 +85,16 @@ const HTML_CALLBACK = `<!doctype html>
     </div>
     <script>
       (async function() {
-        function parseHash(hash) {
-          if (!hash || hash.length < 2) return {}
-          const out = {}
-          for (const part of hash.slice(1).split("&")) {
-            const [k, v] = part.split("=")
-            if (!k) continue
-            out[decodeURIComponent(k)] = v == null ? "" : decodeURIComponent(v)
-          }
-          return out
-        }
-        const params = parseHash(window.location.hash)
+        const params = new URLSearchParams((window.location.hash || "").slice(1))
         const search = new URLSearchParams(window.location.search)
-        const error = params.error || search.get("error")
-        const errorDescription = params.error_description || search.get("error_description")
+        const error = params.get("error") || search.get("error")
+        const errorDescription = params.get("error_description") || search.get("error_description")
         const titleEl = document.getElementById("title")
         const msgEl = document.getElementById("msg")
         try {
           const body = error
             ? { error, error_description: errorDescription || "" }
-            : { access_token: params.access_token || "", expires_in: params.expires_in || "0", state: params.state || "" }
+            : { access_token: params.get("access_token") || "", expires_in: params.get("expires_in") || "0", state: params.get("state") || "" }
           await fetch(${JSON.stringify(OAUTH_TOKEN_PATH)}, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -410,20 +400,6 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
         {
           type: "api",
           label: "Paste Model Access Key",
-          prompts: [
-            {
-              type: "text",
-              key: "key",
-              message: "Enter your DigitalOcean Model Access Key",
-              placeholder: "sk_do_...",
-              validate: (value) => (value && value.length > 0 ? undefined : "Required"),
-            },
-          ],
-          async authorize(inputs = {}) {
-            const key = inputs["key"]
-            if (!key) return { type: "failed" as const }
-            return { type: "success" as const, provider: "digitalocean", key }
-          },
         },
       ],
     },

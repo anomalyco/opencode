@@ -77,13 +77,14 @@ test("digitalocean provider.models surfaces cached routers from auth metadata", 
     },
   })
   let routerFetches = 0
-  globalThis.fetch = (async (input: any, init?: any) => {
+  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+    const input = args[0]
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes("/v2/gen-ai/models/routers")) {
       routerFetches++
       throw new Error("router endpoint should not be called when cache is fresh")
     }
-    return originalFetch(input, init)
+    return originalFetch(...args)
   }) as typeof fetch
   injectAuth({
     routers: JSON.stringify([
@@ -119,13 +120,14 @@ test("digitalocean provider.models skips refresh when oauth bearer is expired", 
     },
   })
   let routerFetches = 0
-  globalThis.fetch = (async (input: any, init?: any) => {
+  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+    const input = args[0]
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes("/v2/gen-ai/models/routers")) {
       routerFetches++
       return new Response(JSON.stringify({ model_routers: [] }), { status: 200 })
     }
-    return originalFetch(input, init)
+    return originalFetch(...args)
   }) as typeof fetch
   injectAuth({
     routers: JSON.stringify([{ name: "stale-router", uuid: "stale" }]),
@@ -154,13 +156,14 @@ test("digitalocean provider.models passes through base models when no auth metad
     },
   })
   let routerFetches = 0
-  globalThis.fetch = (async (input: any, init?: any) => {
+  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+    const input = args[0]
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes("/v2/gen-ai/models/")) {
       routerFetches++
       throw new Error("DO management API should not be called without metadata")
     }
-    return originalFetch(input, init)
+    return originalFetch(...args)
   }) as typeof fetch
   await WithInstance.provide({
     directory: tmp.path,
