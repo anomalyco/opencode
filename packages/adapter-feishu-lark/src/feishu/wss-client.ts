@@ -7,6 +7,8 @@
 // SDK autoReconnect 自带断线重连,我们不再手动 retry。
 // SDK domain 参数:`https://open.feishu.cn`(国内) / `https://open.larksuite.com`(国际)。
 
+import { homedir } from "node:os"
+import { join } from "node:path"
 import { EventDispatcher, WSClient } from "@larksuiteoapi/node-sdk"
 import type { FeishuAccount } from "../core/config-schema"
 import { readSecret } from "../core/secret-ref"
@@ -67,8 +69,12 @@ export class FeishuWSSClient {
   private readonly wsClient: WSClient
   private readonly dispatcher: EventDispatcher
   private readonly chatQueue = new ChatQueue()
-  /** 第一层:同 messageId+ts 12h dedup(防 WSS 重连重放,飞书 message_id 同 = 真正重复)*/
-  private readonly dedup = new DedupCache()
+  /** 第一层:同 messageId+ts 12h dedup(防 WSS 重连重放,飞书 message_id 同 = 真正重复)
+   *  **持久化到磁盘** — sidecar 重启后能识别之前 mark 的 message_id,防飞书 WSS 重连
+   *  server 重推老 message 时 in-memory cache 失忆把老 message 当新的(2026-05-12 实测撞过) */
+  private readonly dedup = new DedupCache({
+    persistPath: join(homedir(), ".opencode", "feishu-wss-dedup.json"),
+  })
   /** 第二层:同 chatId+text 10s 短期 dedup(防飞书 IM 客户端连击/retry 发出**不同 message_id 但内容一致**
    *  的 2 条消息 — 飞书后台分配新 id 第一层拦不住,但 user 实际是想发一次)
    *  [feat: permission-card-ux-fixes] 2026-05-12 */
