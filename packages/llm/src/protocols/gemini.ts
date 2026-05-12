@@ -16,6 +16,7 @@ import {
 } from "../schema"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
+import { Lifecycle } from "./utils/lifecycle"
 
 const ADAPTER = "gemini"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -134,9 +135,8 @@ interface ParserState {
   readonly hasToolCalls: boolean
   readonly nextToolCallId: number
   readonly usage?: Usage
+  readonly lifecycle: Lifecycle.State
 }
-
-const invalid = ProviderShared.invalidRequest
 
 const mediaData = ProviderShared.mediaBytes
 
@@ -324,7 +324,14 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
 
 const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
   state.finishReason || state.usage
-    ? [LLMEvent.requestFinish({ reason: mapFinishReason(state.finishReason, state.hasToolCalls), usage: state.usage })]
+    ? (() => {
+        const events: LLMEvent[] = []
+        Lifecycle.finish(state.lifecycle, events, {
+          reason: mapFinishReason(state.finishReason, state.hasToolCalls),
+          usage: state.usage,
+        })
+        return events
+      })()
     : []
 
 const step = (state: ParserState, event: GeminiEvent) => {
@@ -341,21 +348,21 @@ const step = (state: ParserState, event: GeminiEvent) => {
 
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
+  let lifecycle = nextState.lifecycle
   let nextToolCallId = nextState.nextToolCallId
 
   for (const part of candidate.content.parts) {
     if ("text" in part && part.text.length > 0) {
-      events.push(
-        part.thought
-          ? LLMEvent.reasoningDelta({ id: "reasoning-0", text: part.text })
-          : LLMEvent.textDelta({ id: "text-0", text: part.text }),
-      )
+      lifecycle = part.thought
+        ? Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", part.text)
+        : Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
       continue
     }
 
     if ("functionCall" in part) {
       const input = part.functionCall.args
       const id = `tool_${nextToolCallId++}`
+      lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(LLMEvent.toolCall({ id, name: part.functionCall.name, input }))
       hasToolCalls = true
     }
@@ -365,6 +372,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
     {
       ...nextState,
       hasToolCalls,
+      lifecycle,
       nextToolCallId,
       finishReason: candidate.finishReason ?? nextState.finishReason,
     },
@@ -388,7 +396,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
-    initial: () => ({ hasToolCalls: false, nextToolCallId: 0 }),
+    initial: () => ({ hasToolCalls: false, nextToolCallId: 0, lifecycle: Lifecycle.initial() }),
     step,
     onHalt: finish,
   },
