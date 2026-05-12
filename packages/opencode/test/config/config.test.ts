@@ -189,6 +189,32 @@ test("does not create global config when OPENCODE_CONFIG_DIR is set", async () =
   }
 })
 
+test("does not create global config when OPENCODE_CONFIG_CONTENT is set", async () => {
+  await using tmp = await tmpdir()
+  const prevConfig = Global.Path.config
+  const prevEnv = process.env.OPENCODE_CONFIG_CONTENT
+  ;(Global.Path as { config: string }).config = tmp.path
+  process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ model: "test/model" })
+  await clear(true)
+
+  try {
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await load()
+        expect(config.model).toBe("test/model")
+      },
+    })
+
+    expect(await Filesystem.exists(path.join(tmp.path, "opencode.jsonc"))).toBe(false)
+  } finally {
+    ;(Global.Path as { config: string }).config = prevConfig
+    if (prevEnv === undefined) delete process.env.OPENCODE_CONFIG_CONTENT
+    else process.env.OPENCODE_CONFIG_CONTENT = prevEnv
+    await clear(true)
+  }
+})
+
 test("loads JSON config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
