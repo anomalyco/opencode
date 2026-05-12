@@ -68,6 +68,12 @@ export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   }
 }
 
+export namespace Usage {
+  export type Input = Usage | ConstructorParameters<typeof Usage>[0]
+
+  export const make = (input: Input) => (input instanceof Usage ? input : new Usage(input))
+}
+
 export const RequestStart = Schema.Struct({
   type: Schema.tag("request-start"),
   id: ResponseID,
@@ -222,16 +228,13 @@ const llmEventTagged = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 
 type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
-type UsageInput = Usage | ConstructorParameters<typeof Usage>[0]
 type WithUsage<Event extends { readonly usage?: Usage }> = Omit<Event, "type" | "usage"> & {
-  readonly usage?: UsageInput
+  readonly usage?: Usage.Input
 }
 
 const responseID = (value: ResponseID | string) => ResponseID.make(value)
 const contentBlockID = (value: ContentBlockID | string) => ContentBlockID.make(value)
 const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
-const usage = (value: UsageInput | undefined) =>
-  value === undefined ? undefined : value instanceof Usage ? value : new Usage(value)
 
 /**
  * camelCase aliases for `LLMEvent.guards` (provided by `Schema.toTaggedUnion`).
@@ -261,12 +264,12 @@ export const LLMEvent = Object.assign(llmEventTagged, {
   stepFinish: (input: WithUsage<StepFinish>) =>
     StepFinish.make({
       ...input,
-      usage: usage(input.usage),
+      usage: input.usage === undefined ? undefined : Usage.make(input.usage),
     }),
   requestFinish: (input: WithUsage<RequestFinish>) =>
     RequestFinish.make({
       ...input,
-      usage: usage(input.usage),
+      usage: input.usage === undefined ? undefined : Usage.make(input.usage),
     }),
   providerError: ProviderErrorEvent.make,
   is: {

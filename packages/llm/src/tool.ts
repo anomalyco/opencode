@@ -8,7 +8,10 @@ import { ToolDefinition, ToolFailure } from "./schema"
  * beyond pure data conversion belongs in the handler closure.
  */
 export type ToolSchema<T> = Schema.Codec<T, any, never, never>
-export type ToolExecuteContext = Pick<ToolCallPart, "id" | "name">
+export interface ToolExecuteContext {
+  readonly id: ToolCallPart["id"]
+  readonly name: ToolCallPart["name"]
+}
 
 export type ToolExecute<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = (
   params: Schema.Schema.Type<Parameters>,
