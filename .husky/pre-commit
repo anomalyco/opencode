@@ -1,3 +1,4 @@
 #!/bin/sh
 set -e
+bun oxlint --quiet
 bun run script/check-cross-package-refs.ts
