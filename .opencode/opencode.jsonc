@@ -1,7 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "permission": {},
+  "permission": {
+    "edit": {
+      "packages/opencode/migration/*": "ask",
+    },
+  },
   "mcp": {},
   "tools": {
     "github-triage": false,
