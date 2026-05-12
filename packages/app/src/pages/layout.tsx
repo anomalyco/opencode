@@ -2097,6 +2097,7 @@ export default function Layout(props: ParentProps) {
               </div>
             </Show>
           }
+          keyed
         >
           {(project) => (
             <>
@@ -2107,9 +2108,7 @@ export default function Layout(props: ParentProps) {
                       id={`project:${projectId()}`}
                       value={projectName}
                       onSave={(next) => {
-                        const item = project()
-                        if (!item) return
-                        void renameProject(item, next)
+                        void renameProject(project, next)
                       }}
                       class="text-14-medium text-text-strong truncate"
                       displayClass="text-14-medium text-text-strong truncate"
@@ -2151,9 +2150,7 @@ export default function Layout(props: ParentProps) {
                       <DropdownMenu.Content class="mt-1">
                         <DropdownMenu.Item
                           onSelect={() => {
-                            const item = project()
-                            if (!item) return
-                            showEditProjectDialog(item)
+                            showEditProjectDialog(project)
                           }}
                         >
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
@@ -2163,9 +2160,7 @@ export default function Layout(props: ParentProps) {
                           data-project={slug()}
                           disabled={!canToggle()}
                           onSelect={() => {
-                            const item = project()
-                            if (!item) return
-                            toggleProjectWorkspaces(item)
+                            toggleProjectWorkspaces(project)
                           }}
                         >
                           <DropdownMenu.ItemLabel>
@@ -2224,7 +2219,7 @@ export default function Layout(props: ParentProps) {
                       <div class="flex-1 min-h-0">
                         <LocalWorkspace
                           ctx={workspaceSidebarCtx}
-                          project={project()}
+                          project={project}
                           sortNow={sortNow}
                           mobile={panelProps.mobile}
                         />
@@ -2239,9 +2234,7 @@ export default function Layout(props: ParentProps) {
                         icon="plus-small"
                         class="w-full"
                         onClick={() => {
-                          const item = project()
-                          if (!item) return
-                          void createWorkspace(item)
+                          void createWorkspace(project)
                         }}
                       >
                         {language.t("workspace.new")}
@@ -2268,7 +2261,7 @@ export default function Layout(props: ParentProps) {
                                 <SortableWorkspace
                                   ctx={workspaceSidebarCtx}
                                   directory={directory}
-                                  project={project()}
+                                  project={project}
                                   sortNow={sortNow}
                                   mobile={panelProps.mobile}
                                 />
