@@ -17,9 +17,6 @@ jobs:
       dockerTarget: dev
       helmRepository: enk-opencode-hub-helm
       propertyPath: jupyterhub.singleuser.image.tag
-      buildArgs: |
-        VITE_MODEL_PIN=anthropic/claude-sonnet-4-6
-        VITE_MODEL_PIN_TIER=high
       updateTargets: |
         {
           "aws": {
