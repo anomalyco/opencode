@@ -34,7 +34,7 @@ import { useFileComponent } from "../context/file"
 import { useDialog } from "../context/dialog"
 import { type UiI18n, useI18n } from "../context/i18n"
 import { BasicTool, GenericTool } from "./basic-tool"
-import { countPartialStringLines, parsePartialToolInput } from "./tool-input"
+import { countPartialStringLines, editPendingDiff, parsePartialToolInput } from "./tool-input"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Card } from "./card"
@@ -1855,15 +1855,11 @@ ToolRegistry.register({
     const pending = () => props.status === "pending" || props.status === "running"
     const pendingDiff = createMemo(() => {
       if (!pending()) return { additions: 0, deletions: 0 }
-      const lineCount = (closed: unknown, key: string): number => {
-        if (typeof closed === "string") return closed === "" ? 0 : closed.split("\n").length
-        if (typeof props.raw === "string") return countPartialStringLines(props.raw, key)
-        return 0
-      }
-      return {
-        additions: lineCount(props.input.newString, "newString"),
-        deletions: lineCount(props.input.oldString, "oldString"),
-      }
+      return editPendingDiff({
+        oldString: props.input.oldString,
+        newString: props.input.newString,
+        raw: props.raw,
+      })
     })
     return (
       <div data-component="edit-tool">
@@ -1972,9 +1968,6 @@ ToolRegistry.register({
                   <Show when={props.input.filePath}>
                     <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
-                  <Show when={pending() && pendingLines() > 0}>
-                    <span data-slot="basic-tool-tool-arg">{i18n.t("ui.tool.lines", { count: pendingLines() })}</span>
-                  </Show>
                 </div>
                 <Show when={!pending() && props.input.filePath?.includes("/")}>
                   <div data-slot="message-part-path">
@@ -1982,7 +1975,14 @@ ToolRegistry.register({
                   </div>
                 </Show>
               </div>
-              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
+              <div data-slot="message-part-actions">
+                <Show when={pending() && pendingLines() > 0}>
+                  <DiffChanges changes={{ additions: pendingLines(), deletions: 0 }} />
+                </Show>
+                <Show when={!pending() && props.metadata.filediff}>
+                  <DiffChanges changes={props.metadata.filediff} />
+                </Show>
+              </div>
             </div>
           }
         >

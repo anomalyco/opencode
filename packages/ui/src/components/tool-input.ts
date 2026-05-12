@@ -1,3 +1,5 @@
+import { diffLines } from "diff"
+
 /**
  * Best-effort extraction of fully-formed key/value pairs from a partial
  * tool-input JSON string streamed during a pending tool call. Only closed
@@ -34,6 +36,42 @@ export function parsePartialToolInput(raw: string): Record<string, any> | undefi
     any = true
   }
   return any ? out : undefined
+}
+
+/**
+ * Computes the live `+`/`-` diff for an `edit` tool call while its input
+ * is streaming. When both `oldString` and `newString` have fully arrived,
+ * runs the same line diff as the backend `filediff` so the pending value
+ * matches the post-completion value (no visible jump). While either side
+ * is still arriving, falls back to raw line counts (best effort).
+ */
+export function editPendingDiff(input: {
+  oldString: unknown
+  newString: unknown
+  raw?: unknown
+}): { additions: number; deletions: number } {
+  const oldClosed = typeof input.oldString === "string" ? input.oldString : null
+  const newClosed = typeof input.newString === "string" ? input.newString : null
+
+  if (oldClosed !== null && newClosed !== null) {
+    let additions = 0
+    let deletions = 0
+    for (const change of diffLines(oldClosed, newClosed)) {
+      if (change.added) additions += change.count ?? 0
+      if (change.removed) deletions += change.count ?? 0
+    }
+    return { additions, deletions }
+  }
+
+  const lineCount = (closed: string | null, key: string): number => {
+    if (closed !== null) return closed === "" ? 0 : closed.split("\n").length
+    if (typeof input.raw === "string") return countPartialStringLines(input.raw, key)
+    return 0
+  }
+  return {
+    additions: lineCount(newClosed, "newString"),
+    deletions: lineCount(oldClosed, "oldString"),
+  }
 }
 
 /**

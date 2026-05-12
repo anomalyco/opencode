@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { countPartialStringLines, parsePartialToolInput } from "./tool-input"
+import { countPartialStringLines, editPendingDiff, parsePartialToolInput } from "./tool-input"
 
 describe("parsePartialToolInput", () => {
   test("returns undefined for empty / structural-only input", () => {
@@ -66,5 +66,75 @@ describe("countPartialStringLines", () => {
 
   test("handles other escapes without inflating the count", () => {
     expect(countPartialStringLines('{"content":"a\\tb\\"c', "content")).toBe(1)
+  })
+})
+
+describe("editPendingDiff", () => {
+  test("returns zero when neither side has arrived", () => {
+    expect(editPendingDiff({ oldString: undefined, newString: undefined })).toEqual({
+      additions: 0,
+      deletions: 0,
+    })
+  })
+
+  test("falls back to line counts when newString is still streaming", () => {
+    expect(
+      editPendingDiff({
+        oldString: "a\nb\nc",
+        newString: undefined,
+        raw: '{"oldString":"a\\nb\\nc","newString":"x\\ny',
+      }),
+    ).toEqual({ additions: 2, deletions: 3 })
+  })
+
+  test("falls back to line counts when oldString is still streaming", () => {
+    expect(
+      editPendingDiff({
+        oldString: undefined,
+        newString: "x\ny\nz",
+        raw: '{"newString":"x\\ny\\nz","oldString":"a\\nb',
+      }),
+    ).toEqual({ additions: 3, deletions: 2 })
+  })
+
+  test("uses real line diff once both sides are closed (changed-only is counted)", () => {
+    expect(
+      editPendingDiff({
+        oldString: "a\nb\nc",
+        newString: "a\nB\nc",
+      }),
+    ).toEqual({ additions: 1, deletions: 1 })
+  })
+
+  test("oldString fully contained in newString counts only additions", () => {
+    expect(
+      editPendingDiff({
+        oldString: "a\nb\n",
+        newString: "a\nb\nc\nd\n",
+      }),
+    ).toEqual({ additions: 2, deletions: 0 })
+  })
+
+  test("newString fully contained in oldString counts only deletions", () => {
+    expect(
+      editPendingDiff({
+        oldString: "a\nb\nc\nd\n",
+        newString: "a\nb\n",
+      }),
+    ).toEqual({ additions: 0, deletions: 2 })
+  })
+
+  test("identical strings produce zero diff", () => {
+    expect(editPendingDiff({ oldString: "a\nb", newString: "a\nb" })).toEqual({
+      additions: 0,
+      deletions: 0,
+    })
+  })
+
+  test("empty oldString reports newString as pure additions", () => {
+    expect(editPendingDiff({ oldString: "", newString: "a\nb\nc" })).toEqual({
+      additions: 3,
+      deletions: 0,
+    })
   })
 })
