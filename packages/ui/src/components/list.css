@@ -325,12 +325,4 @@ html[data-platform="desktop"][data-os="windows"] [data-component="list"] [data-s
     background: rgb(255 255 255 / 0.05);
     border: 1px solid rgb(255 255 255 / 0.06);
   }
-
-  [data-slot="list-header"] {
-    background: rgb(12 12 14 / 0.22);
-
-    &::after {
-      background: linear-gradient(to bottom, rgb(12 12 14 / 0.22), transparent);
-    }
-  }
 }
