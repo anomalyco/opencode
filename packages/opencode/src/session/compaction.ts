@@ -2,22 +2,25 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import * as Session from "./session"
 import { SessionID, MessageID, PartID } from "./schema"
-import { Provider } from "../provider"
+import { Provider } from "@/provider/provider"
 import { MessageV2 } from "./message-v2"
-import z from "zod"
-import { Token } from "../util"
-import { Log } from "../util"
+import { Token } from "@/util/token"
+import * as Log from "@opencode-ai/core/util/log"
 import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
-import { Config } from "@/config"
-import { NotFoundError } from "@/storage"
+import { Config } from "@/config/config"
+import { NotFoundError } from "@/storage/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, Context, Schema } from "effect"
-import { InstanceState } from "@/effect"
+import * as DateTime from "effect/DateTime"
+import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
-import { fn } from "@/util/fn"
+import { serviceUse } from "@/effect/service-use"
+import { SyncEvent } from "@/sync"
+import { SessionEvent } from "@/v2/session-event"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -37,8 +40,8 @@ const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 8_000
-const SUMMARY_TEMPLATE = `Output exactly this Markdown structure and keep the section order unchanged:
----
+const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
+<template>
 ## Goal
 - [single-sentence task summary]
 
@@ -66,7 +69,7 @@ const SUMMARY_TEMPLATE = `Output exactly this Markdown structure and keep the se
 
 ## Relevant Files
 - [file or directory path: why it matters, or "(none)"]
----
+</template>
 
 Rules:
 - Keep every section, even when empty.
@@ -76,12 +79,10 @@ Rules:
 type Turn = {
   start: number
   end: number
-  id: MessageID
 }
 
 type Tail = {
   start: number
-  id: MessageID
 }
 
 type CompletedCompaction = {
@@ -118,18 +119,40 @@ function completedCompactions(messages: MessageV2.WithParts[]) {
   })
 }
 
-function buildPrompt(input: { previousSummary?: string; context: string[] }) {
+function buildPrompt(input: { previousSummary?: string; context: string[]; tail?: string }) {
+  const source = input.tail
+    ? "the conversation history above and the serialized recent conversation tail below"
+    : "the conversation history above"
   const anchor = input.previousSummary
     ? [
-        "Update the anchored summary below using the conversation history above.",
+        `Update the anchored summary below using ${source}.`,
         "Preserve still-true details, remove stale details, and merge in the new facts.",
         "<previous-summary>",
         input.previousSummary,
         "</previous-summary>",
       ].join("\n")
-    : "Create a new anchored summary from the conversation history above."
-  return [anchor, SUMMARY_TEMPLATE, ...input.context].join("\n\n")
+    : `Create a new anchored summary from ${source}.`
+  const tail = input.tail
+    ? [
+        "Fold this serialized recent conversation tail into the summary; it is not provider message history.",
+        "<recent-conversation-tail>",
+        input.tail,
+        "</recent-conversation-tail>",
+      ].join("\n")
+    : undefined
+  return [anchor, ...(tail ? [tail] : []), SUMMARY_TEMPLATE, ...input.context].join("\n\n")
 }
+
+const serialize = Effect.fn("SessionCompaction.serialize")(function* (input: {
+  messages: MessageV2.WithParts[]
+  model: Provider.Model
+}) {
+  const messages = yield* MessageV2.toModelMessagesEffect(input.messages, input.model, {
+    stripMedia: true,
+    toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
+  })
+  return messages.length ? JSON.stringify(messages, null, 2) : undefined
+})
 
 function preserveRecentBudget(input: { cfg: Config.Info; model: Provider.Model }) {
   return (
@@ -147,7 +170,6 @@ function turns(messages: MessageV2.WithParts[]) {
     result.push({
       start: i,
       end: messages.length,
-      id: msg.info.id,
     })
   }
   for (let i = 0; i < result.length - 1; i++) {
@@ -174,7 +196,6 @@ function splitTurn(input: {
       if (size > input.budget) continue
       return {
         start,
-        id: input.messages[start]!.info.id,
       } satisfies Tail
     }
     return undefined
@@ -205,6 +226,8 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
+export const use = serviceUse(Service)
+
 export const layer: Layer.Layer<
   Service,
   never,
@@ -215,6 +238,7 @@ export const layer: Layer.Layer<
   | Plugin.Service
   | SessionProcessor.Service
   | Provider.Service
+  | SyncEvent.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -225,6 +249,7 @@ export const layer: Layer.Layer<
     const plugin = yield* Plugin.Service
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
+    const sync = yield* SyncEvent.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
@@ -237,8 +262,7 @@ export const layer: Layer.Layer<
       messages: MessageV2.WithParts[]
       model: Provider.Model
     }) {
-      const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, input.model)
-      return Token.estimate(JSON.stringify(msgs))
+      return Token.estimate((yield* serialize(input)) ?? "")
     })
 
     const select = Effect.fn("SessionCompaction.select")(function* (input: {
@@ -247,10 +271,10 @@ export const layer: Layer.Layer<
       model: Provider.Model
     }) {
       const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
-      if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
+      if (limit <= 0) return { head: input.messages, tail: [] }
       const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
       const all = turns(input.messages)
-      if (!all.length) return { head: input.messages, tail_start_id: undefined }
+      if (!all.length) return { head: input.messages, tail: [] }
       const recent = all.slice(-limit)
       const sizes = yield* Effect.forEach(
         recent,
@@ -269,7 +293,7 @@ export const layer: Layer.Layer<
         const size = sizes[i]
         if (total + size <= budget) {
           total += size
-          keep = { start: turn.start, id: turn.id }
+          keep = { start: turn.start }
           continue
         }
         const remaining = budget - total
@@ -285,10 +309,10 @@ export const layer: Layer.Layer<
         break
       }
 
-      if (!keep || keep.start === 0) return { head: input.messages, tail_start_id: undefined }
+      if (!keep) return { head: input.messages, tail: [] }
       return {
         head: input.messages.slice(0, keep.start),
-        tail_start_id: keep.id,
+        tail: input.messages.slice(keep.start),
       }
     })
 
@@ -399,7 +423,10 @@ export const layer: Layer.Layer<
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
+      const tailMessages = structuredClone(selected.tail)
+      yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: tailMessages })
+      const tail = yield* serialize({ messages: tailMessages, model })
+      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context, tail })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
@@ -464,13 +491,6 @@ export const layer: Layer.Layer<
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
         return "stop"
-      }
-
-      if (compactionPart && selected.tail_start_id && compactionPart.tail_start_id !== selected.tail_start_id) {
-        yield* session.updatePart({
-          ...compactionPart,
-          tail_start_id: selected.tail_start_id,
-        })
       }
 
       if (result === "continue" && input.auto) {
@@ -556,7 +576,22 @@ export const layer: Layer.Layer<
       }
 
       if (processor.message.error) return "stop"
-      if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      if (result === "continue") {
+        const summary = summaryText(
+          (yield* session.messages({ sessionID: input.sessionID })).find((item) => item.info.id === msg.id) ?? {
+            info: msg,
+            parts: [],
+          },
+        )
+        if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+          yield* sync.run(SessionEvent.Compaction.Ended.Sync, {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+            text: summary ?? "",
+          })
+        }
+        yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      }
       return result
     })
 
@@ -583,6 +618,13 @@ export const layer: Layer.Layer<
         auto: input.auto,
         overflow: input.overflow,
       })
+      if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+        yield* sync.run(SessionEvent.Compaction.Started.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+          reason: input.auto ? "auto" : "manual",
+        })
+      }
     })
 
     return Service.of({
@@ -603,6 +645,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(SyncEvent.defaultLayer),
   ),
 )
 
@@ -615,16 +658,5 @@ export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"];
 export async function prune(input: { sessionID: SessionID }) {
   return runPromise((svc) => svc.prune(input))
 }
-
-export const create = fn(
-  z.object({
-    sessionID: SessionID.zod,
-    agent: z.string(),
-    model: z.object({ providerID: ProviderID.zod, modelID: ModelID.zod }),
-    auto: z.boolean(),
-    overflow: z.boolean().optional(),
-  }),
-  (input) => runPromise((svc) => svc.create(input)),
-)
 
 export * as SessionCompaction from "./compaction"

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Lock } from "../../src/util"
+import { Lock } from "@/util/lock"
 
 function tick() {
   return new Promise<void>((r) => queueMicrotask(r))

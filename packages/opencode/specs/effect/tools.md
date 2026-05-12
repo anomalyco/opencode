@@ -40,7 +40,6 @@ These exported tool definitions currently use `Tool.define(...)` in `src/tool`:
 
 - [x] `apply_patch.ts`
 - [x] `bash.ts`
-- [x] `codesearch.ts`
 - [x] `edit.ts`
 - [x] `glob.ts`
 - [x] `grep.ts`
@@ -79,7 +78,6 @@ Notable items that are already effectively on the target path and do not need se
 - `apply_patch.ts`
 - `grep.ts`
 - `write.ts`
-- `codesearch.ts`
 - `websearch.ts`
 - `edit.ts`
 

@@ -1,29 +1,29 @@
-import { Config } from "../config"
-import z from "zod"
-import { Provider } from "../provider"
+import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
-import { Truncate } from "../tool"
+import { Truncate } from "@/tool/truncate"
 import { Auth } from "../auth"
-import { ProviderTransform } from "../provider"
+import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_SCOUT from "./prompt/scout.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, Context, Layer, Schema } from "effect"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
-import { zod } from "@/util/effect-zod"
-import { withStatics, type DeepMutable } from "@/util/schema"
+import { type DeepMutable } from "@opencode-ai/core/schema"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -31,8 +31,8 @@ export const Info = Schema.Struct({
   mode: Schema.Literals(["subagent", "primary", "all"]),
   native: Schema.optional(Schema.Boolean),
   hidden: Schema.optional(Schema.Boolean),
-  topP: Schema.optional(Schema.Number),
-  temperature: Schema.optional(Schema.Number),
+  topP: Schema.optional(Schema.Finite),
+  temperature: Schema.optional(Schema.Finite),
   color: Schema.optional(Schema.String),
   permission: Permission.Ruleset,
   model: Schema.optional(
@@ -44,11 +44,15 @@ export const Info = Schema.Struct({
   variant: Schema.optional(Schema.String),
   prompt: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Unknown),
-  steps: Schema.optional(Schema.Number),
-})
-  .annotate({ identifier: "Agent" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+  steps: Schema.optional(Schema.Finite),
+}).annotate({ identifier: "Agent" })
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+
+const GeneratedAgent = Schema.Struct({
+  identifier: Schema.String,
+  whenToUse: Schema.String,
+  systemPrompt: Schema.String,
+})
 
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
@@ -81,7 +85,15 @@ export const layer = Layer.effect(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
-        const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
+        const whitelistedDirs = [
+          Truncate.GLOB,
+          path.join(Global.Path.tmp, "*"),
+          ...skillDirs.map((dir) => path.join(dir, "*")),
+        ]
+        const readonlyExternalDirectory = {
+          "*": "ask",
+          ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+        } satisfies Record<string, "allow" | "ask" | "deny">
 
         const defaults = Permission.fromConfig({
           "*": "allow",
@@ -93,6 +105,8 @@ export const layer = Layer.effect(
           question: "deny",
           plan_enter: "deny",
           plan_exit: "deny",
+          repo_clone: "deny",
+          repo_overview: "deny",
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
           read: {
             "*": "allow",
@@ -169,12 +183,8 @@ export const layer = Layer.effect(
                 bash: "allow",
                 webfetch: "allow",
                 websearch: "allow",
-                codesearch: "allow",
                 read: "allow",
-                external_directory: {
-                  "*": "ask",
-                  ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-                },
+                external_directory: readonlyExternalDirectory,
               }),
               user,
             ),
@@ -184,6 +194,36 @@ export const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
+          ...(Flag.OPENCODE_EXPERIMENTAL_SCOUT
+            ? {
+                scout: {
+                  name: "scout",
+                  permission: Permission.merge(
+                    defaults,
+                    Permission.fromConfig({
+                      "*": "deny",
+                      grep: "allow",
+                      glob: "allow",
+                      webfetch: "allow",
+                      websearch: "allow",
+                      read: "allow",
+                      repo_clone: "allow",
+                      repo_overview: "allow",
+                      external_directory: {
+                        ...readonlyExternalDirectory,
+                        [path.join(Global.Path.repos, "*")]: "allow",
+                      },
+                    }),
+                    user,
+                  ),
+                  description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
+                  prompt: PROMPT_SCOUT,
+                  options: {},
+                  mode: "subagent" as const,
+                  native: true,
+                },
+              }
+            : {}),
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -369,11 +409,10 @@ export const layer = Layer.effect(
             },
           ],
           model: language,
-          schema: z.object({
-            identifier: z.string(),
-            whenToUse: z.string(),
-            systemPrompt: z.string(),
-          }),
+          schema: Object.assign(
+            Schema.toStandardSchemaV1(GeneratedAgent),
+            Schema.toStandardJSONSchemaV1(GeneratedAgent),
+          ),
         } satisfies Parameters<typeof generateObject>[0]
 
         if (isOpenaiOauth) {

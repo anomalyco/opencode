@@ -45,6 +45,7 @@ const getModelsInfo = query(async (workspaceID: string) => {
       all: Object.entries(ZenData.list("full").models)
         .filter(([id, _model]) => !["claude-3-5-haiku"].includes(id))
         .filter(([id, _model]) => !id.startsWith("alpha-"))
+        .filter(([id, _model]) => !id.endsWith(":global"))
         .sort(([idA, modelA], [idB, modelB]) => {
           const priority = ["big-pickle", "minimax", "grok", "claude", "gpt", "gemini"]
           const getPriority = (id: string) => {

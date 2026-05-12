@@ -29,16 +29,16 @@ opencode [project]
 
 #### Opcije
 
-| Opcija       | Kratko | Opis                                                                     |
-| ------------ | ------ | ------------------------------------------------------------------------ |
-| `--continue` | `-c`   | Nastavite posljednju sesiju                                              |
-| `--session`  | `-s`   | ID sesije za nastavak                                                    |
-| `--fork`     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`) |
-| `--prompt`   |        | Prompt za upotrebu                                                       |
-| `--model`    | `-m`   | Model za korištenje u obliku provider/model                              |
-| `--agent`    |        | Agent za korištenje                                                      |
-| `--port`     |        | Port na kojem treba slušati                                              |
-| `--hostname` |        | Hostname na kojem treba slušati                                          |
+| Opcija                                   | Kratko | Opis                                                                     |
+| ---------------------------------------- | ------ | ------------------------------------------------------------------------ |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavite posljednju sesiju                                              |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                    |
+| <nobr><code>{"--fork"}</code></nobr>     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`) |
+| <nobr><code>{"--prompt"}</code></nobr>   |        | Prompt za upotrebu                                                       |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`   | Model za korištenje u obliku provider/model                              |
+| <nobr><code>{"--agent"}</code></nobr>    |        | Agent za korištenje                                                      |
+| <nobr><code>{"--port"}</code></nobr>     |        | Port na kojem treba slušati                                              |
+| <nobr><code>{"--hostname"}</code></nobr> |        | Hostname na kojem treba slušati                                          |
 
 ---
 
@@ -78,10 +78,14 @@ opencode attach http://10.20.30.40:4096
 
 #### Opcije
 
-| Opcija      | Kratko | Opis                                 |
-| ----------- | ------ | ------------------------------------ |
-| `--dir`     |        | Radni direktorij za pokretanje TUI-a |
-| `--session` | `-s`   | ID sesije za nastavak                |
+| Opcija                                   | Kratko | Opis                                                                                          |
+| ---------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |        | Radni direktorij za pokretanje TUI-a                                                          |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavi posljednju sesiju                                                                     |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                                         |
+| <nobr><code>{"--fork"}</code></nobr>     |        | Forkuj sesiju prilikom nastavka (koristite sa `--continue` ili `--session`)                   |
+| <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_PASSWORD`)                       |
+| <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_USERNAME` ili `opencode`) |
 
 ---
 
@@ -187,10 +191,10 @@ opencode github run
 
 ##### Opcije
 
-| Opcija    | Opis                                   |
-| --------- | -------------------------------------- |
-| `--event` | GitHub mock event za pokretanje agenta |
-| `--token` | GitHub Personal Access Token           |
+| Opcija                                | Opis                                   |
+| ------------------------------------- | -------------------------------------- |
+| <nobr><code>{"--event"}</code></nobr> | GitHub mock event za pokretanje agenta |
+| <nobr><code>{"--token"}</code></nobr> | GitHub Personal Access Token           |
 
 ---
 
@@ -293,10 +297,10 @@ opencode models anthropic
 
 #### Opcije
 
-| Opcija      | Opis                                                                     |
-| ----------- | ------------------------------------------------------------------------ |
-| `--refresh` | Osvježite keš modela sa models.dev                                       |
-| `--verbose` | Koristite detaljniji izlaz modela (uključuje metapodatke poput troškova) |
+| Opcija                                  | Opis                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------ |
+| <nobr><code>{"--refresh"}</code></nobr> | Osvježite keš modela sa models.dev                                       |
+| <nobr><code>{"--verbose"}</code></nobr> | Koristite detaljniji izlaz modela (uključuje metapodatke poput troškova) |
 
 Koristite `--refresh` zastavicu da ažurirate keširanu listu modela. Ovo je korisno kada su novi modeli dodani provajderu i želite da ih vidite u OpenCode.
 
@@ -332,20 +336,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Opcije
 
-| Opcija       | Kratko | Opis                                                                     |
-| ------------ | ------ | ------------------------------------------------------------------------ |
-| `--command`  |        | Naredba za pokretanje, koristite poruku za argumente                     |
-| `--continue` | `-c`   | Nastavite posljednju sesiju                                              |
-| `--session`  | `-s`   | ID sesije za nastavak                                                    |
-| `--fork`     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`) |
-| `--share`    |        | Podijelite sesiju                                                        |
-| `--model`    | `-m`   | Model za korištenje u obliku provider/model                              |
-| `--agent`    |        | Agent za korištenje                                                      |
-| `--file`     | `-f`   | Fajlovi koje treba priložiti poruci                                      |
-| `--format`   |        | Format: default (formatiran) ili json (sirovi JSON događaji)             |
-| `--title`    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)     |
-| `--attach`   |        | Priključite na pokrenuti OpenCode server (npr. http://localhost:4096)    |
-| `--port`     |        | Port za lokalni server (zadano na nasumični port)                        |
+| Opcija                                   | Kratko | Opis                                                                                          |
+| ---------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |        | Naredba za pokretanje, koristite poruku za argumente                                          |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavite posljednju sesiju                                                                   |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                                         |
+| <nobr><code>{"--fork"}</code></nobr>     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`)                      |
+| <nobr><code>{"--share"}</code></nobr>    |        | Podijelite sesiju                                                                             |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`   | Model za korištenje u obliku provider/model                                                   |
+| <nobr><code>{"--agent"}</code></nobr>    |        | Agent za korištenje                                                                           |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`   | Fajlovi koje treba priložiti poruci                                                           |
+| <nobr><code>{"--format"}</code></nobr>   |        | Format: default (formatiran) ili json (sirovi JSON događaji)                                  |
+| <nobr><code>{"--title"}</code></nobr>    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)                          |
+| <nobr><code>{"--attach"}</code></nobr>   |        | Priključite na pokrenuti OpenCode server (npr. http://localhost:4096)                         |
+| <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_PASSWORD`)                       |
+| <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_USERNAME` ili `opencode`) |
+| <nobr><code>{"--dir"}</code></nobr>      |        | Direktorij za pokretanje, ili putanja na udaljenom serveru pri spajanju                       |
+| <nobr><code>{"--variant"}</code></nobr>  |        | Varijanta modela (napor zaključivanja specifičan za provajdera)                               |
+| <nobr><code>{"--thinking"}</code></nobr> |        | Prikaži blokove razmišljanja                                                                  |
+| <nobr><code>{"--port"}</code></nobr>     |        | Port za lokalni server (zadano na nasumični port)                                             |
 
 ---
 
@@ -361,12 +370,12 @@ Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti OpenCode-a bez 
 
 #### Opcije
 
-| Opcija       | Opis                                                  |
-| ------------ | ----------------------------------------------------- |
-| `--port`     | Port na kojem treba slušati                           |
-| `--hostname` | Hostname na kojem treba slušati                       |
-| `--mdns`     | Omogući mDNS otkrivanje                               |
-| `--cors`     | Dodatni origin(i) pretraživača koji dozvoljavaju CORS |
+| Opcija                                   | Opis                                                  |
+| ---------------------------------------- | ----------------------------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | Port na kojem treba slušati                           |
+| <nobr><code>{"--hostname"}</code></nobr> | Hostname na kojem treba slušati                       |
+| <nobr><code>{"--mdns"}</code></nobr>     | Omogući mDNS otkrivanje                               |
+| <nobr><code>{"--cors"}</code></nobr>     | Dodatni origin(i) pretraživača koji dozvoljavaju CORS |
 
 ---
 
@@ -390,10 +399,10 @@ opencode session list
 
 ##### Opcije
 
-| Opcija        | Kratko | Opis                                   |
-| ------------- | ------ | -------------------------------------- |
-| `--max-count` | `-n`   | Ograničenje na N najnovijih sesija     |
-| `--format`    |        | Izlazni format: table ili json (table) |
+| Opcija                                    | Kratko | Opis                                   |
+| ----------------------------------------- | ------ | -------------------------------------- |
+| <nobr><code>{"--max-count"}</code></nobr> | `-n`   | Ograničenje na N najnovijih sesija     |
+| <nobr><code>{"--format"}</code></nobr>    |        | Izlazni format: table ili json (table) |
 
 ---
 
@@ -407,12 +416,12 @@ opencode stats
 
 #### Opcije
 
-| Opcija      | Opis                                                                                                       |
-| ----------- | ---------------------------------------------------------------------------------------------------------- |
-| `--days`    | Prikaži statistiku za zadnjih N dana (sva vremena)                                                         |
-| `--tools`   | Broj alata za prikaz (svi)                                                                                 |
-| `--models`  | Prikaži raščlambu korištenja modela (skriveno prema zadanim postavkama). Proslijedite broj za prikaz top N |
-| `--project` | Filtriraj po projektu (svi projekti, prazan niz: trenutni projekt)                                         |
+| Opcija                                  | Opis                                                                                                       |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--days"}</code></nobr>    | Prikaži statistiku za zadnjih N dana (sva vremena)                                                         |
+| <nobr><code>{"--tools"}</code></nobr>   | Broj alata za prikaz (svi)                                                                                 |
+| <nobr><code>{"--models"}</code></nobr>  | Prikaži raščlambu korištenja modela (skriveno prema zadanim postavkama). Proslijedite broj za prikaz top N |
+| <nobr><code>{"--project"}</code></nobr> | Filtriraj po projektu (svi projekti, prazan niz: trenutni projekt)                                         |
 
 ---
 
@@ -457,12 +466,12 @@ Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCode-u preko 
 
 #### Opcije
 
-| Opcija       | Opis                                                  |
-| ------------ | ----------------------------------------------------- |
-| `--port`     | Port na kojem treba slušati                           |
-| `--hostname` | Hostname na kojem treba slušati                       |
-| `--mdns`     | Omogući mDNS otkrivanje                               |
-| `--cors`     | Dodatni origin(i) pretraživača koji dozvoljavaju CORS |
+| Opcija                                   | Opis                                                  |
+| ---------------------------------------- | ----------------------------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | Port na kojem treba slušati                           |
+| <nobr><code>{"--hostname"}</code></nobr> | Hostname na kojem treba slušati                       |
+| <nobr><code>{"--mdns"}</code></nobr>     | Omogući mDNS otkrivanje                               |
+| <nobr><code>{"--cors"}</code></nobr>     | Dodatni origin(i) pretraživača koji dozvoljavaju CORS |
 
 ---
 
@@ -478,11 +487,11 @@ Ova naredba pokreće ACP server koji komunicira preko stdin/stdout koristeći nd
 
 #### Opcije
 
-| Opcija       | Opis                        |
-| ------------ | --------------------------- |
-| `--cwd`      | Radni direktorij            |
-| `--port`     | Port na kojem treba slušati |
-| `--hostname` | Hostname na kojem slušati   |
+| Opcija                                   | Opis                        |
+| ---------------------------------------- | --------------------------- |
+| <nobr><code>{"--cwd"}</code></nobr>      | Radni direktorij            |
+| <nobr><code>{"--port"}</code></nobr>     | Port na kojem treba slušati |
+| <nobr><code>{"--hostname"}</code></nobr> | Hostname na kojem slušati   |
 
 ---
 
@@ -496,12 +505,12 @@ opencode uninstall
 
 #### Opcije
 
-| Opcija          | Kratko | Opis                                          |
-| --------------- | ------ | --------------------------------------------- |
-| `--keep-config` | `-c`   | Sačuvajte konfiguracijske datoteke            |
-| `--keep-data`   | `-d`   | Sačuvajte podatke i snimke sesije             |
-| `--dry-run`     |        | Pokažite šta bi bilo uklonjeno bez uklanjanja |
-| `--force`       | `-f`   | Preskoči upite za potvrdu                     |
+| Opcija                                      | Kratko | Opis                                          |
+| ------------------------------------------- | ------ | --------------------------------------------- |
+| <nobr><code>{"--keep-config"}</code></nobr> | `-c`   | Sačuvajte konfiguracijske datoteke            |
+| <nobr><code>{"--keep-data"}</code></nobr>   | `-d`   | Sačuvajte podatke i snimke sesije             |
+| <nobr><code>{"--dry-run"}</code></nobr>     |        | Pokažite šta bi bilo uklonjeno bez uklanjanja |
+| <nobr><code>{"--force"}</code></nobr>       | `-f`   | Preskoči upite za potvrdu                     |
 
 ---
 
@@ -527,9 +536,9 @@ opencode upgrade v0.1.48
 
 #### Opcije
 
-| Opcija     | Kratko | Opis                                                    |
-| ---------- | ------ | ------------------------------------------------------- |
-| `--method` | `-m`   | Korišteni način instalacije; curl, npm, pnpm, bun, brew |
+| Opcija                                 | Kratko | Opis                                                    |
+| -------------------------------------- | ------ | ------------------------------------------------------- |
+| <nobr><code>{"--method"}</code></nobr> | `-m`   | Korišteni način instalacije; curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -537,12 +546,12 @@ opencode upgrade v0.1.48
 
 OpenCode CLI prihvata sljedeće globalne zastavice.
 
-| Opcija         | Kratko | Opis                                      |
-| -------------- | ------ | ----------------------------------------- |
-| `--help`       | `-h`   | Prikaži pomoć                             |
-| `--version`    | `-v`   | Ispiši broj verzije                       |
-| `--print-logs` |        | Ispis logova u stderr                     |
-| `--log-level`  |        | Nivo logovanja (DEBUG, INFO, WARN, ERROR) |
+| Opcija                                     | Kratko | Opis                                      |
+| ------------------------------------------ | ------ | ----------------------------------------- |
+| <nobr><code>{"--help"}</code></nobr>       | `-h`   | Prikaži pomoć                             |
+| <nobr><code>{"--version"}</code></nobr>    | `-v`   | Ispiši broj verzije                       |
+| <nobr><code>{"--print-logs"}</code></nobr> |        | Ispis logova u stderr                     |
+| <nobr><code>{"--log-level"}</code></nobr>  |        | Nivo logovanja (DEBUG, INFO, WARN, ERROR) |
 
 ---
 

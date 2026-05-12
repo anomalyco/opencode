@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
-import { Session as SessionNs } from "../../src/session"
+import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
-import { Log } from "../../src/util"
-import { tmpdir } from "../fixture/fixture"
+import * as Log from "@opencode-ai/core/util/log"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -31,7 +31,7 @@ const svc = {
 }
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 async function withoutWatcher<T>(fn: () => Promise<T>) {
@@ -76,7 +76,7 @@ describe("session messages endpoint", () => {
   test("returns cursor headers for older pages", async () => {
     await using tmp = await tmpdir({ git: true })
     await withoutWatcher(() =>
-      Instance.provide({
+      WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const session = await svc.create({})
@@ -105,7 +105,7 @@ describe("session messages endpoint", () => {
   test("keeps full-history responses when limit is omitted", async () => {
     await using tmp = await tmpdir({ git: true })
     await withoutWatcher(() =>
-      Instance.provide({
+      WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const session = await svc.create({})
@@ -126,7 +126,7 @@ describe("session messages endpoint", () => {
   test("rejects invalid cursors and missing sessions", async () => {
     await using tmp = await tmpdir({ git: true })
     await withoutWatcher(() =>
-      Instance.provide({
+      WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const session = await svc.create({})
@@ -147,7 +147,7 @@ describe("session messages endpoint", () => {
   test("does not truncate large legacy limit requests", async () => {
     await using tmp = await tmpdir({ git: true })
     await withoutWatcher(() =>
-      Instance.provide({
+      WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const session = await svc.create({})
@@ -158,6 +158,30 @@ describe("session messages endpoint", () => {
           expect(res.status).toBe(200)
           const body = (await res.json()) as MessageV2.WithParts[]
           expect(body).toHaveLength(510)
+
+          await svc.remove(session.id)
+        },
+      }),
+    )
+  })
+
+  test("accepts directory query used by workspace routing", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await withoutWatcher(() =>
+      WithInstance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await svc.create({})
+          await fill(session.id, 1)
+          const app = Server.Default().app
+
+          const res = await app.request(
+            `/session/${session.id}/message?limit=80&directory=${encodeURIComponent(tmp.path)}`,
+          )
+          expect(res.status).toBe(200)
+          const body = await res.json()
+          expect(Array.isArray(body)).toBe(true)
+          expect(body).toHaveLength(1)
 
           await svc.remove(session.id)
         },

@@ -1,17 +1,16 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { Config } from "@/config"
-import { InstanceState, EffectBridge } from "@/effect"
+import { Config } from "@/config/config"
+import { InstanceState } from "@/effect/instance-state"
+import { EffectBridge } from "@/effect/bridge"
 import { lazy } from "@opencode-ai/core/util/lazy"
 import { Plugin } from "@/plugin"
-import { Instance } from "@/project/instance"
 import { Shell } from "@/shell/shell"
 import type { Proc } from "#pty"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context, Schema, Types } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "pty" })
 
@@ -61,10 +60,8 @@ export const Info = Schema.Struct({
   args: Schema.Array(Schema.String),
   cwd: Schema.String,
   status: Schema.Literals(["running", "exited"]),
-  pid: Schema.Number,
-})
-  .annotate({ identifier: "Pty" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+  pid: PositiveInt,
+}).annotate({ identifier: "Pty" })
 
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
@@ -74,7 +71,7 @@ export const CreateInput = Schema.Struct({
   cwd: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
 
@@ -82,18 +79,18 @@ export const UpdateInput = Schema.Struct({
   title: Schema.optional(Schema.String),
   size: Schema.optional(
     Schema.Struct({
-      rows: Schema.Number,
-      cols: Schema.Number,
+      rows: PositiveInt,
+      cols: PositiveInt,
     }),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 
 export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 
 export const Event = {
   Created: BusEvent.define("pty.created", Schema.Struct({ info: Info })),
   Updated: BusEvent.define("pty.updated", Schema.Struct({ info: Info })),
-  Exited: BusEvent.define("pty.exited", Schema.Struct({ id: PtyID, exitCode: Schema.Number })),
+  Exited: BusEvent.define("pty.exited", Schema.Struct({ id: PtyID, exitCode: NonNegativeInt })),
   Deleted: BusEvent.define("pty.deleted", Schema.Struct({ id: PtyID })),
 }
 
@@ -228,42 +225,38 @@ export const layer = Layer.effect(
         subscribers: new Map(),
       }
       s.sessions.set(id, session)
-      proc.onData(
-        Instance.bind((chunk) => {
-          session.cursor += chunk.length
+      proc.onData((chunk) => {
+        session.cursor += chunk.length
 
-          for (const [key, ws] of session.subscribers.entries()) {
-            if (ws.readyState !== 1) {
-              session.subscribers.delete(key)
-              continue
-            }
-            if (sock(ws) !== key) {
-              session.subscribers.delete(key)
-              continue
-            }
-            try {
-              ws.send(chunk)
-            } catch {
-              session.subscribers.delete(key)
-            }
+        for (const [key, ws] of session.subscribers.entries()) {
+          if (ws.readyState !== 1) {
+            session.subscribers.delete(key)
+            continue
           }
+          if (sock(ws) !== key) {
+            session.subscribers.delete(key)
+            continue
+          }
+          try {
+            ws.send(chunk)
+          } catch {
+            session.subscribers.delete(key)
+          }
+        }
 
-          session.buffer += chunk
-          if (session.buffer.length <= BUFFER_LIMIT) return
-          const excess = session.buffer.length - BUFFER_LIMIT
-          session.buffer = session.buffer.slice(excess)
-          session.bufferCursor += excess
-        }),
-      )
-      proc.onExit(
-        Instance.bind(({ exitCode }) => {
-          if (session.info.status === "exited") return
-          log.info("session exited", { id, exitCode })
-          session.info.status = "exited"
-          bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
-          bridge.fork(remove(id))
-        }),
-      )
+        session.buffer += chunk
+        if (session.buffer.length <= BUFFER_LIMIT) return
+        const excess = session.buffer.length - BUFFER_LIMIT
+        session.buffer = session.buffer.slice(excess)
+        session.bufferCursor += excess
+      })
+      proc.onExit(({ exitCode }) => {
+        if (session.info.status === "exited") return
+        log.info("session exited", { id, exitCode })
+        session.info.status = "exited"
+        bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
+        bridge.fork(remove(id))
+      })
       yield* bus.publish(Event.Created, { info })
       return info
     })

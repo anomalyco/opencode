@@ -2,23 +2,27 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import fs from "fs/promises"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
-import { Config } from "../../src/config"
-import { LSP } from "../../src/lsp"
+import { Config } from "@/config/config"
+import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
-import { Provider as ProviderSvc } from "../../src/provider"
+import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
+import { Git } from "../../src/git"
+import { Image } from "../../src/image/image"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
-import { Session } from "../../src/session"
+import { Session } from "@/session/session"
+import { SessionMessageTable } from "../../src/session/session.sql"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -31,19 +35,23 @@ import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { SessionV2 } from "../../src/v2/session"
 import { Skill } from "../../src/skill"
 import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
-import { ToolRegistry } from "../../src/tool"
-import { Truncate } from "../../src/tool"
-import { Log } from "../../src/util"
+import { ToolRegistry } from "@/tool/registry"
+import { Truncate } from "@/tool/truncate"
+import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import * as Database from "../../src/storage/db"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
+import { Reference } from "../../src/reference/reference"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
+import { SyncEvent } from "@/sync"
 
 void Log.init({ print: false })
 
@@ -168,6 +176,7 @@ function makeHttp() {
     mcp,
     AppFileSystem.defaultLayer,
     status,
+    SyncEvent.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -175,6 +184,8 @@ function makeHttp() {
     Layer.provide(Skill.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provideMerge(todo),
@@ -182,12 +193,18 @@ function makeHttp() {
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps))
+  const proc = SessionProcessor.layer.pipe(
+    Layer.provide(summary),
+    Layer.provide(Image.defaultLayer),
+    Layer.provideMerge(deps),
+  )
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
       Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(Image.defaultLayer),
+      Layer.provide(Reference.defaultLayer),
       Layer.provide(summary),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),
@@ -366,6 +383,47 @@ it.live("loop calls LLM and returns assistant message", () =>
       const parts = result.parts.filter((p) => p.type === "text")
       expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
       expect(yield* llm.hits).toHaveLength(1)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("prompt emits v2 prompted and synthetic events", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "hello v2" },
+          {
+            type: "file",
+            mime: "text/plain",
+            filename: "note.txt",
+            url: "data:text/plain;base64,bm90ZSBjb250ZW50",
+          },
+        ],
+      })
+
+      const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
+        Effect.provide(SessionV2.layer),
+      )
+      const row = Database.use((db) =>
+        db.select().from(SessionMessageTable).where(Database.eq(SessionMessageTable.session_id, chat.id)).get(),
+      )
+      expect(messages.find((message) => message.type === "user")).toMatchObject({ type: "user", text: "hello v2" })
+      expect(typeof row?.data.time.created).toBe("number")
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "synthetic", text: expect.stringContaining("Called the Read tool") }),
+          expect.objectContaining({ type: "synthetic", text: "note content" }),
+        ]),
+      )
     }),
     { git: true, config: providerCfg },
   ),
@@ -812,6 +870,43 @@ it.live(
       { git: true, config: cfg },
     ),
   30_000,
+)
+
+it.live(
+  "cancel propagates from slash command subtask to child session",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const status = yield* SessionStatus.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+        yield* llm.hang
+        const msg = yield* user(chat.id, "hello")
+        yield* addSubtask(chat.id, msg.id)
+
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+        yield* llm.wait(1)
+
+        const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+        const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+        const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+        const sessionID = tool?.state.status === "running" ? tool.state.metadata?.sessionId : undefined
+        expect(typeof sessionID).toBe("string")
+        if (typeof sessionID !== "string") throw new Error("missing child session id")
+        const childID = SessionID.make(sessionID)
+        expect((yield* status.get(childID)).type).toBe("busy")
+
+        yield* prompt.cancel(chat.id)
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
+
+        expect((yield* status.get(chat.id)).type).toBe("idle")
+        expect((yield* status.get(childID)).type).toBe("idle")
+      }),
+      { git: true, config: providerCfg },
+    ),
+  10_000,
 )
 
 it.live(
@@ -1470,6 +1565,10 @@ unix(
 
           const exit = yield* Fiber.await(loop)
           expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) {
+            const tool = completedTool(exit.value.parts)
+            expect(tool?.state.output).toContain("User aborted the command")
+          }
 
           yield* Fiber.await(sh)
         }),
@@ -1691,6 +1790,168 @@ it.live("keeps stored part order stable when file resolution is async", () =>
         yield* sessions.remove(session.id)
       }),
     { git: true, config: cfg },
+  ),
+)
+
+it.live("resolves configured reference mentions before workspace paths and agents", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const docs = path.join(dir, "external-docs")
+        yield* Effect.promise(() => fs.mkdir(path.join(docs, "guide"), { recursive: true }))
+        yield* Effect.promise(() => fs.mkdir(path.join(dir, "docs"), { recursive: true }))
+        yield* Effect.promise(() => Bun.write(path.join(docs, "README.md"), "reference readme"))
+        yield* Effect.promise(() => Bun.write(path.join(docs, "guide", "intro.md"), "reference intro"))
+        yield* Effect.promise(() => Bun.write(path.join(dir, "docs", "README.md"), "workspace readme"))
+
+        const prompt = yield* SessionPrompt.Service
+        const parts = yield* prompt.resolvePromptParts(
+          "Use @docs and @docs/README.md and @docs/guide and @docs/missing.md and @docs/README.md and @build",
+        )
+        const references = parts.filter(
+          (part): part is MessageV2.TextPartInput =>
+            part.type === "text" && part.synthetic === true && part.text.startsWith("Referenced configured reference "),
+        )
+        const files = parts.filter((part): part is MessageV2.FilePartInput => part.type === "file")
+        const agents = parts.filter((part): part is MessageV2.AgentPartInput => part.type === "agent")
+        const bare = references.find((part) => part.text.includes("@docs."))
+        const missing = references.find((part) => part.text.includes("@docs/missing.md"))
+        const guide = files.find((part) => part.filename === "docs/guide")
+
+        expect(references.length).toBe(2)
+        expect(bare?.metadata?.reference).toMatchObject({
+          name: "docs",
+          kind: "local",
+          path: docs,
+        })
+        expect(missing?.text).toContain("Path does not exist inside configured reference @docs")
+        expect(missing?.metadata?.reference).toMatchObject({
+          target: "missing.md",
+          targetPath: path.join(docs, "missing.md"),
+        })
+
+        expect(files.length).toBe(2)
+        expect(files.map((file) => fileURLToPath(file.url)).sort()).toEqual(
+          [path.join(docs, "README.md"), path.join(docs, "guide")].sort(),
+        )
+        expect(guide?.mime).toBe("application/x-directory")
+        expect(agents.map((agent) => agent.name)).toEqual(["build"])
+      }),
+    {
+      git: true,
+      config: {
+        ...cfg,
+        reference: {
+          docs: "./external-docs",
+        },
+      },
+    },
+  ),
+)
+
+it.live("injects metadata for bare configured reference mentions", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const docs = path.join(dir, "external-docs")
+        yield* Effect.promise(() => fs.mkdir(docs, { recursive: true }))
+
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({})
+        const message = yield* prompt.prompt({
+          sessionID: session.id,
+          noReply: true,
+          parts: yield* prompt.resolvePromptParts("Use @docs for context"),
+        })
+
+        const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+        const synthetic = stored.parts.filter(
+          (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+        )
+        const reference = synthetic.find((part) => part.text.startsWith("Referenced configured reference @docs."))
+
+        expect(reference?.metadata?.reference).toMatchObject({ name: "docs", kind: "local", path: docs })
+        expect(synthetic.some((part) => part.text.includes(`Reference root: ${docs}`))).toBe(true)
+        expect(synthetic.some((part) => part.text.includes("subagent scout"))).toBe(true)
+
+        yield* sessions.remove(session.id)
+      }),
+    {
+      git: true,
+      config: {
+        ...cfg,
+        reference: {
+          docs: "./external-docs",
+        },
+      },
+    },
+  ),
+)
+
+it.live("injects metadata for configured reference file attachments", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const docs = path.join(dir, "external-docs")
+        const readme = path.join(docs, "README.md")
+        yield* Effect.promise(() => fs.mkdir(docs, { recursive: true }))
+        yield* Effect.promise(() => Bun.write(readme, "reference readme"))
+
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({})
+        const message = yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [
+            { type: "text", text: "Read @docs/README.md" },
+            {
+              type: "file",
+              mime: "text/plain",
+              filename: "docs/README.md",
+              url: pathToFileURL(readme).href,
+              source: {
+                type: "file",
+                path: "docs/README.md",
+                text: { value: "@docs/README.md", start: 5, end: 20 },
+              },
+            },
+          ],
+        })
+
+        const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+        const synthetic = stored.parts.filter(
+          (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+        )
+        const reference = synthetic.find((part) =>
+          part.text.startsWith("Referenced configured reference @docs/README.md."),
+        )
+
+        expect(reference?.metadata?.reference).toMatchObject({
+          name: "docs",
+          kind: "local",
+          path: docs,
+          target: "README.md",
+          targetPath: readme,
+          source: { value: "@docs/README.md", start: 5, end: 20 },
+        })
+        expect(synthetic.findIndex((part) => part === reference)).toBeLessThan(
+          synthetic.findIndex((part) => part.text.startsWith("Called the Read tool with the following input:")),
+        )
+
+        yield* sessions.remove(session.id)
+      }),
+    {
+      git: true,
+      config: {
+        ...cfg,
+        reference: {
+          docs: "./external-docs",
+        },
+      },
+    },
   ),
 )
 

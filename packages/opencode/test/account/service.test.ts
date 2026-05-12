@@ -15,7 +15,7 @@ import {
   RefreshToken,
   UserCode,
 } from "../../src/account/schema"
-import { Database } from "../../src/storage"
+import { Database } from "@/storage/db"
 import { testEffect } from "../lib/effect"
 
 const truncate = Layer.effectDiscard(

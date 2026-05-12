@@ -1,8 +1,9 @@
 import sessionProjectors from "../session/projectors"
 import { SyncEvent } from "@/sync"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { SessionTable } from "@/session/session.sql"
-import { Database, eq } from "@/storage"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 
 export function initProjectors() {
   SyncEvent.init({

@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test"
 import { Effect } from "effect"
 import { Discovery } from "../../src/skill/discovery"
 import { Global } from "@opencode-ai/core/global"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
 import { rm } from "fs/promises"
 import path from "path"
 

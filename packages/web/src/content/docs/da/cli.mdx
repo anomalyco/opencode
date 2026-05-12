@@ -29,16 +29,16 @@ opencode [project]
 
 #### Flag
 
-| Flag         | Kort | Beskrivelse                                                                  |
-| ------------ | ---- | ---------------------------------------------------------------------------- |
-| `--continue` | `-c` | Fortsæt sidste session                                                       |
-| `--session`  | `-s` | Sessions-id for at fortsætte                                                 |
-| `--fork`     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`) |
-| `--prompt`   |      | Spørg om at bruge                                                            |
-| `--model`    | `-m` | Model til brug i form af provider/model                                      |
-| `--agent`    |      | Agent hos bruge                                                              |
-| `--port`     |      | Port at lytte på                                                             |
-| `--hostname` |      | Værtsnavn at lytte på                                                        |
+| Flag                                     | Kort | Beskrivelse                                                                  |
+| ---------------------------------------- | ---- | ---------------------------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsæt sidste session                                                       |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Sessions-id for at fortsætte                                                 |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`) |
+| <nobr><code>{"--prompt"}</code></nobr>   |      | Spørg om at bruge                                                            |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | Model til brug i form af provider/model                                      |
+| <nobr><code>{"--agent"}</code></nobr>    |      | Agent hos bruge                                                              |
+| <nobr><code>{"--port"}</code></nobr>     |      | Port at lytte på                                                             |
+| <nobr><code>{"--hostname"}</code></nobr> |      | Værtsnavn at lytte på                                                        |
 
 ---
 
@@ -78,10 +78,14 @@ opencode attach http://10.20.30.40:4096
 
 #### Flag
 
-| Flag        | Kort | Beskrivelse                      |
-| ----------- | ---- | -------------------------------- |
-| `--dir`     |      | Arbejdsmappe til at starte TUI i |
-| `--session` | `-s` | Sessions-id for at fortsætte     |
+| Flag                                     | Kort | Beskrivelse                                                                       |
+| ---------------------------------------- | ---- | --------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Arbejdsmappe til at starte TUI i                                                  |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsæt den seneste session                                                       |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Sessions-id for at fortsætte                                                      |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`)      |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OPENCODE_SERVER_PASSWORD`)                 |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`) |
 
 ---
 
@@ -187,10 +191,10 @@ opencode github run
 
 ##### Flag
 
-| Flag      | Beskrivelse                                    |
-| --------- | ---------------------------------------------- |
-| `--event` | GitHub mock begivenhed for at køre agenten for |
-| `--token` | GitHub personlig adgangstoken                  |
+| Flag                                  | Beskrivelse                                    |
+| ------------------------------------- | ---------------------------------------------- |
+| <nobr><code>{"--event"}</code></nobr> | GitHub mock begivenhed for at køre agenten for |
+| <nobr><code>{"--token"}</code></nobr> | GitHub personlig adgangstoken                  |
 
 ---
 
@@ -296,10 +300,10 @@ opencode models anthropic
 
 #### Flag
 
-| Flag        | Beskrivelse                                                             |
-| ----------- | ----------------------------------------------------------------------- |
-| `--refresh` | Opdater modelcachen fra models.dev                                      |
-| `--verbose` | Brug mere detaljeret modeloutput (inkluderer metadata som omkostninger) |
+| Flag                                    | Beskrivelse                                                             |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| <nobr><code>{"--refresh"}</code></nobr> | Opdater modelcachen fra models.dev                                      |
+| <nobr><code>{"--verbose"}</code></nobr> | Brug mere detaljeret modeloutput (inkluderer metadata som omkostninger) |
 
 Brug flaget `--refresh` til at opdatere den cachelagrede modelliste. Dette er nyttigt, når nye modeller er blevet tilføjet til en udbyder, og du vil se dem i OpenCode.
 
@@ -335,20 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flag
 
-| Flag         | Kort | Beskrivelse                                                                         |
-| ------------ | ---- | ----------------------------------------------------------------------------------- |
-| `--command`  |      | Kommandoen til at køre, brug besked til args                                        |
-| `--continue` | `-c` | Fortsæt sidste session                                                              |
-| `--session`  | `-s` | Sessions-id for at fortsætte                                                        |
-| `--fork`     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`)        |
-| `--share`    |      | Del sessionen                                                                       |
-| `--model`    | `-m` | Model til brug i form af provider/model                                             |
-| `--agent`    |      | Agent til brug                                                                      |
-| `--file`     | `-f` | Fil(er), der skal vedhæftes til meddelelsen                                         |
-| `--format`   |      | Format: standard (formateret) eller json (rå JSON hændelser)                        |
-| `--title`    |      | Titel for sessionen (bruger trunkeret prompt, hvis der ikke er angivet nogen værdi) |
-| `--attach`   |      | Tilslut til en kørende opencode-server (f.eks. http://localhost:4096)               |
-| `--port`     |      | Port til den lokale server (standard til vilkårlig port)                            |
+| Flag                                     | Kort | Beskrivelse                                                                         |
+| ---------------------------------------- | ---- | ----------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |      | Kommandoen til at køre, brug besked til args                                        |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsæt sidste session                                                              |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Sessions-id for at fortsætte                                                        |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`)        |
+| <nobr><code>{"--share"}</code></nobr>    |      | Del sessionen                                                                       |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | Model til brug i form af provider/model                                             |
+| <nobr><code>{"--agent"}</code></nobr>    |      | Agent til brug                                                                      |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | Fil(er), der skal vedhæftes til meddelelsen                                         |
+| <nobr><code>{"--format"}</code></nobr>   |      | Format: standard (formateret) eller json (rå JSON hændelser)                        |
+| <nobr><code>{"--title"}</code></nobr>    |      | Titel for sessionen (bruger trunkeret prompt, hvis der ikke er angivet nogen værdi) |
+| <nobr><code>{"--attach"}</code></nobr>   |      | Tilslut til en kørende opencode-server (f.eks. http://localhost:4096)               |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OPENCODE_SERVER_PASSWORD`)                   |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`)   |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Mappe at køre i, eller sti på fjernserveren ved tilkobling                          |
+| <nobr><code>{"--variant"}</code></nobr>  |      | Modelvariant (udbyder-specifik ræsonneringsindsats)                                 |
+| <nobr><code>{"--thinking"}</code></nobr> |      | Vis tænkeblokke                                                                     |
+| <nobr><code>{"--port"}</code></nobr>     |      | Port til den lokale server (standard til vilkårlig port)                            |
 
 ---
 
@@ -364,12 +373,12 @@ Dette starter en HTTP-server, der giver API-adgang til opencode-funktionalitet u
 
 #### Flag
 
-| Flag         | Beskrivelse                                      |
-| ------------ | ------------------------------------------------ |
-| `--port`     | Port at lytte på                                 |
-| `--hostname` | Værtsnavn at lytte på                            |
-| `--mdns`     | Aktiver mDNS-opdagelse                           |
-| `--cors`     | Yderligere browseroprindelse til at tillade CORS |
+| Flag                                     | Beskrivelse                                      |
+| ---------------------------------------- | ------------------------------------------------ |
+| <nobr><code>{"--port"}</code></nobr>     | Port at lytte på                                 |
+| <nobr><code>{"--hostname"}</code></nobr> | Værtsnavn at lytte på                            |
+| <nobr><code>{"--mdns"}</code></nobr>     | Aktiver mDNS-opdagelse                           |
+| <nobr><code>{"--cors"}</code></nobr>     | Yderligere browseroprindelse til at tillade CORS |
 
 ---
 
@@ -393,10 +402,10 @@ opencode session list
 
 ##### Flag
 
-| Flag          | Kort | Beskrivelse                            |
-| ------------- | ---- | -------------------------------------- |
-| `--max-count` | `-n` | Begræns til N seneste sessioner        |
-| `--format`    |      | Outputformat: tabel eller json (tabel) |
+| Flag                                      | Kort | Beskrivelse                            |
+| ----------------------------------------- | ---- | -------------------------------------- |
+| <nobr><code>{"--max-count"}</code></nobr> | `-n` | Begræns til N seneste sessioner        |
+| <nobr><code>{"--format"}</code></nobr>    |      | Outputformat: tabel eller json (tabel) |
 
 ---
 
@@ -410,12 +419,12 @@ opencode stats
 
 #### Flag
 
-| Flag        | Beskrivelse                                                                 |
-| ----------- | --------------------------------------------------------------------------- |
-| `--days`    | Vis statistik for de sidste N dage (hele tiden)                             |
-| `--tools`   | Antal værktøjer, der skal vises (alle)                                      |
-| `--models`  | Vis modelbrugsopdeling (skjult som standard). Send et tal for at vise top N |
-| `--project` | Filtre efter projekt (alle projekter, tom streng: nuværende projekt)        |
+| Flag                                    | Beskrivelse                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| <nobr><code>{"--days"}</code></nobr>    | Vis statistik for de sidste N dage (hele tiden)                             |
+| <nobr><code>{"--tools"}</code></nobr>   | Antal værktøjer, der skal vises (alle)                                      |
+| <nobr><code>{"--models"}</code></nobr>  | Vis modelbrugsopdeling (skjult som standard). Send et tal for at vise top N |
+| <nobr><code>{"--project"}</code></nobr> | Filtre efter projekt (alle projekter, tom streng: nuværende projekt)        |
 
 ---
 
@@ -460,12 +469,12 @@ Dette starter en HTTP-server og åbner en webbrowser for at få adgang til OpenC
 
 #### Flag
 
-| Flag         | Beskrivelse                                      |
-| ------------ | ------------------------------------------------ |
-| `--port`     | Port at lytte på                                 |
-| `--hostname` | Værtsnavn at lytte på                            |
-| `--mdns`     | Aktiver mDNS-opdagelse                           |
-| `--cors`     | Yderligere browseroprindelse til at tillade CORS |
+| Flag                                     | Beskrivelse                                      |
+| ---------------------------------------- | ------------------------------------------------ |
+| <nobr><code>{"--port"}</code></nobr>     | Port at lytte på                                 |
+| <nobr><code>{"--hostname"}</code></nobr> | Værtsnavn at lytte på                            |
+| <nobr><code>{"--mdns"}</code></nobr>     | Aktiver mDNS-opdagelse                           |
+| <nobr><code>{"--cors"}</code></nobr>     | Yderligere browseroprindelse til at tillade CORS |
 
 ---
 
@@ -481,11 +490,11 @@ Denne kommando starter en ACP-server, der kommunikerer via stdin/stdout ved hjæ
 
 #### Flag
 
-| Flag         | Beskrivelse           |
-| ------------ | --------------------- |
-| `--cwd`      | Arbejdsmappe          |
-| `--port`     | Port at lytte på      |
-| `--hostname` | Værtsnavn at lytte på |
+| Flag                                     | Beskrivelse           |
+| ---------------------------------------- | --------------------- |
+| <nobr><code>{"--cwd"}</code></nobr>      | Arbejdsmappe          |
+| <nobr><code>{"--port"}</code></nobr>     | Port at lytte på      |
+| <nobr><code>{"--hostname"}</code></nobr> | Værtsnavn at lytte på |
 
 ---
 
@@ -499,12 +508,12 @@ opencode uninstall
 
 #### Flag
 
-| Flag            | Kort | Beskrivelse                                      |
-| --------------- | ---- | ------------------------------------------------ |
-| `--keep-config` | `-c` | Se konfigurationsfiler                           |
-| `--keep-data`   | `-d` | Gem sessionsdata og snapshots                    |
-| `--dry-run`     |      | Vis, hvad der ville blive fjernet uden at fjerne |
-| `--force`       | `-f` | Spring bekræftelsesspørgsmål over                |
+| Flag                                        | Kort | Beskrivelse                                      |
+| ------------------------------------------- | ---- | ------------------------------------------------ |
+| <nobr><code>{"--keep-config"}</code></nobr> | `-c` | Se konfigurationsfiler                           |
+| <nobr><code>{"--keep-data"}</code></nobr>   | `-d` | Gem sessionsdata og snapshots                    |
+| <nobr><code>{"--dry-run"}</code></nobr>     |      | Vis, hvad der ville blive fjernet uden at fjerne |
+| <nobr><code>{"--force"}</code></nobr>       | `-f` | Spring bekræftelsesspørgsmål over                |
 
 ---
 
@@ -530,9 +539,9 @@ opencode upgrade v0.1.48
 
 #### upgrade
 
-| Flag       | Kort | Beskrivelse                                                      |
-| ---------- | ---- | ---------------------------------------------------------------- |
-| `--method` | `-m` | Installationsmetoden, der blev brugt; curl, npm, pnpm, bun, brew |
+| Flag                                   | Kort | Beskrivelse                                                      |
+| -------------------------------------- | ---- | ---------------------------------------------------------------- |
+| <nobr><code>{"--method"}</code></nobr> | `-m` | Installationsmetoden, der blev brugt; curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -540,12 +549,12 @@ opencode upgrade v0.1.48
 
 opencode CLI tager følgende globale flag.
 
-| Flag           | Kort | Beskrivelse                          |
-| -------------- | ---- | ------------------------------------ |
-| `--help`       | `-h` | Vis hjælp                            |
-| `--version`    | `-v` | Udskriftsversionsnummer              |
-| `--print-logs` |      | Udskriv logfiler til stderr          |
-| `--log-level`  |      | Logniveau (DEBUG, INFO, WARN, ERROR) |
+| Flag                                       | Kort | Beskrivelse                          |
+| ------------------------------------------ | ---- | ------------------------------------ |
+| <nobr><code>{"--help"}</code></nobr>       | `-h` | Vis hjælp                            |
+| <nobr><code>{"--version"}</code></nobr>    | `-v` | Udskriftsversionsnummer              |
+| <nobr><code>{"--print-logs"}</code></nobr> |      | Udskriv logfiler til stderr          |
+| <nobr><code>{"--log-level"}</code></nobr>  |      | Logniveau (DEBUG, INFO, WARN, ERROR) |
 
 ---
 

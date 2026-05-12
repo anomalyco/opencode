@@ -2,28 +2,25 @@ import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
-import { LocalContext } from "../util"
+import { LocalContext } from "@/util/local-context"
 import { lazy } from "../util/lazy"
 import { Global } from "@opencode-ai/core/global"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
-import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { iife } from "@/util/iife"
 import { init } from "#db"
+import { Schema } from "effect"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
-export const NotFoundError = NamedError.create(
-  "NotFoundError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const NotFoundError = NamedError.create("NotFoundError", {
+  message: Schema.String,
+})
 
 const log = Log.create({ service: "db" })
 
@@ -47,6 +44,13 @@ export type Transaction = SQLiteTransaction<"sync", void>
 type Client = SQLiteBunDatabase
 
 type Journal = { sql: string; timestamp: number; name: string }[]
+
+// Drizzle's migrate overloads trigger expensive variance checks here; narrow to the journal overload we actually use.
+const migrateFromJournal = migrate as unknown as (db: SQLiteBunDatabase, entries: Journal) => void
+
+function applyMigrations(db: SQLiteBunDatabase, entries: Journal) {
+  migrateFromJournal(db, entries)
+}
 
 function time(tag: string) {
   const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
@@ -108,13 +112,14 @@ export const Client = lazy(() => {
         item.sql = "select 1;"
       }
     }
-    migrate(db, entries)
+    applyMigrations(db, entries)
   }
 
   return db
 })
 
 export function close() {
+  if (!Client.loaded()) return
   Client().$client.close()
   Client.reset()
 }
@@ -170,3 +175,5 @@ export function transaction<T>(
     throw err
   }
 }
+
+export * as Database from "./db"
