@@ -1,0 +1,3 @@
+#!/bin/sh
+set -e
+bun run script/check-cross-package-refs.ts
