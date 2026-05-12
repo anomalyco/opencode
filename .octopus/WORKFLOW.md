@@ -593,6 +593,10 @@ P0/Hotfix 抢占当前 Agent 时：
 | 运行时 | SDK smoke                   |  —   |  —  |  ✓   |
 | 安全   | bun audit                   |  ✓   |  ✓  |  ✓   |
 | 安全   | bundle size                 |  —   |  —  |  ✓   |
+| 品牌   | Docs MDX API 标识符检查     |  ✓*  |  ✓* |  ✓*  |
+| 品牌   | openapi.json/spec 品牌名检查 |  ✓*  |  ✓* |  ✓*  |
+
+> \* 仅涉及品牌迁移/重命名/标识符替换的版本触发。
 
 **PR 分级审批**
 
