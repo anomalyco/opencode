@@ -1843,6 +1843,18 @@ ToolRegistry.register({
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
+    const pendingDiff = createMemo(() => {
+      if (!pending()) return { additions: 0, deletions: 0 }
+      const lineCount = (closed: unknown, key: string): number => {
+        if (typeof closed === "string") return closed === "" ? 0 : closed.split("\n").length
+        if (typeof props.raw === "string") return countPartialStringLines(props.raw, key)
+        return 0
+      }
+      return {
+        additions: lineCount(props.input.newString, "newString"),
+        deletions: lineCount(props.input.oldString, "oldString"),
+      }
+    })
     return (
       <div data-component="edit-tool">
         <BasicTool
@@ -1872,6 +1884,9 @@ ToolRegistry.register({
                 </Show>
               </div>
               <div data-slot="message-part-actions">
+                <Show when={pending() && (pendingDiff().additions > 0 || pendingDiff().deletions > 0)}>
+                  <DiffChanges changes={pendingDiff()} />
+                </Show>
                 <Show when={!pending() && props.metadata.filediff}>
                   <DiffChanges changes={props.metadata.filediff} />
                 </Show>
