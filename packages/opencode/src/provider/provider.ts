@@ -13,7 +13,7 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { namedSchemaError } from "@/util/named-schema-error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
@@ -1749,13 +1749,13 @@ export function parseModel(model: string) {
   }
 }
 
-export const ModelNotFoundError = namedSchemaError("ProviderModelNotFoundError", {
+export const ModelNotFoundError = NamedError.create("ProviderModelNotFoundError", {
   providerID: ProviderID,
   modelID: ModelID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
 })
 
-export const InitError = namedSchemaError("ProviderInitError", {
+export const InitError = NamedError.create("ProviderInitError", {
   providerID: ProviderID,
 })
 
