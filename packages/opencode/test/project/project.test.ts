@@ -28,19 +28,6 @@ function run<A>(fn: (svc: Project.Interface) => Effect.Effect<A>) {
   })
 }
 
-function gitTmpdir() {
-  return Effect.gen(function* () {
-    const tmp = yield* tmpdirScoped()
-    yield* Effect.promise(() => $`git init`.cwd(tmp).quiet())
-    yield* Effect.promise(() => $`git config core.fsmonitor false`.cwd(tmp).quiet())
-    yield* Effect.promise(() => $`git config commit.gpgsign false`.cwd(tmp).quiet())
-    yield* Effect.promise(() => $`git config user.email "test@opencode.test"`.cwd(tmp).quiet())
-    yield* Effect.promise(() => $`git config user.name "Test"`.cwd(tmp).quiet())
-    yield* Effect.promise(() => $`git commit --allow-empty -m ${`root commit ${tmp}`}`.cwd(tmp).quiet())
-    return tmp
-  })
-}
-
 /**
  * Creates a mock ChildProcessSpawner layer that intercepts git subcommands
  * matching `failArg` and returns exit code 128, while delegating everything
@@ -107,7 +94,7 @@ describe("Project.fromDirectory", () => {
 
   it.live("should handle git repository with commits", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
@@ -131,7 +118,7 @@ describe("Project.fromDirectory", () => {
 
   it.live("derives stable project ID from root commit", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project: a } = yield* run((svc) => svc.fromDirectory(tmp))
       const { project: b } = yield* run((svc) => svc.fromDirectory(tmp))
       expect(b.id).toBe(a.id)
@@ -155,7 +142,7 @@ describe("Project.fromDirectory git failure paths", () => {
 
   failureIt("--show-toplevel").live("handles show-toplevel failure gracefully", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const { project, sandbox } = yield* run((svc) => svc.fromDirectory(tmp))
       expect(project.worktree).toBe(tmp)
@@ -165,7 +152,7 @@ describe("Project.fromDirectory git failure paths", () => {
 
   failureIt("--git-common-dir").live("handles git-common-dir failure gracefully", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const { project, sandbox } = yield* run((svc) => svc.fromDirectory(tmp))
       expect(project.worktree).toBe(tmp)
@@ -177,7 +164,7 @@ describe("Project.fromDirectory git failure paths", () => {
 describe("Project.fromDirectory with worktrees", () => {
   it.live("should set worktree to root when called from root", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const { project, sandbox } = yield* run((svc) => svc.fromDirectory(tmp))
 
@@ -189,7 +176,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
   it.live("should set worktree to root when called from a worktree", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const worktreePath = path.join(tmp, "..", path.basename(tmp) + "-worktree")
       yield* Effect.addFinalizer(() => Effect.promise(() => $`git worktree remove ${worktreePath}`.cwd(tmp).quiet().catch(() => {})))
@@ -206,7 +193,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
   it.live("worktree should share project ID with main repo", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const { project: main } = yield* run((svc) => svc.fromDirectory(tmp))
 
@@ -227,9 +214,9 @@ describe("Project.fromDirectory with worktrees", () => {
 
   it.live("separate clones of the same repo should share project ID", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
-    // Create a bare remote, push, then clone into a second directory
+      // Create a bare remote, push, then clone into a second directory
       const bare = tmp + "-bare"
       const clone = tmp + "-clone"
       yield* Effect.addFinalizer(() => Effect.promise(() => $`rm -rf ${bare} ${clone}`.quiet().nothrow()).pipe(Effect.ignore))
@@ -245,7 +232,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
   it.live("should accumulate multiple worktrees in sandboxes", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const worktree1 = path.join(tmp, "..", path.basename(tmp) + "-wt1")
       const worktree2 = path.join(tmp, "..", path.basename(tmp) + "-wt2")
@@ -272,7 +259,7 @@ describe("Project.fromDirectory with worktrees", () => {
 describe("Project.discover", () => {
   it.live("should discover favicon.png in root", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -291,7 +278,7 @@ describe("Project.discover", () => {
 
   it.live("should not discover non-image files", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       yield* Effect.promise(() => Bun.write(path.join(tmp, "favicon.txt"), "not an image"))
@@ -306,7 +293,7 @@ describe("Project.discover", () => {
 
   it.live("should not discover favicon when override is set", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       yield* run((svc) =>
@@ -335,7 +322,7 @@ describe("Project.discover", () => {
 describe("Project.update", () => {
   it.live("should update name", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const updated = yield* run((svc) =>
@@ -354,7 +341,7 @@ describe("Project.update", () => {
 
   it.live("should update icon url", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const updated = yield* run((svc) =>
@@ -373,7 +360,7 @@ describe("Project.update", () => {
 
   it.live("should update icon color", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const updated = yield* run((svc) =>
@@ -392,7 +379,7 @@ describe("Project.update", () => {
 
   it.live("should update icon override", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const updated = yield* run((svc) =>
@@ -411,7 +398,7 @@ describe("Project.update", () => {
 
   it.live("should update commands", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const updated = yield* run((svc) =>
@@ -446,7 +433,7 @@ describe("Project.update", () => {
 
   it.live("should emit GlobalBus event on update", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       let eventPayload: any = null
@@ -466,7 +453,7 @@ describe("Project.update", () => {
 
   it.live("should update multiple fields at once", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const updated = yield* run((svc) =>
@@ -490,7 +477,7 @@ describe("Project.update", () => {
 describe("Project.list and Project.get", () => {
   it.live("list returns all projects", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const all = Project.list()
@@ -501,7 +488,7 @@ describe("Project.list and Project.get", () => {
 
   it.live("get returns project by id", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       const found = Project.get(project.id)
@@ -519,7 +506,7 @@ describe("Project.list and Project.get", () => {
 describe("Project.setInitialized", () => {
   it.live("sets time_initialized on project", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       expect(project.time.initialized).toBeUndefined()
@@ -535,7 +522,7 @@ describe("Project.setInitialized", () => {
 describe("Project.addSandbox and Project.removeSandbox", () => {
   it.live("addSandbox adds directory and removeSandbox removes it", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
       const sandboxDir = path.join(tmp, "sandbox-test")
 
@@ -553,7 +540,7 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
 
   it.live("addSandbox emits GlobalBus event", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
       const sandboxDir = path.join(tmp, "sandbox-event")
 
@@ -572,7 +559,7 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
 describe("Project.fromDirectory with bare repos", () => {
   it.live("worktree from bare repo should cache in bare repo, not parent", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const parentDir = path.dirname(tmp)
       const barePath = path.join(parentDir, `bare-${Date.now()}.git`)
@@ -597,8 +584,8 @@ describe("Project.fromDirectory with bare repos", () => {
 
   it.live("different bare repos under same parent should not share project ID", () =>
     Effect.gen(function* () {
-      const tmp1 = yield* gitTmpdir()
-      const tmp2 = yield* gitTmpdir()
+      const tmp1 = yield* tmpdirScoped({ git: true })
+      const tmp2 = yield* tmpdirScoped({ git: true })
 
       const parentDir = path.dirname(tmp1)
       const bareA = path.join(parentDir, `bare-a-${Date.now()}.git`)
@@ -633,7 +620,7 @@ describe("Project.fromDirectory with bare repos", () => {
 
   it.live("bare repo without .git suffix is still detected via core.bare", () =>
     Effect.gen(function* () {
-      const tmp = yield* gitTmpdir()
+      const tmp = yield* tmpdirScoped({ git: true })
 
       const parentDir = path.dirname(tmp)
       const barePath = path.join(parentDir, `bare-no-suffix-${Date.now()}`)
