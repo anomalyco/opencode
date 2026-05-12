@@ -1,11 +1,45 @@
 import { type FilteredListProps, useFilteredList, useScrollContainer } from "@opencode-ai/ui/hooks"
-import { createEffect, For, onCleanup, type JSX, on, Show } from "solid-js"
+import { createEffect, createMemo, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
+import { type VirtualizerHandle, Virtualizer } from "virtua/solid"
 import { useI18n } from "../context/i18n"
 import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextField } from "./text-field"
+
+function impact() {
+  if (typeof window === "undefined") return
+  try {
+    const raw = window.localStorage.getItem("opencode.prompt.impact")
+    if (!raw) return
+    const [name, at, until] = raw.split(":")
+    const end = Number(until)
+    if (!Number.isFinite(end)) return
+    const now = Math.round(performance.now())
+    if (now > end) return
+    return {
+      name: name || "unknown",
+      age: Math.max(0, now - (Number(at) || 0)),
+      left: Math.max(0, end - now),
+    }
+  } catch {
+    return
+  }
+}
+
+function log(kind: string, fields: Record<string, string | number | boolean | undefined>) {
+  const tag = impact()
+  if (!tag) return
+  const line = Object.entries({
+    impact: tag.name,
+    impactAge: tag.age,
+    impactLeft: tag.left,
+    ...fields,
+  })
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ")
+  console.debug(`[list:perf] ${kind} ${line}`)
+}
 
 /**
  * List component for displaying filterable, searchable, and keyboard-navigable lists.
@@ -55,6 +89,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   divider?: boolean
   add?: ListAddProps
   groupHeader?: (group: { category: string; items: T[] }) => JSX.Element
+  virtual?: boolean
 }
 
 export interface ListRef {
@@ -73,7 +108,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const internalFilter = () => store.internalFilter
   const setInternalFilter = (value: string) => setStore("internalFilter", value)
 
-  const { setScrollRef, scrollRef, scrollToElement, scrollToTop, findByKey } = useScrollContainer()
+  const { setScrollRef, scrollRef, scrollToTop } = useScrollContainer()
+  let virtualizerHandle: VirtualizerHandle | undefined
 
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput, refetch } = useFilteredList<T>(props)
 
@@ -119,31 +155,29 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   )
 
   createEffect(() => {
-    const scroll = scrollRef()
-    if (!scroll) return
     if (!props.current) return
     const key = props.key(props.current)
+    const rows = virtualRows()
+    const idx = rows.findIndex((r) => r.type === "item" && props.key(r.item) === key)
+    if (idx === -1) return
     requestAnimationFrame(() => {
-      const element = findByKey(key)
-      if (!element) return
-      scrollToElement(element, { block: "center", behavior: "auto" })
+      virtualizerHandle?.scrollToIndex(idx, { align: "center" })
     })
   })
 
   createEffect(() => {
     const all = flat()
     if (store.mouseActive || all.length === 0) return
-    const scroll = scrollRef()
-    if (!scroll) return
     if (active() === props.key(all[0])) {
       scrollToTop("auto")
       return
     }
     const key = active()
     if (!key) return
-    const element = findByKey(key)
-    if (!element) return
-    scrollToElement(element, { block: "center", behavior: "auto" })
+    const rows = virtualRows()
+    const idx = rows.findIndex((r) => r.type === "item" && props.key(r.item) === key)
+    if (idx === -1) return
+    virtualizerHandle?.scrollToIndex(idx, { align: "nearest" })
   })
 
   createEffect(() => {
@@ -200,33 +234,51 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     )
   }
 
-  function GroupHeader(groupProps: { group: { category: string; items: T[] } }): JSX.Element {
-    const [state, setState] = createStore({
-      stuck: false,
-      header: undefined as HTMLDivElement | undefined,
-    })
+  type VirtualRow =
+    | { type: "header"; category: string; group: { category: string; items: T[] } }
+    | { type: "item"; item: T; flatIndex: number; isLastInGroup: boolean; isLastGroup: boolean }
+    | { type: "add" }
 
-    createEffect(() => {
-      const scroll = scrollRef()
-      const node = state.header
-      if (!scroll || !node) return
-
-      const handler = () => {
-        const rect = node.getBoundingClientRect()
-        const scrollRect = scroll.getBoundingClientRect()
-        setState("stuck", rect.top <= scrollRect.top + 1 && scroll.scrollTop > 0)
+  const virtualRows = createMemo<VirtualRow[]>(() => {
+    const groups = grouped.latest || []
+    const rows: VirtualRow[] = []
+    let flatIndex = 0
+    for (let gi = 0; gi < groups.length; gi++) {
+      const group = groups[gi]
+      const isLastGroup = gi === groups.length - 1
+      if (group.category) {
+        rows.push({ type: "header", category: group.category, group })
       }
+      for (let ii = 0; ii < group.items.length; ii++) {
+        rows.push({
+          type: "item",
+          item: group.items[ii],
+          flatIndex: flatIndex++,
+          isLastInGroup: ii === group.items.length - 1,
+          isLastGroup,
+        })
+      }
+    }
+    if (showAdd()) {
+      rows.push({ type: "add" })
+    }
+    return rows
+  })
 
-      makeEventListener(scroll, "scroll", handler, { passive: true })
-      handler()
+  createEffect(() => {
+    const rows = virtualRows()
+    const items = rows.filter((row) => row.type === "item").length
+    const headers = rows.filter((row) => row.type === "header").length
+    log("rows", {
+      rows: rows.length,
+      items,
+      headers,
+      groups: grouped.latest?.length ?? 0,
+      flat: flat().length,
+      filter: filter(),
+      loading: grouped.loading,
     })
-
-    return (
-      <div data-slot="list-header" data-stuck={state.stuck} ref={(el) => setState("header", el)}>
-        {props.groupHeader?.(groupProps.group) ?? groupProps.group.category}
-      </div>
-    )
-  }
+  })
 
   const emptyMessage = () => {
     if (grouped.loading) return props.loadingMessage ?? i18n.t("ui.list.loading")
@@ -245,6 +297,51 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
         </Show>
       </>
     )
+  }
+
+  const rowNode = (row: VirtualRow) => {
+    if (row.type === "header") {
+      return <div data-slot="list-header">{props.groupHeader?.(row.group) ?? row.category}</div>
+    }
+    if (row.type === "add") return renderAdd()
+    const { item, flatIndex, isLastInGroup, isLastGroup } = row
+    const node = (
+      <button
+        data-slot="list-item"
+        data-key={props.key(item)}
+        data-active={props.key(item) === active()}
+        data-selected={item === props.current}
+        onClick={() => handleSelect(item, flatIndex)}
+        onKeyDown={handleKey}
+        type="button"
+        onMouseMove={(event) => {
+          if (!moved(event)) return
+          setStore("mouseActive", true)
+          setActive(props.key(item))
+        }}
+        onMouseLeave={() => {
+          if (!store.mouseActive) return
+          setActive(null)
+        }}
+      >
+        {props.children(item)}
+        <Show when={item === props.current}>
+          <span data-slot="list-item-selected-icon">
+            <Icon name="check-small" />
+          </span>
+        </Show>
+        <Show when={props.activeIcon}>
+          {(icon) => (
+            <span data-slot="list-item-active-icon">
+              <Icon name={icon()} />
+            </span>
+          )}
+        </Show>
+        {props.divider && (!isLastInGroup || (showAdd() && isLastGroup)) && <span data-slot="list-item-divider" />}
+      </button>
+    )
+    if (props.itemWrapper) return props.itemWrapper(item, node)
+    return node
   }
 
   return (
@@ -312,68 +409,17 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
             </div>
           }
         >
-          <For each={grouped.latest}>
-            {(group, groupIndex) => {
-              const isLastGroup = () => groupIndex() === grouped.latest.length - 1
-              return (
-                <div data-slot="list-group">
-                  <Show when={group.category}>
-                    <GroupHeader group={group} />
-                  </Show>
-                  <div data-slot="list-items">
-                    <For each={group.items}>
-                      {(item, i) => {
-                        const node = (
-                          <button
-                            data-slot="list-item"
-                            data-key={props.key(item)}
-                            data-active={props.key(item) === active()}
-                            data-selected={item === props.current}
-                            onClick={() => handleSelect(item, i())}
-                            onKeyDown={handleKey}
-                            type="button"
-                            onMouseMove={(event) => {
-                              if (!moved(event)) return
-                              setStore("mouseActive", true)
-                              setActive(props.key(item))
-                            }}
-                            onMouseLeave={() => {
-                              if (!store.mouseActive) return
-                              setActive(null)
-                            }}
-                          >
-                            {props.children(item)}
-                            <Show when={item === props.current}>
-                              <span data-slot="list-item-selected-icon">
-                                <Icon name="check-small" />
-                              </span>
-                            </Show>
-                            <Show when={props.activeIcon}>
-                              {(icon) => (
-                                <span data-slot="list-item-active-icon">
-                                  <Icon name={icon()} />
-                                </span>
-                              )}
-                            </Show>
-                            {props.divider && (i() !== group.items.length - 1 || (showAdd() && isLastGroup())) && (
-                              <span data-slot="list-item-divider" />
-                            )}
-                          </button>
-                        )
-                        if (props.itemWrapper) return props.itemWrapper(item, node)
-                        return node
-                      }}
-                    </For>
-                    <Show when={showAdd() && isLastGroup()}>{renderAdd()}</Show>
-                  </div>
-                </div>
-              )
-            }}
-          </For>
-          <Show when={grouped.latest.length === 0 && showAdd()}>
-            <div data-slot="list-group">
-              <div data-slot="list-items">{renderAdd()}</div>
-            </div>
+          <Show
+            when={props.virtual !== false}
+            fallback={
+              <For each={virtualRows()}>
+                {(row) => rowNode(row)}
+              </For>
+            }
+          >
+            <Virtualizer data={virtualRows()} scrollRef={scrollRef()} ref={(h) => { virtualizerHandle = h }}>
+              {(row) => rowNode(row)}
+            </Virtualizer>
           </Show>
         </Show>
       </div>
