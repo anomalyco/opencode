@@ -180,7 +180,7 @@ describe("tool.registry", () => {
       const promptTools = yield* registry.tools({
         providerID: ProviderID.opencode,
         modelID: ModelID.make("test"),
-        agent: yield* agents.get(yield* agents.defaultAgent()),
+        agent: yield* agents.defaultInfo(),
       })
       const promptTool = promptTools.find((tool) => tool.id === "sql")
       if (!promptTool) throw new Error("custom sql tool was not returned for prompts")

@@ -698,6 +698,18 @@ test("defaultAgent returns build when no default_agent config", async () => {
   })
 })
 
+test("defaultInfo returns resolved build agent when no default_agent config", async () => {
+  await using tmp = await tmpdir()
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await load(tmp.path, (svc) => svc.defaultInfo())
+      expect(agent.name).toBe("build")
+      expect(agent.mode).toBe("primary")
+    },
+  })
+})
+
 test("defaultAgent respects default_agent config set to plan", async () => {
   await using tmp = await tmpdir({
     config: {
