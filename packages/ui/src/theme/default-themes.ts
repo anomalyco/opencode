@@ -4,6 +4,7 @@ import amoledThemeJson from "./themes/amoled.json"
 import auraThemeJson from "./themes/aura.json"
 import ayuThemeJson from "./themes/ayu.json"
 import carbonfoxThemeJson from "./themes/carbonfox.json"
+import coffeeThemeJson from "./themes/coffee.json"
 import catppuccinThemeJson from "./themes/catppuccin.json"
 import catppuccinFrappeThemeJson from "./themes/catppuccin-frappe.json"
 import catppuccinMacchiatoThemeJson from "./themes/catppuccin-macchiato.json"
@@ -42,6 +43,7 @@ export const amoledTheme = amoledThemeJson as DesktopTheme
 export const auraTheme = auraThemeJson as DesktopTheme
 export const ayuTheme = ayuThemeJson as DesktopTheme
 export const carbonfoxTheme = carbonfoxThemeJson as DesktopTheme
+export const coffeeTheme = coffeeThemeJson as DesktopTheme
 export const catppuccinTheme = catppuccinThemeJson as DesktopTheme
 export const catppuccinFrappeTheme = catppuccinFrappeThemeJson as DesktopTheme
 export const catppuccinMacchiatoTheme = catppuccinMacchiatoThemeJson as DesktopTheme
@@ -81,6 +83,7 @@ export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   aura: auraTheme,
   ayu: ayuTheme,
   carbonfox: carbonfoxTheme,
+  coffee: coffeeTheme,
   catppuccin: catppuccinTheme,
   "catppuccin-frappe": catppuccinFrappeTheme,
   "catppuccin-macchiato": catppuccinMacchiatoTheme,

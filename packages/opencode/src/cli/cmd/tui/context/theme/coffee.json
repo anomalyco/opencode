@@ -1,0 +1,243 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "darkBg0": "#1E120C",
+    "darkBg1": "#2C1810",
+    "darkBg2": "#3D2B1F",
+    "darkBg3": "#4A3728",
+    "darkBg4": "#5C4033",
+    "darkBg5": "#6E5645",
+    "darkFg0": "#FED8B1",
+    "darkFg1": "#ECB176",
+    "darkFg2": "#D4A574",
+    "darkMuted": "#A67B5B",
+    "darkPrimary": "#ECB176",
+    "darkSecondary": "#A67B5B",
+    "darkAccent": "#D4A574",
+    "darkRed": "#C75B5B",
+    "darkGreen": "#7A9E7E",
+    "darkYellow": "#C4943A",
+    "darkBlue": "#6B8CAE",
+    "darkOrange": "#D4823A",
+    "lightBg0": "#FAF3EB",
+    "lightBg1": "#F0E6D8",
+    "lightBg2": "#E6D8C8",
+    "lightBg3": "#DCCCB8",
+    "lightBg4": "#D2C0A8",
+    "lightBg5": "#C8B498",
+    "lightFg0": "#2C1810",
+    "lightFg1": "#3D261C",
+    "lightFg2": "#6F4E37",
+    "lightMuted": "#8C7B6B",
+    "lightPrimary": "#6F4E37",
+    "lightSecondary": "#8B6914",
+    "lightAccent": "#A07850",
+    "lightRed": "#A53E3E",
+    "lightGreen": "#4A7C59",
+    "lightYellow": "#8A6B1A",
+    "lightBlue": "#4A6FA5",
+    "lightOrange": "#B8722D"
+  },
+  "theme": {
+    "primary": {
+      "dark": "darkPrimary",
+      "light": "lightPrimary"
+    },
+    "secondary": {
+      "dark": "darkSecondary",
+      "light": "lightSecondary"
+    },
+    "accent": {
+      "dark": "darkAccent",
+      "light": "lightAccent"
+    },
+    "error": {
+      "dark": "darkRed",
+      "light": "lightRed"
+    },
+    "warning": {
+      "dark": "darkYellow",
+      "light": "lightYellow"
+    },
+    "success": {
+      "dark": "darkGreen",
+      "light": "lightGreen"
+    },
+    "info": {
+      "dark": "darkBlue",
+      "light": "lightBlue"
+    },
+    "text": {
+      "dark": "darkFg0",
+      "light": "lightFg0"
+    },
+    "textMuted": {
+      "dark": "darkMuted",
+      "light": "lightMuted"
+    },
+    "background": {
+      "dark": "darkBg0",
+      "light": "lightBg0"
+    },
+    "backgroundPanel": {
+      "dark": "darkBg1",
+      "light": "lightBg1"
+    },
+    "backgroundElement": {
+      "dark": "darkBg2",
+      "light": "lightBg2"
+    },
+    "border": {
+      "dark": "darkBg4",
+      "light": "lightBg4"
+    },
+    "borderActive": {
+      "dark": "darkFg1",
+      "light": "lightFg1"
+    },
+    "borderSubtle": {
+      "dark": "darkBg3",
+      "light": "lightBg3"
+    },
+    "diffAdded": {
+      "dark": "#7A9E7E",
+      "light": "#4A7C59"
+    },
+    "diffRemoved": {
+      "dark": "#C75B5B",
+      "light": "#A53E3E"
+    },
+    "diffContext": {
+      "dark": "#9C8B7A",
+      "light": "#8C7B6B"
+    },
+    "diffHunkHeader": {
+      "dark": "#A67B5B",
+      "light": "#8B6914"
+    },
+    "diffHighlightAdded": {
+      "dark": "#8AB88F",
+      "light": "#5A9E6B"
+    },
+    "diffHighlightRemoved": {
+      "dark": "#D97A7A",
+      "light": "#C45E5E"
+    },
+    "diffAddedBg": {
+      "dark": "#1E2A20",
+      "light": "#D8E8DA"
+    },
+    "diffRemovedBg": {
+      "dark": "#2A1E1E",
+      "light": "#ECD8D8"
+    },
+    "diffContextBg": {
+      "dark": "darkBg1",
+      "light": "lightBg1"
+    },
+    "diffLineNumber": {
+      "dark": "#7A6B5E",
+      "light": "#A09080"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#182A1A",
+      "light": "#C8DCC8"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#2A1818",
+      "light": "#DCC8C8"
+    },
+    "markdownText": {
+      "dark": "darkFg0",
+      "light": "lightFg0"
+    },
+    "markdownHeading": {
+      "dark": "darkPrimary",
+      "light": "lightPrimary"
+    },
+    "markdownLink": {
+      "dark": "darkAccent",
+      "light": "lightAccent"
+    },
+    "markdownLinkText": {
+      "dark": "darkBlue",
+      "light": "lightBlue"
+    },
+    "markdownCode": {
+      "dark": "darkGreen",
+      "light": "lightGreen"
+    },
+    "markdownBlockQuote": {
+      "dark": "darkMuted",
+      "light": "lightMuted"
+    },
+    "markdownEmph": {
+      "dark": "darkYellow",
+      "light": "lightYellow"
+    },
+    "markdownStrong": {
+      "dark": "darkOrange",
+      "light": "lightOrange"
+    },
+    "markdownHorizontalRule": {
+      "dark": "darkBg4",
+      "light": "lightBg4"
+    },
+    "markdownListItem": {
+      "dark": "darkPrimary",
+      "light": "lightPrimary"
+    },
+    "markdownListEnumeration": {
+      "dark": "darkBlue",
+      "light": "lightBlue"
+    },
+    "markdownImage": {
+      "dark": "darkAccent",
+      "light": "lightAccent"
+    },
+    "markdownImageText": {
+      "dark": "darkBlue",
+      "light": "lightBlue"
+    },
+    "markdownCodeBlock": {
+      "dark": "darkFg0",
+      "light": "lightFg0"
+    },
+    "syntaxComment": {
+      "dark": "darkMuted",
+      "light": "lightMuted"
+    },
+    "syntaxKeyword": {
+      "dark": "darkRed",
+      "light": "lightRed"
+    },
+    "syntaxFunction": {
+      "dark": "darkGreen",
+      "light": "lightGreen"
+    },
+    "syntaxVariable": {
+      "dark": "darkBlue",
+      "light": "lightBlue"
+    },
+    "syntaxString": {
+      "dark": "darkYellow",
+      "light": "lightYellow"
+    },
+    "syntaxNumber": {
+      "dark": "darkOrange",
+      "light": "lightOrange"
+    },
+    "syntaxType": {
+      "dark": "darkAccent",
+      "light": "lightAccent"
+    },
+    "syntaxOperator": {
+      "dark": "darkPrimary",
+      "light": "lightPrimary"
+    },
+    "syntaxPunctuation": {
+      "dark": "darkFg0",
+      "light": "lightFg0"
+    }
+  }
+}

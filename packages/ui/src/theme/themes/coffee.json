@@ -1,0 +1,47 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Coffee",
+  "id": "coffee",
+  "light": {
+    "palette": {
+      "neutral": "#FAF3EB",
+      "ink": "#2C1810",
+      "primary": "#6F4E37",
+      "accent": "#ECB176",
+      "success": "#4A7C59",
+      "warning": "#8A6B1A",
+      "error": "#A53E3E",
+      "info": "#4A6FA5",
+      "diffAdd": "#4A7C59",
+      "diffDelete": "#A53E3E"
+    },
+    "overrides": {
+      "syntax-comment": "#8C7B6B",
+      "syntax-keyword": "#A53E3E",
+      "syntax-primitive": "#6F4E37",
+      "syntax-property": "#4A6FA5",
+      "syntax-constant": "#8B6914"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1E120C",
+      "ink": "#FED8B1",
+      "primary": "#ECB176",
+      "accent": "#D4A574",
+      "success": "#7A9E7E",
+      "warning": "#C4943A",
+      "error": "#C75B5B",
+      "info": "#6B8CAE",
+      "diffAdd": "#7A9E7E",
+      "diffDelete": "#C75B5B"
+    },
+    "overrides": {
+      "syntax-comment": "#9C8B7A",
+      "syntax-keyword": "#C75B5B",
+      "syntax-primitive": "#ECB176",
+      "syntax-property": "#6B8CAE",
+      "syntax-constant": "#D4A574"
+    }
+  }
+}
