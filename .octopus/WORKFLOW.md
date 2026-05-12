@@ -329,9 +329,25 @@ orchestrator 执行：
 
 1. 收集所有候选 Issue（已通过 P1 分级，标签完备、影响包已初判）
 2. 对涉及同包的 Issue 强制串行排序
-3. 识别跨包依赖（如 core API 变更 → ui 需适配）
-4. 标识 Fast-track 候选（XS/S + 无同包冲突）
-5. 生成 P6 执行序列
+3. 识别跨包 API 依赖（如 core API 变更 → ui 需适配）
+4. **构建依赖链建模**（新增）：
+   - 从 `turbo.json` 提取 `dependsOn` / `^build` 等构建拓扑
+   - 标注 "A 包 build 产物被 B 包消费" → A 必须先完成 P6
+   - 标注运行时跨包引用（如 CLI 内嵌路径 `../octopus/`）
+   - 输出构建依赖图，作为执行序列的拓扑约束
+5. 标识 Fast-track 候选（XS/S + 无同包冲突）
+6. 生成 P6 执行序列
+
+**构建依赖链建模示例**：
+
+```
+turbo.json:
+  desktop#build dependsOn [octopus#build]  →  octopus P6 完成前，desktop 不能开始
+
+跨包引用 (rg in packages/):
+  packages/desktop → ../octopus/dist/     →  同上
+  script/build.ts → packages/octopus/      →  脚本变更影响构建
+```
 
 **入队规则**: 迭代计划通过后，范围内 Issue 锁定——仅 Hotfix 和批准的迭代修订可破门。
 
@@ -340,12 +356,13 @@ orchestrator 执行：
 - [ ] 去重已完成并记录（语义去重 + 影响范围交叉比对）
 - [ ] 候选 Issue 均已通过 P1 分级（标签完备、影响包已初判）
 - [ ] 同包冲突已检测并排序（同包串行、异包并行）
-- [ ] 跨包依赖已识别并正确排序
+- [ ] 跨包 API 依赖已识别并正确排序
+- [ ] **构建依赖链已建模**（turbo.json + 跨包引用扫描）
 - [ ] Fast-track 候选已标识
 - [ ] 迭代范围与 Agent 容量匹配（每个 Agent ≤ 3 个 M+ Issue）
 - [ ] **LLM Panel 评审通过**（≥5/7，评审记录→`.octopus/review/<date>-<slug>-iteration-plan.md`）
 
-**LLM Panel 评审维度**: 迭代范围合理性、Issue 排序正确性、冲突检测完整性、风险识别
+**LLM Panel 评审维度**: 迭代范围合理性、Issue 排序正确性、冲突检测完整性、构建依赖链正确性、风险识别
 
 #### P2 执行保障：多 Issue 并发控制
 
