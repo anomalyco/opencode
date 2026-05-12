@@ -1,4 +1,5 @@
 import { Slug } from "@opencode-ai/core/util/slug"
+import fs from "fs/promises"
 import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
@@ -39,11 +40,64 @@ import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { zod } from "@opencode-ai/core/effect-zod"
 import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
+import { SessionAssembleTemplate } from "./assemble-template"
 
 const log = Log.create({ service: "session" })
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
+const systemPromptGuide = `# Session System Prompt
+
+This folder lets this session replace selected system prompt sections without changing global config.
+
+Create any of these .txt files to override that section for this session only:
+
+- provider.txt: replace the provider or agent base prompt.
+- environment.txt: replace the runtime environment section.
+- instructions.txt: replace project and config instructions.
+- skills.txt: replace the available skills section.
+- structured-output.txt: replace the structured output helper prompt when JSON schema output is requested.
+- user.txt: replace the optional per-request user system prompt.
+- prepend.txt: add text before all rendered system sections.
+- append.txt: add text after all rendered system sections.
+
+Files that do not exist are ignored. No .txt files are created by default.
+
+Example instructions.txt:
+
+\`\`\`text
+You are OpenCode working in this repository.
+Prefer concise answers, preserve existing code style, and explain risky changes before applying them.
+When editing, keep changes focused on the current request.
+\`\`\`
+`
+
+const toolGuide = `# Session Tools
+
+This folder lets this session add extra tools without changing global config.
+
+Create .ts or .js files in this folder. Each file may export a default tool, or named tools. Tools use the same plugin tool shape as config tools.
+
+Example weather.ts:
+
+\`\`\`ts
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Return a demo weather report for a city.",
+  args: {
+    city: tool.schema.string().describe("City name"),
+  },
+  async execute(args) {
+    return "Weather for " + args.city + ": sunny and 25C"
+  },
+})
+\`\`\`
+
+File names become tool ids. For example, weather.ts default export becomes weather. A named export named forecast in weather.ts becomes weather_forecast.
+
+Session tools are loaded only for this session. They do not replace built-in, MCP, or structured output tools; conflicting ids are skipped.
+`
 
 function createDefaultTitle(isChild = false) {
   return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
@@ -141,6 +195,43 @@ function sessionPath(worktree: string, cwd: string) {
   return path.relative(path.resolve(worktree), cwd).replaceAll("\\", "/")
 }
 
+export function folder(sessionID: SessionID) {
+  return path.join(Global.Path.data, "session", sessionID)
+}
+
+function init(info: Info) {
+  return Effect.promise(async () => {
+    const dir = folder(info.id)
+    await fs.mkdir(dir, { recursive: true })
+    await fs.mkdir(path.join(dir, "system"), { recursive: true })
+    await fs.mkdir(path.join(dir, "tool"), { recursive: true })
+    await fs.writeFile(path.join(dir, "system", "README.md"), systemPromptGuide, { flag: "wx" }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+    })
+    await fs.writeFile(path.join(dir, "tool", "README.md"), toolGuide, { flag: "wx" }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+    })
+    await SessionAssembleTemplate.ensure(dir)
+    await fs.writeFile(
+      path.join(dir, "metadata.json"),
+      JSON.stringify(
+        {
+          id: info.id,
+          project_id: info.projectID,
+          workspace_id: info.workspaceID,
+          parent_id: info.parentID,
+          directory: info.directory,
+          path: info.path,
+          title: info.title,
+          time: info.time,
+        },
+        undefined,
+        2,
+      ),
+    )
+  })
+}
+
 const Summary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
@@ -217,6 +308,7 @@ export type GlobalInfo = Types.DeepMutable<Schema.Schema.Type<typeof GlobalInfo>
 
 export const CreateInput = Schema.optional(
   Schema.Struct({
+    id: Schema.optional(SessionID),
     parentID: Schema.optional(SessionID),
     title: Schema.optional(Schema.String),
     agent: Schema.optional(Schema.String),
@@ -519,6 +611,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       }
       log.info("created", result)
 
+      yield* init(result)
+
       yield* sync.run(Event.Created, { sessionID: result.id, info: result })
 
       if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
@@ -619,6 +713,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     })
 
     const create = Effect.fn("Session.create")(function* (input?: {
+      id?: SessionID
       parentID?: SessionID
       title?: string
       agent?: string
@@ -629,6 +724,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
       return yield* createNext({
+        id: input?.id,
         parentID: input?.parentID,
         directory: ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),

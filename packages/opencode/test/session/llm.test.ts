@@ -367,7 +367,7 @@ describe("session.llm.stream", () => {
           sessionID,
           model: resolved,
           agent,
-          system: ["You are a helpful assistant."],
+          system: [{ id: "instructions", content: "You are a helpful assistant." }],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
@@ -455,7 +455,7 @@ describe("session.llm.stream", () => {
                 sessionID,
                 model: resolved,
                 agent,
-                system: ["You are a helpful assistant."],
+                system: [{ id: "instructions", content: "You are a helpful assistant." }],
                 messages: [{ role: "user", content: "Hello" }],
                 tools: {},
               })
@@ -544,7 +544,7 @@ describe("session.llm.stream", () => {
           model: resolved,
           agent,
           permission: [{ permission: "question", pattern: "*", action: "allow" }],
-          system: ["You are a helpful assistant."],
+          system: [{ id: "instructions", content: "You are a helpful assistant." }],
           messages: [{ role: "user", content: "Hello" }],
           tools: {
             question: tool({
@@ -657,7 +657,7 @@ describe("session.llm.stream", () => {
           sessionID,
           model: resolved,
           agent,
-          system: ["You are a helpful assistant."],
+          system: [{ id: "instructions", content: "You are a helpful assistant." }],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
@@ -772,7 +772,7 @@ describe("session.llm.stream", () => {
           sessionID,
           model: resolved,
           agent,
-          system: ["You are a helpful assistant."],
+          system: [{ id: "instructions", content: "You are a helpful assistant." }],
           messages: [
             {
               role: "user",
@@ -893,7 +893,7 @@ describe("session.llm.stream", () => {
           sessionID,
           model: resolved,
           agent,
-          system: ["You are a helpful assistant."],
+          system: [{ id: "instructions", content: "You are a helpful assistant." }],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
@@ -1252,7 +1252,7 @@ describe("session.llm.stream", () => {
           sessionID,
           model: resolved,
           agent,
-          system: ["You are a helpful assistant."],
+          system: [{ id: "instructions", content: "You are a helpful assistant." }],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })

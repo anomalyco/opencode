@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { existsSync, mkdirSync, rmSync } from "node:fs"
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
@@ -281,6 +281,13 @@ const main = Effect.gen(function* () {
   const hostname = "127.0.0.1"
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
+  if (!app.isPackaged) {
+    mkdirSync(app.getPath("userData"), { recursive: true })
+    writeFileSync(
+      join(app.getPath("userData"), "sidecar.json"),
+      JSON.stringify({ url, username: "opencode", password }, undefined, 2),
+    )
+  }
 
   const loadingTask = yield* Effect.gen(function* () {
     logger.log("sidecar connection started", { url })

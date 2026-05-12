@@ -24,10 +24,28 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { Session } from "./session"
+import path from "path"
+import fs from "fs/promises"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 type Result = Awaited<ReturnType<typeof streamText>>
+const SYSTEM_FILES = {
+  provider: "provider.txt",
+  environment: "environment.txt",
+  instructions: "instructions.txt",
+  skills: "skills.txt",
+  "structured-output": "structured-output.txt",
+  user: "user.txt",
+  prepend: "prepend.txt",
+  append: "append.txt",
+} as const
+
+export type SystemSection = {
+  id: "environment" | "instructions" | "skills" | "structured-output"
+  content: string
+}
 
 // Avoid re-instantiating remeda's deep merge types in this hot LLM path; the runtime behavior is still mergeDeep.
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
@@ -40,7 +58,10 @@ export type StreamInput = {
   model: Provider.Model
   agent: Agent.Info
   permission?: Permission.Ruleset
-  system: string[]
+  // Incoming session system format: prompt.ts sends named sections so this
+  // layer can still tell environment, instructions, skills, and structured
+  // output apart before rendering them for plugins and providers.
+  system: SystemSection[]
   messages: ModelMessage[]
   small?: boolean
   tools: Record<string, Tool>
@@ -100,19 +121,41 @@ const live: Layer.Layer<
       // TODO: move this to a proper hook
       const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
 
-      const system: string[] = []
-      system.push(
-        [
-          // use agent prompt otherwise provider prompt
-          ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-          // any custom prompt passed into this call
-          ...input.system,
-          // any custom prompt from last user message
-          ...(input.user.system ? [input.user.system] : []),
-        ]
-          .filter((x) => x)
-          .join("\n"),
-      )
+      const dir = path.join(Session.folder(SessionID.make(input.sessionID)), "system")
+      const read = (file: string) =>
+        Effect.tryPromise(() => fs.readFile(path.join(dir, file), "utf8")).pipe(
+          Effect.catch(() => Effect.succeed(undefined as string | undefined)),
+        )
+      const replacements = yield* Effect.all({
+        provider: read(SYSTEM_FILES.provider),
+        environment: read(SYSTEM_FILES.environment),
+        instructions: read(SYSTEM_FILES.instructions),
+        skills: read(SYSTEM_FILES.skills),
+        structured: read(SYSTEM_FILES["structured-output"]),
+        user: read(SYSTEM_FILES.user),
+        prepend: read(SYSTEM_FILES.prepend),
+        append: read(SYSTEM_FILES.append),
+      })
+      const replace = (item: SystemSection) =>
+        item.id === "structured-output"
+          ? (replacements.structured ?? item.content)
+          : (replacements[item.id] ?? item.content)
+
+      // Session-local system overrides are read from session/<id>/system/*.txt.
+      // Incoming format is named sections plus explicit provider/user slots;
+      // files with matching names replace only that slot, while prepend/append
+      // add extra system messages around the rendered sections.
+      // Outgoing plugin/provider format is string[]: [provider, ...sections,
+      // user?], with optional prepend/append entries. The transform hook sees
+      // this rendered array before providers receive it.
+      const system = [
+        replacements.prepend,
+        replacements.provider ??
+          (input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)).filter((x) => x).join("\n"),
+        ...input.system.map(replace),
+        ...(replacements.user ? [replacements.user] : input.user.system ? [input.user.system] : []),
+        replacements.append,
+      ].filter((x): x is string => !!x)
 
       const header = system[0]
       yield* plugin.trigger(
@@ -226,6 +269,7 @@ const live: Layer.Layer<
         })
       }
       const sortedTools = Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b)))
+      const activeTools = Object.keys(sortedTools).filter((x) => x !== "invalid")
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
@@ -334,8 +378,8 @@ const live: Layer.Layer<
         ? (yield* InstanceState.context).project.id
         : undefined
 
-      return streamText({
-        onError(error) {
+      const payload: Parameters<typeof streamText>[0] = {
+        onError(error: unknown) {
           l.error("stream error", {
             error,
           })
@@ -365,7 +409,7 @@ const live: Layer.Layer<
         topP: params.topP,
         topK: params.topK,
         providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-        activeTools: Object.keys(sortedTools).filter((x) => x !== "invalid"),
+        activeTools,
         tools: sortedTools,
         toolChoice: input.toolChoice,
         maxOutputTokens: params.maxOutputTokens,
@@ -413,8 +457,79 @@ const live: Layer.Layer<
             sessionId: input.sessionID,
           },
         },
+      }
+
+      // Outgoing request log format: each LLM call writes a JSON file under
+      // <session>/llm-request containing the final provider input plus a
+      // serializable tool summary. This mirrors the streamText payload closely
+      // enough to inspect system/messages/tools without storing executable
+      // functions or mutating the actual request sent to the provider.
+      yield* writeRequestLog(SessionID.make(input.sessionID), input.user.id, {
+        time: new Date().toISOString(),
+        sessionID: input.sessionID,
+        requestID: input.user.id,
+        agent: input.agent.name,
+        model: {
+          providerID: input.model.providerID,
+          modelID: input.model.id,
+        },
+        params: {
+          temperature: params.temperature,
+          topP: params.topP,
+          topK: params.topK,
+          maxOutputTokens: params.maxOutputTokens,
+          maxRetries: input.retries ?? 0,
+          toolChoice: input.toolChoice,
+        },
+        activeTools,
+        toolNames: Object.keys(sortedTools),
+        headerKeys: Object.keys(payload.headers ?? {}),
+        providerOptionKeys: Object.keys(payload.providerOptions ?? {}),
+        assembly: {
+          system,
+          messages,
+          tools: serializeTools(sortedTools),
+        },
       })
+
+      return streamText(payload)
     })
+
+    const writeRequestLog = Effect.fn("LLM.writeRequestLog")(function* (
+      sessionID: SessionID,
+      requestID: string,
+      payload: unknown,
+    ) {
+      const dir = path.join(Session.folder(sessionID), "llm-request")
+      yield* Effect.promise(() => fs.mkdir(dir, { recursive: true }))
+      yield* Effect.promise(() =>
+        fs.writeFile(path.join(dir, `${Date.now()}-${sanitize(requestID)}.json`), JSON.stringify(payload, null, 2)),
+      )
+      const list = (yield* Effect.promise(() => fs.readdir(dir))).filter((item) => item.endsWith(".json")).sort()
+      if (list.length <= 100) return
+      yield* Effect.promise(() =>
+        Promise.all(list.slice(0, list.length - 100).map((item) => fs.rm(path.join(dir, item), { force: true }))),
+      )
+    })
+
+    function sanitize(input: string) {
+      return input.replace(/[\\/:*?"<>|]/g, "_")
+    }
+
+    function serializeTools(input: Record<string, Tool>) {
+      return Object.fromEntries(
+        Object.entries(input).map(([id, item]) => {
+          const info = item as Record<string, unknown>
+          return [
+            id,
+            {
+              description: info.description,
+              inputSchema: info.inputSchema,
+            },
+          ]
+        }),
+      )
+    }
 
     const stream: Interface["stream"] = (input) =>
       Stream.scoped(

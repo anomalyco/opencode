@@ -3,6 +3,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
+import fs from "fs/promises"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -557,6 +558,63 @@ it.live("glob tool keeps instance context during prompt runs", () =>
         expect(tool.state.output).not.toContain("No context found for instance")
         expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
       }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loads and executes a session-local tool", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Session tool",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      expect(
+        yield* Effect.promise(() => Bun.file(path.join(Session.folder(session.id), "tool", "README.md")).exists()),
+      ).toBe(true)
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(Session.folder(session.id), "tool", "local.ts"),
+          `export default {
+  description: "Return a local session value.",
+  args: {},
+  async execute(args) {
+    return "local:ok"
+  },
+}
+`,
+        ),
+      )
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "call local" }],
+      })
+      yield* llm.tool("local", {})
+      yield* llm.text("done")
+
+      const result = yield* prompt.loop({ sessionID: session.id })
+      const logs = yield* Effect.promise(() => fs.readdir(path.join(Session.folder(session.id), "llm-request")))
+      expect(logs.some((item) => item.endsWith(".json"))).toBe(true)
+      const log = yield* Effect.promise(() =>
+        Bun.file(
+          path.join(Session.folder(session.id), "llm-request", logs.find((item) => item.endsWith(".json"))!),
+        ).json(),
+      )
+      expect(log.toolNames).toContain("local")
+      expect(log.assembly.tools.local.description).toBe("Return a local session value.")
+      const tool = (yield* MessageV2.filterCompactedEffect(session.id))
+        .flatMap((msg) => msg.parts)
+        .find(
+          (part): part is CompletedToolPart =>
+            part.type === "tool" && part.tool === "local" && part.state.status === "completed",
+        )
+      expect(tool?.state.output).toBe("local:ok")
+      expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    }),
     { git: true, config: providerCfg },
   ),
 )

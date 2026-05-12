@@ -1,6 +1,8 @@
 import path from "path"
 import os from "os"
+import fs from "fs/promises"
 import * as EffectZod from "@opencode-ai/core/effect-zod"
+import { ZodOverride } from "@opencode-ai/core/effect-zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import * as Log from "@opencode-ai/core/util/log"
@@ -10,6 +12,7 @@ import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
+import { type ToolDefinition as PluginToolDefinition } from "@opencode-ai/plugin"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { Bus } from "../bus"
@@ -47,6 +50,7 @@ import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import { zod } from "@opencode-ai/core/effect-zod"
+import z from "zod"
 import { withStatics } from "@opencode-ai/core/schema"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
@@ -61,6 +65,7 @@ import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
 import { SessionTable } from "./session.sql"
+import { SessionAssemble } from "./assemble"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -125,6 +130,99 @@ export const layer = Layer.effect(
         resolvePromptParts: (template: string) => resolvePromptParts(template),
         prompt: (input: PromptInput) => prompt(input),
       } satisfies TaskPromptOps
+    })
+
+    const sessionToolGuide = `# Session Tools
+
+This folder lets this session add extra tools without changing global config.
+
+Create .ts or .js files in this folder. Each file may export a default tool, or named tools. Tools use the same plugin tool shape as config tools.
+
+Example weather.ts:
+
+\`\`\`ts
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Return a demo weather report for a city.",
+  args: {
+    city: tool.schema.string().describe("City name"),
+  },
+  async execute(args) {
+    return \"Weather for \" + args.city + \": sunny and 25C\"
+  },
+})
+\`\`\`
+
+File names become tool ids. For example, weather.ts default export becomes weather. A named export named forecast in weather.ts becomes weather_forecast.
+
+Session tools are loaded only for this session. They do not replace built-in, MCP, or structured output tools; conflicting ids are skipped.
+`
+
+    function fromSessionTool(id: string, def: PluginToolDefinition): Tool.Def {
+      // Session-local tools are received as plugin-style modules from
+      // <session>/tool/*.ts or *.js. Convert that shape into the internal
+      // Tool.Def shape consumed by resolveTools so the existing LLM tool-call
+      // execution, plugin hooks, result storage, and next-turn context replay
+      // all continue to use the normal pipeline.
+      const zodParams = z.object(def.args)
+      const parameters = Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success).annotate({
+        [ZodOverride]: zodParams,
+      })
+      return {
+        id,
+        parameters,
+        description: def.description,
+        execute: (args, toolCtx) =>
+          Effect.gen(function* () {
+            const ctx = yield* InstanceState.context
+            const result = yield* Effect.promise(() =>
+              def.execute(args as Record<string, unknown>, {
+                sessionID: toolCtx.sessionID,
+                messageID: toolCtx.messageID,
+                agent: toolCtx.agent,
+                directory: ctx.directory,
+                worktree: ctx.worktree,
+                abort: toolCtx.abort,
+                metadata: (val) => toolCtx.metadata(val),
+                ask: (req) => toolCtx.ask(req),
+              }),
+            )
+            return typeof result === "string"
+              ? { title: "", output: result, metadata: {} }
+              : { title: "", output: result.output, metadata: result.metadata ?? {} }
+          }),
+      }
+    }
+
+    const sessionTools = Effect.fn("SessionPrompt.sessionTools")(function* (sessionID: SessionID) {
+      const dir = path.join(Session.folder(sessionID), "tool")
+      yield* fsys.ensureDir(dir).pipe(Effect.catch(Effect.die))
+      const readme = path.join(dir, "README.md")
+      if (!(yield* fsys.existsSafe(readme))) yield* Effect.promise(() => fs.writeFile(readme, sessionToolGuide))
+
+      // Incoming format: a session tool is a .ts or .js module exporting
+      // plugin-style tool definitions. Outgoing format: Tool.Def[], ready to
+      // merge with registry tools before conversion into AI SDK tool objects.
+      // This loader only adds session-local tools; built-in/global tool loading
+      // stays unchanged in ToolRegistry.
+      const files = yield* Effect.promise(() =>
+        fs
+          .readdir(dir)
+          .then((items) => items.filter((item) => /\.(ts|js)$/.test(item)).map((item) => path.join(dir, item))),
+      )
+      if (files.length) yield* config.waitForDependencies()
+      return yield* Effect.forEach(
+        files,
+        Effect.fnUntraced(function* (file) {
+          const namespace = path.basename(file, path.extname(file))
+          const mod = yield* Effect.promise(() => import(pathToFileURL(file).href))
+          return Object.entries<PluginToolDefinition>(mod).map((entry) =>
+            fromSessionTool(entry[0] === "default" ? namespace : `${namespace}_${entry[0]}`, entry[1]),
+          )
+        }),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map((items) => items.flat()))
     })
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
@@ -448,6 +546,50 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 if (options.abortSignal?.aborted) {
                   yield* input.processor.completeToolCall(options.toolCallId, output)
                 }
+                return output
+              }),
+            )
+          },
+        })
+      }
+
+      const used = new Set(Object.keys(tools))
+      for (const item of yield* sessionTools(input.session.id)) {
+        if (used.has(item.id)) continue
+        used.add(item.id)
+        const schema = ProviderTransform.schema(input.model, EffectZod.toJsonSchema(item.parameters))
+        // Session tools leave the session/tool module format as plugin-style
+        // definitions, then become normal AI SDK tools here. The outgoing
+        // object is the same format as built-in tools: description,
+        // JSON-schema input, and an execute handler returning Tool.ExecuteResult.
+        tools[item.id] = tool({
+          description: item.description,
+          inputSchema: jsonSchema(schema),
+          execute(args, options) {
+            return run.promise(
+              Effect.gen(function* () {
+                const ctx = context(args, options)
+                yield* plugin.trigger(
+                  "tool.execute.before",
+                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
+                  { args },
+                )
+                const result = yield* item.execute(args, ctx)
+                const output = {
+                  ...result,
+                  attachments: result.attachments?.map((attachment) => ({
+                    ...attachment,
+                    id: PartID.ascending(),
+                    sessionID: ctx.sessionID,
+                    messageID: input.processor.message.id,
+                  })),
+                }
+                yield* plugin.trigger(
+                  "tool.execute.after",
+                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+                  output,
+                )
+                if (options.abortSignal?.aborted) yield* input.processor.completeToolCall(options.toolCallId, output)
                 return output
               }),
             )
@@ -1563,6 +1705,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
             }
 
+            msgs = yield* SessionAssemble.run({
+              session,
+              agent,
+              model,
+              step,
+              messages: msgs,
+            })
+
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
@@ -1571,9 +1721,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            // Outgoing LLM system format: keep sections named until llm.ts so
+            // later transforms can target environment, instructions, skills,
+            // or structured output without guessing by array position.
+            const system: LLM.SystemSection[] = [
+              ...env.map((content) => ({ id: "environment" as const, content })),
+              ...instructions.map((content) => ({ id: "instructions" as const, content })),
+              ...(skills ? [{ id: "skills" as const, content: skills }] : []),
+            ]
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            if (format.type === "json_schema") {
+              system.push({ id: "structured-output", content: STRUCTURED_OUTPUT_SYSTEM_PROMPT })
+            }
             const result = yield* handle.process({
               user: lastUser,
               agent,
