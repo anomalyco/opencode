@@ -633,7 +633,11 @@ function contextToolDetail(part: ToolPart): string | undefined {
 }
 
 function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
-  const input = (part.state.input ?? {}) as Record<string, unknown>
+  const isPending = part.state.status === "pending"
+  const baseInput = (part.state.input ?? {}) as Record<string, unknown>
+  const partialRaw = isPending ? ((part.state as Record<string, unknown>).raw as string | undefined) : undefined
+  const partial = typeof partialRaw === "string" ? (parsePartialToolInput(partialRaw) ?? {}) : {}
+  const input = { ...partial, ...baseInput } as Record<string, unknown>
   const path = typeof input.path === "string" ? input.path : "/"
   const filePath = typeof input.filePath === "string" ? input.filePath : undefined
   const pattern = typeof input.pattern === "string" ? input.pattern : undefined
@@ -643,6 +647,14 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
 
   switch (part.tool) {
     case "read": {
+      if (isPending) {
+        const start = offset !== undefined && offset > 0 ? offset : 1
+        return {
+          title: i18n.t("ui.tool.readActive"),
+          subtitle: filePath ? getFilename(filePath) : "",
+          args: filePath ? [i18n.t("ui.tool.lines", { count: start })] : [],
+        }
+      }
       const args: string[] = []
       if (offset !== undefined) args.push("offset=" + offset)
       if (limit !== undefined) args.push("limit=" + limit)
@@ -827,9 +839,10 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
+  const effectiveOpen = createMemo(() => open() || pending())
 
   return (
-    <Collapsible open={open()} onOpenChange={setOpen} variant="ghost" class="tool-collapsible">
+    <Collapsible open={effectiveOpen()} onOpenChange={setOpen} variant="ghost" class="tool-collapsible">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
           <span
@@ -894,10 +907,10 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
                             <span data-slot="basic-tool-tool-title">
                               <TextShimmer text={trigger().title} active={running()} />
                             </span>
-                            <Show when={!running() && trigger().subtitle}>
+                            <Show when={trigger().subtitle}>
                               <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
                             </Show>
-                            <Show when={!running() && trigger().args?.length}>
+                            <Show when={trigger().args?.length}>
                               <For each={trigger().args}>
                                 {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
                               </For>
