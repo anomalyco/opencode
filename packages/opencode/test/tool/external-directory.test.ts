@@ -1,14 +1,16 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import type { Tool } from "@/tool/tool"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
-import { assertExternalDirectory } from "../../src/tool/external-directory"
+import { assertExternalDirectoryEffect } from "../../src/tool/external-directory"
 import { Filesystem } from "@/util/filesystem"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { testEffect } from "../lib/effect"
+
+const it = testEffect(CrossSpawnSpawner.defaultLayer)
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: SessionID.make("ses_test"),
@@ -36,135 +38,116 @@ function makeCtx() {
 }
 
 describe("tool.assertExternalDirectory", () => {
-  test("no-ops for empty target", async () => {
-    const { requests, ctx } = makeCtx()
+  it.live("no-ops for empty target", () =>
+    Effect.gen(function* () {
+      const { requests, ctx } = makeCtx()
 
-    await WithInstance.provide({
-      directory: "/tmp",
-      fn: async () => {
-        await assertExternalDirectory(ctx)
-      },
-    })
+      yield* assertExternalDirectoryEffect(ctx)
 
-    expect(requests.length).toBe(0)
-  })
+      expect(requests.length).toBe(0)
+    }),
+  )
 
-  test("no-ops for paths inside Instance.directory", async () => {
-    const { requests, ctx } = makeCtx()
+  it.live("no-ops for paths inside Instance.directory", () =>
+    provideInstance("/tmp/project")(
+      Effect.gen(function* () {
+        const { requests, ctx } = makeCtx()
 
-    await WithInstance.provide({
-      directory: "/tmp/project",
-      fn: async () => {
-        await assertExternalDirectory(ctx, path.join("/tmp/project", "file.txt"))
-      },
-    })
+        yield* assertExternalDirectoryEffect(ctx, path.join("/tmp/project", "file.txt"))
 
-    expect(requests.length).toBe(0)
-  })
+        expect(requests.length).toBe(0)
+      }),
+    ),
+  )
 
-  test("asks with a single canonical glob", async () => {
-    const { requests, ctx } = makeCtx()
+  it.live("asks with a single canonical glob", () =>
+    Effect.gen(function* () {
+      const { requests, ctx } = makeCtx()
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside/file.txt"
-    const expected = glob(path.join(path.dirname(target), "*"))
+      const directory = "/tmp/project"
+      const target = "/tmp/outside/file.txt"
+      const expected = glob(path.join(path.dirname(target), "*"))
 
-    await WithInstance.provide({
-      directory,
-      fn: async () => {
-        await assertExternalDirectory(ctx, target)
-      },
-    })
+      yield* provideInstance(directory)(assertExternalDirectoryEffect(ctx, target))
 
-    const req = requests.find((r) => r.permission === "external_directory")
-    expect(req).toBeDefined()
-    expect(req!.patterns).toEqual([expected])
-    expect(req!.always).toEqual([expected])
-  })
+      const req = requests.find((r) => r.permission === "external_directory")
+      expect(req).toBeDefined()
+      expect(req!.patterns).toEqual([expected])
+      expect(req!.always).toEqual([expected])
+    }),
+  )
 
-  test("uses target directory when kind=directory", async () => {
-    const { requests, ctx } = makeCtx()
+  it.live("uses target directory when kind=directory", () =>
+    Effect.gen(function* () {
+      const { requests, ctx } = makeCtx()
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside"
-    const expected = glob(path.join(target, "*"))
+      const directory = "/tmp/project"
+      const target = "/tmp/outside"
+      const expected = glob(path.join(target, "*"))
 
-    await WithInstance.provide({
-      directory,
-      fn: async () => {
-        await assertExternalDirectory(ctx, target, { kind: "directory" })
-      },
-    })
+      yield* provideInstance(directory)(assertExternalDirectoryEffect(ctx, target, { kind: "directory" }))
 
-    const req = requests.find((r) => r.permission === "external_directory")
-    expect(req).toBeDefined()
-    expect(req!.patterns).toEqual([expected])
-    expect(req!.always).toEqual([expected])
-  })
+      const req = requests.find((r) => r.permission === "external_directory")
+      expect(req).toBeDefined()
+      expect(req!.patterns).toEqual([expected])
+      expect(req!.always).toEqual([expected])
+    }),
+  )
 
-  test("skips prompting when bypass=true", async () => {
-    const { requests, ctx } = makeCtx()
+  it.live("skips prompting when bypass=true", () =>
+    provideInstance("/tmp/project")(
+      Effect.gen(function* () {
+        const { requests, ctx } = makeCtx()
 
-    await WithInstance.provide({
-      directory: "/tmp/project",
-      fn: async () => {
-        await assertExternalDirectory(ctx, "/tmp/outside/file.txt", { bypass: true })
-      },
-    })
+        yield* assertExternalDirectoryEffect(ctx, "/tmp/outside/file.txt", { bypass: true })
 
-    expect(requests.length).toBe(0)
-  })
+        expect(requests.length).toBe(0)
+      }),
+    ),
+  )
 
   if (process.platform === "win32") {
-    test("normalizes Windows path variants to one glob", async () => {
-      const { requests, ctx } = makeCtx()
+    it.instance("normalizes Windows path variants to one glob", () =>
+      Effect.gen(function* () {
+        const { requests, ctx } = makeCtx()
 
-      await using outerTmp = await tmpdir({
-        init: async (dir) => {
-          await Bun.write(path.join(dir, "outside.txt"), "x")
-        },
-      })
-      await using tmp = await tmpdir({ git: true })
+        const outerTmp = yield* tmpdirScoped()
+        yield* Effect.promise(() => Bun.write(path.join(outerTmp, "outside.txt"), "x"))
 
-      const target = path.join(outerTmp.path, "outside.txt")
-      const alt = target
-        .replace(/^[A-Za-z]:/, "")
-        .replaceAll("\\", "/")
-        .toLowerCase()
+        const target = path.join(outerTmp, "outside.txt")
+        const alt = target
+          .replace(/^[A-Za-z]:/, "")
+          .replaceAll("\\", "/")
+          .toLowerCase()
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await assertExternalDirectory(ctx, alt)
-        },
-      })
+        yield* assertExternalDirectoryEffect(ctx, alt)
 
-      const req = requests.find((r) => r.permission === "external_directory")
-      const expected = glob(path.join(outerTmp.path, "*"))
-      expect(req).toBeDefined()
-      expect(req!.patterns).toEqual([expected])
-      expect(req!.always).toEqual([expected])
-    })
+        const req = requests.find((r) => r.permission === "external_directory")
+        const expected = glob(path.join(outerTmp, "*"))
+        expect(req).toBeDefined()
+        expect(req!.patterns).toEqual([expected])
+        expect(req!.always).toEqual([expected])
+      }),
+      { git: true },
+    )
 
-    test("uses drive root glob for root files", async () => {
-      const { requests, ctx } = makeCtx()
+    it.instance("uses drive root glob for root files", () =>
+      Effect.gen(function* () {
+        const { requests, ctx } = makeCtx()
 
-      await using tmp = await tmpdir({ git: true })
-      const root = path.parse(tmp.path).root
-      const target = path.join(root, "boot.ini")
+        const tmp = yield* TestInstance
+        const root = path.parse(tmp.directory).root
+        const target = path.join(root, "boot.ini")
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          await assertExternalDirectory(ctx, target)
-        },
-      })
+        yield* assertExternalDirectoryEffect(ctx, target)
 
-      const req = requests.find((r) => r.permission === "external_directory")
-      const expected = path.join(root, "*")
-      expect(req).toBeDefined()
-      expect(req!.patterns).toEqual([expected])
-      expect(req!.always).toEqual([expected])
-    })
+        const req = requests.find((r) => r.permission === "external_directory")
+        const expected = path.join(root, "*")
+        expect(req).toBeDefined()
+        expect(req!.patterns).toEqual([expected])
+        expect(req!.always).toEqual([expected])
+      }),
+      { git: true },
+    )
   }
 })
