@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Octopus "O" letterform - medium detail -->
+  <!-- Outer frame: main O shape -->
+  <path fill="currentColor" fill-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z"/>
+  <!-- Inner tentacle detail - simplified -->
+  <path fill="currentColor" opacity="0.4" d="M320 224V352H192V224H320Z"/>
+</svg>

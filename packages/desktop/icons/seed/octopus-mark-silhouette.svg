@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Octopus "O" letterform - silhouette (minimal) -->
+  <!-- Just the solid outer shape, no inner detail -->
+  <path fill="currentColor" fill-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z"/>
+</svg>

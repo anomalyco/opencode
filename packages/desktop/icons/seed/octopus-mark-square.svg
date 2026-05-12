@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Octopus "O" letterform - full detail -->
+  <!-- Outer frame: main O shape with evenodd cutout -->
+  <path fill="currentColor" fill-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z"/>
+  <!-- Inner tentacle detail -->
+  <path fill="currentColor" opacity="0.45" d="M320 224V352H192V224H320Z"/>
+  <!-- Additional organic detail for the O shape - subtle curves -->
+  <path fill="currentColor" fill-rule="evenodd" d="M256 48C141.12 48 48 141.12 48 256s93.12 208 208 208 208-93.12 208-208S370.88 48 256 48zm0 376c-92.64 0-168-75.36-168-168S163.36 88 256 88s168 75.36 168 168-75.36 168-168 168z" opacity="0.15"/>
+  <!-- Small decorative dots representing suction cups -->
+  <circle cx="272" cy="288" r="6" fill="currentColor" opacity="0.3"/>
+  <circle cx="240" cy="288" r="6" fill="currentColor" opacity="0.3"/>
+  <circle cx="272" cy="312" r="5" fill="currentColor" opacity="0.25"/>
+  <circle cx="240" cy="312" r="5" fill="currentColor" opacity="0.25"/>
+  <circle cx="256" cy="336" r="4" fill="currentColor" opacity="0.2"/>
+</svg>
