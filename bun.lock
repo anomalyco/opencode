@@ -214,7 +214,6 @@
         "npm-package-arg": "13.0.2",
         "semver": "^7.6.3",
         "xdg-basedir": "5.1.0",
-        "zod": "catalog:",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
