@@ -142,7 +142,7 @@ export const layer: Layer.Layer<
           const entries = Object.entries(def.args)
           const allZod = entries.every((entry) => isZodType(entry[1]))
           const zodParams = allZod ? z.object(def.args) : undefined
-          const jsonSchema = zodParams ? z.toJSONSchema(zodParams, { io: "input" }) : legacyJsonSchema(entries)
+          const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
           const parameters = zodParams
             ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
             : Schema.Unknown
@@ -401,6 +401,13 @@ function legacyJsonSchema(entries: [string, unknown][]): JSONSchema7 {
     properties,
     required: Object.keys(properties),
   }
+}
+
+function zodJsonSchema(schema: z.ZodType): JSONSchema7 {
+  const result = z.toJSONSchema(schema, { io: "input" })
+  if (typeof result === "boolean") return result
+  const { $defs, ...rest } = result
+  return $defs ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
 }
 
 export * as ToolRegistry from "./registry"
