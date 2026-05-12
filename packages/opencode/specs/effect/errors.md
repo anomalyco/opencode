@@ -23,8 +23,9 @@ contracts.
 - Some services already use `Schema.TaggedErrorClass`, for example `Account`,
   `Auth`, `Permission`, `Question`, `Installation`, and parts of
   `Workspace`.
-- Legacy Hono error handling recognizes `NamedError`, `Session.BusyError`, and a
-  few name-based cases, then emits the legacy `{ name, data }` JSON body.
+- The temporary HttpApi compatibility middleware recognizes `NamedError`,
+  `Session.BusyError`, and a few name-based cases, then emits the legacy
+  `{ name, data }` JSON body.
 - Effect `HttpApi` only knows how to encode errors that are declared on the
   endpoint, group, or middleware. Undeclared expected errors become defects and
   eventually fall through to generic HTTP handling.
@@ -127,7 +128,7 @@ Create an HttpApi-local error module, likely
 That module should provide:
 
 - Legacy-compatible public schemas for `{ name, data }` error bodies that must
-  remain SDK-compatible during the Hono migration.
+  remain SDK-compatible while route groups declare typed errors.
 - Small constructors or mapping helpers for common API errors such as not found,
   bad request, conflict, and unknown internal errors.
 - Route-group-specific adapters only when they encode domain-specific public
@@ -173,7 +174,7 @@ Add the `httpapi/errors.ts` module before converting route groups.
 - Define a legacy `{ name, data }` body helper for SDK-compatible errors.
 - Define `UnknownError` for generic internal failures with a safe public message.
 - Define `BadRequestError` and `NotFoundError` equivalents only if the actual
-  wire body must match the legacy Hono SDK surface.
+  wire body must match the existing SDK surface.
 - Put the HTTP status on the public schema with `HttpApiSchema.status(...)` or
   `{ httpApiStatus: code }`; do not keep a separate name-to-status table.
 - Keep conversion helpers pure and small. They should not inspect `Cause` or
@@ -238,7 +239,7 @@ Suggested route order:
 2. `experimental` worktree mutations.
 3. `provider` auth and model selection errors.
 4. `mcp` OAuth and connection errors.
-5. Remaining route groups as Hono deletion work progresses.
+5. Remaining route groups as typed error contracts are declared.
 
 ### 6. Remove Defect Recovery
 
@@ -286,8 +287,8 @@ For HttpApi conversions:
   errors.
 - Add a regression test that the temporary middleware is no longer needed for the
   migrated route.
-- Keep bridge/parity tests aligned with legacy Hono behavior until Hono is
-  deleted or the SDK contract intentionally changes.
+- Keep compatibility tests aligned with the existing SDK contract until the
+  public error shape intentionally changes.
 
 ## Verification Commands
 

@@ -1,7 +1,7 @@
 import { Redactor } from "@opencode-ai/http-recorder"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMError } from "../../src"
+import { LLM, LLMError, Message, ToolCallPart } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { weatherToolName } from "../recorded-scenarios"
@@ -16,12 +16,12 @@ const malformedToolOrderRequest = LLM.request({
   id: "recorded_anthropic_malformed_tool_order",
   model,
   messages: [
-    LLM.assistant([
-      LLM.toolCall({ id: "call_1", name: weatherToolName, input: { city: "Paris" } }),
+    Message.assistant([
+      ToolCallPart.make({ id: "call_1", name: weatherToolName, input: { city: "Paris" } }),
       { type: "text", text: "I will check the weather." },
     ]),
-    LLM.toolMessage({ id: "call_1", name: weatherToolName, result: { temperature: "72F" } }),
-    LLM.user("Use that result to answer briefly."),
+    Message.tool({ id: "call_1", name: weatherToolName, result: { temperature: "72F" } }),
+    Message.user("Use that result to answer briefly."),
   ],
   tools: [{ name: weatherToolName, description: "Get weather", inputSchema: { type: "object", properties: {} } }],
 })

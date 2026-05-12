@@ -17,6 +17,7 @@ import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { BedrockAuth, type Credentials as BedrockCredentials } from "./utils/bedrock-auth"
 import { BedrockCache } from "./utils/bedrock-cache"
 import { BedrockMedia } from "./utils/bedrock-media"
+import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "bedrock-converse"
@@ -420,45 +421,64 @@ interface ParserState {
   // `metadata` (carries usage). Hold the terminal event in state so `onHalt`
   // can emit exactly one finish after both chunks have had a chance to arrive.
   readonly pendingFinish: { readonly reason: FinishReason; readonly usage?: Usage } | undefined
+  readonly hasToolCalls: boolean
+  readonly lifecycle: Lifecycle.State
 }
 
 const step = (state: ParserState, event: BedrockEvent) =>
   Effect.gen(function* () {
     if (event.contentBlockStart?.start?.toolUse) {
       const index = event.contentBlockStart.contentBlockIndex
+      const events: LLMEvent[] = []
+      const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
       return [
         {
           ...state,
+          lifecycle,
           tools: ToolStream.start(state.tools, index, {
             id: event.contentBlockStart.start.toolUse.toolUseId,
             name: event.contentBlockStart.start.toolUse.name,
           }),
         },
-        [],
+        [
+          ...events,
+          LLMEvent.toolInputStart({
+            id: event.contentBlockStart.start.toolUse.toolUseId,
+            name: event.contentBlockStart.start.toolUse.name,
+          }),
+        ],
       ] as const
     }
 
     if (event.contentBlockDelta?.delta?.text) {
+      const events: LLMEvent[] = []
       return [
-        state,
-        [
-          LLMEvent.textDelta({
-            id: `text-${event.contentBlockDelta.contentBlockIndex}`,
-            text: event.contentBlockDelta.delta.text,
-          }),
-        ],
+        {
+          ...state,
+          lifecycle: Lifecycle.textDelta(
+            state.lifecycle,
+            events,
+            `text-${event.contentBlockDelta.contentBlockIndex}`,
+            event.contentBlockDelta.delta.text,
+          ),
+        },
+        events,
       ] as const
     }
 
     if (event.contentBlockDelta?.delta?.reasoningContent?.text) {
+      const events: LLMEvent[] = []
       return [
-        state,
-        [
-          LLMEvent.reasoningDelta({
-            id: `reasoning-${event.contentBlockDelta.contentBlockIndex}`,
-            text: event.contentBlockDelta.delta.reasoningContent.text,
-          }),
-        ],
+        {
+          ...state,
+          lifecycle: Lifecycle.reasoningDelta(
+            state.lifecycle,
+            events,
+            `reasoning-${event.contentBlockDelta.contentBlockIndex}`,
+            event.contentBlockDelta.delta.reasoningContent.text,
+          ),
+        },
+        events,
       ] as const
     }
 
@@ -472,12 +492,33 @@ const step = (state: ParserState, event: BedrockEvent) =>
         "Bedrock Converse tool delta is missing its tool call",
       )
       if (ToolStream.isError(result)) return yield* result
-      return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
+      const events: LLMEvent[] = []
+      const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+      events.push(...result.events)
+      return [{ ...state, lifecycle, tools: result.tools }, events] as const
     }
 
     if (event.contentBlockStop) {
       const result = yield* ToolStream.finish(ADAPTER, state.tools, event.contentBlockStop.contentBlockIndex)
-      return [{ ...state, tools: result.tools }, result.event ? [result.event] : []] as const
+      const events: LLMEvent[] = []
+      const resultEvents = result.events ?? []
+      const lifecycle = resultEvents.length
+        ? Lifecycle.stepStart(state.lifecycle, events)
+        : Lifecycle.reasoningEnd(
+            Lifecycle.textEnd(state.lifecycle, events, `text-${event.contentBlockStop.contentBlockIndex}`),
+            events,
+            `reasoning-${event.contentBlockStop.contentBlockIndex}`,
+          )
+      events.push(...resultEvents)
+      return [
+        {
+          ...state,
+          hasToolCalls: resultEvents.some(LLMEvent.is.toolCall) ? true : state.hasToolCalls,
+          lifecycle,
+          tools: result.tools,
+        },
+        events,
+      ] as const
     }
 
     if (event.messageStop) {
@@ -517,7 +558,15 @@ const framing = BedrockEventStream.framing(ADAPTER)
 
 const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
   state.pendingFinish
-    ? [LLMEvent.requestFinish({ reason: state.pendingFinish.reason, usage: state.pendingFinish.usage })]
+    ? (() => {
+        const events: LLMEvent[] = []
+        Lifecycle.finish(state.lifecycle, events, {
+          reason:
+            state.pendingFinish.reason === "stop" && state.hasToolCalls ? "tool-calls" : state.pendingFinish.reason,
+          usage: state.pendingFinish.usage,
+        })
+        return events
+      })()
     : []
 
 // =============================================================================
@@ -535,7 +584,12 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: BedrockEvent,
-    initial: () => ({ tools: ToolStream.empty<number>(), pendingFinish: undefined }),
+    initial: () => ({
+      tools: ToolStream.empty<number>(),
+      pendingFinish: undefined,
+      hasToolCalls: false,
+      lifecycle: Lifecycle.initial(),
+    }),
     step,
     onHalt,
   },

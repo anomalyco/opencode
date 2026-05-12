@@ -13,9 +13,7 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 // bodies deliberately avoid Plugin/config directly. The marker only
 // appears if InstanceBootstrap ran at the instance boundary.
 //
-// The Hono variant of this check lived alongside these tests and is
-// going away with the Hono backend. The boundaries below are backend-
-// agnostic and stay.
+// The boundaries below are transport-agnostic and stay.
 
 afterEach(async () => {
   await disposeAllInstances()
