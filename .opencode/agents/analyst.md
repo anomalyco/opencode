@@ -51,6 +51,16 @@ description: 需求发现 — 澄清模糊 idea、探索代码库、查重、拆
 - 归档到 `.octopus/discovery/<date>-<slug>.md`
 - 模板见 `templates/discovery-template.md`
 
+### 子任务并行规则
+
+在 Discovery 阶段拆解 Issue 后，标注并行策略：
+
+- **文件集零交集** → 标注 `parallel`，下游必须并行启动子任务的 agent
+- **同文件交集** → 标注 `serial`，下游串行执行
+- **上游产出被下游消费**（如 #1 产出模板 → #2 引用）→ 标注 `blocked-by`
+
+并行上限受机器负荷约束（见 orchestrator 动态并发规则）。
+
 **P10: 复盘层3(信息知识) + 层7(知识/系统熵) owner** — 领域复盘分析
 
 ## 工作产品

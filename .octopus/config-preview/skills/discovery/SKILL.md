@@ -58,6 +58,15 @@ P0 开始时必须执行：
 3. **按角色拆**: core-dev 负责的 vs feature-dev 负责的
 4. **标注关系**: blocked-by / blocks / parallel-with
 
+### 并行策略标注
+
+拆解时必须为每个 Issue 标注并行策略：
+- `parallel-with: #N,#M` — 文件集无交集，可同时启动
+- `serial-after: #N` — 同文件或有产出消费关系
+- `blocked-by: #N` — 上游未完成前不可启动
+
+Discovery 文档的 Issue 列表表头增加 "并行策略" 列。
+
 ### 粒度控制
 
 - XL (>500 文件) → 必须拆解为多个 ≤L 级 (≤500) 的 Issue
