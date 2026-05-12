@@ -250,7 +250,7 @@ export const Info = Schema.Struct({
           description: Schema.String,
         }),
       ]),
-    ),
+    ).annotate({ description: "Tool configuration overrides, including description replacements" }),
   ),
   attachment: Schema.optional(ConfigAttachment.Info).annotate({
     description: "Attachment processing configuration, including image size limits and resizing behavior",

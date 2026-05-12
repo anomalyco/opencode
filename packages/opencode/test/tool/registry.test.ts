@@ -64,6 +64,7 @@ const registryLayerWithToolOverrides = ToolRegistry.layer.pipe(
           tools: {
             read: { description: "Read file" },
             bash: { description: "" },
+            task: { description: "custom task description" },
           },
         }),
       directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
@@ -291,6 +292,21 @@ describe("tool.registry", () => {
       const invalidTool = tools.find((t) => t.id === "invalid")
       expect(invalidTool).toBeDefined()
       expect(invalidTool!.description.length).toBeGreaterThanOrEqual(10)
+    }),
+  )
+
+  itWithOverrides.instance("override suppresses describeTask/describeSkill append", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const tools = yield* registry.tools({
+        modelID: ModelID.make("test/model"),
+        providerID: ProviderID.make("test"),
+        agent: { name: "test", mode: "subagent", options: {}, permission: [{ permission: "*", pattern: "*", action: "allow" }] },
+      })
+      const taskTool = tools.find((t) => t.id === "task")
+      expect(taskTool).toBeDefined()
+      expect(taskTool!.description).toBe("custom task description")
+      expect(taskTool!.description).not.toContain("Available agent types")
     }),
   )
 })
