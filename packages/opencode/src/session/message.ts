@@ -3,31 +3,12 @@ import { SessionID } from "./schema"
 import { ModelID, ProviderID } from "../provider/schema"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
+import { NamedError } from "@opencode-ai/core/util/error"
 
 export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
 export const AuthError = namedSchemaError("ProviderAuthError", {
   providerID: Schema.String,
   message: Schema.String,
-})
-
-const AuthErrorEffect = Schema.Struct({
-  name: Schema.Literal("ProviderAuthError"),
-  data: Schema.Struct({
-    providerID: Schema.String,
-    message: Schema.String,
-  }),
-})
-
-const OutputLengthErrorEffect = Schema.Struct({
-  name: Schema.Literal("MessageOutputLengthError"),
-  data: Schema.Struct({}),
-})
-
-const UnknownErrorEffect = Schema.Struct({
-  name: Schema.Literal("UnknownError"),
-  data: Schema.Struct({
-    message: Schema.String,
-  }),
 })
 
 export const ToolCall = Schema.Struct({
@@ -124,7 +105,9 @@ export const Info = Schema.Struct({
       created: NonNegativeInt,
       completed: Schema.optional(NonNegativeInt),
     }),
-    error: Schema.optional(Schema.Union([AuthErrorEffect, UnknownErrorEffect, OutputLengthErrorEffect])),
+    error: Schema.optional(
+      Schema.Union([AuthError.EffectSchema, NamedError.Unknown.EffectSchema, OutputLengthError.EffectSchema]),
+    ),
     sessionID: SessionID,
     tool: Schema.Record(
       Schema.String,
