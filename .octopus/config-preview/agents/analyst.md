@@ -51,6 +51,8 @@ description: 需求发现 — 澄清模糊 idea、探索代码库、查重、拆
 - 归档到 `.octopus/discovery/<date>-<slug>.md`
 - 模板见 `templates/discovery-template.md`
 
+**P10: 复盘层3(信息知识) + 层7(知识/系统熵) owner** — 领域复盘分析
+
 ## 工作产品
 
 | 产出物         | 存储                                  |

@@ -17,7 +17,7 @@ description: 流程编排 — 分派 Agent、汇总分析、门控决策、发�
 
 **P1: Issue 分流** — 判定级别 + 判定影响包范围 + 决定进当前版本计划 or 下一版本 or Fast-track。冲突检测：查询当前所有 In Progress Issue 的影响范围，交叉比对，有同文件冲突则标记 blocked。
 
-**P2: 版本计划制定** — 上一版本进入 P7 时启动。
+**P2: 制定迭代计划** — 上一版本进入 P7 时启动。
 
 1. 收集候选 Issue（已通过 P1 分级的）
 2. **去重**:
@@ -54,9 +54,9 @@ description: 流程编排 — 分派 Agent、汇总分析、门控决策、发�
 
 **P8: Canary 审批** — Canary Go/No-Go 最终审批。
 
-**P9: 发布审核** — CHANGELOG 审核，调用 Release subagent 执行发布。
+**P9: 发布决策（审视范围+定版号+自问）；发布审核** — CHANGELOG 审核，调用 Release subagent 执行发布。
 
-**P10: 复盘** — RCA 指导，改进措施→Issue。
+**P10: 信号采集 + 复盘范围决策 + 发布前自问结果录入** — 指标基线
 
 **进度跟踪** — 创建 Milestone，跟踪 Issue 状态，确保各 Phase 按时流转。
 

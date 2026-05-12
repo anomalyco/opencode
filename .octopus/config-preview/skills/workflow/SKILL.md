@@ -10,10 +10,10 @@ description: Octopus project E2E workflow - phase codes, change classification, 
 ## Phase 总览
 
 ```
-P0 Discovery (analyst) → P1 Issue创建&分流 → P2 版本计划 → P3 需求分析 → P4 需求评审
+P0 Discovery (analyst) → P1 Issue创建&分流 → P2 迭代计划 → P3 需求分析 → P4 需求评审
                                                                             ↓ Go
-                                                          P5 方案设计 → P6 编码 → P7 集成测试 → P8 Canary → P9 发布
-                                                                                                            ↓ P0/P1问题
+                                                          P5 方案设计 → P6 编码 → P7 集成测试 → P8 Canary → P9 发布(决策+执行)
+                                                                                                            ↓ 信号驱动
                                                                                                          P10 复盘
 ```
 
@@ -50,7 +50,7 @@ orchestrator 在 P2 收集候选 Issue 时必须执行去重：
 2. 语义级去重——不同 Issue 描述同一目标 → 合并为单个 Issue
 3. 排除已在过往版本发布的 Issue（CHANGELOG 已包含）
 4. 排除已有关联 PR 已 merge 的 Issue
-5. 去重记录写入版本计划 "去重说明" 章节
+5. 去重记录写入迭代计划 "去重说明" 章节
 
 ## Phase 门控
 
@@ -58,7 +58,7 @@ orchestrator 在 P2 收集候选 Issue 时必须执行去重：
 | ------ | ------------------------- | ------------------------------ | -------------------------------------------- | ----------------- |
 | P0     | `dev`                     | 用户提出原始 idea              | Discovery 文档 + Issue 草稿完成              | —                 |
 | P1     | — (GitHub)                | P0 Issue 草稿                  | 变更级别已判定 + Agent 已分派 + 无同文件冲突 | Bots 自动         |
-| P2     | `dev`                     | P1 分级完成 / 上一版本 P7 期间 | 版本计划通过（≥5/7）                         | LLM Panel         |
+| P2     | `dev`                     | P1 分级完成 / 上一迭代 P7 期间 | 迭代计划通过（≥5/7）                         | LLM Panel         |
 | P3     | `dev`                     | P2 通过                        | 需求分析报告完成（M+: ≥2 Agent 分析）        | —                 |
 | P4     | `dev`                     | P3 完成                        | M+: LLM Panel ≥4/7 Go                        | LLM Panel         |
 | P5     | `dev`                     | P4 Go（仅 M+）                 | 技术设计+任务拆解通过（≥5/7）                | LLM Panel         |
@@ -66,7 +66,7 @@ orchestrator 在 P2 收集候选 Issue 时必须执行去重：
 | P7     | PR → `dev`                | P6 PR ready                    | 质量门通过 + squash merge                    | CI + QA           |
 | P8     | `release/vX.Y.Z`          | L/XL 质量门通过                | Canary 1h 无异常                             | QA 否决           |
 | P9     | `release/vX.Y.Z` → `main` | Canary 通过 / P7 通过 (XS/S/M) | 发布成功 + 24h OK                            | Release           |
-| P10    | `dev`                     | P0/P1 问题触发                 | RCA + 改进 Issue                             | Release→architect |
+| P10    | `dev`                     | P9 发布完成                     | 指标基线 + 复盘报告(按需) + 改进 Issue       | Release→architect |
 | Hotfix | `hotfix/vX.Y.Z`           | 紧急修复                       | merge to main + backmerge to dev             | Release           |
 
 ## PR 审批规则
