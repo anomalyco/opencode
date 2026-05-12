@@ -64,14 +64,15 @@ export const TeamTool = Tool.define(
     const agent = yield* Agent.Service
     const config = yield* Config.Service
     const sessions = yield* Session.Service
-    const fs = yield* AppFileSystem.Service
-    const inst = yield* InstanceState.context
 
     return {
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const fs = yield* AppFileSystem.Service
+          const inst = yield* InstanceState.context
+
           yield* ctx.ask({
             permission: id,
             patterns: ["*"],

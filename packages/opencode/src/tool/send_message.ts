@@ -18,14 +18,15 @@ export const Parameters = Schema.Struct({
 export const SendMessageTool = Tool.define(
   id,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
-    const inst = yield* InstanceState.context
 
     return {
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const fs = yield* AppFileSystem.Service
+          const inst = yield* InstanceState.context
+
           yield* ctx.ask({
             permission: id,
             patterns: ["*"],
