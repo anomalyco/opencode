@@ -7,10 +7,13 @@ export type Err = ReturnType<NamedError["toObject"]>
 
 export const GO_UPSELL_MESSAGE = "Free usage exceeded, subscribe to Go"
 export const GO_UPSELL_URL = "https://opencode.ai/go"
+export type RetryReason = "free_tier_limit" | "account_rate_limit" | (string & {})
 
 export type Retryable = {
   message: string
   action?: {
+    reason: RetryReason
+    provider: string
     title: string
     message: string
     label: string
@@ -60,7 +63,7 @@ export function delay(attempt: number, error?: MessageV2.APIError) {
   return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
 }
 
-export function retryable(error: Err) {
+export function retryable(error: Err, provider: string) {
   // context overflow errors should not be retried
   if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
   if (MessageV2.APIError.isInstance(error)) {
@@ -72,6 +75,8 @@ export function retryable(error: Err) {
       return {
         message: GO_UPSELL_MESSAGE,
         action: {
+          reason: "free_tier_limit",
+          provider,
           title: "Free limit reached",
           message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
           label: "subscribe",
@@ -97,12 +102,14 @@ export function retryable(error: Err) {
         return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
       })
 
-      const message = `${limitName} usage limit reached. It will reset in ${resetIn}. To continue using this model now, enable usage from your available balance`
+      const message = `${limitName ? `${limitName} usage limit` : "Usage limit"} reached. It will reset in ${resetIn}. To continue using this model now, enable usage from your available balance`
 
       const link = `https://opencode.ai/workspace/${workspace}/go`
       return {
         message: `${message} - ${link}`,
         action: {
+          reason: "account_rate_limit",
+          provider,
           title: "Go limit reached",
           message,
           label: "open settings",
@@ -165,13 +172,14 @@ function parseJSON(value: unknown) {
 }
 
 export function policy(opts: {
+  provider: string
   parse: (error: unknown) => Err
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
-      const retry = retryable(error)
+      const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)

@@ -37,8 +37,7 @@ import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
+import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "session" })
 
@@ -142,9 +141,9 @@ function sessionPath(worktree: string, cwd: string) {
 }
 
 const Summary = Schema.Struct({
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
-  files: NonNegativeInt,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  files: Schema.Finite,
   diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
 })
 
@@ -193,26 +192,20 @@ export const Info = Schema.Struct({
   time: Time,
   permission: optionalOmitUndefined(Permission.Ruleset),
   revert: optionalOmitUndefined(Revert),
-})
-  .annotate({ identifier: "Session" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const ProjectInfo = Schema.Struct({
   id: ProjectID,
   name: optionalOmitUndefined(Schema.String),
   worktree: Schema.String,
-})
-  .annotate({ identifier: "ProjectSummary" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ProjectSummary" })
 export type ProjectInfo = Types.DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
 
 export const GlobalInfo = Schema.Struct({
   ...Info.fields,
   project: Schema.NullOr(ProjectInfo),
-})
-  .annotate({ identifier: "GlobalSession" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "GlobalSession" })
 export type GlobalInfo = Types.DeepMutable<Schema.Schema.Type<typeof GlobalInfo>>
 
 export const CreateInput = Schema.optional(
@@ -224,36 +217,34 @@ export const CreateInput = Schema.optional(
     permission: Schema.optional(Permission.Ruleset),
     workspaceID: Schema.optional(WorkspaceID),
   }),
-).pipe(withStatics((s) => ({ zod: zod(s) })))
+)
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
 
 export const ForkInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export const GetInput = SessionID
 export const ChildrenInput = SessionID
 export const RemoveInput = SessionID
-export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema.String }).pipe(
-  withStatics((s) => ({ zod: zod(s) })),
-)
+export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema.String })
 export const SetArchivedInput = Schema.Struct({
   sessionID: SessionID,
   time: Schema.optional(ArchivedTimestamp),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
   permission: Permission.Ruleset,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export const SetRevertInput = Schema.Struct({
   sessionID: SessionID,
   revert: Schema.optional(Revert),
   summary: Schema.optional(Summary),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export const MessagesInput = Schema.Struct({
   sessionID: SessionID,
   limit: Schema.optional(NonNegativeInt),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ListInput = {
   directory?: string
   scope?: "project"
@@ -353,7 +344,7 @@ export function plan(input: { slug: string; time: { created: number } }, instanc
 export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
     if (!Number.isFinite(value)) return 0
-    return value
+    return Math.max(0, value)
   }
   const inputTokens = safe(input.usage.inputTokens ?? 0)
   const outputTokens = safe(input.usage.outputTokens ?? 0)

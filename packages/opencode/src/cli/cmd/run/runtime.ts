@@ -487,6 +487,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
 
           const handle = await mod.createSessionTransport({
             sdk: ctx.sdk,
+            directory: ctx.directory,
             sessionID: state.sessionID,
             thinking: input.thinking,
             limits: () => state.limits,

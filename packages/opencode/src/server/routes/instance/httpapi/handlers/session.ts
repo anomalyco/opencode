@@ -187,11 +187,28 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
       params: { sessionID: SessionID }
-      payload: typeof ForkPayload.Type
+      payload?: typeof ForkPayload.Type
     }) {
       return yield* SessionError.mapStorageNotFound(
-        session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload.messageID }),
+        session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload?.messageID }),
       )
+    })
+
+    const forkRaw = Effect.fn("SessionHttpApi.forkRaw")(function* (ctx: {
+      params: { sessionID: SessionID }
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      if (body.trim().length === 0) return yield* fork({ params: ctx.params })
+
+      const json = yield* Effect.try({
+        try: () => JSON.parse(body) as unknown,
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+      const payload = yield* Schema.decodeUnknownEffect(ForkPayload)(json).pipe(
+        Effect.mapError(() => new HttpApiError.BadRequest({})),
+      )
+      return yield* fork({ params: ctx.params, payload })
     })
 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -203,23 +220,32 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof InitPayload.Type
     }) {
-      yield* promptSvc.command({
-        sessionID: ctx.params.sessionID,
-        messageID: ctx.payload.messageID,
-        model: `${ctx.payload.providerID}/${ctx.payload.modelID}`,
-        command: Command.Default.INIT,
-        arguments: "",
-      })
+      yield* promptSvc
+        .command({
+          sessionID: ctx.params.sessionID,
+          messageID: ctx.payload.messageID,
+          model: `${ctx.payload.providerID}/${ctx.payload.modelID}`,
+          command: Command.Default.INIT,
+          arguments: "",
+        })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
       return true
     })
 
+    // share/unshare errors aren't all client-induced — storage and network
+    // failures from SessionShare are real possibilities. Map to a typed 500
+    // (matches the legacy route behavior which routed any failure through
+    // ErrorMiddleware → NamedError.Unknown 500) instead of blanket-mapping
+    // every failure to a 400 BadRequest.
     const share = Effect.fn("SessionHttpApi.share")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* shareSvc.share(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      yield* shareSvc.share(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.InternalServerError({})))
       return yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
     })
 
     const unshare = Effect.fn("SessionHttpApi.unshare")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* shareSvc.unshare(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      yield* shareSvc
+        .unshare(ctx.params.sessionID)
+        .pipe(Effect.mapError(() => new HttpApiError.InternalServerError({})))
       return yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
     })
 
@@ -251,20 +277,19 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     }) {
       const instance = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
-      return HttpServerResponse.stream(
-        Stream.fromEffect(
-          promptSvc
-            .prompt({
-              ...ctx.payload,
-              sessionID: ctx.params.sessionID,
-            })
-            .pipe(Effect.provideService(InstanceRef, instance), Effect.provideService(WorkspaceRef, workspace)),
-        ).pipe(
-          Stream.map((message) => JSON.stringify(message)),
-          Stream.encodeText,
-        ),
-        { contentType: "application/json" },
-      )
+      const message = yield* promptSvc
+        .prompt({
+          ...ctx.payload,
+          sessionID: ctx.params.sessionID,
+        })
+        .pipe(
+          Effect.provideService(InstanceRef, instance),
+          Effect.provideService(WorkspaceRef, workspace),
+          Effect.mapError(() => new HttpApiError.BadRequest({})),
+        )
+      return HttpServerResponse.stream(Stream.make(JSON.stringify(message)).pipe(Stream.encodeText), {
+        contentType: "application/json",
+      })
     })
 
     const promptAsync = Effect.fn("SessionHttpApi.promptAsync")(function* (ctx: {
@@ -290,7 +315,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof CommandPayload.Type
     }) {
-      return yield* promptSvc.command({ ...ctx.payload, sessionID: ctx.params.sessionID })
+      return yield* promptSvc
+        .command({ ...ctx.payload, sessionID: ctx.params.sessionID })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
     })
 
     const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {
@@ -363,7 +390,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handleRaw("create", createRaw)
       .handle("remove", remove)
       .handle("update", update)
-      .handle("fork", fork)
+      .handleRaw("fork", forkRaw)
       .handle("abort", abort)
       .handle("init", init)
       .handle("share", share)

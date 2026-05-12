@@ -50,7 +50,7 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
     const cacheReadTokens = usage.input_tokens_details?.cached_tokens ?? undefined
     return {
       inputTokens: inputTokens - (cacheReadTokens ?? 0),
-      outputTokens: outputTokens - (reasoningTokens ?? 0),
+      outputTokens,
       reasoningTokens,
       cacheReadTokens,
       cacheWrite5mTokens: undefined,

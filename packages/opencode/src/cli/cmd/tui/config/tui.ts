@@ -1,44 +1,41 @@
 export * as TuiConfig from "./tui"
 
-import type z from "zod"
-import type { KeyEvent, Renderable } from "@opentui/core"
-import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
+import { createBindingLookup } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
-import { Context, Effect, Fiber, Layer } from "effect"
+import { Context, Effect, Fiber, Layer, Schema } from "effect"
 import { ConfigParse } from "@/config/parse"
+import { InvalidError } from "@/config/error"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { KeymapConfig, TuiInfo, TuiJsonSchemaInfo } from "./tui-schema"
+import { KeymapLeaderTimeoutDefault, TuiInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@opencode-ai/core/global"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
-import { ConfigKeybinds } from "@/config/keybinds"
+import { TuiKeybind } from "./keybind"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Filesystem } from "@/util/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
-import { LegacyKeymapTransform } from "./legacy-keymap-transform"
-import { KeymapSectionNames, keymapBindingDefaults, type KeymapInfo, type KeymapSection } from "./tui-schema"
+import type { DeepMutable } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiInfo
-export const JsonSchemaInfo = TuiJsonSchemaInfo
-export type Info = z.output<typeof Info>
+export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
 
 type Acc = {
   result: Info
   plugin_origins: ConfigPlugin.Origin[]
 }
 
-export type Resolved = Omit<Info, "keybinds" | "keymap"> & {
-  keybinds: ConfigKeybinds.Keybinds
-  keymap: KeymapInfo
+export type Resolved = Omit<Info, "keybinds" | "leader_timeout"> & {
+  keybinds: TuiKeybind.BindingLookupView
+  leader_timeout: number
   // Internal resolved plugin list used by runtime loading.
   plugin_origins?: ConfigPlugin.Origin[]
 }
@@ -94,10 +91,20 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       if (!isRecord(data)) return {} as Info
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      const validated = ConfigParse.schema(Info, normalize(data), configFilepath)
+      const normalized = normalize(data)
+      if (isRecord(normalized.keybinds)) {
+        const invalid = TuiKeybind.unknownKeys(normalized.keybinds)
+        if (invalid.length) {
+          throw new InvalidError({
+            path: configFilepath,
+            message: `Unrecognized keybind${invalid.length === 1 ? "" : "s"}: ${invalid.join(", ")}`,
+          })
+        }
+      }
+      const validated = ConfigParse.schema(Info, normalized, configFilepath)
       return yield* resolvePlugins(validated, configFilepath)
     }).pipe(
-      // catchCause (not tapErrorCause + orElseSucceed) because ConfigParse.jsonc/.schema
+      // catchCause (not tapErrorCause + orElseSucceed) because JSONC parsing and validation
       // can sync-throw — those become defects, which orElseSucceed wouldn't catch.
       Effect.catchCause((cause) =>
         Effect.sync(() => {
@@ -180,37 +187,22 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     }
   }
 
-  const keybinds = { ...(acc.result.keybinds ?? {}) }
+  const keybinds = { ...acc.result.keybinds }
   if (process.platform === "win32") {
     // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
     keybinds.terminal_suspend = "none"
-    keybinds.input_undo ??= unique([
-      "ctrl+z",
-      ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(","),
-    ]).join(",")
+    const inputUndo = TuiKeybind.defaultValue("input_undo")
+    keybinds.input_undo ??= unique(["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]).join(",")
   }
-  const parsedKeybinds = ConfigKeybinds.Keybinds.parse(keybinds)
-  const keymapInput = acc.result.keymap ?? LegacyKeymapTransform.create(acc.result.keybinds ?? {})
-  const keymapConfig = KeymapConfig.parse(keymapInput)
-  const keymap = {
-    leader: !keymapConfig.leader || keymapConfig.leader === "none" ? "ctrl+x" : keymapConfig.leader,
-    leader_timeout: keymapConfig.leader_timeout,
-    ...resolveBindingSections<Renderable, KeyEvent, BindingSectionsConfig<Renderable, KeyEvent>, KeymapSection>(
-      keymapConfig.sections,
-      {
-        sections: KeymapSectionNames,
-        bindingDefaults: keymapBindingDefaults,
-      },
-    ),
-  }
+  const parsedKeybinds = TuiKeybind.parse(keybinds)
   const result: Resolved = {
     ...acc.result,
-    keybinds: parsedKeybinds,
+    keybinds: createBindingLookup(TuiKeybind.toBindingConfig(parsedKeybinds), {
+      commandMap: TuiKeybind.CommandMap,
+      bindingDefaults: TuiKeybind.bindingDefaults(),
+    }),
+    leader_timeout: acc.result.leader_timeout ?? KeymapLeaderTimeoutDefault,
     plugin_origins: acc.plugin_origins.length ? acc.plugin_origins : undefined,
-    // `keybinds` is deprecated and will be removed in opencode v2.0. Keep it
-    // only as the legacy fallback; once `keymap` is configured, ignore
-    // `keybinds` for keymap resolution.
-    keymap,
   }
 
   return {

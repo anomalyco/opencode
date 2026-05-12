@@ -24,7 +24,9 @@ import type {
   EventTuiPromptAppend2,
   EventTuiSessionSelect2,
   EventTuiToastShow2,
+  ExperimentalConsoleGetErrors,
   ExperimentalConsoleGetResponses,
+  ExperimentalConsoleListOrgsErrors,
   ExperimentalConsoleListOrgsResponses,
   ExperimentalConsoleSwitchOrgResponses,
   ExperimentalResourceListResponses,
@@ -36,6 +38,7 @@ import type {
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
   ExperimentalWorkspaceStatusResponses,
+  ExperimentalWorkspaceSyncListResponses,
   ExperimentalWorkspaceWarpErrors,
   ExperimentalWorkspaceWarpResponses,
   FileListResponses,
@@ -686,7 +689,11 @@ export class Console extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<ExperimentalConsoleGetResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).get<
+      ExperimentalConsoleGetResponses,
+      ExperimentalConsoleGetErrors,
+      ThrowOnError
+    >({
       url: "/experimental/console",
       ...options,
       ...params,
@@ -716,7 +723,11 @@ export class Console extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<ExperimentalConsoleListOrgsResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).get<
+      ExperimentalConsoleListOrgsResponses,
+      ExperimentalConsoleListOrgsErrors,
+      ThrowOnError
+    >({
       url: "/experimental/console/orgs",
       ...options,
       ...params,
@@ -946,6 +957,36 @@ export class Workspace extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Sync workspace list
+   *
+   * Register missing workspaces returned by workspace adapters.
+   */
+  public syncList<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ExperimentalWorkspaceSyncListResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/sync-list",
+      ...options,
+      ...params,
     })
   }
 
@@ -4122,6 +4163,13 @@ export class Session3 extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      limit?: number
+      order?: "asc" | "desc"
+      path?: string
+      roots?: boolean | "true" | "false"
+      start?: number
+      search?: string
+      cursor?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4132,6 +4180,13 @@ export class Session3 extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "order" },
+            { in: "query", key: "path" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "start" },
+            { in: "query", key: "search" },
+            { in: "query", key: "cursor" },
           ],
         },
       ],
@@ -4290,6 +4345,9 @@ export class Session3 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      limit?: number
+      order?: "asc" | "desc"
+      cursor?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4301,6 +4359,9 @@ export class Session3 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "order" },
+            { in: "query", key: "cursor" },
           ],
         },
       ],
