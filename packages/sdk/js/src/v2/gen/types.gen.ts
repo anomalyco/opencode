@@ -741,6 +741,16 @@ export type Session = {
     files: number
     diffs?: Array<SnapshotFileDiff>
   }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
   share?: {
     url: string
   }
@@ -771,6 +781,7 @@ export type Prompt = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  references?: Array<PromptReferenceAttachment>
 }
 
 export type GlobalEvent = {
@@ -944,7 +955,6 @@ export type PermissionConfig =
       question?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
-      codesearch?: PermissionActionConfig
       repo_clone?: PermissionRuleConfig
       repo_overview?: PermissionRuleConfig
       lsp?: PermissionRuleConfig
@@ -1397,7 +1407,7 @@ export type WorktreeCreateInput = {
 
 export type Worktree = {
   name: string
-  branch: string
+  branch?: string
   directory: string
 }
 
@@ -1428,6 +1438,16 @@ export type GlobalSession = {
     deletions: number
     files: number
     diffs?: Array<SnapshotFileDiff>
+  }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
   }
   share?: {
     url: string
@@ -1794,9 +1814,9 @@ export type Workspace = {
   id: string
   type: string
   name: string
-  branch: string | null
-  directory: string | null
-  extra: unknown | null
+  branch?: string | null
+  directory?: string | null
+  extra?: unknown | null
   projectID: string
   timeUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
@@ -1891,6 +1911,16 @@ export type SyncEventSessionUpdated = {
         deletions: number
         files: number
         diffs?: Array<SnapshotFileDiff>
+      } | null
+      cost?: number | null
+      tokens?: {
+        input: number
+        output: number
+        reasoning: number
+        cache: {
+          read: number
+          write: number
+        }
       } | null
       share?: {
         url?: string | null
@@ -2565,7 +2595,7 @@ export type EventWorktreeReady = {
   type: "worktree.ready"
   properties: {
     name: string
-    branch: string
+    branch?: string
   }
 }
 
@@ -2715,6 +2745,18 @@ export type PromptFileAttachment = {
 
 export type PromptAgentAttachment = {
   name: string
+  source?: PromptSource
+}
+
+export type PromptReferenceAttachment = {
+  name: string
+  kind: "local" | "git" | "invalid"
+  uri?: string
+  repository?: string
+  branch?: string
+  target?: string
+  targetUri?: string
+  problem?: string
   source?: PromptSource
 }
 
@@ -3072,6 +3114,16 @@ export type SessionInfo = {
     providerID: string
     variant: string
   }
+  cost: number
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
   time: {
     created: number
     updated: number
@@ -3121,6 +3173,7 @@ export type SessionMessageUser = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  references?: Array<PromptReferenceAttachment>
   type: "user"
 }
 
@@ -3296,11 +3349,11 @@ export type EventTuiToastShow1 = {
 }
 
 export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
+  name: "BadRequest"
+  data: {
+    message: string
+    kind?: "Params" | "Headers" | "Query" | "Body" | "Payload"
+  }
 }
 
 export type AuthRemoveData = {
@@ -5591,6 +5644,10 @@ export type SessionForkData = {
 
 export type SessionForkErrors = {
   /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
    * NotFoundError
    */
   404: NotFoundError
@@ -6754,7 +6811,7 @@ export type ExperimentalWorkspaceCreateData = {
   body?: {
     id?: string
     type: string
-    branch: string | null
+    branch?: string | null
     extra?: unknown | null
   }
   path?: never

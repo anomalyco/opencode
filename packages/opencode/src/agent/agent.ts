@@ -1,5 +1,4 @@
 import { Config } from "@/config/config"
-import z from "zod"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
@@ -24,11 +23,7 @@ import { Effect, Context, Layer, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics, type DeepMutable } from "@opencode-ai/core/schema"
-
-type ReferenceEntry = NonNullable<Config.Info["reference"]>[string]
-type ResolvedReference = { kind: "git"; repository: string; branch?: string } | { kind: "local"; path: string }
+import { type DeepMutable } from "@opencode-ai/core/schema"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -50,10 +45,14 @@ export const Info = Schema.Struct({
   prompt: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Unknown),
   steps: Schema.optional(Schema.Finite),
-})
-  .annotate({ identifier: "Agent" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Agent" })
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+
+const GeneratedAgent = Schema.Struct({
+  identifier: Schema.String,
+  whenToUse: Schema.String,
+  systemPrompt: Schema.String,
+})
 
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
@@ -207,7 +206,6 @@ export const layer = Layer.effect(
                       glob: "allow",
                       webfetch: "allow",
                       websearch: "allow",
-                      codesearch: "allow",
                       read: "allow",
                       repo_clone: "allow",
                       repo_overview: "allow",
@@ -301,75 +299,6 @@ export const layer = Layer.effect(
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
-        }
-
-        function referencePath(value: string) {
-          if (value.startsWith("~/")) return path.join(Global.Path.home, value.slice(2))
-          return path.isAbsolute(value)
-            ? value
-            : path.resolve(ctx.worktree === "/" ? ctx.directory : ctx.worktree, value)
-        }
-
-        function resolveReference(reference: ReferenceEntry): ResolvedReference {
-          if (typeof reference === "string") {
-            if (reference.startsWith(".") || reference.startsWith("/") || reference.startsWith("~")) {
-              return { kind: "local", path: referencePath(reference) }
-            }
-            return { kind: "git", repository: reference }
-          }
-          if ("path" in reference) return { kind: "local", path: referencePath(reference.path) }
-          return { kind: "git", repository: reference.repository, branch: reference.branch }
-        }
-
-        function referencePrompt(name: string, reference: ResolvedReference) {
-          if (reference.kind === "local") {
-            return [
-              PROMPT_SCOUT,
-              `You are Scout reference @${name}. This reference points to a local directory outside or alongside the current workspace.`,
-              `Local directory: ${reference.path}`,
-              `When invoked, inspect this directory as the primary reference source. Prefer repo_overview with path ${JSON.stringify(reference.path)} before broader searches. Do not edit files.`,
-            ].join("\n\n")
-          }
-
-          return [
-            PROMPT_SCOUT,
-            `You are Scout reference @${name}. This reference points to a git repository.`,
-            `Repository: ${reference.repository}`,
-            ...(reference.branch ? [`Branch/ref: ${reference.branch}`] : []),
-            `When invoked, clone or refresh this repository with repo_clone, then inspect the cached repository as the primary reference source. Do not edit files.`,
-          ].join("\n\n")
-        }
-
-        if (Flag.OPENCODE_EXPERIMENTAL_SCOUT) {
-          for (const [name, reference] of Object.entries(cfg.reference ?? {})) {
-            if (agents[name]) continue
-            const resolved = resolveReference(reference)
-            const localPath = resolved.kind === "local" ? resolved.path : undefined
-            agents[name] = {
-              name,
-              description:
-                resolved.kind === "local"
-                  ? `Scout reference for local directory ${resolved.path}`
-                  : `Scout reference for repository ${resolved.repository}`,
-              permission: Permission.merge(
-                agents.scout.permission,
-                Permission.fromConfig(
-                  localPath
-                    ? {
-                        external_directory: {
-                          [localPath]: "allow",
-                          [path.join(localPath, "*")]: "allow",
-                        },
-                      }
-                    : {},
-                ),
-              ),
-              prompt: referencePrompt(name, resolved),
-              options: { reference },
-              mode: "subagent",
-              native: false,
-            }
-          }
         }
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured
@@ -480,11 +409,10 @@ export const layer = Layer.effect(
             },
           ],
           model: language,
-          schema: z.object({
-            identifier: z.string(),
-            whenToUse: z.string(),
-            systemPrompt: z.string(),
-          }),
+          schema: Object.assign(
+            Schema.toStandardSchemaV1(GeneratedAgent),
+            Schema.toStandardJSONSchemaV1(GeneratedAgent),
+          ),
         } satisfies Parameters<typeof generateObject>[0]
 
         if (isOpenaiOauth) {

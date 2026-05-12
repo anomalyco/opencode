@@ -1,5 +1,4 @@
 import { Option, Schema, SchemaGetter } from "effect"
-import { zod, ZodOverride } from "./effect-zod"
 
 /**
  * Integer greater than zero.
@@ -21,7 +20,6 @@ export const optionalOmitUndefined = <S extends Schema.Top>(schema: S) =>
       decode: SchemaGetter.passthrough({ strict: false }),
       encode: SchemaGetter.transformOptional(Option.filter((value) => value !== undefined)),
     }),
-    Schema.annotate({ [ZodOverride]: zod(schema).optional() }),
   )
 
 /**

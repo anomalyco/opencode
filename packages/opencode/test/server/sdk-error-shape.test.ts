@@ -52,23 +52,33 @@ describe("v2 SDK error shape", () => {
     })
   })
 
-  test("400 with empty body throws a real Error naming the status", async () => {
+  test("400 schema rejection: SDK extracts the field-level reason from the NamedError body", async () => {
+    // Canary for the #26631 wire shape. Asserts the contract end-to-end:
+    // server emits {name:"BadRequest", data:{message, kind}}, SDK's
+    // wrapClientError extracts .data.message into Error.message. If either
+    // side regresses (#26457 reverted because both layers were missing),
+    // this test fails before users see (empty response body).
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const sdk = client(tmp.path)
 
     let caught: unknown
     try {
-      // POST /sync/history with `aggregate: -1` triggers schema validation
-      // that returns an empty 400 body (verified via plan-mode probe).
-      await sdk.sync.history.list({ aggregate: -1 } as any, { throwOnError: true })
+      await sdk.sync.history.list({ body: { aggregate: -1 } as any }, { throwOnError: true })
     } catch (e) {
       caught = e
     }
 
     expect(caught).toBeInstanceOf(Error)
     const err = caught as Error
-    const cause = err.cause as { status?: number }
-    expect(err.message.length).toBeGreaterThan(0)
+    const cause = err.cause as { body?: any; status?: number }
     expect(cause.status).toBe(400)
+    expect(cause.body).toMatchObject({
+      name: "BadRequest",
+      data: { kind: expect.stringMatching(/^(Body|Payload)$/) },
+    })
+    expect(typeof cause.body.data.message).toBe("string")
+    expect(cause.body.data.message.length).toBeGreaterThan(0)
+    // Whatever the server put in data.message must be what the user sees.
+    expect(err.message).toBe(cause.body.data.message)
   })
 })
