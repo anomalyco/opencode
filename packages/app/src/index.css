@@ -95,6 +95,21 @@
     animation: sidebar-session-loading-sheen 1.8s linear infinite;
   }
 
+  [data-component="project-icon-loading"] [data-slot="sheen"] {
+    background: linear-gradient(
+      110deg,
+      transparent 0%,
+      transparent 34%,
+      rgba(255, 255, 255, 0.08) 44%,
+      rgba(255, 255, 255, 0.28) 50%,
+      rgba(255, 255, 255, 0.08) 56%,
+      transparent 66%,
+      transparent 100%
+    );
+    transform: translateX(-140%);
+    animation: sidebar-session-loading-sheen 1.8s linear infinite;
+  }
+
   [data-dock-surface="shell"][data-slot="prompt-shell"] {
     border-top-left-radius: 28px;
     border-top-right-radius: 28px;
