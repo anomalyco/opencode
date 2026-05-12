@@ -20,8 +20,6 @@
         "review_rounds",
         "hotfix_or_rollback",
         "scope_deviation_pct",
-        "token_delta_pct",
-        "ci_time_delta_pct",
         "agent_queue_max_m_plus"
       ],
       "properties": {
@@ -35,8 +33,8 @@
         },
         "hotfix_or_rollback": { "type": "boolean" },
         "scope_deviation_pct": { "type": "number", "description": "Actual vs estimated file count deviation" },
-        "token_delta_pct": { "type": "number", "description": "LLM token consumption change vs previous release" },
-        "ci_time_delta_pct": { "type": "number", "description": "CI pipeline time change vs previous release" },
+        "token_delta_pct": { "type": ["number", "null"], "description": "LLM token consumption change vs previous release (null on first release)" },
+        "ci_time_delta_pct": { "type": ["number", "null"], "description": "CI pipeline time change vs previous release (null on first release)" },
         "agent_queue_max_m_plus": { "type": "integer", "minimum": 0, "description": "Max concurrent M+ issues waiting" },
         "layer6_review_uptick": { "type": "boolean", "description": "Consecutive 2 releases with increased review rejection rate" },
         "layer7_tool_zero_usage": {
