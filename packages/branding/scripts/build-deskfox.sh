@@ -164,6 +164,29 @@ if [[ "$BUILD_EXIT" -ne 0 ]]; then
     echo "[deskfox] Warning: tauri build exited with code $BUILD_EXIT" >&2
 fi
 
+# === 3.5 开发机 jsonc 清理(防多档累积 → multi-instance 双推 message)===
+# 决策:产品 inject 逻辑不做"同 plugin 多物理路径"清理(普通用户不撞,详见 feishu_plugin_install.rs 头注释)。
+# 开发机一台机器来回切 dev / prod / raw target → plugin 数组累积多个 entry → opencode loader 各 import → 3 instance
+# → 3 WSSClient 同 appId 连飞书 → server 给多 connection 推同 user message 分配不同 message_id → "user 只发一条 IM 但 bot 弹卡两次"
+# 这里 build 成功后顺手清,下次 DeskFox 启动 setup hook 自动 inject 当前 .app 路径(单 entry,正常状态)。
+# [feat: feishu-plugin-dedup-decision] 2026-05-12
+if [[ "$BUILD_EXIT" -eq 0 ]]; then
+    JSONC="$HOME/.config/opencode/opencode.jsonc"
+    if [[ -f "$JSONC" ]]; then
+        FEISHU_COUNT=$(grep -c "plugin/feishu-bridge" "$JSONC" 2>/dev/null || echo 0)
+        if [[ "$FEISHU_COUNT" -gt 1 ]]; then
+            echo ""
+            echo "[deskfox] jsonc 发现 $FEISHU_COUNT 个 feishu-bridge plugin entry,清理(下次 DeskFox 启动 setup hook 自动 inject 当前 .app)..."
+            cp "$JSONC" "$JSONC.bak.build-cleanup"
+            grep -v "plugin/feishu-bridge" "$JSONC.bak.build-cleanup" > "$JSONC.tmp"
+            # 修复:删完 entry 后 plugin 数组最后一项可能留悬空逗号(",\n  ]" → "\n  ]")
+            perl -i -0pe 's/,(\s*\])/\1/g' "$JSONC.tmp"
+            mv "$JSONC.tmp" "$JSONC"
+            echo "[deskfox] ✅ 已清,原文件备份至 $JSONC.bak.build-cleanup"
+        fi
+    fi
+fi
+
 # === 4. 提示产物路径 ===
 echo ""
 case "$(uname -s)" in

@@ -121,6 +121,29 @@ if ($buildExit -ne 0) {
     Write-Warning "tauri build exited with code $buildExit (NSIS SignTool missing 是已知挂账,exe 仍 build 出来了)"
 }
 
+# 3.5 开发机 jsonc 清理(防多档累积 → multi-instance 双推 message)
+# 决策同 Mac 端 build-deskfox.sh — 产品 inject 逻辑不做"同 plugin 多物理路径"清理,开发机 build 后顺手清,
+# 下次 DeskFox 启动 setup hook 自动 inject 当前 .exe 路径(单 entry 正常状态)。
+# [feat: feishu-plugin-dedup-decision] 2026-05-12
+if ($buildExit -eq 0) {
+    $jsonc = Join-Path $env:USERPROFILE ".config\opencode\opencode.jsonc"
+    if (Test-Path $jsonc) {
+        $raw = Get-Content $jsonc -Raw
+        $feishuMatches = [regex]::Matches($raw, "plugin/feishu-bridge")
+        if ($feishuMatches.Count -gt 1) {
+            Write-Output ""
+            Write-Output "[deskfox] jsonc 发现 $($feishuMatches.Count) 个 feishu-bridge plugin entry,清理(下次 DeskFox 启动 setup hook 自动 inject 当前 .exe)..."
+            Copy-Item $jsonc "$jsonc.bak.build-cleanup" -Force
+            # 删除所有含 plugin/feishu-bridge 的行
+            $cleaned = ($raw -split "`n" | Where-Object { $_ -notmatch "plugin/feishu-bridge" }) -join "`n"
+            # 修复:plugin 数组最后一项可能留悬空逗号(",\n  ]" → "\n  ]")
+            $cleaned = [regex]::Replace($cleaned, ",(\s*\])", '$1')
+            Set-Content -Path $jsonc -Value $cleaned -NoNewline
+            Write-Output "[deskfox] OK 已清,原文件备份至 $jsonc.bak.build-cleanup"
+        }
+    }
+}
+
 # 4. 提示产物路径
 $exePath = Join-Path $repoRoot "packages/desktop/src-tauri/target/release/DeskFox.exe"
 if (Test-Path $exePath) {
