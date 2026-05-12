@@ -192,6 +192,15 @@ P0 开始时必须执行：
 3. **按角色拆**: core-dev 负责的 vs feature-dev 负责的
 4. **标注关系**: blocked-by / blocks / parallel-with
 
+### 并行策略标注
+
+拆解时必须为每个 Issue 标注并行策略：
+- `parallel-with: #N,#M` — 文件集无交集，可同时启动
+- `serial-after: #N` — 同文件或有产出消费关系
+- `blocked-by: #N` — 上游未完成前不可启动
+
+Discovery 文档的 Issue 列表表头增加 "并行策略" 列。
+
 ### 粒度控制
 
 - XL (>500 文件) → 必须拆解为多个 ≤L 级 (≤500) 的 Issue
@@ -205,6 +214,35 @@ P0 开始时必须执行：
 - `package.json` workspaces — 包列表和依赖关系
 - 包间 import 图 — `@project/core` → `@project/ui` 等
 - 关键目录结构 — 每个包的 `src/` 子目录
+
+### 双维度影响范围评估
+
+P0 必须从两个维度交叉评估影响范围，避免单维度盲区（历史教训：v0.2.0 i18n 低估 3×，CI/CD 低估 25%）：
+
+**维度 1: 文件类型分布**
+
+```
+rg <pattern> --count -g '*.ts'     # 代码文件
+rg <pattern> --count -g '*.json'   # 配置/i18n
+rg <pattern> --count -g '*.mdx'    # 文档
+rg <pattern> --count -g '*.yml'    # CI/CD
+```
+
+**维度 2: 目录拓扑分布**
+
+```
+rg <pattern> --count -g 'packages/*/'  | awk -F: '{print $1}' | cut -d/ -f1-3 | sort | uniq -c
+```
+
+输出示例：
+```
+120 packages/core
+ 50 packages/ui
+ 51 packages/web/src/content/i18n   ← 容易被遗漏的子目录
+ 25 .github/workflows               ← 不在 packages/ 下
+```
+
+**交叉判定**: 两个维度的结果必须在 Discovery 文档中并列表格，差距 >20% 的标注为 ⚠️。
 
 不做的事：
 
