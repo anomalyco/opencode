@@ -51,4 +51,30 @@ See MIGRATION.md for detailed instructions.
 
 ---
 
-[Unreleased]: https://github.com/anomalyco/opencode/compare/v0.1.0...HEAD
+## v0.2.0 (2026-05-12)
+
+### Post-Migration Deep Cleanup
+
+Continued cleanup after the v0.1.0 brand migration — fixed remaining OpenCode references in agent configurations, corrected model provider paths, and added the project workflow infrastructure.
+
+#### Changes
+
+- **Agent config cleanup** — Fixed model provider prefix (`opencode-go/` → `deepseek/`) in all agent configs (`.opencode/agents/*.md`, `.octopus/config-preview/agents/*.md`)
+- **Import path fixes** — Updated 5 remaining `opencode-process` → `octopus-process` import references (P7 quality gate)
+- **Config updates** — `.opencode/opencode.jsonc` and `.octopus/config-preview/opencode.jsonc` cleanup
+- **Workflow infrastructure** — Added `.octopus/skills/` (16 skill files), `.octopus/workflow/` system, P1-P10 orchestration framework
+- **Version planning** — v0.2.0 and v0.3.0 version plans, discovery docs, design docs, and review reports
+- **Brand identity (preview)** — Octopus SVG identity suite and PNG master artwork (foundation for v0.3.0)
+
+#### Quality
+
+| Gate | Result |
+|------|:---:|
+| typecheck | Passed |
+| prettier (source) | Passed |
+| oxlint | 0 errors |
+| test pass rate | 98.97% (2592/2619) |
+
+---
+
+[Unreleased]: https://github.com/anomalyco/opencode/compare/v0.2.0...HEAD
