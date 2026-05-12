@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Ref, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, Latch, Ref, Scope } from "effect"
 import { Runner } from "@/effect/runner"
 import { it } from "../lib/effect"
 
@@ -352,11 +352,18 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("interrupted") })
+      const ready = yield* Latch.make()
 
       const sh = yield* runner
-        .startShell(Effect.never.pipe(Effect.ensuring(Effect.die("boom")), Effect.as("ignored")))
+        .startShell(
+          Effect.gen(function* () {
+            yield* ready.open
+            return yield* Effect.never.pipe(Effect.as("ignored"))
+          }).pipe(Effect.ensuring(Effect.die("boom"))),
+          ready,
+        )
         .pipe(Effect.forkChild)
-      yield* Effect.sleep("10 millis")
+      yield* ready.await.pipe(Effect.timeout("250 millis"))
 
       yield* runner.cancel
       expect(Exit.isFailure(yield* Fiber.await(sh))).toBe(true)

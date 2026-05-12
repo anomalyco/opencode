@@ -5,16 +5,14 @@ import * as LSPClient from "./client"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import * as LSPServer from "./server"
-import z from "zod"
 import { Config } from "@/config/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Process } from "@/util/process"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { NonNegativeInt, withStatics } from "@/util/schema"
-import { zod, ZodOverride } from "@/util/effect-zod"
+import { containsPath } from "@/project/instance-context"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "lsp" })
 
@@ -30,9 +28,7 @@ const Position = Schema.Struct({
 export const Range = Schema.Struct({
   start: Position,
   end: Position,
-})
-  .annotate({ identifier: "Range" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Range" })
 export type Range = typeof Range.Type
 
 export const Symbol = Schema.Struct({
@@ -42,9 +38,7 @@ export const Symbol = Schema.Struct({
     uri: Schema.String,
     range: Range,
   }),
-})
-  .annotate({ identifier: "Symbol" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Symbol" })
 export type Symbol = typeof Symbol.Type
 
 export const DocumentSymbol = Schema.Struct({
@@ -53,21 +47,15 @@ export const DocumentSymbol = Schema.Struct({
   kind: NonNegativeInt,
   range: Range,
   selectionRange: Range,
-})
-  .annotate({ identifier: "DocumentSymbol" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "DocumentSymbol" })
 export type DocumentSymbol = typeof DocumentSymbol.Type
 
 export const Status = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   root: Schema.String,
-  status: Schema.Literals(["connected", "error"]).annotate({
-    [ZodOverride]: z.union([z.literal("connected"), z.literal("error")]),
-  }),
-})
-  .annotate({ identifier: "LSPStatus" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+  status: Schema.Literals(["connected", "error"]),
+}).annotate({ identifier: "LSPStatus" })
 export type Status = typeof Status.Type
 
 enum SymbolKind {
@@ -221,12 +209,7 @@ export const layer = Layer.effect(
 
     const getClients = Effect.fnUntraced(function* (file: string) {
       const ctx = yield* InstanceState.context
-      if (
-        !AppFileSystem.contains(ctx.directory, file) &&
-        (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, file))
-      ) {
-        return [] as LSPClient.Info[]
-      }
+      if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file

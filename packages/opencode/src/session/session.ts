@@ -3,7 +3,6 @@ import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
-import z from "zod"
 import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -32,13 +31,13 @@ import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
+import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "session" })
 
@@ -78,8 +77,26 @@ export function fromRow(row: SessionRow): Info {
     path: row.path ?? undefined,
     parentID: row.parent_id ?? undefined,
     title: row.title,
+    agent: row.agent ?? undefined,
+    model: row.model
+      ? {
+          id: ModelID.make(row.model.id),
+          providerID: ProviderID.make(row.model.providerID),
+          variant: row.model.variant,
+        }
+      : undefined,
     version: row.version,
     summary,
+    cost: row.cost,
+    tokens: {
+      input: row.tokens_input,
+      output: row.tokens_output,
+      reasoning: row.tokens_reasoning,
+      cache: {
+        read: row.tokens_cache_read,
+        write: row.tokens_cache_write,
+      },
+    },
     share,
     revert,
     permission: row.permission ?? undefined,
@@ -102,12 +119,20 @@ export function toRow(info: Info) {
     directory: info.directory,
     path: info.path,
     title: info.title,
+    agent: info.agent,
+    model: info.model,
     version: info.version,
     share_url: info.share?.url,
     summary_additions: info.summary?.additions,
     summary_deletions: info.summary?.deletions,
     summary_files: info.summary?.files,
     summary_diffs: info.summary?.diffs,
+    cost: info.cost ?? 0,
+    tokens_input: (info.tokens ?? EmptyTokens).input,
+    tokens_output: (info.tokens ?? EmptyTokens).output,
+    tokens_reasoning: (info.tokens ?? EmptyTokens).reasoning,
+    tokens_cache_read: (info.tokens ?? EmptyTokens).cache.read,
+    tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
     revert: info.revert ?? null,
     permission: info.permission,
     time_created: info.time.created,
@@ -132,11 +157,23 @@ function sessionPath(worktree: string, cwd: string) {
 }
 
 const Summary = Schema.Struct({
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
-  files: NonNegativeInt,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  files: Schema.Finite,
   diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
 })
+
+const Tokens = Schema.Struct({
+  input: Schema.Finite,
+  output: Schema.Finite,
+  reasoning: Schema.Finite,
+  cache: Schema.Struct({
+    read: Schema.Finite,
+    write: Schema.Finite,
+  }),
+})
+
+const EmptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
 const Share = Schema.Struct({
   url: Schema.String,
@@ -160,6 +197,12 @@ const Revert = Schema.Struct({
   diff: optionalOmitUndefined(Schema.String),
 })
 
+const Model = Schema.Struct({
+  id: ModelID,
+  providerID: ProviderID,
+  variant: optionalOmitUndefined(Schema.String),
+})
+
 export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
@@ -169,71 +212,69 @@ export const Info = Schema.Struct({
   path: optionalOmitUndefined(Schema.String),
   parentID: optionalOmitUndefined(SessionID),
   summary: optionalOmitUndefined(Summary),
+  cost: optionalOmitUndefined(Schema.Finite),
+  tokens: optionalOmitUndefined(Tokens),
   share: optionalOmitUndefined(Share),
   title: Schema.String,
+  agent: optionalOmitUndefined(Schema.String),
+  model: optionalOmitUndefined(Model),
   version: Schema.String,
   time: Time,
   permission: optionalOmitUndefined(Permission.Ruleset),
   revert: optionalOmitUndefined(Revert),
-})
-  .annotate({ identifier: "Session" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const ProjectInfo = Schema.Struct({
   id: ProjectID,
   name: optionalOmitUndefined(Schema.String),
   worktree: Schema.String,
-})
-  .annotate({ identifier: "ProjectSummary" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ProjectSummary" })
 export type ProjectInfo = Types.DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
 
 export const GlobalInfo = Schema.Struct({
   ...Info.fields,
   project: Schema.NullOr(ProjectInfo),
-})
-  .annotate({ identifier: "GlobalSession" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "GlobalSession" })
 export type GlobalInfo = Types.DeepMutable<Schema.Schema.Type<typeof GlobalInfo>>
 
 export const CreateInput = Schema.optional(
   Schema.Struct({
     parentID: Schema.optional(SessionID),
     title: Schema.optional(Schema.String),
+    agent: Schema.optional(Schema.String),
+    model: Schema.optional(Model),
     permission: Schema.optional(Permission.Ruleset),
     workspaceID: Schema.optional(WorkspaceID),
   }),
-).pipe(withStatics((s) => ({ zod: zod(s) })))
+)
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
 
 export const ForkInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export const GetInput = SessionID
 export const ChildrenInput = SessionID
 export const RemoveInput = SessionID
-export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema.String }).pipe(
-  withStatics((s) => ({ zod: zod(s) })),
-)
+export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema.String })
 export const SetArchivedInput = Schema.Struct({
   sessionID: SessionID,
   time: Schema.optional(ArchivedTimestamp),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
   permission: Permission.Ruleset,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export const SetRevertInput = Schema.Struct({
   sessionID: SessionID,
   revert: Schema.optional(Revert),
   summary: Schema.optional(Summary),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export const MessagesInput = Schema.Struct({
   sessionID: SessionID,
   limit: Schema.optional(NonNegativeInt),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ListInput = {
   directory?: string
   scope?: "project"
@@ -270,8 +311,12 @@ const UpdatedInfo = Schema.Struct({
   path: Schema.optional(Schema.NullOr(Schema.String)),
   parentID: Schema.optional(Schema.NullOr(SessionID)),
   summary: Schema.optional(Schema.NullOr(Summary)),
+  cost: Schema.optional(Schema.Finite),
+  tokens: Schema.optional(Tokens),
   share: Schema.optional(UpdatedShare),
   title: Schema.optional(Schema.NullOr(Schema.String)),
+  agent: Schema.optional(Schema.NullOr(Schema.String)),
+  model: Schema.optional(Schema.NullOr(Model)),
   version: Schema.optional(Schema.NullOr(Schema.String)),
   time: Schema.optional(UpdatedTime),
   permission: Schema.optional(Schema.NullOr(Permission.Ruleset)),
@@ -331,7 +376,7 @@ export function plan(input: { slug: string; time: { created: number } }, instanc
 export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
     if (!Number.isFinite(value)) return 0
-    return value
+    return Math.max(0, value)
   }
   const inputTokens = safe(input.usage.inputTokens ?? 0)
   const outputTokens = safe(input.usage.outputTokens ?? 0)
@@ -399,17 +444,21 @@ export class BusyError extends Error {
   }
 }
 
+export type NotFound = InstanceType<typeof NotFoundError>
+
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly create: (input?: {
     parentID?: SessionID
     title?: string
+    agent?: string
+    model?: Schema.Schema.Type<typeof Model>
     permission?: Permission.Ruleset
     workspaceID?: WorkspaceID
   }) => Effect.Effect<Info>
-  readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info>
+  readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
-  readonly get: (id: SessionID) => Effect.Effect<Info>
+  readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
@@ -423,7 +472,7 @@ export interface Interface {
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
-  readonly remove: (sessionID: SessionID) => Effect.Effect<void>
+  readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
   readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
@@ -464,6 +513,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
       title?: string
+      agent?: string
+      model?: Schema.Schema.Type<typeof Model>
       parentID?: SessionID
       workspaceID?: WorkspaceID
       directory: string
@@ -481,7 +532,11 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
         workspaceID: input.workspaceID,
         parentID: input.parentID,
         title: input.title ?? createDefaultTitle(!!input.parentID),
+        agent: input.agent,
+        model: input.model,
         permission: input.permission,
+        cost: 0,
+        tokens: EmptyTokens,
         time: {
           created: Date.now(),
           updated: Date.now(),
@@ -505,13 +560,13 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
 
     const get = Effect.fn("Session.get")(function* (id: SessionID) {
       const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
-      if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+      if (!row) return yield* Effect.fail(new NotFoundError({ message: `Session not found: ${id}` }))
       return fromRow(row)
     })
 
     const list = Effect.fn("Session.list")(function* (input?: ListInput) {
       const ctx = yield* InstanceState.context
-      return Array.from(listByProject({ projectID: ctx.project.id, ...(input ?? {}) }))
+      return Array.from(listByProject({ projectID: ctx.project.id, ...input }))
     })
 
     const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
@@ -526,8 +581,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     })
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const session = yield* get(sessionID)
       try {
-        const session = yield* get(sessionID)
         const kids = yield* children(sessionID)
         for (const child of kids) {
           yield* remove(child.id)
@@ -591,6 +646,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     const create = Effect.fn("Session.create")(function* (input?: {
       parentID?: SessionID
       title?: string
+      agent?: string
+      model?: Schema.Schema.Type<typeof Model>
       permission?: Permission.Ruleset
       workspaceID?: WorkspaceID
     }) {
@@ -601,6 +658,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
         directory: ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),
         title: input?.title,
+        agent: input?.agent,
+        model: input?.model,
         permission: input?.permission,
         workspaceID: input?.workspaceID ?? workspace,
       })

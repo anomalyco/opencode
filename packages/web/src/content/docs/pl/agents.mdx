@@ -35,13 +35,13 @@ OpenCode zawiera dwa wbudowane agenty główne: **Build** i **Plan**. Przyjrzymy
 
 Subagenci to asystenci pomocniczy, których mogą przywoływać agenci główni w celu wykonania konkretnych zadań. Możesz także wywoływać ich ręcznie, **wzmiankując ich (@)** w swoich wiadomościach.
 
-OpenCode ma dwóch wbudowanych subagentów: **General** i **Explore**. Przyjrzymy się im poniżej.
+OpenCode ma trzech wbudowanych subagentów: **General**, **Explore** i **Scout**. Przyjrzymy się im poniżej.
 
 ---
 
 ## Wbudowane
 
-OpenCode ma dwa wbudowane agenty główne i dwa wbudowane subagenty.
+OpenCode ma dwa wbudowane agenty główne i trzech wbudowanych subagentów.
 
 ---
 
@@ -80,6 +80,14 @@ Rozwiązuje złożone zadania wieloetapowe. Pełny dostęp do narzędzi (z możl
 _Mode_: `subagent`
 
 Szybki agent tylko do odczytu do eksploracji baz kodu. Nie może modyfikować plików. Używany, gdy chcesz szybko znaleźć pliki według wzorców, wyszukać w kodzie słowa kluczowe lub uzyskać odpowiedzi na pytania dotyczące bazy kodu.
+
+---
+
+### Scout
+
+_Mode_: `subagent`
+
+Agent tylko do odczytu do pracy z zewnętrzną dokumentacją i badaniem zależności. Używaj go, gdy chcesz sklonować repozytorium zależności do zarządzanej pamięci podręcznej OpenCode, przejrzeć kod źródłowy biblioteki albo porównać lokalny kod z implementacjami upstream bez modyfikowania swojego workspace.
 
 ---
 
