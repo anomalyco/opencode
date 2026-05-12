@@ -38,7 +38,20 @@ Mac 端实测验证(本机 2026-05-12 11:55 + 11:59 + 12:22 三次 build/launch)
 
 **installer**:`packages/desktop/src-tauri/target/release/bundle/dmg/DeskFox-2026.5.12.1_aarch64.dmg`(64,645,764 bytes)
 
-**已知** pack-installer.sh `--no-bump` 时跳过 rename(NEW_VERSION 为空)— 本次手动 rename,加进需求池后续修。
+**📦 安装步骤(给 user 看的)**:
+1. 下载 `DeskFox-2026.5.12.1_aarch64.dmg`(Apple Silicon arm64)
+2. 双击 .dmg 挂载 → 拖 DeskFox 到 Applications
+3. ⚠️ **不要双击 .app 启动!** .app 没数字签名,新版 macOS 直接提示 "DeskFox 已损坏,无法打开。您应该将它移到废纸篓"。先打开「终端」执行(只需一次):
+   ```bash
+   xattr -cr /Applications/DeskFox.app
+   ```
+   清掉系统的 quarantine(隔离)标记。
+4. 然后双击 Applications 里的 DeskFox 启动
+5. 首次启动会弹系统授权对话框 — 请点「同意」给本地文件访问授权,否则 DeskFox 内的飞书桥接 sidecar 不会立即启动(可能要 1-2 分钟才恢复 — 即`prod-首次启动-sidecar-idle.md` 需求池记的 TCC 阻塞)
+
+**已知**:
+- pack-installer.sh `--no-bump` 时跳过 rename(NEW_VERSION 为空)— 本次手动 rename,加进需求池后续修
+- 首次启动 sidecar idle 2 分钟+ 是 TCC 授权对话框阻塞,user 必须点同意
 
 **双平台分发**(2026-05-12 起新规则反转 — Mac 端 ship 也推 Gitee,之前 memory 立的"Mac 不跑 Gitee"分工撤回):
 - GitHub Release `ship-mac-prod-2026.5.12.1`(主仓 `zoulukuang/deskfox`)
