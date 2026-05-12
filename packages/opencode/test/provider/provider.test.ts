@@ -301,7 +301,7 @@ test("custom provider with npm package", async () => {
   })
 })
 
-test("custom DeepSeek openai-compatible model defaults interleaved reasoning field", async () => {
+test("custom OpenAI-compatible reasoning_content models default interleaved reasoning field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -316,13 +316,42 @@ test("custom DeepSeek openai-compatible model defaults interleaved reasoning fie
               models: {
                 "deepseek-r1": {
                   name: "DeepSeek R1",
+                  reasoning: true,
                 },
                 "deepseek-details": {
                   name: "DeepSeek Details",
+                  reasoning: true,
                   interleaved: { field: "reasoning_details" },
+                },
+                "kimi-k2.5": {
+                  name: "Kimi K2.5",
+                  reasoning: true,
+                },
+                "kimi-k2.6": {
+                  name: "Kimi K2.6",
+                  reasoning: true,
+                },
+                "kimi-k2-thinking": {
+                  name: "Kimi K2 Thinking",
+                  reasoning: true,
+                },
+                "glm-5": {
+                  name: "GLM 5",
+                  reasoning: true,
+                },
+                "glm-5.1": {
+                  name: "GLM 5.1",
+                  reasoning: true,
+                },
+                "glm-5v-turbo": {
+                  name: "GLM 5V Turbo",
+                  reasoning: true,
                 },
                 "custom-model": {
                   name: "Custom Model",
+                },
+                "kimi-k2-turbo-preview": {
+                  name: "Kimi K2 Turbo Preview",
                 },
               },
               options: {
@@ -354,7 +383,14 @@ test("custom DeepSeek openai-compatible model defaults interleaved reasoning fie
       const provider = providers[ProviderID.make("custom-provider")]
       expect(provider.models["deepseek-r1"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
       expect(provider.models["deepseek-details"].capabilities.interleaved).toEqual({ field: "reasoning_details" })
+      expect(provider.models["kimi-k2.5"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+      expect(provider.models["kimi-k2.6"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+      expect(provider.models["kimi-k2-thinking"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+      expect(provider.models["glm-5"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+      expect(provider.models["glm-5.1"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+      expect(provider.models["glm-5v-turbo"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
       expect(provider.models["custom-model"].capabilities.interleaved).toBe(false)
+      expect(provider.models["kimi-k2-turbo-preview"].capabilities.interleaved).toBe(false)
       expect(
         providers[ProviderID.make("custom-anthropic-provider")].models["deepseek-r1"].capabilities.interleaved,
       ).toBe(false)
