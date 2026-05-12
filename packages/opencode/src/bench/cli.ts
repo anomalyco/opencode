@@ -252,6 +252,10 @@ function runOpencode(args: {
   // and avoids PATH lookup quirks under Bun's posix_spawn.
   const bunPath = process.execPath
   return new Promise((resolve) => {
+    // Don't set spawn's `cwd` — Bun's posix_spawn on some minimal apptainer
+    // images ENOENTs whenever cwd is set (libc lacks addchdir_np). Opencode's
+    // own `--dir <workspaceRoot>` flag changes the working directory
+    // internally, so we don't need spawn-level cwd.
     const child = spawn(
       bunPath,
       [
@@ -269,7 +273,6 @@ function runOpencode(args: {
         args.workspaceRoot,
       ],
       {
-        cwd: args.workspaceRoot,
         env: args.env,
         stdio: ["ignore", "pipe", "pipe"],
       },

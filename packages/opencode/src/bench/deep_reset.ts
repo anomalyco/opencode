@@ -98,6 +98,10 @@ export function buildDeepResetCmd(baseCommit: string): string {
   return `( ${carefulPass(baseCommit)} ) || ( ${nuclearPass(baseCommit)} ) || true`
 }
 
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
 export async function runDeepReset(workspaceRoot: string, baseCommit: string): Promise<void> {
   if (!baseCommit) return
   const shell = detectShell()
@@ -105,11 +109,14 @@ export async function runDeepReset(workspaceRoot: string, baseCommit: string): P
     console.warn(`[bench] deep_reset skipped: no shell found at /bin/{bash,sh} or /usr/bin/{bash,sh}`)
     return
   }
-  const cmd = buildDeepResetCmd(baseCommit)
+  // Bake `cd <workspace>` into the shell script instead of passing the `cwd`
+  // option to spawn(). On some minimal apptainer images Bun's posix_spawn
+  // ENOENTs whenever a `cwd` is set (libc lacks addchdir_np extension); routing
+  // the chdir through the shell sidesteps that entirely.
+  const cmd = `cd ${shellQuote(workspaceRoot)} && ` + buildDeepResetCmd(baseCommit)
   console.log(`[bench] deep_reset workspace=${workspaceRoot} base=${baseCommit} shell=${shell}`)
   await new Promise<void>((resolve) => {
     const child = spawn(shell, ["-c", cmd], {
-      cwd: workspaceRoot,
       stdio: ["ignore", "inherit", "inherit"],
     })
     child.on("close", (code) => {
