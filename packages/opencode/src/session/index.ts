@@ -496,7 +496,11 @@ export namespace Session {
   }) {
     const at = Date.now()
     const project = Instance.project
-    const conditions = [eq(SessionTable.project_id, project.id)]
+    const conditions: SQL[] = []
+
+    if (!input?.directory) {
+      conditions.push(eq(SessionTable.project_id, project.id))
+    }
 
     if (WorkspaceContext.workspaceID) {
       conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
@@ -521,12 +525,13 @@ export namespace Session {
         .select()
         .from(SessionTable)
         .where(and(...conditions))
-        .orderBy(desc(SessionTable.time_updated))
+        .orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
         .limit(limit)
         .all(),
     )
     log.info("session.list", {
       projectID: project.id,
+      projectScoped: !input?.directory,
       directory: input?.directory ?? Instance.directory,
       workspaceID: WorkspaceContext.workspaceID,
       roots: input?.roots,

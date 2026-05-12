@@ -31,10 +31,10 @@ import { initI18n, startup, t } from "./i18n"
 import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { Channel } from "@tauri-apps/api/core"
 import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
+import { pathRoute, routeInitialPath } from "./path-route"
 
 const startupClock = typeof performance === "object" ? performance.now() : Date.now()
 const startupSeen = new Set<string>()
@@ -281,18 +281,11 @@ const syncGenericagent = async () => {
 const deepLinkEvent = "opencode:deep-link"
 
 const navigateToPath = (path: string) => {
-  const encoded = base64Encode(path)
-  window.history.pushState(null, "", `/${encoded}/session`)
+  window.history.pushState(null, "", pathRoute(path))
   window.dispatchEvent(new PopStateEvent("popstate"))
 }
 
 const listenForOpenPath = async () => {
-  const initialPath = window.__OPENCODE__?.initialPath
-  if (initialPath) {
-    window.__OPENCODE__!.initialPath = null
-    setTimeout(() => navigateToPath(initialPath), 100)
-  }
-
   await listen<string>("opencode:open-path", (event) => {
     navigateToPath(event.payload)
   })
@@ -924,6 +917,8 @@ let menuTrigger = null as null | ((id: string) => void)
 createMenu((id) => {
   menuTrigger?.(id)
 })
+const path = routeInitialPath()
+if (path) console.debug("[desktop] initial path routed before mount", { path })
 void listenForDeepLinks()
 void listenForOpenPath()
 void listenForDragDrop()
