@@ -3,67 +3,68 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { File } from "../../src/file"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
-import { provideInstance, tmpdir } from "../fixture/fixture"
 
-const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
-  Effect.runPromise(provideInstance(Instance.directory)(eff.pipe(Effect.provide(File.defaultLayer))))
-const status = () => run(File.Service.use((svc) => svc.status()))
-const read = (file: string) => run(File.Service.use((svc) => svc.read(file)))
-
-const wintest = process.platform === "win32" ? test : test.skip
+const it = process.platform === "win32" ? (await import("../lib/effect")).testEffect((await import("../../src/file")).File.defaultLayer) : undefined
 
 describe("file fsmonitor", () => {
-  wintest("status does not start fsmonitor for readonly git checks", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const target = path.join(tmp.path, "tracked.txt")
+  if (!it) {
+    test.skip("status does not start fsmonitor for readonly git checks", () => {})
+    test.skip("read does not start fsmonitor for git diffs", () => {})
+    return
+  }
 
-    await fs.writeFile(target, "base\n")
-    await $`git add tracked.txt`.cwd(tmp.path).quiet()
-    await $`git commit -m init`.cwd(tmp.path).quiet()
-    await $`git config core.fsmonitor true`.cwd(tmp.path).quiet()
-    await $`git fsmonitor--daemon stop`.cwd(tmp.path).quiet().nothrow()
-    await fs.writeFile(target, "next\n")
-    await fs.writeFile(path.join(tmp.path, "new.txt"), "new\n")
+  it.instance(
+    "status does not start fsmonitor for readonly git checks",
+    () =>
+      Effect.gen(function* () {
+        const { File } = yield* Effect.promise(() => import("../../src/file"))
+        const { TestInstance } = yield* Effect.promise(() => import("../fixture/fixture"))
+        const directory = (yield* TestInstance).directory
+        const target = path.join(directory, "tracked.txt")
 
-    const before = await $`git fsmonitor--daemon status`.cwd(tmp.path).quiet().nothrow()
-    expect(before.exitCode).not.toBe(0)
+        yield* Effect.promise(() => fs.writeFile(target, "base\n"))
+        yield* Effect.promise(() => $`git add tracked.txt`.cwd(directory).quiet())
+        yield* Effect.promise(() => $`git commit -m init`.cwd(directory).quiet())
+        yield* Effect.promise(() => $`git config core.fsmonitor true`.cwd(directory).quiet())
+        yield* Effect.promise(() => $`git fsmonitor--daemon stop`.cwd(directory).quiet().nothrow())
+        yield* Effect.promise(() => fs.writeFile(target, "next\n"))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "new.txt"), "new\n"))
 
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await status()
-      },
-    })
+        const before = yield* Effect.promise(() => $`git fsmonitor--daemon status`.cwd(directory).quiet().nothrow())
+        expect(before.exitCode).not.toBe(0)
 
-    const after = await $`git fsmonitor--daemon status`.cwd(tmp.path).quiet().nothrow()
-    expect(after.exitCode).not.toBe(0)
-  })
+        yield* File.Service.use((svc) => svc.status())
 
-  wintest("read does not start fsmonitor for git diffs", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const target = path.join(tmp.path, "tracked.txt")
+        const after = yield* Effect.promise(() => $`git fsmonitor--daemon status`.cwd(directory).quiet().nothrow())
+        expect(after.exitCode).not.toBe(0)
+      }),
+    { git: true },
+  )
 
-    await fs.writeFile(target, "base\n")
-    await $`git add tracked.txt`.cwd(tmp.path).quiet()
-    await $`git commit -m init`.cwd(tmp.path).quiet()
-    await $`git config core.fsmonitor true`.cwd(tmp.path).quiet()
-    await $`git fsmonitor--daemon stop`.cwd(tmp.path).quiet().nothrow()
-    await fs.writeFile(target, "next\n")
+  it.instance(
+    "read does not start fsmonitor for git diffs",
+    () =>
+      Effect.gen(function* () {
+        const { File } = yield* Effect.promise(() => import("../../src/file"))
+        const { TestInstance } = yield* Effect.promise(() => import("../fixture/fixture"))
+        const directory = (yield* TestInstance).directory
+        const target = path.join(directory, "tracked.txt")
 
-    const before = await $`git fsmonitor--daemon status`.cwd(tmp.path).quiet().nothrow()
-    expect(before.exitCode).not.toBe(0)
+        yield* Effect.promise(() => fs.writeFile(target, "base\n"))
+        yield* Effect.promise(() => $`git add tracked.txt`.cwd(directory).quiet())
+        yield* Effect.promise(() => $`git commit -m init`.cwd(directory).quiet())
+        yield* Effect.promise(() => $`git config core.fsmonitor true`.cwd(directory).quiet())
+        yield* Effect.promise(() => $`git fsmonitor--daemon stop`.cwd(directory).quiet().nothrow())
+        yield* Effect.promise(() => fs.writeFile(target, "next\n"))
 
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await read("tracked.txt")
-      },
-    })
+        const before = yield* Effect.promise(() => $`git fsmonitor--daemon status`.cwd(directory).quiet().nothrow())
+        expect(before.exitCode).not.toBe(0)
 
-    const after = await $`git fsmonitor--daemon status`.cwd(tmp.path).quiet().nothrow()
-    expect(after.exitCode).not.toBe(0)
-  })
+        yield* File.Service.use((svc) => svc.read("tracked.txt"))
+
+        const after = yield* Effect.promise(() => $`git fsmonitor--daemon status`.cwd(directory).quiet().nothrow())
+        expect(after.exitCode).not.toBe(0)
+      }),
+    { git: true },
+  )
 })
