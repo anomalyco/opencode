@@ -38,7 +38,8 @@ export const Info = Schema.Struct({
   description: Schema.optional(Schema.String),
   location: Schema.String,
   content: Schema.String,
-})
+  scope: Schema.Union([Schema.Literal("global"), Schema.Literal("project")]),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Info = Schema.Schema.Type<typeof Info>
 
 const Issue = Schema.StructWithRest(
@@ -75,12 +76,12 @@ type State = {
 }
 
 type DiscoveryState = {
-  matches: string[]
+  matches: Array<{ path: string; scope: "global" | "project" }>
   dirs: string[]
 }
 
 type ScanState = {
-  matches: Set<string>
+  matches: Map<string, "global" | "project">
   dirs: Set<string>
 }
 
@@ -91,7 +92,7 @@ export interface Interface {
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
 }
 
-const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.Interface) {
+const add = Effect.fnUntraced(function* (state: State, match: string, scope: "global" | "project", bus: Bus.Interface) {
   const md = yield* Effect.tryPromise({
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
@@ -127,6 +128,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
     description: md.data.description,
     location: match,
     content: md.content,
+    scope,
   }
 })
 
@@ -155,7 +157,7 @@ const scan = Effect.fnUntraced(function* (
   )
 
   for (const match of matches) {
-    state.matches.add(match)
+    state.matches.set(match, (opts?.scope as "global" | "project") ?? "project")
     state.dirs.add(path.dirname(match))
   }
 })
@@ -170,7 +172,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   directory: string,
   worktree: string,
 ) {
-  const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const state: ScanState = { matches: new Map(), dirs: new Set() }
 
   const externalDirs: string[] = []
   if (!disableExternalSkills) {
@@ -194,7 +196,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    yield* scan(state, dir, OPENCODE_SKILL_PATTERN, { scope: "global" })
   }
 
   const cfg = yield* config.get()
@@ -217,13 +219,13 @@ const discoverSkills = Effect.fnUntraced(function* (
   }
 
   return {
-    matches: Array.from(state.matches),
+    matches: Array.from(state.matches.entries()).map(([path, scope]) => ({ path, scope })),
     dirs: Array.from(state.dirs),
   }
 })
 
 const loadSkills = Effect.fnUntraced(function* (state: State, discovered: DiscoveryState, bus: Bus.Interface) {
-  yield* Effect.forEach(discovered.matches, (match) => add(state, match, bus), {
+  yield* Effect.forEach(discovered.matches, (item) => add(state, item.path, item.scope, bus), {
     concurrency: "unbounded",
     discard: true,
   })
@@ -261,11 +263,15 @@ export const layer = Layer.effect(
         const s: State = { skills: {}, dirs: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
         // skill with the same name can override it.
-        s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
-          name: CUSTOMIZE_OPENCODE_SKILL_NAME,
-          description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
-          location: "<built-in>",
-          content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+        if (Flag.OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL) {
+          s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
+            name: CUSTOMIZE_OPENCODE_SKILL_NAME,
+            description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
+            location: "<built-in>",
+            content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+            scope: "global",
+          }
+        }
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
         return s

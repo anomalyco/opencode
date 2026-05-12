@@ -107,20 +107,34 @@ const live: Layer.Layer<
       const system: string[] = []
 
       if (!Array.isArray(input.system)) {
-        const stable = [
-          ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-          ...input.system.stable,
-        ]
-          .filter((x) => x)
-          .join("\n")
-        const dynamic = [
-          ...input.system.dynamic,
-          ...(input.user.system ? [input.user.system] : []),
-        ]
-          .filter((x) => x)
-          .join("\n")
-        system.push(stable)
-        system.push(dynamic)
+        const shouldSplit = item.options?.["splitSystemPrompt"] !== false
+        if (shouldSplit) {
+          const stable = [
+            ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+            ...input.system.stable,
+          ]
+            .filter((x) => x)
+            .join("\n")
+          const dynamic = [
+            ...input.system.dynamic,
+            ...(input.user.system ? [input.user.system] : []),
+          ]
+            .filter((x) => x)
+            .join("\n")
+          system.push(stable)
+          system.push(dynamic)
+        } else {
+          system.push(
+            [
+              ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+              ...input.system.stable,
+              ...input.system.dynamic,
+              ...(input.user.system ? [input.user.system] : []),
+            ]
+              .filter((x) => x)
+              .join("\n"),
+          )
+        }
       } else {
         system.push(
           [

@@ -13,23 +13,27 @@ const skills: Skill.Info[] = [
     description: "Zeta skill.",
     location: "/tmp/zeta-skill/SKILL.md",
     content: "# zeta-skill",
+    scope: "project",
   },
   {
     name: "alpha-skill",
     description: "Alpha skill.",
     location: "/tmp/alpha-skill/SKILL.md",
     content: "# alpha-skill",
+    scope: "project",
   },
   {
     name: "middle-skill",
     description: "Middle skill.",
     location: "/tmp/middle-skill/SKILL.md",
     content: "# middle-skill",
+    scope: "project",
   },
   {
     name: "manual-skill",
     location: "/tmp/manual-skill/SKILL.md",
     content: "# manual-skill",
+    scope: "project",
   },
 ]
 
@@ -62,9 +66,10 @@ describe("session.system", () => {
       const prompt = yield* SystemPrompt.Service
       const first = yield* prompt.skills(build)
       const second = yield* prompt.skills(build)
-      const output = first ?? (yield* Effect.fail(new NamedError.Unknown({ message: "missing skills output" })))
 
-      expect(first).toBe(second)
+      expect(first).toEqual(second)
+
+      const output = first.project ?? (yield* Effect.fail(new NamedError.Unknown({ message: "missing skills output" })))
 
       const alpha = output.indexOf("<name>alpha-skill</name>")
       const middle = output.indexOf("<name>middle-skill</name>")
