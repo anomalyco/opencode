@@ -45,6 +45,39 @@ describe("background.job", () => {
     }),
   )
 
+  it.instance("deduplicates concurrent starts for a running id", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const started = yield* Deferred.make<void>()
+      const id = "job_test"
+      const [first, second] = yield* Effect.all(
+        [
+          jobs.start({
+            id,
+            type: "test",
+            run: Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+          }),
+          jobs.start({
+            id,
+            type: "test",
+            run: Effect.fail(new Error("duplicate started")),
+          }),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      yield* Deferred.await(started)
+
+      expect(first.id).toBe(id)
+      expect(second.id).toBe(id)
+      expect(first.status).toBe("running")
+      expect(second.status).toBe("running")
+      expect((yield* jobs.list()).map((item) => item.id)).toEqual([id])
+
+      yield* jobs.cancel(id)
+    }),
+  )
+
   it.instance("records failed jobs", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
