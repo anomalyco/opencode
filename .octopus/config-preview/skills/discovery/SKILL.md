@@ -172,40 +172,36 @@ P0 开始时必须执行：
    - 已有 discovery 文档 → 读取，告知进度，询问是否继续
    - 已有 Issue → 告知 Issue 链接，询问用户意图
 
-## Issue 拆解原则
+## Issue 提纲原则
 
-### INVEST 原则
+P0 产出的是 Issue 提纲（标题 + 价值 + 文件数），不是完整规格。完整规格在 P1 由 Orchestrator 制定。
 
-| 字母 | 含义        | 检查                                |
-| ---- | ----------- | ----------------------------------- |
-| I    | Independent | 每个 Issue 可独立开发？             |
-| N    | Negotiable  | 实现细节可协商？                    |
-| V    | Valuable    | 每个 Issue 独立交付价值？           |
-| E    | Estimable   | 文件数可预估？                      |
-| S    | Small       | 单个 Issue ≤ 150 文件（L 级）？     |
-| T    | Testable    | 验收标准可用 Given/When/Then 描述？ |
+### 提纲三要素
 
-### 拆解策略
+每个 Issue 提纲包含：
+1. **标题**: 一句话描述要做什么（如 "README 多语言删除 & opencode 清洗"）
+2. **价值**: 独立交付什么（如 "根目录只保留中英双语文档，减少维护负担"）
+3. **预估文件数**: 基于双维度范围评估的估算
 
-1. **按模块拆**: 一个包 = 一个 Issue（如 `packages/core` 迁移）
-2. **按依赖拆**: 前置工作 → 核心实现 → 适配层
-3. **按角色拆**: core-dev 负责的 vs feature-dev 负责的
-4. **标注关系**: blocked-by / blocks / parallel-with
+### 价值独立性检查
 
-### 并行策略标注
+每个提纲必须回答：这个 Issue 完成后，用户/项目能获得什么可感知的价值？
 
-拆解时必须为每个 Issue 标注并行策略：
-- `parallel-with: #N,#M` — 文件集无交集，可同时启动
-- `serial-after: #N` — 同文件或有产出消费关系
-- `blocked-by: #N` — 上游未完成前不可启动
+- ✅ "CLI 启动屏显示章鱼主题，不再拼写 OPCODE"
+- ❌ "修改 logo.ts 文件"（只描述了行为，未描述价值）
 
-Discovery 文档的 Issue 列表表头增加 "并行策略" 列。
+### P0 不产出（→ P1 Orchestrator）
 
-### 粒度控制
+以下内容属于 P1 规划领域，Analyst 不越界：
 
-- XL (>500 文件) → 必须拆解为多个 ≤L 级 (≤500) 的 Issue
-- L (150-500) → 建议拆解为多个 M 级
-- XS (<10) → 考虑是否应合并到更大 Issue 中
+| 不产出 | 理由 |
+|--------|------|
+| 验收标准 (Given/When/Then) | 需要 P3 需求分析后才能精确定义 |
+| 依赖拓扑 (blocked-by/blocks) | 需要 P1 冲突检测 + 代码比对 |
+| 并行策略 (parallel-with/serial-after) | 依赖拓扑不完整时标注不可靠 |
+| 变更级别 (XS/S/M/L/XL) | 需要 P1 综合文件数 + 风险判定 |
+| Agent 分派 | 需要 P1 根据级别 + 领域判定 |
+| Issue 详细规格 | 需要 P1 综合以上所有信息 |
 
 ## 代码库探索
 

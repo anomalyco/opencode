@@ -38,28 +38,36 @@ description: 需求发现 — 澄清模糊 idea、探索代码库、查重、拆
 - 判定 idea 可能涉及的包/模块范围
 - 不做技术深度分析，只做范围判定（预估文件数级别）
 
-**4. 拆解 Issue**
+**4. 产出 Issue 提纲**
 
-- 将一个 idea 拆解为 1~N 个结构化 Issue 草稿
-- 标注 Issue 间依赖关系（blocked-by / blocks）
-- 标注可并行执行的 Issue 组
-- 每个 Issue 应可独立交付价值
-- 评估每个 Issue 的预估文件数（供 P1 分级使用）
+P0 只产出 Issue 的「是什么」和「多大」，不产出「怎么做」和「谁来做」——这些是 P1 Orchestrator 的工作。
+
+每个 Issue 提纲仅包含：
+- **标题**: 一句话描述要做什么
+- **价值**: 一句话说明独立交付什么价值
+- **预估文件数**: 基于双维度范围评估的估算
+
+明确不产出（→ P1 Orchestrator）:
+- ❌ 验收标准（Given/When/Then）
+- ❌ 依赖拓扑（blocked-by / blocks）
+- ❌ 并行策略标注（parallel-with / serial-after）
+- ❌ 变更级别判定（XS/S/M/L/XL）
+- ❌ Agent 分派建议
 
 **5. 产出 Discovery 文档**
 
 - 归档到 `.octopus/discovery/<date>-<slug>.md`
 - 模板见 `templates/discovery-template.md`
 
-### 子任务并行规则
+### P0 → P1 交接边界
 
-在 Discovery 阶段拆解 Issue 后，标注并行策略：
+Discovery 文档是 Analyst 的最终产出。Orchestrator 接管后负责：
+- 基于 Issue 提纲创建正式 GitHub Issue
+- 补充验收标准、依赖拓扑、并行策略
+- 判定变更级别、分派 Agent
+- 冲突检测后编入迭代计划
 
-- **文件集零交集** → 标注 `parallel`，下游必须并行启动子任务的 agent
-- **同文件交集** → 标注 `serial`，下游串行执行
-- **上游产出被下游消费**（如 #1 产出模板 → #2 引用）→ 标注 `blocked-by`
-
-并行上限受机器负荷约束（见 orchestrator 动态并发规则）。
+Analyst 不越界进入 P1 规划领域。
 
 **P10: 复盘层3(信息知识) + 层7(知识/系统熵) owner** — 领域复盘分析
 
@@ -80,3 +88,4 @@ description: 需求发现 — 澄清模糊 idea、探索代码库、查重、拆
 - 不执行测试 → `@qa`
 - 不执行发布 → `@release`
 - 不做流程编排 → orchestrator（P1-P10 由 orchestrator 接管）
+- 不写验收标准 / 依赖拓扑 / 并行策略 / 变更级别 → P1 Orchestrator
