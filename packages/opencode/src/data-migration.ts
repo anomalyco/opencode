@@ -94,6 +94,7 @@ export const layer = Layer.effect(
                         tokens_reasoning: value.tokens.reasoning,
                         tokens_cache_read: value.tokens.cache.read,
                         tokens_cache_write: value.tokens.cache.write,
+                        time_updated: sql`${SessionTable.time_updated}`,
                       })
                       .where(eq(SessionTable.id, sessionID))
                       .run()
@@ -115,6 +116,29 @@ export const layer = Layer.effect(
             cursor = next
             yield* Effect.sleep("10 millis")
           }
+        }),
+      },
+      {
+        name: "restore_session_updated_after_usage_migration",
+        run: Effect.sync(() => {
+          Database.use((db) => {
+            const usageMigration = db
+              .select({ time_completed: DataMigrationTable.time_completed })
+              .from(DataMigrationTable)
+              .where(eq(DataMigrationTable.name, "session_usage_from_messages"))
+              .get()
+            if (!usageMigration) return
+
+            db.run(sql`
+              update ${SessionTable}
+              set time_updated = coalesce(
+                (select max(${MessageTable.time_updated}) from ${MessageTable} where ${MessageTable.session_id} = ${SessionTable.id}),
+                ${SessionTable.time_created}
+              )
+              where ${SessionTable.time_updated} between ${usageMigration.time_completed - 60_000} and ${usageMigration.time_completed}
+                and ${SessionTable.time_created} < ${usageMigration.time_completed - 60_000}
+            `)
+          })
         }),
       },
     ]
