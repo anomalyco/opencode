@@ -113,3 +113,56 @@ Tiny + post-build script + 改动是控制流包装(逻辑本身不变)+ 不影�
 ## 规模
 
 **Tiny** — ps1 +6 行 / sh +6 行 / 单文档。
+
+---
+
+## Follow-up(2026-05-12,Mac 端实测撞 bug)
+
+### 现象
+
+Mac 端真跑 `bash build-deskfox.sh -Env dev --no-bundle`,stderr 出:
+
+```
+0: syntax error in expression (error token is "0")
+```
+
+build 本身仍成功,但 log 不干净。
+
+### 根因
+
+主 feat 的 cleanup loop 用了:
+
+```bash
+FEISHU_COUNT=$(grep -c "plugin/feishu-bridge" "$JSONC" 2>/dev/null || echo 0)
+```
+
+`grep -c` 找到 **0 个 match** 时行为反直觉:**stdout 仍输出 "0"** + **exit code = 1**。`|| echo 0` 兜底再追加一个 "0" → COUNT 实际是多行字符串 `"0\n0"` → `[[ "$COUNT" -gt 1 ]]` 在 arithmetic context 撞 token "0" 引发 syntax error。
+
+Mac 端 user 通常多文件存在但其中一个含 0 entry(例如 v3 升级时 jsonc 刚被 setup hook inject 单 entry,而 .json 不存在 — 第一个文件触发 bug,第二个 continue)。Win 端 ps1 用 `[regex]::Matches.Count` 没此问题。
+
+### 修法
+
+去掉冗余兜底,grep 已经输出单行 "0",只需让 substitution exit 0 防 set -e 触发:
+
+```diff
+- FEISHU_COUNT=$(grep -c "plugin/feishu-bridge" "$JSONC" 2>/dev/null || echo 0)
++ FEISHU_COUNT=$(grep -c "plugin/feishu-bridge" "$JSONC" 2>/dev/null || true)
+```
+
+### 验证
+
+bash fixture 三个边界(`set -e`):
+
+| 输入 | 修前 COUNT | 修后 COUNT | 修后行为 |
+|---|---|---|---|
+| jsonc 含 0 个 feishu entry | `"0\n0"` → syntax error | `"0"` | skipped ✓ |
+| jsonc 含 1 个 entry | `"1"` | `"1"` | skipped ✓ |
+| jsonc 含 3 个 entry(多行 pretty 格式) | `"3"` | `"3"` | would clean ✓ |
+
+注:`grep -c` 计 **含 match 的行数**(不是 match 数),所以单行 JSON 包多个 entry 时只计 1。但 opencode pretty 输出 jsonc 永远多行(每个 plugin entry 一行),所以这个假设安全。
+
+### follow-up commit
+
+| commit | 简述 |
+|---|---|
+| `<本笔 commit>` | fix(build-deskfox): grep -c 0 match 不重复 echo,防 bash arithmetic syntax error [bug-repro: build-deskfox.sh stderr "0: syntax error in expression"] |
