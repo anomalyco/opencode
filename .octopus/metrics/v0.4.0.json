@@ -1,0 +1,22 @@
+{
+  "version": "v0.4.0",
+  "timestamp": "2026-05-12T14:00:00+08:00",
+  "signals": {
+    "review_rounds": { "p2": 1, "p4": 1, "p5": 0 },
+    "hotfix_or_rollback": false,
+    "scope_deviation_pct": 0,
+    "token_delta_pct": null,
+    "ci_time_delta_pct": null,
+    "agent_queue_max_m_plus": 0,
+    "layer6_review_uptick": false,
+    "layer7_tool_zero_usage": [],
+    "layer7_skill_stale_versions": 0
+  },
+  "baseline": {
+    "wall_clock_p0_to_p9": 180,
+    "total_files_changed": 15,
+    "total_issues": 5,
+    "llm_panel_calls": 2,
+    "agent_context_switches": 0
+  }
+}
