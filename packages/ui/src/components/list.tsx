@@ -7,38 +7,7 @@ import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextField } from "./text-field"
 
-function impact() {
-  if (typeof window === "undefined") return
-  try {
-    const raw = window.localStorage.getItem("opencode.prompt.impact")
-    if (!raw) return
-    const [name, at, until] = raw.split(":")
-    const end = Number(until)
-    if (!Number.isFinite(end)) return
-    const now = Math.round(performance.now())
-    if (now > end) return
-    return {
-      name: name || "unknown",
-      age: Math.max(0, now - (Number(at) || 0)),
-      left: Math.max(0, end - now),
-    }
-  } catch {
-    return
-  }
-}
-
-function log(kind: string, fields: Record<string, string | number | boolean | undefined>) {
-  const tag = impact()
-  if (!tag) return
-  const line = Object.entries({
-    impact: tag.name,
-    impactAge: tag.age,
-    impactLeft: tag.left,
-    ...fields,
-  })
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(" ")
-  console.debug(`[list:perf] ${kind} ${line}`)
+function log(_kind: string, _fields: Record<string, string | number | boolean | undefined>) {
 }
 
 /**
