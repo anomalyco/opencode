@@ -92,7 +92,7 @@ Use Effect-aware fixtures from `test/fixture/fixture.ts`:
 - `provideTmpdirInstance((dir) => effect, options)` when a live test needs custom instance setup or multiple instance scopes
 - `disposeAllInstances()` in `afterEach` only for integration tests that intentionally touch shared instance registries
 
-Prefer finalizers for local global mutations:
+Use finalizers only as a temporary bridge for existing global mutations:
 
 ```ts
 yield* Effect.acquireUseRelease(
@@ -109,6 +109,8 @@ yield* Effect.acquireUseRelease(
     }),
 )
 ```
+
+TODO: eliminate this pattern over time. Tests should not toggle process-global flags or env vars when the behavior can be modeled with services. Prefer moving flag/env reads behind injectable services such as `Config.Service`, `Env.Service`, or focused test layers, then provide the desired test value through the layer graph instead of mutating `process.env` or `Global.Path`.
 
 ## Conversion Recipe
 
@@ -133,6 +135,8 @@ const run = Effect.fn("MyTest.run")(function* (input: Input) {
 const exit = yield* run(input).pipe(Effect.exit)
 expect(Exit.isFailure(exit)).toBe(true)
 ```
+
+This is correct but still verbose. Track repeated assertion shapes during migration so we can add small test assertion helpers later instead of copying low-level `Exit` plumbing everywhere.
 
 9. Keep concurrency concurrent by using `Effect.forkScoped`, `Fiber.join`, `Deferred`, or `Effect.all(..., { concurrency: "unbounded" })` instead of serializing formerly parallel Promise work.
 10. Run the focused test file and `bun typecheck` from `packages/opencode`.
@@ -170,3 +174,42 @@ Start with files that already exercise Effect services but still manually run Pr
 3. Extract additional `test/fake/*` boundary layers only when a second test needs the same fake.
 4. Convert files with concurrency or watchers after the simple files, preserving timing semantics with `Deferred` and fibers.
 5. Leave pure non-Effect utility tests alone unless converting the underlying code to Effect.
+
+## Claimable Checklist
+
+Use this as a migration queue. Each checkbox should be safe for one agent or one PR unless the notes say otherwise. Agents should claim one item, convert only that file or cluster, run the focused test file, run `bun typecheck`, and update this checklist in the PR description or follow-up note.
+
+- [ ] `test/file/index.test.ts`: straightforward service wrapper cleanup. Replace local Promise helpers with Effect helpers and use `it.instance` / `it.live` around existing temp instance cases.
+- [ ] `test/session/messages-pagination.test.ts`: convert the local `run(...)` / `svc(...)` facade to `testEffect(Session.defaultLayer...)` and direct service yields. Good early target.
+- [ ] `test/snapshot/snapshot.test.ts`: convert snapshot operations to `it.live` with `tmpdirScoped` / `provideInstance`. Keep git/filesystem behavior live.
+- [ ] `test/project/vcs.test.ts`: convert `AppRuntime.runPromise` service calls first. Leave event/watcher timing intact until the first Effect version is stable.
+- [ ] `test/provider/provider.test.ts` cluster 1: convert provider service tests that only read config/env and do not mutate global state heavily.
+- [ ] `test/provider/provider.test.ts` cluster 2: convert tests with env/config mutation after introducing or reusing service-backed test seams.
+- [ ] `test/tool/shell.test.ts`: replace custom `ManagedRuntime` with `testEffect`, keep as `it.live`, and preserve process behavior.
+- [ ] `test/tool/edit.test.ts` cluster 1: convert straightforward edit/read/write cases and remove manual runtime helpers.
+- [ ] `test/tool/edit.test.ts` cluster 2: convert concurrency/race tests using `Deferred`, fibers, and `Effect.all` without serializing behavior.
+- [ ] `test/config/config.test.ts` setup pass: replace inline fake layers with shared `test/fake/*` layers where possible and turn Promise helpers into Effect helpers.
+- [ ] `test/config/config.test.ts` cluster 1: convert simple config load/merge tests that only need one instance.
+- [ ] `test/config/config.test.ts` cluster 2: convert managed/global config tests that mutate `Global.Path` or managed config directories. Prefer service seams; use finalizers only as a bridge.
+- [ ] `test/config/config.test.ts` cluster 3: convert plugin/dependency tests after ensuring `NpmTest.noop` or explicit fake NPM layers are used.
+- [ ] `test/config/config.test.ts` cluster 4: convert remote/account/provider config tests after isolating auth/account/env dependencies through layers.
+- [ ] Audit remaining `Effect.runPromise` in `packages/opencode/test/**/*.ts` and create follow-up checklist entries for any missed files.
+- [ ] Audit remaining `WithInstance.provide` in `packages/opencode/test/**/*.ts` and convert cases that can use `it.instance` or `provideInstance` inside Effect.
+- [ ] Audit repeated `Exit` / `Cause` assertion shapes and propose `test/lib/effect-assert.ts` helpers if at least three files repeat the same pattern.
+
+Parallelization notes:
+
+- The first four items are mostly independent and good for parallel agents.
+- `provider.test.ts`, `tool/edit.test.ts`, and `config.test.ts` should be split by cluster so agents do not edit the same file concurrently.
+- Any new fake boundary layer under `test/fake/*` should be small and independently useful. Do not add a fake just for one assertion unless it removes a real external dependency.
+- Do not combine assertion-helper design with file migrations. First collect repeated shapes, then add helpers in a separate pass.
+
+## Effectified Test Rough Edges
+
+Track patterns that are technically Effect-native but still too noisy. These should become a second cleanup pass after the Promise-land migration is underway.
+
+- Failure assertions against `Exit` / `Cause` are often verbose. Consider helpers such as `expectEffectFailure(effect)`, `expectTaggedError(effect, Tag)`, or custom Bun matchers if the same shapes repeat.
+- Some tests still need `Effect.promise(...)` around Node/Bun filesystem helpers. Prefer Effect platform services when the surrounding code already uses them, but do not block migrations on perfect filesystem abstraction.
+- Scoped global mutation with `process.env`, `Global.Path`, or flags should disappear behind injectable services over time.
+- Layer composition can be noisy when a test needs a real service subtree plus fake boundaries. Keep extracting small `test/fake/*` boundary layers before inventing larger builders.
+- Concurrency tests can become harder to read after replacing Promise resolvers with `Deferred` and fibers. Look for repeated patterns that deserve named helpers.
