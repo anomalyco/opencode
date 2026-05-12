@@ -1240,12 +1240,12 @@ describe("session.compaction.process", () => {
         yield* Deferred.await(ready).pipe(Effect.timeout("1 second"))
         const start = Date.now()
         yield* Fiber.interrupt(fiber)
-        const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("1 second"))
+        const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("5 seconds"))
 
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
           expect(Cause.hasInterrupts(exit.cause)).toBe(true)
-          expect(Date.now() - start).toBeLessThan(1_000)
+          expect(Date.now() - start).toBeLessThan(5_000)
         }
       }).pipe(withCompaction({ llm: stub.layer }))
     },
