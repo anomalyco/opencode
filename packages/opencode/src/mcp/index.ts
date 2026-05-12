@@ -6,6 +6,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
+  ListToolsResultSchema,
   ToolSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
@@ -14,7 +15,6 @@ import { Config } from "@/config/config"
 import { ConfigMCP } from "../config/mcp"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
-import z from "zod/v4"
 import { Installation } from "../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
@@ -35,13 +35,8 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
 
-const TolerantToolSchema = ToolSchema.extend({
-  outputSchema: z.unknown().optional(),
-})
-
-const TolerantListToolsResultSchema = z.looseObject({
-  tools: z.array(TolerantToolSchema),
-  nextCursor: z.string().optional(),
+const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
+  tools: ToolSchema.omit({ outputSchema: true }).array(),
 })
 
 export const Resource = Schema.Struct({
@@ -137,7 +132,10 @@ function listTools(key: string, client: MCPClient, timeout: number) {
 
       log.warn("failed to validate MCP tool output schemas, retrying without output schema validation", { key, error })
       return Effect.tryPromise({
-        try: () => client.request({ method: "tools/list" }, TolerantListToolsResultSchema, { timeout }),
+        try: () =>
+          client.request({ method: "tools/list" }, TolerantListToolsResultSchema, {
+            timeout,
+          }),
         catch: (err) => (err instanceof Error ? err : new Error(String(err))),
       }).pipe(
         Effect.map((result) =>

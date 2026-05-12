@@ -23,8 +23,10 @@ import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Schema, Types } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
-import { namedSchemaError } from "@/util/named-schema-error"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
+import { MessageError } from "./message-error"
+import { AuthError, OutputLengthError } from "./message-error"
+export { AuthError, OutputLengthError } from "./message-error"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -36,17 +38,12 @@ interface FetchDecompressionError extends Error {
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
 
-export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
-export const AbortedError = namedSchemaError("MessageAbortedError", { message: Schema.String })
-export const StructuredOutputError = namedSchemaError("StructuredOutputError", {
+export const AbortedError = NamedError.create("MessageAbortedError", { message: Schema.String })
+export const StructuredOutputError = NamedError.create("StructuredOutputError", {
   message: Schema.String,
   retries: NonNegativeInt,
 })
-export const AuthError = namedSchemaError("ProviderAuthError", {
-  providerID: Schema.String,
-  message: Schema.String,
-})
-export const APIError = namedSchemaError("APIError", {
+export const APIError = NamedError.create("APIError", {
   message: Schema.String,
   statusCode: Schema.optional(NonNegativeInt),
   isRetryable: Schema.Boolean,
@@ -55,7 +52,7 @@ export const APIError = namedSchemaError("APIError", {
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 })
 export type APIError = Schema.Schema.Type<typeof APIError.Schema>
-export const ContextOverflowError = namedSchemaError("ContextOverflowError", {
+export const ContextOverflowError = NamedError.create("ContextOverflowError", {
   message: Schema.String,
   responseBody: Schema.optional(Schema.String),
 })
@@ -381,9 +378,7 @@ export type Part =
   | CompactionPart
 
 const AssistantErrorSchema = Schema.Union([
-  AuthError.EffectSchema,
-  NamedError.Unknown.EffectSchema,
-  OutputLengthError.EffectSchema,
+  ...MessageError.Shared,
   AbortedError.EffectSchema,
   StructuredOutputError.EffectSchema,
   ContextOverflowError.EffectSchema,

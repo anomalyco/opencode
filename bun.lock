@@ -65,7 +65,6 @@
         "solid-list": "catalog:",
         "tailwindcss": "catalog:",
         "virtua": "catalog:",
-        "zod": "catalog:",
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "20.0.11",
@@ -214,7 +213,6 @@
         "npm-package-arg": "13.0.2",
         "semver": "^7.6.3",
         "xdg-basedir": "5.1.0",
-        "zod": "catalog:",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
