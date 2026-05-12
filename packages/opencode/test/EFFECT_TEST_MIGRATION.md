@@ -200,10 +200,19 @@ Use this as a migration queue. Each checkbox should be safe for one agent or one
 
 Parallelization notes:
 
-- The first four items are mostly independent and good for parallel agents.
+- The first four items are mostly independent and good for separate worktrees.
 - `provider.test.ts`, `tool/edit.test.ts`, and `config.test.ts` should be split by cluster so agents do not edit the same file concurrently.
 - Any new fake boundary layer under `test/fake/*` should be small and independently useful. Do not add a fake just for one assertion unless it removes a real external dependency.
 - Do not combine assertion-helper design with file migrations. First collect repeated shapes, then add helpers in a separate pass.
+
+Orchestration rules:
+
+- Prefer supervised foreground agents for implementation. Background agents are acceptable for research-only surveys, but code migrations need a returned diff, focused test output, and local commit before moving on.
+- Create one worktree per claim and verify the branch/worktree path before edits. A status check should include `git status --short --branch` from the claimed worktree.
+- After an agent reports completion, the coordinator must independently inspect `git status`, run the focused test, run `bun typecheck`, and review the diff before pushing.
+- If an agent edits the wrong worktree, move the patch deliberately with `git diff` / `git apply`, then clean the accidental worktree before opening a PR.
+- Keep dependency setup boring. Prefer reusing existing installed dependencies via worktrees or symlinks over running a fresh `bun install` in a temporary path unless the native build path is known to work.
+- Do not delete worktrees with unpushed commits or uncommitted changes. Once a migration PR branch is pushed and clean, the local worktree can be removed while leaving the branch on the fork.
 
 ## Effectified Test Rough Edges
 
