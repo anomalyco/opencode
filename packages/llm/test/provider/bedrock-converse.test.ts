@@ -169,12 +169,12 @@ describe("Bedrock Converse route", () => {
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.text).toBe("Hello!")
-      const finishes = response.events.filter((event) => event.type === "request-finish")
+      const finishes = response.events.filter((event) => event.type === "finish")
       // Bedrock splits the finish across `messageStop` (carries reason) and
       // `metadata` (carries usage). We consolidate them into a single
-      // terminal `request-finish` event with both.
+      // terminal `finish` event with both.
       expect(finishes).toHaveLength(1)
-      expect(finishes[0]).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(finishes[0]).toMatchObject({ type: "finish", reason: "stop" })
       expect(response.usage).toMatchObject({
         inputTokens: 5,
         outputTokens: 2,
@@ -213,7 +213,7 @@ describe("Bedrock Converse route", () => {
         { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "tool_1", name: "lookup", text: ':"weather"}' },
       ])
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "tool-calls" })
     }),
   )
 

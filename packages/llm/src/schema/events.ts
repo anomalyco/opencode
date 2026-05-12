@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, ResponseID, RouteID, ToolCallID } from "./ids"
+import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
 import { ModelRef } from "./options"
 import { ToolResultValue } from "./messages"
 
@@ -73,13 +73,6 @@ export class Usage extends Schema.Class<Usage>("LLM.Usage")({
 }
 
 export type UsageInput = Usage | ConstructorParameters<typeof Usage>[0]
-
-export const RequestStart = Schema.Struct({
-  type: Schema.tag("request-start"),
-  id: ResponseID,
-  model: ModelRef,
-}).annotate({ identifier: "LLM.Event.RequestStart" })
-export type RequestStart = Schema.Schema.Type<typeof RequestStart>
 
 export const StepStart = Schema.Struct({
   type: Schema.tag("step-start"),
@@ -191,13 +184,13 @@ export const StepFinish = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
-export const RequestFinish = Schema.Struct({
-  type: Schema.tag("request-finish"),
+export const Finish = Schema.Struct({
+  type: Schema.tag("finish"),
   reason: FinishReason,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "LLM.Event.RequestFinish" })
-export type RequestFinish = Schema.Schema.Type<typeof RequestFinish>
+}).annotate({ identifier: "LLM.Event.Finish" })
+export type Finish = Schema.Schema.Type<typeof Finish>
 
 export const ProviderErrorEvent = Schema.Struct({
   type: Schema.tag("provider-error"),
@@ -208,7 +201,6 @@ export const ProviderErrorEvent = Schema.Struct({
 export type ProviderErrorEvent = Schema.Schema.Type<typeof ProviderErrorEvent>
 
 const llmEventTagged = Schema.Union([
-  RequestStart,
   StepStart,
   TextStart,
   TextDelta,
@@ -223,7 +215,7 @@ const llmEventTagged = Schema.Union([
   ToolResult,
   ToolError,
   StepFinish,
-  RequestFinish,
+  Finish,
   ProviderErrorEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
 
@@ -232,7 +224,6 @@ type WithUsage<Event extends { readonly usage?: Usage }> = Omit<Event, "type" | 
   readonly usage?: UsageInput
 }
 
-const responseID = (value: ResponseID | string) => ResponseID.make(value)
 const contentBlockID = (value: ContentBlockID | string) => ContentBlockID.make(value)
 const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
 
@@ -242,7 +233,6 @@ const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
  * `events.filter(LLMEvent.guards["tool-call"])`.
  */
 export const LLMEvent = Object.assign(llmEventTagged, {
-  requestStart: (input: WithID<RequestStart, ResponseID>) => RequestStart.make({ ...input, id: responseID(input.id) }),
   stepStart: StepStart.make,
   textStart: (input: WithID<TextStart, ContentBlockID>) => TextStart.make({ ...input, id: contentBlockID(input.id) }),
   textDelta: (input: WithID<TextDelta, ContentBlockID>) => TextDelta.make({ ...input, id: contentBlockID(input.id) }),
@@ -266,14 +256,13 @@ export const LLMEvent = Object.assign(llmEventTagged, {
       ...input,
       usage: input.usage === undefined ? undefined : Usage.from(input.usage),
     }),
-  requestFinish: (input: WithUsage<RequestFinish>) =>
-    RequestFinish.make({
+  finish: (input: WithUsage<Finish>) =>
+    Finish.make({
       ...input,
       usage: input.usage === undefined ? undefined : Usage.from(input.usage),
     }),
   providerError: ProviderErrorEvent.make,
   is: {
-    requestStart: llmEventTagged.guards["request-start"],
     stepStart: llmEventTagged.guards["step-start"],
     textStart: llmEventTagged.guards["text-start"],
     textDelta: llmEventTagged.guards["text-delta"],
@@ -288,7 +277,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],
     stepFinish: llmEventTagged.guards["step-finish"],
-    requestFinish: llmEventTagged.guards["request-finish"],
+    finish: llmEventTagged.guards.finish,
     providerError: llmEventTagged.guards["provider-error"],
   },
 })
