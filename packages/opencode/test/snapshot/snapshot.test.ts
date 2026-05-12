@@ -15,6 +15,7 @@ const it = testEffect(Snapshot.defaultLayer)
 // with path.join (which produces \ on Windows) then normalizes back to /.
 // This helper does the same for expected values so assertions match cross-platform.
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
+const emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -289,10 +290,18 @@ it.instance(
 )
 
 it.instance(
-  "track does not record empty tree snapshots",
+  "track records empty tree baseline for first additions",
   Effect.gen(function* () {
     const snapshot = yield* Snapshot.Service
-    expect(yield* snapshot.track()).toBeUndefined()
+    const before = yield* snapshot.track()
+    expect(before).toBe(emptyTreeHash)
+    if (!before) throw new Error("expected empty tree snapshot")
+    const tmp = yield* TestInstance
+    yield* write(`${tmp.directory}/first.txt`, "first\n")
+    const patch = yield* snapshot.patch(before)
+    expect(patch.files).toContain(fwd(tmp.directory, "first.txt"))
+    yield* snapshot.revert([patch])
+    expect(yield* exists(`${tmp.directory}/first.txt`)).toBe(false)
   }),
   { git: true },
 )

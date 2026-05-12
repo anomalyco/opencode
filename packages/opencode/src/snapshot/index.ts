@@ -31,7 +31,6 @@ export type FileDiff = typeof FileDiff.Type
 const log = Log.create({ service: "snapshot" })
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
-const emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904" // git's canonical hash for an empty tree.
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -315,7 +314,6 @@ export const layer: Layer.Layer<
               const result = yield* git(args(["write-tree"]), { cwd: state.directory })
               const hash = result.text.trim()
               if (!hash) throw new Error("Snapshot tracking failed: git write-tree produced no hash")
-              if (hash === emptyTreeHash) return
               log.info("tracking", { hash, cwd: state.directory, git: state.gitdir })
               return hash
             }),
