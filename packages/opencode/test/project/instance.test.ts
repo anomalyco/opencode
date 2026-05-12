@@ -1,13 +1,12 @@
 import { afterEach, describe, expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
 import { InstanceStore } from "../../src/project/instance-store"
-import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 let bootstrapRun: Effect.Effect<void> = Effect.void
@@ -75,18 +74,18 @@ describe("InstanceStore", () => {
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const store = yield* InstanceStore.Service
-      const started = Promise.withResolvers<void>()
-      const release = Promise.withResolvers<void>()
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
       let initialized = 0
 
-      bootstrapRun = Effect.promise(async () => {
+      bootstrapRun = Effect.gen(function* () {
         initialized++
-        started.resolve()
-        await release.promise
+        yield* Deferred.succeed(started, undefined)
+        yield* Deferred.await(release)
       })
       const first = yield* store.load({ directory: dir }).pipe(Effect.forkScoped)
 
-      yield* Effect.promise(() => started.promise)
+      yield* Deferred.await(started)
 
       bootstrapRun = Effect.sync(() => {
         initialized++
@@ -94,7 +93,7 @@ describe("InstanceStore", () => {
       const second = yield* store.load({ directory: dir }).pipe(Effect.forkScoped)
 
       expect(initialized).toBe(1)
-      release.resolve()
+      yield* Deferred.succeed(release, undefined)
 
       const [firstCtx, secondCtx] = yield* Effect.all([Fiber.join(first), Fiber.join(second)])
       expect(secondCtx).toBe(firstCtx)
@@ -147,8 +146,8 @@ describe("InstanceStore", () => {
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const store = yield* InstanceStore.Service
-      const reloading = Promise.withResolvers<void>()
-      const releaseReload = Promise.withResolvers<void>()
+      const reloading = yield* Deferred.make<void>()
+      const releaseReload = yield* Deferred.make<void>()
       const disposed: Array<string> = []
       const off = registerDisposer(async (directory) => {
         disposed.push(directory)
@@ -156,15 +155,15 @@ describe("InstanceStore", () => {
       yield* Effect.addFinalizer(() => Effect.sync(off))
 
       const first = yield* store.load({ directory: dir })
-      bootstrapRun = Effect.promise(async () => {
-        reloading.resolve()
-        await releaseReload.promise
+      bootstrapRun = Effect.gen(function* () {
+        yield* Deferred.succeed(reloading, undefined)
+        yield* Deferred.await(releaseReload)
       })
       const reload = yield* store.reload({ directory: dir }).pipe(Effect.forkScoped)
 
-      yield* Effect.promise(() => reloading.promise)
+      yield* Deferred.await(reloading)
       const staleDispose = yield* store.dispose(first).pipe(Effect.forkScoped)
-      releaseReload.resolve()
+      yield* Deferred.succeed(releaseReload, undefined)
 
       const second = yield* Fiber.join(reload)
       yield* Fiber.join(staleDispose)
@@ -178,23 +177,23 @@ describe("InstanceStore", () => {
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const store = yield* InstanceStore.Service
-      const disposing = Promise.withResolvers<void>()
-      const releaseDispose = Promise.withResolvers<void>()
+      const disposing = yield* Deferred.make<void>()
+      const releaseDispose = yield* Deferred.make<void>()
       const disposed: Array<string> = []
       const off = registerDisposer(async (directory) => {
         disposed.push(directory)
-        disposing.resolve()
-        await releaseDispose.promise
+        Deferred.doneUnsafe(disposing, Effect.void)
+        await Effect.runPromise(Deferred.await(releaseDispose))
       })
       yield* Effect.addFinalizer(() => Effect.sync(off))
 
       yield* store.load({ directory: dir })
       const first = yield* store.disposeAll().pipe(Effect.forkScoped)
-      yield* Effect.promise(() => disposing.promise)
+      yield* Deferred.await(disposing)
       const second = yield* store.disposeAll().pipe(Effect.forkScoped)
 
       expect(disposed).toEqual([dir])
-      releaseDispose.resolve()
+      yield* Deferred.succeed(releaseDispose, undefined)
       yield* Effect.all([Fiber.join(first), Fiber.join(second)])
       expect(disposed).toEqual([dir])
     }),
@@ -221,19 +220,17 @@ describe("InstanceStore", () => {
     }),
   )
 
-  it.live("provides legacy Promise callers with instance ALS", () =>
+  it.instance("provides legacy Promise callers with instance ALS", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped({ git: true })
+      const test = yield* TestInstance
+      const ctx = yield* InstanceRef
+      if (!ctx) throw new Error("InstanceRef not provided")
 
-      const directory = yield* Effect.promise(() =>
-        WithInstance.provide({
-          directory: dir,
-          fn: () => Instance.directory,
-        }),
-      )
+      const directory = yield* Effect.promise(() => Promise.resolve(Instance.restore(ctx, () => Instance.directory)))
 
-      expect(directory).toBe(dir)
+      expect(directory).toBe(test.directory)
       expect(() => Instance.current).toThrow()
     }),
+    { git: true },
   )
 })
