@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createSignal, onMount } from "solid-js"
 import { Logo } from "../component/logo"
 import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
@@ -10,6 +10,7 @@ import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useTuiConfig } from "../context/tui-config"
+import { useEditorContext } from "@tui/context/editor"
 
 let once = false
 const placeholder = {
@@ -26,7 +27,12 @@ export function Home() {
   const args = useArgs()
   const local = useLocal()
   const tuiConfig = useTuiConfig()
+  const editor = useEditorContext()
   let sent = false
+
+  onMount(() => {
+    editor.clearSelection()
+  })
 
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
@@ -62,6 +68,7 @@ export function Home() {
         <box flexShrink={0}>
           <TuiPluginRuntime.Slot name="home_logo" mode="replace">
             <Logo
+              idle={tuiConfig.logo?.animate ?? false}
               animation={tuiConfig.logo?.animate ?? false}
               sound={tuiConfig.logo?.sound ?? false}
             />

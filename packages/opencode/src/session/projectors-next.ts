@@ -132,11 +132,7 @@ export default [
   SyncEvent.project(SessionEvent.ModelSwitched.Sync, (db, data, event) => {
     db.update(SessionTable)
       .set({
-        model: {
-          id: data.id,
-          providerID: data.providerID,
-          variant: data.variant,
-        },
+        model: data.model,
         time_updated: DateTime.toEpochMillis(data.timestamp),
       })
       .where(eq(SessionTable.id, data.sessionID))
@@ -161,6 +157,9 @@ export default [
   SyncEvent.project(SessionEvent.Step.Ended.Sync, (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.ended", data })
   }),
+  SyncEvent.project(SessionEvent.Step.Failed.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.failed", data })
+  }),
   SyncEvent.project(SessionEvent.Text.Started.Sync, (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.text.started", data })
   }),
@@ -181,8 +180,8 @@ export default [
   SyncEvent.project(SessionEvent.Tool.Success.Sync, (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.success", data })
   }),
-  SyncEvent.project(SessionEvent.Tool.Error.Sync, (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.error", data })
+  SyncEvent.project(SessionEvent.Tool.Failed.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.failed", data })
   }),
   SyncEvent.project(SessionEvent.Reasoning.Started.Sync, (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.reasoning.started", data })

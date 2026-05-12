@@ -1,51 +1,43 @@
-import z from "zod"
 import { ConfigPlugin } from "@/config/plugin"
-import { ConfigKeybinds } from "@/config/keybinds"
+import { TuiKeybind } from "./keybind"
+import { Schema } from "effect"
 
-const KeybindOverride = z
-  .object(
-    Object.fromEntries(Object.keys(ConfigKeybinds.Keybinds.shape).map((key) => [key, z.string().optional()])) as Record<
-      string,
-      z.ZodOptional<z.ZodString>
-    >,
-  )
-  .strict()
-
-export const TuiOptions = z.object({
-  scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
-  scroll_acceleration: z
-    .object({
-      enabled: z.boolean().describe("Enable scroll acceleration"),
-    })
-    .optional()
-    .describe("Scroll acceleration settings"),
-  diff_style: z
-    .enum(["auto", "stacked"])
-    .optional()
-    .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
-  mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
-  logo: z
-    .object({
-      animate: z
-        .boolean()
-        .optional()
-        .describe("Enable logo animation on the home screen and Go upsell dialog (default: false)"),
-      sound: z
-        .boolean()
-        .optional()
-        .describe("Enable sound effects for the logo animation. Only has effect when animate is true (default: false)"),
-    })
-    .optional()
-    .describe("Logo display settings"),
+export const KeymapLeaderTimeoutDefault = 2000
+const KeymapLeaderTimeout = Schema.Int.check(Schema.isGreaterThan(0)).annotate({
+  description: "Leader key timeout in milliseconds",
 })
 
-export const TuiInfo = z
-  .object({
-    $schema: z.string().optional(),
-    theme: z.string().optional(),
-    keybinds: KeybindOverride.optional(),
-    plugin: ConfigPlugin.Spec.zod.array().optional(),
-    plugin_enabled: z.record(z.string(), z.boolean()).optional(),
-  })
-  .extend(TuiOptions.shape)
-  .strict()
+export const ScrollSpeed = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0.001))
+
+export const ScrollAcceleration = Schema.Struct({
+  enabled: Schema.Boolean.annotate({ description: "Enable scroll acceleration" }),
+}).annotate({ description: "Scroll acceleration settings" })
+
+export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
+  description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
+})
+
+export const Logo = Schema.Struct({
+  animate: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable logo animation on the home screen and Go upsell dialog (default: false)",
+  }),
+  sound: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable sound effects for the logo animation. Only has effect when animate is true (default: false)",
+  }),
+}).annotate({ description: "Logo display settings" })
+
+export const TuiInfo = Schema.Struct({
+  $schema: Schema.optional(Schema.String),
+  theme: Schema.optional(Schema.String),
+  keybinds: Schema.optional(TuiKeybind.KeybindOverrides),
+  plugin: Schema.optional(Schema.Array(ConfigPlugin.Spec)),
+  plugin_enabled: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  leader_timeout: Schema.optional(KeymapLeaderTimeout),
+  scroll_speed: Schema.optional(ScrollSpeed).annotate({
+    description: "TUI scroll speed",
+  }),
+  scroll_acceleration: Schema.optional(ScrollAcceleration),
+  diff_style: Schema.optional(DiffStyle),
+  mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  logo: Schema.optional(Logo),
+})

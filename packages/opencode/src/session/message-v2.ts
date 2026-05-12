@@ -23,8 +23,7 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Schema, Types } from "effect"
-import { zod, ZodOverride } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 
@@ -35,7 +34,7 @@ interface FetchDecompressionError extends Error {
   path: string
 }
 
-export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached image(s) from tool result:"
+export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
 
 export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
@@ -64,24 +63,19 @@ export const ContextOverflowError = namedSchemaError("ContextOverflowError", {
 
 export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
   type: Schema.Literal("text"),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
   type: Schema.Literal("json_schema"),
   schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
   retryCount: NonNegativeInt.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
-const _Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
+export const Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
   discriminator: "type",
   identifier: "OutputFormat",
 })
-export const Format = Object.assign(_Format, { zod: zod(_Format) })
-export type OutputFormat = Schema.Schema.Type<typeof _Format>
+export type OutputFormat = Schema.Schema.Type<typeof Format>
 
 const partBase = {
   id: PartID,
@@ -93,9 +87,7 @@ export const SnapshotPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("snapshot"),
   snapshot: Schema.String,
-})
-  .annotate({ identifier: "SnapshotPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SnapshotPart" })
 export type SnapshotPart = Types.DeepMutable<Schema.Schema.Type<typeof SnapshotPart>>
 
 export const PatchPart = Schema.Struct({
@@ -103,9 +95,7 @@ export const PatchPart = Schema.Struct({
   type: Schema.Literal("patch"),
   hash: Schema.String,
   files: Schema.Array(Schema.String),
-})
-  .annotate({ identifier: "PatchPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "PatchPart" })
 export type PatchPart = Types.DeepMutable<Schema.Schema.Type<typeof PatchPart>>
 
 export const TextPart = Schema.Struct({
@@ -121,9 +111,7 @@ export const TextPart = Schema.Struct({
     }),
   ),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-})
-  .annotate({ identifier: "TextPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "TextPart" })
 export type TextPart = Types.DeepMutable<Schema.Schema.Type<typeof TextPart>>
 
 export const ReasoningPart = Schema.Struct({
@@ -135,16 +123,14 @@ export const ReasoningPart = Schema.Struct({
     start: NonNegativeInt,
     end: Schema.optional(NonNegativeInt),
   }),
-})
-  .annotate({ identifier: "ReasoningPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ReasoningPart" })
 export type ReasoningPart = Types.DeepMutable<Schema.Schema.Type<typeof ReasoningPart>>
 
 const filePartSourceBase = {
   text: Schema.Struct({
     value: Schema.String,
-    start: NonNegativeInt,
-    end: NonNegativeInt,
+    start: Schema.Finite,
+    end: Schema.Finite,
   }).annotate({ identifier: "FilePartSourceText" }),
 }
 
@@ -152,9 +138,7 @@ export const FileSource = Schema.Struct({
   ...filePartSourceBase,
   type: Schema.Literal("file"),
   path: Schema.String,
-})
-  .annotate({ identifier: "FileSource" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "FileSource" })
 
 export const SymbolSource = Schema.Struct({
   ...filePartSourceBase,
@@ -163,24 +147,19 @@ export const SymbolSource = Schema.Struct({
   range: LSP.Range,
   name: Schema.String,
   kind: NonNegativeInt,
-})
-  .annotate({ identifier: "SymbolSource" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SymbolSource" })
 
 export const ResourceSource = Schema.Struct({
   ...filePartSourceBase,
   type: Schema.Literal("resource"),
   clientName: Schema.String,
   uri: Schema.String,
-})
-  .annotate({ identifier: "ResourceSource" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ResourceSource" })
 
-const _FilePartSource = Schema.Union([FileSource, SymbolSource, ResourceSource]).annotate({
+export const FilePartSource = Schema.Union([FileSource, SymbolSource, ResourceSource]).annotate({
   discriminator: "type",
   identifier: "FilePartSource",
 })
-export const FilePartSource = Object.assign(_FilePartSource, { zod: zod(_FilePartSource) })
 
 export const FilePart = Schema.Struct({
   ...partBase,
@@ -188,10 +167,8 @@ export const FilePart = Schema.Struct({
   mime: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
-  source: Schema.optional(_FilePartSource),
-})
-  .annotate({ identifier: "FilePart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+  source: Schema.optional(FilePartSource),
+}).annotate({ identifier: "FilePart" })
 export type FilePart = Types.DeepMutable<Schema.Schema.Type<typeof FilePart>>
 
 export const AgentPart = Schema.Struct({
@@ -205,9 +182,7 @@ export const AgentPart = Schema.Struct({
       end: NonNegativeInt,
     }),
   ),
-})
-  .annotate({ identifier: "AgentPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "AgentPart" })
 export type AgentPart = Types.DeepMutable<Schema.Schema.Type<typeof AgentPart>>
 
 export const CompactionPart = Schema.Struct({
@@ -216,9 +191,7 @@ export const CompactionPart = Schema.Struct({
   auto: Schema.Boolean,
   overflow: Schema.optional(Schema.Boolean),
   tail_start_id: Schema.optional(MessageID),
-})
-  .annotate({ identifier: "CompactionPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "CompactionPart" })
 export type CompactionPart = Types.DeepMutable<Schema.Schema.Type<typeof CompactionPart>>
 
 export const SubtaskPart = Schema.Struct({
@@ -234,9 +207,7 @@ export const SubtaskPart = Schema.Struct({
     }),
   ),
   command: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "SubtaskPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SubtaskPart" })
 export type SubtaskPart = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPart>>
 
 export const RetryPart = Schema.Struct({
@@ -247,9 +218,7 @@ export const RetryPart = Schema.Struct({
   time: Schema.Struct({
     created: NonNegativeInt,
   }),
-})
-  .annotate({ identifier: "RetryPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "RetryPart" })
 export type RetryPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof RetryPart>>, "error"> & {
   error: APIError
 }
@@ -258,9 +227,7 @@ export const StepStartPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("step-start"),
   snapshot: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "StepStartPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "StepStartPart" })
 export type StepStartPart = Types.DeepMutable<Schema.Schema.Type<typeof StepStartPart>>
 
 export const StepFinishPart = Schema.Struct({
@@ -270,27 +237,23 @@ export const StepFinishPart = Schema.Struct({
   snapshot: Schema.optional(Schema.String),
   cost: Schema.Finite,
   tokens: Schema.Struct({
-    total: Schema.optional(NonNegativeInt),
-    input: NonNegativeInt,
-    output: NonNegativeInt,
-    reasoning: NonNegativeInt,
+    total: Schema.optional(Schema.Finite),
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
     cache: Schema.Struct({
-      read: NonNegativeInt,
-      write: NonNegativeInt,
+      read: Schema.Finite,
+      write: Schema.Finite,
     }),
   }),
-})
-  .annotate({ identifier: "StepFinishPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "StepFinishPart" })
 export type StepFinishPart = Types.DeepMutable<Schema.Schema.Type<typeof StepFinishPart>>
 
 export const ToolStatePending = Schema.Struct({
   status: Schema.Literal("pending"),
   input: Schema.Record(Schema.String, Schema.Any),
   raw: Schema.String,
-})
-  .annotate({ identifier: "ToolStatePending" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolStatePending" })
 export type ToolStatePending = Types.DeepMutable<Schema.Schema.Type<typeof ToolStatePending>>
 
 export const ToolStateRunning = Schema.Struct({
@@ -301,9 +264,7 @@ export const ToolStateRunning = Schema.Struct({
   time: Schema.Struct({
     start: NonNegativeInt,
   }),
-})
-  .annotate({ identifier: "ToolStateRunning" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolStateRunning" })
 export type ToolStateRunning = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateRunning>>
 
 export const ToolStateCompleted = Schema.Struct({
@@ -318,9 +279,7 @@ export const ToolStateCompleted = Schema.Struct({
     compacted: Schema.optional(NonNegativeInt),
   }),
   attachments: Schema.optional(Schema.Array(FilePart)),
-})
-  .annotate({ identifier: "ToolStateCompleted" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolStateCompleted" })
 export type ToolStateCompleted = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateCompleted>>
 
 function truncateToolOutput(text: string, maxChars?: number) {
@@ -338,21 +297,17 @@ export const ToolStateError = Schema.Struct({
     start: NonNegativeInt,
     end: NonNegativeInt,
   }),
-})
-  .annotate({ identifier: "ToolStateError" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolStateError" })
 export type ToolStateError = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateError>>
 
-const _ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).annotate({
+export const ToolState = Schema.Union([
+  ToolStatePending,
+  ToolStateRunning,
+  ToolStateCompleted,
+  ToolStateError,
+]).annotate({
   discriminator: "status",
   identifier: "ToolState",
-})
-// Cast the derived zod so downstream z.infer sees the same mutable shape that
-// our exported TS types expose (the pre-migration Zod inferences were mutable).
-export const ToolState = Object.assign(_ToolState, {
-  zod: zod(_ToolState) as unknown as z.ZodType<
-    ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
-  >,
 })
 export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
 
@@ -361,11 +316,9 @@ export const ToolPart = Schema.Struct({
   type: Schema.Literal("tool"),
   callID: Schema.String,
   tool: Schema.String,
-  state: _ToolState,
+  state: ToolState,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-})
-  .annotate({ identifier: "ToolPart" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ToolPart" })
 export type ToolPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof ToolPart>>, "state"> & {
   state: ToolState
 }
@@ -381,7 +334,7 @@ export const User = Schema.Struct({
   time: Schema.Struct({
     created: NonNegativeInt,
   }),
-  format: Schema.optional(_Format),
+  format: Schema.optional(Format),
   summary: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.String),
@@ -397,12 +350,10 @@ export const User = Schema.Struct({
   }),
   system: Schema.optional(Schema.String),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
-})
-  .annotate({ identifier: "UserMessage" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "UserMessage" })
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
 
-const _Part = Schema.Union([
+export const Part = Schema.Union([
   TextPart,
   SubtaskPart,
   ReasoningPart,
@@ -416,22 +367,6 @@ const _Part = Schema.Union([
   RetryPart,
   CompactionPart,
 ]).annotate({ discriminator: "type", identifier: "Part" })
-export const Part = Object.assign(_Part, {
-  zod: zod(_Part) as unknown as z.ZodType<
-    | TextPart
-    | SubtaskPart
-    | ReasoningPart
-    | FilePart
-    | ToolPart
-    | StepStartPart
-    | StepFinishPart
-    | SnapshotPart
-    | PatchPart
-    | AgentPart
-    | RetryPart
-    | CompactionPart
-  >,
-})
 export type Part =
   | TextPart
   | SubtaskPart
@@ -446,19 +381,6 @@ export type Part =
   | RetryPart
   | CompactionPart
 
-// Zod discriminated union kept for the legacy Hono OpenAPI path.
-const AssistantErrorZod = z.discriminatedUnion("name", [
-  AuthError.Schema,
-  NamedError.Unknown.Schema,
-  OutputLengthError.Schema,
-  AbortedError.Schema,
-  StructuredOutputError.Schema,
-  ContextOverflowError.Schema,
-  APIError.Schema,
-])
-type AssistantError = z.infer<typeof AssistantErrorZod>
-
-// Effect Schema for the same union — used by HttpApi OpenAPI generation.
 const AssistantErrorSchema = Schema.Union([
   AuthError.EffectSchema,
   Schema.Struct({ name: Schema.Literal("UnknownError"), data: Schema.Struct({ message: Schema.String }) }).annotate({
@@ -470,14 +392,14 @@ const AssistantErrorSchema = Schema.Union([
   ContextOverflowError.EffectSchema,
   APIError.EffectSchema,
 ]).annotate({ discriminator: "name" })
+type AssistantError = Schema.Schema.Type<typeof AssistantErrorSchema>
 
 // ── Prompt input schemas ─────────────────────────────────────────────────────
 //
 // Consumers of `SessionPrompt.PromptInput.parts` send part drafts without the
 // ambient IDs (`messageID`, `sessionID`) that live on stored parts, and may
 // omit `id` to let the server allocate one.  These Schema-Struct variants
-// carry that shape, and `SessionPrompt.PromptInput` just references the
-// derived `.zod` (no omit/partial gymnastics needed at the call site).
+// carry that shape so prompt decoding can accept drafts without stored IDs.
 
 export const TextPartInput = Schema.Struct({
   id: Schema.optional(PartID),
@@ -492,9 +414,7 @@ export const TextPartInput = Schema.Struct({
     }),
   ),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-})
-  .annotate({ identifier: "TextPartInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "TextPartInput" })
 export type TextPartInput = Types.DeepMutable<Schema.Schema.Type<typeof TextPartInput>>
 
 export const FilePartInput = Schema.Struct({
@@ -503,10 +423,8 @@ export const FilePartInput = Schema.Struct({
   mime: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
-  source: Schema.optional(_FilePartSource),
-})
-  .annotate({ identifier: "FilePartInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+  source: Schema.optional(FilePartSource),
+}).annotate({ identifier: "FilePartInput" })
 export type FilePartInput = Types.DeepMutable<Schema.Schema.Type<typeof FilePartInput>>
 
 export const AgentPartInput = Schema.Struct({
@@ -520,9 +438,7 @@ export const AgentPartInput = Schema.Struct({
       end: NonNegativeInt,
     }),
   ),
-})
-  .annotate({ identifier: "AgentPartInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "AgentPartInput" })
 export type AgentPartInput = Types.DeepMutable<Schema.Schema.Type<typeof AgentPartInput>>
 
 export const SubtaskPartInput = Schema.Struct({
@@ -538,9 +454,7 @@ export const SubtaskPartInput = Schema.Struct({
     }),
   ),
   command: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "SubtaskPartInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "SubtaskPartInput" })
 export type SubtaskPartInput = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPartInput>>
 
 export const Assistant = Schema.Struct({
@@ -566,34 +480,29 @@ export const Assistant = Schema.Struct({
   summary: Schema.optional(Schema.Boolean),
   cost: Schema.Finite,
   tokens: Schema.Struct({
-    total: Schema.optional(NonNegativeInt),
-    input: NonNegativeInt,
-    output: NonNegativeInt,
-    reasoning: NonNegativeInt,
+    total: Schema.optional(Schema.Finite),
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
     cache: Schema.Struct({
-      read: NonNegativeInt,
-      write: NonNegativeInt,
+      read: Schema.Finite,
+      write: Schema.Finite,
     }),
   }),
   structured: Schema.optional(Schema.Any),
   variant: Schema.optional(Schema.String),
   finish: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "AssistantMessage" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "AssistantMessage" })
 export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {
   error?: AssistantError
 }
 
-const _Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
-export const Info = Object.assign(_Info, {
-  zod: zod(_Info) as unknown as z.ZodType<User | Assistant>,
-})
+export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
 export type Info = User | Assistant
 
 const UpdatedEventSchema = Schema.Struct({
   sessionID: SessionID,
-  info: _Info,
+  info: Info,
 })
 
 const RemovedEventSchema = Schema.Struct({
@@ -603,7 +512,7 @@ const RemovedEventSchema = Schema.Struct({
 
 const PartUpdatedEventSchema = Schema.Struct({
   sessionID: SessionID,
-  part: _Part,
+  part: Part,
   time: NonNegativeInt,
 })
 
@@ -651,9 +560,9 @@ export const Event = {
 }
 
 export const WithParts = Schema.Struct({
-  info: _Info,
-  parts: Schema.Array(_Part),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+  info: Info,
+  parts: Schema.Array(Part),
+})
 export type WithParts = {
   info: Info
   parts: Part[]
@@ -734,25 +643,25 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
   // Track media from tool results that need to be injected as user messages
-  // for providers that don't support media in tool results.
+  // for providers that don't support that media type in tool results.
   //
   // OpenAI-compatible APIs only support string content in tool results, so we need
-  // to extract media and inject as user messages. Other SDKs (anthropic, google,
-  // bedrock) handle type: "content" with media parts natively.
+  // to extract media and inject as user messages. Some SDKs only support a subset
+  // of media in tool results; e.g. Bedrock supports images but not PDFs there.
   //
-  // Only apply this workaround if the model actually supports image input -
-  // otherwise there's no point extracting images.
-  const supportsMediaInToolResults = (() => {
+  // Only apply this workaround if the model actually supports that media input -
+  // otherwise unsupportedParts() will turn it into a user-visible error.
+  const supportsMediaInToolResult = (attachment: { mime: string }) => {
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock") return true
+    if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
     if (model.api.npm === "@ai-sdk/google") {
       const id = model.api.id.toLowerCase()
       return id.includes("gemini-3") && !id.includes("gemini-2")
     }
     return false
-  })()
+  }
 
   const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
     const output = options.output
@@ -797,9 +706,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         role: "user",
         parts: [],
       }
-      result.push(userMessage)
       for (const part of msg.parts) {
-        if (part.type === "text" && !part.ignored)
+        // User message parts should never be empty
+        if (part.type === "text" && !part.ignored && part.text !== "")
           userMessage.parts.push({
             type: "text",
             text: part.text,
@@ -834,11 +743,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
+      if (userMessage.parts.length > 0) result.push(userMessage)
     }
 
     if (msg.info.role === "assistant") {
       const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
-      const media: Array<{ mime: string; url: string }> = []
+      const media: Array<{ mime: string; url: string; filename?: string }> = []
 
       if (
         msg.info.error &&
@@ -854,13 +764,31 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         role: "assistant",
         parts: [],
       }
+      // Anthropic adaptive thinking can persist assistant turns like:
+      // step-start, reasoning(signature), text(""), step-start,
+      // reasoning(signature). The empty text part is a structural separator,
+      // but it does not carry the signature metadata itself. Dropping it shifts
+      // signed thinking positions after step-start splitting/provider regrouping;
+      // keeping it as "" is filtered by the AI SDK and rejected by Anthropic.
+      // It is unclear whether this shape originates in our stream processing,
+      // a proxy, or a lower-level library, but preserving a non-empty separator
+      // here is the only safe replay point we have.
+      // Use a single space so the separator survives replay without changing
+      // the neighboring signed reasoning blocks.
+      const hasSignedReasoning = msg.parts.some((part) => {
+        if (part.type !== "reasoning") return false
+        return part.metadata?.anthropic?.signature != null
+      })
       for (const part of msg.parts) {
-        if (part.type === "text")
+        if (msg.info.summary && part.type !== "text") continue
+        if (part.type === "text") {
+          const text = part.text === "" && hasSignedReasoning ? " " : part.text
           assistantMessage.parts.push({
             type: "text",
-            text: part.text,
-            ...(differentModel ? {} : { providerMetadata: part.metadata }),
+            text,
+            ...(differentModel || msg.info.summary ? {} : { providerMetadata: part.metadata }),
           })
+        }
         if (part.type === "step-start")
           assistantMessage.parts.push({
             type: "step-start",
@@ -876,11 +804,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             // For providers that don't support media in tool results, extract media files
             // (images, PDFs) to be sent as a separate user message
             const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
-            const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
-            if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
-              media.push(...mediaAttachments)
+            const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
+            if (extractedMedia.length > 0) {
+              media.push(...extractedMedia)
             }
-            const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
+            const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
 
             const output =
               finalAttachments.length > 0
@@ -970,6 +898,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 type: "file" as const,
                 url: attachment.url,
                 mediaType: attachment.mime,
+                filename: attachment.filename,
               })),
             ],
           })
@@ -1083,23 +1012,12 @@ export function get(input: { sessionID: SessionID; messageID: MessageID }): With
 export function filterCompacted(msgs: Iterable<WithParts>) {
   const result = [] as WithParts[]
   const completed = new Set<string>()
-  let retain: MessageID | undefined
   for (const msg of msgs) {
     result.push(msg)
-    if (retain) {
-      if (msg.info.id === retain) break
-      continue
-    }
     if (msg.info.role === "user" && completed.has(msg.info.id)) {
-      const part = msg.parts.find((item): item is CompactionPart => item.type === "compaction")
-      if (!part) continue
-      if (!part.tail_start_id) break
-      retain = part.tail_start_id
-      if (msg.info.id === retain) break
+      if (msg.parts.some((item): item is CompactionPart => item.type === "compaction")) break
       continue
     }
-    if (msg.info.role === "user" && completed.has(msg.info.id) && msg.parts.some((part) => part.type === "compaction"))
-      break
     if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
       completed.add(msg.info.parentID)
   }

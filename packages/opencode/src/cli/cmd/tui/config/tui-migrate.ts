@@ -1,8 +1,8 @@
 import path from "path"
 import { type ParseError as JsoncParseError, applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { unique } from "remeda"
-import z from "zod"
-import { TuiInfo, TuiOptions } from "./tui-schema"
+import { Option, Schema } from "effect"
+import { DiffStyle, Logo, ScrollAcceleration, ScrollSpeed } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
@@ -13,17 +13,12 @@ const log = Log.create({ service: "tui.migrate" })
 
 const TUI_SCHEMA_URL = "https://opencode.ai/tui.json"
 
-const LegacyTheme = TuiInfo.shape.theme.optional()
-const LegacyRecord = z.record(z.string(), z.unknown()).optional()
-
-const TuiLegacy = z
-  .object({
-    scroll_speed: TuiOptions.shape.scroll_speed.catch(undefined),
-    scroll_acceleration: TuiOptions.shape.scroll_acceleration.catch(undefined),
-    diff_style: TuiOptions.shape.diff_style.catch(undefined),
-    logo: TuiOptions.shape.logo.catch(undefined),
-  })
-  .strip()
+const decodeTheme = Schema.decodeUnknownOption(Schema.String)
+const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
+const decodeScrollSpeed = Schema.decodeUnknownOption(ScrollSpeed)
+const decodeScrollAcceleration = Schema.decodeUnknownOption(ScrollAcceleration)
+const decodeDiffStyle = Schema.decodeUnknownOption(DiffStyle)
+const decodeLogo = Schema.decodeUnknownOption(Logo)
 
 interface MigrateInput {
   cwd: string
@@ -47,13 +42,13 @@ export async function migrateTuiConfig(input: MigrateInput) {
     const data = parseJsonc(source, errors, { allowTrailingComma: true })
     if (errors.length || !data || typeof data !== "object" || Array.isArray(data)) continue
 
-    const theme = LegacyTheme.safeParse("theme" in data ? data.theme : undefined)
-    const keybinds = LegacyRecord.safeParse("keybinds" in data ? data.keybinds : undefined)
-    const legacyTui = LegacyRecord.safeParse("tui" in data ? data.tui : undefined)
+    const theme = decodeTheme("theme" in data ? data.theme : undefined)
+    const keybinds = decodeRecord("keybinds" in data ? data.keybinds : undefined)
+    const legacyTui = decodeRecord("tui" in data ? data.tui : undefined)
     const extracted = {
-      theme: theme.success ? theme.data : undefined,
-      keybinds: keybinds.success ? keybinds.data : undefined,
-      tui: legacyTui.success ? legacyTui.data : undefined,
+      theme: Option.getOrUndefined(theme),
+      keybinds: Option.getOrUndefined(keybinds),
+      tui: Option.getOrUndefined(legacyTui),
     }
     const tui = extracted.tui ? normalizeTui(extracted.tui) : undefined
     if (extracted.theme === undefined && extracted.keybinds === undefined && !tui) continue
@@ -86,17 +81,26 @@ export async function migrateTuiConfig(input: MigrateInput) {
   }
 }
 
-function normalizeTui(data: Record<string, unknown>) {
-  const parsed = TuiLegacy.parse(data)
-  if (
-    parsed.scroll_speed === undefined &&
+function normalizeTui(data: Record<string, unknown>):
+  | {
+      scroll_speed: number | undefined
+      scroll_acceleration: { enabled: boolean } | undefined
+      diff_style: "auto" | "stacked" | undefined
+      logo: { animate?: boolean; sound?: boolean } | undefined
+    }
+  | undefined {
+  const parsed = {
+    scroll_speed: Option.getOrUndefined(decodeScrollSpeed(data.scroll_speed)),
+    scroll_acceleration: Option.getOrUndefined(decodeScrollAcceleration(data.scroll_acceleration)),
+    diff_style: Option.getOrUndefined(decodeDiffStyle(data.diff_style)),
+    logo: Option.getOrUndefined(decodeLogo(data.logo)),
+  }
+  return parsed.scroll_speed === undefined &&
     parsed.diff_style === undefined &&
     parsed.scroll_acceleration === undefined &&
     parsed.logo === undefined
-  ) {
-    return
-  }
-  return parsed
+    ? undefined
+    : parsed
 }
 
 async function backupAndStripLegacy(file: string, source: string) {

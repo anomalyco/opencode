@@ -354,7 +354,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-1"),
+          id: MessageID.make("msg_user-1"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -438,7 +438,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
         const user = {
-          id: MessageID.make("user-service-abort"),
+          id: MessageID.make("msg_user-service-abort"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -529,7 +529,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-tools"),
+          id: MessageID.make("msg_user-tools"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -644,7 +644,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-2"),
+          id: MessageID.make("msg_user-2"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -759,7 +759,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-data-url"),
+          id: MessageID.make("msg_user-data-url"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -880,7 +880,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-3"),
+          id: MessageID.make("msg_user-3"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -995,7 +995,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
         const user = {
-          id: MessageID.make("user-anthropic-tools"),
+          id: MessageID.make("msg_user-anthropic-tools"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -1239,7 +1239,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-4"),
+          id: MessageID.make("msg_user-4"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
